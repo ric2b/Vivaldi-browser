@@ -26,10 +26,10 @@ enum class AudioCapability {
 // 4k content. It is assumed by the sender that the receiver can support 4k
 // on all supported codecs.
 enum class VideoCapability {
-  // |kSupports4k| indicates that the receiver wants and can support 4k remoting
+  // `kSupports4k` indicates that the receiver wants and can support 4k remoting
   // content--both decoding/rendering and either a native 4k display or
   // downscaling to the display's native resolution.
-  // TODO(issuetracker.google.com/184429130): |kSupports4k| is not super helpful
+  // TODO(issuetracker.google.com/184429130): `kSupports4k` is not super helpful
   // for enabling 4k support, as receivers may not support 4k for all types of
   // content.
   kSupports4k,

@@ -124,6 +124,7 @@
   X("log")                                                               \
   X("login")                                                             \
   X("media")                                                             \
+  X("mediastream")                                                       \
   X("media_router")                                                      \
   X("memory")                                                            \
   X("midi")                                                              \
@@ -258,10 +259,12 @@
   X(TRACE_DISABLED_BY_DEFAULT("memory-infra"))                           \
   X(TRACE_DISABLED_BY_DEFAULT("memory-infra.v8.code_stats"))             \
   X(TRACE_DISABLED_BY_DEFAULT("mojom"))                                  \
+  X(TRACE_DISABLED_BY_DEFAULT("navigation"))                             \
   X(TRACE_DISABLED_BY_DEFAULT("net"))                                    \
   X(TRACE_DISABLED_BY_DEFAULT("network"))                                \
   X(TRACE_DISABLED_BY_DEFAULT("paint-worklet"))                          \
   X(TRACE_DISABLED_BY_DEFAULT("power"))                                  \
+  X(TRACE_DISABLED_BY_DEFAULT("system_metrics"))                         \
   X(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"))                     \
   X(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler.debug"))               \
   X(TRACE_DISABLED_BY_DEFAULT("sequence_manager"))                       \
@@ -274,7 +277,6 @@
   X(TRACE_DISABLED_BY_DEFAULT("skottie"))                                \
   X(TRACE_DISABLED_BY_DEFAULT("SyncFileSystem"))                         \
   X(TRACE_DISABLED_BY_DEFAULT("system_power"))                           \
-  X(TRACE_DISABLED_BY_DEFAULT("system_stats"))                           \
   X(TRACE_DISABLED_BY_DEFAULT("thread_pool_diagnostics"))                \
   X(TRACE_DISABLED_BY_DEFAULT("toplevel.ipc"))                           \
   X(TRACE_DISABLED_BY_DEFAULT("user_action_samples"))                    \
@@ -327,6 +329,7 @@
   X("blink,blink.resource")                                                   \
   X("blink,blink_style")                                                      \
   X("blink,devtools.timeline")                                                \
+  X("blink,latency")                                                          \
   X("blink,loading")                                                          \
   X("blink,rail")                                                             \
   X("blink.animations,devtools.timeline,benchmark,rail")                      \
@@ -338,6 +341,7 @@
   X("category1,category2")                                                    \
   X("cc,benchmark")                                                           \
   X("cc,benchmark,input,input.scrolling")                                     \
+  X("cc,benchmark,latency")                                                   \
   X("cc,benchmark," TRACE_DISABLED_BY_DEFAULT("devtools.timeline.frame"))     \
   X("cc,input")                                                               \
   X("cc,raf_investigation")                                                   \
@@ -387,6 +391,7 @@
   X("shutdown,viz")                                                           \
   X("startup,benchmark,rail")                                                 \
   X("startup,rail")                                                           \
+  X("toplevel,graphics.pipeline")                                             \
   X("toplevel,Java")                                                          \
   X("toplevel,viz")                                                           \
   X("ui,input")                                                               \

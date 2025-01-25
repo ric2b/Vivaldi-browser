@@ -60,6 +60,7 @@ ErrorOr<std::unique_ptr<QuicConnection>> QuicConnectionFactoryClient::Connect(
   if (!create_result) {
     return create_result.error();
   }
+
   std::unique_ptr<UdpSocket> socket = std::move(create_result.value());
   socket->Bind();
 
@@ -89,6 +90,7 @@ ErrorOr<std::unique_ptr<QuicConnection>> QuicConnectionFactoryClient::Connect(
     if (!success) {
       return Error::Code::kSha256HashFailure;
     }
+
     crypto_client_config_ = std::make_unique<quic::QuicCryptoClientConfig>(
         std::move(proof_verifier), nullptr);
     crypto_client_config_->set_proof_source(

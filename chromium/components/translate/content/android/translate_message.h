@@ -170,6 +170,9 @@ class TranslateMessage {
   // Keeps track of whether or not a translation is in progress that could
   // trigger automatically setting "always translate language".
   bool is_translation_eligible_for_auto_always_translate_ = false;
+
+  // Vivaldi
+  void InternalTranslate();
 };
 
 }  // namespace translate

@@ -16,10 +16,8 @@ vector<float16_t, 2> tint_bitcast_to_f16(uint src) {
 }
 
 matrix<float16_t, 2, 2> v_2(uint start_byte_offset) {
-  uint4 v_3 = u[(start_byte_offset / 16u)];
-  vector<float16_t, 2> v_4 = tint_bitcast_to_f16((((((start_byte_offset % 16u) / 4u) == 2u)) ? (v_3.z) : (v_3.x)));
-  uint4 v_5 = u[((4u + start_byte_offset) / 16u)];
-  return matrix<float16_t, 2, 2>(v_4, tint_bitcast_to_f16(((((((4u + start_byte_offset) % 16u) / 4u) == 2u)) ? (v_5.z) : (v_5.x))));
+  vector<float16_t, 2> v_3 = tint_bitcast_to_f16(u[(start_byte_offset / 16u)][((start_byte_offset % 16u) / 4u)]);
+  return matrix<float16_t, 2, 2>(v_3, tint_bitcast_to_f16(u[((4u + start_byte_offset) / 16u)][(((4u + start_byte_offset) % 16u) / 4u)]));
 }
 
 void f_inner(uint tint_local_index) {
@@ -28,9 +26,9 @@ void f_inner(uint tint_local_index) {
   }
   GroupMemoryBarrierWithGroupSync();
   w = v_2(0u);
-  w[1] = tint_bitcast_to_f16(u[0u].x);
-  w[1] = tint_bitcast_to_f16(u[0u].x).yx;
-  w[0][1] = float16_t(f16tof32(u[0u].y));
+  w[int(1)] = tint_bitcast_to_f16(u[0u].x);
+  w[int(1)] = tint_bitcast_to_f16(u[0u].x).yx;
+  w[int(0)][int(1)] = float16_t(f16tof32(u[0u].y));
 }
 
 [numthreads(1, 1, 1)]

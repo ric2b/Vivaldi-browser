@@ -72,8 +72,7 @@ Length::ValueRange CSSPrimitiveValue::ConversionToLengthValueRange(
     case ValueRange::kAll:
       return Length::ValueRange::kAll;
     default:
-      NOTREACHED_IN_MIGRATION();
-      return Length::ValueRange::kAll;
+      NOTREACHED();
   }
 }
 
@@ -270,8 +269,7 @@ CSSPrimitiveValue* CSSPrimitiveValue::CreateFromLength(const Length& length,
     default:
       break;
   }
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 // TODO(crbug.com/1133390): When we support <frequency>, we must clamp like
@@ -316,6 +314,16 @@ double CSSPrimitiveValue::ComputeSeconds(
           ? To<CSSMathFunctionValue>(this)->ComputeSeconds(length_resolver)
           : To<CSSNumericLiteralValue>(this)->ComputeSeconds();
   return CSSValueClampingUtils::ClampTime(result);
+}
+
+double CSSPrimitiveValue::ComputeDotsPerPixel(
+    const CSSLengthResolver& length_resolver) const {
+  DCHECK(IsResolution());
+  double result =
+      IsCalculated()
+          ? To<CSSMathFunctionValue>(this)->ComputeDotsPerPixel(length_resolver)
+          : To<CSSNumericLiteralValue>(this)->ComputeDotsPerPixel();
+  return CSSValueClampingUtils::ClampDouble(result);
 }
 
 template <>
@@ -859,8 +867,7 @@ CSSPrimitiveValue::UnitType CSSPrimitiveValue::LengthUnitTypeToUnitType(
     case kLengthUnitTypeCount:
       break;
   }
-  NOTREACHED_IN_MIGRATION();
-  return CSSPrimitiveValue::UnitType::kUnknown;
+  NOTREACHED();
 }
 
 const char* CSSPrimitiveValue::UnitTypeToString(UnitType type) {
@@ -999,8 +1006,7 @@ const char* CSSPrimitiveValue::UnitTypeToString(UnitType type) {
     default:
       break;
   }
-  NOTREACHED_IN_MIGRATION();
-  return "";
+  NOTREACHED();
 }
 
 String CSSPrimitiveValue::CustomCSSText() const {

@@ -23,6 +23,13 @@
   {
     "cmd": [
       "ls",
+      "RECIPE_REPO[depot_tools]/roll_downstream_gcs_deps.py"
+    ],
+    "name": "roll_downstream_gcs_deps_path"
+  },
+  {
+    "cmd": [
+      "ls",
       "RECIPE_REPO[depot_tools]/cros"
     ],
     "name": "cros"

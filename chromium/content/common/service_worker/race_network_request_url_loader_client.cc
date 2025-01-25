@@ -71,7 +71,7 @@ void ServiceWorkerRaceNetworkRequestURLLoaderClient::OnUploadProgress(
     int64_t current_position,
     int64_t total_size,
     OnUploadProgressCallback ack_callback) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void ServiceWorkerRaceNetworkRequestURLLoaderClient::OnTransferSizeUpdated(
@@ -114,9 +114,21 @@ void ServiceWorkerRaceNetworkRequestURLLoaderClient::OnReceiveResponse(
       head_ = std::move(head);
       head_->load_timing.request_start = request_start_;
       head_->load_timing.request_start_time = request_start_time_;
+      head_->load_timing.receive_headers_start = base::TimeTicks::Now();
+      head_->load_timing.receive_headers_end =
+          head_->load_timing.receive_headers_start;
       cached_metadata_ = std::move(cached_metadata);
-      read_buffer_manager_.emplace(std::move(body));
-      WatchDataUpdate();
+      if (base::FeatureList::IsEnabled(
+              features::
+                  kServiceWorkerStaticRouterRaceNetworkRequestPerformanceImprovement) &&
+          owner_->commit_responsibility() ==
+              FetchResponseFrom::kNoResponseYet) {
+        simple_buffer_manager_.emplace(std::move(body));
+        CloneResponse();
+      } else {
+        read_buffer_manager_.emplace(std::move(body));
+        WatchDataUpdate();
+      }
       break;
     case DataConsumePolicy::kForwardingOnly:
       forwarding_client_->OnReceiveResponse(std::move(head), std::move(body),
@@ -240,10 +252,12 @@ void ServiceWorkerRaceNetworkRequestURLLoaderClient::MaybeCommitResponse() {
 
   if (state_ == State::kResponseReceived) {
     TransitionState(State::kDataTransferStarted);
-    forwarding_client_->OnReceiveResponse(
-        head_->Clone(),
-        write_buffer_manager_for_fetch_handler_.ReleaseConsumerHandle(),
-        std::nullopt);
+    if (!simple_buffer_manager_.has_value()) {
+      forwarding_client_->OnReceiveResponse(
+          head_->Clone(),
+          write_buffer_manager_for_fetch_handler_.ReleaseConsumerHandle(),
+          std::nullopt);
+    }
   }
 
   if (state_ != State::kDataTransferStarted) {
@@ -344,15 +358,18 @@ void ServiceWorkerRaceNetworkRequestURLLoaderClient::CompleteResponse() {
     case FetchResponseFrom::kAutoPreloadHandlingFallback:
       NOTREACHED();
   }
-  write_buffer_manager_for_race_network_request_.ResetProducer();
-  forwarding_client_->OnComplete(completion_status_.value());
-  write_buffer_manager_for_fetch_handler_.ResetProducer();
-  // Cancel watching data pipes here not to call watcher callbacks after
-  // complete the response.
-  write_buffer_manager_for_race_network_request_.CancelWatching();
-  write_buffer_manager_for_fetch_handler_.CancelWatching();
-  if (read_buffer_manager_.has_value() && read_buffer_manager_->IsWatching()) {
-    read_buffer_manager_->CancelWatching();
+  if (!simple_buffer_manager_.has_value()) {
+    write_buffer_manager_for_race_network_request_.ResetProducer();
+    forwarding_client_->OnComplete(completion_status_.value());
+    write_buffer_manager_for_fetch_handler_.ResetProducer();
+    // Cancel watching data pipes here not to call watcher callbacks after
+    // complete the response.
+    write_buffer_manager_for_race_network_request_.CancelWatching();
+    write_buffer_manager_for_fetch_handler_.CancelWatching();
+    if (read_buffer_manager_.has_value() &&
+        read_buffer_manager_->IsWatching()) {
+      read_buffer_manager_->CancelWatching();
+    }
   }
 }
 
@@ -429,8 +446,7 @@ void ServiceWorkerRaceNetworkRequestURLLoaderClient::Read(
     case MOJO_RESULT_SHOULD_WAIT:
       return;
     default:
-      NOTREACHED_IN_MIGRATION() << "ReadData result:" << read_result;
-      return;
+      NOTREACHED() << "ReadData result:" << read_result;
   }
 }
 
@@ -641,8 +657,48 @@ void ServiceWorkerRaceNetworkRequestURLLoaderClient::
       ConvertMojoResultForUMA(result));
 }
 
+void ServiceWorkerRaceNetworkRequestURLLoaderClient::CloneResponse() {
+  simple_buffer_manager_->Clone(
+      write_buffer_manager_for_race_network_request_.ReleaseProducerHandle(),
+      base::BindOnce(
+          &ServiceWorkerRaceNetworkRequestURLLoaderClient::OnCloneCompleted,
+          weak_factory_.GetWeakPtr()));
+  MaybeCommitResponse();
+}
+
+void ServiceWorkerRaceNetworkRequestURLLoaderClient::
+    CloneResponseForFetchHandler() {
+  simple_buffer_manager_->Clone(
+      write_buffer_manager_for_fetch_handler_.ReleaseProducerHandle(),
+      base::BindOnce(&ServiceWorkerRaceNetworkRequestURLLoaderClient::
+                         OnCloneCompletedForFetchHandler,
+                     weak_factory_.GetWeakPtr()));
+  forwarding_client_->OnReceiveResponse(
+      head_->Clone(),
+      write_buffer_manager_for_fetch_handler_.ReleaseConsumerHandle(),
+      std::nullopt);
+}
+
+void ServiceWorkerRaceNetworkRequestURLLoaderClient::OnCloneCompleted() {
+  OnDataTransferComplete();
+  // Do clone data again to fulfil the `fetch()` in the fetch-event.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&ServiceWorkerRaceNetworkRequestURLLoaderClient::
+                         CloneResponseForFetchHandler,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void ServiceWorkerRaceNetworkRequestURLLoaderClient::
+    OnCloneCompletedForFetchHandler() {
+  CHECK(completion_status_.has_value());
+  forwarding_client_->OnComplete(completion_status_.value());
+  write_buffer_manager_for_fetch_handler_.ResetProducer();
+}
+
 void ServiceWorkerRaceNetworkRequestURLLoaderClient::TransitionState(
     State new_state) {
+  SCOPED_CRASH_KEY_NUMBER("SWRace", "current_state", static_cast<int>(state_));
   switch (new_state) {
     case State::kWaitForBody:
       NOTREACHED();

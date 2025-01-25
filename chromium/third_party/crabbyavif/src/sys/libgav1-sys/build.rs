@@ -61,7 +61,8 @@ fn main() {
     // Generate bindings.
     let header_file = PathBuf::from(&abs_library_dir).join(path_buf(&["src", "gav1", "decoder.h"]));
     let version_dir = PathBuf::from(&abs_library_dir).join(path_buf(&["src"]));
-    let outfile = PathBuf::from(&project_root).join(path_buf(&["src", "libgav1.rs"]));
+    let outdir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
+    let outfile = PathBuf::from(&outdir).join("libgav1_bindgen.rs");
     let extra_includes_str = format!("-I{}", version_dir.display());
     let mut bindings = bindgen::Builder::default()
         .header(header_file.into_os_string().into_string().unwrap())
@@ -85,8 +86,4 @@ fn main() {
     bindings
         .write_to_file(outfile.as_path())
         .unwrap_or_else(|_| panic!("Couldn't write bindings for libgav1"));
-    println!(
-        "cargo:rustc-env=CRABBYAVIF_LIBGAV1_BINDINGS_RS={}",
-        outfile.display()
-    );
 }

@@ -9,55 +9,20 @@
 #ifndef COMPONENTS_SEARCH_ENGINES_PREPOPULATED_ENGINES_H_
 #define COMPONENTS_SEARCH_ENGINES_PREPOPULATED_ENGINES_H_
 
-#include <cstddef>
+#include "base/containers/span.h"
+
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/regulatory_extension_type.h"
+#include "components/search_engines/original/prepopulated_engines.h"
 
 namespace TemplateURLPrepopulateData {
 
-struct RegulatoryExtension {
-  //RegulatoryExtension();
-  RegulatoryExtensionType variant = RegulatoryExtensionType::kDefault;
-  const char* search_params = nullptr;
-  const char* suggest_params = nullptr;
-};
+using RegulatoryExtension = TemplateURLPrepopulateDataOriginal::RegulatoryExtension;
+struct PrepopulatedEngine : public TemplateURLPrepopulateDataOriginal::PrepopulatedEngine {};
 
-struct PrepopulatedEngine {
-  PrepopulatedEngine();
-  const char16_t* name = nullptr;
-  const char16_t* keyword = nullptr;
-  const char* favicon_url = nullptr;
-  const char* search_url = nullptr;
-  const char* encoding = nullptr;
-  const char* suggest_url = nullptr;
-  const char* image_url = nullptr;
-  const char* image_translate_url = nullptr;
-  const char* new_tab_url = nullptr;
-  const char* contextual_search_url = nullptr;
-  const char* logo_url = nullptr;
-  const char* doodle_url = nullptr;
-  const char* search_url_post_params = nullptr;
-  const char* suggest_url_post_params = nullptr;
-  const char* image_url_post_params = nullptr;
-  const char* side_search_param = nullptr;
-  const char* side_image_search_param = nullptr;
-  const char* image_translate_source_language_param_key = nullptr;
-  const char* image_translate_target_language_param_key = nullptr;
-  const char16_t* image_search_branding_label = nullptr;
-  const char* * search_intent_params = nullptr;
-  size_t search_intent_params_size = 0;
-  const char* * alternate_urls = nullptr;
-  size_t alternate_urls_size = 0;
-  SearchEngineType type = SEARCH_ENGINE_UNKNOWN;
-  const char* preconnect_to_search_url = nullptr;
-  const char* prefetch_likely_navigations = nullptr;
-  const RegulatoryExtension* regulatory_extensions = nullptr;
-  size_t regulatory_extensions_size = 0;
-  int id = 0;
-};
+extern const PrepopulatedEngine google;
 
-extern PrepopulatedEngine google;
-
+extern base::span<const PrepopulatedEngine* const> kAllEngines;
 }  // namespace TemplateURLPrepopulateData
 
 #endif // COMPONENTS_SEARCH_ENGINES_PREPOPULATED_ENGINES_H_

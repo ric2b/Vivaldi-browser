@@ -27,17 +27,21 @@ void xnn_${DATATYPE.lower()}_vlrelu_ukernel__${ISA}_arm_u${BATCH_TILE}(
     size_t batch,
     const ${XINT8_T}* input,
     ${XINT8_T}* output,
-    const union xnn_${DATATYPE.lower()}_lrelu_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_${DATATYPE.lower()}_lrelu_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(${XINT8_T}) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const v128_t vinput_zero_point = wasm_v128_load64_splat(params->wasmsimd_arm.input_zero_point);
-  const v128_t vpositive_multiplier = wasm_v128_load64_splat(params->wasmsimd_arm.positive_multiplier);
-  const v128_t vnegative_multiplier = wasm_v128_load64_splat(params->wasmsimd_arm.negative_multiplier);
-  const v128_t voutput_zero_point = wasm_v128_load64_splat(params->wasmsimd_arm.output_zero_point);
+  const v128_t vinput_zero_point = wasm_v128_load16_splat(&params->scalar.input_zero_point);
+  const v128_t vpositive_multiplier = wasm_i16x8_splat(-params->scalar.positive_multiplier);
+  const v128_t vnegative_multiplier = wasm_i16x8_splat(-params->scalar.negative_multiplier);
+  const v128_t voutput_zero_point = wasm_v128_load16_splat(&params->scalar.output_zero_point);
+  XNN_FORCE_REALIZATION(vinput_zero_point);
+  XNN_FORCE_REALIZATION(vpositive_multiplier);
+  XNN_FORCE_REALIZATION(vnegative_multiplier);
+  XNN_FORCE_REALIZATION(voutput_zero_point);
   for (; batch >= ${BATCH_TILE} * sizeof(${XINT8_T}); batch -= ${BATCH_TILE} * sizeof(${XINT8_T})) {
     v128_t vx${ABC[0]} = wasm_v128_load(input);
     $for N in range(1, SIMD_TILE):

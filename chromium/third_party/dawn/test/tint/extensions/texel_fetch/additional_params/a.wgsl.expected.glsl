@@ -1,22 +1,21 @@
-SKIP: INVALID
+#version 310 es
+precision highp float;
+precision highp int;
 
-
-enable chromium_experimental_framebuffer_fetch;
 
 struct In {
-  @location(0)
-  uv : vec4f,
+  vec4 uv;
+};
+
+in vec4 f_Input;
+layout(location = 0) in vec4 f_loc0_Input;
+void g(float a, float b, float c) {
 }
-
-fn g(a : f32, b : f32, c : f32) {
+void f_inner(vec4 pos, vec4 fbf, In tint_symbol) {
+  g(pos[0u], fbf[0u], tint_symbol.uv[0u]);
 }
-
-@fragment
-fn f(@builtin(position) pos : vec4f, @color(0) fbf : vec4f, tint_symbol : In) {
-  g(pos.x, fbf.x, tint_symbol.uv.x);
+void main() {
+  vec4 v = gl_FragCoord;
+  vec4 v_1 = f_Input;
+  f_inner(v, v_1, In(f_loc0_Input));
 }
-
-Failed to generate: <dawn>/test/tint/extensions/texel_fetch/additional_params/a.wgsl:1:8 error: GLSL backend does not support extension 'chromium_experimental_framebuffer_fetch'
-enable chromium_experimental_framebuffer_fetch;
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-

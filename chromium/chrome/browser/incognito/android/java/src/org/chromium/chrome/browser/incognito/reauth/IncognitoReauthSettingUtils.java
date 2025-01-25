@@ -47,7 +47,7 @@ public class IncognitoReauthSettingUtils {
      * @return A {@link CharSequence} containing the summary string for the Incognito lock setting.
      */
     public static CharSequence getSummaryString(Activity activity) {
-        return (isDeviceScreenLockEnabled())
+        return isDeviceScreenLockEnabled()
                 ? activity.getString(
                         R.string.vivaldi_settings_incognito_tab_lock_summary_android_setting_on) // Vivaldi
                 : buildLinkToAndroidScreenLockSettings(activity);

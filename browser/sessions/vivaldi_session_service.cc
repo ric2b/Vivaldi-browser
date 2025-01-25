@@ -602,7 +602,7 @@ VivaldiSessionService::LoadSettingInfo(const base::FilePath& path) {
 Browser* VivaldiSessionService::CreateRestoredBrowser(
     Browser::Type type,
     gfx::Rect bounds,
-    ui::WindowShowState show_state,
+    ui::mojom::WindowShowState show_state,
     const std::string& app_name) {
   Browser::CreateParams params(profile_, false);
   if (!app_name.empty()) {
@@ -809,12 +809,12 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
   Browser* browser_to_activate = nullptr;
 
   // Determine if there is a visible window, or if the active window exists.
-  // Even if all windows are ui::SHOW_STATE_MINIMIZED, if one of them is the
-  // active window it will be made visible by the call to
+  // Even if all windows are ui::mojom::WindowShowState::kMinimized, if one
+  // of them is the active window it will be made visible by the call to
   // browser_to_activate->window()->Activate() later on in this method.
   bool has_visible_browser = false;
   for (auto i = windows->begin(); i != windows->end(); ++i) {
-    if ((*i)->show_state != ui::SHOW_STATE_MINIMIZED ||
+    if ((*i)->show_state != ui::mojom::WindowShowState::kMinimized ||
         (*i)->window_id == active_window_id)
       has_visible_browser = true;
   }
@@ -839,9 +839,9 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
           continue;
         }
         // Show the first window if none are visible.
-        ui::WindowShowState show_state = (*i)->show_state;
+        ui::mojom::WindowShowState show_state = (*i)->show_state;
         if (!has_visible_browser) {
-          show_state = ui::SHOW_STATE_NORMAL;
+          show_state = ui::mojom::WindowShowState::kNormal;
           has_visible_browser = true;
         }
         browser = CreateRestoredBrowser(BrowserTypeForWindowType((*i)->type),

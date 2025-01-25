@@ -23,7 +23,6 @@
 #include "ash/components/arc/arc_features.h"
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
-#include "ash/components/arc/session/arc_dlc_installer.h"
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/session/arc_session.h"
 #include "ash/components/arc/session/file_system_status.h"
@@ -393,7 +392,6 @@ class ArcVmClientAdapterTest : public testing::Test,
     adapter_->SetDemoModeDelegate(&demo_mode_delegate_);
     app_host_ = std::make_unique<FakeAppHost>(arc_bridge_service()->app());
     app_instance_ = std::make_unique<FakeAppInstance>(app_host_.get());
-    arc_dlc_installer_ = std::make_unique<ArcDlcInstaller>();
 
     auto fake_user_manager = std::make_unique<user_manager::FakeUserManager>();
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
@@ -402,7 +400,6 @@ class ArcVmClientAdapterTest : public testing::Test,
 
   void TearDown() override {
     scoped_user_manager_.reset();
-    arc_dlc_installer_.reset();
     ash::PatchPanelClient::Shutdown();
     ash::SessionManagerClient::Shutdown();
     adapter_->RemoveObserver(this);
@@ -661,7 +658,6 @@ class ArcVmClientAdapterTest : public testing::Test,
   FakeDemoModeDelegate demo_mode_delegate_;
   std::unique_ptr<FakeAppHost> app_host_;
   std::unique_ptr<FakeAppInstance> app_instance_;
-  std::unique_ptr<ArcDlcInstaller> arc_dlc_installer_;
   std::unique_ptr<TestDebugDaemonClient> test_debug_daemon_client_;
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
 };
@@ -1472,16 +1468,6 @@ TEST_F(ArcVmClientAdapterTest, TestCreateArcVmClientAdapter) {
   CreateArcVmClientAdapter();
 }
 
-TEST_F(ArcVmClientAdapterTest, DefaultBlockSize) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(arc::kUseDefaultBlockSize, true /* use */);
-
-  StartParams start_params(GetPopulatedStartParams());
-  StartMiniArcWithParams(true, std::move(start_params));
-  EXPECT_EQ(
-      0u, GetTestConciergeClient()->start_arc_vm_request().rootfs_block_size());
-}
-
 TEST_F(ArcVmClientAdapterTest, SpecifyBlockSize) {
   StartParams start_params(GetPopulatedStartParams());
   StartMiniArcWithParams(true, std::move(start_params));
@@ -1660,39 +1646,6 @@ TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_LvmSupported) {
   EXPECT_TRUE(it->o_direct());
 }
 
-TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_OverrideUseLvm) {
-  // ArcVirtioBlkDataConfigOverride:use_lvm/true should override
-  // ArcLvmApplicationContainers flag.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeaturesAndParameters(
-      /*enabled_features=*/{{arc::kVirtioBlkDataConfigOverride,
-                             {{"use_lvm", "true"}}}},
-      /*disabled_features=*/{arc::kLvmApplicationContainers});
-
-  StartParams start_params(GetPopulatedStartParams());
-  start_params.use_virtio_blk_data = true;
-  StartMiniArcWithParams(true, std::move(start_params));
-  EXPECT_GE(GetTestConciergeClient()->start_arc_vm_call_count(), 1);
-
-  // CreateDiskImage() should NOT be called.
-  EXPECT_EQ(GetTestConciergeClient()->create_disk_image_call_count(), 0);
-
-  // StartArcVmRequest should contain the LVM-provided disk path.
-  const auto& req = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_TRUE(req.enable_virtio_blk_data());
-  const std::string expected_lvm_disk_path =
-      base::StringPrintf("/dev/mapper/vm/dmcrypt-%s-arcvm",
-                         std::string(kUserIdHash).substr(0, 8).c_str());
-  const auto& disks = req.disks();
-  auto it =
-      base::ranges::find_if(disks, [&expected_lvm_disk_path](const auto& disk) {
-        return disk.path() == expected_lvm_disk_path;
-      });
-  EXPECT_NE(it, disks.end());
-  // O_DIRECT option should always be enabled on LVM-provided disk images.
-  EXPECT_TRUE(it->o_direct());
-}
-
 TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_NoLvmForEphemeralCryptohome) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(arc::kLvmApplicationContainers);
@@ -1806,6 +1759,18 @@ TEST_F(ArcVmClientAdapterTest, MetadataDisk_EnabledForArcU) {
       base::StringPrintf("/run/daemon-store/crosvm/%s/YXJjdm0=.metadata.img",
                          std::string(kUserIdHash).c_str());
   EXPECT_TRUE(HasDiskImage(req, metadta_disk_path));
+}
+
+TEST_F(ArcVmClientAdapterTest, SyspropDiskAlwaysEnabled) {
+  StartParams start_params(GetPopulatedStartParams());
+  StartMiniArcWithParams(true, std::move(start_params));
+  const auto& request = GetTestConciergeClient()->start_arc_vm_request();
+
+  const std::string sysprop_disk_path =
+      base::StringPrintf("/run/daemon-store/crosvm/%s/YXJjdm0=.runtime.prop",
+                         std::string(kUserIdHash).c_str());
+  EXPECT_TRUE(HasDiskImage(request, sysprop_disk_path));
+  EXPECT_EQ(request.disks(5).path(), sysprop_disk_path);
 }
 
 TEST_F(ArcVmClientAdapterTest, ArcErofsImagesDisabled) {
@@ -2761,10 +2726,6 @@ INSTANTIATE_TEST_SUITE_P(All,
                          ::testing::ValuesIn(kDalvikMemoryProfileTestCases));
 
 TEST_P(ArcVmClientAdapterDalvikMemoryProfileTest, Profile) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(arc::kUseDalvikMemoryProfile,
-                                    true /* use */);
-
   const auto& test_param = GetParam();
   StartParams start_params(GetPopulatedStartParams());
   start_params.dalvik_memory_profile = test_param.profile;
@@ -2886,22 +2847,6 @@ TEST_F(ArcVmClientAdapterTest, LazyWebViewInitDisabled) {
 
   const auto& request = GetTestConciergeClient()->start_arc_vm_request();
   EXPECT_FALSE(request.enable_web_view_zygote_lazy_init());
-}
-
-TEST_F(ArcVmClientAdapterTest, ArcKeyboardShortcutHelperIntegrationEnabled) {
-  StartParams start_params(GetPopulatedStartParams());
-  start_params.enable_keyboard_shortcut_helper_integration = true;
-  StartMiniArcWithParams(true, std::move(start_params));
-  const auto& request = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_TRUE(request.enable_keyboard_shortcut_helper_integration());
-}
-
-TEST_F(ArcVmClientAdapterTest, ArcKeyboardShortcutHelperIntegrationDisabled) {
-  StartParams start_params(GetPopulatedStartParams());
-  start_params.enable_keyboard_shortcut_helper_integration = false;
-  StartMiniArcWithParams(true, std::move(start_params));
-  const auto& request = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_FALSE(request.enable_keyboard_shortcut_helper_integration());
 }
 
 TEST_F(ArcVmClientAdapterTest, ArcFilePickerExperimentFalse) {

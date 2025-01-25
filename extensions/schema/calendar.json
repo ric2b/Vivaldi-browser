@@ -27,7 +27,6 @@
           },
           "date": {
             "type": "number",
-            "optional": true,
             "description": "The date of a recurring event that an exception should be added to. In milliseconds since the epoch."
           },
           "exception_event_id": {

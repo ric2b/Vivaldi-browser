@@ -488,6 +488,11 @@ struct WebPreferences {
   // blocking user's access to the background web content.
   bool modal_context_menu = true;
 
+  // Whether the safe-area-insets should be changed dynamically based on
+  // browser controls shown ratio. This value is used in web settings only
+  // when feature DynamicSafeAreaInsets is enabled.
+  bool dynamic_safe_area_insets_enabled = false;
+
   // Vivaldi specific preferences:
   // Maps to the Cycle focus setting in Vivaldi.
   bool allow_tab_cycle_from_webpage_into_ui;

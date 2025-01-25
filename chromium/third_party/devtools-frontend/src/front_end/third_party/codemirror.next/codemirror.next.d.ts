@@ -1140,6 +1140,10 @@ declare class InputStream {
     the stream position) to change that.
     */
     acceptToken(token: number, endOffset?: number): void;
+    /**
+    Accept a token ending at a specific given position.
+    */
+    acceptTokenTo(token: number, endPos: number): void;
     private getChunk;
     private readNext;
     /**
@@ -4883,6 +4887,7 @@ declare class Tag {
     this one itself and sorted in order of decreasing specificity.
     */
     readonly set: Tag[];
+    toString(): string;
     /**
     Define a new tag. If `parent` is given, the tag is treated as a
     sub-tag of that parent, and
@@ -4890,6 +4895,7 @@ declare class Tag {
     this tag will try to fall back to the parent tag (or grandparent
     tag, etc).
     */
+    static define(name?: string, parent?: Tag): Tag;
     static define(parent?: Tag): Tag;
     /**
     Define a tag _modifier_, which is a function that, given a tag,
@@ -4903,7 +4909,7 @@ declare class Tag {
     example `m1(m2(m3(t1)))` is a subtype of `m1(m2(t1))`,
     `m1(m3(t1)`, and so on.
     */
-    static defineModifier(): (tag: Tag) => Tag;
+    static defineModifier(name?: string): (tag: Tag) => Tag;
 }
 /**
 A highlighter defines a mapping from highlighting tags and
@@ -4928,7 +4934,9 @@ interface Highlighter {
 }
 /**
 Highlight the given [tree](#common.Tree) with the given
-[highlighter](#highlight.Highlighter).
+[highlighter](#highlight.Highlighter). Often, the higher-level
+[`highlightCode`](#highlight.highlightCode) function is easier to
+use.
 */
 declare function highlightTree(tree: Tree, highlighter: Highlighter | readonly Highlighter[],
 /**
@@ -5223,7 +5231,7 @@ declare const tags: {
     */
     heading6: Tag;
     /**
-    A prose separator (such as a horizontal rule).
+    A prose [content](#highlight.tags.content) separator (such as a horizontal rule).
     */
     contentSeparator: Tag;
     /**
@@ -6188,6 +6196,11 @@ interface Completion {
     */
     type?: string;
     /**
+    When this option is selected, and one of these characters is
+    typed, insert the completion before typing the character.
+    */
+    commitCharacters?: readonly string[];
+    /**
     When given, should be a number from -99 to 99 that adjusts how
     this completion is ranked compared to other completions that
     match the input as well as this one. A negative number moves it
@@ -6258,6 +6271,14 @@ declare class CompletionContext {
     */
     readonly explicit: boolean;
     /**
+    The editor view. May be undefined if the context was created
+    in a situation where there is no such view available, such as
+    in synchronous updates via
+    [`CompletionResult.update`](https://codemirror.net/6/docs/ref/#autocomplete.CompletionResult.update)
+    or when called by test code.
+    */
+    readonly view?: EditorView | undefined;
+    /**
     Create a new completion context. (Mostly useful for testing
     completion sources—in the editor, the extension will create
     these for you.)
@@ -6277,7 +6298,15 @@ declare class CompletionContext {
     only return completions when either there is part of a
     completable entity before the cursor, or `explicit` is true.
     */
-    explicit: boolean);
+    explicit: boolean,
+    /**
+    The editor view. May be undefined if the context was created
+    in a situation where there is no such view available, such as
+    in synchronous updates via
+    [`CompletionResult.update`](https://codemirror.net/6/docs/ref/#autocomplete.CompletionResult.update)
+    or when called by test code.
+    */
+    view?: EditorView | undefined);
     /**
     Get the extent, content, and (if there is a token) type of the
     token before `this.pos`.
@@ -6306,8 +6335,18 @@ declare class CompletionContext {
     Allows you to register abort handlers, which will be called when
     the query is
     [aborted](https://codemirror.net/6/docs/ref/#autocomplete.CompletionContext.aborted).
+
+    By default, running queries will not be aborted for regular
+    typing or backspacing, on the assumption that they are likely to
+    return a result with a
+    [`validFor`](https://codemirror.net/6/docs/ref/#autocomplete.CompletionResult.validFor) field that
+    allows the result to be used after all. Passing `onDocChange:
+    true` will cause this query to be aborted for any document
+    change.
     */
-    addEventListener(type: "abort", listener: () => void): void;
+    addEventListener(type: "abort", listener: () => void, options?: {
+        onDocChange: boolean;
+    }): void;
 }
 /**
 Wrap the given completion source so that it will not fire when the
@@ -6379,6 +6418,20 @@ interface CompletionResult {
     completion still applies in the new state.
     */
     update?: (current: CompletionResult, from: number, to: number, context: CompletionContext) => CompletionResult | null;
+    /**
+    When results contain position-dependent information in, for
+    example, `apply` methods, you can provide this method to update
+    the result for transactions that happen after the query. It is
+    not necessary to update `from` and `to`—those are tracked
+    automatically.
+    */
+    map?: (current: CompletionResult, changes: ChangeDesc) => CompletionResult | null;
+    /**
+    Set a default set of [commit
+    characters](https://codemirror.net/6/docs/ref/#autocomplete.Completion.commitCharacters) for all
+    options in this result.
+    */
+    commitCharacters?: readonly string[];
 }
 
 interface CompletionConfig {
@@ -6387,6 +6440,19 @@ interface CompletionConfig {
     whenever the user types something that can be completed.
     */
     activateOnTyping?: boolean;
+    /**
+    When given, if a completion that matches the predicate is
+    picked, reactivate completion again as if it was typed normally.
+    */
+    activateOnCompletion?: (completion: Completion) => boolean;
+    /**
+    The amount of time to wait for further typing before querying
+    completion sources via
+    [`activateOnTyping`](https://codemirror.net/6/docs/ref/#autocomplete.autocompletion^config.activateOnTyping).
+    Defaults to 100, which should be fine unless your completion
+    source is very slow and/or doesn't use `validFor`.
+    */
+    activateOnTypingDelay?: number;
     /**
     By default, when completion opens, the first option is selected
     and can be confirmed with
@@ -6453,7 +6519,7 @@ interface CompletionConfig {
     80.
     */
     addToOptions?: {
-        render: (completion: Completion, state: EditorState) => Node | null;
+        render: (completion: Completion, state: EditorState, view: EditorView) => Node | null;
         position: number;
     }[];
     /**
@@ -6475,6 +6541,13 @@ interface CompletionConfig {
     [`localeCompare`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/localeCompare).
     */
     compareCompletions?: (a: Completion, b: Completion) => number;
+    /**
+    When set to true (the default is false), turn off fuzzy matching
+    of completions and only show those that start with the text the
+    user typed. Only takes effect for results where
+    [`filter`](https://codemirror.net/6/docs/ref/#autocomplete.CompletionResult.filter) isn't false.
+    */
+    filterStrict?: boolean;
     /**
     By default, commands relating to an open completion only take
     effect 75 milliseconds after the completion opened, so that key

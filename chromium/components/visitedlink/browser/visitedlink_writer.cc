@@ -179,7 +179,7 @@ VisitedLinkWriter::LoadFromFileResult::LoadFromFileResult(
   memcpy(this->salt, salt, LINK_SALT_LENGTH);
 }
 
-VisitedLinkWriter::LoadFromFileResult::~LoadFromFileResult() {}
+VisitedLinkWriter::LoadFromFileResult::~LoadFromFileResult() = default;
 
 // TableBuilder ---------------------------------------------------------------
 
@@ -219,7 +219,7 @@ class VisitedLinkWriter::TableBuilder
   void OnComplete(bool succeed) override;
 
  private:
-  ~TableBuilder() override {}
+  ~TableBuilder() override = default;
 
   // OnComplete mashals to this function on the main thread to do the
   // notification.
@@ -1207,7 +1207,7 @@ void VisitedLinkWriter::TableBuilder::OnCompleteMainThread() {
 
 // static
 VisitedLinkCommon::Fingerprint* VisitedLinkWriter::GetHashTableFromMapping(
-    const base::WritableSharedMemoryMapping& hash_table_mapping) {
+    base::WritableSharedMemoryMapping& hash_table_mapping) {
   DCHECK(hash_table_mapping.IsValid());
   // Our table pointer is just the data immediately following the header.
   return reinterpret_cast<Fingerprint*>(

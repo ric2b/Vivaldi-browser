@@ -31,10 +31,10 @@ class CastCRL {
   // of X.509 certificates.
   //
   // Inputs:
-  // * |trusted_chain| is the chain of verified certificates, starting with
+  // * `trusted_chain` is the chain of verified certificates, starting with
   //   trust anchor.
   //
-  // * |time| is the timestamp to use for determining if the certificate is
+  // * `time` is the timestamp to use for determining if the certificate is
   //   revoked.
   //
   // Output:
@@ -69,9 +69,9 @@ class CastCRL {
 // Cast device certificates, using the built-in Cast CRL trust anchors.
 //
 // Inputs:
-// * |crl_proto| is a serialized cast_certificate.CrlBundle proto.
-// * |time| is the timestamp to use for determining if the CRL is valid.
-// * |trust_store| is the set of trust anchors to use.
+// * `crl_proto` is a serialized cast_certificate.CrlBundle proto.
+// * `time` is the timestamp to use for determining if the CRL is valid.
+// * `trust_store` is the set of trust anchors to use.
 //
 // Output:
 // Returns the CRL object if success, nullptr otherwise.

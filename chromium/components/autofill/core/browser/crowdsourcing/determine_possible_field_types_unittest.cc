@@ -21,7 +21,7 @@ namespace autofill {
 namespace {
 
 using ::autofill::test::CreateTestFormField;
-using ::autofill::test::CreateTestSelectOrSelectListField;
+using ::autofill::test::CreateTestSelectField;
 using ::testing::Contains;
 using ::testing::ElementsAre;
 using ::testing::Not;
@@ -32,8 +32,7 @@ std::unique_ptr<FormStructure> ConstructFormStructureFromFormData(
     const FormData& form) {
   auto cached_form_structure =
       std::make_unique<FormStructure>(test::WithoutValues(form));
-  cached_form_structure->DetermineHeuristicTypes(GeoIpCountryCode(""), nullptr,
-                                                 nullptr);
+  cached_form_structure->DetermineHeuristicTypes(GeoIpCountryCode(""), nullptr);
 
   auto form_structure = std::make_unique<FormStructure>(form);
   form_structure->RetrieveFromCache(
@@ -144,7 +143,9 @@ class ProfileMatchingTypesTest
   ProfileMatchingTypesTest() {
     features_.InitWithFeatures({features::kAutofillUseCAAddressModel,
                                 features::kAutofillUseFRAddressModel,
-                                features::kAutofillUseITAddressModel},
+                                features::kAutofillUseITAddressModel,
+                                features::kAutofillUseNLAddressModel
+                               },
                                {});
   }
 
@@ -603,39 +604,6 @@ TEST_F(DeterminePossibleFieldTypesForUploadTest,
 
   CheckThatNoFieldHasThisPossibleType(*form_structure,
                                       CREDIT_CARD_VERIFICATION_CODE);
-}
-
-// Tests that email field is detected if the field value matches a valid email
-// format.
-TEST_F(DeterminePossibleFieldTypesForUploadTest,
-       CrowdsourceEmailFieldsByValue) {
-  base::test::ScopedFeatureList features{
-      features::kAutofillUploadVotesForFieldsWithEmail};
-
-  std::vector<AutofillProfile> profiles;
-  AutofillProfile profile =
-      FillDataToAutofillProfile(GetElvisAddressFillData());
-  profile.set_guid(MakeGuid(1));
-  profiles.push_back(profile);
-
-  FormData form;
-  test_api(form).Append(CreateTestFormField("foo", "foo", "invalidemail",
-                                            FormControlType::kInputText));
-  // The email value is different from the stored profile's email. The
-  // classification is then extracted from matching the value and not the
-  // profile's email.
-  test_api(form).Append(CreateTestFormField("foo", "foo", "myemail@gmail.com",
-                                            FormControlType::kInputText));
-
-  FormStructure form_structure(form);
-  DeterminePossibleFieldTypesForUpload(profiles, {}, std::u16string(), "en-us",
-                                       &form_structure);
-
-  ASSERT_EQ(2U, form_structure.field_count());
-  EXPECT_EQ(form_structure.field(0)->possible_types(),
-            FieldTypeSet({UNKNOWN_TYPE}));
-  EXPECT_EQ(form_structure.field(1)->possible_types(),
-            FieldTypeSet({EMAIL_ADDRESS}));
 }
 
 }  // namespace

@@ -86,7 +86,8 @@ public class ChromePageInfo {
                         mEphemeralTabCoordinatorSupplier,
                         pageInfoHighlight,
                         mTabCreator),
-                pageInfoHighlight);
+                pageInfoHighlight,
+                ChromePageInfo::dismissPopup); // Vivaldi
 
         // Vivaldi - Combined Site prefs and Tracker blocker popup
         View pageInfoContainer = PageInfoController.getPageInfoContainer();
@@ -98,6 +99,13 @@ public class ChromePageInfo {
                     ((AppCompatActivity) activity).getSupportFragmentManager(), "TrackerBlocker");
     }
 
+    // Vivaldi
+    private static void dismissPopup() {
+        if (mTrackerBlockerPopup != null && mTrackerBlockerPopup.isVisible())
+            mTrackerBlockerPopup.dismiss();
+    }
+
+    // Vivaldi
     public static VivaldiTrackerBlockerPopup getPopupInstance() {
         return mTrackerBlockerPopup;
     }

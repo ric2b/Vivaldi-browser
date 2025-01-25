@@ -6,22 +6,27 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <random>
 #include <vector>
 
-#include <fp16/fp16.h>
-
+#include "utils.h"
 #include "xnnpack.h"
-
+#include "xnnpack/math.h"
+#include "xnnpack/buffer.h"
 #include <benchmark/benchmark.h>
-#include "bench/utils.h"
+
 #ifdef BENCHMARK_TENSORFLOW_LITE
-#include "flatbuffers/include/flatbuffers/flatbuffers.h"
+#include "flatbuffers/include/flatbuffers/buffer.h"
+#include "flatbuffers/include/flatbuffers/flatbuffer_builder.h"
+#include "flatbuffers/include/flatbuffers/string.h"
+#include "tensorflow/lite/core/interpreter_builder.h"
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/kernels/register.h"
-#include "tensorflow/lite/model.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/version.h"
 #endif  // BENCHMARK_TENSORFLOW_LITE
@@ -32,12 +37,10 @@ static void xnnpack_softmax_qu8(benchmark::State& state) {
 
   std::random_device random_device;
   auto rng = std::mt19937(random_device());
-  auto u8rng = std::bind(std::uniform_int_distribution<uint32_t>(0, std::numeric_limits<uint8_t>::max()), std::ref(rng));
 
-  std::vector<uint8_t> input(batch_size * channels);
-  std::vector<uint8_t> output(batch_size * channels);
-  std::generate(input.begin(), input.end(), std::ref(u8rng));
-  std::fill(output.begin(), output.end(), 0xA5);
+  xnnpack::Buffer<uint8_t> input(batch_size * channels);
+  xnnpack::Buffer<uint8_t> output(batch_size * channels);
+  xnnpack::fill_uniform_random_bits(input.data(), input.size(), rng);
 
   xnn_status status = xnn_initialize(nullptr /* allocator */);
   if (status != xnn_status_success) {
@@ -109,10 +112,13 @@ static void xnnpack_softmax_f32(benchmark::State& state) {
   auto rng = std::mt19937(random_device());
   auto f32rng = std::bind(std::uniform_real_distribution<float>(-100.0f, 100.0f), std::ref(rng));
 
-  std::vector<float> input(batch_size * channels + XNN_EXTRA_BYTES / sizeof(float));
-  std::vector<float> output(batch_size * channels);
+  xnnpack::Buffer<float> input(batch_size * channels + XNN_EXTRA_BYTES / sizeof(float));
+  // Pad the outputs as well since the softmax computation is a multi-phase
+  // operation in which the output is re-read, potentially going OOB with
+  // vectorized kernels.
+  xnnpack::Buffer<float> output(batch_size * channels +
+                            XNN_EXTRA_BYTES / sizeof(float));
   std::generate(input.begin(), input.end(), std::ref(f32rng));
-  std::fill(output.begin(), output.end(), std::nanf(""));
 
   xnn_status status = xnn_initialize(nullptr /* allocator */);
   if (status != xnn_status_success) {
@@ -179,13 +185,15 @@ static void xnnpack_softmax_f16(benchmark::State& state) {
 
   std::random_device random_device;
   auto rng = std::mt19937(random_device());
-  auto f32rng = std::bind(std::uniform_real_distribution<float>(-100.0f, 100.0f), std::ref(rng));
-  auto f16rng = std::bind(fp16_ieee_from_fp32_value, f32rng);
-
-  std::vector<uint16_t> input(batch_size * channels + XNN_EXTRA_BYTES / sizeof(uint16_t));
-  std::vector<uint16_t> output(batch_size * channels);
-  std::generate(input.begin(), input.end(), std::ref(f16rng));
-  std::fill(output.begin(), output.end(), UINT16_C(0x7E00) /* NaN */);
+  auto f32rng = std::bind(
+      std::uniform_real_distribution<float>(-100.0f, 100.0f), std::ref(rng));
+  xnnpack::Buffer<xnn_float16> input(batch_size * channels + XNN_EXTRA_BYTES / sizeof(xnn_float16));
+  // Pad the outputs as well since the softmax computation is a multi-phase
+  // operation in which the output is re-read, potentially going OOB with
+  // vectorized kernels.
+  xnnpack::Buffer<xnn_float16> output(batch_size * channels +
+                                  XNN_EXTRA_BYTES / sizeof(xnn_float16));
+  std::generate(input.begin(), input.end(), f32rng);
 
   xnn_status status = xnn_initialize(nullptr /* allocator */);
   if (status != xnn_status_success) {
@@ -241,7 +249,7 @@ static void xnnpack_softmax_f16(benchmark::State& state) {
   state.counters["elements"] =
     benchmark::Counter(uint64_t(state.iterations()) * elements_per_iteration, benchmark::Counter::kIsRate);
 
-  const size_t bytes_per_iteration = 2 * elements_per_iteration * sizeof(uint16_t);
+  const size_t bytes_per_iteration = 2 * elements_per_iteration * sizeof(xnn_float16);
   state.counters["bytes"] =
     benchmark::Counter(uint64_t(state.iterations()) * bytes_per_iteration, benchmark::Counter::kIsRate);
 }

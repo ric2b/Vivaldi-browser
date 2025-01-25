@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Быстрый поиск доступен только в случае, если Google выбран поиском по умолчанию в Vivaldi. Эта функция отправляет слово и его контекст в поиск Google. Вы можете отключить её в <ph name="BEGIN_LINK" />Настройках<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Обычные/приватные вкладки</translation>
 <translation id="1644574205037202324">История</translation>
-<translation id="17513872634828108">Открыть вкладки</translation>
 <translation id="1829244130665387512">Найти на странице</translation>
 <translation id="1910514478706885609">Сгруппировать с активной</translation>
 <translation id="1925021887439448749">Ввести свой веб-адрес</translation>
 <translation id="2038563949887743358">Включить полную версию сайта</translation>
-<translation id="2139186145475833000">Добавить на гл. экран</translation>
 <translation id="2149973817440762519">Изменить закладку</translation>
 <translation id="2306442503286132111">Закладка сохранена в папке <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Внешний вид</translation>
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">Текущий язык устройства</translation>
 <translation id="4167670741834902166">Новая приватная вкладка</translation>
 <translation id="4195643157523330669">Открыть в новой вкладке</translation>
+<translation id="4225895483398857530">Кнопка на панели инструментов</translation>
 <translation id="4243710787042215766">Открыть в приватной вкладке</translation>
 <translation id="4304713468139749426">Менеджер паролей</translation>
 <translation id="451872707440238414">Искать в закладках</translation>
@@ -74,6 +73,7 @@
 <translation id="8560602726703398413">Список чтения находится в закладках</translation>
 <translation id="85991616550051997">Переход на домашнюю страницу</translation>
 <translation id="8820817407110198400">Закладки</translation>
+<translation id="9042893549633094279">Приватность и безопасность</translation>
 <translation id="9063523880881406963">Отключить полную версию сайта</translation>
 <translation id="9080642952018487277">Работать приватно</translation>
 <translation id="96681097142096641">Читать страницу в упрощённом виде?</translation>

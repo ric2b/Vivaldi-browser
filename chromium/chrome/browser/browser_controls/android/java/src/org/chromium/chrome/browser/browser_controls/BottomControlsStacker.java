@@ -29,15 +29,21 @@ public class BottomControlsStacker implements BrowserControlsStateProvider.Obser
     /** Enums that defines the type and position for each bottom controls. */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({
-        LayerType.BOTTOM_TOOLBAR,
+        LayerType.PROGRESS_BAR,
+        LayerType.TABSTRIP_TOOLBAR,
         LayerType.READ_ALOUD_PLAYER,
+        LayerType.BOTTOM_TOOLBAR,
         LayerType.BOTTOM_CHIN,
         LayerType.TEST_BOTTOM_LAYER
     })
     public @interface LayerType {
-        int BOTTOM_TOOLBAR = 0;
-        int READ_ALOUD_PLAYER = 1;
-        int BOTTOM_CHIN = 2;
+        // The progress bar during page loading. This layer has a height of 0 and overlaps the next
+        // visible layer in the stack.
+        int PROGRESS_BAR = 0;
+        int TABSTRIP_TOOLBAR = 1;
+        int READ_ALOUD_PLAYER = 2;
+        int BOTTOM_TOOLBAR = 3;
+        int BOTTOM_CHIN = 4;
 
         // Layer that's used for testing.
         int TEST_BOTTOM_LAYER = 100;
@@ -94,8 +100,10 @@ public class BottomControlsStacker implements BrowserControlsStateProvider.Obser
     // The pre-defined stack order for different bottom controls.
     private static final @LayerType int[] STACK_ORDER =
             new int[] {
-                LayerType.BOTTOM_TOOLBAR,
+                LayerType.PROGRESS_BAR,
+                LayerType.TABSTRIP_TOOLBAR,
                 LayerType.READ_ALOUD_PLAYER,
+                LayerType.BOTTOM_TOOLBAR,
                 LayerType.BOTTOM_CHIN,
                 LayerType.TEST_BOTTOM_LAYER
             };
@@ -151,6 +159,16 @@ public class BottomControlsStacker implements BrowserControlsStateProvider.Obser
             if (mLayerVisibilities.get(layerType)) return true;
         }
         return false;
+    }
+
+    /** Returns the calculated total height of all visible layers. */
+    public int getTotalHeight() {
+        return mTotalHeight;
+    }
+
+    /** Returns the calculated total min height of all visible layers. */
+    public int getTotalMinHeight() {
+        return mTotalMinHeight;
     }
 
     /**
@@ -409,8 +427,10 @@ public class BottomControlsStacker implements BrowserControlsStateProvider.Obser
             // Record the current yOffset in case the offset will be used for future animated
             // height adjustment.
             int yOffset = yOffsetOfLayers.get(layerType, layer.getHeight());
-            if (!mLayerVisibilities.get(layerType)) {
+            if (!mLayerVisibilities.get(layerType)
+                    && layer.getLayerVisibility() != LayerVisibility.HIDING) {
                 mLayerYOffsets.delete(layerType);
+                yOffset = layer.getHeight();
             } else {
                 mLayerYOffsets.put(layerType, yOffset);
             }

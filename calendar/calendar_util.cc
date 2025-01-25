@@ -179,9 +179,7 @@ RecurrenceExceptionRow CreateEventException(
     const RecurrenceException& exception) {
   RecurrenceExceptionRow exception_event;
 
-  if (exception.date.has_value()) {
-    exception_event.exception_day = GetTime(exception.date.value());
-  }
+  exception_event.exception_day = GetTime(exception.date);
 
   if (exception.cancelled.has_value()) {
     exception_event.cancelled = exception.cancelled.value();

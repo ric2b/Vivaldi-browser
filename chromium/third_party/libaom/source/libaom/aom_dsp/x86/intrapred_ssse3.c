@@ -83,6 +83,7 @@ void aom_paeth_predictor_4x8_ssse3(uint8_t *dst, ptrdiff_t stride,
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_paeth_predictor_4x16_ssse3(uint8_t *dst, ptrdiff_t stride,
                                     const uint8_t *above, const uint8_t *left) {
   __m128i l = _mm_load_si128((const __m128i *)left);
@@ -102,6 +103,7 @@ void aom_paeth_predictor_4x16_ssse3(uint8_t *dst, ptrdiff_t stride,
     rep = _mm_add_epi16(rep, one);
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_paeth_predictor_8x4_ssse3(uint8_t *dst, ptrdiff_t stride,
                                    const uint8_t *above, const uint8_t *left) {
@@ -166,6 +168,7 @@ void aom_paeth_predictor_8x16_ssse3(uint8_t *dst, ptrdiff_t stride,
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_paeth_predictor_8x32_ssse3(uint8_t *dst, ptrdiff_t stride,
                                     const uint8_t *above, const uint8_t *left) {
   const __m128i t = _mm_loadl_epi64((const __m128i *)above);
@@ -187,6 +190,7 @@ void aom_paeth_predictor_8x32_ssse3(uint8_t *dst, ptrdiff_t stride,
     }
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 // Return 16 8-bit pixels in one row
 static inline __m128i paeth_16x1_pred(const __m128i *left, const __m128i *top0,
@@ -197,6 +201,7 @@ static inline __m128i paeth_16x1_pred(const __m128i *left, const __m128i *top0,
   return _mm_packus_epi16(p0, p1);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_paeth_predictor_16x4_ssse3(uint8_t *dst, ptrdiff_t stride,
                                     const uint8_t *above, const uint8_t *left) {
   __m128i l = _mm_cvtsi32_si128(((const int *)left)[0]);
@@ -217,6 +222,7 @@ void aom_paeth_predictor_16x4_ssse3(uint8_t *dst, ptrdiff_t stride,
     rep = _mm_add_epi16(rep, one);
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_paeth_predictor_16x8_ssse3(uint8_t *dst, ptrdiff_t stride,
                                     const uint8_t *above, const uint8_t *left) {
@@ -298,6 +304,7 @@ void aom_paeth_predictor_16x32_ssse3(uint8_t *dst, ptrdiff_t stride,
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_paeth_predictor_16x64_ssse3(uint8_t *dst, ptrdiff_t stride,
                                      const uint8_t *above,
                                      const uint8_t *left) {
@@ -348,6 +355,7 @@ void aom_paeth_predictor_32x8_ssse3(uint8_t *dst, ptrdiff_t stride,
     rep = _mm_add_epi16(rep, one);
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_paeth_predictor_32x16_ssse3(uint8_t *dst, ptrdiff_t stride,
                                      const uint8_t *above,
@@ -538,6 +546,7 @@ void aom_paeth_predictor_64x64_ssse3(uint8_t *dst, ptrdiff_t stride,
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_paeth_predictor_64x16_ssse3(uint8_t *dst, ptrdiff_t stride,
                                      const uint8_t *above,
                                      const uint8_t *left) {
@@ -577,6 +586,7 @@ void aom_paeth_predictor_64x16_ssse3(uint8_t *dst, ptrdiff_t stride,
     rep = _mm_add_epi16(rep, one);
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 // -----------------------------------------------------------------------------
 // SMOOTH_PRED
@@ -686,6 +696,7 @@ void aom_smooth_predictor_4x8_ssse3(uint8_t *dst, ptrdiff_t stride,
   smooth_pred_4xh(pixels, wh, ww, 8, dst, stride, 0);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_smooth_predictor_4x16_ssse3(uint8_t *dst, ptrdiff_t stride,
                                      const uint8_t *above,
                                      const uint8_t *left) {
@@ -699,6 +710,7 @@ void aom_smooth_predictor_4x16_ssse3(uint8_t *dst, ptrdiff_t stride,
   dst += stride << 3;
   smooth_pred_4xh(pixels, &wh[2], ww, 8, dst, stride, 1);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 // pixels[0]: above and below_pred interleave vector, first half
 // pixels[1]: above and below_pred interleave vector, second half
@@ -865,6 +877,7 @@ void aom_smooth_predictor_8x16_ssse3(uint8_t *dst, ptrdiff_t stride,
   smooth_pred_8xh(pixels, &wh[2], ww, 8, dst, stride, 1);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_smooth_predictor_8x32_ssse3(uint8_t *dst, ptrdiff_t stride,
                                      const uint8_t *above,
                                      const uint8_t *left) {
@@ -882,6 +895,7 @@ void aom_smooth_predictor_8x32_ssse3(uint8_t *dst, ptrdiff_t stride,
   dst += stride << 3;
   smooth_pred_8xh(&pixels[4], &wh[6], ww, 8, dst, stride, 1);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 // TODO(slavarnway): Visual Studio only supports restrict when /std:c11
 // (available in 2019+) or greater is specified; __restrict can be used in that
@@ -998,11 +1012,13 @@ static void smooth_predictor_wxh(uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_smooth_predictor_16x4_ssse3(uint8_t *dst, ptrdiff_t stride,
                                      const uint8_t *above,
                                      const uint8_t *left) {
   smooth_predictor_wxh(dst, stride, above, left, 16, 4);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_smooth_predictor_16x8_ssse3(uint8_t *dst, ptrdiff_t stride,
                                      const uint8_t *above,
@@ -1022,6 +1038,7 @@ void aom_smooth_predictor_16x32_ssse3(uint8_t *dst, ptrdiff_t stride,
   smooth_predictor_wxh(dst, stride, above, left, 16, 32);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_smooth_predictor_16x64_ssse3(uint8_t *dst, ptrdiff_t stride,
                                       const uint8_t *above,
                                       const uint8_t *left) {
@@ -1033,6 +1050,7 @@ void aom_smooth_predictor_32x8_ssse3(uint8_t *dst, ptrdiff_t stride,
                                      const uint8_t *left) {
   smooth_predictor_wxh(dst, stride, above, left, 32, 8);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_smooth_predictor_32x16_ssse3(uint8_t *dst, ptrdiff_t stride,
                                       const uint8_t *above,
@@ -1052,11 +1070,13 @@ void aom_smooth_predictor_32x64_ssse3(uint8_t *dst, ptrdiff_t stride,
   smooth_predictor_wxh(dst, stride, above, left, 32, 64);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_smooth_predictor_64x16_ssse3(uint8_t *dst, ptrdiff_t stride,
                                       const uint8_t *above,
                                       const uint8_t *left) {
   smooth_predictor_wxh(dst, stride, above, left, 64, 16);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_smooth_predictor_64x32_ssse3(uint8_t *dst, ptrdiff_t stride,
                                       const uint8_t *above,
@@ -1198,6 +1218,7 @@ void aom_smooth_v_predictor_4x8_ssse3(
   write_smooth_vertical4xh(&pixels, weights, 8, dst, stride);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_smooth_v_predictor_4x16_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
     const uint8_t *LIBAOM_RESTRICT top_row,
@@ -1212,6 +1233,7 @@ void aom_smooth_v_predictor_4x16_ssse3(
   dst += stride << 3;
   write_smooth_vertical4xh(&pixels, &weights[2], 8, dst, stride);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_smooth_v_predictor_8x4_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
@@ -1311,6 +1333,7 @@ void aom_smooth_v_predictor_8x16_ssse3(
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_smooth_v_predictor_8x32_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
     const uint8_t *LIBAOM_RESTRICT top_row,
@@ -1419,6 +1442,7 @@ void aom_smooth_v_predictor_16x4_ssse3(
                                  scaled_bottom_left_y, scaled_bottom_left_y,
                                  round);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_smooth_v_predictor_16x8_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
@@ -1561,6 +1585,7 @@ void aom_smooth_v_predictor_16x32_ssse3(
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_smooth_v_predictor_16x64_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
     const uint8_t *LIBAOM_RESTRICT top_row,
@@ -1639,6 +1664,7 @@ void aom_smooth_v_predictor_32x8_ssse3(
     dst += stride;
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_smooth_v_predictor_32x16_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
@@ -1832,6 +1858,7 @@ void aom_smooth_v_predictor_32x64_ssse3(
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_smooth_v_predictor_64x16_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
     const uint8_t *LIBAOM_RESTRICT top_row,
@@ -1901,6 +1928,7 @@ void aom_smooth_v_predictor_64x16_ssse3(
     dst += stride;
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_smooth_v_predictor_64x32_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
@@ -2178,6 +2206,7 @@ void aom_smooth_h_predictor_4x8_ssse3(
                                &round);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_smooth_h_predictor_4x16_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
     const uint8_t *LIBAOM_RESTRICT top_row,
@@ -2259,6 +2288,7 @@ void aom_smooth_h_predictor_4x16_ssse3(
   write_smooth_horizontal_sum4(dst, &left_y, &weights, &scaled_top_right,
                                &round);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 // For SMOOTH_H, |pixels| is the repeated left value for the row. For SMOOTH_V,
 // |pixels| is a segment of the top row or the whole top row, and |weights| is
@@ -2343,6 +2373,7 @@ void aom_smooth_h_predictor_8x16_ssse3(
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_smooth_h_predictor_8x32_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
     const uint8_t *LIBAOM_RESTRICT top_row,
@@ -2424,6 +2455,7 @@ void aom_smooth_h_predictor_16x4_ssse3(
   write_smooth_directional_sum16(dst, left_y, left_y, weights1, weights2,
                                  scaled_top_right1, scaled_top_right2, round);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_smooth_h_predictor_16x8_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
@@ -2535,6 +2567,7 @@ void aom_smooth_h_predictor_16x32_ssse3(
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_smooth_h_predictor_16x64_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
     const uint8_t *LIBAOM_RESTRICT top_row,
@@ -2600,6 +2633,7 @@ void aom_smooth_h_predictor_32x8_ssse3(
     dst += stride;
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_smooth_h_predictor_32x16_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
@@ -2757,6 +2791,7 @@ void aom_smooth_h_predictor_32x64_ssse3(
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_smooth_h_predictor_64x16_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,
     const uint8_t *LIBAOM_RESTRICT top_row,
@@ -2829,6 +2864,7 @@ void aom_smooth_h_predictor_64x16_ssse3(
     dst += stride;
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_smooth_h_predictor_64x32_ssse3(
     uint8_t *LIBAOM_RESTRICT dst, ptrdiff_t stride,

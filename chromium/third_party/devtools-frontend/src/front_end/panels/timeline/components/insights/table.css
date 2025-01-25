@@ -7,6 +7,11 @@
 table {
   width: 100%;
   padding: 5px 0;
+  border-collapse: collapse;
+}
+
+thead {
+  white-space: nowrap;
 }
 
 table tr > * {
@@ -17,10 +22,24 @@ table tr > *:first-child {
   text-align: left;
 }
 
-table th[scope="row"] {
+table.interactive tbody tr {
+  cursor: pointer;
+}
+
+table.interactive tbody tr:hover,
+table.interactive tbody tr.selected {
+  background-color: var(--app-color-performance-sidebar-table-row-hover);
+}
+
+table thead th {
+  font: var(--sys-typescale-body4-medium);
+}
+
+table tbody th {
   font-weight: normal;
 }
 
-td {
-  font-weight: bold;
+table th[scope="row"] {
+  padding: 3px 0;
+  word-break: break-word;
 }

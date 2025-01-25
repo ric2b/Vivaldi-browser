@@ -66,7 +66,6 @@
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser
                             screenProvider:(ScreenProvider*)screenProvider {
-  DCHECK(!browser->GetBrowserState()->IsOffTheRecord());
   self = [super initWithBaseViewController:viewController browser:browser];
   if (self) {
     _screenProvider = screenProvider;
@@ -199,8 +198,7 @@
                                    browser:self.browser
                                   delegate:self];
     case kStepsCompleted:
-      NOTREACHED_IN_MIGRATION() << "Reaches kStepsCompleted unexpectedly.";
-      break;
+      NOTREACHED() << "Reaches kStepsCompleted unexpectedly.";
   }
   return nil;
 }
@@ -271,7 +269,7 @@
     observeTabStyleChange:^(BOOL isTabsOn) {
     [VivaldiTabSettingPrefs
       setDesktopTabsMode:isTabsOn
-          inPrefServices:self.browser->GetBrowserState()->GetPrefs()];
+          inPrefServices:self.browser->GetProfile()->GetPrefs()];
   }];
 
   [self.onboardingActionsBridge
@@ -281,7 +279,7 @@
             inPrefServices:GetApplicationContext()->GetLocalState()];
     [VivaldiTabSettingPrefs
         setReverseSearchSuggestionsEnabled:isBottomOmniboxEnabled
-            inPrefServices:self.browser->GetBrowserState()->GetPrefs()];
+            inPrefServices:self.browser->GetProfile()->GetPrefs()];
   }];
 
   [self.onboardingActionsBridge observeOnboardingFinishedState:^{

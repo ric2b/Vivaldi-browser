@@ -15,6 +15,7 @@
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/user_metrics.h"
+#include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -28,8 +29,6 @@
 #include "chrome/browser/autofill/ui/ui_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/device_reauth/chrome_device_authenticator_factory.h"
-#include "chrome/browser/fast_checkout/fast_checkout_client_impl.h"
-#include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/keyboard_accessory/android/manual_filling_controller.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
@@ -43,9 +42,7 @@
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/autofill/address_bubbles_controller.h"
 #include "chrome/browser/ui/autofill/autofill_field_promo_controller_impl.h"
-#include "chrome/browser/ui/autofill/autofill_prediction_improvements/save_autofill_prediction_improvements_controller.h"
 #include "chrome/browser/ui/autofill/autofill_suggestion_controller.h"
-#include "chrome/browser/ui/autofill/delete_address_profile_dialog_controller_impl.h"
 #include "chrome/browser/ui/autofill/edit_address_profile_dialog_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/chrome_payments_autofill_client.h"
 #include "chrome/browser/ui/autofill/payments/credit_card_scanner_controller.h"
@@ -59,8 +56,8 @@
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/passwords/ui_utils.h"
 #include "chrome/browser/ui/plus_addresses/plus_address_creation_controller.h"
-#include "chrome/browser/ui/plus_addresses/plus_address_error_dialog.h"
 #include "chrome/browser/ui/singleton_tabs.h"
+#include "chrome/browser/ui/user_education/browser_user_education_interface.h"
 #include "chrome/browser/webdata_services/web_data_service_factory.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/url_constants.h"
@@ -71,6 +68,7 @@
 #include "components/autofill/core/browser/autofill_optimization_guide.h"
 #include "components/autofill/core/browser/autofill_plus_address_delegate.h"
 #include "components/autofill/core/browser/autofill_type.h"
+#include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/filling_product.h"
 #include "components/autofill/core/browser/form_data_importer.h"
@@ -90,7 +88,6 @@
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/compose/buildflags.h"
 #include "components/feature_engagement/public/feature_constants.h"
-#include "components/feature_engagement/public/tracker.h"
 #include "components/optimization_guide/machine_learning_tflite_buildflags.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/content/browser/password_form_classification_util.h"
@@ -118,19 +115,20 @@
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/storage_partition.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "ui/base/interaction/element_identifier.h"
 #include "ui/gfx/geometry/rect.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/android/preferences/autofill/settings_launcher_helper.h"
-#include "chrome/browser/android/signin/signin_bridge.h"
+#include "chrome/browser/android/preferences/autofill/settings_navigation_helper.h"
 #include "chrome/browser/android/tab_android.h"
+#include "chrome/browser/fast_checkout/fast_checkout_client_impl.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
+#include "chrome/browser/signin/android/signin_bridge.h"
 #include "chrome/browser/ui/android/autofill/autofill_accessibility_utils.h"
 #include "chrome/browser/ui/android/autofill/save_update_address_profile_flow_manager.h"
-#include "chrome/browser/ui/autofill/payments/autofill_snackbar_controller_impl.h"
+#include "chrome/browser/ui/autofill/autofill_snackbar_type.h"
 #include "chrome/browser/ui/autofill/payments/offer_notification_controller_android.h"
-#include "components/autofill/core/browser/autofill_prediction_improvements_delegate.h"
 #include "components/autofill/core/browser/payments/autofill_save_card_infobar_delegate_mobile.h"
 #include "components/autofill/core/browser/payments/autofill_save_card_infobar_mobile.h"
 #include "components/infobars/content/content_infobar_manager.h"
@@ -138,18 +136,23 @@
 #include "components/messages/android/messages_feature.h"
 #include "components/strings/grit/components_strings.h"
 #else  // !BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/autofill_prediction_improvements/chrome_autofill_prediction_improvements_client.h"
+#include "chrome/browser/autofill_ai/chrome_autofill_ai_client.h"
 #include "chrome/browser/ui/autofill/autofill_prediction_improvements/save_autofill_prediction_improvements_controller.h"
 #include "chrome/browser/ui/autofill/delete_address_profile_dialog_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/offer_notification_bubble_controller_impl.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/plus_addresses/plus_address_error_dialog.h"
+#include "chrome/browser/ui/plus_addresses/plus_address_menu_model.h"  // nogncheck
 #include "chrome/browser/ui/tabs/public/tab_features.h"  // nogncheck
+#include "chrome/browser/ui/toasts/api/toast_id.h"
+#include "chrome/browser/ui/toasts/toast_controller.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
-#include "components/autofill_prediction_improvements/core/browser/autofill_prediction_improvements_features.h"
-#include "components/autofill_prediction_improvements/core/browser/autofill_prediction_improvements_manager.h"
+#include "components/autofill/core/browser/autofill_ai_delegate.h"
+#include "components/autofill_ai/core/browser/autofill_ai_features.h"  // nogncheck
+#include "components/autofill_ai/core/browser/autofill_ai_manager.h"  // nogncheck
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(ENABLE_COMPOSE)
@@ -158,8 +161,9 @@
 #endif
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
-#include "chrome/browser/autofill/autofill_ml_prediction_model_service_factory.h"
-#include "components/autofill/core/browser/ml_model/autofill_ml_prediction_model_handler.h"
+#include "chrome/browser/autofill/autofill_field_classification_model_service_factory.h"
+#include "chrome/browser/password_manager/password_field_classification_model_handler_factory.h"
+#include "components/autofill/core/browser/ml_model/field_classification_model_handler.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -180,6 +184,28 @@ AutoselectFirstSuggestion ShouldAutofillPopupAutoselectFirstSuggestion(
   return AutoselectFirstSuggestion(
       source == AutofillSuggestionTriggerSource::kTextFieldDidReceiveKeyDown);
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+const base::Feature& GetFeature(AutofillClient::IphFeature iph_feature) {
+  switch (iph_feature) {
+    case AutofillClient::IphFeature::kManualFallback:
+      return feature_engagement::kIPHAutofillManualFallbackFeature;
+    case AutofillClient::IphFeature::kPredictionImprovements:
+      return feature_engagement::kIPHAutofillPredictionImprovementsFeature;
+  }
+  NOTREACHED();
+}
+
+ui::ElementIdentifier GetElementId(AutofillClient::IphFeature iph_feature) {
+  switch (iph_feature) {
+    case AutofillClient::IphFeature::kManualFallback:
+      return kAutofillManualFallbackElementId;
+    case AutofillClient::IphFeature::kPredictionImprovements:
+      return kAutofillPredictionImprovementsIphElementId;
+  }
+  NOTREACHED();
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace
 
@@ -204,6 +230,10 @@ ChromeAutofillClient::~ChromeAutofillClient() {
     // Hide the controller to avoid a memory leak.
     suggestion_controller_->Hide(SuggestionHidingReason::kTabGone);
   }
+}
+
+base::WeakPtr<AutofillClient> ChromeAutofillClient::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 version_info::Channel ChromeAutofillClient::GetChannel() const {
@@ -246,11 +276,23 @@ AutofillOptimizationGuide* ChromeAutofillClient::GetAutofillOptimizationGuide()
              : AutofillOptimizationGuideFactory::GetForProfile(profile);
 }
 
-AutofillMlPredictionModelHandler*
-ChromeAutofillClient::GetAutofillMlPredictionModelHandler() {
+FieldClassificationModelHandler*
+ChromeAutofillClient::GetAutofillFieldClassificationModelHandler() {
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
   if (base::FeatureList::IsEnabled(features::kAutofillModelPredictions)) {
-    return AutofillMlPredictionModelServiceFactory::GetForBrowserContext(
+    return AutofillFieldClassificationModelServiceFactory::GetForBrowserContext(
+        web_contents()->GetBrowserContext());
+  }
+#endif
+  return nullptr;
+}
+
+FieldClassificationModelHandler*
+ChromeAutofillClient::GetPasswordManagerFieldClassificationModelHandler() {
+#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordFormClientsideClassifier)) {
+    return PasswordFieldClassificationModelHandlerFactory::GetForBrowserContext(
         web_contents()->GetBrowserContext());
   }
 #endif
@@ -290,17 +332,12 @@ AutofillPlusAddressDelegate* ChromeAutofillClient::GetPlusAddressDelegate() {
       web_contents()->GetBrowserContext());
 }
 
-AutofillPredictionImprovementsDelegate*
-ChromeAutofillClient::GetAutofillPredictionImprovementsDelegate() {
+AutofillAiDelegate* ChromeAutofillClient::GetAutofillAiDelegate() {
 #if !BUILDFLAG(IS_ANDROID)
-  if (!autofill_prediction_improvements::
-          IsAutofillPredictionImprovementsEnabled()) {
-    return nullptr;
-  }
   if (tabs::TabInterface* tab = tabs::TabInterface::MaybeGetFromContents(
           web_contents()->GetOutermostWebContents())) {
-    ChromeAutofillPredictionImprovementsClient* client =
-        tab->GetTabFeatures()->chrome_autofill_prediction_improvements_client();
+    ChromeAutofillAiClient* client =
+        tab->GetTabFeatures()->chrome_autofill_ai_client();
     return client ? &client->GetManager() : nullptr;
   }
 #endif
@@ -353,6 +390,12 @@ syncer::SyncService* ChromeAutofillClient::GetSyncService() {
 }
 
 signin::IdentityManager* ChromeAutofillClient::GetIdentityManager() {
+  return const_cast<signin::IdentityManager*>(
+      std::as_const(*this).GetIdentityManager());
+}
+
+const signin::IdentityManager* ChromeAutofillClient::GetIdentityManager()
+    const {
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
   return IdentityManagerFactory::GetForProfile(profile->GetOriginalProfile());
@@ -483,7 +526,7 @@ void ChromeAutofillClient::ShowAutofillSettings(
       ShowAutofillCreditCardSettings(web_contents());
       return;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 #else
   Browser* browser = chrome::FindBrowserWithTab(web_contents());
@@ -504,7 +547,7 @@ void ChromeAutofillClient::ShowAutofillSettings(
         chrome::ShowSettingsSubPage(browser, chrome::kPaymentsSubPage);
         return;
       default:
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
     }
   }
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -579,7 +622,7 @@ ChromeAutofillClient::ShowAutofillSuggestions(
     base::WeakPtr<AutofillSuggestionDelegate> delegate) {
   // The Autofill Popup cannot open if it overlaps with another popup.
   // Therefore, the IPH is hidden before showing the Autofill Popup.
-  HideAutofillFieldIphForManualFallbackFeature();
+  HideAutofillFieldIph();
 
   // IPH hiding is asynchronous. Posting showing the Autofill Popup
   // guarantees the IPH will be hidden by the time the Autofill Popup will
@@ -590,8 +633,37 @@ ChromeAutofillClient::ShowAutofillSuggestions(
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&ChromeAutofillClient::ShowAutofillSuggestionsImpl,
-                     GetWeakPtr(), session_id, open_args, delegate));
+                     weak_ptr_factory_.GetWeakPtr(), session_id, open_args,
+                     delegate));
   return session_id;
+}
+
+void ChromeAutofillClient::ShowPlusAddressEmailOverrideNotification(
+    const std::string& original_email,
+    EmailOverrideUndoCallback email_override_undo_callback) {
+#if BUILDFLAG(IS_ANDROID)
+  GetAutofillSnackbarController()->Show(
+      AutofillSnackbarType::kPlusAddressEmailOverride,
+      std::move(email_override_undo_callback));
+#else
+  Browser* const browser = chrome::FindBrowserWithTab(web_contents());
+  if (!browser) {
+    return;
+  }
+  if (ToastController* const controller =
+          browser->browser_window_features()->toast_controller()) {
+    ToastParams params(ToastId::kPlusAddressOverride);
+    params.menu_model = std::make_unique<plus_addresses::PlusAddressMenuModel>(
+        base::UTF8ToUTF16(
+            GetIdentityManager()
+                ->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin)
+                .email),
+        std::move(email_override_undo_callback),
+        base::BindRepeating(&AutofillClient::ShowAutofillSettings, GetWeakPtr(),
+                            SuggestionType::kManagePlusAddress));
+    controller->MaybeShowToast(std::move(params));
+  }
+#endif
 }
 
 void ChromeAutofillClient::UpdateAutofillDataListValues(
@@ -742,6 +814,18 @@ const AutofillAblationStudy& ChromeAutofillClient::GetAblationStudy() const {
   return ablation_study_;
 }
 
+#if BUILDFLAG(IS_ANDROID)
+AutofillSnackbarControllerImpl*
+ChromeAutofillClient::GetAutofillSnackbarController() {
+  if (!autofill_snackbar_controller_impl_) {
+    autofill_snackbar_controller_impl_ =
+        std::make_unique<AutofillSnackbarControllerImpl>(web_contents());
+  }
+
+  return autofill_snackbar_controller_impl_.get();
+}
+#endif
+
 FormInteractionsFlowId
 ChromeAutofillClient::GetCurrentFormInteractionsFlowId() {
   constexpr base::TimeDelta max_flow_time = base::Minutes(20);
@@ -768,48 +852,56 @@ ChromeAutofillClient::GetDeviceAuthenticator() {
 #endif
 }
 
-void ChromeAutofillClient::ShowAutofillFieldIphForManualFallbackFeature(
-    const FormFieldData& field) {
+bool ChromeAutofillClient::ShowAutofillFieldIphForFeature(
+    const FormFieldData& field,
+    IphFeature autofill_feature) {
 #if !BUILDFLAG(IS_ANDROID)
-  if (!autofill_field_promo_controller_manual_fallback_) {
-    autofill_field_promo_controller_manual_fallback_ =
-        std::make_unique<AutofillFieldPromoControllerImpl>(
-            web_contents(),
-            feature_engagement::kIPHAutofillManualFallbackFeature,
-            kAutofillManualFallbackElementId);
+  if (autofill_field_promo_controller_ &&
+      autofill_field_promo_controller_->IsMaybeShowing()) {
+    return true;
   }
-  autofill_field_promo_controller_manual_fallback_->Show(field.bounds());
+
+  const base::Feature& feature = GetFeature(autofill_feature);
+
+  // [Re]create the controller if `autofill_feature` isn't the current one.
+  if (!autofill_field_promo_controller_ ||
+      autofill_field_promo_controller_->GetFeaturePromo().name !=
+          feature.name) {
+    autofill_field_promo_controller_ =
+        std::make_unique<AutofillFieldPromoControllerImpl>(
+            web_contents(), feature, GetElementId(autofill_feature));
+  }
+
+  autofill_field_promo_controller_->Show(field.bounds());
+  return autofill_field_promo_controller_->IsMaybeShowing();
+#else
+  return false;
 #endif  // !BUILDFLAG(IS_ANDROID)
 }
 
-void ChromeAutofillClient::HideAutofillFieldIphForManualFallbackFeature() {
-  if (autofill_field_promo_controller_manual_fallback_) {
-    autofill_field_promo_controller_manual_fallback_->Hide();
+void ChromeAutofillClient::HideAutofillFieldIph() {
+  if (autofill_field_promo_controller_) {
+    autofill_field_promo_controller_->Hide();
   }
 }
 
-void ChromeAutofillClient::NotifyAutofillManualFallbackUsed() {
+void ChromeAutofillClient::NotifyIphFeatureUsed(
+    AutofillClient::IphFeature feature) {
 #if !BUILDFLAG(IS_ANDROID)
   // Based on the feature config, the IPH will not be shown ever again once the
-  // user has used the manual fallback feature. If the user is aware that the
-  // manual fallback feature exists, then they shouldn't be spammed with IPHs.
-  // The IPH code cannot know if the feature was used or not unless explicitly
-  // notified.
-  feature_engagement::TrackerFactory::GetForBrowserContext(
-      web_contents()->GetBrowserContext())
-      ->NotifyUsedEvent(feature_engagement::kIPHAutofillManualFallbackFeature);
-#endif  // !BUILDFLAG(IS_ANDROID)
-}
-
-void ChromeAutofillClient::ShowSaveAutofillPredictionImprovementsBubble() {
-#if !BUILDFLAG(IS_ANDROID)
-  if (SaveAutofillPredictionImprovementsController* controller =
-          SaveAutofillPredictionImprovementsController::GetOrCreate(
+  // user has used the `feature`. If the user is aware of it, then they
+  // shouldn't be spammed with IPHs. The IPH code cannot know if the feature was
+  // used or not unless explicitly notified.
+  if (auto* interface =
+          BrowserUserEducationInterface::MaybeGetForWebContentsInTab(
               web_contents())) {
-    controller->OfferSave({});
+    interface->NotifyFeaturePromoFeatureUsed(
+        GetFeature(feature),
+        FeaturePromoFeatureUsedAction::kClosePromoIfPresent);
   }
 #endif  // !BUILDFLAG(IS_ANDROID)
 }
+
 ChromeAutofillClient::ChromeAutofillClient(content::WebContents* web_contents)
     : ContentAutofillClient(web_contents),
       content::WebContentsObserver(web_contents),
@@ -900,10 +992,6 @@ void ChromeAutofillClient::ShowAutofillSuggestionsImpl(
     suggestion_controller_->SetKeepPopupOpenForTesting(
         keep_popup_open_for_testing_);
   }
-}
-
-base::WeakPtr<ChromeAutofillClient> ChromeAutofillClient::GetWeakPtr() {
-  return weak_ptr_factory_.GetWeakPtr();
 }
 
 std::unique_ptr<AutofillManager> ChromeAutofillClient::CreateManager(

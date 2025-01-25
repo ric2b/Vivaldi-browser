@@ -7,11 +7,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 
 #include "xnnpack.h"
 #include "xnnpack/common.h"
 #include "xnnpack/memory.h"
-
 #include <benchmark/benchmark.h>
 
 namespace benchmark {
@@ -93,10 +93,11 @@ void BinaryElementwiseParameters(benchmark::internal::Benchmark* benchmark) {
   benchmark->Arg(characteristic_l2 / elementwise_size / 960 * 960);
 }
 
-// Set multi-threading parameters appropriate for the processor.
-void MultiThreadingParameters(benchmark::internal::Benchmark* benchmark);
+using IsaCheckFunction = std::function<bool(benchmark::State&)>;
 
-typedef bool (*IsaCheckFunction)(benchmark::State& state);
+// Check if the architecture flags are supported.
+// If unsupported, report error in benchmark state, and return false.
+bool CheckArchFlags(benchmark::State& state, uint64_t arch_flags);
 
 // Check if either ARM VFPv2 or VFPv3 extension is supported.
 // If VFP is unsupported, report error in benchmark state, and return false.
@@ -206,6 +207,10 @@ bool CheckAVX512FP16(benchmark::State& state);
 // If AVX-VNNI extension is unsupported, report error in benchmark state, and return false.
 bool CheckAVXVNNI(benchmark::State& state);
 
+// Check if x86 AVX-VNNI-INT8 extension is supported.
+// If AVX-VNNI-INT8 extension is unsupported, report error in benchmark state, and return false.
+bool CheckAVXVNNIINT8(benchmark::State& state);
+
 // Check if x86 AVX256SKX extension is supported.
 // If AVX256SKX extension is unsupported, report error in benchmark state, and return false.
 bool CheckAVX256SKX(benchmark::State& state);
@@ -252,18 +257,6 @@ inline T Doz(T a, T b) {
   return a >= b ? a - b : T(0);
 }
 
-#if XNN_PLATFORM_JIT
-
-// A struct that uses RAII pattern to allocate and release code memory.
-struct CodeMemoryHelper {
-  CodeMemoryHelper();
-  ~CodeMemoryHelper();
-
-  xnn_code_buffer buffer;
-  xnn_status status;
-};
-
-#endif  // XNN_PLATFORM_JIT
 
 }  // namespace utils
 }  // namespace benchmark

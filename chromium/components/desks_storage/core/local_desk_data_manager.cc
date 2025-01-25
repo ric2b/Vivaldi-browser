@@ -52,6 +52,7 @@ constexpr size_t kMaxDeskTemplateCount = 6u;
 // Currently, the save for later button is dependent on the the max number of
 // entries total.
 constexpr size_t kMaxSaveAndRecallDeskCount = 6u;
+constexpr size_t kMaxCoralDeskCount = 6u;
 
 // Set of valid desk types.
 constexpr auto kValidDeskTypes = base::MakeFixedFlatSet<ash::DeskTemplateType>(
@@ -550,8 +551,7 @@ DeskModel::AddOrUpdateEntryStatus LocalDeskDataManager::AddOrUpdateEntryTask(
   const base::FilePath fully_qualified_path =
       GetFullyQualifiedPath(local_saved_desk_path, uuid);
   if (WriteTemplateFile(fully_qualified_path, std::move(entry_base_value))) {
-    int64_t file_size;
-    GetFileSize(fully_qualified_path, &file_size);
+    int64_t file_size = GetFileSize(fully_qualified_path).value_or(0);
     RecordSavedDeskTemplateSizeHistogram(desk_type, file_size);
     return AddOrUpdateEntryStatus::kOk;
   }
@@ -652,6 +652,8 @@ size_t LocalDeskDataManager::GetMaxEntryCountByDeskType(
       return kMaxDeskTemplateCount + policy_entries_.size();
     case ash::DeskTemplateType::kSaveAndRecall:
       return kMaxSaveAndRecallDeskCount;
+    case ash::DeskTemplateType::kCoral:
+      return kMaxCoralDeskCount;
     case ash::DeskTemplateType::kFloatingWorkspace:
     case ash::DeskTemplateType::kUnknown:
       return 0;

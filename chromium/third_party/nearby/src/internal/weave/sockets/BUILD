@@ -23,15 +23,15 @@ cc_library(
         "initial_data_provider.h",
         "server_socket.h",
     ],
-    visibility = [
-        "//connections:__subpackages__",
-    ],
+    visibility = ["//visibility:private"],
     deps = [
         "//internal/platform:types",
         "//internal/weave",
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
     ],
 )
 

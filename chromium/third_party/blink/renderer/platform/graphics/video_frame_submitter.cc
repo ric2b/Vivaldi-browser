@@ -131,8 +131,8 @@ class VideoFrameSubmitter::FrameSinkBundleProxy
   }
 
   // Not used by VideoFrameSubmitter.
-  void SetWantsAnimateOnlyBeginFrames() override { NOTREACHED_IN_MIGRATION(); }
-  void SetAutoNeedsBeginFrame() override { NOTREACHED_IN_MIGRATION(); }
+  void SetWantsAnimateOnlyBeginFrames() override { NOTREACHED(); }
+  void SetAutoNeedsBeginFrame() override { NOTREACHED(); }
 
   void SubmitCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
@@ -155,7 +155,7 @@ class VideoFrameSubmitter::FrameSinkBundleProxy
       std::optional<viz::HitTestRegionList> hit_test_region_list,
       uint64_t submit_time,
       SubmitCompositorFrameSyncCallback callback) override {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) override {
@@ -193,8 +193,8 @@ class VideoFrameSubmitter::FrameSinkBundleProxy
       viz::mojom::blink::PendingLayerContextPtr context) override {}
 
 #if BUILDFLAG(IS_ANDROID)
-  void SetThreadIds(const WTF::Vector<int32_t>& thread_ids) override {
-    bundle_->SetThreadIds(frame_sink_id_.sink_id(), thread_ids);
+  void SetThreads(const WTF::Vector<viz::Thread>& threads) override {
+    bundle_->SetThreads(frame_sink_id_.sink_id(), threads);
   }
 #endif
 
@@ -697,10 +697,12 @@ void VideoFrameSubmitter::StartSubmitting() {
                        : viz::mojom::CompositorFrameSinkType::kVideo);
 
 #if BUILDFLAG(IS_ANDROID)
-  WTF::Vector<base::PlatformThreadId> thread_ids;
-  thread_ids.push_back(base::PlatformThread::CurrentId());
-  thread_ids.push_back(Platform::Current()->GetIOThreadId());
-  compositor_frame_sink_->SetThreadIds(thread_ids);
+  WTF::Vector<viz::Thread> threads;
+  threads.push_back(viz::Thread{base::PlatformThread::CurrentId(),
+                                viz::Thread::Type::kVideo});
+  threads.push_back(viz::Thread{Platform::Current()->GetIOThreadId(),
+                                viz::Thread::Type::kIO});
+  compositor_frame_sink_->SetThreads(threads);
 #endif
 
   UpdateSubmissionState();
@@ -826,6 +828,10 @@ bool VideoFrameSubmitter::SubmitFrame(
 
   last_frame_id_ = video_frame->unique_id();
 
+  Opacity new_opacity = media::IsOpaque(video_frame->format())
+                            ? Opacity::kIsOpaque
+                            : Opacity::kIsNotOpaque;
+
   auto frame_token = ++next_frame_token_;
   auto source_id = begin_frame_ack.frame_id.source_id;
   if (source_id != viz::BeginFrameArgs::kManualSourceId) {
@@ -854,6 +860,8 @@ bool VideoFrameSubmitter::SubmitFrame(
       std::move(compositor_frame), std::nullopt, 0);
   resource_provider_->ReleaseFrameResources();
 
+  NotifyOpacityIfNeeded(new_opacity);
+
   ++waiting_for_compositor_ack_;
   return true;
 }
@@ -879,6 +887,7 @@ void VideoFrameSubmitter::SubmitEmptyFrame() {
   compositor_frame_sink_->SubmitCompositorFrame(
       child_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
       std::move(compositor_frame), std::nullopt, 0);
+  NotifyOpacityIfNeeded(Opacity::kIsNotOpaque);
 
   // We set `waiting_for_compositor_ack_` to zero here since we want to allow a
   // subsequent real frame to replace it at any time if needed.
@@ -998,6 +1007,15 @@ void VideoFrameSubmitter::GenerateNewSurfaceId() {
 
   surface_embedder_->SetLocalSurfaceId(
       child_local_surface_id_allocator_.GetCurrentLocalSurfaceId());
+}
+
+void VideoFrameSubmitter::NotifyOpacityIfNeeded(Opacity new_opacity) {
+  if (opacity_ == new_opacity || !surface_embedder_.is_bound()) {
+    return;
+  }
+
+  opacity_ = new_opacity;
+  surface_embedder_->OnOpacityChanged(new_opacity == Opacity::kIsOpaque);
 }
 
 }  // namespace blink

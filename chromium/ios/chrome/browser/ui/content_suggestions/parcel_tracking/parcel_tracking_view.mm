@@ -118,6 +118,18 @@ BOOL isInProgressState(ParcelState state) {
   if (self) {
     [self constructView];
     self.isAccessibilityElement = YES;
+    if (@available(iOS 17, *)) {
+      NSArray<UITrait>* traits = TraitCollectionSetForTraits(@[
+        UITraitUserInterfaceStyle.class,
+        UITraitPreferredContentSizeCategory.class
+      ]);
+      __weak __typeof(self) weakSelf = self;
+      UITraitChangeHandler handler = ^(id<UITraitEnvironment> traitEnvironment,
+                                       UITraitCollection* previousCollection) {
+        [weakSelf updateUIOnTraitChange:previousCollection];
+      };
+      [self registerForTraitChanges:traits withHandler:handler];
+    }
   }
   return self;
 }
@@ -155,20 +167,16 @@ BOOL isInProgressState(ParcelState state) {
       stringWithFormat:@"%@, %@", _titleLabel.text, _subtitleLabel.text];
 }
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-  if (previousTraitCollection.userInterfaceStyle !=
-      self.traitCollection.userInterfaceStyle) {
-    _imageContainer.layer.borderColor =
-        [UIColor colorNamed:kGrey200Color].CGColor;
-    _imageContainer.layer.borderWidth = [self iconBorderWidth];
+  if (@available(iOS 17, *)) {
+    return;
   }
-  if (previousTraitCollection.preferredContentSizeCategory !=
-      self.traitCollection.preferredContentSizeCategory) {
-    _titleLabel.font =
-        CreateDynamicFont(UIFontTextStyleFootnote, UIFontWeightSemibold);
-  }
+
+  [self updateUIOnTraitChange:previousTraitCollection];
 }
+#endif
 
 - (void)constructView {
   _titleLabel = [[UILabel alloc] init];
@@ -271,11 +279,7 @@ BOOL isInProgressState(ParcelState state) {
 - (UIImage*)iconImageForParcelType:(ParcelType)parcelType {
 #if !BUILDFLAG(IOS_USE_BRANDED_SYMBOLS)
   _useCarrierLogo = NO;
-  if (@available(iOS 16.0, *)) {
     return DefaultSymbolWithPointSize(kBoxTruckFillSymbol, kIconSize);
-  } else {
-    return DefaultSymbolWithPointSize(kShippingBoxFillSymbol, kIconSize);
-  }
 #else
   switch (parcelType) {
     case ParcelType::kUPS:
@@ -286,11 +290,7 @@ BOOL isInProgressState(ParcelState state) {
       return [UIImage imageNamed:kFedexCarrierImage];
     default:
       _useCarrierLogo = NO;
-      if (@available(iOS 16.0, *)) {
         return DefaultSymbolWithPointSize(kBoxTruckFillSymbol, kIconSize);
-      } else {
-        return DefaultSymbolWithPointSize(kShippingBoxFillSymbol, kIconSize);
-      }
   }
 #endif
 }
@@ -472,6 +472,22 @@ BOOL isInProgressState(ParcelState state) {
     return 0;
   }
   return 1;
+}
+
+// Updates properties of some elements of the UI when UITraitUserInterfaceStyle
+// or UITraitPreferredContentSizeCategories are changed.
+- (void)updateUIOnTraitChange:(UITraitCollection*)previousTraitCollection {
+  if (previousTraitCollection.userInterfaceStyle !=
+      self.traitCollection.userInterfaceStyle) {
+    _imageContainer.layer.borderColor =
+        [UIColor colorNamed:kGrey200Color].CGColor;
+    _imageContainer.layer.borderWidth = [self iconBorderWidth];
+  }
+  if (previousTraitCollection.preferredContentSizeCategory !=
+      self.traitCollection.preferredContentSizeCategory) {
+    _titleLabel.font =
+        CreateDynamicFont(UIFontTextStyleFootnote, UIFontWeightSemibold);
+  }
 }
 
 #pragma mark - Testing category methods

@@ -116,15 +116,12 @@ class RASTER_EXPORT RasterImplementation : public RasterInterface,
   // RasterInterface implementation.
   void CopySharedImage(const gpu::Mailbox& source_mailbox,
                        const gpu::Mailbox& dest_mailbox,
-                       GLenum dest_target,
                        GLint xoffset,
                        GLint yoffset,
                        GLint x,
                        GLint y,
                        GLsizei width,
-                       GLsizei height,
-                       GLboolean unpack_flip_y,
-                       GLboolean unpack_premultiply_alpha) override;
+                       GLsizei height) override;
 
   void WritePixels(const gpu::Mailbox& dest_mailbox,
                    int dst_x_offset,
@@ -134,24 +131,6 @@ class RASTER_EXPORT RasterImplementation : public RasterInterface,
 
   void WritePixelsYUV(const gpu::Mailbox& dest_mailbox,
                       const SkYUVAPixmaps& src_yuv_pixmap) override;
-
-  void ConvertYUVAMailboxesToRGB(
-      const gpu::Mailbox& dest_mailbox,
-      GLint src_x,
-      GLint src_y,
-      GLsizei width,
-      GLsizei height,
-      SkYUVColorSpace planes_yuv_color_space,
-      const SkColorSpace* planes_rgb_color_space,
-      SkYUVAInfo::PlaneConfig plane_config,
-      SkYUVAInfo::Subsampling subsampling,
-      const gpu::Mailbox yuva_plane_mailboxes[]) override;
-
-  void ConvertRGBAToYUVAMailboxes(SkYUVColorSpace planes_yuv_color_space,
-                                  SkYUVAInfo::PlaneConfig plane_config,
-                                  SkYUVAInfo::Subsampling subsampling,
-                                  const gpu::Mailbox yuva_plane_mailboxes[],
-                                  const gpu::Mailbox& source_mailbox) override;
 
   void BeginRasterCHROMIUM(SkColor4f sk_color_4f,
                            GLboolean needs_clear,

@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.bookmarks;
 import static org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils.buildMenuListItem;
 
 import android.content.Context;
-import android.content.res.Resources;
 import android.text.TextUtils;
 
 import androidx.annotation.DrawableRes;
@@ -33,9 +32,10 @@ import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.Observer;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiState.BookmarkUiMode;
 import org.chromium.chrome.browser.bookmarks.ImprovedBookmarkRow.Location;
 import org.chromium.chrome.browser.bookmarks.ImprovedBookmarkRowProperties.ImageVisibility;
-import org.chromium.chrome.browser.commerce.ShoppingFeatures;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksReader;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.sync.ui.bookmark_batch_upload_card.BookmarkBatchUploadCardCoordinator;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.native_page.BasicNativePage;
 import org.chromium.chrome.browser.ui.signin.SyncPromoController.SyncPromoState;
@@ -50,11 +50,11 @@ import org.chromium.components.browser_ui.widget.dragreorder.DragStateDelegate;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListLayout;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate.SelectionObserver;
+import org.chromium.components.commerce.core.CommerceFeatureUtils;
 import org.chromium.components.commerce.core.CommerceSubscription;
 import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.components.commerce.core.SubscriptionsObserver;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
 import org.chromium.components.power_bookmarks.PowerBookmarkType;
 import org.chromium.ui.accessibility.AccessibilityState;
@@ -63,7 +63,6 @@ import org.chromium.ui.listmenu.ListMenuItemProperties;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
-import org.chromium.url.GURL;
 
 import java.util.HashSet;
 import java.util.List;
@@ -232,6 +231,13 @@ class BookmarkManagerMediator
                                 if (mSelectionDelegate.isItemSelected(id)) {
                                     mSelectionDelegate.toggleSelectionForItem(id);
                                 }
+                                // Update the batch upload card (in case of refresh() is not called)
+                                // to reflect the right number of the
+                                // local bookmarks.
+                                if (mBookmarkBatchUploadCardCoordinator != null) {
+                                    mBookmarkBatchUploadCardCoordinator
+                                            .hideBatchUploadCardAndUpdate();
+                                }
                             }
                         }
                     } else if (getCurrentUiMode() == BookmarkUiMode.SEARCHING) {
@@ -367,11 +373,6 @@ class BookmarkManagerMediator
                 @Override
                 public void onBookmarkRowDisplayPrefChanged(
                         @BookmarkRowDisplayPref int displayPref) {
-                    Resources res = mContext.getResources();
-                    mBookmarkImageFetcher.setupFetchProperties(
-                            BookmarkUtils.getRoundedIconGenerator(mContext, displayPref),
-                            BookmarkUtils.getImageIconSize(res, displayPref),
-                            BookmarkUtils.getFaviconDisplaySize(res));
                     refresh();
 
                     if (AccessibilityState.isTouchExplorationEnabled()) {
@@ -448,7 +449,6 @@ class BookmarkManagerMediator
     // Owned by BookmarkManager(Coordinator).
     private final RecyclerView mRecyclerView;
     private final DragReorderableRecyclerViewAdapter mDragReorderableRecyclerViewAdapter;
-    private final LargeIconBridge mLargeIconBridge;
     // Whether we're showing in a dialog UI which is only true for phones.
     private final boolean mIsDialogUi;
     private final ObservableSupplierImpl<Boolean> mBackPressStateSupplier;
@@ -470,6 +470,7 @@ class BookmarkManagerMediator
                     TaskTraits.UI_DEFAULT, mCallbackController.makeCancelable(this::refresh));
     private final BookmarkMoveSnackbarManager mBookmarkMoveSnackbarManager;
 
+    @Nullable private BookmarkBatchUploadCardCoordinator mBookmarkBatchUploadCardCoordinator;
     // Whether this instance has been destroyed.
     private boolean mIsDestroyed;
     private String mInitialUrl;
@@ -495,7 +496,6 @@ class BookmarkManagerMediator
             SelectionDelegate<BookmarkId> selectionDelegate,
             RecyclerView recyclerView,
             DragReorderableRecyclerViewAdapter dragReorderableRecyclerViewAdapter,
-            LargeIconBridge largeIconBridge,
             boolean isDialogUi,
             ObservableSupplierImpl<Boolean> backPressStateSupplier,
             Profile profile,
@@ -522,7 +522,6 @@ class BookmarkManagerMediator
         mDragReorderableRecyclerViewAdapter.addDragListener(mDragListener);
         mDragReorderableRecyclerViewAdapter.setLongPressDragDelegate(
                 () -> mDragStateDelegate.getDragActive());
-        mLargeIconBridge = largeIconBridge;
         mIsDialogUi = isDialogUi;
         mBackPressStateSupplier = backPressStateSupplier;
         mProfile = profile;
@@ -536,10 +535,18 @@ class BookmarkManagerMediator
         mPromoHeaderManager =
                 new BookmarkPromoHeader(
                         mContext, mProfile.getOriginalProfile(), this::updateHeader);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.UNO_PHASE_2_FOLLOW_UP)) {
+            mBookmarkBatchUploadCardCoordinator =
+                    new BookmarkBatchUploadCardCoordinator(
+                            mContext,
+                            mProfile.getOriginalProfile(),
+                            mSnackbarManager,
+                            this::updateBatchUploadCard);
+        }
         mBookmarkUndoController = bookmarkUndoController;
         mBookmarkMoveSnackbarManager = bookmarkMoveSnackbarManager;
 
-        if (mShoppingService.isShoppingListEligible()) {
+        if (CommerceFeatureUtils.isShoppingListEligible(mShoppingService)) {
             mShoppingService.addSubscriptionsObserver(mSubscriptionsObserver);
         }
 
@@ -610,7 +617,6 @@ class BookmarkManagerMediator
         mBookmarkModel.removeObserver(mBookmarkModelObserver);
 
         mBookmarkImageFetcher.destroy();
-        mLargeIconBridge.destroy();
         PartnerBookmarksReader.removeFaviconUpdateObserver(this);
 
         mBookmarkUndoController.destroy();
@@ -620,7 +626,8 @@ class BookmarkManagerMediator
         mBookmarkUiPrefs.removeObserver(mBookmarkUiPrefsObserver);
         mBookmarkMoveSnackbarManager.destroy();
 
-        if (mShoppingService != null && mShoppingService.isShoppingListEligible()) {
+        if (mShoppingService != null
+                && CommerceFeatureUtils.isShoppingListEligible(mShoppingService)) {
             mShoppingService.removeSubscriptionsObserver(mSubscriptionsObserver);
         }
 
@@ -871,11 +878,6 @@ class BookmarkManagerMediator
     }
 
     @Override
-    public LargeIconBridge getLargeIconBridge() {
-        return mLargeIconBridge;
-    }
-
-    @Override
     public DragStateDelegate getDragStateDelegate() {
         return mDragStateDelegate;
     }
@@ -907,7 +909,6 @@ class BookmarkManagerMediator
     @Override
     public void onUpdateFavicon(String url) {
         assert mBookmarkModel.isBookmarkModelLoaded();
-        mLargeIconBridge.clearFavicon(new GURL(url));
         mFaviconsNeedRefresh = true;
     }
 
@@ -1118,6 +1119,9 @@ class BookmarkManagerMediator
             mModelList.removeRange(index, mModelList.size() - index);
         }
 
+        // Add the batch upload card if possible.
+        updateBatchUploadCard();
+
         updateAllLocations();
         syncAdapterAndSelectionDelegate();
     }
@@ -1210,6 +1214,13 @@ class BookmarkManagerMediator
         }
     }
 
+    private boolean shouldShowBatchUploadCard() {
+        if (mBookmarkBatchUploadCardCoordinator == null) {
+            return false;
+        }
+        return mBookmarkBatchUploadCardCoordinator.shouldShowBatchUploadCard();
+    }
+
     /**
      * Removes, adds, or updates the promo row, depending on the previous state and desired state.
      * Note that this method effectively duplicates the logic in {@link this#setBookmarks} that
@@ -1236,6 +1247,34 @@ class BookmarkManagerMediator
         }
     }
 
+    private void updateBatchUploadCard() {
+        if (getCurrentUiMode() != BookmarkUiMode.FOLDER || !topLevelFoldersShowing()) {
+            return;
+        }
+        int currentBatchUploadCardIndex =
+                searchForFirstIndexOfType(
+                        /* endIndex= */ mModelList.size() - 1,
+                        viewType -> viewType == ViewType.BATCH_UPLOAD_CARD);
+        if (shouldShowBatchUploadCard()) {
+            // In the root folder there can only be exactly zero or two SECTION HEADERs. The
+            // account header is the first of them, and the second header is the local one.
+            if (currentBatchUploadCardIndex < 0) {
+                ListItem batchUploadCardListItem = buildBatchUploadCardListItem();
+                int localSectionHeaderIndex =
+                        searchForLastIndexOfType(
+                                0, viewType -> viewType == ViewType.SECTION_HEADER);
+                if (localSectionHeaderIndex >= 0) {
+                    // Inserting the batch upload card immediately after the local header.
+                    mModelList.add(localSectionHeaderIndex + 1, batchUploadCardListItem);
+                }
+            }
+        } else {
+            if (currentBatchUploadCardIndex >= 0) {
+                mModelList.removeAt(currentBatchUploadCardIndex);
+            }
+        }
+    }
+
     private int getCurrentPromoHeaderIndex() {
         return searchForFirstIndexOfType(/* endIndex= */ PROMO_MAX_INDEX, this::isPromoType);
     }
@@ -1249,6 +1288,19 @@ class BookmarkManagerMediator
     private int searchForFirstIndexOfType(int endIndex, Predicate<Integer> typePredicate) {
         endIndex = Math.min(endIndex, mModelList.size() - 1);
         for (int i = 0; i <= endIndex; ++i) {
+            if (typePredicate.test(mModelList.get(i).type)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Returns the last index that matches up starting from startIndex, or -1 if no match is found.
+     */
+    private int searchForLastIndexOfType(int startIndex, Predicate<Integer> typePredicate) {
+        startIndex = Math.min(startIndex, 0);
+        for (int i = mModelList.size() - 1; i >= startIndex; --i) {
             if (typePredicate.test(mModelList.get(i).type)) {
                 return i;
             }
@@ -1323,11 +1375,19 @@ class BookmarkManagerMediator
                 BookmarkListEntry.createSyncPromoHeader(promoHeaderType);
         PropertyModel.Builder builder =
                 new PropertyModel.Builder(BookmarkManagerProperties.ALL_KEYS)
-                        .with(
-                                BookmarkManagerProperties.PROMO_TOP_MARGIN_RES,
-                                R.dimen.bookmark_promo_top_margin_with_search_box)
                         .with(BookmarkManagerProperties.BOOKMARK_LIST_ENTRY, bookmarkListEntry)
                         .with(BookmarkManagerProperties.BOOKMARK_PROMO_HEADER, mPromoHeaderManager);
+        return new ListItem(bookmarkListEntry.getViewType(), builder.build());
+    }
+
+    private ListItem buildBatchUploadCardListItem() {
+        BookmarkListEntry bookmarkListEntry = BookmarkListEntry.createBatchUploadCard();
+        PropertyModel.Builder builder =
+                new PropertyModel.Builder(BookmarkManagerProperties.ALL_KEYS)
+                        .with(BookmarkManagerProperties.BOOKMARK_LIST_ENTRY, bookmarkListEntry)
+                        .with(
+                                BookmarkManagerProperties.BOOKMARK_BATCH_UPLOAD_CARD_COORDINATOR,
+                                mBookmarkBatchUploadCardCoordinator);
         return new ListItem(bookmarkListEntry.getViewType(), builder.build());
     }
 
@@ -1409,6 +1469,11 @@ class BookmarkManagerMediator
 
     private void finishLoadingBookmarkModel() {
         mBookmarkModel.finishLoadingBookmarkModel(this::onBookmarkModelLoaded);
+    }
+
+    @VisibleForTesting
+    BookmarkBatchUploadCardCoordinator getBookmarkBatchUploadCardCoordinator() {
+        return mBookmarkBatchUploadCardCoordinator;
     }
 
     @VisibleForTesting
@@ -1729,8 +1794,7 @@ class BookmarkManagerMediator
     // properly.
     @VisibleForTesting
     void updateShoppingFilterVisible() {
-        boolean eligible = ShoppingFeatures.isShoppingListEligible(mProfile);
-        if (!eligible) {
+        if (!CommerceFeatureUtils.isShoppingListEligible(mShoppingService)) {
             updateFilterAvailability(false);
             return;
         }
@@ -1820,8 +1884,11 @@ class BookmarkManagerMediator
     Comparator<BookmarkListEntry> mBookmarkListComparator = new Comparator<>() {
         @Override
         public int compare(BookmarkListEntry entry, BookmarkListEntry t1) {
-            if (entry.getBookmarkItem().isFolder() != t1.getBookmarkItem().isFolder())
-                return entry.getBookmarkItem().isFolder() ? -1 : 1;
+            int folderComparison = Boolean.compare(entry.getBookmarkItem().isFolder(),
+                    t1.getBookmarkItem().isFolder());
+            if (folderComparison != 0) {
+                return folderComparison;
+            }
             switch (mSortOrder) {
                 case TITLE:
                     return entry.getBookmarkItem().getTitle().compareTo(
@@ -1856,7 +1923,6 @@ class BookmarkManagerMediator
      * Sets bookmarks items list in sortOrder given by param
      * If called with same sortOrder, switches from ascending to descending
      * or vice versa
-     * @param sortOrder
      */
     @Override
     public void setSortOrder(SortOrder sortOrder) {
@@ -1875,16 +1941,10 @@ class BookmarkManagerMediator
 
         List<BookmarkListEntry> entries =
                 mBookmarkQueryHandler.buildBookmarkListForParent(mCurrentFolder);
-
         mSortOrder = sortOrder;
         if (sortOrder != SortOrder.MANUAL) {
-            if (sortAscOrDesc == SortAscOrDesc.DESCENDING) {
-                Collections.sort(entries, mBookmarkListComparator.reversed());
-                mSortAscOrDesc = SortAscOrDesc.DESCENDING;
-            } else {
-                Collections.sort(entries, mBookmarkListComparator);
-                mSortAscOrDesc = SortAscOrDesc.ASCENDING;
-            }
+            sortBookmarkList(entries, sortOrder, sortAscOrDesc);
+            mSortAscOrDesc = sortAscOrDesc;
             setBookmarks(entries /*, true*/);
             mDragReorderableRecyclerViewAdapter.disableDrag();
         } else {
@@ -1912,10 +1972,6 @@ class BookmarkManagerMediator
 
     /**
      * Sort incoming bookmark entry list according to @param sortOrder and sortAscOrDesc
-     * @param entries
-     * @param sortOrder
-     * @param sortAscOrDesc - ascending or descending or none (if manual)
-     * @return
      */
     private List<BookmarkListEntry> sortBookmarkList(
             List<BookmarkListEntry> entries, SortOrder sortOrder, SortAscOrDesc sortAscOrDesc) {

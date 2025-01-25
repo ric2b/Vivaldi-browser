@@ -47,7 +47,7 @@ class RpcMessenger {
   Handle GetUniqueHandle();
 
   // Register a component to receive messages via the given
-  // ReceiveMessageCallback. |handle| is a unique handle value provided by a
+  // ReceiveMessageCallback. `handle` is a unique handle value provided by a
   // prior call to GetUniqueHandle() and is used to reference the component in
   // the RPC messages. The receiver can then use it to direct an RPC message
   // back to a specific component.
@@ -58,7 +58,7 @@ class RpcMessenger {
   void UnregisterMessageReceiverCallback(Handle handle);
 
   // Distributes an incoming RPC message to the registered (if any) component.
-  // The |serialized_message| should be already base64-decoded and ready for
+  // The `serialized_message` should be already base64-decoded and ready for
   // deserialization by protobuf.
   void ProcessMessageFromRemote(const uint8_t* message,
                                 std::size_t message_len);
@@ -66,7 +66,7 @@ class RpcMessenger {
   // registered component.
   void ProcessMessageFromRemote(std::unique_ptr<RpcMessage> message);
 
-  // Executes the |send_message_cb_| using |rpc|.
+  // Executes the `send_message_cb_` using `rpc`.
   void SendMessageToRemote(const RpcMessage& rpc);
 
   // Checks if the handle is registered for receiving messages. Test-only.

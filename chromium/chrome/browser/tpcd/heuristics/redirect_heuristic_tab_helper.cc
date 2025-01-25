@@ -4,14 +4,15 @@
 
 #include "chrome/browser/tpcd/heuristics/redirect_heuristic_tab_helper.h"
 
+#include "base/barrier_callback.h"
+#include "base/functional/bind.h"
 #include "base/rand_util.h"
-#include "chrome/browser/content_settings/cookie_settings_factory.h"
-#include "chrome/browser/dips/dips_service_factory.h"
-#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/chrome_content_browser_client.h"
+#include "chrome/browser/dips/dips_service_impl.h"
 #include "chrome/browser/tpcd/experiment/tpcd_experiment_features.h"
 #include "chrome/browser/tpcd/heuristics/opener_heuristic_metrics.h"
 #include "chrome/browser/tpcd/heuristics/opener_heuristic_utils.h"
-#include "components/content_settings/core/browser/cookie_settings.h"
+#include "components/content_settings/core/common/features.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
@@ -25,9 +26,7 @@ RedirectHeuristicTabHelper::RedirectHeuristicTabHelper(
     : content::WebContentsObserver(web_contents),
       content::WebContentsUserData<RedirectHeuristicTabHelper>(*web_contents),
       detector_(RedirectChainDetector::FromWebContents(web_contents)),
-      dips_service_(DIPSServiceImpl::Get(web_contents->GetBrowserContext())),
-      cookie_settings_(CookieSettingsFactory::GetForProfile(
-          Profile::FromBrowserContext(web_contents->GetBrowserContext()))) {
+      dips_service_(DIPSServiceImpl::Get(web_contents->GetBrowserContext())) {
   obs_.Observe(detector_);
 }
 
@@ -49,7 +48,8 @@ void RedirectHeuristicTabHelper::PrimaryPageChanged(content::Page& page) {
   last_commit_timestamp_ = clock_->Now();
 }
 
-void RedirectHeuristicTabHelper::OnNavigationCommitted() {
+void RedirectHeuristicTabHelper::OnNavigationCommitted(
+    content::NavigationHandle* navigation_handle) {
   // Use the redirects just added to the DIPSRedirectContext in order to
   // create new storage access grants when the Redirect heuristic applies.
   CreateAllRedirectHeuristicGrants(web_contents()->GetLastCommittedURL());
@@ -77,7 +77,7 @@ void RedirectHeuristicTabHelper::MaybeRecordRedirectHeuristic(
   ukm::SourceId third_party_source_id =
       third_party_site_info->second->url.source_id;
   bool is_current_interaction =
-      detector_->CommittedRedirectContext().SiteHadUserActivation(
+      detector_->CommittedRedirectContext().SiteHadUserActivationOrAuthn(
           third_party_site);
 
   auto first_party_site_info =
@@ -99,7 +99,7 @@ void RedirectHeuristicTabHelper::MaybeRecordRedirectHeuristic(
   CHECK(dips_service_);
   CHECK(!dips_service_->storage()->is_null());
   dips_service_->storage()
-      ->AsyncCall(&DIPSStorage::LastInteractionTime)
+      ->AsyncCall(&DIPSStorage::LastUserActivationOrAuthnAssertionTime)
       .WithArgs(details.url)
       .Then(base::BindOnce(&RedirectHeuristicTabHelper::RecordRedirectHeuristic,
                            weak_factory_.GetWeakPtr(), first_party_source_id,
@@ -206,7 +206,7 @@ void RedirectHeuristicTabHelper::CreateAllRedirectHeuristicGrants(
       CHECK(dips_service_);
       CHECK(!dips_service_->storage()->is_null());
       dips_service_->storage()
-          ->AsyncCall(&DIPSStorage::LastInteractionTime)
+          ->AsyncCall(&DIPSStorage::LastUserActivationOrAuthnAssertionTime)
           .WithArgs(url)
           .Then(std::move(create_grant));
     }
@@ -224,8 +224,12 @@ void RedirectHeuristicTabHelper::CreateRedirectHeuristicGrant(
     // TODO(crbug.com/40282235): Add bounds to these grants to avoid overflow.
     // TODO(crbug.com/40282235): Consider applying these grants only to rSA
     // calls.
-    cookie_settings_->SetTemporaryCookieGrantForHeuristic(url, first_party_url,
-                                                          grant_duration);
+    // TODO: crbug.com/40883201 - When we move to //content, we will call
+    // this via ContentBrowserClient instead of as a standalone function.
+    dips_move::GrantCookieAccessDueToHeuristic(
+        web_contents()->GetBrowserContext(),
+        net::SchemefulSite(first_party_url), net::SchemefulSite(url),
+        grant_duration, /*ignore_schemes=*/false);
   }
 }
 

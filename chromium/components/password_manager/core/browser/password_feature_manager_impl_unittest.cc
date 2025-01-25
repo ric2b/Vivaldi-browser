@@ -61,8 +61,6 @@ class PasswordFeatureManagerImplTest : public ::testing::Test {
 
 TEST_F(PasswordFeatureManagerImplTest,
        GenerationEnabledIfNonSyncingAndUsingAccountStorage) {
-  base::test::ScopedFeatureList feature_list(
-      syncer::kEnablePasswordsAccountStorageForNonSyncingUsers);
 #if BUILDFLAG(IS_ANDROID)
   pref_service_.registry()->RegisterIntegerPref(
       password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores,
@@ -220,7 +218,7 @@ TEST_F(PasswordFeatureManagerImplTest, ShouldNotChangeDefaultPasswordStore) {
 }
 #endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
 
 struct TestCase {
   const char* description;
@@ -237,6 +235,16 @@ TEST_P(PasswordFeatureManagerImplTestBiometricAuthenticationTest,
        IsBiometricAuthenticationBeforeFillingEnabled) {
   TestCase test_case = GetParam();
   SCOPED_TRACE(test_case.description);
+  base::test::ScopedFeatureList feature_list;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (test_case.feature_flag) {
+    feature_list.InitAndEnableFeature(
+        password_manager::features::kBiometricsAuthForPwdFill);
+  } else {
+    feature_list.InitAndDisableFeature(
+        password_manager::features::kBiometricsAuthForPwdFill);
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   pref_service_.SetBoolean(password_manager::prefs::kHadBiometricsAvailable,
                            test_case.feature_flag);
@@ -277,4 +285,4 @@ INSTANTIATE_TEST_SUITE_P(
             .feature_flag = true,
             .pref_value = true,
         }));
-#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)  || BUILDFLAG(IS_CHROMEOS)
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)  || BUILDFLAG(IS_CHROMEOS_ASH)

@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Tikken-om-te-zoeken is een functie die alleen beschikbaar is wanneer Google is ingesteld als standaardzoekmachine in Vivaldi. Het stuurt het geselecteerde woord en de huidige pagina als context naar Google Search. Je kunt het uitschakelen in <ph name="BEGIN_LINK" /> Instellingen <ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Normale/Privétabbladen wisselen</translation>
 <translation id="1644574205037202324">Geschiedenis</translation>
-<translation id="17513872634828108">Open tabs</translation>
 <translation id="1829244130665387512">Zoeken op pagina</translation>
 <translation id="1910514478706885609">Openen in nieuwe tabgroep</translation>
 <translation id="1925021887439448749">Aangepast webadres opgeven</translation>
 <translation id="2038563949887743358">'Desktopwebsite aanvragen' inschakelen</translation>
-<translation id="2139186145475833000">Aan startscherm toevoegen</translation>
 <translation id="2149973817440762519">Bladwijzer bewerken</translation>
 <translation id="2306442503286132111">Bladwijzer opgeslagen in map <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Uiterlijk</translation>
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">Huidige taal van dit apparaat</translation>
 <translation id="4167670741834902166">Nieuwe privétab</translation>
 <translation id="4195643157523330669">Openen op nieuw tabblad</translation>
+<translation id="4225895483398857530">Snelkoppeling voor werkbalk</translation>
 <translation id="4243710787042215766">Openen in privétab</translation>
 <translation id="4304713468139749426">Wachtwoordbeheer</translation>
 <translation id="451872707440238414">Bladwijzers doorzoeken</translation>
@@ -74,6 +73,7 @@ Druk lang op de zoekterm om de selectie aan te passen. Om de zoekopdracht te ver
 <translation id="8560602726703398413">Bekijk je leeslijst in Bladwijzers</translation>
 <translation id="85991616550051997">Startpagina openen</translation>
 <translation id="8820817407110198400">Bladwijzers</translation>
+<translation id="9042893549633094279">Privacy en beveiliging</translation>
 <translation id="9063523880881406963">'Desktopwebsite opvragen' uitschakelen</translation>
 <translation id="9080642952018487277">Privémodus inschakelen</translation>
 <translation id="96681097142096641">Pagina in leesweergave bekijken?</translation>

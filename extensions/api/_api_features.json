@@ -111,6 +111,11 @@
     "dependencies": [ "permission:notes" ],
     "contexts": [ "privileged_extension" ]
   },
+  "omniboxPrivate": {
+    "vivaldi": true,
+    "dependencies": [ "permission:omniboxPrivate" ],
+    "contexts": [ "privileged_extension" ]
+  },
   "pageActions": {
     "vivaldi": true,
     "dependencies": [ "permission:pageActions" ],

@@ -152,10 +152,6 @@
                 {{member_transfer_type(member)}} {{as_varName(member.name)}};
                 {% continue %}
             {% endif %}
-            //* Members of type "const char *" have their length embedded directly in the command.
-            {% if member.length == "strlen" %}
-                uint64_t {{as_varName(member.name)}}Strlen;
-            {% endif %}
             //* Optional members additionally come with a boolean to indicate whether they were set.
             {% if member.optional and member.type.category != "object" %}
                 WGPUBool has_{{as_varName(member.name)}};
@@ -187,18 +183,6 @@
             {%- set memberName = as_varName(member.name) -%}
             //* Skip size computation if we are skipping serialization.
             {% if member.skip_serialize %}
-                {% continue %}
-            {% endif %}
-            //* Special handling of const char* that have their length embedded directly in the command.
-            {% if member.length == "strlen" %}
-                {% if member.optional %}
-                    if (record.{{memberName}} != nullptr) {
-                        result += Align(std::strlen(record.{{memberName}}), kWireBufferAlignment);
-                    }
-                {% else %}
-                    DAWN_ASSERT(record.{{memberName}} != nullptr);
-                    result += Align(std::strlen(record.{{memberName}}), kWireBufferAlignment);
-                {% endif %}
                 {% continue %}
             {% endif %}
             //* Normal handling for pointer members and structs.
@@ -271,23 +255,6 @@
             //* Value types are directly in the transfer record, objects being replaced with their IDs.
             {% if member.annotation == "value" %}
                 {{serialize_member(member, "record." + memberName, "transfer->" + memberName)}}
-                {% continue %}
-            {% endif %}
-            //* Special handling of const char* that have their length embedded directly in the command.
-            {% if member.length == "strlen" %}
-                {% if member.optional %}
-                    bool has_{{memberName}} = record.{{memberName}} != nullptr;
-                    transfer->has_{{memberName}} = has_{{memberName}};
-                    if (has_{{memberName}}) {
-                {% else %}
-                    {
-                {% endif %}
-                    transfer->{{memberName}}Strlen = std::strlen(record.{{memberName}});
-
-                    char* stringInBuffer;
-                    WIRE_TRY(buffer->NextN(transfer->{{memberName}}Strlen, &stringInBuffer));
-                    memcpy(stringInBuffer, record.{{memberName}}, transfer->{{memberName}}Strlen);
-                }
                 {% continue %}
             {% endif %}
             //* Allocate space and write the non-value arguments in it.
@@ -369,38 +336,6 @@
             //* Value types are directly in the transfer record, objects being replaced with their IDs.
             {% if member.annotation == "value" %}
                 {{deserialize_member(member, "transfer->" + memberName, "record->" + memberName)}}
-                {% continue %}
-            {% endif %}
-            //* Special handling of const char* that have their length embedded directly in the command.
-            {% if member.length == "strlen" %}
-                {% if member.optional %}
-                    bool has_{{memberName}} = transfer->has_{{memberName}};
-                    record->{{memberName}} = nullptr;
-                    if (has_{{memberName}}) {
-                {% else %}
-                    {
-                {% endif %}
-                    uint64_t stringLength64 = transfer->{{memberName}}Strlen;
-                    if (stringLength64 >= std::numeric_limits<size_t>::max()) {
-                        //* Cannot allocate space for the string. It can be at most
-                        //* size_t::max() - 1. We need 1 byte for the null-terminator.
-                        return WireResult::FatalError;
-                    }
-                    size_t stringLength = static_cast<size_t>(stringLength64);
-
-                    const volatile char* stringInBuffer;
-                    WIRE_TRY(deserializeBuffer->ReadN(stringLength, &stringInBuffer));
-
-                    char* copiedString;
-                    WIRE_TRY(GetSpace(allocator, stringLength + 1, &copiedString));
-                    //* We can cast away the volatile qualifier because DeserializeBuffer::ReadN already
-                    //* validated that the range [stringInBuffer, stringInBuffer + stringLength) is valid.
-                    //* memcpy may have an unknown access pattern, but this is fine since the string is only
-                    //* data and won't affect control flow of this function.
-                    memcpy(copiedString, const_cast<const char*>(stringInBuffer), stringLength);
-                    copiedString[stringLength] = '\0';
-                    record->{{memberName}} = copiedString;
-                }
                 {% continue %}
             {% endif %}
             //* Get extra buffer data, and copy pointed to values in extra allocated space. Note that
@@ -736,8 +671,8 @@ WireResult DeserializeChainedStruct(WGPUChainedStructOut** outChainNext,
 
 // Manually define serialization and deserialization for WGPUStringView because
 // it has a special encoding where:
-//  { .data = nullptr, .length = SIZE_MAX }  --> nil
-//  { .data = non-null, .length = SIZE_MAX } --> null-terminated, use strlen
+//  { .data = nullptr, .length = WGPU_STRLEN }  --> nil
+//  { .data = non-null, .length = WGPU_STRLEN } --> null-terminated, use strlen
 //  { .data = ..., .length = 0 }             --> ""
 //  { .data = ..., .length > 0 }             --> string of size `length`
 struct WGPUStringViewTransfer {
@@ -747,7 +682,7 @@ struct WGPUStringViewTransfer {
 
 size_t WGPUStringViewGetExtraRequiredSize(const WGPUStringView& record) {
     size_t size = record.length;
-    if (size == SIZE_MAX) {
+    if (size == WGPU_STRLEN) {
         // This is a null-terminated string, or it's nil.
         size = record.data ? std::strlen(record.data) : 0;
     }
@@ -767,7 +702,7 @@ WireResult WGPUStringViewSerialize(
         transfer->length = length;
         return WireResult::Success;
     }
-    if (length == SIZE_MAX) {
+    if (length == WGPU_STRLEN) {
         length = std::strlen(record.data);
     }
     if (length > 0) {
@@ -788,12 +723,12 @@ WireResult WGPUStringViewDeserialize(
     bool has_data = transfer->has_data;
     uint64_t length = transfer->length;
 
-    if (length > SIZE_MAX) {
+    if (length > WGPU_STRLEN) {
         return WireResult::FatalError;
     }
     if (!has_data) {
         record->data = nullptr;
-        if (length != 0 && length != SIZE_MAX) {
+        if (length != 0 && length != WGPU_STRLEN) {
             // Invalid string.
             return WireResult::FatalError;
         }

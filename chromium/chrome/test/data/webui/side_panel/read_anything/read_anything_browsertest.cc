@@ -22,7 +22,8 @@ class ReadAnythingMochaBrowserTest : public WebUIMochaBrowserTest {
     set_test_loader_scheme(content::kChromeUIUntrustedScheme);
     scoped_feature_list_.InitWithFeatures(
         {features::kReadAnythingReadAloud,
-         features::kReadAloudLanguagePackDownloading},
+         features::kReadAloudLanguagePackDownloading,
+         features::kReadAnythingImagesViaAlgorithm},
         {});
   }
 
@@ -55,6 +56,10 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, Common) {
   RunSidePanelTest("side_panel/read_anything/common_test.js", "mocha.run()");
 }
 
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, Images) {
+  RunSidePanelTest("side_panel/read_anything/image_test.js", "mocha.run()");
+}
+
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, Logger) {
   RunSidePanelTest("side_panel/read_anything/read_anything_logger_test.js",
                    "mocha.run()");
@@ -73,6 +78,12 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, VoiceSelectionMenu) {
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, VoiceLanguageUtil) {
   RunSidePanelTest("side_panel/read_anything/voice_language_util_test.js",
                    "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, VoiceNotificationManager) {
+  RunSidePanelTest(
+      "side_panel/read_anything/voice_notification_manager_test.js",
+      "mocha.run()");
 }
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, ReadAloudFlag) {
@@ -125,6 +136,11 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, AppStyleUpdater) {
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, LanguageMenu) {
   RunSidePanelTest("side_panel/read_anything/language_menu_test.js",
+                   "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, LanguageToast) {
+  RunSidePanelTest("side_panel/read_anything/language_toast_test.js",
                    "mocha.run()");
 }
 
@@ -202,8 +218,14 @@ class ReadAnythingReadAloudMochaTest : public ReadAnythingMochaBrowserTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
+// TODO(crbug.com/368057422): This test is flaky on Mac. Fix and re-enable.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_LinksToggledIntegration DISABLED_LinksToggledIntegration
+#else
+#define MAYBE_LinksToggledIntegration LinksToggledIntegration
+#endif
 IN_PROC_BROWSER_TEST_F(ReadAnythingReadAloudMochaTest,
-                       LinksToggledIntegration) {
+                       MAYBE_LinksToggledIntegration) {
   RunSidePanelTest("side_panel/read_anything/links_toggled_integration_test.js",
                    "mocha.run()");
 }

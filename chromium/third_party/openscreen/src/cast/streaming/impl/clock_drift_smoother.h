@@ -16,7 +16,7 @@ namespace openscreen::cast {
 // moves at a rate based on the passage of time.
 class ClockDriftSmoother {
  public:
-  // |time_constant| is the amount of time an impulse signal takes to decay by
+  // `time_constant` is the amount of time an impulse signal takes to decay by
   // ~62.6%.  Interpretation: If the value passed to several Update() calls is
   // held constant for T seconds, then the running average will have moved
   // towards the value by ~62.6% from where it started.
@@ -26,13 +26,13 @@ class ClockDriftSmoother {
   // Returns the current offset.
   Clock::duration Current() const;
 
-  // Discard all history and reset to exactly |offset|, measured |now|.
+  // Discard all history and reset to exactly `offset`, measured `now`.
   void Reset(Clock::time_point now, Clock::duration offset);
 
-  // Update the current offset, which was measured |now|.  The weighting that
-  // |measured_offset| will have on the running average is influenced by how
+  // Update the current offset, which was measured `now`.  The weighting that
+  // `measured_offset` will have on the running average is influenced by how
   // much time has passed since the last call to this method (or Reset()).
-  // |now| should be monotonically non-decreasing over successive calls of this
+  // `now` should be monotonically non-decreasing over successive calls of this
   // method.
   void Update(Clock::time_point now, Clock::duration measured_offset);
 
@@ -44,7 +44,7 @@ class ClockDriftSmoother {
  private:
   const std::chrono::duration<double, Clock::duration::period> time_constant_;
 
-  // The time at which |estimated_tick_offset_| was last updated.
+  // The time at which `estimated_tick_offset_` was last updated.
   Clock::time_point last_update_time_;
 
   // The current estimated offset, as number of Clock::duration ticks.

@@ -35,8 +35,8 @@
 
 #include "audio.h"
 #include "avfilter.h"
+#include "filters.h"
 #include "formats.h"
-#include "internal.h"
 #include "af_volume.h"
 
 static const char * const precision_str[] = {
@@ -130,9 +130,11 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&vol->fdsp);
 }
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    VolumeContext *vol = ctx->priv;
+    const VolumeContext *vol = ctx->priv;
     static const enum AVSampleFormat sample_fmts[][7] = {
         [PRECISION_FIXED] = {
             AV_SAMPLE_FMT_U8,
@@ -154,15 +156,13 @@ static int query_formats(AVFilterContext *ctx)
             AV_SAMPLE_FMT_NONE
         }
     };
-    int ret = ff_set_common_all_channel_counts(ctx);
+    int ret;
+
+    ret = ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out, sample_fmts[vol->precision]);
     if (ret < 0)
         return ret;
 
-    ret = ff_set_common_formats_from_list(ctx, sample_fmts[vol->precision]);
-    if (ret < 0)
-        return ret;
-
-    return ff_set_common_all_samplerates(ctx);
+    return 0;
 }
 
 static inline void scale_samples_u8(uint8_t *dst, const uint8_t *src,
@@ -328,6 +328,7 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
 {
+    FilterLink      *inl = ff_filter_link(inlink);
     AVFilterContext *ctx = inlink->dst;
     VolumeContext *vol    = inlink->dst->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
@@ -380,7 +381,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     }
     vol->var_values[VAR_PTS] = TS2D(buf->pts);
     vol->var_values[VAR_T  ] = TS2T(buf->pts, inlink->time_base);
-    vol->var_values[VAR_N  ] = inlink->frame_count_out;
+    vol->var_values[VAR_N  ] = inl->frame_count_out;
 
 #if FF_API_FRAME_PKT
 FF_DISABLE_DEPRECATION_WARNINGS
@@ -479,7 +480,7 @@ const AVFilter ff_af_volume = {
     .uninit         = uninit,
     FILTER_INPUTS(avfilter_af_volume_inputs),
     FILTER_OUTPUTS(avfilter_af_volume_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .flags          = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
     .process_command = process_command,
 };

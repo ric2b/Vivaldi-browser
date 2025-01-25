@@ -281,8 +281,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
   editedNodes.insert(_folder);
   [self.snackbarCommandsHandler
       showSnackbarMessage:bookmark_utils_ios::DeleteBookmarksWithUndoToast(
-                              editedNodes, _bookmarkModel.get(),
-                              self.browserState, FROM_HERE)];
+                              editedNodes, _bookmarkModel.get(), self.profile,
+                              FROM_HERE)];
   [self.delegate bookmarksFolderEditorDidDeleteEditedFolder:self];
 }
 
@@ -309,7 +309,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [self.snackbarCommandsHandler
           showSnackbarMessage:bookmark_utils_ios::MoveBookmarksWithUndoToast(
                                   bookmarksVector, _bookmarkModel.get(),
-                                  _parentFolder, self.browserState,
+                                  _parentFolder, self.profile,
                                   _authService->GetWeakPtr(), _syncService)];
       // Move might change the pointer, grab the updated value.
       CHECK_EQ(bookmarksVector.size(), 1u);
@@ -324,8 +324,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   if (_manuallyChangedTheFolder) {
     BookmarkStorageType type = bookmark_utils_ios::GetBookmarkStorageType(
         _parentFolder, _bookmarkModel.get());
-    SetLastUsedBookmarkFolder(self.browserState->GetPrefs(), _parentFolder,
-                              type);
+    SetLastUsedBookmarkFolder(self.profile->GetPrefs(), _parentFolder, type);
   }
   [self.view endEditing:YES];
   [self.delegate bookmarksFolderEditor:self didFinishEditingFolder:_folder];
@@ -346,7 +345,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)bookmarkModelLoaded {
   // The bookmark model is assumed to be loaded when this controller is created.
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 - (void)didChangeNode:(const BookmarkNode*)bookmarkNode {
@@ -452,10 +451,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 #pragma mark - Private
 
-// Returns the browser state.
-- (ChromeBrowserState*)browserState {
+// Returns the profile.
+- (ProfileIOS*)profile {
   if (Browser* browser = _browser.get()) {
-    return browser->GetBrowserState()->GetOriginalChromeBrowserState();
+    return browser->GetProfile()->GetOriginalProfile();
   }
   return nullptr;
 }

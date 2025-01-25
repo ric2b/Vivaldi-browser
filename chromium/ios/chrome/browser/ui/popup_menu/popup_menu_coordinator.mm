@@ -242,8 +242,8 @@ using base::UserMetricsAction;
       webContentAreaOverlayPresenter:overlayPresenter];
 
   feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
+      feature_engagement::TrackerFactory::GetForProfile(
+          self.browser->GetProfile());
 
   // Create the overflow menu mediator first so the popup mediator isn't created
   // if not needed.
@@ -308,29 +308,27 @@ using base::UserMetricsAction;
     mediator.webStateList = browser->GetWebStateList();
     mediator.navigationAgent = WebNavigationBrowserAgent::FromBrowser(browser);
     mediator.baseViewController = self.baseViewController;
-    mediator.bookmarkModel =
-        ios::BookmarkModelFactory::GetForBrowserState(profile);
-    mediator.readingListModel =
-        ReadingListModelFactory::GetInstance()->GetForBrowserState(profile);
-    mediator.browserStatePrefs = profile->GetPrefs();
+    mediator.bookmarkModel = ios::BookmarkModelFactory::GetForProfile(profile);
+    mediator.readingListModel = ReadingListModelFactory::GetForProfile(profile);
+    mediator.profilePrefs = profile->GetPrefs();
     mediator.engagementTracker = tracker;
     mediator.webContentAreaOverlayPresenter = overlayPresenter;
     mediator.browserPolicyConnector =
         GetApplicationContext()->GetBrowserPolicyConnector();
-    mediator.syncService = SyncServiceFactory::GetForBrowserState(profile);
+    mediator.syncService = SyncServiceFactory::GetForProfile(profile);
     mediator.templateURLService =
-        ios::TemplateURLServiceFactory::GetForBrowserState(profile);
-    mediator.promosManager = PromosManagerFactory::GetForBrowserState(profile);
+        ios::TemplateURLServiceFactory::GetForProfile(profile);
+    mediator.promosManager = PromosManagerFactory::GetForProfile(profile);
     mediator.readingListBrowserAgent =
         ReadingListBrowserAgent::FromBrowser(browser);
     if (IsWebChannelsEnabled()) {
       mediator.followBrowserAgent = FollowBrowserAgent::FromBrowser(browser);
     }
     // Set the AuthenticationService with the one from the original
-    // ChromeBrowserState as the incognito one doesn't have that service.
+    // ProfileIOS as the incognito one doesn't have that service.
     mediator.authenticationService =
-        AuthenticationServiceFactory::GetForBrowserState(
-            profile->GetOriginalChromeBrowserState());
+        AuthenticationServiceFactory::GetForProfile(
+            profile->GetOriginalProfile());
     mediator.tabBasedIPHBrowserAgent =
         TabBasedIPHBrowserAgent::FromBrowser(browser);
     mediator.hasSettingsBlueDot =
@@ -427,24 +425,22 @@ using base::UserMetricsAction;
   }
 
   self.mediator = [[PopupMenuMediator alloc]
-            initWithIsIncognito:self.browser->GetBrowserState()
-                                    ->IsOffTheRecord()
-               readingListModel:ReadingListModelFactory::GetForBrowserState(
-                                    self.browser->GetBrowserState())
-         browserPolicyConnector:GetApplicationContext()
-                                    ->GetBrowserPolicyConnector()];
+         initWithIsIncognito:self.browser->GetProfile()->IsOffTheRecord()
+            readingListModel:ReadingListModelFactory::GetForProfile(
+                                 self.browser->GetProfile())
+      browserPolicyConnector:GetApplicationContext()
+                                 ->GetBrowserPolicyConnector()];
   self.mediator.engagementTracker = tracker;
   self.mediator.webStateList = self.browser->GetWebStateList();
   self.mediator.readingListBrowserAgent =
       ReadingListBrowserAgent::FromBrowser(self.browser);
   self.mediator.lensCommandsHandler =
       HandlerForProtocol(self.browser->GetCommandDispatcher(), LensCommands);
-  self.mediator.bookmarkModel = ios::BookmarkModelFactory::GetForBrowserState(
-      self.browser->GetBrowserState());
-  self.mediator.prefService = self.browser->GetBrowserState()->GetPrefs();
+  self.mediator.bookmarkModel =
+      ios::BookmarkModelFactory::GetForProfile(self.browser->GetProfile());
+  self.mediator.prefService = self.browser->GetProfile()->GetPrefs();
   self.mediator.templateURLService =
-      ios::TemplateURLServiceFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
+      ios::TemplateURLServiceFactory::GetForProfile(self.browser->GetProfile());
   self.mediator.popupMenu = tableViewController;
   self.mediator.webContentAreaOverlayPresenter = overlayPresenter;
   self.mediator.URLLoadingBrowserAgent =
@@ -503,14 +499,14 @@ using base::UserMetricsAction;
     OverflowMenuVisitedEvent event;
     base::TimeDelta elapsed = base::Seconds(
         [NSDate timeIntervalSinceReferenceDate] - self.toolsMenuOpenTime);
-    UMA_HISTOGRAM_MEDIUM_TIMES("IOS.OverflowMenu.TimeOpen", elapsed);
+    DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES("IOS.OverflowMenu.TimeOpen", elapsed);
     if (self.toolsMenuUserTookAction && self.overflowMenuUserSelectedAction) {
-      UMA_HISTOGRAM_MEDIUM_TIMES("IOS.OverflowMenu.TimeOpen.ActionChosen",
-                                 elapsed);
+      DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES(
+          "IOS.OverflowMenu.TimeOpen.ActionChosen", elapsed);
     } else if (self.toolsMenuUserTookAction &&
                self.overflowMenuUserSelectedDestination) {
-      UMA_HISTOGRAM_MEDIUM_TIMES("IOS.OverflowMenu.TimeOpen.DestinationChosen",
-                                 elapsed);
+      DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES(
+          "IOS.OverflowMenu.TimeOpen.DestinationChosen", elapsed);
     }
 
     event.PutOrRemove(OverflowMenuVisitedEventFields::kUserSelectedDestination,
@@ -545,7 +541,7 @@ using base::UserMetricsAction;
 
     RecordOverflowMenuVisitedEvent(_event);
 
-    if (IsOverflowMenuCustomizationEnabled() &&
+    if (IsNewOverflowMenuEnabled() &&
         self.overflowMenuUserScrolledToEndOfActions) {
       base::UmaHistogramBoolean(
           "IOS.OverflowMenu.UserScrolledToEndAndStartedCustomization",
@@ -760,12 +756,12 @@ using base::UserMetricsAction;
 #pragma mark - Private
 
 - (void)trackToolsMenuNoHorizontalScrollOrAction {
-  ChromeBrowserState* browserState = self.browser->GetBrowserState();
-  if (!browserState) {
+  ProfileIOS* profile = self.browser->GetProfile();
+  if (!profile) {
     return;
   }
   feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(browserState);
+      feature_engagement::TrackerFactory::GetForProfile(profile);
   if (!tracker) {
     return;
   }
@@ -775,13 +771,13 @@ using base::UserMetricsAction;
 }
 
 - (void)logFeatureEngagementCustomizationStarted {
-  ChromeBrowserState* browserState = self.browser->GetBrowserState();
-  if (!browserState) {
+  ProfileIOS* profile = self.browser->GetProfile();
+  if (!profile) {
     return;
   }
 
   feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(browserState);
+      feature_engagement::TrackerFactory::GetForProfile(profile);
   if (!tracker) {
     return;
   }

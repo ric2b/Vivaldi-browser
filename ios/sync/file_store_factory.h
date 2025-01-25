@@ -10,10 +10,11 @@ namespace file_sync {
 class SyncedFileStore;
 }
 
+class ProfileIOS;
+
 class SyncedFileStoreFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static file_sync::SyncedFileStore* GetForBrowserState(
-      ChromeBrowserState* browser_state);
+  static file_sync::SyncedFileStore* GetForProfile(ProfileIOS* browser_state);
 
   static SyncedFileStoreFactory* GetInstance();
 

@@ -15,7 +15,6 @@ static_library("helper") {
     "//content/public/browser:browser",
     "//chrome/common:buildflags",
     "//components/paint_preview/buildflags",
-    "//components/services/language_detection/public/mojom",
     "//components/translate/content/common",
     "//vivaldi/extensions/schema",
   ]

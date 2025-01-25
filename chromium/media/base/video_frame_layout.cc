@@ -4,10 +4,11 @@
 
 #include "media/base/video_frame_layout.h"
 
-#include <string.h>
 #include <numeric>
 #include <sstream>
+#include <string>
 
+#include "base/check_op.h"
 #include "base/notreached.h"
 #include "base/numerics/checked_math.h"
 
@@ -31,9 +32,11 @@ std::string VectorToString(const std::vector<T>& vec) {
 }
 
 std::vector<ColorPlaneLayout> PlanesFromStrides(
-    const std::vector<int32_t> strides) {
+    const std::vector<int32_t>& strides) {
   std::vector<ColorPlaneLayout> planes(strides.size());
   for (size_t i = 0; i < strides.size(); i++) {
+    // TODO(crbug.com/338570700): Make strides unsigned and remove the CHECK().
+    CHECK_GE(strides[i], 0) << " plane: " << i;
     planes[i].stride = strides[i];
   }
   return planes;
@@ -93,8 +96,7 @@ size_t VideoFrameLayout::NumPlanes(VideoPixelFormat format) {
       // Set its NumPlanes() to zero to avoid NOTREACHED().
       return 0;
   }
-  NOTREACHED_IN_MIGRATION() << "Unsupported video frame format: " << format;
-  return 0;
+  NOTREACHED() << "Unsupported video frame format: " << format;
 }
 
 // static
@@ -187,7 +189,6 @@ bool VideoFrameLayout::FitsInContiguousBufferOfSize(size_t data_size) const {
     return false;
   }
 
-  base::CheckedNumeric<size_t> required_size = 0;
   for (const auto& plane : planes_) {
     if (plane.offset > data_size || plane.size > data_size) {
       return false;
@@ -199,12 +200,6 @@ bool VideoFrameLayout::FitsInContiguousBufferOfSize(size_t data_size) const {
     if (!plane_end.IsValid() || plane_end.ValueOrDie() > data_size) {
       return false;
     }
-
-    required_size += plane.size;
-  }
-
-  if (!required_size.IsValid() || required_size.ValueOrDie() > data_size) {
-    return false;
   }
 
   return true;

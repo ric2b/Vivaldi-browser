@@ -97,6 +97,7 @@ if (vivaldi_build_tests) {
 if (!is_ios && !is_android) {
   update_target("//chrome/browser:browser") {
     sources += [
+      "//vivaldi/components/bookmarks/vivaldi_bookmark_folder.cc",
       "//vivaldi/components/crashreport/crashreport_accessor.cc",
       "//vivaldi/components/crashreport/crashreport_accessor.h",
       "//vivaldi/components/crashreport/crashreport_observer.cc",

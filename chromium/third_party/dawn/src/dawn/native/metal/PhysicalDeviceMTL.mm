@@ -493,12 +493,13 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
 
     // On macOS 15.0+, we can use sampleTimestamps:gpuTimestamp: from MTLDevice to capture CPU and
     // GPU timestamps to estimate GPU timestamp period at device creation, but this API call will
-    // cause GPU overheating on Intel Iris Plus Graphics 655 due to driver bug. Skip the
-    // timestamp sampling on the specific device as workaround. See https://crbug.com/342701242 for
-    // more details.
+    // cause GPU overheating on Intel GPUs due to a driver bug keeping the GPU running at the
+    // maximum clock. Disable timestamp sampling to avoid overheating user's devices.
+    // See https://crbug.com/342701242 for more details.
     if (@available(macos 15.0, iOS 14.0, *)) {
-        deviceToggles->Default(Toggle::MetalDisableTimestampPeriodEstimation,
-                               gpu_info::IsIrisPlus655(deviceId));
+        if (gpu_info::IsIntel(deviceId)) {
+            deviceToggles->Default(Toggle::MetalDisableTimestampPeriodEstimation, true);
+        }
     }
 
     // Use the Tint IR backend by default if the corresponding platform feature is enabled.
@@ -716,12 +717,12 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::ShaderF16);
     EnableFeature(Feature::RG11B10UfloatRenderable);
     EnableFeature(Feature::BGRA8UnormStorage);
-    EnableFeature(Feature::SurfaceCapabilities);
     EnableFeature(Feature::DualSourceBlending);
     EnableFeature(Feature::R8UnormStorage);
     EnableFeature(Feature::ShaderModuleCompilationOptions);
     EnableFeature(Feature::DawnLoadResolveTexture);
     EnableFeature(Feature::ClipDistances);
+    EnableFeature(Feature::Float32Blendable);
 
     // SIMD-scoped permute operations is supported by GPU family Metal3, Apple6, Apple7, Apple8,
     // and Mac2.

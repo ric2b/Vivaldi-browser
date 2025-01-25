@@ -31,7 +31,6 @@
 #include "base/notreached.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
-#include "base/profiler/process_type.h"
 #include "base/sampling_heap_profiler/poisson_allocation_sampler.h"
 #include "base/sampling_heap_profiler/sampling_heap_profiler.h"
 #include "base/strings/string_number_conversions.h"
@@ -46,6 +45,7 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
+#include "base/types/optional_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/heap_profiling/in_process/browser_process_snapshot_controller.h"
@@ -56,8 +56,10 @@
 #include "components/heap_profiling/in_process/switches.h"
 #include "components/metrics/call_stacks/call_stack_profile_builder.h"
 #include "components/metrics/public/mojom/call_stack_profile_collector.mojom.h"
+#include "components/sampling_profiler/process_type.h"
 #include "components/version_info/channel.h"
 #include "mojo/core/embedder/scoped_ipc_support.h"
+#include "mojo/public/cpp/base/proto_wrapper.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -118,7 +120,7 @@ namespace {
 
 using FeatureRef = base::test::FeatureRef;
 using FeatureRefAndParams = base::test::FeatureRefAndParams;
-using ProcessType = base::ProfilerProcessType;
+using ProcessType = sampling_profiler::ProfilerProcessType;
 using ProcessTypeSet =
     base::EnumSet<ProcessType, ProcessType::kUnknown, ProcessType::kMax>;
 using ProfileCollectorCallback =
@@ -168,7 +170,8 @@ class TestCallStackProfileCollector final
                metrics::mojom::SampledProfilePtr profile) final {
     metrics::SampledProfile sampled_profile;
     ASSERT_TRUE(profile);
-    ASSERT_TRUE(sampled_profile.ParseFromString(profile->contents));
+    ASSERT_TRUE(base::OptionalUnwrapTo(
+        profile->contents.As<metrics::SampledProfile>(), sampled_profile));
     EXPECT_EQ(profile_type == metrics::mojom::ProfileType::kHeap,
               sampled_profile.trigger_event() ==
                   metrics::SampledProfile::PERIODIC_HEAP_COLLECTION);

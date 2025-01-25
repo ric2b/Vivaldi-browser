@@ -145,8 +145,7 @@ bool VerifyAlgorithmNameMappings(const AlgorithmNameMapping* begin,
   for (const AlgorithmNameMapping* it = begin; it != end; ++it) {
     if (it->algorithm_name_length != strlen(it->algorithm_name))
       return false;
-    String str(it->algorithm_name,
-               static_cast<unsigned>(it->algorithm_name_length));
+    String str(base::span(it->algorithm_name, it->algorithm_name_length));
     if (!str.ContainsOnlyASCIIOrEmpty())
       return false;
     if (str.UpperASCII() != str)
@@ -1073,8 +1072,7 @@ bool ParseAlgorithmParams(v8::Isolate* isolate,
       context.Add("Pbkdf2Params");
       return ParsePbkdf2Params(isolate, raw, params, context, exception_state);
   }
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 const char* OperationToString(WebCryptoOperation op) {

@@ -15,6 +15,7 @@
 #include "aom_dsp/x86/synonyms.h"
 #include "aom_dsp/x86/synonyms_avx2.h"
 #include "aom_dsp/x86/sum_squares_sse2.h"
+#include "config/aom_config.h"
 #include "config/aom_dsp_rtcd.h"
 
 static uint64_t aom_sum_squares_2d_i16_nxn_avx2(const int16_t *src, int stride,
@@ -256,6 +257,7 @@ uint64_t aom_var_2d_u8_avx2(uint8_t *src, int src_stride, int width,
   return (ss - s * s / (width * height));
 }
 
+#if CONFIG_AV1_HIGHBITDEPTH
 uint64_t aom_var_2d_u16_avx2(uint8_t *src, int src_stride, int width,
                              int height) {
   uint16_t *srcp1 = CONVERT_TO_SHORTPTR(src), *srcp;
@@ -324,3 +326,4 @@ uint64_t aom_var_2d_u16_avx2(uint8_t *src, int src_stride, int width,
   }
   return (ss - s * s / (width * height));
 }
+#endif  // CONFIG_AV1_HIGHBITDEPTH

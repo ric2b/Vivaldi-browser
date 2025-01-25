@@ -146,11 +146,10 @@ wtf_size_t InlinePaintContext::SyncDecoratingBox(
 #if DCHECK_IS_ON()
           ShowLayoutTree(layout_object);
 #endif
-          NOTREACHED_IN_MIGRATION()
-              << "size=" << decorations->size()
-              << ", parent=" << parent_decorations.size()
-              << ", TextDecorationLine="
-              << static_cast<int>(style->GetTextDecorationLine());
+          NOTREACHED() << "size=" << decorations->size()
+                       << ", parent=" << parent_decorations.size()
+                       << ", TextDecorationLine="
+                       << static_cast<int>(style->GetTextDecorationLine());
         }
 
         if (!IsA<LayoutInline>(parent)) [[unlikely]] {
@@ -192,8 +191,7 @@ wtf_size_t InlinePaintContext::SyncDecoratingBox(
         const Vector<AppliedTextDecoration, 1>& parent_decorations) {
       const Vector<AppliedTextDecoration, 1>* base_decorations =
           style.BaseAppliedTextDecorations();
-      if (base_decorations == &parent_decorations ||
-          !RuntimeEnabledFeatures::CssDecoratingBoxFirstLineEnabled()) {
+      if (base_decorations == &parent_decorations) {
         DCHECK_EQ(decorations.size(), parent_decorations.size() + 1);
         DCHECK_NE(style.GetTextDecorationLine(), TextDecorationLine::kNone);
         PushDecoratingBox(item, layout_object, style, decorations);

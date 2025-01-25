@@ -5,10 +5,11 @@
 #import "ios/chrome/browser/orchestrator/ui_bundled/omnibox_focus_orchestrator.h"
 
 #import "base/check.h"
-#import "ios/chrome/browser/shared/public/features/features.h"
+#import "base/ios/ios_util.h"
 #import "ios/chrome/browser/orchestrator/ui_bundled/edit_view_animatee.h"
 #import "ios/chrome/browser/orchestrator/ui_bundled/location_bar_animatee.h"
 #import "ios/chrome/browser/orchestrator/ui_bundled/toolbar_animatee.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/common/material_timing.h"
 
 // Vivaldi
@@ -42,7 +43,7 @@
                              completion:(ProceduralBlock)completion {
   _completion = completion;
   _trigger = trigger;
-                               
+
   if (vivaldi::IsVivaldiRunning()) {
     if (toolbarExpanded) {
       return [self updateUIToExpandedState:animated
@@ -69,6 +70,10 @@
   self.isAnimating = animated;
   self.areOmniboxChangesQueued = NO;
   self.inProgressAnimationCount = 0;
+
+  if (omniboxFocused) {
+    [self prepareToFocusOmniboxAnimated:animated];
+  }
 
   if (toolbarExpanded) {
     [self updateUIToExpandedState:animated];
@@ -105,6 +110,29 @@
 
 #pragma mark - Private
 
+// Sets some initial state that needs to be set immediately, before any
+// `dispatch_async` calls, in order to avoid flicker at the start of the
+// animation.
+- (void)prepareToFocusOmniboxAnimated:(BOOL)animated {
+  if (!animated) {
+    return;
+  }
+
+  if ([self isTriggerUnpinnedFakebox]) {
+    // If focus trigger is the unpinned fakebox, the edit view will appear
+    // in-place (without animation) and the steady view will not slide and
+    // fade out - it will be hidden from the start.
+    [UIView performWithoutAnimation:^{
+      // This can be triggered inside of another animation on the NTP, so
+      // `performWithoutAnimation` is used to ensure that these changes happen
+      // immediately.
+      [self.locationBarAnimatee resetTextFieldOffsetAndOffsetSteadyViewToMatch];
+      [self.locationBarAnimatee setEditViewFaded:NO];
+      [self.locationBarAnimatee setSteadyViewFaded:YES];
+    }];
+  }
+}
+
 - (void)focusOmniboxAnimated:(BOOL)animated {
   // Cleans up after the animation.
   void (^cleanup)() = ^{
@@ -119,19 +147,10 @@
 
   if (animated) {
     // Prepare for animation.
-    BOOL shouldCrossfadeEditAndSteadyViews =
-        _trigger != OmniboxFocusTrigger::kUnpinnedLargeFakebox &&
-        _trigger != OmniboxFocusTrigger::kUnpinnedFakebox;
+    BOOL shouldCrossfadeEditAndSteadyViews = ![self isTriggerUnpinnedFakebox];
     if (shouldCrossfadeEditAndSteadyViews) {
       [self.locationBarAnimatee offsetTextFieldToMatchSteadyView];
       [self.locationBarAnimatee setEditViewFaded:YES];
-    } else {
-      // If focus trigger is the unpinned fakebox, the edit view will appear
-      // in-place (without animation) and the steady view will not slide and
-      // fade out - it will be hidden from the start.
-      [self.locationBarAnimatee resetTextFieldOffsetAndOffsetSteadyViewToMatch];
-      [self.locationBarAnimatee setEditViewFaded:NO];
-      [self.locationBarAnimatee setSteadyViewFaded:YES];
     }
 
     // Hide badge and entrypoint views before the transform regardless of
@@ -301,6 +320,7 @@
         [self.toolbarAnimatee setLocationBarHeightToMatchFakeOmnibox];
         break;
       case OmniboxFocusTrigger::kUnpinnedLargeFakebox:
+      case OmniboxFocusTrigger::kUnpinnedFakebox:
         [self.toolbarAnimatee setToolbarFaded:YES];
         break;
       default:
@@ -310,18 +330,27 @@
         delay:0
         options:UIViewAnimationCurveEaseInOut
         animations:^{
-          [UIView addKeyframeWithRelativeStartTime:0
-                                  relativeDuration:1
-                                        animations:^{
-                                          [self expansion];
-                                        }];
-          [UIView
-              addKeyframeWithRelativeStartTime:0
-                              relativeDuration:kMaterialDuration2 /
-                                               kMaterialDuration1
-                                    animations:^{
-                                      [self.toolbarAnimatee hideControlButtons];
-                                    }];
+          BOOL isLowerThan17 = !base::ios::IsRunningOnOrLater(17, 0, 0);
+          BOOL isHigherThan17_2 = base::ios::IsRunningOnOrLater(17, 2, 0);
+          if (isLowerThan17 || isHigherThan17_2) {
+            [UIView addKeyframeWithRelativeStartTime:0
+                                    relativeDuration:1
+                                          animations:^{
+                                            [self expansion];
+                                          }];
+            [UIView addKeyframeWithRelativeStartTime:0
+                                    relativeDuration:kMaterialDuration2 /
+                                                     kMaterialDuration1
+                                          animations:^{
+                                            [self.toolbarAnimatee
+                                                    hideControlButtons];
+                                          }];
+          } else {
+            // This is a workaround for a crash that is mostly happening on
+            // iOS 17.0-17.1. See crbug.com/369988988.
+            [self expansion];
+            [self.toolbarAnimatee hideControlButtons];
+          }
         }
         completion:^(BOOL finished) {
           [self animationFinished];
@@ -416,6 +445,7 @@
       [self.toolbarAnimatee setLocationBarHeightExpanded];
       break;
     case OmniboxFocusTrigger::kUnpinnedLargeFakebox:
+    case OmniboxFocusTrigger::kUnpinnedFakebox:
       [self.toolbarAnimatee setToolbarFaded:NO];
       break;
     default:
@@ -428,6 +458,20 @@
   [self.toolbarAnimatee contractLocationBar];
   if (_trigger == OmniboxFocusTrigger::kPinnedLargeFakebox) {
     [self.toolbarAnimatee setLocationBarHeightToMatchFakeOmnibox];
+  }
+}
+
+// Returns YES if the focus event was triggered by the NTP Fakebox in its
+// unpinned state.
+- (BOOL)isTriggerUnpinnedFakebox {
+  switch (_trigger) {
+    case OmniboxFocusTrigger::kUnpinnedLargeFakebox:
+    case OmniboxFocusTrigger::kUnpinnedFakebox:
+      return YES;
+    case OmniboxFocusTrigger::kOther:
+    case OmniboxFocusTrigger::kPinnedFakebox:
+    case OmniboxFocusTrigger::kPinnedLargeFakebox:
+      return NO;
   }
 }
 
@@ -508,5 +552,6 @@
     showControls();
   }
 }
+// End Vivaldi
 
 @end

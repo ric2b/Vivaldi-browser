@@ -26,8 +26,11 @@
 #import "components/autofill/ios/browser/autofill_driver_ios.h"
 #import "components/autofill/ios/browser/autofill_driver_ios_factory.h"
 #import "components/autofill/ios/browser/autofill_java_script_feature.h"
+#import "components/autofill/ios/browser/autofill_util.h"
 #import "components/autofill/ios/browser/mock_password_autofill_agent_delegate.h"
+#import "components/autofill/ios/browser/new_frame_catcher.h"
 #import "components/autofill/ios/browser/test_autofill_manager_injector.h"
+#import "components/autofill/ios/common/features.h"
 #import "components/autofill/ios/form_util/autofill_test_with_web_state.h"
 #import "components/autofill/ios/form_util/child_frame_registrar.h"
 #import "components/autofill/ios/form_util/form_handlers_java_script_feature.h"
@@ -44,6 +47,7 @@
 #import "testing/gtest/include/gtest/gtest.h"
 #import "url/gurl.h"
 
+using autofill::test::NewFrameCatcher;
 using base::test::ios::kWaitForJSCompletionTimeout;
 using net::test_server::EmbeddedTestServer;
 using ::testing::AllOf;
@@ -322,10 +326,9 @@ class TestAutofillManager : public BrowserAutofillManager {
   }
 
   void OnFormSubmitted(const FormData& form,
-                       const bool known_success,
                        const mojom::SubmissionSource source) override {
     submitted_forms_.emplace_back(form);
-    BrowserAutofillManager::OnFormSubmitted(form, known_success, source);
+    BrowserAutofillManager::OnFormSubmitted(form, source);
   }
 
   void OnAskForValuesToFill(
@@ -392,29 +395,6 @@ class TestAutofillManager : public BrowserAutofillManager {
   TestAutofillManagerWaiter text_field_did_change_forms_waiter_{
       *this,
       {AutofillManagerEvent::kTextFieldDidChange}};
-};
-
-// Catcher that captures the latest new frame reported by `manager`.
-class NewFrameCatcher : public web::WebFramesManager::Observer {
- public:
-  explicit NewFrameCatcher(web::WebFramesManager* manager) {
-    scoped_observer_.Observe(manager);
-  }
-
-  // Returns the latest new frame that was observed. Returns nullptr if nothing
-  // was seen.
-  web::WebFrame* latest_new_frame() { return latest_new_frame_; }
-
- private:
-  void WebFrameBecameAvailable(web::WebFramesManager* web_frames_manager,
-                               web::WebFrame* web_frame) override {
-    latest_new_frame_ = web_frame;
-  }
-
-  web::WebFrame* latest_new_frame_ = nullptr;
-  base::ScopedObservation<web::WebFramesManager,
-                          web::WebFramesManager::Observer>
-      scoped_observer_{this};
 };
 
 // A mock child frame registrar observer.
@@ -525,8 +505,7 @@ class AutofillAcrossIframesTest : public AutofillTestWithWebState {
   }
 
   web::WebFramesManager* web_frames_manager() {
-    return autofill::FormUtilJavaScriptFeature::GetInstance()
-        ->GetWebFramesManager(web_state());
+    return GetWebFramesManagerForAutofill(web_state());
   }
 
   autofill::ChildFrameRegistrar* registrar() {
@@ -1230,7 +1209,6 @@ TEST_F(AutofillAcrossIframesTest, SubmitMultiFrameForm) {
       [](const FormFieldData& field) { return field.global_id(); });
 
   main_frame_driver()->FormSubmitted(main_frame_manager().seen_forms().front(),
-                                     /*known_success=*/true,
                                      mojom::SubmissionSource::FORM_SUBMISSION);
 
   // Wait on the main frame form to report itself as submitted, which is the
@@ -1639,7 +1617,7 @@ TEST_F(AutofillAcrossIframesTest, FrameDoubleRegistration_Notify) {
 
   {
     const std::u16string script = base::StrCat(
-        {u"__gCrWeb.common.sendWebKitMessage('FormHandlersMessage', "
+        {u"__gCrWeb.common.sendWebKitMessage('FrameRegistrationMessage', "
          u"{'command': 'registerAsChildFrame', 'local_frame_id': "
          u"__gCrWeb.frameId, 'remote_frame_id':'",
          base::UTF8ToUTF16(stolen_remote_token.ToString()), u"'});"});
@@ -1771,9 +1749,14 @@ TEST_F(AutofillAcrossIframesTest, FeatureDisabled) {
 
   const FormData& form = main_frame_manager().seen_forms()[0];
   EXPECT_EQ(form.child_frames().size(), 0u);
-
-  EXPECT_FALSE(
-      autofill::ChildFrameRegistrar::GetOrCreateForWebState(web_state()));
+  {
+    // Disable isolated autofill which uses the registrar as well.
+    base::test::ScopedFeatureList disable_isolated_autofill;
+    disable_isolated_autofill.InitAndDisableFeature(
+        kAutofillIsolatedWorldForJavascriptIos);
+    EXPECT_FALSE(
+        autofill::ChildFrameRegistrar::GetOrCreateForWebState(web_state()));
+  }
 }
 
 // Suite of tests that focuses on testing the security of xframe filling.

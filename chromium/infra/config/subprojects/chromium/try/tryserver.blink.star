@@ -10,6 +10,7 @@ load("//lib/html.star", "linkify")
 load("//lib/try.star", "try_")
 load("//lib/consoles.star", "consoles")
 load("//lib/gn_args.star", "gn_args")
+load("//lib/targets.star", "targets")
 
 try_.defaults.set(
     executable = try_.DEFAULT_EXECUTABLE,
@@ -23,6 +24,12 @@ try_.defaults.set(
     siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
 )
 
+targets.builder_defaults.set(
+    mixins = [
+        "chromium-tester-service-account",
+    ],
+)
+
 consoles.list_view(
     name = "tryserver.blink",
     branch_selector = branches.selector.DESKTOP_BRANCHES,
@@ -34,6 +41,11 @@ def blink_mac_builder(*, name, **kwargs):
     kwargs.setdefault("cores", None)
     kwargs.setdefault("os", os.MAC_DEFAULT)
     kwargs.setdefault("ssd", True)
+
+    # TODO(crbug.com/40232671): Remove when the experiment is the default.
+    kwargs.setdefault("experiments", {
+        "chromium.use_per_builder_build_dir_name": 0,
+    })
     return try_.builder(
         name = name,
         **kwargs
@@ -69,7 +81,32 @@ try_.builder(
             "x64",
         ],
     ),
+    # Should be kept in sync with v8_linux_blink_rel in tryserver.v8
+    targets = targets.bundle(
+        targets = [
+            "chromium_linux_blink_rel_isolated_scripts",
+        ],
+        mixins = [
+            "linux-jammy",
+        ],
+        per_test_modifications = {
+            "blink_wpt_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+            "blink_web_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+        },
+    ),
     os = os.LINUX_DEFAULT,
+    # TODO(crbug.com/40232671): Remove when the experiment is the default.
+    experiments = {
+        "chromium.use_per_builder_build_dir_name": 0,
+    },
     main_list_view = "try",
 )
 
@@ -87,6 +124,10 @@ try_.builder(
     gn_args = "ci/linux-wpt-chromium-rel",
     os = os.LINUX_DEFAULT,
     contact_team_email = "chrome-blink-engprod@google.com",
+    # TODO(crbug.com/40232671): Remove when the experiment is the default.
+    experiments = {
+        "chromium.use_per_builder_build_dir_name": 0,
+    },
     main_list_view = "try",
 )
 
@@ -100,6 +141,10 @@ try_.builder(
     builderless = True,
     os = os.WINDOWS_10,
     contact_team_email = "chrome-blink-engprod@google.com",
+    # TODO(crbug.com/40232671): Remove when the experiment is the default.
+    experiments = {
+        "chromium.use_per_builder_build_dir_name": 0,
+    },
     main_list_view = "try",
 )
 
@@ -134,8 +179,39 @@ try_.builder(
             "minimal_symbols",
         ],
     ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 900,
+                ),
+            ),
+            "win10",
+        ],
+        per_test_modifications = {
+            "blink_wpt_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                    shards = 9,
+                ),
+            ),
+            "blink_web_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                    shards = 6,
+                ),
+            ),
+        },
+    ),
     builderless = True,
     os = os.WINDOWS_ANY,
+    # TODO(crbug.com/40232671): Remove when the experiment is the default.
+    experiments = {
+        "chromium.use_per_builder_build_dir_name": 0,
+    },
 )
 
 try_.builder(
@@ -168,8 +244,40 @@ try_.builder(
             "minimal_symbols",
         ],
     ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            targets.mixin(
+                swarming = targets.swarming(
+                    dimensions = {
+                        "os": "Windows-11",
+                    },
+                    hard_timeout_sec = 900,
+                ),
+            ),
+            "arm64",
+        ],
+        per_test_modifications = {
+            "blink_wpt_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+            "blink_web_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+        },
+    ),
     builderless = True,
     os = os.WINDOWS_ANY,
+    # TODO(crbug.com/40232671): Remove when the experiment is the default.
+    experiments = {
+        "chromium.use_per_builder_build_dir_name": 0,
+    },
 )
 
 try_.builder(
@@ -202,8 +310,37 @@ try_.builder(
             "minimal_symbols",
         ],
     ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 900,
+                ),
+            ),
+            "win11",
+        ],
+        per_test_modifications = {
+            "blink_wpt_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+            "blink_web_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+        },
+    ),
     builderless = True,
     os = os.WINDOWS_ANY,
+    # TODO(crbug.com/40232671): Remove when the experiment is the default.
+    experiments = {
+        "chromium.use_per_builder_build_dir_name": 0,
+    },
 )
 
 blink_mac_builder(
@@ -234,6 +371,26 @@ blink_mac_builder(
             "mac",
             "x64",
         ],
+    ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            "mac_11_x64",
+        ],
+        per_test_modifications = {
+            "blink_wpt_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+            "blink_web_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+        },
     ),
     builderless = False,
 )
@@ -268,6 +425,26 @@ blink_mac_builder(
             "mac",
         ],
     ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            "mac_11_arm64",
+        ],
+        per_test_modifications = {
+            "blink_wpt_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+            "blink_web_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+        },
+    ),
     cores = None,
     cpu = cpu.ARM64,
 )
@@ -301,6 +478,26 @@ blink_mac_builder(
             "x64",
         ],
     ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            "mac_12_x64",
+        ],
+        per_test_modifications = {
+            "blink_wpt_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+            "blink_web_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+        },
+    ),
     cpu = cpu.ARM64,
 )
 
@@ -332,6 +529,26 @@ blink_mac_builder(
             "arm64",
             "minimal_symbols",
         ],
+    ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            "mac_12_arm64",
+        ],
+        per_test_modifications = {
+            "blink_wpt_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+            "blink_web_tests": targets.mixin(
+                swarming = targets.swarming(
+                    hard_timeout_sec = 2400,
+                ),
+            ),
+        },
     ),
     cores = None,
     cpu = cpu.ARM64,
@@ -366,6 +583,14 @@ blink_mac_builder(
             "x64",
         ],
     ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            "mac_13_x64",
+        ],
+    ),
     cores = None,
     cpu = cpu.ARM64,
 )
@@ -382,6 +607,10 @@ try_.builder(
     os = os.MAC_ANY,
     cpu = cpu.ARM64,
     contact_team_email = "chrome-blink-engprod@google.com",
+    # TODO(crbug.com/40232671): Remove when the experiment is the default.
+    experiments = {
+        "chromium.use_per_builder_build_dir_name": 0,
+    },
     main_list_view = "try",
 )
 
@@ -412,6 +641,14 @@ blink_mac_builder(
             "mac",
             "arm64",
             "minimal_symbols",
+        ],
+    ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            "mac_13_arm64",
         ],
     ),
     cores = None,
@@ -479,6 +716,14 @@ blink_mac_builder(
             "x64",
         ],
     ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            "mac_14_x64",
+        ],
+    ),
     cpu = cpu.ARM64,
     contact_team_email = "chrome-blink-engprod@google.com",
 )
@@ -513,6 +758,14 @@ blink_mac_builder(
             "mac",
             "arm64",
             "minimal_symbols",
+        ],
+    ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            "mac_14_arm64",
         ],
     ),
     cpu = cpu.ARM64,
@@ -552,6 +805,14 @@ blink_mac_builder(
             "x64",
         ],
     ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            "mac_15_x64",
+        ],
+    ),
     cpu = cpu.ARM64,
     contact_team_email = "chrome-blink-engprod@google.com",
 )
@@ -587,6 +848,14 @@ blink_mac_builder(
             "mac",
             "arm64",
             "minimal_symbols",
+        ],
+    ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            "mac_15_arm64",
         ],
     ),
     cpu = cpu.ARM64,

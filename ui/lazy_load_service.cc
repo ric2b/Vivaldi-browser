@@ -54,12 +54,15 @@ void LazyLoadService::OnLifecycleUnitCreated(
   Browser* browser = chrome::FindBrowserWithTab(web_contents);
   if (!browser)
     return;
+
+  // Update the WebContents state. See https://github.com/WICG/web-lifecycle.
+  // This needs to come before SetIsDiscarded as it sends an event and the state
+  // must be in sync.
+  web_contents->SetWasDiscarded(true);
+
   // Discard all restored tabs as the activation is now done after the webview
   // has been attached.
   tab_lifecycle_unit_external->SetIsDiscarded();
-
-  // Update the WebContents state. See https://github.com/WICG/web-lifecycle.
-  web_contents->SetWasDiscarded(true);
 }
 
 void LazyLoadService::OnWillRestoreTab(

@@ -134,7 +134,7 @@
 #include "net/test/test_data_directory.h"
 #include "net/test/test_with_task_environment.h"
 #include "net/third_party/quiche/src/quiche/common/http/http_header_block.h"
-#include "net/third_party/quiche/src/quiche/spdy/core/spdy_framer.h"
+#include "net/third_party/quiche/src/quiche/http2/core/spdy_framer.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/static_http_user_agent_settings.h"
 #include "net/websockets/websocket_handshake_stream_base.h"
@@ -411,6 +411,24 @@ TransportInfo EmbeddedHttpServerTransportInfo() {
   return info;
 }
 
+struct TestParams {
+  TestParams(bool priority_header_enabled, bool happy_eyeballs_v3_enabled)
+      : priority_header_enabled(priority_header_enabled),
+        happy_eyeballs_v3_enabled(happy_eyeballs_v3_enabled) {}
+
+  bool priority_header_enabled;
+  bool happy_eyeballs_v3_enabled;
+};
+
+std::vector<TestParams> GetTestParams() {
+  return {TestParams(/*priority_header_enabled=*/true,
+                     /*happy_eyeballs_v3_enabled=*/false),
+          TestParams(/*priority_header_enabled=*/false,
+                     /*happy_eyeballs_v3_enabled=*/false),
+          TestParams(/*priority_header_enabled=*/true,
+                     /*happy_eyeballs_v3_enabled=*/true)};
+}
+
 }  // namespace
 
 // TODO(crbug.com/365771838): Add tests for non-ip protection nested proxy
@@ -652,18 +670,36 @@ class HttpNetworkTransactionTestBase : public PlatformTest,
   int old_max_pool_sockets_;
 };
 
-class HttpNetworkTransactionTest : public HttpNetworkTransactionTestBase,
-                                   public ::testing::WithParamInterface<bool> {
+class HttpNetworkTransactionTest
+    : public HttpNetworkTransactionTestBase,
+      public ::testing::WithParamInterface<TestParams> {
  protected:
   HttpNetworkTransactionTest() {
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
     if (PriorityHeaderEnabled()) {
-      feature_list_.InitAndEnableFeature(features::kPriorityHeader);
+      enabled_features.emplace_back(features::kPriorityHeader);
     } else {
-      feature_list_.InitAndDisableFeature(features::kPriorityHeader);
+      disabled_features.emplace_back(features::kPriorityHeader);
     }
+
+    if (HappyEyeballsV3Enabled()) {
+      enabled_features.emplace_back(features::kHappyEyeballsV3);
+    } else {
+      disabled_features.emplace_back(features::kHappyEyeballsV3);
+    }
+
+    feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
-  bool PriorityHeaderEnabled() const { return GetParam(); }
+  bool PriorityHeaderEnabled() const {
+    return GetParam().priority_header_enabled;
+  }
+
+  bool HappyEyeballsV3Enabled() const {
+    return GetParam().happy_eyeballs_v3_enabled;
+  }
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -671,7 +707,7 @@ class HttpNetworkTransactionTest : public HttpNetworkTransactionTestBase,
 
 INSTANTIATE_TEST_SUITE_P(All,
                          HttpNetworkTransactionTest,
-                         testing::Values(true, false));
+                         testing::ValuesIn(GetTestParams()));
 
 namespace {
 
@@ -6180,8 +6216,7 @@ class SameProxyWithDifferentSchemesProxyResolver : public ProxyResolver {
       results->UsePacString("HTTPS " + ProxyHostPortPairAsString());
       return OK;
     }
-    NOTREACHED_IN_MIGRATION();
-    return ERR_NOT_IMPLEMENTED;
+    NOTREACHED();
   }
 };
 
@@ -18799,10 +18834,8 @@ TEST_P(HttpNetworkTransactionTest, GenerateAuthToken) {
     if (test_config.proxy_auth_timing != AUTH_NONE) {
       for (int n = 0; n < 3; n++) {
         auto auth_handler = std::make_unique<HttpAuthHandlerMock>();
-        std::string auth_challenge = "Mock realm=proxy";
         url::SchemeHostPort scheme_host_port(GURL(test_config.proxy_url));
-        HttpAuthChallengeTokenizer tokenizer(auth_challenge.begin(),
-                                             auth_challenge.end());
+        HttpAuthChallengeTokenizer tokenizer("Mock realm=proxy");
         auth_handler->InitFromChallenge(
             &tokenizer, HttpAuth::AUTH_PROXY, empty_ssl_info,
             NetworkAnonymizationKey(), scheme_host_port, NetLogWithSource());
@@ -18815,10 +18848,8 @@ TEST_P(HttpNetworkTransactionTest, GenerateAuthToken) {
     }
     if (test_config.server_auth_timing != AUTH_NONE) {
       auto auth_handler = std::make_unique<HttpAuthHandlerMock>();
-      std::string auth_challenge = "Mock realm=server";
       url::SchemeHostPort scheme_host_port(GURL(test_config.server_url));
-      HttpAuthChallengeTokenizer tokenizer(auth_challenge.begin(),
-                                           auth_challenge.end());
+      HttpAuthChallengeTokenizer tokenizer("Mock realm=server");
       auth_handler->InitFromChallenge(&tokenizer, HttpAuth::AUTH_SERVER,
                                       empty_ssl_info, NetworkAnonymizationKey(),
                                       scheme_host_port, NetLogWithSource());
@@ -18947,10 +18978,8 @@ TEST_P(HttpNetworkTransactionTest, MultiRoundAuth) {
   auto auth_handler = std::make_unique<HttpAuthHandlerMock>();
   auto* auth_handler_ptr = auth_handler.get();
   auth_handler->set_connection_based(true);
-  std::string auth_challenge = "Mock realm=server";
   GURL url("http://www.example.com");
-  HttpAuthChallengeTokenizer tokenizer(auth_challenge.begin(),
-                                       auth_challenge.end());
+  HttpAuthChallengeTokenizer tokenizer("Mock realm=server");
   SSLInfo empty_ssl_info;
   auth_handler->InitFromChallenge(&tokenizer, HttpAuth::AUTH_SERVER,
                                   empty_ssl_info, NetworkAnonymizationKey(),
@@ -24023,7 +24052,7 @@ class HttpNetworkTransactionNetworkErrorLoggingTest
 
 INSTANTIATE_TEST_SUITE_P(All,
                          HttpNetworkTransactionNetworkErrorLoggingTest,
-                         testing::Values(true, false));
+                         testing::ValuesIn(GetTestParams()));
 
 TEST_P(HttpNetworkTransactionNetworkErrorLoggingTest,
        DontProcessNelHeaderNoService) {
@@ -28199,7 +28228,7 @@ class HttpNetworkTransactionPoolTest : public HttpNetworkTransactionTest {
 
 INSTANTIATE_TEST_SUITE_P(All,
                          HttpNetworkTransactionPoolTest,
-                         ::testing::Bool());
+                         ::testing::ValuesIn(GetTestParams()));
 
 TEST_P(HttpNetworkTransactionPoolTest, SwitchToHttpStreamPool) {
   MockRead data_reads[] = {

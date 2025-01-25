@@ -26,6 +26,7 @@
 #include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/password_manager/profile_password_store_factory.h"
+#include "chrome/browser/promos/promos_types.h"
 #include "chrome/browser/signin/signin_promo_util.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -42,8 +43,11 @@
 #include "chrome/browser/ui/passwords/manage_passwords_icon_view.h"
 #include "chrome/browser/ui/passwords/password_dialog_prompts.h"
 #include "chrome/browser/ui/passwords/ui_utils.h"
+#include "chrome/browser/ui/promos/ios_promos_utils.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/browser/ui/tab_dialogs.h"
+#include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/branded_strings.h"
@@ -394,11 +398,11 @@ void ManagePasswordsUIController::OnPasswordAutofilled(
   const bool has_non_empty_note = !base::ranges::all_of(
       GetCurrentForms(), &std::u16string::empty,
       &password_manager::PasswordForm::GetNoteWithEmptyUniqueDisplayName);
-  if (has_non_empty_note &&
-      browser->window()->MaybeShowFeaturePromo(
-          feature_engagement::
-              kIPHPasswordsManagementBubbleDuringSigninFeature)) {
-    return;
+  // Only one of these promos will be able to show. Try the more specific one
+  // first.
+  if (has_non_empty_note) {
+    browser->window()->MaybeShowFeaturePromo(
+        feature_engagement::kIPHPasswordsManagementBubbleDuringSigninFeature);
   }
   MaybeShowPasswordManagerShortcutIPH(browser);
 }
@@ -450,7 +454,7 @@ void ManagePasswordsUIController::OnBiometricAuthenticationForFilling(
       GetState() == password_manager::ui::INACTIVE_STATE) {
     return;
   }
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
   const std::string promo_shown_counter =
       password_manager::prefs::kBiometricAuthBeforeFillingPromoShownCounter;
   // Checking GetIfBiometricAuthenticationPromoWasShown() prevents from
@@ -530,8 +534,9 @@ void ManagePasswordsUIController::OnKeychainError() {
 #endif
 }
 
-void ManagePasswordsUIController::OnPasskeySaved(bool gpm_pin_created) {
-  passwords_data_.OnPasskeySaved(gpm_pin_created);
+void ManagePasswordsUIController::OnPasskeySaved(bool gpm_pin_created,
+                                                 std::string passkey_rp_id) {
+  passwords_data_.OnPasskeySaved(gpm_pin_created, std::move(passkey_rp_id));
   bubble_status_ = BubbleStatus::SHOULD_POP_UP;
   UpdateBubbleAndIconVisibility();
 }
@@ -542,14 +547,15 @@ void ManagePasswordsUIController::OnPasskeyDeleted() {
   UpdateBubbleAndIconVisibility();
 }
 
-void ManagePasswordsUIController::OnPasskeyUpdated() {
-  passwords_data_.OnPasskeyUpdated();
+void ManagePasswordsUIController::OnPasskeyUpdated(std::string passkey_rp_id) {
+  passwords_data_.OnPasskeyUpdated(std::move(passkey_rp_id));
   bubble_status_ = BubbleStatus::SHOULD_POP_UP;
   UpdateBubbleAndIconVisibility();
 }
 
-void ManagePasswordsUIController::OnPasskeyNotAccepted() {
-  passwords_data_.OnPasskeyNotAccepted();
+void ManagePasswordsUIController::OnPasskeyNotAccepted(
+    std::string passkey_rp_id) {
+  passwords_data_.OnPasskeyNotAccepted(std::move(passkey_rp_id));
   bubble_status_ = BubbleStatus::SHOULD_POP_UP;
   UpdateBubbleAndIconVisibility();
 }
@@ -720,10 +726,6 @@ size_t ManagePasswordsUIController::GetTotalNumberCompromisedPasswords() const {
   return post_save_compromised_helper_->compromised_count();
 }
 
-bool ManagePasswordsUIController::DidAuthForAccountStoreOptInFail() const {
-  return passwords_data_.auth_for_account_storage_opt_in_failed();
-}
-
 bool ManagePasswordsUIController::BubbleIsManualFallbackForSaving() const {
   return save_fallback_timer_.IsRunning();
 }
@@ -732,6 +734,10 @@ bool ManagePasswordsUIController::GpmPinCreatedDuringRecentPasskeyCreation()
     const {
   CHECK_EQ(GetState(), password_manager::ui::PASSKEY_SAVED_CONFIRMATION_STATE);
   return passwords_data_.gpm_pin_created_during_recent_passkey_creation();
+}
+
+const std::string& ManagePasswordsUIController::PasskeyRpId() const {
+  return passwords_data_.passkey_rp_id();
 }
 
 void ManagePasswordsUIController::OnBubbleShown() {
@@ -866,15 +872,11 @@ void ManagePasswordsUIController::SavePassword(const std::u16string& username,
   bubble_status_ = BubbleStatus::SHOWN_PENDING_ICON_UPDATE;
   Browser* browser = chrome::FindBrowserWithTab(web_contents());
   // Do not trigger the IPH if the sign in promo will be shown.
-  if (browser &&
-      !signin::ShouldShowSignInPromo(
-          *browser->profile(),
-          signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE)) {
-    if (browser->window()->MaybeShowFeaturePromo(
-            feature_engagement::
-                kIPHPasswordsManagementBubbleAfterSaveFeature)) {
-      return;
-    }
+  if (browser && !signin::ShouldShowPasswordSignInPromo(*browser->profile())) {
+    // Only one of these promos will be able to show. Try the more specific one
+    // first.
+    browser->window()->MaybeShowFeaturePromo(
+        feature_engagement::kIPHPasswordsManagementBubbleAfterSaveFeature);
     MaybeShowPasswordManagerShortcutIPH(browser);
   }
 }
@@ -1096,7 +1098,18 @@ void ManagePasswordsUIController::MaybeShowIOSPasswordPromo() {
   if (!browser) {
     return;
   }
-  browser->window()->VerifyUserEligibilityIOSPasswordPromoBubble();
+
+  if (base::FeatureList::IsEnabled(
+          features::kIOSPromoRefreshedPasswordBubble)) {
+    ios_promos_utils::VerifyIOSPromoEligibility(
+        IOSPromoType::kPassword, browser->profile(),
+        BrowserView::GetBrowserViewForBrowser(browser)
+            ->toolbar_button_provider());
+  } else {
+    // TODO(crbug.com/339262105): Clean up the old password promo methods after
+    // the generic promo launch.
+    browser->window()->VerifyUserEligibilityIOSPasswordPromoBubble();
+  }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 
@@ -1255,7 +1268,6 @@ void ManagePasswordsUIController::
         const std::u16string& password,
         password_manager::PasswordManagerClient::ReauthSucceeded
             reauth_succeeded) {
-  passwords_data_.set_auth_for_account_storage_opt_in_failed(!reauth_succeeded);
   if (reauth_succeeded) {
     // Save the password only if it is the same origin and same form manager.
     // Otherwise it can be dangerous (e.g. saving the credentials against

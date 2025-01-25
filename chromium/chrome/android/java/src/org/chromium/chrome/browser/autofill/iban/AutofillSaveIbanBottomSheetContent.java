@@ -4,8 +4,11 @@
 
 package org.chromium.chrome.browser.autofill.iban;
 
+import android.content.Context;
 import android.view.View;
 import android.widget.ScrollView;
+
+import androidx.annotation.NonNull;
 
 import org.chromium.chrome.R;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
@@ -41,7 +44,7 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 
     @Override
     public boolean swipeToDismissEnabled() {
-        return false;
+        return true;
     }
 
     @Override
@@ -70,26 +73,24 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
     }
 
     @Override
-    public int getSheetContentDescriptionStringId() {
-        // TODO(b/309163431): Support a11y.
-        return R.string.ok;
+    public @NonNull String getSheetContentDescription(Context context) {
+        return context.getString(
+                R.string.autofill_save_iban_prompt_bottom_sheet_content_description);
     }
 
     @Override
     public int getSheetHalfHeightAccessibilityStringId() {
-        // TODO(b/309163431): Support a11y.
-        return R.string.ok;
+        assert false : "This method will not be called.";
+        return 0;
     }
 
     @Override
     public int getSheetFullHeightAccessibilityStringId() {
-        // TODO(b/309163431): Support a11y.
-        return R.string.ok;
+        return R.string.autofill_save_iban_prompt_bottom_sheet_full_height;
     }
 
     @Override
     public int getSheetClosedAccessibilityStringId() {
-        // TODO(b/309163431): Support a11y.
-        return R.string.ok;
+        return R.string.autofill_save_iban_prompt_bottom_sheet_closed;
     }
 }

@@ -19,7 +19,7 @@ namespace ip_protection {
 // Manages a list of currently cached proxy hostnames.
 //
 // This class is responsible for checking, fetching, and refreshing the proxy
-// list for IpProtectionConfigCache.
+// list for IpProtectionCore.
 class IpProtectionProxyConfigManager {
  public:
   virtual ~IpProtectionProxyConfigManager() = default;
@@ -37,13 +37,8 @@ class IpProtectionProxyConfigManager {
   // If token caching by geo is disabled, this will always return "EARTH".
   virtual const std::string& CurrentGeo() = 0;
 
-  // Requests a proxy list refresh when a geo change has occurred. This will
-  // either kick off an immediate refresh or schedule a refresh for the soonest
-  // possible time.
-  virtual void RefreshProxyListForGeoChange() = 0;
-
   // Request a refresh of the proxy list. Call this when it's likely that the
-  // proxy list is out of date.
+  // proxy list is out of date or needs an update due to a geo change.
   virtual void RequestRefreshProxyList() = 0;
 };
 

@@ -40,7 +40,7 @@ class DISPLAY_EXPORT VSyncCallbackMac {
 
  private:
   friend class CADisplayLinkMac;
-  friend class CASharedState;
+  friend struct ObjCState;
   friend class CVDisplayLinkMac;
   friend class DisplayLinkMacSharedState;
   using UnregisterCallback = base::OnceCallback<void(VSyncCallbackMac*)>;
@@ -59,7 +59,8 @@ class DISPLAY_EXPORT VSyncCallbackMac {
 
 class DISPLAY_EXPORT DisplayLinkMac : public base::RefCounted<DisplayLinkMac> {
  public:
-  // Create a DisplayLinkMac for the specified display.
+  // Create a DisplayLinkMac for the specified display. The returned object may
+  // only be accessed on the thread on which it was retrieved.
   static scoped_refptr<DisplayLinkMac> GetForDisplay(int64_t display_id);
 
   // Register an observer callback.

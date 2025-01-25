@@ -34,7 +34,7 @@ promise_test(async t => {
   const builder = new MLGraphBuilder(context);
   context.destroy();
   assert_throws_dom('InvalidStateError', () => {
-    const operandType = {dataType: 'float32', dimensions: [1]};
+    const operandType = {dataType: 'float32', shape: [1]};
     builder.input('input', operandType);
   });
 }, 'Destroyed context can not build operator.');
@@ -50,7 +50,7 @@ promise_test(async t => {
 promise_test(async t => {
   const context = await navigator.ml.createContext(contextOptions);
   const builder = new MLGraphBuilder(context);
-  const operandType = {dataType: 'float32', dimensions: [1]};
+  const operandType = {dataType: 'float32', shape: [1]};
   const input_operand = builder.input('input', operandType);
   const const_operand = builder.constant(operandType, Float32Array.from([2]));
   const output_operand = builder.mul(input_operand, const_operand);
@@ -63,7 +63,7 @@ promise_test(async t => {
 promise_test(async t => {
   const context = await navigator.ml.createContext(contextOptions);
   const builder = new MLGraphBuilder(context);
-  const operandType = {dataType: 'float32', dimensions: [1]};
+  const operandType = {dataType: 'float32', shape: [1]};
   const input_operand = builder.input('input', operandType);
   const const_operand = builder.constant(operandType, Float32Array.from([2]));
   const output_operand = builder.mul(input_operand, const_operand);
@@ -79,7 +79,7 @@ promise_test(async t => {
 promise_test(async t => {
   const context = await navigator.ml.createContext(contextOptions);
   const builder = new MLGraphBuilder(context);
-  const operandType = {dataType: 'float32', dimensions: [1]};
+  const operandType = {dataType: 'float32', shape: [1]};
   const lhsOperand = builder.input('lhs', operandType);
   const rhsOperand = builder.input('rhs', operandType);
   const graph =
@@ -103,7 +103,7 @@ promise_test(async t => {
 promise_test(async t => {
   const context = await navigator.ml.createContext(contextOptions);
   const builder = new MLGraphBuilder(context);
-  const operandType = {dataType: 'float32', dimensions: [1]};
+  const operandType = {dataType: 'float32', shape: [1]};
   const lhsOperand = builder.input('lhs', operandType);
   const rhsOperand = builder.input('rhs', operandType);
   const graph =
@@ -127,15 +127,15 @@ promise_test(async t => {
   context.destroy();
   promise_rejects_dom(
       t, 'InvalidStateError',
-      context.createTensor({dataType: 'float32', dimensions: [1]}));
+      context.createTensor({dataType: 'float32', shape: [1]}));
 }, 'Destroyed context can not create tensor.');
 
 promise_test(async t => {
   const context = await navigator.ml.createContext(contextOptions);
   const tensor = await context.createTensor({
     dataType: 'float32',
-    dimensions: [1],
-    usage: MLTensorUsage.READ,
+    shape: [1],
+    readable: true,
   });
   context.destroy();
   promise_rejects_dom(t, 'InvalidStateError', context.readTensor(tensor));
@@ -145,8 +145,8 @@ promise_test(async t => {
   const context = await navigator.ml.createContext(contextOptions);
   const tensor = await context.createTensor({
     dataType: 'float32',
-    dimensions: [1],
-    usage: MLTensorUsage.READ,
+    shape: [1],
+    readable: true,
   });
   let promise = context.readTensor(tensor);
   context.destroy();
@@ -160,8 +160,8 @@ promise_test(async t => {
   another_context.destroy();
   const tensor = await context.createTensor({
     dataType: 'float32',
-    dimensions: [1],
-    usage: MLTensorUsage.WRITE,
+    shape: [1],
+    writable: true,
   });
   let arrayBuffer = new ArrayBuffer(4);
   context.destroy();

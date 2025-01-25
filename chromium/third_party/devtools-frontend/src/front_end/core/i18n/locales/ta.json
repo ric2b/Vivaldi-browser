@@ -80,6 +80,9 @@
   "core/common/ResourceType.ts | ws": {
     "message": "WS"
   },
+  "core/common/Revealer.ts | animationsPanel": {
+    "message": "அனிமேஷன்கள் பேனல்"
+  },
   "core/common/Revealer.ts | applicationPanel": {
     "message": "ஆப்ஸ் பேனல்"
   },
@@ -200,24 +203,6 @@
   "core/host/ResourceLoader.ts | unknownError": {
     "message": "அறியப்படாத பிழை"
   },
-  "core/i18n/time-utilities.ts | fdays": {
-    "message": "{PH1} நாட்கள்"
-  },
-  "core/i18n/time-utilities.ts | fhrs": {
-    "message": "{PH1} மணிநேரம்"
-  },
-  "core/i18n/time-utilities.ts | fmin": {
-    "message": "{PH1} நிமி"
-  },
-  "core/i18n/time-utilities.ts | fmms": {
-    "message": "{PH1} μs"
-  },
-  "core/i18n/time-utilities.ts | fms": {
-    "message": "{PH1} மிவி"
-  },
-  "core/i18n/time-utilities.ts | fs": {
-    "message": "{PH1} வி"
-  },
   "core/sdk/CPUProfilerModel.ts | profileD": {
     "message": "சுயவிவரம் {PH1}"
   },
@@ -249,7 +234,7 @@
     "message": "“{PH1}” ப்ரொஃபைல் தொடங்கியது."
   },
   "core/sdk/DebuggerModel.ts | block": {
-    "message": "தடுத்தல்"
+    "message": "பிளாக்"
   },
   "core/sdk/DebuggerModel.ts | catchBlock": {
     "message": "Catch பிரிவு"
@@ -312,7 +297,7 @@
     "message": "{PH1} ஏற்றப்பட்டது: {PH2} \"{PH3}\"."
   },
   "core/sdk/NetworkManager.ts | slowG": {
-    "message": "3ஜி"
+    "message": "3G"
   },
   "core/sdk/NetworkRequest.ts | anUnknownErrorWasEncounteredWhenTrying": {
     "message": "இந்தக் குக்கீயைச் சேமிக்க முயலும்போது அறியப்படாத பிழை ஏற்பட்டது."
@@ -344,9 +329,6 @@
   "core/sdk/NetworkRequest.ts | domainMismatch": {
     "message": "கோரிக்கை URLலின் டொமைன் குக்கீயின் டொமைனுடன் துல்லியமாகப் பொருந்தாததாலோ குக்கீயின் டொமைன் பண்புக்கூறு மதிப்பின் துணை டொமைனாக, கோரிக்கை URLலின் டொமைன் இல்லாததாலோ இந்தக் குக்கீ தடுக்கப்பட்டது."
   },
-  "core/sdk/NetworkRequest.ts | exemptionReasonCorsOptIn": {
-    "message": "CORSக்கு அளிக்கப்பட்டுள்ள ஒப்புதல் காரணமாக இந்தக் குக்கீ அனுமதிக்கப்பட்டுள்ளது. மேலும் தெரிந்துகொள்ளுங்கள்: goo.gle/cors"
-  },
   "core/sdk/NetworkRequest.ts | exemptionReasonEnterprisePolicy": {
     "message": "இந்தக் குக்கீயை Chrome Enterprise கொள்கை அனுமதித்துள்ளது. மேலும் தெரிந்துகொள்ளுங்கள்: goo.gle/ce-3pc"
   },
@@ -357,16 +339,19 @@
     "message": "இந்தக் குக்கீயை Storage Access API அனுமதித்துள்ளது. மேலும் தெரிந்துகொள்ளுங்கள்: goo.gle/saa"
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTPCDDeprecationTrial": {
-    "message": "தவிர்க்கப்பட்ட மூன்றாம் தரப்புக் குக்கீயின் டெப்ரிகேஷன் ட்ரயல் காரணமாக இந்தக் குக்கீ அனுமதிக்கப்பட்டுள்ளது. goo.gle/ps-dt தளத்தில் மேலும் தெரிந்துகொள்ளுங்கள்."
+    "message": "மூன்றாம் தரப்புக் குக்கீயின் டெப்ரிகேஷன் ட்ரயல் மூலம் இந்தக் குக்கீ அனுமதிக்கப்பட்டுள்ளது. goo.gle/ps-dt தளத்தில் மேலும் தெரிந்துகொள்ளுங்கள்."
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTPCDHeuristics": {
-    "message": "தவிர்க்கப்பட்ட மூன்றாம் தரப்புக் குக்கீயின் ஹியுரிஸ்ட்டிக்ஸ் காரணமாக இந்தக் குக்கீ அனுமதிக்கப்பட்டுள்ளது. மேலும் தெரிந்துகொள்ளுங்கள்: goo.gle/hbe"
+    "message": "மூன்றாம் தரப்புக் குக்கீயின் ஹியுரிஸ்ட்டிக்ஸ் மூலம் இந்தக் குக்கீ அனுமதிக்கப்பட்டுள்ளது. goo.gle/hbe தளத்தில் மேலும் தெரிந்துகொள்ளுங்கள்"
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTPCDMetadata": {
     "message": "மூன்றாம் தரப்புக் குக்கீ டெப்ரிகேஷன் ட்ரயல் சலுகைக் காலத்தின் காரணமாக இந்தக் குக்கீ அனுமதிக்கப்பட்டுள்ளது. goo.gle/dt-grace தளத்தில் மேலும் தெரிந்துகொள்ளுங்கள்."
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTopLevelStorageAccessAPI": {
     "message": "இந்தக் குக்கீயை முதல் நிலை Storage Access API அனுமதித்துள்ளது. மேலும் தெரிந்துகொள்ளுங்கள்: goo.gle/saa-top"
+  },
+  "core/sdk/NetworkRequest.ts | exemptionReasonTopLevelTPCDDeprecationTrial": {
+    "message": "முதல் நிலை மூன்றாம் தரப்புக் குக்கீயின் டெப்ரிகேஷன் ட்ரயல் மூலம் இந்தக் குக்கீ அனுமதிக்கப்பட்டுள்ளது. goo.gle/ps-dt தளத்தில் மேலும் தெரிந்துகொள்ளுங்கள்."
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonUserSetting": {
     "message": "பயனர் விருப்பத்தேர்வு காரணமாக இந்தக் குக்கீ அனுமதிக்கப்பட்டுள்ளது."
@@ -411,7 +396,7 @@
     "message": "குக்கீகளைச் சேமிக்க இந்த இணைப்பின் திட்டத்திற்கு அனுமதியில்லை."
   },
   "core/sdk/NetworkRequest.ts | thirdPartyPhaseout": {
-    "message": "மூன்றாம் தரப்புக் குக்கீகள் தவிர்க்கப்பட்டுள்ளதால் இந்தக் குக்கீ தடுக்கப்பட்டது. ‘சிக்கல்கள்’ பிரிவில் மேலும் தெரிந்துகொள்ளலாம்."
+    "message": "Chrome கொடியிடல்கள் அல்லது பிரவுசர் உள்ளமைவின் காரணமாக இந்தக் குக்கீ தடுக்கப்பட்டது. ‘சிக்கல்கள்’ பேனலில் மேலும் தெரிந்துகொள்ளலாம்."
   },
   "core/sdk/NetworkRequest.ts | thisSetcookieDidntSpecifyASamesite": {
     "message": "இந்த Set-Cookie தலைப்பில் \"SameSite\" பண்புக்கூறு குறிப்பிடப்படவில்லை, \"SameSite=Lax\" என்பதே இயல்பு மதிப்பாக அமைக்கப்பட்டது. வேற்று தளப் பதிலில் (உயர்நிலை வழிச்செலுத்தலுக்குரிய பதிலாக அல்லாமல்) இருந்து பெறப்பட்டதால் இந்தக் குக்கீ தடுக்கப்பட்டது. URLலின் ஸ்கீமும் தற்போதைய தளத்தின் ஸ்கீமும் வெவ்வேறாக இருப்பதால் இந்தக் கோரிக்கை வேற்று தளக் கோரிக்கை எனக் கருதப்பட்டது."
@@ -435,7 +420,7 @@
     "message": "குக்கீ மிகவும் பெரிதாக இருந்ததால் Set-Cookie தலைப்பு மூலம் குக்கீயை அமைக்கும் இந்த முயற்சி தடுக்கப்பட்டது. பெயர், மதிப்பு ஆகியவற்றின் ஒட்டுமொத்த அளவு 4096 எழுத்துகளை விடக் குறைவாகவோ அதற்குச் சமமாகவோ இருக்க வேண்டும்."
   },
   "core/sdk/NetworkRequest.ts | thisSetcookieWasBlockedDueThirdPartyPhaseout": {
-    "message": "மூன்றாம் தரப்புக் குக்கீகள் தவிர்க்கப்பட்டுள்ளதால் இந்தக் குக்கீயை அமைப்பது தடுக்கப்பட்டது. ‘சிக்கல்கள்’ பிரிவில் மேலும் தெரிந்துகொள்ளலாம்."
+    "message": "Chrome கொடியிடல்கள் அல்லது பிரவுசர் உள்ளமைவின் காரணமாக இந்தக் குக்கீயை அமைப்பது தடுக்கப்பட்டது. ‘சிக்கல்கள்’ பேனலில் மேலும் தெரிந்துகொள்ளலாம்."
   },
   "core/sdk/NetworkRequest.ts | thisSetcookieWasBlockedDueToUser": {
     "message": "பயனரின் விருப்பத்தேர்வுகள் காரணமாக Set-Cookie தலைப்பு மூலம் குக்கீயை அமைக்கும் இந்த முயற்சி தடுக்கப்பட்டது."
@@ -451,6 +436,9 @@
   },
   "core/sdk/PageResourceLoader.ts | loadCanceledDueToReloadOf": {
     "message": "கண்காணிக்கப்பட்ட பக்கம் ரெஃப்ரெஷ் செய்யப்பட்டதால் ஏற்றுதல் ரத்துசெய்யப்பட்டது"
+  },
+  "core/sdk/RehydratingConnection.ts | noSourceText": {
+    "message": "மூல வார்த்தை கிடைக்கவில்லை"
   },
   "core/sdk/Script.ts | scriptRemovedOrDeleted": {
     "message": "ஸ்கிரிப்ட் அகற்றப்பட்டது/நீக்கப்பட்டது."
@@ -512,6 +500,21 @@
   "core/sdk/ServiceWorkerManager.ts | stopping": {
     "message": "நிறுத்துகிறது"
   },
+  "core/sdk/SourceMapScopeChainEntry.ts | block": {
+    "message": "பிளாக்"
+  },
+  "core/sdk/SourceMapScopeChainEntry.ts | closure": {
+    "message": "உள்ளடங்கிய செயல்பாடு"
+  },
+  "core/sdk/SourceMapScopeChainEntry.ts | global": {
+    "message": "குளோபல்"
+  },
+  "core/sdk/SourceMapScopeChainEntry.ts | local": {
+    "message": "லோக்கல்"
+  },
+  "core/sdk/SourceMapScopeChainEntry.ts | returnValue": {
+    "message": "வழங்கப்படும் மதிப்பு"
+  },
   "core/sdk/sdk-meta.ts | achromatopsia": {
     "message": "அக்ரமடோப்ஸியா (நிறமில்லாதது)"
   },
@@ -534,7 +537,7 @@
     "message": "AVIF வடிவமைப்பை முடக்கு"
   },
   "core/sdk/sdk-meta.ts | disableCache": {
-    "message": "தற்காலிகச் சேமிப்பை முடக்கு (டெவெலப்பர் கருவிகள் திறந்திருக்கும்போது)"
+    "message": "டெவெலப்பர் கருவிகள் திறந்திருக்கும்போது தற்காலிகச் சேமிப்பை முடக்கு"
   },
   "core/sdk/sdk-meta.ts | disableJavascript": {
     "message": "JavaScriptடை முடக்கு"
@@ -650,9 +653,6 @@
   "core/sdk/sdk-meta.ts | extendGridLines": {
     "message": "கட்டங்களை அதிகப்படுத்து"
   },
-  "core/sdk/sdk-meta.ts | hideCoreWebVitalsOverlay": {
-    "message": "வலைதளத்தின் முக்கியமான அடிப்படை விவரங்கள் உள்ள மேலடுக்கை மறை"
-  },
   "core/sdk/sdk-meta.ts | hideFramesPerSecondFpsMeter": {
     "message": "ஒரு வினாடிக்கு ஃபிரேம்களின் எண்ணிக்கையைக் (frames per second - FPS) கணக்கிடும் மீட்டரை மறை"
   },
@@ -673,6 +673,9 @@
   },
   "core/sdk/sdk-meta.ts | highlightAdFrames": {
     "message": "விளம்பர ஃபிரேம்களை ஹைலைட் செய்"
+  },
+  "core/sdk/sdk-meta.ts | networkCacheExplanation": {
+    "message": "நெட்வொர்க் தற்காலிகச் சேமிப்பை முடக்குவது, முதல்முறை வரும் பார்வையாளருக்குக் கிடைக்கும் நெட்வொர்க் அனுபவத்தை சிமுலேட் செய்யும்."
   },
   "core/sdk/sdk-meta.ts | networkRequestBlocking": {
     "message": "நெட்வொர்க் கோரிக்கையைத் தடுத்தல்"
@@ -703,9 +706,6 @@
   },
   "core/sdk/sdk-meta.ts | showAreaNames": {
     "message": "பகுதிப் பெயர்களைக் காட்டு"
-  },
-  "core/sdk/sdk-meta.ts | showCoreWebVitalsOverlay": {
-    "message": "வலைதளத்தின் முக்கியமான அடிப்படை விவரங்கள் மேல் அடுக்கைக் காட்டு"
   },
   "core/sdk/sdk-meta.ts | showFramesPerSecondFpsMeter": {
     "message": "ஒரு வினாடிக்கு ஃபிரேம்களின் எண்ணிக்கையைக் (frames per second - FPS) கணக்கிடும் மீட்டரைக் காட்டு"
@@ -763,9 +763,6 @@
   },
   "entrypoints/inspector_main/OutermostTargetSelector.ts | targetS": {
     "message": "பக்கம்: {PH1}"
-  },
-  "entrypoints/inspector_main/RenderingOptions.ts | coreWebVitals": {
-    "message": "வலைதளத்தின் முக்கியமான அடிப்படை விவரங்கள்"
   },
   "entrypoints/inspector_main/RenderingOptions.ts | disableAvifImageFormat": {
     "message": "AVIF பட வடிவமைப்பை முடக்கு"
@@ -853,9 +850,6 @@
   },
   "entrypoints/inspector_main/RenderingOptions.ts | scrollingPerformanceIssues": {
     "message": "ஸ்க்ரோலிங் செயல்திறன் சிக்கல்கள்"
-  },
-  "entrypoints/inspector_main/RenderingOptions.ts | showsAnOverlayWithCoreWebVitals": {
-    "message": "வலைதளத்தின் முக்கியமான அடிப்படை விவரங்களுடன் கூடிய மேல் அடுக்கைக் காட்டும்."
   },
   "entrypoints/inspector_main/RenderingOptions.ts | showsLayerBordersOrangeoliveAnd": {
     "message": "லேயர் பார்டர்களையும் (ஆரஞ்சு/ஆலிவ்) கட்டங்களையும் (சியான்) காட்டு."
@@ -965,14 +959,14 @@
   "entrypoints/main/main-meta.ts | auto": {
     "message": "தானியங்கு"
   },
+  "entrypoints/main/main-meta.ts | autoTheme": {
+    "message": "தானியங்கு"
+  },
   "entrypoints/main/main-meta.ts | bottom": {
     "message": "கீழ் புறம்"
   },
   "entrypoints/main/main-meta.ts | browserLanguage": {
     "message": "உலாவியின் UI மொழி"
-  },
-  "entrypoints/main/main-meta.ts | browserPreference": {
-    "message": "உலாவி விருப்பத்தேர்வு"
   },
   "entrypoints/main/main-meta.ts | cancelSearch": {
     "message": "தேடலை ரத்துசெய்"
@@ -994,6 +988,9 @@
   },
   "entrypoints/main/main-meta.ts | dockToRight": {
     "message": "வலதுபுறம் டாக் செய்"
+  },
+  "entrypoints/main/main-meta.ts | dontMatchChromeColorSchemeCommand": {
+    "message": "Chrome வண்ணத் திட்டத்துடன் பொருத்தாதே"
   },
   "entrypoints/main/main-meta.ts | enableCtrlShortcutToSwitchPanels": {
     "message": "பேனல்களுக்கு இடையே மாற Ctrl + 1-9 ஷார்ட்கட்டை இயக்கு"
@@ -1028,6 +1025,15 @@
   "entrypoints/main/main-meta.ts | lightLower": {
     "message": "லைட்"
   },
+  "entrypoints/main/main-meta.ts | matchChromeColorScheme": {
+    "message": "Chrome வண்ணத் திட்டத்துடன் பொருத்து"
+  },
+  "entrypoints/main/main-meta.ts | matchChromeColorSchemeCommand": {
+    "message": "Chrome வண்ணத் திட்டத்துடன் பொருத்து"
+  },
+  "entrypoints/main/main-meta.ts | matchChromeColorSchemeDocumentation": {
+    "message": "நீங்கள் பிரத்தியேகப்படுத்திய Chrome தீம் இயக்கப்பட்டிருக்கும்போது, அதனுடன் டெவெலப்பர் கருவிகளின் வண்ணங்களைப் பொருத்தலாம்"
+  },
   "entrypoints/main/main-meta.ts | nextPanel": {
     "message": "அடுத்த பேனல்"
   },
@@ -1061,8 +1067,8 @@
   "entrypoints/main/main-meta.ts | searchOnEnterCommand": {
     "message": "டைப் செய்யும்போதே தேடுவதை முடக்கு (தேட Enter அழுத்தவும்)"
   },
-  "entrypoints/main/main-meta.ts | switchToBrowserPreferredColor": {
-    "message": "உலாவி பரிந்துரைக்கும் கலர் தீமிற்கு மாறு"
+  "entrypoints/main/main-meta.ts | switchToBrowserPreferredTheme": {
+    "message": "பிரவுசர் பரிந்துரைக்கும் தீமிற்கு மாறு"
   },
   "entrypoints/main/main-meta.ts | switchToDarkTheme": {
     "message": "டார்க் தீமிற்கு மாறு"
@@ -1145,9 +1151,6 @@
   "generated/Deprecation.ts | CSSCustomStateDeprecatedSyntax": {
     "message": ":--customstatename நிறுத்தப்பட்டது. அதற்குப் பதிலாக :state(customstatename) தொடரியலைப் பயன்படுத்தவும்."
   },
-  "generated/Deprecation.ts | CSSInsetAreaProperty": {
-    "message": "inset-area பிராப்பர்ட்டி நிறுத்தப்பட்டது. அதற்குப் பதிலாக position-area பிராப்பர்ட்டியைப் பயன்படுத்தவும்."
-  },
   "generated/Deprecation.ts | CSSSelectorInternalMediaControlsOverlayCastButton": {
     "message": "இயல்பு அலைபரப்பு ஒருங்கிணைப்பை முடக்க -internal-media-controls-overlay-cast-button தேர்விக்குப் பதிலாக disableRemotePlayback பண்புக்கூறைப் பயன்படுத்த வேண்டும்."
   },
@@ -1184,20 +1187,11 @@
   "generated/Deprecation.ts | DataUrlInSvgUse": {
     "message": "தரவுக்கான ஆதரவு: SVGUseElementடில் இருக்கும் URLகள் நிறுத்தப்பட்டன மற்றும் எதிர்காலத்தில் அது அகற்றப்படும்."
   },
-  "generated/Deprecation.ts | DelegatedInkExpectedImprovement": {
-    "message": "சாத்தியமுள்ள கைரேகைச் சிக்கல்களினால்DelegatedInkTrailPresenter.expectedImprovement நிறுத்தப்பட்டது."
-  },
-  "generated/Deprecation.ts | DocumentDomainSettingWithoutOriginAgentClusterHeader": {
-    "message": "document.domain ஐ அமைத்து அதே ஆரிஜின் கொள்கையைத் தளர்த்துவது நிறுத்தப்பட்டது. இயல்பாகவே இது முடக்கப்படும். இந்த அம்சத்தைத் தொடர்ந்து பயன்படுத்த ஆவணம் மற்றும் ஃபிரேம்களுக்கான HTTP பதிலுடன் Origin-Agent-Cluster: ?0 தலைப்பை அனுப்பி ஆரிஜின்-கீய்டு ஏஜெண்ட் கிளஸ்டர்களின் ஒப்புதலை நீக்கவும். கூடுதல் தகவல்களுக்கு https://developer.chrome.com/blog/immutable-document-domain/ தளத்திற்குச் செல்லவும்."
-  },
   "generated/Deprecation.ts | GeolocationInsecureOrigin": {
     "message": "பாதுகாப்பற்ற ஆரிஜின்களில் getCurrentPosition() மற்றும் watchPosition() இனி செயல்படாது. இந்த அம்சத்தைப் பயன்படுத்த உங்கள் ஆப்ஸை HTTPS போன்ற பாதுகாப்பான ஆரிஜின்களுக்கு மாற்றவும். கூடுதல் தகவல்களுக்கு https://goo.gle/chrome-insecure-origins தளத்தைப் பார்க்கவும்."
   },
   "generated/Deprecation.ts | GeolocationInsecureOriginDeprecatedNotRemoved": {
     "message": "பாதுகாப்பற்ற ஆரிஜின்களில் getCurrentPosition(), watchPosition() ஆகியவை நிறுத்தப்பட்டன. இந்த அம்சத்தைப் பயன்படுத்த உங்கள் ஆப்ஸை HTTPS போன்ற பாதுகாப்பான ஆரிஜின்களுக்கு மாற்றவும். கூடுதல் தகவல்களுக்கு https://goo.gle/chrome-insecure-origins தளத்தைப் பார்க்கவும்."
-  },
-  "generated/Deprecation.ts | GetInnerHTML": {
-    "message": "getInnerHTML() செயல்பாடு நிறுத்தப்பட்டது, இது விரைவில் இந்த உலாவியில் இருந்து அகற்றப்படும். அதற்குப் பதிலாக getHTML() ஐப் பயன்படுத்தவும்."
   },
   "generated/Deprecation.ts | GetUserMediaInsecureOrigin": {
     "message": "பாதுகாப்பற்ற ஆரிஜின்களில் getUserMedia() இனி செயல்படாது. இந்த அம்சத்தைப் பயன்படுத்த உங்கள் ஆப்ஸை HTTPS போன்ற பாதுகாப்பான ஆரிஜின்களுக்கு மாற்றவும். கூடுதல் தகவல்களுக்கு https://goo.gle/chrome-insecure-origins தளத்தைப் பார்க்கவும்."
@@ -1307,6 +1301,9 @@
   "generated/Deprecation.ts | UnloadHandler": {
     "message": "அன்லோடு ஈவண்ட் லிசனர்கள் நிறுத்தப்பட்டன, அவை விரைவில் அகற்றப்படும்."
   },
+  "generated/Deprecation.ts | V8GPUAdapter_RequestAdapterInfo_Method": {
+    "message": "GPUAdapter requestAdapterInfo() முறை நிறுத்தப்பட்டது, இதற்குப் பதிலாக GPUAdapter info பண்புக்கூறைப் பயன்படுத்தவும்."
+  },
   "generated/Deprecation.ts | V8SharedArrayBufferConstructedInExtensionWithoutIsolation": {
     "message": "SharedArrayBuffer ஐத் தொடர்ந்து பயன்படுத்த நீட்டிப்புகள் கிராஸ் ஆரிஜின் ஐசொலேஷனைப் பயன்படுத்த வேண்டும். https://developer.chrome.com/docs/extensions/mv3/cross-origin-isolation/ தளத்தைப் பார்வையிடவும்."
   },
@@ -1348,6 +1345,9 @@
   },
   "models/bindings/DebuggerLanguagePlugins.ts | loadingDebugSymbolsForVia": {
     "message": "{PH2} தளத்திற்கான பிழைதிருத்தக் குறியீடுகளை [{PH1}] ஏற்றுகிறது ({PH3} மூலம்)..."
+  },
+  "models/bindings/IgnoreListManager.ts | addAllAnonymousScriptsToIgnoreList": {
+    "message": "அடையாளம் தெரியாத ஸ்கிரிப்ட்டுகள் அனைத்தையும் தவிர்க்க வேண்டியவற்றின் பட்டியலில் சேர்"
   },
   "models/bindings/IgnoreListManager.ts | addAllContentScriptsToIgnoreList": {
     "message": "நீட்டிப்பு ஸ்கிரிப்ட்டுகள் அனைத்தையும் தவிர்க்க வேண்டியவற்றின் பட்டியலில் சேர்"
@@ -1440,7 +1440,7 @@
     "message": "நம்பகமான வகைகள் - கொள்கை மீறல்"
   },
   "models/issues_manager/CookieDeprecationMetadataIssue.ts | thirdPartyPhaseoutExplained": {
-    "message": "மூன்றாம் தரப்புக் குக்கீகளைப் படிப்படியாகக் குறைக்கத் தயாராகுங்கள்"
+    "message": "மூன்றாம் தரப்புக் குக்கீகளை Chrome கையாளும் விதத்தில் செய்யப்பட்டுள்ள மாற்றங்கள்"
   },
   "models/issues_manager/CookieIssue.ts | aSecure": {
     "message": "பாதுகாப்பானது"
@@ -1449,10 +1449,10 @@
     "message": "பாதுகாப்பற்ற"
   },
   "models/issues_manager/CookieIssue.ts | consoleTpcdErrorMessage": {
-    "message": "தனியுரிமை சாண்ட்பாக்ஸின் ஒரு பகுதியாக மூன்றாம் தரப்புக் குக்கீ Chromeமில் தடுக்கப்பட்டுள்ளது."
+    "message": "Chrome கொடியிடல்கள் அல்லது பிரவுசர் உள்ளமைவின் காரணமாக மூன்றாம் தரப்புக் குக்கீ Chromeமில் தடுக்கப்பட்டுள்ளது."
   },
   "models/issues_manager/CookieIssue.ts | consoleTpcdWarningMessage": {
-    "message": "தனியுரிமை சாண்ட்பாக்ஸின் ஒரு பகுதியாக மூன்றாம் தரப்புக் குக்கீ இனிவரும் Chrome பதிப்புகளில் தடுக்கப்படும்."
+    "message": "மூன்றாம் தரப்புக் குக்கீகளைப் பயன்படுத்தாமல் பிரவுஸ் செய்ய பயனர்களை அனுமதிக்கும் புதிய வசதி Chromeமில் வரவுள்ளது."
   },
   "models/issues_manager/CookieIssue.ts | fileCrosSiteRedirectBug": {
     "message": "பிழையைப் புகாரளி"
@@ -1467,7 +1467,7 @@
     "message": "SameSite குக்கீகள் சரிசெய்யப்பட்டன"
   },
   "models/issues_manager/CookieIssue.ts | thirdPartyPhaseoutExplained": {
-    "message": "மூன்றாம் தரப்புக் குக்கீகளைப் படிப்படியாகக் குறைக்கத் தயாராகுங்கள்"
+    "message": "மூன்றாம் தரப்புக் குக்கீகளை Chrome கையாளும் விதத்தில் செய்யப்பட்டுள்ள மாற்றங்கள்"
   },
   "models/issues_manager/CorsIssue.ts | CORS": {
     "message": "கிராஸ் ஆரிஜின் ரிசோர்ஸ் ஷேரிங் (CORS)"
@@ -1572,7 +1572,7 @@
     "message": "மீட்டமை"
   },
   "models/persistence/EditFileSystemView.ts | add": {
-    "message": "சேர்"
+    "message": "ஃபோல்டரைச் சேர்"
   },
   "models/persistence/EditFileSystemView.ts | enterAPath": {
     "message": "தடத்தை உள்ளிடவும்"
@@ -1581,7 +1581,7 @@
     "message": "தனித்துவமான தடத்தை உள்ளிடவும்"
   },
   "models/persistence/EditFileSystemView.ts | excludedFolders": {
-    "message": "சேர்க்கப்படாத ஃபோல்டர்கள்"
+    "message": "விலக்கப்பட்டுள்ள துணை ஃபோல்டர்கள்"
   },
   "models/persistence/EditFileSystemView.ts | folderPath": {
     "message": "ஃபோல்டரின் தடம்"
@@ -1591,6 +1591,9 @@
   },
   "models/persistence/EditFileSystemView.ts | sViaDevtools": {
     "message": "{PH1} (.devtools மூலம்)"
+  },
+  "models/persistence/EditFileSystemView.ts | url": {
+    "message": "URL"
   },
   "models/persistence/IsolatedFileSystem.ts | blobCouldNotBeLoaded": {
     "message": "BLOBபினை ஏற்ற முடியவில்லை."
@@ -1641,10 +1644,10 @@
     "message": "கோப்புகளை PlatformFileSystem ஆல் ஏற்ற முடியவில்லை."
   },
   "models/persistence/WorkspaceSettingsTab.ts | addFolder": {
-    "message": "ஃபோல்டரைச் சேர்…"
+    "message": "ஃபோல்டரைச் சேர்"
   },
   "models/persistence/WorkspaceSettingsTab.ts | folderExcludePattern": {
-    "message": "ஃபோல்டரை விலக்கும் பேர்ட்டன்"
+    "message": "வொர்க்ஸ்பேஸில் இருந்து விலக்கு"
   },
   "models/persistence/WorkspaceSettingsTab.ts | mappingsAreInferredAutomatically": {
     "message": "மேப்பிங்குகள் தானாகவே பெறப்பட்டுள்ளன."
@@ -1685,8 +1688,65 @@
   "models/persistence/persistence-meta.ts | workspace": {
     "message": "Workspace"
   },
-  "models/timeline_model/TimelineJSProfile.ts | threadS": {
-    "message": "தொடரிழை {PH1}"
+  "models/trace/insights/CLSCulprits.ts | description": {
+    "message": "பயனரின் எந்தவொரு செயலும் இல்லாமல் எலிமெண்ட்டுகள் நகரும்போது லே-அவுட் ஷிஃப்ட்கள் நிகழும். பக்கம் ஏற்றப்படும்போது எலிமெண்ட்களின் எழுத்து வடிவங்கள் மாறுவது, எலிமெண்ட்டுகள் சேர்க்கப்படுவது, அகற்றப்படுவது போன்ற [லே-அவுட் ஷிஃப்ட்டிற்கான காரணங்களை ஆய்வு செய்யவும்](https://web.dev/articles/optimize-cls)."
+  },
+  "models/trace/insights/CLSCulprits.ts | title": {
+    "message": "லே-அவுட் ஷிஃப்ட்டுக்கான காரணங்கள்"
+  },
+  "models/trace/insights/DocumentLatency.ts | description": {
+    "message": "உங்களின் முதல் நெட்வொர்க் கோரிக்கை மிகவும் முக்கியமானது.  திசைதிருப்புதல்களைத் தவிர்த்தல், விரைவான சேவையகப் பதிலை உறுதிசெய்தல், வார்த்தையைச் சுருக்குதல் ஆகியவற்றின் மூலம் அதன் தாமதத்தைக் குறைக்கவும்."
+  },
+  "models/trace/insights/DocumentLatency.ts | title": {
+    "message": "ஆவணக் கோரிக்கைக்கான தாமதம்"
+  },
+  "models/trace/insights/FontDisplay.ts | description": {
+    "message": "வார்த்தைகள் சீராகத் தெரிவதை உறுதிசெய்துகொள்ள, [font-display](https://developer.chrome.com/blog/font-display) ஐ swap அல்லது optional என்று அமைக்கவும். [எழுத்து வடிவ அளவீட்டை மீறிச் செயல்படுதல்](https://developer.chrome.com/blog/font-fallbacks) அம்சத்தின் மூலம் லே-அவுட் ஷிஃப்ட்டுகளைக் குறைக்க, swap ஐ மேலும் மேம்படுத்தலாம்."
+  },
+  "models/trace/insights/FontDisplay.ts | title": {
+    "message": "எழுத்து வடிவக் காட்சி"
+  },
+  "models/trace/insights/InteractionToNextPaint.ts | description": {
+    "message": "நீளமான நிலையில் இருந்து ஆய்வைத் தொடங்கவும். [தாமதங்களைக் குறைக்கலாம்](https://web.dev/articles/optimize-inp#optimize_interactions). செயலாக்கத்திற்கான கால அளவைக் குறைக்க, [முக்கியத் தொடரிழையின் (பெரும்பாலும் JS செயலாக்கங்கள்) செயல்திறன் பாதிப்புகளை](https://web.dev/articles/optimize-long-tasks) மேம்படுத்தவும்."
+  },
+  "models/trace/insights/InteractionToNextPaint.ts | title": {
+    "message": "நிலையின்படி INP"
+  },
+  "models/trace/insights/LCPDiscovery.ts | description": {
+    "message": "HTMLலில் உள்ள LCP படத்தை உடனடியாகக் [கண்டறியப்படும்படி](https://web.dev/articles/optimize-lcp#1_eliminate_resource_load_delay) அமைப்பது, ['தேவையுள்ளபோது காண்பித்தல்' அம்சத்தைத் தவிர்ப்பது](https://web.dev/articles/lcp-lazy-loading) ஆகியவற்றின் மூலம் LCPயை மேம்படுத்தலாம்"
+  },
+  "models/trace/insights/LCPDiscovery.ts | title": {
+    "message": "LCP கோரிக்கையைக் கண்டறிதல்"
+  },
+  "models/trace/insights/LCPPhases.ts | description": {
+    "message": "ஒவ்வொரு [நிலைக்கும் குறிப்பிட்ட மேம்பாட்டு உத்திகள் உள்ளன](https://web.dev/articles/optimize-lcp#lcp-breakdown). பொதுவாக, LCP நேரம் பெரும்பாலும் ரிசோர்ஸ்களை ஏற்றுவதற்காகச் செலவிடப்படவேண்டுமே தவிர தாமதங்களில் அல்ல."
+  },
+  "models/trace/insights/LCPPhases.ts | title": {
+    "message": "நிலையின்படி LCP"
+  },
+  "models/trace/insights/RenderBlocking.ts | description": {
+    "message": "பக்கத்தின் துவக்க ரென்டரைத் தடுக்கும் கோரிக்கைகள் LCPயைத் தாமதப்படுத்தக்கூடும். [தவிர்ப்பது அல்லது இன்லைனில்](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources/) வழங்குவதன் மூலம் இந்த நெட்வொர்க் கோரிக்கைகளை முக்கியக் கோரிக்கைத் தடத்தில் இருந்து வெளியேற்றலாம்."
+  },
+  "models/trace/insights/RenderBlocking.ts | title": {
+    "message": "தடுப்புக் கோரிக்கைகளை ரென்டரிங் செய்தல்"
+  },
+  "models/trace/insights/SlowCSSSelector.ts | description": {
+    "message": "ஸ்டைலை மீண்டும் கணக்கிடுதலின் செயல்திறன் பாதிப்பு அதிகமாக இருந்தால், தேர்விகளை மேம்படுத்தி அதைக் குறைக்கலாம். அதிக நேரம் எடுத்துக்கொள்ளும் தேர்விகளையும் மெதுவான தடத்தின் பொருத்தச் சதவீதம் அதிகமாக உள்ள [தேர்விகளையும் மேம்படுத்தலாம்](https://developer.chrome.com/docs/devtools/performance/selector-stats). எளிமையான தேர்விகள், குறைவான தேர்விகள், சிறிய DOM, அடுக்குகள் குறைவான DOM ஆகியவை பொருத்தச் செயல்திறனின் பாதிப்புகளைக் குறைக்கும்."
+  },
+  "models/trace/insights/SlowCSSSelector.ts | title": {
+    "message": "CSS தேர்விக்கான செயல்திறன் பாதிப்பு"
+  },
+  "models/trace/insights/ThirdParties.ts | description": {
+    "message": "மூன்றாம் தரப்புக் குறியீட்டால் ஏற்றுதல் செயல்திறனில் குறிப்பிடத்தக்க மாற்றம் ஏற்படலாம். உங்கள் பக்கத்தின் உள்ளடக்கத்திற்கு முன்னுரிமை வழங்க, [மூன்றாம் தரப்புக் குறியீடு ஏற்றப்படுவதைக் குறைக்கலாம் தாமதப்படுத்தலாம்](https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/loading-third-party-javascript/)."
+  },
+  "models/trace/insights/ThirdParties.ts | title": {
+    "message": "மூன்றாம் தரப்பினர்"
+  },
+  "models/trace/insights/Viewport.ts | description": {
+    "message": "பக்கத்தின் காட்சிப் பகுதி மொபைலுக்கு ஏற்றதாக இல்லை என்பதால் தட்டுதல் செயல்பாடுகள் [300 மிவி வரை தாமதம் ஆகக்கூடும்](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/)."
+  },
+  "models/trace/insights/Viewport.ts | title": {
+    "message": "காட்சிப் பகுதி மொபைலுக்கு ஏற்றதாக இல்லை"
   },
   "models/workspace/UISourceCode.ts | index": {
     "message": "(பொருளடக்கம்)"
@@ -2453,6 +2513,21 @@
   "panels/application/ApplicationPanelSidebar.ts | documentNotAvailable": {
     "message": "ஆவணம் எதுவுமில்லை"
   },
+  "panels/application/ApplicationPanelSidebar.ts | extensionLocalStorage": {
+    "message": "லோக்கல்"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | extensionManagedStorage": {
+    "message": "நிர்வகிக்கப்படுகிறது"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | extensionSessionStorage": {
+    "message": "அமர்வு"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | extensionStorage": {
+    "message": "நீட்டிப்புச் சேமிப்பகம்"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | extensionSyncStorage": {
+    "message": "ஒத்திசைவு"
+  },
   "panels/application/ApplicationPanelSidebar.ts | frames": {
     "message": "ஃபிரேம்கள்"
   },
@@ -2633,16 +2708,28 @@
   "panels/application/DOMStorageItemsView.ts | domStorageItemsCleared": {
     "message": "DOM சேமிப்பகத் தரவு அழிக்கப்பட்டது"
   },
-  "panels/application/DOMStorageItemsView.ts | domStorageNumberEntries": {
-    "message": "இந்த அட்டவணையில் காட்டப்படும் உள்ளீடுகளின் எண்ணிக்கை: {PH1}"
-  },
   "panels/application/DOMStorageItemsView.ts | key": {
     "message": "குறியீடு"
   },
-  "panels/application/DOMStorageItemsView.ts | selectAValueToPreview": {
-    "message": "மாதிரிக்காட்சியைப் பார்க்க ஒரு மதிப்பைத் தேர்ந்தெடுக்கவும்"
-  },
   "panels/application/DOMStorageItemsView.ts | value": {
+    "message": "மதிப்பு"
+  },
+  "panels/application/ExtensionStorageItemsView.ts | extensionStorage": {
+    "message": "நீட்டிப்புச் சேமிப்பகம்"
+  },
+  "panels/application/ExtensionStorageItemsView.ts | extensionStorageItemDeleted": {
+    "message": "சேமிப்பக மதிப்பு நீக்கப்பட்டது."
+  },
+  "panels/application/ExtensionStorageItemsView.ts | extensionStorageItems": {
+    "message": "நீட்டிப்புச் சேமிப்பக உள்ளடக்கங்கள்"
+  },
+  "panels/application/ExtensionStorageItemsView.ts | extensionStorageItemsCleared": {
+    "message": "நீட்டிப்பின் சேமிப்பக உள்ளடக்கங்கள் அழிக்கப்பட்டன"
+  },
+  "panels/application/ExtensionStorageItemsView.ts | key": {
+    "message": "கீ"
+  },
+  "panels/application/ExtensionStorageItemsView.ts | value": {
     "message": "மதிப்பு"
   },
   "panels/application/IndexedDBViews.ts | clearObjectStore": {
@@ -2726,8 +2813,8 @@
   "panels/application/OpenedWindowDetailsView.ts | accessToOpener": {
     "message": "ஒப்பனருக்கான அணுகல்"
   },
-  "panels/application/OpenedWindowDetailsView.ts | clickToRevealInElementsPanel": {
-    "message": "உறுப்புகள் பேனலைக் காட்ட கிளிக் செய்க"
+  "panels/application/OpenedWindowDetailsView.ts | clickToOpenInElementsPanel": {
+    "message": "உறுப்புகள் பேனலில் திறக்க கிளிக் செய்யுங்கள்"
   },
   "panels/application/OpenedWindowDetailsView.ts | closed": {
     "message": "மூடப்பட்டது"
@@ -3166,6 +3253,9 @@
   },
   "panels/application/components/BackForwardCacheStrings.ts | containsPlugins": {
     "message": "செருகுநிரல்களைக் கொண்ட பக்கங்களை ‘முன் பின் பக்கங்களைத் தற்காலிகமாகச் சேமித்தல்’ அம்சத்தில் தற்போது சேமிக்க முடியாது."
+  },
+  "panels/application/components/BackForwardCacheStrings.ts | contentDiscarded": {
+    "message": "வரையறுக்கப்படவில்லை"
   },
   "panels/application/components/BackForwardCacheStrings.ts | contentFileChooser": {
     "message": "FileChooser APIயைப் பயன்படுத்தும் பக்கங்களை ‘முன் பின் பக்கங்களைத் தற்காலிகமாகச் சேமித்தல்’ அம்சத்தில் சேமிக்க முடியாது."
@@ -3614,17 +3704,17 @@
   "panels/application/components/FrameDetailsView.ts | childDescription": {
     "message": "இந்த ஃபிரேம் ஒரு விளம்பரத்தின் உபநிலை ஃபிரேமாகக் அடையாளம் காணப்பட்டுள்ளது"
   },
-  "panels/application/components/FrameDetailsView.ts | clickToRevealInElementsPanel": {
-    "message": "உறுப்புகள் பேனலைக் காட்ட கிளிக் செய்க"
+  "panels/application/components/FrameDetailsView.ts | clickToOpenInElementsPanel": {
+    "message": "உறுப்புகள் பேனலில் திறக்க கிளிக் செய்யுங்கள்"
   },
-  "panels/application/components/FrameDetailsView.ts | clickToRevealInNetworkPanel": {
-    "message": "நெட்வொர்க் பேனலைப் பார்க்க கிளிக் செய்யுங்கள்"
+  "panels/application/components/FrameDetailsView.ts | clickToOpenInNetworkPanel": {
+    "message": "நெட்வொர்க் பேனலில் திறக்க கிளிக் செய்யுங்கள்"
   },
-  "panels/application/components/FrameDetailsView.ts | clickToRevealInNetworkPanelMight": {
-    "message": "நெட்வொர்க் பேனலைக் காட்ட கிளிக் செய்க (பக்கத்தை ரெஃப்ரெஷ் செய்ய வேண்டியிருக்கும்)"
+  "panels/application/components/FrameDetailsView.ts | clickToOpenInNetworkPanelMight": {
+    "message": "நெட்வொர்க் பேனலைத் திறக்க கிளிக் செய்யுங்கள் (பக்கத்தை ரெஃப்ரெஷ் செய்ய வேண்டியிருக்கும்)"
   },
-  "panels/application/components/FrameDetailsView.ts | clickToRevealInSourcesPanel": {
-    "message": "ஆதாரங்கள் பேனலைக் காட்ட கிளிக் செய்க"
+  "panels/application/components/FrameDetailsView.ts | clickToOpenInSourcesPanel": {
+    "message": "ஆதாரங்கள் பேனலில் திறக்க கிளிக் செய்யுங்கள்"
   },
   "panels/application/components/FrameDetailsView.ts | contentSecurityPolicy": {
     "message": "உள்ளடக்கப் பாதுகாப்புக் கொள்கை (Content Security Policy - CSP)"
@@ -3998,6 +4088,12 @@
   "panels/application/preloading/PreloadingView.ts | filterFilterByRuleSet": {
     "message": "ரூல் செட்டின்படி வடிகட்டு"
   },
+  "panels/application/preloading/PreloadingView.ts | noRuleSets": {
+    "message": "விதித் தொகுப்புகள் இல்லை"
+  },
+  "panels/application/preloading/PreloadingView.ts | prettyPrint": {
+    "message": "பிரெட்டி பிரிண்ட்"
+  },
   "panels/application/preloading/PreloadingView.ts | statusFailure": {
     "message": "தோல்வி"
   },
@@ -4186,9 +4282,6 @@
   },
   "panels/application/preloading/components/PreloadingString.ts | PrefetchFailedNon2XX": {
     "message": "2xx அல்லாத HTTP பதில் நிலைக் குறியீடு காரணமாக ப்ரீஃபெட்ச் செய்ய முடியவில்லை."
-  },
-  "panels/application/preloading/components/PreloadingString.ts | PrefetchFailedPerPageLimitExceeded": {
-    "message": "தொடங்குதல் பக்கத்தில் ஏற்கெனவே பல ப்ரீஃபெட்ச்கள் செயலில் இருப்பதால் ப்ரீஃபெட்ச் செயல்படுத்தப்படவில்லை."
   },
   "panels/application/preloading/components/PreloadingString.ts | PrefetchIneligibleRetryAfter": {
     "message": "ஆரிஜினுக்கான முந்தைய ப்ரீஃபெட்ச், இன்னும் முடிவடையாத Retry-After தலைப்புடன் கூடிய HTTP 503 பதிலைப் பெற்றுள்ளது."
@@ -4397,6 +4490,9 @@
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusUaChangeRequiresReload": {
     "message": "ப்ரீரெண்டரிங் வழிசெலுத்தலில் பயனர் ஏஜெண்ட் மாற்றப்பட்டுள்ளது."
   },
+  "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusWindowClosed": {
+    "message": "window.close() செயல்பாட்டைத் தூண்டியதால் ப்ரீரெண்டரிங் செய்யப்பட்ட பக்கம் அகற்றப்பட்டது."
+  },
   "panels/application/preloading/components/PreloadingString.ts | statusFailure": {
     "message": "தோல்வி"
   },
@@ -4415,14 +4511,14 @@
   "panels/application/preloading/components/PreloadingString.ts | statusSuccess": {
     "message": "இணைக்கப்பட்டது"
   },
-  "panels/application/preloading/components/RuleSetGrid.ts | buttonClickToRevealInElementsPanel": {
-    "message": "உறுப்புகள் பேனலைப் பார்க்க கிளிக் செய்யுங்கள்"
-  },
-  "panels/application/preloading/components/RuleSetGrid.ts | buttonClickToRevealInNetworkPanel": {
-    "message": "நெட்வொர்க் பேனலைப் பார்க்க கிளிக் செய்யுங்கள்"
-  },
   "panels/application/preloading/components/RuleSetGrid.ts | buttonRevealPreloadsAssociatedWithRuleSet": {
     "message": "இந்த ரூல் செட்டுடன் தொடர்புடைய யூக அடிப்படையிலான ஏற்றுதல்களைக் காட்டு"
+  },
+  "panels/application/preloading/components/RuleSetGrid.ts | clickToOpenInElementsPanel": {
+    "message": "உறுப்புகள் பேனலில் திறக்க கிளிக் செய்யுங்கள்"
+  },
+  "panels/application/preloading/components/RuleSetGrid.ts | clickToOpenInNetworkPanel": {
+    "message": "நெட்வொர்க் பேனலில் திறக்க கிளிக் செய்யுங்கள்"
   },
   "panels/application/preloading/components/RuleSetGrid.ts | errors": {
     "message": "{errorCount,plural, =1{# பிழை}other{# பிழைகள்}}"
@@ -5027,11 +5123,20 @@
   "panels/console/ConsoleViewMessage.ts | explainThisError": {
     "message": "இந்தப் பிழையைப் புரிந்துகொள்ளுங்கள்"
   },
+  "panels/console/ConsoleViewMessage.ts | explainThisErrorWithAI": {
+    "message": "இந்தப் பிழையைப் புரிந்துகொள்ளுங்கள். AI வழங்குகிறது."
+  },
   "panels/console/ConsoleViewMessage.ts | explainThisMessage": {
     "message": "இந்த மெசேஜைப் புரிந்துகொள்ளுங்கள்"
   },
+  "panels/console/ConsoleViewMessage.ts | explainThisMessageWithAI": {
+    "message": "இந்த மெசேஜைப் புரிந்துகொள்ளுங்கள். AI வழங்குகிறது."
+  },
   "panels/console/ConsoleViewMessage.ts | explainThisWarning": {
     "message": "இந்த எச்சரிக்கையைப் புரிந்துகொள்ளுங்கள்"
+  },
+  "panels/console/ConsoleViewMessage.ts | explainThisWarningWithAI": {
+    "message": "இந்த எச்சரிக்கையைப் புரிந்துகொள்ளுங்கள். AI வழங்குகிறது."
   },
   "panels/console/ConsoleViewMessage.ts | functionWasResolvedFromBound": {
     "message": "இணைக்கப்பட்ட செயல்பாட்டில் இருந்து செயல்பாடு தீர்க்கப்பட்டது."
@@ -5532,7 +5637,7 @@
     "message": "கண்டெய்னர் உறுப்பில் {PROPERTY_NAME} ஐ அமைக்கவும் அல்லது {ALTERNATIVE_PROPERTY_NAME} ஐப் பயன்படுத்தவும்."
   },
   "panels/elements/CSSRuleValidator.ts | flexGridContainerPropertyRuleReason": {
-    "message": "இந்த உறுப்பு {CONTAINER_DISPLAY_NAME} வகையைச் சேர்ந்தது. அதாவது, {CONTAINER_DISPLAY_NAME} கண்டெய்னரின் உபநிலை, ஆனால் கண்டெய்னர்களுக்கு மட்டுமே {PROPERTY_NAME} வகை பொருந்தும்."
+    "message": "இந்த எலிமெண்ட் {CONTAINER_DISPLAY_NAME} வகையைச் சேர்ந்தது. அதாவது, {CONTAINER_DISPLAY_NAME} கண்டெய்னரின் உபநிலை. ஆனால், கண்டெய்னர்களுக்கு மட்டுமே {PROPERTY_NAME} வகை பொருந்தும்."
   },
   "panels/elements/CSSRuleValidator.ts | fontVariationSettingsWarning": {
     "message": "“{PH5}” எழுத்து வடிவக் குடும்பத்திற்கான அனுமதிக்கப்படும் வரம்பை [{PH3}, {PH4}] விட “{PH1}” {PH2} அமைப்பிற்கான மதிப்பு அதிகமாக உள்ளது."
@@ -5603,6 +5708,9 @@
   "panels/elements/ElementStatePaneWidget.ts | forceElementState": {
     "message": "உறுப்பு நிலையைச் செயல்படுத்தல்"
   },
+  "panels/elements/ElementStatePaneWidget.ts | learnMore": {
+    "message": "மேலும் அறிக"
+  },
   "panels/elements/ElementStatePaneWidget.ts | toggleElementState": {
     "message": "உறுப்பு நிலைக்கு மாறும்"
   },
@@ -5630,8 +5738,8 @@
   "panels/elements/ElementsPanel.ts | nodeCannotBeFoundInTheCurrent": {
     "message": "தற்போதைய பக்கத்தில் கணுவைக் கண்டறிய முடியவில்லை."
   },
-  "panels/elements/ElementsPanel.ts | revealInElementsPanel": {
-    "message": "உறுப்புகள் பேனலில் காட்டு"
+  "panels/elements/ElementsPanel.ts | openInElementsPanel": {
+    "message": "உறுப்புகள் பேனலில் திற"
   },
   "panels/elements/ElementsPanel.ts | showComputedStylesSidebar": {
     "message": "கணக்கிடப்பட்ட ஸ்டைல்கள் பக்கப்பட்டியைக் காட்டும்"
@@ -5720,6 +5828,9 @@
   "panels/elements/ElementsTreeElement.ts | editText": {
     "message": "உரையைத் திருத்து"
   },
+  "panels/elements/ElementsTreeElement.ts | elementHasScrollableOverflow": {
+    "message": "இந்த எலிமெண்ட்டிற்கு ஸ்க்ரோல் செய்யக்கூடிய ஓவர்ஃப்லோ உள்ளது"
+  },
   "panels/elements/ElementsTreeElement.ts | enableFlexMode": {
     "message": "ஃப்ளெக்ஸ் பயன்முறையை இயக்கு"
   },
@@ -5787,7 +5898,7 @@
     "message": "முதன்மையானவை"
   },
   "panels/elements/EventListenersWidget.ts | blocking": {
-    "message": "தடுத்தல்"
+    "message": "தடுக்கிறது"
   },
   "panels/elements/EventListenersWidget.ts | eventListenersCategory": {
     "message": "ஈவண்ட் லிசனர்கள் வகை"
@@ -5924,11 +6035,14 @@
   "panels/elements/StylePropertyTreeElement.ts | gridEditorButton": {
     "message": "grid எடிட்டரைத் திற"
   },
+  "panels/elements/StylePropertyTreeElement.ts | jumpToAnimationsPanel": {
+    "message": "“அனிமேஷன்கள்” பேனலுக்குச் செல்"
+  },
   "panels/elements/StylePropertyTreeElement.ts | openColorPickerS": {
     "message": "வண்ணத் தேர்வியைத் திறத்தல். {PH1}"
   },
-  "panels/elements/StylePropertyTreeElement.ts | revealInSourcesPanel": {
-    "message": "ஆதாரங்கள் பேனலில் காட்டு"
+  "panels/elements/StylePropertyTreeElement.ts | openInSourcesPanel": {
+    "message": "ஆதாரங்கள் பேனலில் திற"
   },
   "panels/elements/StylePropertyTreeElement.ts | shiftClickToChangeColorFormat": {
     "message": "வண்ண வடிவத்தை மாற்ற, Shift விசையை அழுத்தியபடி கிளிக் செய்க."
@@ -6332,11 +6446,11 @@
   "panels/event_listeners/EventListenersView.ts | noEventListeners": {
     "message": "ஈவண்ட் லிசனர்கள் இல்லை"
   },
+  "panels/event_listeners/EventListenersView.ts | openInElementsPanel": {
+    "message": "உறுப்புகள் பேனலில் திற"
+  },
   "panels/event_listeners/EventListenersView.ts | passive": {
     "message": "பேஸிவ்"
-  },
-  "panels/event_listeners/EventListenersView.ts | revealInElementsPanel": {
-    "message": "உறுப்புகள் பேனலில் காட்டு"
   },
   "panels/event_listeners/EventListenersView.ts | togglePassive": {
     "message": "பேஸிவ் லிசனருக்கு மாற்று"
@@ -6344,23 +6458,14 @@
   "panels/event_listeners/EventListenersView.ts | toggleWhetherEventListenerIs": {
     "message": "ஈவண்ட் லிசனர் பேஸிவ் ஆக உள்ளதா தடுக்கிறதா என்று நிலைமாற்று"
   },
-  "panels/explain/components/ConsoleInsight.ts | back": {
-    "message": "பின்செல்"
-  },
-  "panels/explain/components/ConsoleInsight.ts | cancel": {
-    "message": "வேண்டாம்"
+  "panels/explain/components/ConsoleInsight.ts | badResponse": {
+    "message": "மோசமான பதில்"
   },
   "panels/explain/components/ConsoleInsight.ts | closeInsight": {
     "message": "விளக்கத்தை மூடு"
   },
   "panels/explain/components/ConsoleInsight.ts | consoleMessage": {
     "message": "கன்சோல் மெசேஜ்"
-  },
-  "panels/explain/components/ConsoleInsight.ts | continue": {
-    "message": "தொடர்க"
-  },
-  "panels/explain/components/ConsoleInsight.ts | disableFeature": {
-    "message": "இந்த அம்சத்தை முடக்கு"
   },
   "panels/explain/components/ConsoleInsight.ts | error": {
     "message": "டெவெலப்பர் கருவியில் பிழை ஏற்பட்டுள்ளது"
@@ -6370,6 +6475,9 @@
   },
   "panels/explain/components/ConsoleInsight.ts | generating": {
     "message": "விளக்கத்தை உருவாக்குகிறது…"
+  },
+  "panels/explain/components/ConsoleInsight.ts | goodResponse": {
+    "message": "நல்ல பதில்"
   },
   "panels/explain/components/ConsoleInsight.ts | inputData": {
     "message": "இந்த மெசேஜைப் புரிந்துகொள்ள பயன்படுத்தப்பட்ட தரவு"
@@ -6382,12 +6490,6 @@
   },
   "panels/explain/components/ConsoleInsight.ts | networkRequest": {
     "message": "நெட்வொர்க் கோரிக்கை"
-  },
-  "panels/explain/components/ConsoleInsight.ts | next": {
-    "message": "அடுத்து"
-  },
-  "panels/explain/components/ConsoleInsight.ts | notAvailable": {
-    "message": "அம்சம் கிடைக்கவில்லை"
   },
   "panels/explain/components/ConsoleInsight.ts | notLoggedIn": {
     "message": "உங்கள் Google கணக்கு மூலம் Chromeமில் உள்நுழையும்போது மட்டுமே இந்த அம்சம் கிடைக்கும்."
@@ -6413,26 +6515,20 @@
   "panels/explain/components/ConsoleInsight.ts | search": {
     "message": "தேடல் இன்ஜினைப் பயன்படுத்து"
   },
+  "panels/explain/components/ConsoleInsight.ts | settingsLink": {
+    "message": "அமைப்புகளில் Console insights"
+  },
+  "panels/explain/components/ConsoleInsight.ts | signIn": {
+    "message": "உள்நுழைக"
+  },
   "panels/explain/components/ConsoleInsight.ts | signInToUse": {
     "message": "இந்த அம்சத்தைப் பயன்படுத்த உள்நுழையவும்"
   },
   "panels/explain/components/ConsoleInsight.ts | stackTrace": {
     "message": "ஸ்டாக் டிரேஸ்:"
   },
-  "panels/explain/components/ConsoleInsight.ts | syncIsOff": {
-    "message": "இந்த அம்சத்திற்கு Chrome ஒத்திசைவை இயக்க வேண்டும்."
-  },
-  "panels/explain/components/ConsoleInsight.ts | thumbsDown": {
-    "message": "தம்ஸ்-டவுன்"
-  },
-  "panels/explain/components/ConsoleInsight.ts | thumbsUp": {
-    "message": "தம்ஸ்-அப்"
-  },
-  "panels/explain/components/ConsoleInsight.ts | updateSettings": {
-    "message": "அமைப்புகளை மாற்று"
-  },
-  "panels/explain/explain-meta.ts | ageRestricted": {
-    "message": "18 அல்லது அதற்கு மேற்பட்ட வயதுடைய பயனர்கள் மட்டுமே இந்த அம்சத்தைப் பயன்படுத்த முடியும்"
+  "panels/explain/components/ConsoleInsight.ts | turnOnInSettings": {
+    "message": "கன்சோல் எச்சரிக்கைகளையும் பிழைகளையும் புரிந்துகொண்டு அவற்றைச் சரிசெய்வதற்காக AI உதவிபெற {PH1} அம்சத்தை இயக்குங்கள்."
   },
   "panels/explain/explain-meta.ts | enableConsoleInsights": {
     "message": "AI மூலம் கன்சோல் மெசேஜ்களைப் புரிந்துகொள்ளுதல்"
@@ -6450,10 +6546,91 @@
     "message": "இந்த அம்சம் உங்கள் பிராந்தியத்தில் கிடைக்கவில்லை"
   },
   "panels/explain/explain-meta.ts | policyRestricted": {
-    "message": "இந்த அம்சத்தை உங்கள் நிறுவனம் முடக்கியுள்ளது. கூடுதல் தகவல்களுக்கு, உங்கள் நிர்வாகிகளைத் தொடர்புகொள்ளவும்."
+    "message": "உங்கள் நிர்வாகி இந்த அமைப்பை நிர்வகிக்கிறார்"
   },
   "panels/explain/explain-meta.ts | wrongLocale": {
-    "message": "இந்த அம்சத்தைப் பயன்படுத்த, டெவெலப்பர் கருவிகளின் அமைப்புகளில் உங்கள் மொழி விருப்பத்தேர்வை ஆங்கிலத்திற்கு மாற்றுங்கள்."
+    "message": "இந்த அம்சத்தைப் பயன்படுத்த டெவெலப்பர் கருவிகள் அமைப்புகளில் உங்களின் விருப்ப மொழியை ஆங்கிலம் என்று அமையுங்கள்"
+  },
+  "panels/freestyler/FreestylerPanel.ts | chatDeleted": {
+    "message": "உரையாடல் நீக்கப்பட்டது"
+  },
+  "panels/freestyler/FreestylerPanel.ts | clearChatHistory": {
+    "message": "உரையாடல் பதிவுகளை அழி"
+  },
+  "panels/freestyler/FreestylerPanel.ts | deleteChat": {
+    "message": "உரையாடலை நீக்கு"
+  },
+  "panels/freestyler/FreestylerPanel.ts | help": {
+    "message": "உதவி"
+  },
+  "panels/freestyler/FreestylerPanel.ts | history": {
+    "message": "பதிவு"
+  },
+  "panels/freestyler/FreestylerPanel.ts | newChat": {
+    "message": "புதிய உரையாடல்"
+  },
+  "panels/freestyler/FreestylerPanel.ts | newChatCreated": {
+    "message": "புதிய உரையாடல் உருவாக்கப்பட்டது"
+  },
+  "panels/freestyler/FreestylerPanel.ts | noPastConversations": {
+    "message": "முந்தைய உரையாடல்கள் எதுவும் இல்லை"
+  },
+  "panels/freestyler/FreestylerPanel.ts | sendFeedback": {
+    "message": "கருத்தை அனுப்பும்"
+  },
+  "panels/freestyler/FreestylerPanel.ts | settings": {
+    "message": "அமைப்புகள்"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | followTheSteps": {
+    "message": "கேள்வி கேட்க மேலே உள்ள வழிமுறைகளைப் பின்பற்றவும்"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | inputDisclaimerForEmptyState": {
+    "message": "இது பரிசோதனை நிலையில் உள்ள AI அம்சம் என்பதால் சில சமயங்களில் சரியாகச் செயல்படாமல் போகலாம்."
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | learnAbout": {
+    "message": "டெவெலப்பர் கருவிகளில் AI குறித்துத் தெரிந்துகொள்ளுங்கள்"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | notLoggedIn": {
+    "message": "உங்கள் Google கணக்கு மூலம் Chromeமில் உள்நுழைந்திருக்கும்போது மட்டுமே இந்த அம்சத்தைப் பயன்படுத்த முடியும்"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | offline": {
+    "message": "இணைய இணைப்பைச் சரிபார்த்து மீண்டும் முயலவும்"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | settingsLink": {
+    "message": "அமைப்புகளில் AI உதவி"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | turnOnForStyles": {
+    "message": "CSS ஸ்டைல்களைப் புரிந்துகொள்வதற்கான உதவியைப் பெற {PH1} இயக்குங்கள்"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | turnOnForStylesAndRequests": {
+    "message": "ஸ்டைல்கள் மற்றும் நெட்வொர்க் கோரிக்கைகளுக்கான உதவியைப் பெற {PH1} இயக்குங்கள்"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | turnOnForStylesRequestsAndFiles": {
+    "message": "ஸ்டைல்கள், நெட்வொர்க் கோரிக்கைகள் மற்றும் ஃபைல்கள் தொடர்பான உதவியைப் பெற {PH1} என்பதை இயக்கவும்"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | turnOnForStylesRequestsPerformanceAndFiles": {
+    "message": "ஸ்டைல்கள், நெட்வொர்க் கோரிக்கைகள், செயல்திறன் மற்றும் ஃபைல்கள் தொடர்பான உதவியைப் பெற {PH1} என்பதை இயக்கவும்"
+  },
+  "panels/freestyler/freestyler-meta.ts | aiAssistance": {
+    "message": "AI உதவி"
+  },
+  "panels/freestyler/freestyler-meta.ts | askAi": {
+    "message": "AIயிடம் கேட்கலாம்"
+  },
+  "panels/freestyler/freestyler-meta.ts | enableAiAssistance": {
+    "message": "AI உதவியை இயக்கு"
+  },
+  "panels/freestyler/freestyler-meta.ts | geoRestricted": {
+    "message": "இந்த அம்சம் உங்கள் பிராந்தியத்தில் கிடைக்கவில்லை"
+  },
+  "panels/freestyler/freestyler-meta.ts | policyRestricted": {
+    "message": "உங்கள் நிர்வாகி இந்த அமைப்பை நிர்வகிக்கிறார்"
+  },
+  "panels/freestyler/freestyler-meta.ts | showAiAssistance": {
+    "message": "AI உதவியைக் காட்டு"
+  },
+  "panels/freestyler/freestyler-meta.ts | wrongLocale": {
+    "message": "இந்த அம்சத்தைப் பயன்படுத்த டெவெலப்பர் கருவிகள் அமைப்புகளில் உங்களின் விருப்ப மொழியை ஆங்கிலம் என்று அமையுங்கள்"
   },
   "panels/issues/AffectedBlockedByResponseView.ts | blockedResource": {
     "message": "தடுக்கப்பட்ட ஆதாரம்"
@@ -7295,8 +7472,8 @@
   "panels/linear_memory_inspector/LinearMemoryInspectorController.ts | couldNotOpenLinearMemory": {
     "message": "நேரியல்பு நினைவகக் கண்காணிப்புக் கருவியைத் திறக்க முடியவில்லை: பஃபரைக் கண்டறிய முடியவில்லை."
   },
-  "panels/linear_memory_inspector/LinearMemoryInspectorController.ts | revealInMemoryInspectorPanel": {
-    "message": "நினைவகக் கண்காணிப்புப் பேனலில் காட்டு"
+  "panels/linear_memory_inspector/LinearMemoryInspectorController.ts | openInMemoryInspectorPanel": {
+    "message": "மெமரி இன்ஸ்பெக்டர் பேனலில் திற"
   },
   "panels/linear_memory_inspector/LinearMemoryInspectorPane.ts | noOpenInspections": {
     "message": "நிலுவையில் உள்ள ஆய்வுகள் எதுவுமில்லை"
@@ -7604,11 +7781,8 @@
   "panels/mobile_throttling/ThrottlingManager.ts | hardwareConcurrency": {
     "message": "வன்பொருள் ஒருங்கமைவு"
   },
-  "panels/mobile_throttling/ThrottlingManager.ts | hardwareConcurrencyIsEnabled": {
-    "message": "வன்பொருள் ஒருங்கமைவு மீறிச் செயல்படுவது இயக்கப்பட்டது"
-  },
-  "panels/mobile_throttling/ThrottlingManager.ts | hardwareConcurrencySettingTooltip": {
-    "message": "இந்தப் பக்கத்தில் navigator.hardwareConcurrencyயால் தெரிவிக்கப்பட்ட மதிப்பினை மீறிச் செயல்படும்"
+  "panels/mobile_throttling/ThrottlingManager.ts | hardwareConcurrencySettingLabel": {
+    "message": "navigator.hardwareConcurrencyயால் தெரிவிக்கப்பட்ட மதிப்பினை மீறிச் செயல்படும்"
   },
   "panels/mobile_throttling/ThrottlingManager.ts | noThrottling": {
     "message": "த்ராட்லிங் இல்லை"
@@ -7650,7 +7824,7 @@
     "message": "மெதுவான 3G & 6 மடங்கு CPU ஸ்லோடவுன்"
   },
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | addCustomProfile": {
-    "message": "பிரத்தியேகச் சுயவிவரத்தைச் சேர்..."
+    "message": "சுயவிவரத்தைச் சேர்"
   },
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | dms": {
     "message": "{PH1} ms"
@@ -7955,15 +8129,6 @@
   "panels/network/NetworkDataGridNode.ts | redirect": {
     "message": "திசைதிருப்புதல்"
   },
-  "panels/network/NetworkDataGridNode.ts | requestContentHeadersOverridden": {
-    "message": "கோரிக்கை உள்ளடக்கம், தலைப்புகள் ஆகிய இரண்டும் மீறிச் செயல்படுகின்றன"
-  },
-  "panels/network/NetworkDataGridNode.ts | requestContentOverridden": {
-    "message": "கோரிக்கை உள்ளடக்கம் ஓவர்-ரைடு செய்யப்பட்டது"
-  },
-  "panels/network/NetworkDataGridNode.ts | requestHeadersOverridden": {
-    "message": "கோரிக்கை ஹெட்டர்கள் மீறிச் செயல்படுகின்றன"
-  },
   "panels/network/NetworkDataGridNode.ts | sPreflight": {
     "message": "{PH1} + ப்ரீஃப்ளைட்"
   },
@@ -7999,9 +8164,6 @@
   },
   "panels/network/NetworkDataGridNode.ts | signedexchange": {
     "message": "கையொப்பமிட்ட பரிமாற்றம்"
-  },
-  "panels/network/NetworkDataGridNode.ts | thirdPartyPhaseout": {
-    "message": "மூன்றாம் தரப்புக் குக்கீகள் தவிர்க்கப்பட்டுள்ளதால், இந்தக் குக்கீகளுக்கான கோரிக்கை தடுக்கப்பட்டன. ‘சிக்கல்கள்’ பிரிவில் மேலும் தெரிந்துகொள்ளலாம்."
   },
   "panels/network/NetworkDataGridNode.ts | timeSubtitleTooltipText": {
     "message": "தாமதம் (பதில் பெறப்பட்ட நேரம் - தொடக்க நேரம்)"
@@ -8084,9 +8246,6 @@
   "panels/network/NetworkItemView.ts | websocketMessages": {
     "message": "WebSocket மெசேஜ்கள்"
   },
-  "panels/network/NetworkLogView.ts | allStrings": {
-    "message": "எல்லாம்"
-  },
   "panels/network/NetworkLogView.ts | areYouSureYouWantToClearBrowser": {
     "message": "உலாவியின் தற்காலிகச் சேமிப்பை அழிக்க விரும்புகிறீர்களா?"
   },
@@ -8126,8 +8285,11 @@
   "panels/network/NetworkLogView.ts | copyAllAsFetch": {
     "message": "அனைத்தையும் fetch ஆக நகலெடு"
   },
-  "panels/network/NetworkLogView.ts | copyAllAsHar": {
-    "message": "அனைத்தையும் HAR ஆக நகலெடு"
+  "panels/network/NetworkLogView.ts | copyAllAsHarSanitized": {
+    "message": "தேவையில்லாதவை அகற்றப்பட்ட பின்னர் எல்லாவற்றையும் HAR வடிவில் நகலெடு"
+  },
+  "panels/network/NetworkLogView.ts | copyAllAsHarWithSensitiveData": {
+    "message": "பாதுகாக்கப்பட வேண்டிய தனிப்பட்ட தரவுடன் சேர்த்து எல்லாவற்றையும் HAR ஆக நகலெடு"
   },
   "panels/network/NetworkLogView.ts | copyAllAsNodejsFetch": {
     "message": "அனைத்தையும் fetch (Node.js) ஆக நகலெடு"
@@ -8147,8 +8309,11 @@
   "panels/network/NetworkLogView.ts | copyAllListedAsFetch": {
     "message": "fetch என்று காட்டப்படும் அனைத்தையும் நகலெடு"
   },
-  "panels/network/NetworkLogView.ts | copyAllListedAsHar": {
-    "message": "HAR என்று காட்டப்படும் அனைத்தையும் நகலெடு"
+  "panels/network/NetworkLogView.ts | copyAllListedAsHarSanitized": {
+    "message": "தேவையில்லாதவை அகற்றப்பட்ட பின்னர் பட்டியலிடப்பட்ட எல்லாவற்றையும் HAR வடிவில் நகலெடு"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsHarWithSensitiveData": {
+    "message": "பாதுகாக்கப்பட வேண்டிய தனிப்பட்ட தரவுடன் சேர்த்து பட்டியலிடப்பட்ட எல்லாவற்றையும் HAR ஆக நகலெடு"
   },
   "panels/network/NetworkLogView.ts | copyAllListedAsNodejsFetch": {
     "message": "fetch (Node.js) என்று காட்டப்படும் அனைத்தையும் நகலெடு"
@@ -8243,9 +8408,6 @@
   "panels/network/NetworkLogView.ts | onlyShowThirdPartyRequests": {
     "message": "பக்க ஆரிஜினிலிருந்து மாறுபட்ட ஆரிஜினைக் கொண்ட கோரிக்கைகளை மட்டுமே காட்டும்"
   },
-  "panels/network/NetworkLogView.ts | overTwoTypesSelected": {
-    "message": "{PH1}, {PH2}..."
-  },
   "panels/network/NetworkLogView.ts | overrideHeaders": {
     "message": "தலைப்புகளுக்கான ஓவர்-ரைடு"
   },
@@ -8261,14 +8423,8 @@
   "panels/network/NetworkLogView.ts | replayXhr": {
     "message": "XHRரை மீண்டும் இயக்கு"
   },
-  "panels/network/NetworkLogView.ts | requestTypes": {
-    "message": "கோரிக்கை வகைகள்"
-  },
   "panels/network/NetworkLogView.ts | requestTypesToInclude": {
     "message": "சேர்ப்பதற்கான கோரிக்கை வகைகள்"
-  },
-  "panels/network/NetworkLogView.ts | requestTypesTooltip": {
-    "message": "வகையின்படி கோரிக்கைகளை வடிகட்டு"
   },
   "panels/network/NetworkLogView.ts | sBResourcesLoadedByThePage": {
     "message": "{PH1} B ஆதாரங்கள் பக்கத்தால் ஏற்றப்பட்டன"
@@ -8300,20 +8456,11 @@
   "panels/network/NetworkLogView.ts | sTransferred": {
     "message": "{PH1} மாற்றப்பட்டது"
   },
-  "panels/network/NetworkLogView.ts | saveAllAsHarWithContent": {
-    "message": "உள்ளடக்கத்துடன் HAR ஆக அனைத்தையும் சேமி"
-  },
-  "panels/network/NetworkLogView.ts | showOnly": {
-    "message": "{PH1} மட்டும் காட்டு"
-  },
   "panels/network/NetworkLogView.ts | showOnlyHideRequests": {
     "message": "மறைக்கப்பட்ட கோரிக்கைகளை மட்டும் காட்டும்"
   },
   "panels/network/NetworkLogView.ts | thirdParty": {
     "message": "மூன்றாம் தரப்புக் கோரிக்கைகள்"
-  },
-  "panels/network/NetworkLogView.ts | twoTypesSelected": {
-    "message": "{PH1}, {PH2}"
   },
   "panels/network/NetworkLogView.ts | unblockS": {
     "message": "{PH1} தளத்தை அனுமதி"
@@ -8436,13 +8583,16 @@
     "message": "தற்காலிகச் சேமிப்பை முடக்கு"
   },
   "panels/network/NetworkPanel.ts | disableCacheWhileDevtoolsIsOpen": {
-    "message": "தற்காலிகச் சேமிப்பை முடக்கு (டெவெலப்பர் கருவிகள் திறந்திருக்கும்போது)"
+    "message": "டெவெலப்பர் கருவிகள் திறந்திருக்கும்போது தற்காலிகச் சேமிப்பை முடக்கு"
   },
   "panels/network/NetworkPanel.ts | doNotClearLogOnPageReload": {
     "message": "பக்கத்தை ரெஃப்ரெஷ் செய்யும்போது/செல்லும்போது பதிவு அழிக்கப்படாது"
   },
-  "panels/network/NetworkPanel.ts | exportHar": {
-    "message": "HAR பதிவிறக்கும்..."
+  "panels/network/NetworkPanel.ts | exportHarSanitized": {
+    "message": "தேவையில்லாதவற்றை அகற்றிய பின்னர் HAR வடிவில் பதிவிறக்கும்..."
+  },
+  "panels/network/NetworkPanel.ts | exportHarWithSensitiveData": {
+    "message": "பாதுகாக்கப்பட வேண்டிய தனிப்பட்ட தரவுடன் சேர்த்து HAR ஐ ஏற்று..."
   },
   "panels/network/NetworkPanel.ts | fetchingFrames": {
     "message": "ஃபிரேம்களைப் பெறுகிறது..."
@@ -8465,14 +8615,17 @@
   "panels/network/NetworkPanel.ts | networkSettings": {
     "message": "நெட்வொர்க் அமைப்புகள்"
   },
+  "panels/network/NetworkPanel.ts | openInNetworkPanel": {
+    "message": "நெட்வொர்க் பேனலில் திற"
+  },
+  "panels/network/NetworkPanel.ts | openInNetworkPanelMissingRequest": {
+    "message": "நெட்வொர்க் பேனலில் திற (விடுபட்ட கோரிக்கை)"
+  },
   "panels/network/NetworkPanel.ts | preserveLog": {
     "message": "பதிவைச் சேமி"
   },
   "panels/network/NetworkPanel.ts | recordingFrames": {
     "message": "ஃபிரேம்களை ரெக்கார்டு செய்கிறது..."
-  },
-  "panels/network/NetworkPanel.ts | revealInNetworkPanel": {
-    "message": "நெட்வொர்க் பேனலில் காட்டு"
   },
   "panels/network/NetworkPanel.ts | search": {
     "message": "தேடு"
@@ -8692,6 +8845,18 @@
   },
   "panels/network/RequestTimingView.ts | retrievalTimeS": {
     "message": "பதில் கிடைத்த நேரம்: {PH1}"
+  },
+  "panels/network/RequestTimingView.ts | routerActualSource": {
+    "message": "அசல் மூலம்: {PH1}"
+  },
+  "panels/network/RequestTimingView.ts | routerCacheLookup": {
+    "message": "தற்காலிகச் சேமிப்பைத் தேடுதல்"
+  },
+  "panels/network/RequestTimingView.ts | routerEvaluation": {
+    "message": "ரூட்டர் மதிப்பீடு"
+  },
+  "panels/network/RequestTimingView.ts | routerMatchedSource": {
+    "message": "பொருந்திய ஆதாரம்: {PH1}"
   },
   "panels/network/RequestTimingView.ts | serverPush": {
     "message": "சர்வர் புஷ்"
@@ -8946,7 +9111,7 @@
     "message": "கோரிக்கைத் தலைப்புகள்"
   },
   "panels/network/components/RequestHeadersView.ts | requestMethod": {
-    "message": "கோரிக்கை முறை"
+    "message": "கோரிக்கையின் முறை"
   },
   "panels/network/components/RequestHeadersView.ts | requestUrl": {
     "message": "URLலைக் கோரு"
@@ -9047,6 +9212,12 @@
   "panels/network/network-meta.ts | addNetworkRequestBlockingPattern": {
     "message": "நெட்வொர்க் கோரிக்கைத் தடுப்புப் பேட்டர்னைச் சேர்க்கும்"
   },
+  "panels/network/network-meta.ts | allowToGenerateHarWithSensitiveData": {
+    "message": "பாதுகாக்கப்பட வேண்டிய தனிப்பட்ட தரவுடன் சேர்த்து HAR ஐ உருவாக்க அனுமதி"
+  },
+  "panels/network/network-meta.ts | allowToGenerateHarWithSensitiveDataDocumentation": {
+    "message": "இயல்பாகவே, உருவாக்கப்பட்ட HAR பதிவுகளில் தேவையில்லாதவை அகற்றப்படுவதுடன் Cookie, Set-Cookie, Authorization HTTP தலைப்புகள் போன்றவையும் சேர்க்கப்பட்டிருக்காது. இந்த அமைப்பு இயக்கப்பட்டிருக்கும்போது, பாதுகாக்கப்பட வேண்டிய தனிப்பட்ட தரவுடன் HARரை ஏற்றும்/நகலெடுக்கும் விருப்பங்கள் வழங்கப்படும்."
+  },
   "panels/network/network-meta.ts | clear": {
     "message": "நெட்வொர்க் பதிவை அழி"
   },
@@ -9061,6 +9232,9 @@
   },
   "panels/network/network-meta.ts | diskCache": {
     "message": "டிஸ்க் தற்காலிகச் சேமிப்பு"
+  },
+  "panels/network/network-meta.ts | dontAllowToGenerateHarWithSensitiveData": {
+    "message": "பாதுகாக்கப்பட வேண்டிய தனிப்பட்ட தரவுடன் சேர்த்து HAR ஐ உருவாக்க அனுமதிக்காதே"
   },
   "panels/network/network-meta.ts | dontGroupNetworkLogItemsByFrame": {
     "message": "நெட்வொர்க் பதிவுகளை ஃபிரேம் வாரியாகக் குழுவாக்க வேண்டாம்"
@@ -9176,6 +9350,27 @@
   "panels/performance_monitor/performance_monitor-meta.ts | systemMonitor": {
     "message": "சிஸ்டம் மானிட்டர்"
   },
+  "panels/profiler/HeapDetachedElementsDataGrid.ts | detachedElementsList": {
+    "message": "டிட்டாச் செய்யப்பட்ட எலிமெண்ட்டுகளின் பட்டியல்"
+  },
+  "panels/profiler/HeapDetachedElementsDataGrid.ts | detachedNodes": {
+    "message": "டிட்டாச் செய்யப்பட்ட நோடுகள்"
+  },
+  "panels/profiler/HeapDetachedElementsDataGrid.ts | nodeSize": {
+    "message": "நோடுகளின் எண்ணிக்கை"
+  },
+  "panels/profiler/HeapDetachedElementsView.ts | detachedElementProfile": {
+    "message": "டிட்டாச் செய்யப்பட்ட எலிமெண்ட்டுகள்: {PH1}"
+  },
+  "panels/profiler/HeapDetachedElementsView.ts | detachedElementsDescription": {
+    "message": "JS ரெஃபரென்ஸ் தக்கவைத்த ஆப்ஜெக்ட்டுகளை டிட்டாச் செய்யப்பட்ட எலிமெண்ட்டுகள் காட்டும்."
+  },
+  "panels/profiler/HeapDetachedElementsView.ts | detachedElementsTitle": {
+    "message": "டிட்டாச் செய்யப்பட்ட எலிமெண்ட்டுகள்"
+  },
+  "panels/profiler/HeapDetachedElementsView.ts | startDetachedElements": {
+    "message": "டிட்டாச் செய்யப்பட்ட எலிமெண்ட்டுகளைப் பெறு"
+  },
   "panels/profiler/HeapProfileView.ts | allocationSampling": {
     "message": "ஒதுக்கீட்டு மாதிரி"
   },
@@ -9185,9 +9380,6 @@
   "panels/profiler/HeapProfileView.ts | heapProfilerIsRecording": {
     "message": "ஹீப் ப்ரொஃபைலர் ரெக்கார்டு செய்கிறது"
   },
-  "panels/profiler/HeapProfileView.ts | itProvidesGoodApproximation": {
-    "message": "JavaScript இன் எக்ஸிகியூஷன் ஸ்டாக் மூலம் காட்டப்படும் ஒதுக்கீடுகளின் சிறந்த தோராயமான மதிப்பை இது வழங்குகிறது."
-  },
   "panels/profiler/HeapProfileView.ts | name": {
     "message": "பெயர்"
   },
@@ -9195,7 +9387,7 @@
     "message": "சுயவிவரம் {PH1}"
   },
   "panels/profiler/HeapProfileView.ts | recordMemoryAllocations": {
-    "message": "சாம்பிளிங் முறையைப் பயன்படுத்தி நினைவக ஒதுக்கீடுகளை ரெக்கார்டு செய்யும்."
+    "message": "குறைவான சுமை உள்ள நீண்ட செயல்பாடுகளை சாம்பிளிங் செய்து நினைவக ஒதுக்கீடுகளைத் தோராயமாகக் கணக்கிட்டு, JavaScript எக்ஸிகியூஷன் ஸ்டாக் அடிப்படையிலான பிரிவுகளைப் பெறலாம்"
   },
   "panels/profiler/HeapProfileView.ts | recording": {
     "message": "ரெக்கார்டு செய்கிறது…"
@@ -9226,9 +9418,6 @@
   },
   "panels/profiler/HeapProfileView.ts | stopping": {
     "message": "நிறுத்துகிறது…"
-  },
-  "panels/profiler/HeapProfileView.ts | thisProfileTypeHasMinimal": {
-    "message": "இந்தச் சுயவிவரம் குறைந்தபட்ச செயல்திறன் சுமையை அளிப்பதாக உள்ளது, ஆகவே நீண்ட நேரம் இயங்கும் செயல்பாடுகளுக்கு இதைப் பயன்படுத்தலாம்."
   },
   "panels/profiler/HeapProfileView.ts | totalSize": {
     "message": "மொத்த அளவு"
@@ -9384,7 +9573,7 @@
     "message": "“{PH1}” கால் முறையைக் கோரியபோது பிழை ஏற்பட்டது"
   },
   "panels/profiler/HeapSnapshotView.ts | AllocationTimelinesShowInstrumented": {
-    "message": "குறிப்பிட்ட காலகட்டத்தில் ஒழுங்குபடுத்தப்பட்ட JavaScript நினைவக ஒதுக்கீடுகளை ஒதுக்கீட்டுக் காலப்பதிவுகள் காட்டும். ப்ரொஃபைலை ரெக்கார்டு செய்தவுடன் அதற்குள் ஒதுக்கப்பட்டு, ரெக்கார்டிங்கின் முடிவிலும் செயலில் உள்ள ஆப்ஜெக்ட்டுகளைப் பார்க்க கால இடைவெளியைத் தேர்ந்தெடுக்கலாம். நினைவகக் கசிவுகளைத் தனிமைப்படுத்த இந்த ப்ரொஃபைலைப் பயன்படுத்தவும்."
+    "message": "நினைவக ஒதுக்கீடுகளைக் காலப்போக்கில் ரெக்கார்டு செய்யலாம், இன்னமும் செயலில் உள்ள ஒதுக்கீடுகளுடன் கூடிய இடைவெளிகளைத் தேர்ந்தெடுப்பதன் மூலம் நினைவகக் கசிவுகளைத் தனிமைப்படுத்தலாம்"
   },
   "panels/profiler/HeapSnapshotView.ts | allObjects": {
     "message": "ஆப்ஜெக்ட்டுகள் அனைத்தும்"
@@ -9393,7 +9582,7 @@
     "message": "ஒதுக்கீடு"
   },
   "panels/profiler/HeapSnapshotView.ts | allocationInstrumentationOn": {
-    "message": "காலப்பதிவில் ஒதுக்கீட்டிற்கான இன்ஸ்ட்ரூமென்டேஷன்"
+    "message": "டைம்லைனில் ஒதுக்கீடுகள்"
   },
   "panels/profiler/HeapSnapshotView.ts | allocationStack": {
     "message": "ஒதுக்கீட்டு அடுக்கு"
@@ -9417,7 +9606,7 @@
     "message": "நகல் வார்த்தைகள்"
   },
   "panels/profiler/HeapSnapshotView.ts | exposeInternals": {
-    "message": "உள்ளமைந்தவற்றைக் காட்டு (செயல்படுத்தல் சார்ந்த கூடுதல் விவரங்களும் அடங்கும்)"
+    "message": "செயல்படுத்தல் விவரங்களுடன் அகத் தரவு"
   },
   "panels/profiler/HeapSnapshotView.ts | filter": {
     "message": "வடிகட்டு"
@@ -9435,7 +9624,7 @@
     "message": "ஹீப் ஸ்னாப்ஷாட்"
   },
   "panels/profiler/HeapSnapshotView.ts | heapSnapshotProfilesShowMemory": {
-    "message": "உங்கள் பக்கத்தின் JavaScript ஆப்ஜெக்ட்டுகள் மற்றும் தொடர்புடைய DOM கணுக்கள் இடையேயான நினைவக விநியோகத்தை ஹீப் ஸ்னாப்ஷாட் சுயவிவரங்கள் காட்டும்."
+    "message": "JavaScript ஆப்ஜெக்ட்டுகள் மற்றும் தொடர்புடைய DOM நோடுகளின் நினைவகப் பகிர்வைக் காட்டு"
   },
   "panels/profiler/HeapSnapshotView.ts | heapSnapshots": {
     "message": "ஹீப் ஸ்னாப்ஷாட்கள்"
@@ -9456,7 +9645,7 @@
     "message": "{PH1}, {PH2} ஆகியவற்றுக்கு இடையில் ஒதுக்கப்பட்டுள்ள ஆப்ஜெக்ட்டுகள்"
   },
   "panels/profiler/HeapSnapshotView.ts | objectsRetainedByConsole": {
-    "message": "டெவெலப்பர் கருவிகள் கன்சோல் மூலம் தக்கவைக்கப்பட்டுள்ள ஆப்ஜெக்ட்டுகள்"
+    "message": "டெவெலப்பர் கருவிகள் கன்சோல் தக்கவைத்துள்ள ஆப்ஜெக்ட்டுகள்"
   },
   "panels/profiler/HeapSnapshotView.ts | objectsRetainedByDetachedDomNodes": {
     "message": "இணைப்பு நீக்கப்பட்ட DOM நோடுகள் மூலம் தக்கவைக்கப்பட்டுள்ள ஆப்ஜெக்ட்டுகள்"
@@ -9468,7 +9657,7 @@
     "message": "அணுகுமுறை"
   },
   "panels/profiler/HeapSnapshotView.ts | recordAllocationStacksExtra": {
-    "message": "ஒதுக்கீடுகளின் ஸ்டாக் ட்ரேஸ்களை ரெக்கார்டு செய் (கூடுதல் செயல்திறன் சுமை)"
+    "message": "ஒதுக்கீட்டு ஸ்டாக் டிரேஸ்கள் (அதிகச் சுமை)"
   },
   "panels/profiler/HeapSnapshotView.ts | recording": {
     "message": "ரெக்கார்டு செய்கிறது…"
@@ -9492,7 +9681,7 @@
     "message": "ஸ்னாப்ஷாட் எடுக்கிறது…"
   },
   "panels/profiler/HeapSnapshotView.ts | stackWasNotRecordedForThisObject": {
-    "message": "இந்தச் சுயவிவரத்திற்கான ரெக்கார்டிங் தொடங்குவதற்கு முன்பு ஒதுக்கப்பட்டதால் இந்த ஆப்ஜெக்ட்டிற்கு அடுக்கு ரெக்கார்டு செய்யப்படவில்லை."
+    "message": "இந்தச் சுயவிவரத்திற்கான ரெக்கார்டிங் தொடங்குவதற்கு முன்பு ஒதுக்கப்பட்டதால் இந்த ஆப்ஜெக்ட்டிற்கு ஸ்டாக் ரெக்கார்டு செய்யப்படவில்லை."
   },
   "panels/profiler/HeapSnapshotView.ts | startRecordingHeapProfile": {
     "message": "ஹீப் சுயவிவரத்தை ரெக்கார்டிங் செய்யத் தொடங்கு"
@@ -9581,17 +9770,11 @@
   "panels/profiler/ModuleUIStrings.ts | buildingDominatedNodes": {
     "message": "டாமினேட்டேட் கணுக்களை உருவாக்குகிறது…"
   },
-  "panels/profiler/ModuleUIStrings.ts | buildingDominatorTree": {
-    "message": "டாமிணேட்டர் ட்ரீயை உருவாக்குகிறது…"
-  },
   "panels/profiler/ModuleUIStrings.ts | buildingEdgeIndexes": {
     "message": "எட்ஜ் அட்டவணைகளை உருவாக்குகிறது…"
   },
   "panels/profiler/ModuleUIStrings.ts | buildingLocations": {
     "message": "இருப்பிடங்களை உருவாக்குகிறது…"
-  },
-  "panels/profiler/ModuleUIStrings.ts | buildingPostorderIndex": {
-    "message": "போஸ்ட்ஆர்டர் அட்டவணையை உருவாக்குகிறது…"
   },
   "panels/profiler/ModuleUIStrings.ts | buildingRetainers": {
     "message": "ரீடெய்னர்களை உருவாக்குகிறது…"
@@ -9801,7 +9984,7 @@
     "message": "திருத்தி மீண்டும் அனுப்பு"
   },
   "panels/protocol_monitor/ProtocolMonitor.ts | elapsedTime": {
-    "message": "முடிந்துள்ள நேரம்"
+    "message": "எடுத்துக்கொண்ட நேரம்"
   },
   "panels/protocol_monitor/ProtocolMonitor.ts | filter": {
     "message": "வடிகட்டு"
@@ -10337,6 +10520,24 @@
   "panels/search/SearchView.ts | searching": {
     "message": "தேடுகிறது…"
   },
+  "panels/security/CookieReportView.ts | allowed": {
+    "message": "அனுமதிக்கப்பட்டது"
+  },
+  "panels/security/CookieReportView.ts | allowedByException": {
+    "message": "விதிவிலக்கின் மூலம் அனுமதிக்கப்பட்டது"
+  },
+  "panels/security/CookieReportView.ts | blocked": {
+    "message": "தடுக்கப்பட்டது"
+  },
+  "panels/security/CookieReportView.ts | body": {
+    "message": "பயனர்கள் அவர்களின் அமைப்புகளின் அடிப்படையில் கட்டுப்பாடுகளை விதித்திருக்கக்கூடிய மூன்றாம் தரப்புக் குக்கீகள். ஒரு பயனர் குக்கீகளைக் கட்டுப்படுத்தி இருந்தால், இந்தத் தளம் அவருக்குச் செயல்படாமல் போகக்கூடும்."
+  },
+  "panels/security/CookieReportView.ts | learnMoreLink": {
+    "message": "மூன்றாம் தரப்புக் குக்கீகள் எப்படிப் பயன்படுத்தப்படுகின்றன என்பது குறித்து மேலும் தெரிந்துகொள்ளுங்கள்"
+  },
+  "panels/security/CookieReportView.ts | title": {
+    "message": "மூன்றாம் தரப்புக் குக்கீகள்"
+  },
   "panels/security/SecurityModel.ts | cipherWithMAC": {
     "message": "{PH2} உடன் {PH1}"
   },
@@ -10433,15 +10634,6 @@
   "panels/security/SecurityPanel.ts | logName": {
     "message": "பதிவின் பெயர்"
   },
-  "panels/security/SecurityPanel.ts | mainOrigin": {
-    "message": "முதன்மை ஆரிஜின்"
-  },
-  "panels/security/SecurityPanel.ts | mainOriginNonsecure": {
-    "message": "முதன்மை ஆரிஜின் (பாதுகாப்பற்றது)"
-  },
-  "panels/security/SecurityPanel.ts | mainOriginSecure": {
-    "message": "முதன்மை ஆரிஜின் (பாதுகாப்பானது)"
-  },
   "panels/security/SecurityPanel.ts | missing": {
     "message": "சான்றிதழ் இல்லை"
   },
@@ -10460,9 +10652,6 @@
   "panels/security/SecurityPanel.ts | nonsecureForm": {
     "message": "பாதுகாப்பற்ற படிவம்"
   },
-  "panels/security/SecurityPanel.ts | nonsecureOrigins": {
-    "message": "பாதுகாப்பற்ற மூலங்கள்"
-  },
   "panels/security/SecurityPanel.ts | notSecure": {
     "message": "பாதுகாப்பற்றது"
   },
@@ -10478,9 +10667,6 @@
   "panels/security/SecurityPanel.ts | origin": {
     "message": "ஆரிஜின்"
   },
-  "panels/security/SecurityPanel.ts | overview": {
-    "message": "மேலோட்டப் பார்வை"
-  },
   "panels/security/SecurityPanel.ts | possibleSpoofingUrl": {
     "message": "ஏமாற்றுவதற்கு சாத்தியமுள்ள URL"
   },
@@ -10495,9 +10681,6 @@
   },
   "panels/security/SecurityPanel.ts | reloadThePageToRecordRequestsFor": {
     "message": "HTTP ஆதாரங்களுக்கான கோரிக்கைகளை ரெக்கார்டு செய்ய பக்கத்தை ரெஃப்ரெஷ் செய்யுங்கள்."
-  },
-  "panels/security/SecurityPanel.ts | reloadToViewDetails": {
-    "message": "விவரங்களைப் பார்க்க ரெஃப்ரெஷ் செய்க"
   },
   "panels/security/SecurityPanel.ts | resources": {
     "message": "ஆதாரங்கள்"
@@ -10519,9 +10702,6 @@
   },
   "panels/security/SecurityPanel.ts | secureConnectionSettings": {
     "message": "பாதுகாப்பான இணைப்பிற்கான அமைப்புகள்"
-  },
-  "panels/security/SecurityPanel.ts | secureOrigins": {
-    "message": "பாதுகாப்பான ஆரிஜின்கள்"
   },
   "panels/security/SecurityPanel.ts | securityOverview": {
     "message": "பாதுகாப்பு குறித்த மேலோட்டப் பார்வை"
@@ -10622,9 +10802,6 @@
   "panels/security/SecurityPanel.ts | toCheckThisPagesStatusVisit": {
     "message": "இந்தப் பக்கத்தின் நிலையை அறிய g.co/safebrowsingstatus என்ற தளத்திற்குச் செல்லவும்."
   },
-  "panels/security/SecurityPanel.ts | unknownCanceled": {
-    "message": "தெரியவில்லை/ரத்துசெய்யப்பட்டது"
-  },
   "panels/security/SecurityPanel.ts | unknownField": {
     "message": "தெரியவில்லை"
   },
@@ -10661,17 +10838,53 @@
   "panels/security/SecurityPanel.ts | yourPageRequestedNonsecure": {
     "message": "தடுக்கப்பட்ட பாதுகாப்பற்ற ஆதாரங்களை உங்கள் பக்கம் கோரியது."
   },
+  "panels/security/SecurityPanelSidebar.ts | cookieReport": {
+    "message": "மூன்றாம் தரப்புக் குக்கீகள்"
+  },
+  "panels/security/SecurityPanelSidebar.ts | mainOrigin": {
+    "message": "முதன்மை ஆரிஜின்"
+  },
+  "panels/security/SecurityPanelSidebar.ts | mainOriginNonsecure": {
+    "message": "முதன்மை ஆரிஜின் (பாதுகாப்பற்றது)"
+  },
+  "panels/security/SecurityPanelSidebar.ts | mainOriginSecure": {
+    "message": "முதன்மை ஆரிஜின் (பாதுகாப்பானது)"
+  },
+  "panels/security/SecurityPanelSidebar.ts | nonsecureOrigins": {
+    "message": "பாதுகாப்பற்ற மூலங்கள்"
+  },
+  "panels/security/SecurityPanelSidebar.ts | overview": {
+    "message": "மேலோட்டப் பார்வை"
+  },
+  "panels/security/SecurityPanelSidebar.ts | privacy": {
+    "message": "தனியுரிமை"
+  },
+  "panels/security/SecurityPanelSidebar.ts | reloadToViewDetails": {
+    "message": "விவரங்களைப் பார்க்க ரெஃப்ரெஷ் செய்க"
+  },
+  "panels/security/SecurityPanelSidebar.ts | secureOrigins": {
+    "message": "பாதுகாப்பான ஆரிஜின்கள்"
+  },
+  "panels/security/SecurityPanelSidebar.ts | security": {
+    "message": "பாதுகாப்பு"
+  },
+  "panels/security/SecurityPanelSidebar.ts | unknownCanceled": {
+    "message": "தெரியவில்லை/ரத்துசெய்யப்பட்டது"
+  },
   "panels/security/security-meta.ts | security": {
     "message": "பாதுகாப்பு"
+  },
+  "panels/security/security-meta.ts | securityAndPrivacy": {
+    "message": "பாதுகாப்பு & தனியுரிமை"
   },
   "panels/security/security-meta.ts | showSecurity": {
     "message": "பாதுகாப்பைக் காட்டு"
   },
-  "panels/sensors/LocationsSettingsTab.ts | addLocation": {
-    "message": "இருப்பிடத்தைச் சேர்..."
+  "panels/security/security-meta.ts | showSecurityAndPrivacy": {
+    "message": "பாதுகாப்பு மற்றும் தனியுரிமை பேனலைக் காட்டு"
   },
-  "panels/sensors/LocationsSettingsTab.ts | customLocations": {
-    "message": "பிரத்தியேக இருப்பிடங்கள்"
+  "panels/sensors/LocationsSettingsTab.ts | addLocation": {
+    "message": "இருப்பிடத்தைச் சேர்"
   },
   "panels/sensors/LocationsSettingsTab.ts | lat": {
     "message": "அ. ரேகை"
@@ -10702,6 +10915,9 @@
   },
   "panels/sensors/LocationsSettingsTab.ts | locationNameMustBeLessThanS": {
     "message": "இருப்பிடத்தின் பெயர் {PH1} எழுத்துகளுக்கும் குறைவாக இருக்க வேண்டும்"
+  },
+  "panels/sensors/LocationsSettingsTab.ts | locations": {
+    "message": "இருப்பிடங்கள்"
   },
   "panels/sensors/LocationsSettingsTab.ts | long": {
     "message": "தீ. ரேகை"
@@ -10753,6 +10969,9 @@
   },
   "panels/sensors/SensorsView.ts | forcesSelectedIdleStateEmulation": {
     "message": "தேர்ந்தெடுத்த செயலற்ற நிலையின் மாதிரி இயக்கத்தைச் செயல்படுத்தும்"
+  },
+  "panels/sensors/SensorsView.ts | forcesSelectedPressureStateEmulation": {
+    "message": "தேர்ந்தெடுத்த அழுத்த நிலையின் மாதிரி இயக்கத்தைச் செயல்படுத்தும்"
   },
   "panels/sensors/SensorsView.ts | forcesTouchInsteadOfClick": {
     "message": "கிளிக் செய்வதற்குப் பதிலாக டச் செய்வதை மட்டுமே அனுமதிக்கும்"
@@ -10826,6 +11045,12 @@
   "panels/sensors/sensors-meta.ts | accelerometer": {
     "message": "ஆக்சலரோமீட்டர்"
   },
+  "panels/sensors/sensors-meta.ts | cpuPressure": {
+    "message": "CPU அழுத்தம்"
+  },
+  "panels/sensors/sensors-meta.ts | critical": {
+    "message": "நெருக்கடி"
+  },
   "panels/sensors/sensors-meta.ts | deviceOrientation": {
     "message": "சாதனத் திசையமைப்பு"
   },
@@ -10834,6 +11059,9 @@
   },
   "panels/sensors/sensors-meta.ts | emulateIdleDetectorState": {
     "message": "ஐடில் டிடெக்டர் நிலையை இயக்கு"
+  },
+  "panels/sensors/sensors-meta.ts | fair": {
+    "message": "ஓரளவு நன்று"
   },
   "panels/sensors/sensors-meta.ts | forceEnabled": {
     "message": "இயக்கப்பட்டது"
@@ -10853,8 +11081,17 @@
   "panels/sensors/sensors-meta.ts | noIdleEmulation": {
     "message": "ஐடில் மாதிரி இயக்கம் எதுவுமில்லை"
   },
+  "panels/sensors/sensors-meta.ts | noPressureEmulation": {
+    "message": "மீறிச் செயல்படுதல் இல்லை"
+  },
+  "panels/sensors/sensors-meta.ts | nominal": {
+    "message": "ஏற்கக்கூடியது"
+  },
   "panels/sensors/sensors-meta.ts | sensors": {
     "message": "சென்சார்கள்"
+  },
+  "panels/sensors/sensors-meta.ts | serious": {
+    "message": "மோசம்"
   },
   "panels/sensors/sensors-meta.ts | showLocations": {
     "message": "இருப்பிடங்களைக் காட்டு"
@@ -10881,70 +11118,94 @@
     "message": "பயனர் செயலில் இல்லை எனில் திரையை அன்லாக் செய்"
   },
   "panels/settings/AISettingsTab.ts | adminSettings": {
-    "message": "நிர்வகிக்கப்படும் பயனர்களுக்குக் கிடைக்கக்கூடிய அம்சங்கள் அவர்களது நிர்வாகியின் அமைப்புகளைப் பொறுத்து மாறுபடக்கூடும்"
+    "message": "உங்கள் Google கணக்கு நிர்வாகம் மற்றும்/அல்லது பிராந்தியத்தைப் பொறுத்து தரவுச் சேகரிப்பை Google தவிர்க்கக்கூடும். நிர்வகிக்கப்படும் பயனர்களுக்குக் கிடைக்கக்கூடிய அம்சங்கள் உங்கள் நிறுவனத்தின் அமைப்புகளைப் பொறுத்து மாறுபடக்கூடும்."
+  },
+  "panels/settings/AISettingsTab.ts | ageRestricted": {
+    "message": "18 அல்லது அதற்கு மேற்பட்ட வயதுடைய பயனர்கள் மட்டுமே இந்த அம்சத்தைப் பயன்படுத்த முடியும்"
   },
   "panels/settings/AISettingsTab.ts | boostYourProductivity": {
-    "message": "Chrome AI மூலம் உங்கள் பணிச் செயல்திறனை அதிகரியுங்கள்"
-  },
-  "panels/settings/AISettingsTab.ts | chromeAi": {
-    "message": "Chrome AI"
-  },
-  "panels/settings/AISettingsTab.ts | collapse": {
-    "message": "சுருக்கு"
+    "message": "AI மூலம் உங்கள் பணிச் செயல்திறனை அதிகரித்தல்"
   },
   "panels/settings/AISettingsTab.ts | consoleInsightsSendsData": {
     "message": "கன்சோல் மெசேஜ், இணைக்கப்பட்டுள்ள ஸ்டாக் டிரேஸ், தொடர்புடைய மூலக் குறியீடு, இணைக்கப்பட்டுள்ள நெட்வொர்க் தலைப்புகள் ஆகியவை விளக்கங்களை உருவாக்குவதற்காக Googleளுக்கு அனுப்பப்படும். இந்த அம்சத்தை மேம்படுத்துவதற்காக இந்தத் தரவு மதிப்பாய்வாளர்களுக்குக் காட்டப்படலாம்."
   },
-  "panels/settings/AISettingsTab.ts | expand": {
-    "message": "விரிவாக்கு"
+  "panels/settings/AISettingsTab.ts | enableAiAssistance": {
+    "message": "AI உதவியை இயக்கு"
+  },
+  "panels/settings/AISettingsTab.ts | enableConsoleInsights": {
+    "message": "Console insights அம்சத்தை இயக்கு"
   },
   "panels/settings/AISettingsTab.ts | experimentalFeatures": {
-    "message": "இந்த அம்சங்கள் பரிசோதனையில் உள்ளதால் மாறுபடக்கூடும்"
+    "message": "இந்த அம்சங்கள் பரிசோதனைக் கட்டத்தில் உள்ளன. இவை ஜெனரேட்டிவ் AIயைப் பயன்படுத்துகின்றன. இவை Googleளின் கருத்துகளைப் பிரதிபலிக்காத, துல்லியமற்ற, மனதைப் புண்படுத்தக்கூடிய தகவல்களைக் காட்டக்கூடும்."
   },
   "panels/settings/AISettingsTab.ts | explainConsole": {
     "message": "கன்சோல் எச்சரிக்கைகள் மற்றும் பிழைகளுக்கான விளக்கங்களைப் பெறலாம்"
   },
   "panels/settings/AISettingsTab.ts | explainStyling": {
-    "message": "ஸ்டைலிங் நடத்தைகளுக்கான விளக்கங்களையும் கூடுதல் விவரங்களையும் பெறலாம்"
+    "message": "AI மூலம் கிடைக்கும் புள்ளிவிவரங்களுடன் CSS ஸ்டைல்களைப் புரிந்துகொள்ளலாம்"
+  },
+  "panels/settings/AISettingsTab.ts | explainStylingAndNetworkRequest": {
+    "message": "AI மூலம் இயங்கும் புள்ளிவிவரங்களின் உதவியுடன் CSS ஸ்டைல்கள், நெட்வொர்க் செயல்பாடு ஆகியவற்றைப் புரிந்துகொள்ளலாம்"
+  },
+  "panels/settings/AISettingsTab.ts | explainStylingNetworkAndFile": {
+    "message": "AI மூலம் இயங்கும் புள்ளிவிவரங்களின் உதவியுடன் CSS ஸ்டைல்கள், நெட்வொர்க் செயல்பாடு, ஃபைல் ஆஃரிஜின்கள் ஆகியவற்றைப் புரிந்துகொள்ளலாம்"
+  },
+  "panels/settings/AISettingsTab.ts | explainStylingNetworkPerformanceAndFile": {
+    "message": "AI மூலம் இயங்கும் புள்ளிவிவரங்களின் உதவியுடன் CSS ஸ்டைல்கள், நெட்வொர்க் செயல்பாடு, செயல்திறன் சிக்கல்கள், ஃபைல் ஆரிஜின்கள் ஆகியவற்றைப் புரிந்துகொள்ளலாம்"
   },
   "panels/settings/AISettingsTab.ts | freestylerSendsData": {
-    "message": "ஆய்வு செய்யப்பட்ட பக்கத்தில் உள்ள DOM அல்லது CSS உள்ளடக்கம், விளக்கங்களை உருவாக்குவதற்காக Googleளுக்கு அனுப்பப்படக்கூடும். இந்த அம்சத்தை மேம்படுத்துவதற்காக இந்தத் தரவு மதிப்பாய்வாளர்களுக்குக் காட்டப்படலாம்."
-  },
-  "panels/settings/AISettingsTab.ts | generatedSnippets": {
-    "message": "உருவாக்கப்பட்ட குறியீட்டுத் துணுக்குகளைக் கவனமாகப் பயன்படுத்துங்கள்"
+    "message": "பரிசோதனை செய்யப்பட்ட பக்கம் Web APIகள், நெட்வொர்க் கோரிக்கைகள், ஃபைல்கள், செயல்திறன் டிரேஸ்கள் ஆகியவற்றின் வழியாக அணுகக்கூடிய எந்தத் தரவும் விளக்கங்களை உருவாக்குவதற்காக Googleளுக்கு அனுப்பப்படுகிறது. இந்த அம்சத்தை மேம்படுத்துவதற்காக இந்தத் தரவு மதிப்பாய்வாளர்களுக்குக் காட்டப்படலாம். தனிப்பட்ட அல்லது பாதுகாக்கவேண்டிய தகவல் இருக்கும் பக்கங்களில் பயன்படுத்த வேண்டாம்."
   },
   "panels/settings/AISettingsTab.ts | helpUnderstandConsole": {
     "message": "கன்சோல் எச்சரிக்கைகள் மற்றும் பிழைகளைப் புரிந்துகொண்டு சரிசெய்ய உதவும்"
   },
   "panels/settings/AISettingsTab.ts | helpUnderstandStyling": {
-    "message": "ஸ்டைலிங் தொடர்பான சிக்கல்களைப் புரிந்துகொண்டு சரிசெய்ய உதவும்"
+    "message": "CSS ஸ்டைல்களைப் புரிந்துகொள்வதற்கான உதவியைப் பெறலாம்"
+  },
+  "panels/settings/AISettingsTab.ts | helpUnderstandStylingAndNetworkRequest": {
+    "message": "CSS ஸ்டைல்களையும் நெட்வொர்க் கோரிக்கைகளையும் புரிந்துகொள்வதற்கான உதவியைப் பெறலாம்"
+  },
+  "panels/settings/AISettingsTab.ts | helpUnderstandStylingNetworkAndFile": {
+    "message": "CSS ஸ்டைல்கள், நெட்வொர்க் கோரிக்கைள், ஃபைல்கள் ஆகியவற்றைப் புரிந்துகொள்வதற்கான உதவியைப் பெறலாம்"
+  },
+  "panels/settings/AISettingsTab.ts | helpUnderstandStylingNetworkPerformanceAndFile": {
+    "message": "CSS ஸ்டைல்கள், நெட்வொர்க் கோரிக்கைள், செயல்திறன், ஃபைல்கள் ஆகியவற்றைப் புரிந்துகொள்வதற்கான உதவியைப் பெறலாம்"
   },
   "panels/settings/AISettingsTab.ts | learnMore": {
     "message": "மேலும் அறிக"
   },
-  "panels/settings/AISettingsTab.ts | oneOrMoreSettingsHaveChanged": {
-    "message": "ஒன்று அல்லது மேற்பட்ட அமைப்புகளில் மாற்றம் செய்யப்பட்டுள்ளதால் அவை செயல்படுத்தப்பட ரெஃப்ரெஷ் செய்ய வேண்டும்."
+  "panels/settings/AISettingsTab.ts | notLoggedIn": {
+    "message": "உங்கள் Google கணக்கு மூலம் Chromeமில் உள்நுழையும்போது மட்டுமே இந்த அம்சம் கிடைக்கும்."
+  },
+  "panels/settings/AISettingsTab.ts | offline": {
+    "message": "இந்த அம்சம் இணைய இணைப்பு செயலில் இருந்தால் மட்டுமே கிடைக்கும்."
   },
   "panels/settings/AISettingsTab.ts | privacyNotice": {
-    "message": "தனியுரிமை அறிக்கை"
+    "message": "Google தனியுரிமைக் கொள்கை"
   },
   "panels/settings/AISettingsTab.ts | receiveStylingSuggestions": {
-    "message": "ஸ்டைலிங் தொடர்பான சிக்கல்களைச் சரிசெய்வதற்கான பரிந்துரைகளையும் குறியீட்டு மாதிரிகளையும் பெறலாம்"
+    "message": "சூழல் சார்ந்த விளக்கங்கள் மற்றும் பரிந்துரைகளுடன் உங்கள் டெவெலப்மெண்ட் பணிமுறையை மேம்படுத்தலாம்"
   },
   "panels/settings/AISettingsTab.ts | receiveSuggestions": {
     "message": "இந்தச் சிக்கல்களைச் சரிசெய்வதற்கான பரிந்துரைகளையும் குறியீட்டு மாதிரிகளையும் பெறலாம்"
   },
   "panels/settings/AISettingsTab.ts | retainData": {
-    "message": "உபயோகத் தரவு, யார் வழங்கியது என்று Google சொல்ல முடியாத வகையிலும், நீக்குதல் கோரிக்கைகளை இனி நிறைவேற்ற முடியாத வகையிலும் சேமிக்கப்பட்டு, 18 மாதங்கள் வரை தக்கவைக்கப்படும்."
+    "message": "உபயோகத் தரவு 18 மாதங்கள் வரை தக்கவைக்கப்பட்டு யார் வழங்கியது என்று Google சொல்ல முடியாத வகையில் சேமிக்கப்படும்."
   },
   "panels/settings/AISettingsTab.ts | sendsDataToGoogle": {
-    "message": "இந்த அம்சங்களைப் பயன்படுத்துவதால் அதனுடன் தொடர்புடைய தரவு Googleளுக்கு அனுப்பப்படும். அம்சம் சார்ந்த கூடுதல் தகவல்களைக் கீழே பார்க்கலாம்."
+    "message": "தொடர்புடைய தரவை இந்த அம்சங்கள் Googleளுக்கு அனுப்பும். மதிப்பாய்வாளர்களின் உதவியுடன் தனது தயாரிப்புகளையும் சேவைகளையும் மேம்படுத்த Google இந்தத் தரவையும் கருத்தையும் சேகரிக்கிறது. பாதுகாக்கவேண்டிய அல்லது தனிப்பட்ட தகவல்களைப் பகிர வேண்டாம்."
+  },
+  "panels/settings/AISettingsTab.ts | showLess": {
+    "message": "குறைவாகக் காட்டு"
+  },
+  "panels/settings/AISettingsTab.ts | showMore": {
+    "message": "மேலும் காட்டு"
   },
   "panels/settings/AISettingsTab.ts | termsOfService": {
     "message": "Google சேவை விதிமுறைகள்"
   },
   "panels/settings/AISettingsTab.ts | termsOfServicePrivacyNotice": {
-    "message": "இந்த அம்சத்தைப் பயன்படுத்துவது {PH1}, {PH2} ஆகியவற்றுக்கு உட்பட்டதாகும்."
+    "message": "இந்த அம்சங்களைப் பயன்படுத்துவது {PH1}, {PH2} ஆகியவற்றுக்கு உட்பட்டதாகும்"
   },
   "panels/settings/AISettingsTab.ts | thingsToConsider": {
     "message": "கருத்தில்கொள்ள வேண்டியவை"
@@ -10953,34 +11214,37 @@
     "message": "செயலில் இருக்கும்போது"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | addFilenamePattern": {
-    "message": "கோப்புப் பெயர் பேட்டர்னைச் சேர்க்கும்"
+    "message": "ஸ்கிரிப்ட்டின் URLலுக்கான ரெகுலர் எக்ஸ்ப்ரெஷன் விதியைச் சேர்க்கலாம்"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | addPattern": {
-    "message": "பேட்டர்னைச் சேர்..."
+    "message": "ரிஜெக்ஸ் விதியைச் சேர்..."
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | automaticallyIgnoreListKnownThirdPartyScripts": {
     "message": "சோர்ஸ் மேப்களில் உள்ள அறியப்பட்ட மூன்றாம் தரப்பு ஸ்கிரிப்ட்டுகள்"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | customExclusionRules": {
-    "message": "பிரத்தியேகத் தவிர்ப்பு விதிகள்:"
-  },
-  "panels/settings/FrameworkIgnoreListSettingsTab.ts | debuggerWillSkipThroughThe": {
-    "message": "பிழைதிருத்தி, ஸ்கிரிப்ட்டுகளைத் தவிர்த்துவிடுவதோடு அவை வழங்கும் எக்ஸெப்ஷன்களையும் பொருட்படுத்தாது."
+    "message": "பிரத்தியேகமான விலக்கு விதிகள்"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | enableIgnoreListing": {
-    "message": "புறக்கணிப்புப் பட்டியலை இயக்கு"
+    "message": "தவிர்க்க வேண்டியவற்றின் பட்டியலை இயக்கு"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | enableIgnoreListingTooltip": {
     "message": "புறக்கணிப்புப் பட்டியல் முழுவதையும் முடக்க தேர்வுநீக்கு"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | frameworkIgnoreList": {
-    "message": "கட்டமைப்புப் புறக்கணிப்புப் பட்டியல்"
+    "message": "தவிர்க்க வேண்டியவற்றின் பட்டியல்"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | generalExclusionRules": {
-    "message": "பொதுத் தவிர்ப்பு விதிகள்:"
+    "message": "பொதுவான விலக்கு விதிகள்"
+  },
+  "panels/settings/FrameworkIgnoreListSettingsTab.ts | ignoreListAnonymousScripts": {
+    "message": "மதிப்பீடு அல்லது கன்சோலில் உள்ள அடையாளம் தெரியாத ஸ்கிரிப்ட்டுகள்"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | ignoreListContentScripts": {
     "message": "நீட்டிப்புகள் மூலம் சேர்க்கப்பட்ட உள்ளடக்க ஸ்கிரிப்ட்டுகள்"
+  },
+  "panels/settings/FrameworkIgnoreListSettingsTab.ts | ignoreListingDescription": {
+    "message": "பிழைதிருத்தி இயக்கப்பட்டிருந்தால், தவிர்க்க வேண்டியவற்றின் பட்டியலில் உள்ள ஸ்கிரிப்ட்டுகளைத் தவிர்த்துவிடும், அவற்றை மட்டும் பாதிக்கின்ற விதிவிலக்குகளைப் புறக்கணிக்கும். இதற்குப் பொருந்தும் ஃபிளேம்சார்ட் விவரங்கள் செயல்திறன் பேனலில் சுருக்கப்படும்."
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | ignoreScriptsWhoseNamesMatchS": {
     "message": "“{PH1}” உடன் பொருந்தும் ஸ்கிரிப்ட் பெயர்களைத் தவிர்"
@@ -10989,16 +11253,16 @@
     "message": "மேலும் அறிக"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | pattern": {
-    "message": "பேட்டர்னைச் சேர்க்கும்"
+    "message": "ஸ்கிரிப்ட்டின் URLலுக்கான ரெகுலர் எக்ஸ்ப்ரெஷன் விதியைச் சேர்க்கலாம்"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | patternAlreadyExists": {
-    "message": "பேட்டர்ன் ஏற்கெனவே உள்ளது"
+    "message": "விதி ஏற்கெனவே உள்ளது"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | patternCannotBeEmpty": {
-    "message": "பேட்டர்ன் காலியாக இருக்கக்கூடாது"
+    "message": "விதி காலியாக இருக்கக்கூடாது"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | patternMustBeAValidRegular": {
-    "message": "செல்லுபடியாகும் ரெகுலர் எக்ஸ்ப்ரெஷனாகப் பேட்டர்ன் இருக்க வேண்டும்"
+    "message": "சரியான ரெகுலர் எக்ஸ்ப்ரெஷனாக விதி இருக்க வேண்டும்"
   },
   "panels/settings/KeybindsSettingsTab.ts | FullListOfDevtoolsKeyboard": {
     "message": "DevTools கீபோர்டு ஷார்ட்கட்டுகள் & சைகைகளின் முழுமையான பட்டியல்"
@@ -11025,7 +11289,7 @@
     "message": "கீபோர்டு ஷார்ட்கட்கள் பட்டியல்"
   },
   "panels/settings/KeybindsSettingsTab.ts | matchShortcutsFromPreset": {
-    "message": "முன்னமைவிலிருந்து பொருந்தும் ஷார்ட்கட்கள்"
+    "message": "ஷார்ட்கட் முன்னமைவு"
   },
   "panels/settings/KeybindsSettingsTab.ts | noShortcutForAction": {
     "message": "செயலுக்கான ஷார்ட்கட் இல்லை"
@@ -11067,13 +11331,10 @@
     "message": "மேலும் அறிக"
   },
   "panels/settings/SettingsScreen.ts | noResults": {
-    "message": "வடிப்பானுடன் பரிசோதனைகள் எதுவும் பொருந்தவில்லை"
+    "message": "எச்சரிக்கை: ஃபில்டருடன் பொருந்தும் பரிசோதனைகள் எதுவும் இல்லை"
   },
   "panels/settings/SettingsScreen.ts | oneOrMoreSettingsHaveChanged": {
     "message": "ஒன்று அல்லது மேற்பட்ட அமைப்புகளில் மாற்றம் செய்யப்பட்டுள்ளதால் அவை செயல்படுத்தப்பட ரெஃப்ரெஷ் செய்ய வேண்டும்."
-  },
-  "panels/settings/SettingsScreen.ts | preferences": {
-    "message": "விருப்பத்தேர்வுகள்"
   },
   "panels/settings/SettingsScreen.ts | restoreDefaultsAndReload": {
     "message": "இயல்புகளை மீட்டெடுத்து ரெஃப்ரெஷ் செய்"
@@ -11088,13 +11349,13 @@
     "message": "ஷார்ட்கட்கள்"
   },
   "panels/settings/SettingsScreen.ts | theseExperimentsAreParticularly": {
-    "message": "இந்தப் பரிசோதனைகள் குறிப்பாக நிலையற்றவை. உங்கள் சொந்த விருப்பத்தின்படி இவற்றை இயக்கலாம்."
+    "message": "எச்சரிக்கை: இந்தப் பரிசோதனைகள் குறிப்பாக நிலையற்றவை. இவற்றை இயக்குவது உங்கள் விருப்பத்திற்குட்பட்டது."
   },
   "panels/settings/SettingsScreen.ts | theseExperimentsCouldBeUnstable": {
-    "message": "இந்தப் பரிசோதனைகள் நிலையற்றதாகவோ நம்பகமற்றதாகவோ இருக்கலாம். மேலும் டெவெலப்பர் கருவிகளை மீண்டும் தொடங்க வேண்டியிருக்கும்."
+    "message": "எச்சரிக்கை: இந்தப் பரிசோதனைகள் நிலையற்றவையாகவோ நம்பகமற்றவையாகவோ இருக்கலாம்."
   },
-  "panels/settings/SettingsScreen.ts | warning": {
-    "message": "எச்சரிக்கை:"
+  "panels/settings/SettingsScreen.ts | unstableExperiments": {
+    "message": "நிலையற்ற பரிசோதனைகள்"
   },
   "panels/settings/components/SyncSection.ts | preferencesSyncDisabled": {
     "message": "இந்த அமைப்பை இயக்க, Chromeமில் அமைப்புகள் ஒத்திசைவை முதலில் இயக்க வேண்டும்."
@@ -11110,6 +11371,12 @@
   },
   "panels/settings/emulation/DevicesSettingsTab.ts | addCustomDevice": {
     "message": "பிரத்தியேகச் சாதனத்தைச் சேர்..."
+  },
+  "panels/settings/emulation/DevicesSettingsTab.ts | customDevices": {
+    "message": "பிரத்தியேகச் சாதனங்கள்"
+  },
+  "panels/settings/emulation/DevicesSettingsTab.ts | defaultDevices": {
+    "message": "இயல்பான சாதனங்கள்"
   },
   "panels/settings/emulation/DevicesSettingsTab.ts | device": {
     "message": "சாதனம்"
@@ -11128,9 +11395,6 @@
   },
   "panels/settings/emulation/DevicesSettingsTab.ts | devicePixelRatio": {
     "message": "சாதனத்தின் பிக்சல் விகிதம்"
-  },
-  "panels/settings/emulation/DevicesSettingsTab.ts | emulatedDevices": {
-    "message": "இயக்கக்கூடிய சாதனங்கள்"
   },
   "panels/settings/emulation/DevicesSettingsTab.ts | height": {
     "message": "உயரம்"
@@ -11237,8 +11501,8 @@
   "panels/settings/emulation/emulation-meta.ts | showDevices": {
     "message": "சாதனங்களைக் காட்டு"
   },
-  "panels/settings/settings-meta.ts | chromeAI": {
-    "message": "Chrome AI"
+  "panels/settings/settings-meta.ts | aiInnovations": {
+    "message": "AI கண்டுபிடிப்புகள்"
   },
   "panels/settings/settings-meta.ts | documentation": {
     "message": "ஆவணமாக்கல்"
@@ -11247,7 +11511,7 @@
     "message": "பரிசோதனைகள்"
   },
   "panels/settings/settings-meta.ts | ignoreList": {
-    "message": "புறக்கணிப்புப் பட்டியல்"
+    "message": "தவிர்க்க வேண்டியவற்றின் பட்டியல்"
   },
   "panels/settings/settings-meta.ts | preferences": {
     "message": "விருப்பத்தேர்வுகள்"
@@ -11258,14 +11522,14 @@
   "panels/settings/settings-meta.ts | shortcuts": {
     "message": "ஷார்ட்கட்கள்"
   },
-  "panels/settings/settings-meta.ts | showChromeAI": {
-    "message": "Chrome AIயைக் காட்டு"
+  "panels/settings/settings-meta.ts | showAiInnovations": {
+    "message": "AI கண்டுபிடிப்புகளைக் காட்டு"
   },
   "panels/settings/settings-meta.ts | showExperiments": {
     "message": "பரிசோதனைகளைக் காட்டு"
   },
   "panels/settings/settings-meta.ts | showIgnoreList": {
-    "message": "புறக்கணிப்புப் பட்டியலைக் காட்டு"
+    "message": "தவிர்க்க வேண்டியவற்றின் பட்டியலைக் காட்டு"
   },
   "panels/settings/settings-meta.ts | showPreferences": {
     "message": "விருப்பத்தேர்வுகளைக் காட்டு"
@@ -11358,7 +11622,7 @@
     "message": "ஃபிரேமை மீண்டும் தொடங்கு"
   },
   "panels/sources/CallStackSidebarPane.ts | showIgnorelistedFrames": {
-    "message": "புறக்கணிப்புப் பட்டியலில் உள்ள ஃபிரேம்களைக் காட்டு"
+    "message": "தவிர்க்க வேண்டியவற்றின் பட்டியலில் உள்ள ஃபிரேம்களைக் காட்டு"
   },
   "panels/sources/CallStackSidebarPane.ts | showMore": {
     "message": "மேலும் காட்டு"
@@ -11394,7 +11658,7 @@
     "message": "கொள்கை மீறல்கள்"
   },
   "panels/sources/CategorizedBreakpointL10n.ts | requestAnimationFrame": {
-    "message": "அனிமேஷன் ஃபிரேமைக் கோரு"
+    "message": "அனிமேஷன் ஃபிரேமைக் கேள்"
   },
   "panels/sources/CategorizedBreakpointL10n.ts | resumeAudiocontext": {
     "message": "AudioContext ஐத் தொடர்க"
@@ -12284,6 +12548,33 @@
   "panels/timeline/AnimationsTrackAppender.ts | animations": {
     "message": "அனிமேஷன்கள்"
   },
+  "panels/timeline/AnnotationHelpers.ts | entriesLink": {
+    "message": "இணைக்கப்பட்டுள்ள உள்ளீடுகள்"
+  },
+  "panels/timeline/AnnotationHelpers.ts | entryLabel": {
+    "message": "உள்ளீட்டு லேபிள்"
+  },
+  "panels/timeline/AnnotationHelpers.ts | srAnnotationAdded": {
+    "message": "{PH1} குறிப்பு சேர்க்கப்பட்டது"
+  },
+  "panels/timeline/AnnotationHelpers.ts | srAnnotationRemoved": {
+    "message": "{PH1} குறிப்பு அகற்றப்பட்டது"
+  },
+  "panels/timeline/AnnotationHelpers.ts | srEnterLabelEditMode": {
+    "message": "குறிப்பு லேபிளின் வார்த்தைகளைத் திருத்துகிறது"
+  },
+  "panels/timeline/AnnotationHelpers.ts | srEntriesLinked": {
+    "message": "இணைக்கப்பட்ட உள்ளீடுகளின் குறிப்பு {PH1} இல் இருந்து {PH2} ஐ இப்போது இணைக்கிறது"
+  },
+  "panels/timeline/AnnotationHelpers.ts | srLabelTextUpdated": {
+    "message": "லேபிள் {PH1} என்று மாற்றப்பட்டது"
+  },
+  "panels/timeline/AnnotationHelpers.ts | srTimeRangeBoundsUpdated": {
+    "message": "நேர வரம்பு மாற்றப்பட்டது, {PH1} இல் தொடங்கி {PH2} இல் முடிகிறது"
+  },
+  "panels/timeline/AnnotationHelpers.ts | timeRange": {
+    "message": "நேர வரம்பு"
+  },
   "panels/timeline/AppenderUtils.ts | sSelfS": {
     "message": "{PH1} (தனிப்பட்ட முறையில் எடுத்துக்கொண்ட நேரம் {PH2})"
   },
@@ -12307,345 +12598,6 @@
   },
   "panels/timeline/CountersGraph.ts | ss": {
     "message": "[{PH1} – {PH2}]"
-  },
-  "panels/timeline/EventUICategory.ts | animation": {
-    "message": "அனிமேஷன்"
-  },
-  "panels/timeline/EventUICategory.ts | animationFrameFired": {
-    "message": "அனிமேஷன் ஃபிரேம் செயல்படுத்தப்பட்டது"
-  },
-  "panels/timeline/EventUICategory.ts | async": {
-    "message": "ஒத்திசையாதவை"
-  },
-  "panels/timeline/EventUICategory.ts | asyncTask": {
-    "message": "ஒத்திசையாத பணி"
-  },
-  "panels/timeline/EventUICategory.ts | cacheModule": {
-    "message": "தற்காலிகச் சேமிப்பு மாடியூல் குறியீடு"
-  },
-  "panels/timeline/EventUICategory.ts | cacheScript": {
-    "message": "தற்காலிகச் சேமிப்பு ஸ்கிரிப்ட் குறியீடு"
-  },
-  "panels/timeline/EventUICategory.ts | cachedWasmModule": {
-    "message": "தற்காலிக நினைவகத்தில் சேமிக்கப்பட்ட Wasm மாடியூல்"
-  },
-  "panels/timeline/EventUICategory.ts | cancelAnimationFrame": {
-    "message": "அனிமேஷன் ஃபிரேமை ரத்துசெய்"
-  },
-  "panels/timeline/EventUICategory.ts | cancelIdleCallback": {
-    "message": "ஐடில் கால்பேக்கை ரத்துசெய்"
-  },
-  "panels/timeline/EventUICategory.ts | commit": {
-    "message": "அனுப்புதல்"
-  },
-  "panels/timeline/EventUICategory.ts | compileCode": {
-    "message": "குறியீட்டைத் தொகு"
-  },
-  "panels/timeline/EventUICategory.ts | compileModule": {
-    "message": "மாடியூலைத் தொகு"
-  },
-  "panels/timeline/EventUICategory.ts | compileScript": {
-    "message": "ஸ்கிரிப்ட்டைத் தொகு"
-  },
-  "panels/timeline/EventUICategory.ts | compiledWasmModule": {
-    "message": "தொகுக்கப்பட்ட Wasm மாடியூல்"
-  },
-  "panels/timeline/EventUICategory.ts | compositeLayers": {
-    "message": "தொகுப்பு லேயர்கள்"
-  },
-  "panels/timeline/EventUICategory.ts | computeIntersections": {
-    "message": "குறுக்கீடுகளைக் கணக்கிடு"
-  },
-  "panels/timeline/EventUICategory.ts | consoleTime": {
-    "message": "கன்சோல் நேரம்"
-  },
-  "panels/timeline/EventUICategory.ts | cppGc": {
-    "message": "CPP GC"
-  },
-  "panels/timeline/EventUICategory.ts | createWebsocket": {
-    "message": "WebSocketடை உருவாக்கு"
-  },
-  "panels/timeline/EventUICategory.ts | decrypt": {
-    "message": "டீக்ரிப்ட் செய்"
-  },
-  "panels/timeline/EventUICategory.ts | decryptReply": {
-    "message": "பதிலை டீகிரிப்ட் செய்"
-  },
-  "panels/timeline/EventUICategory.ts | deserializeCodeCache": {
-    "message": "குறியீட்டுத் தற்காலிகச் சேமிப்பைப் படி"
-  },
-  "panels/timeline/EventUICategory.ts | destroyWebsocket": {
-    "message": "WebSocketடை அழி"
-  },
-  "panels/timeline/EventUICategory.ts | digest": {
-    "message": "செயல்பாட்டு விவரங்கள்"
-  },
-  "panels/timeline/EventUICategory.ts | digestReply": {
-    "message": "செயல்பாட்டு விவரங்கள் பதில்"
-  },
-  "panels/timeline/EventUICategory.ts | domGc": {
-    "message": "DOM GC"
-  },
-  "panels/timeline/EventUICategory.ts | domcontentloadedEvent": {
-    "message": "DOMContentLoaded நிகழ்வு"
-  },
-  "panels/timeline/EventUICategory.ts | drawFrame": {
-    "message": "டிரா ஃபிரேம்"
-  },
-  "panels/timeline/EventUICategory.ts | drawing": {
-    "message": "வரைதல்"
-  },
-  "panels/timeline/EventUICategory.ts | embedderCallback": {
-    "message": "உட்பொதிவு கால்பேக்"
-  },
-  "panels/timeline/EventUICategory.ts | encrypt": {
-    "message": "என்கிரிப்ட் செய்"
-  },
-  "panels/timeline/EventUICategory.ts | encryptReply": {
-    "message": "பதிலை என்கிரிப்ட் செய்"
-  },
-  "panels/timeline/EventUICategory.ts | evaluateModule": {
-    "message": "மாடியூலை ஆய்வு செய்க"
-  },
-  "panels/timeline/EventUICategory.ts | evaluateScript": {
-    "message": "ஸ்கிரிப்ட்டை ஆய்வு செய்க"
-  },
-  "panels/timeline/EventUICategory.ts | event": {
-    "message": "நிகழ்வு"
-  },
-  "panels/timeline/EventUICategory.ts | eventTiming": {
-    "message": "நிகழ்வின் நேரம்"
-  },
-  "panels/timeline/EventUICategory.ts | experience": {
-    "message": "அனுபவம்"
-  },
-  "panels/timeline/EventUICategory.ts | finishLoading": {
-    "message": "ஏற்றுதலை நிறைவுசெய்"
-  },
-  "panels/timeline/EventUICategory.ts | fireIdleCallback": {
-    "message": "ஐடில் கால்பேக்கைத் தொடங்கு"
-  },
-  "panels/timeline/EventUICategory.ts | firstContentfulPaint": {
-    "message": "உள்ளடக்கத்துடன் முதல் தோற்றம்"
-  },
-  "panels/timeline/EventUICategory.ts | firstPaint": {
-    "message": "முதல் தோற்றம்"
-  },
-  "panels/timeline/EventUICategory.ts | frameStart": {
-    "message": "ஃபிரேம் தொடக்கம்"
-  },
-  "panels/timeline/EventUICategory.ts | frameStartMainThread": {
-    "message": "ஃபிரேம் தொடக்கம் (முக்கியத் தொடரிழை)"
-  },
-  "panels/timeline/EventUICategory.ts | frameStartedLoading": {
-    "message": "ஃபிரேம் ஏற்றத் தொடங்கியது"
-  },
-  "panels/timeline/EventUICategory.ts | functionCall": {
-    "message": "ஃபங்ஷன் கால்"
-  },
-  "panels/timeline/EventUICategory.ts | gcEvent": {
-    "message": "GC நிகழ்வு"
-  },
-  "panels/timeline/EventUICategory.ts | gpu": {
-    "message": "GPU"
-  },
-  "panels/timeline/EventUICategory.ts | hitTest": {
-    "message": "ஹிட் சோதனை"
-  },
-  "panels/timeline/EventUICategory.ts | idle": {
-    "message": "செயல்படவில்லை"
-  },
-  "panels/timeline/EventUICategory.ts | imageDecode": {
-    "message": "படத்தை டீகோட் செய்"
-  },
-  "panels/timeline/EventUICategory.ts | installTimer": {
-    "message": "டைமரை நிறுவு"
-  },
-  "panels/timeline/EventUICategory.ts | invalidateLayout": {
-    "message": "தவறான தளவமைப்பு"
-  },
-  "panels/timeline/EventUICategory.ts | jsFrame": {
-    "message": "JS ஃபிரேம்"
-  },
-  "panels/timeline/EventUICategory.ts | largestContentfulPaint": {
-    "message": "பெரிய பகுதியைக் காண்பிக்கும் நேரம்"
-  },
-  "panels/timeline/EventUICategory.ts | layerize": {
-    "message": "லேயராக்குதல்"
-  },
-  "panels/timeline/EventUICategory.ts | layout": {
-    "message": "தளவமைப்பு"
-  },
-  "panels/timeline/EventUICategory.ts | layoutShift": {
-    "message": "லேஅவுட் ஷிஃப்ட்"
-  },
-  "panels/timeline/EventUICategory.ts | loading": {
-    "message": "ஏற்றுகிறது"
-  },
-  "panels/timeline/EventUICategory.ts | majorGc": {
-    "message": "மேஜர் GC"
-  },
-  "panels/timeline/EventUICategory.ts | messaging": {
-    "message": "மெசேஜிங்"
-  },
-  "panels/timeline/EventUICategory.ts | minorGc": {
-    "message": "மைனர் GC"
-  },
-  "panels/timeline/EventUICategory.ts | onMessage": {
-    "message": "மெசேஜில்"
-  },
-  "panels/timeline/EventUICategory.ts | onloadEvent": {
-    "message": "ஏற்றுதல் நிகழ்வு"
-  },
-  "panels/timeline/EventUICategory.ts | optimizeCode": {
-    "message": "குறியீட்டை மேம்படுத்து"
-  },
-  "panels/timeline/EventUICategory.ts | other": {
-    "message": "பிற"
-  },
-  "panels/timeline/EventUICategory.ts | paint": {
-    "message": "பெயிண்ட்"
-  },
-  "panels/timeline/EventUICategory.ts | paintImage": {
-    "message": "படத்தைப் பெயிண்ட் செய்"
-  },
-  "panels/timeline/EventUICategory.ts | paintSetup": {
-    "message": "பெயிண்ட் அமைவு"
-  },
-  "panels/timeline/EventUICategory.ts | painting": {
-    "message": "பெயிண்டிங்"
-  },
-  "panels/timeline/EventUICategory.ts | parseAndCompile": {
-    "message": "பாகுபடுத்தித் தொகு"
-  },
-  "panels/timeline/EventUICategory.ts | parseHtml": {
-    "message": "HTMLலைப் பாகுபடுத்து"
-  },
-  "panels/timeline/EventUICategory.ts | parseStylesheet": {
-    "message": "ஸ்டைல்ஷீட்டைப் பாகுபடுத்து"
-  },
-  "panels/timeline/EventUICategory.ts | prePaint": {
-    "message": "ப்ரீ-பெயிண்ட்"
-  },
-  "panels/timeline/EventUICategory.ts | profilingOverhead": {
-    "message": "ப்ரொஃபைலிங் சுமை"
-  },
-  "panels/timeline/EventUICategory.ts | rasterizePaint": {
-    "message": "பெயிண்ட்டை ராஸ்டெரைஸ் செய்"
-  },
-  "panels/timeline/EventUICategory.ts | rasterizing": {
-    "message": "ராஸ்டெரைஸிங்"
-  },
-  "panels/timeline/EventUICategory.ts | recalculateStyle": {
-    "message": "ஸ்டைலை மீண்டும் கணக்கிடு"
-  },
-  "panels/timeline/EventUICategory.ts | receiveData": {
-    "message": "தரவைப் பெறுக"
-  },
-  "panels/timeline/EventUICategory.ts | receiveResponse": {
-    "message": "பதிலைப் பெறுக"
-  },
-  "panels/timeline/EventUICategory.ts | receiveWebsocketHandshake": {
-    "message": "WebSocket ஹேண்ட்ஷேக்கைப் பெறு"
-  },
-  "panels/timeline/EventUICategory.ts | removeTimer": {
-    "message": "டைமரை அகற்று"
-  },
-  "panels/timeline/EventUICategory.ts | rendering": {
-    "message": "ரெண்டரிங்"
-  },
-  "panels/timeline/EventUICategory.ts | requestAnimationFrame": {
-    "message": "அனிமேஷன் ஃபிரேமைக் கோரு"
-  },
-  "panels/timeline/EventUICategory.ts | requestIdleCallback": {
-    "message": "ஐடில் கால்பேக்கைக் கோரு"
-  },
-  "panels/timeline/EventUICategory.ts | requestMainThreadFrame": {
-    "message": "முக்கியத் தொடரிழை ஃபிரேமைக் கோரு"
-  },
-  "panels/timeline/EventUICategory.ts | runMicrotasks": {
-    "message": "சிறிய பணிகளைச் செயல்படுத்து"
-  },
-  "panels/timeline/EventUICategory.ts | schedulePostMessage": {
-    "message": "postMessageஐத் திட்டமிடுதல்"
-  },
-  "panels/timeline/EventUICategory.ts | scheduleStyleRecalculation": {
-    "message": "ஸ்டைல் மறு கணக்கீடைத் திட்டமிடுக"
-  },
-  "panels/timeline/EventUICategory.ts | scripting": {
-    "message": "ஸ்கிரிப்ட்டிங்"
-  },
-  "panels/timeline/EventUICategory.ts | scroll": {
-    "message": "ஸ்க்ரோல்"
-  },
-  "panels/timeline/EventUICategory.ts | sendRequest": {
-    "message": "கோரிக்கையை அனுப்பு"
-  },
-  "panels/timeline/EventUICategory.ts | sendWebsocketHandshake": {
-    "message": "WebSocket ஹேண்ட்ஷேக்கை அனுப்பு"
-  },
-  "panels/timeline/EventUICategory.ts | sign": {
-    "message": "கையொப்பம்"
-  },
-  "panels/timeline/EventUICategory.ts | signReply": {
-    "message": "கையொப்பமிட்ட பதில்"
-  },
-  "panels/timeline/EventUICategory.ts | streamingCompileTask": {
-    "message": "ஸ்ட்ரீமிங்கைத் தொகுக்கும் பணி"
-  },
-  "panels/timeline/EventUICategory.ts | streamingWasmResponse": {
-    "message": "Wasm பதிலை ஸ்ட்ரீம் செய்கிறது"
-  },
-  "panels/timeline/EventUICategory.ts | system": {
-    "message": "சிஸ்டம்"
-  },
-  "panels/timeline/EventUICategory.ts | task": {
-    "message": "பணி"
-  },
-  "panels/timeline/EventUICategory.ts | timerFired": {
-    "message": "டைமர் செயல்படுத்தப்பட்டது"
-  },
-  "panels/timeline/EventUICategory.ts | timestamp": {
-    "message": "நேரமுத்திரை"
-  },
-  "panels/timeline/EventUICategory.ts | updateLayer": {
-    "message": "லேயரைப் புதுப்பி"
-  },
-  "panels/timeline/EventUICategory.ts | updateLayerTree": {
-    "message": "லேயர் வரிசையைப் புதுப்பி"
-  },
-  "panels/timeline/EventUICategory.ts | userTiming": {
-    "message": "User Timing"
-  },
-  "panels/timeline/EventUICategory.ts | verify": {
-    "message": "சரிபார்"
-  },
-  "panels/timeline/EventUICategory.ts | verifyReply": {
-    "message": "பதிலைச் சரிபார்"
-  },
-  "panels/timeline/EventUICategory.ts | waitingForNetwork": {
-    "message": "நெட்வொர்க் இணைப்பிற்காகக் காத்திருக்கிறது"
-  },
-  "panels/timeline/EventUICategory.ts | wasmModuleCacheHit": {
-    "message": "Wasm Module Cache Hit"
-  },
-  "panels/timeline/EventUICategory.ts | wasmModuleCacheInvalid": {
-    "message": "தவறான Wasm மாடியூல் தற்காலிகச் சேமிப்பு"
-  },
-  "panels/timeline/EventUICategory.ts | willSendRequest": {
-    "message": "கோரிக்கையை அனுப்பும்"
-  },
-  "panels/timeline/EventUICategory.ts | wsMessageReceived": {
-    "message": "WebSocket மெசேஜைப் பெறு"
-  },
-  "panels/timeline/EventUICategory.ts | wsMessageSent": {
-    "message": "WebSocket மெசேஜ் அனுப்பு"
-  },
-  "panels/timeline/EventUICategory.ts | xhrLoad": {
-    "message": "XHR ஏற்றம்"
-  },
-  "panels/timeline/EventUICategory.ts | xhrReadyStateChange": {
-    "message": "XHR ரெடி ஸ்டேட் மாற்றம்"
   },
   "panels/timeline/EventsTimelineTreeView.ts | Dms": {
     "message": "{PH1} மிவி"
@@ -12677,29 +12629,23 @@
   "panels/timeline/IsolateSelector.ts | selectJavascriptVmInstance": {
     "message": "JavaScript VM நேர்வைத் தேர்ந்தெடு"
   },
+  "panels/timeline/LayoutShiftsTrackAppender.ts | layoutShift": {
+    "message": "லே-அவுட் ஷிஃப்ட்"
+  },
+  "panels/timeline/LayoutShiftsTrackAppender.ts | layoutShiftCluster": {
+    "message": "லே-அவுட் ஷிஃப்ட் கிளஸ்டர்"
+  },
   "panels/timeline/LayoutShiftsTrackAppender.ts | layoutShifts": {
-    "message": "லேஅவுட் ஷிஃப்ட்கள்"
+    "message": "லே-அவுட் ஷிஃப்ட்கள்"
   },
   "panels/timeline/NetworkTrackAppender.ts | network": {
     "message": "நெட்வொர்க்"
-  },
-  "panels/timeline/NetworkTrackAppender.ts | wsConnectionClosed": {
-    "message": "WebSocket மூடப்பட்டது"
-  },
-  "panels/timeline/NetworkTrackAppender.ts | wsConnectionOpened": {
-    "message": "WebSocket திறக்கப்பட்டது"
-  },
-  "panels/timeline/NetworkTrackAppender.ts | wsConnectionOpenedWithUrl": {
-    "message": "WebSocket திறக்கப்பட்டது: {PH1}"
   },
   "panels/timeline/ServerTimingsTrackAppender.ts | serverSideTrack": {
     "message": "சேவையக நேரம் — {PH1}"
   },
   "panels/timeline/ServerTimingsTrackAppender.ts | serverTimingTrack": {
     "message": "இந்த டிராக்கில் சேவையக நேர நெட்வொர்க் ரெஸ்பான்ஸ் தலைப்புகளில் இருந்து எடுக்கப்பட்ட நேரங்கள் உள்ளன. அவற்றின் தொடக்க நேரங்கள் மட்டுமே கணக்கிடப்படுகின்றன, அவை துல்லியமற்றதாக இருக்கக்கூடும்."
-  },
-  "panels/timeline/ThreadAppender.ts | anonymous": {
-    "message": "(அறியப்படாதது)"
   },
   "panels/timeline/ThreadAppender.ts | bidderWorklet": {
     "message": "ஏலதாரர் பணித் தொகுப்பு"
@@ -12709,9 +12655,6 @@
   },
   "panels/timeline/ThreadAppender.ts | dedicatedWorker": {
     "message": "பிரத்தியேக Worker"
-  },
-  "panels/timeline/ThreadAppender.ts | eventDispatchS": {
-    "message": "நிகழ்வு: {PH1}"
   },
   "panels/timeline/ThreadAppender.ts | frameS": {
     "message": "ஃபிரேம் — {PH1}"
@@ -12738,13 +12681,13 @@
     "message": "விற்பனையாளர் பணித் தொகுப்பு — {PH1}"
   },
   "panels/timeline/ThreadAppender.ts | threadPool": {
-    "message": "Thread Pool"
+    "message": "பின்புலப் பணிகளின் தொகுப்பு"
   },
   "panels/timeline/ThreadAppender.ts | threadPoolThreadS": {
     "message": "Thread Pool Worker {PH1}"
   },
   "panels/timeline/ThreadAppender.ts | threadS": {
-    "message": "தொடரிழை {PH1}"
+    "message": "த்ரெட் {PH1}"
   },
   "panels/timeline/ThreadAppender.ts | unknownWorklet": {
     "message": "ஏலப் பணித் தொகுப்பு"
@@ -12759,10 +12702,10 @@
     "message": "Worker: {PH1} — {PH2}"
   },
   "panels/timeline/ThreadAppender.ts | workletService": {
-    "message": "ஏலப் பணித் தொகுப்புச் சேவை"
+    "message": "ஏல ஒர்க்லெட் சேவை"
   },
   "panels/timeline/ThreadAppender.ts | workletServiceS": {
-    "message": "ஏலப் பணித் தொகுப்புச் சேவை — {PH1}"
+    "message": "ஏல ஒர்க்லெட் சேவை — {PH1}"
   },
   "panels/timeline/TimelineController.ts | tracingNotSupported": {
     "message": "இந்த வகையான இலக்கில் செயல்திறன் தடங்களை ரெக்கார்டு செய்ய முடியாது"
@@ -12774,7 +12717,7 @@
     "message": "வரிசையைச் செயல்படுத்து"
   },
   "panels/timeline/TimelineDetailsView.ts | eventLog": {
-    "message": "நிகழ்வுப் பதிவு"
+    "message": "நிகழ்வு பதிவு"
   },
   "panels/timeline/TimelineDetailsView.ts | layers": {
     "message": "லேயர்கள்"
@@ -12803,6 +12746,9 @@
   "panels/timeline/TimelineEventOverview.ts | sSDash": {
     "message": "{PH1} – {PH2}"
   },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | addScriptToIgnoreList": {
+    "message": "தவிர்க்க வேண்டியவற்றின் பட்டியலில் ஸ்கிரிப்ட்டைச் சேர்"
+  },
   "panels/timeline/TimelineFlameChartDataProvider.ts | droppedFrame": {
     "message": "டிராப் செய்யப்பட்ட ஃபிரேம்"
   },
@@ -12812,44 +12758,47 @@
   "panels/timeline/TimelineFlameChartDataProvider.ts | frames": {
     "message": "ஃபிரேம்கள்"
   },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | hideChildren": {
+    "message": "உபநிலைகளை மறை"
+  },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | hideFunction": {
+    "message": "செயல்பாட்டை மறை"
+  },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | hideRepeatingChildren": {
+    "message": "மீண்டும் வரும் உபநிலைகளை மறை"
+  },
   "panels/timeline/TimelineFlameChartDataProvider.ts | idleFrame": {
     "message": "ஐடில் ஃபிரேம்"
   },
   "panels/timeline/TimelineFlameChartDataProvider.ts | partiallyPresentedFrame": {
     "message": "பகுதியளவு ரெண்டர் செய்யப்பட்ட ஃபிரேம்"
   },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | removeScriptFromIgnoreList": {
+    "message": "தவிர்க்க வேண்டியவற்றின் பட்டியலில் இருந்து ஸ்கிரிப்ட்டை அகற்று"
+  },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | resetChildren": {
+    "message": "உபநிலைகளை மீட்டமை"
+  },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | resetTrace": {
+    "message": "டிரேஸை மீட்டமை"
+  },
   "panels/timeline/TimelineFlameChartView.ts | sAtS": {
     "message": "{PH1}, {PH2}"
   },
   "panels/timeline/TimelineHistoryManager.ts | currentSessionSS": {
-    "message": "தற்போதைய அமர்வு: {PH1}. {PH2}"
+    "message": "தற்போதைய நேரம்: {PH1}. {PH2}"
   },
-  "panels/timeline/TimelineHistoryManager.ts | landingPageTitleLocalAndFieldMetrics": {
-    "message": "லோக்கல் மற்றும் அசல் அளவீடுகள்"
-  },
-  "panels/timeline/TimelineHistoryManager.ts | landingPageTitleLocalMetrics": {
-    "message": "லோக்கல் அளவீடுகள்"
-  },
-  "panels/timeline/TimelineHistoryManager.ts | moments": {
-    "message": "தருணங்கள்"
+  "panels/timeline/TimelineHistoryManager.ts | landingPageTitle": {
+    "message": "தற்போதைய அளவீடுகள்"
   },
   "panels/timeline/TimelineHistoryManager.ts | noRecordings": {
     "message": "(ரெக்கார்டிங்குகள் எதுவுமில்லை)"
   },
-  "panels/timeline/TimelineHistoryManager.ts | sAgo": {
-    "message": "({PH1} முன்பு)"
-  },
   "panels/timeline/TimelineHistoryManager.ts | sD": {
     "message": "{PH1} #{PH2}"
   },
-  "panels/timeline/TimelineHistoryManager.ts | sH": {
-    "message": "{PH1} ம"
-  },
-  "panels/timeline/TimelineHistoryManager.ts | sM": {
-    "message": "{PH1} நி"
-  },
   "panels/timeline/TimelineHistoryManager.ts | selectTimelineSession": {
-    "message": "காலப்பதிவு அமர்வைத் தேர்ந்தெடுங்கள்"
+    "message": "டைம்லைன் நேரத்தைத் தேர்ந்தெடுக்கலாம்"
   },
   "panels/timeline/TimelineLandingPage.ts | afterRecordingSelectAnAreaOf": {
     "message": "ரெக்கார்டு செய்ததும் இழுப்பதன் மூலம் ’மேலோட்டப் பார்வை’ என்பதில் விரும்பும் பகுதியைத் தேர்ந்தெடுக்கவும். பிறகு மவுஸ் வீல்/{PH1} விசைகளை அழுத்தி காலப்பதிவின் அளவை மாற்றி நகர்த்தவும். {PH2}"
@@ -12872,9 +12821,6 @@
   "panels/timeline/TimelinePanel.ts | CpuThrottlingIsEnabled": {
     "message": "- CPU த்ராட்லிங் இயக்கப்பட்டுள்ளது"
   },
-  "panels/timeline/TimelinePanel.ts | HardwareConcurrencyIsEnabled": {
-    "message": "- வன்பொருள் ஒருங்கமைவு மீறிச் செயல்படுவது இயக்கப்பட்டது"
-  },
   "panels/timeline/TimelinePanel.ts | JavascriptSamplingIsDisabled": {
     "message": "- JavaScript சாம்பிளிங் முடக்கப்பட்டது"
   },
@@ -12886,6 +12832,9 @@
   },
   "panels/timeline/TimelinePanel.ts | SignificantOverheadDueToPaint": {
     "message": "- பெயிண்ட் இன்ஸ்ட்ரூமென்டேஷன் காரணமாக ஏற்பட்ட கணிசமான சுமை"
+  },
+  "panels/timeline/TimelinePanel.ts | backToLiveMetrics": {
+    "message": "நேரலை அளவீட்டுப் பக்கத்திற்கு மீண்டும் செல்லும்"
   },
   "panels/timeline/TimelinePanel.ts | bufferUsage": {
     "message": "பஃபர் உபயோகம்"
@@ -12932,6 +12881,9 @@
   "panels/timeline/TimelinePanel.ts | enableSelectorStats": {
     "message": "CSS தேர்விக்கான புள்ளிவிவரங்களை (குறைவு) இயக்குதல்"
   },
+  "panels/timeline/TimelinePanel.ts | eventSelected": {
+    "message": "{PH1} நிகழ்வு தேர்ந்தெடுக்கப்பட்டது"
+  },
   "panels/timeline/TimelinePanel.ts | exportEnhancedTraces": {
     "message": "மேம்பட்ட செயல்திறன் டிரேஸ்கள்"
   },
@@ -12944,11 +12896,17 @@
   "panels/timeline/TimelinePanel.ts | fixMe": {
     "message": "சரிசெய்"
   },
+  "panels/timeline/TimelinePanel.ts | frameSelected": {
+    "message": "ஃபிரேம் தேர்ந்தெடுக்கப்பட்டது"
+  },
   "panels/timeline/TimelinePanel.ts | hideSidebar": {
-    "message": "ஒற்றைப் பக்கப்பட்டியை மறைக்கும்"
+    "message": "பக்கப்பட்டியை மறைக்கும்"
   },
   "panels/timeline/TimelinePanel.ts | initializingProfiler": {
     "message": "ப்ரொஃபைலரைத் துவக்குகிறது…"
+  },
+  "panels/timeline/TimelinePanel.ts | learnMore": {
+    "message": "மேலும் அறிக"
   },
   "panels/timeline/TimelinePanel.ts | loadProfile": {
     "message": "சுயவிவரத்தை ஏற்றும்…"
@@ -12968,6 +12926,9 @@
   "panels/timeline/TimelinePanel.ts | performanceExtension": {
     "message": "நீட்டிப்புத் தரவு"
   },
+  "panels/timeline/TimelinePanel.ts | processed": {
+    "message": "செயலாக்கப்பட்டது"
+  },
   "panels/timeline/TimelinePanel.ts | processingProfile": {
     "message": "சுயவிவரத்தைச் செயலாக்குகிறது…"
   },
@@ -12983,8 +12944,17 @@
   "panels/timeline/TimelinePanel.ts | saveProfile": {
     "message": "சுயவிவரத்தைச் சேமிக்கும்…"
   },
+  "panels/timeline/TimelinePanel.ts | saveTraceWithAnnotationsMenuOption": {
+    "message": "டிரேஸைச் சேமி"
+  },
+  "panels/timeline/TimelinePanel.ts | saveTraceWithoutAnnotationsMenuOption": {
+    "message": "குறிப்புகள் இல்லாமல் டிரேஸைச் சேமி"
+  },
   "panels/timeline/TimelinePanel.ts | screenshots": {
     "message": "ஸ்கிரீன்ஷாட்கள்"
+  },
+  "panels/timeline/TimelinePanel.ts | selectionCleared": {
+    "message": "தேர்ந்தெடுத்தவை அழிக்கப்பட்டன"
   },
   "panels/timeline/TimelinePanel.ts | showDataAddedByExtensions": {
     "message": "செயல்திறன் பேனலின் நீட்டிப்புகளால் சேர்க்கப்பட்ட தரவைக் காட்டும்"
@@ -13035,7 +13005,7 @@
     "message": "மெதுவான தடத்தில் பொருத்தங்கள் இல்லாதவற்றின் %"
   },
   "panels/timeline/TimelineSelectorStatsView.ts | rejectPercentageExplanation": {
-    "message": "புளூம் ஃபில்டரால் விரைவாக ரத்துசெய்ய முடியாத பொருந்தாத நோடுகளின் (பொருந்தும் முயற்சிகள் - பொருந்தும் எண்ணிக்கை) சதவீதம். இது குறைவாக இருப்பது சிறந்தது."
+    "message": "புளூம் ஃபில்டரால் விரைவாக விலக்க முடியாத பொருந்தாத நோடுகளின் (பொருத்துவதற்கான முயற்சிகள் - பொருத்த எண்ணிக்கை) சதவீதம். தேர்வியில் பல அடுக்குகள் இருப்பதே இதற்குக் காரணம். இது குறைவாக இருப்பது சிறந்தது."
   },
   "panels/timeline/TimelineSelectorStatsView.ts | selector": {
     "message": "தேர்வி"
@@ -13085,6 +13055,9 @@
   "panels/timeline/TimelineTreeView.ts | groupBySubdomain": {
     "message": "துணை டொமைன்படி குழுவாக்கு"
   },
+  "panels/timeline/TimelineTreeView.ts | groupByThirdParties": {
+    "message": "மூன்றாம் தரப்பின்படி குழுவாக்கு"
+  },
   "panels/timeline/TimelineTreeView.ts | groupByUrl": {
     "message": "URLலின்படி குழுவாக்கு"
   },
@@ -13098,7 +13071,7 @@
     "message": "அதிக நேரம் எடுத்துக்கொண்ட ஸ்டாக் பக்கப்பட்டி காட்டப்படுகிறது"
   },
   "panels/timeline/TimelineTreeView.ts | hideHeaviestStack": {
-    "message": "அதிக நேரம் எடுத்துக்கொண்ட ஸ்டாக்கை மறை"
+    "message": "அதிக நேரம் எடுத்துக்கொண்ட ஸ்டாக்கை மறைக்கும்"
   },
   "panels/timeline/TimelineTreeView.ts | matchCase": {
     "message": "பொருந்தும் வகை"
@@ -13107,7 +13080,7 @@
     "message": "மொத்த வார்த்தையையும் பொருத்து"
   },
   "panels/timeline/TimelineTreeView.ts | noGrouping": {
-    "message": "குழு எதுவும் இல்லை"
+    "message": "குழுவாக்கப்படுவதில்லை"
   },
   "panels/timeline/TimelineTreeView.ts | page": {
     "message": "பக்கம்"
@@ -13122,13 +13095,13 @@
     "message": "விவரங்களை அறிய உறுப்பைத் தேர்ந்தெடுக்கவும்."
   },
   "panels/timeline/TimelineTreeView.ts | selfTime": {
-    "message": "சுய நேரம்"
+    "message": "செயல்பாட்டின் கால அளவு"
   },
   "panels/timeline/TimelineTreeView.ts | showHeaviestStack": {
     "message": "அதிக நேரம் எடுத்துக்கொண்ட ஸ்டாக்கைக் காட்டும்"
   },
   "panels/timeline/TimelineTreeView.ts | timelineStack": {
-    "message": "காலப்பதிவு ஸ்டாக்"
+    "message": "டைம்லைன் ஸ்டாக்"
   },
   "panels/timeline/TimelineTreeView.ts | totalTime": {
     "message": "மொத்த நேரம்"
@@ -13151,8 +13124,11 @@
   "panels/timeline/TimelineUIUtils.ts | allottedTime": {
     "message": "ஒதுக்கப்பட்ட நேரம்"
   },
+  "panels/timeline/TimelineUIUtils.ts | animating": {
+    "message": "அனிமேஷன் செய்யப்படுகிறது"
+  },
   "panels/timeline/TimelineUIUtils.ts | animationFrameRequested": {
-    "message": "அனிமேஷன் ஃபிரேம் கோரப்பட்டது"
+    "message": "அனிமேஷன் ஃபிரேம் கேட்கப்பட்டது"
   },
   "panels/timeline/TimelineUIUtils.ts | callbackFunction": {
     "message": "கால்பேக் ஃபங்க்ஷன்"
@@ -13175,6 +13151,66 @@
   "panels/timeline/TimelineUIUtils.ts | compile": {
     "message": "தொகு"
   },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailed": {
+    "message": "தொகுக்க முடியவில்லை"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedAcceleratedAnimationsDisabled": {
+    "message": "துரிதப்படுத்தப்பட்ட அனிமேஷன்கள் முடக்கப்பட்டன"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedAffectsImportantProperty": {
+    "message": "!important உள்ள பிராப்பர்ட்டியை எஃபெக்ட் பாதிக்கிறது"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedAnimationAffectsNonCSSProperties": {
+    "message": "CSS அல்லாத பிராப்பர்ட்டிகளை அனிமேஷன் பாதிக்கிறது"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedAnimationHasNoVisibleChange": {
+    "message": "தெரியக்கூடிய மாற்றம் எதுவும் அனிமேஷனில் இல்லை"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedEffectHasNonReplaceCompositeMode": {
+    "message": "\"மாற்று\" அல்லாமல் வேறொரு தொகுப்புப் பயன்முறையை எஃபெக்ட் கொண்டுள்ளது"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedEffectHasUnsupportedTimingParams": {
+    "message": "ஆதரிக்கப்படாத நேர அளவுருக்களை எஃபெக்ட் கொண்டுள்ளது"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedEffectSuppressedByDevtools": {
+    "message": "டெவெலப்பர் கருவிகள் எஃபெக்ட்டைச் சுருக்கியுள்ளது "
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedFilterRelatedPropertyMayMovePixels": {
+    "message": "ஃபில்டர் தொடர்பான பிராப்பர்ட்டி பிக்சல்களை நகர்த்தக்கூடும்"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedInvalidAnimationOrEffect": {
+    "message": "தவறான அனிமேஷன் அல்லது எஃபெக்ட்"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedMixedKeyframeValueTypes": {
+    "message": "கலவையான கீஃபிரேம் மதிப்பு வகைகள்"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedSVGTargetHasIndependentTransformProperty": {
+    "message": "SVG இலக்கில் தனிப்பட்ட டிரான்ஸ்ஃபார்ம் பிராப்பர்ட்டி உள்ளது"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedTargetHasCSSOffset": {
+    "message": "இலக்கில் CSS ஆஃப்செட் உள்ளது"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedTargetHasIncompatibleAnimations": {
+    "message": "பொருந்தாத வேறொரு அனிமேஷன் இலக்கில் உள்ளது"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedTargetHasInvalidCompositingState": {
+    "message": "இலக்கில் தவறான தொகுப்பு நிலை உள்ளது"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedTimelineSourceHasInvalidCompositingState": {
+    "message": "டைம்லைன் ஆதாரத்தில் தவறான தொகுப்பு நிலை உள்ளது"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedTransformDependsBoxSize": {
+    "message": "டிரான்ஸ்ஃபார்ம் தொடர்பான பிராப்பர்ட்டி, எலிமெண்ட் பெட்டி அளவைப் பொறுத்தது"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedTransformRelatedPropertyCannotBeAcceleratedOnTarget": {
+    "message": "டிரான்ஸ்ஃபார்ம் தொடர்பான பிராப்பர்ட்டியை இலக்கில் துரிதப்படுத்த முடியாது"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedUnknownReason": {
+    "message": "தெரியாத காரணம்"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedUnsupportedCSSProperty": {
+    "message": "{propertyCount,plural, =1{ஆதரிக்கப்படாத CSS பிராப்பர்ட்டி: {properties}}other{ஆதரிக்கப்படாத CSS பிராப்பர்ட்டிகள்: {properties}}}"
+  },
   "panels/timeline/TimelineUIUtils.ts | consumedCacheSize": {
     "message": "உபயோகப்படுத்தப்பட்ட தற்காலிகச் சேமிப்பின் அளவு"
   },
@@ -13182,13 +13218,19 @@
     "message": "கியூமுலேட்டிவ் லேஅவுட் ஷிஃப்ட்"
   },
   "panels/timeline/TimelineUIUtils.ts | cumulativeScore": {
-    "message": "மொத்த ஸ்கோர்"
+    "message": "ஒட்டுமொத்த ஸ்கோர்"
   },
   "panels/timeline/TimelineUIUtils.ts | currentClusterId": {
     "message": "தற்போதைய கிளஸ்டர் ஐடி"
   },
   "panels/timeline/TimelineUIUtils.ts | currentClusterScore": {
     "message": "தற்போதைய கிளஸ்டர் ஸ்கோர்"
+  },
+  "panels/timeline/TimelineUIUtils.ts | delay": {
+    "message": "தாமதம்"
+  },
+  "panels/timeline/TimelineUIUtils.ts | description": {
+    "message": "விளக்கம்"
   },
   "panels/timeline/TimelineUIUtils.ts | details": {
     "message": "விவரங்கள்"
@@ -13203,7 +13245,7 @@
     "message": "அனைத்து ஃபங்ஷன்களும் எப்போதும் கம்பைல் செய்யப்படுகின்றன"
   },
   "panels/timeline/TimelineUIUtils.ts | elementsAffected": {
-    "message": "பாதிக்கப்பட்ட உறுப்புகள்"
+    "message": "பாதிக்கப்பட்ட எலிமெண்ட்டுகள்"
   },
   "panels/timeline/TimelineUIUtils.ts | emptyPlaceholder": {
     "message": "{PH1}"
@@ -13218,10 +13260,10 @@
     "message": "தற்காலிகச் சேமிப்பில் இருந்து ஸ்கிரிப்ட்டை ஏற்ற முடியவில்லை"
   },
   "panels/timeline/TimelineUIUtils.ts | firstInvalidated": {
-    "message": "முதலில் செல்லாததாக்கப்பட்டவை"
+    "message": "முதல் முறை செல்லாதது என்று குறிக்கப்பட்டது"
   },
   "panels/timeline/TimelineUIUtils.ts | firstLayoutInvalidation": {
-    "message": "முதல் லேஅவுட் இன்வேலிடேஷன்கள்"
+    "message": "முதல் லே-அவுட் இன்வேலிடேஷன்"
   },
   "panels/timeline/TimelineUIUtils.ts | frame": {
     "message": "ஃபிரேம்"
@@ -13233,7 +13275,7 @@
     "message": "சமீபத்திய உள்ளீட்டைக் கொண்டுள்ளது"
   },
   "panels/timeline/TimelineUIUtils.ts | idleCallbackRequested": {
-    "message": "ஐடில் கால்பேக் கோரப்பட்டது"
+    "message": "ஐடில் கால்பேக் கேட்கப்பட்டது"
   },
   "panels/timeline/TimelineUIUtils.ts | imageUrl": {
     "message": "பட URL"
@@ -13266,7 +13308,7 @@
     "message": "லேயர் ரூட்"
   },
   "panels/timeline/TimelineUIUtils.ts | layoutForced": {
-    "message": "தளவமைப்பு இயக்கப்பட்டது"
+    "message": "லே-அவுட் வலுக்கட்டாயமாக இயக்கப்பட்டது"
   },
   "panels/timeline/TimelineUIUtils.ts | layoutRoot": {
     "message": "தளவமைப்பு ரூட்"
@@ -13293,13 +13335,13 @@
     "message": "இல்லை"
   },
   "panels/timeline/TimelineUIUtils.ts | nodesThatNeedLayout": {
-    "message": "தளவமைப்பு தேவைப்படும் கணுக்கள்"
+    "message": "லே-அவுட் தேவைப்படும் நோடுகள்"
   },
   "panels/timeline/TimelineUIUtils.ts | outsideBreadcrumbRange": {
     "message": "(பாதை வரம்பிற்கு வெளியே)"
   },
   "panels/timeline/TimelineUIUtils.ts | ownerElement": {
-    "message": "உரிமையாளர் உறுப்பு"
+    "message": "ஓனர் எலிமெண்ட்"
   },
   "panels/timeline/TimelineUIUtils.ts | paintProfiler": {
     "message": "பெயிண்ட் ப்ரொஃபைலர்"
@@ -13316,6 +13358,9 @@
   "panels/timeline/TimelineUIUtils.ts | preview": {
     "message": "மாதிரிக்காட்சி"
   },
+  "panels/timeline/TimelineUIUtils.ts | priority": {
+    "message": "முன்னுரிமை"
+  },
   "panels/timeline/TimelineUIUtils.ts | processingDuration": {
     "message": "செயலாக்க நேரம்"
   },
@@ -13326,10 +13371,10 @@
     "message": "வரம்பு"
   },
   "panels/timeline/TimelineUIUtils.ts | recalculationForced": {
-    "message": "மறு கணக்கீடு இயக்கப்பட்டது"
+    "message": "மறு கணக்கீடு வலுக்கட்டாயமாக இயக்கப்பட்டது"
   },
   "panels/timeline/TimelineUIUtils.ts | relatedNode": {
-    "message": "தொடர்புடைய கணு"
+    "message": "தொடர்புடைய நோடு"
   },
   "panels/timeline/TimelineUIUtils.ts | repeats": {
     "message": "மீண்டும் நிகழ்ந்தவை"
@@ -13389,16 +13434,13 @@
     "message": "தேர்விக்கான புள்ளிவிவரங்கள்"
   },
   "panels/timeline/TimelineUIUtils.ts | selfTime": {
-    "message": "சுய நேரம்"
+    "message": "செயல்பாட்டின் கால அளவு"
   },
   "panels/timeline/TimelineUIUtils.ts | size": {
     "message": "அளவு"
   },
   "panels/timeline/TimelineUIUtils.ts | stackTrace": {
     "message": "ஸ்டாக் டிரேஸ்"
-  },
-  "panels/timeline/TimelineUIUtils.ts | state": {
-    "message": "நிலை"
   },
   "panels/timeline/TimelineUIUtils.ts | streamed": {
     "message": "ஸ்ட்ரீம் செய்யப்பட்டது"
@@ -13486,6 +13528,12 @@
   },
   "panels/timeline/UIDevtoolsUtils.ts | system": {
     "message": "சிஸ்டம்"
+  },
+  "panels/timeline/components/BreadcrumbsUI.ts | activateBreadcrumb": {
+    "message": "பாதையைச் செயல்படுத்து"
+  },
+  "panels/timeline/components/BreadcrumbsUI.ts | removeChildBreadcrumbs": {
+    "message": "உபநிலைப் பாதைகளை அகற்று"
   },
   "panels/timeline/components/CPUThrottlingSelector.ts | cpu": {
     "message": "CPU: {PH1}"
@@ -13607,14 +13655,56 @@
   "panels/timeline/components/InteractionBreakdown.ts | processingDuration": {
     "message": "செயலாக்க நேரம்"
   },
+  "panels/timeline/components/LayoutShiftDetails.ts | animation": {
+    "message": "அனிமேஷன்"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | cluster": {
+    "message": "{PH1} இல் லே-அவுட் ஷிஃப்ட் கிளஸ்டர்"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | culprit": {
+    "message": "கல்ப்ரிட்"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | elementsShifted": {
+    "message": "ஷிஃப்ட் செய்யப்பட்ட எலிமெண்ட்டுகள்"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | fontRequest": {
+    "message": "எழுத்து வடிவத்திற்கான கோரிக்கை"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | injectedIframe": {
+    "message": "சேர்க்கப்பட்டுள்ள iframe"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | layoutShift": {
+    "message": "{PH1} இல் லே-அவுட் ஷிஃப்ட்"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | nonCompositedAnimation": {
+    "message": "தொகுக்கப்படாத அனிமேஷன்"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | parentCluster": {
+    "message": "முதல்நிலை கிளஸ்டர்"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | shiftScore": {
+    "message": "ஷிஃப்ட் ஸ்கோர்"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | startTime": {
+    "message": "தொடக்க நேரம்"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | total": {
+    "message": "மொத்தம்"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | unsizedImage": {
+    "message": "அளவு குறிப்பிடப்படாத படம்"
+  },
   "panels/timeline/components/LiveMetricsView.ts | allDevices": {
     "message": "எல்லா சாதனங்களும்"
   },
   "panels/timeline/components/LiveMetricsView.ts | auto": {
     "message": "தானியங்கு ({PH1})"
   },
+  "panels/timeline/components/LiveMetricsView.ts | clearCurrentLog": {
+    "message": "தற்போதைய பதிவை அழிக்கும்"
+  },
   "panels/timeline/components/LiveMetricsView.ts | collectionPeriod": {
-    "message": "சேகரிப்புக் காலம்:"
+    "message": "சேகரிப்புக் காலம்: {PH1}"
   },
   "panels/timeline/components/LiveMetricsView.ts | dateRange": {
     "message": "{PH1} - {PH2}"
@@ -13625,14 +13715,41 @@
   "panels/timeline/components/LiveMetricsView.ts | device": {
     "message": "சாதனம்: {PH1}"
   },
+  "panels/timeline/components/LiveMetricsView.ts | disableNetworkCache": {
+    "message": "நெட்வொர்க் தற்காலிகச் சேமிப்பை முடக்கு"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | duration": {
+    "message": "லோக்கல் கால அளவு (மிவி)"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | elementRenderDelay": {
+    "message": "எலிமெண்ட் ரென்டரிங் தாமதம்"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | environmentSettings": {
+    "message": "பரிசோதனைச் சூழல் அமைப்புகள்"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | eventLogs": {
+    "message": "இன்டராக்ஷன் மற்றும் லே-அவுட் ஷிஃப்ட் பதிவுகள் பிரிவு"
+  },
   "panels/timeline/components/LiveMetricsView.ts | fieldData": {
     "message": "புலத் தரவு"
   },
-  "panels/timeline/components/LiveMetricsView.ts | fieldDataLink": {
-    "message": "அசல் தரவு"
+  "panels/timeline/components/LiveMetricsView.ts | inpInteraction": {
+    "message": "இன்டராக்ஷன் தாமதங்களின் 98வது சதமானத்தில் INP இன்டராக்ஷன் உள்ளது."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | inpInteractionLink": {
+    "message": "INP இன்டராக்ஷன்"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | inputDelay": {
+    "message": "உள்ளீட்டுத் தாமதம்"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | interactionExcluded": {
+    "message": "இன்டராக்ஷன் தாமதங்களின் 98வது சதமானத்தைப் பயன்படுத்தி INP கணக்கிடப்படுகிறது. எனவே, INP மதிப்பைவிட சில இன்டராக்ஷன் தாமதங்கள் அதிகமாக இருக்கலாம்."
   },
   "panels/timeline/components/LiveMetricsView.ts | interactions": {
     "message": "செயல்பாடுகள்"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | layoutShifts": {
+    "message": "லே-அவுட் ஷிஃப்ட்கள்"
   },
   "panels/timeline/components/LiveMetricsView.ts | lcpElement": {
     "message": "LCP பகுதி"
@@ -13643,26 +13760,35 @@
   "panels/timeline/components/LiveMetricsView.ts | localAndFieldMetrics": {
     "message": "லோக்கல் மற்றும் அசல் அளவீடுகள்"
   },
+  "panels/timeline/components/LiveMetricsView.ts | localFieldLearnMoreLink": {
+    "message": "லோக்கல் மற்றும் ஃபீல்டு தரவு குறித்து மேலும் தெரிந்துகொள்ளுங்கள்"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | localFieldLearnMoreTooltip": {
+    "message": "உங்கள் நெட்வொர்க் இணைப்பு, சாதனம் ஆகியவற்றைப் பயன்படுத்தி தற்போதைய பக்கத்தில் இருந்து லோக்கல் அளவீடுகள் எடுக்கப்படுகின்றன. வெவ்வேறு நெட்வொர்க் இணைப்புகளையும் சாதனங்களையும் பயன்படுத்தி அசல் பயனர்களால் ஃபீல்டு தரவு கணக்கிடப்படுகிறது."
+  },
   "panels/timeline/components/LiveMetricsView.ts | localMetrics": {
     "message": "லோக்கல் அளவீடுகள்"
   },
-  "panels/timeline/components/LiveMetricsView.ts | localMetricsLink": {
-    "message": "லோக்கல் அளவீடுகள்"
+  "panels/timeline/components/LiveMetricsView.ts | logToConsole": {
+    "message": "கன்சோலில் கூடுதல் இன்டராக்ஷன் தரவைப் பதிவுசெய்யும்"
   },
   "panels/timeline/components/LiveMetricsView.ts | mobile": {
     "message": "மொபைல்"
   },
-  "panels/timeline/components/LiveMetricsView.ts | mostUsersDesktop": {
-    "message": "பெரும்பாலான பயனர்கள் டெஸ்க்டாப்பில் பயன்படுத்துகின்றனர். அசல் பயனர்களின் டெஸ்க்டாப் சாளரத்தின் அளவைப் போன்ற ஓர் அளவை உருவகப்படுத்திப் பார்க்கவும்."
-  },
-  "panels/timeline/components/LiveMetricsView.ts | mostUsersMobile": {
-    "message": "பெரும்பாலான பயனர்கள் மொபைலில் பயன்படுத்துகின்றனர். அசல் பயனர்களின் மொபைலைப் போன்ற ஒரு சாதனத்தை உருவகப்படுத்திப் பார்க்கவும்."
-  },
   "panels/timeline/components/LiveMetricsView.ts | needsDataOption": {
     "message": "{PH1} - தரவு இல்லை"
   },
+  "panels/timeline/components/LiveMetricsView.ts | network": {
+    "message": "நெட்வொர்க்: {PH1}"
+  },
   "panels/timeline/components/LiveMetricsView.ts | nextSteps": {
     "message": "அடுத்த படிகள்"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | notEnoughData": {
+    "message": "போதுமான தரவு இல்லை"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | numShifts": {
+    "message": "{shiftCount,plural, =1{{shiftCount} ஷிஃப்ட்}other{{shiftCount} ஷிஃப்ட்கள்}}"
   },
   "panels/timeline/components/LiveMetricsView.ts | originOption": {
     "message": "ஆரிஜின்"
@@ -13670,11 +13796,32 @@
   "panels/timeline/components/LiveMetricsView.ts | originOptionWithKey": {
     "message": "ஆரிஜின்: ({PH1})"
   },
-  "panels/timeline/components/LiveMetricsView.ts | recordingSettings": {
-    "message": "ரெக்கார்டிங் அமைப்புகள்"
+  "panels/timeline/components/LiveMetricsView.ts | percentDevices": {
+    "message": "{PH1}% மொபைல், {PH2}% டெஸ்க்டாப்"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | phase": {
+    "message": "நிலை"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | presentationDelay": {
+    "message": "காட்சிப்படுத்தல் தாமதம்"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | processingDuration": {
+    "message": "செயலாக்க நேரம்"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | realUserEnvironments": {
+    "message": "பயனர் சூழல்கள்"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | resourceLoadDelay": {
+    "message": "ரிசோர்ஸை ஏற்றுவதில் தாமதம்"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | resourceLoadDuration": {
+    "message": "ரிசோர்ஸ் ஏற்றப்படும் கால அளவு"
   },
   "panels/timeline/components/LiveMetricsView.ts | seeHowYourLocalMetricsCompare": {
     "message": "உங்கள் லோக்கல் அளவீடுகள் {PH1} இல் அசல் பயனர் தரவுடன் எப்படி ஒப்பிடப்படுகிறது என்பதைப் பாருங்கள்."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | showClsCluster": {
+    "message": "மோசமான லே-அவுட் ஷிஃப்ட் கிளஸ்டருக்குச் செல்லும்."
   },
   "panels/timeline/components/LiveMetricsView.ts | showFieldDataForDevice": {
     "message": "இந்தச் சாதன வகைக்கான அசல் தரவைக் காட்டு: {PH1}"
@@ -13682,20 +13829,23 @@
   "panels/timeline/components/LiveMetricsView.ts | showFieldDataForPage": {
     "message": "{PH1} இணைப்பிற்கான அசல் தரவைக் காட்டு"
   },
+  "panels/timeline/components/LiveMetricsView.ts | showInpInteraction": {
+    "message": "INP இன்டராக்ஷனுக்குச் செல்லும்."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | simulateDifferentDevices": {
+    "message": "வெவ்வேறு சாதனங்களை சிமுலேட் செய்"
+  },
   "panels/timeline/components/LiveMetricsView.ts | tablet": {
     "message": "டேப்லெட்"
   },
-  "panels/timeline/components/LiveMetricsView.ts | theFieldMetricsAre": {
-    "message": "வெவ்வேறு நெட்வொர்க் இணைப்புகளையும் சாதனங்களையும் பயன்படுத்தி அசல் பயனர்களால் {PH1} கணக்கிடப்படுகிறது."
-  },
-  "panels/timeline/components/LiveMetricsView.ts | theLocalMetricsAre": {
-    "message": "உங்கள் நெட்வொர்க் இணைப்பு, சாதனம் ஆகியவற்றைப் பயன்படுத்தி தற்போதைய பக்கத்தில் இருந்து {PH1} எடுக்கப்படுகின்றன."
+  "panels/timeline/components/LiveMetricsView.ts | timeToFirstByte": {
+    "message": "முதல் பைட்டுக்கான நேரம்"
   },
   "panels/timeline/components/LiveMetricsView.ts | tryDisablingThrottling": {
-    "message": "உண்மையான பயனர்கள் அளவிட்ட நெட்வொர்க் தாமதத்தைத் தோராயமாகக் கணக்கிட நெட்வொர்க் த்ராட்லிங்கை முடக்கிப் பாருங்கள்."
+    "message": "த்ராட்லிங்குடன் சிமுலேட் செய்ய 75வது சதமானம் என்பது மிகவும் வேகமானதாகும்"
   },
   "panels/timeline/components/LiveMetricsView.ts | tryUsingThrottling": {
-    "message": "உண்மையான பயனர்கள் அளவிட்ட நெட்வொர்க் தாமதத்தைத் தோராயமாகக் கணக்கிட {PH1} நெட்வொர்க் த்ராட்லிங்கைப் பயன்படுத்திப் பாருங்கள்."
+    "message": "75வது சதமானம் என்பது {PH1} த்ராட்லிங்கிற்குச் சமமானது"
   },
   "panels/timeline/components/LiveMetricsView.ts | urlOption": {
     "message": "URL"
@@ -13703,68 +13853,149 @@
   "panels/timeline/components/LiveMetricsView.ts | urlOptionWithKey": {
     "message": "URL: {PH1}"
   },
+  "panels/timeline/components/LiveMetricsView.ts | useDeviceToolbar": {
+    "message": "சாதனக் கருவிப்பட்டியை இதற்குப் பயன்படுத்து: {PH1}."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | worstCluster": {
+    "message": "மோசமான கிளஸ்டர்"
+  },
+  "panels/timeline/components/MetricCard.ts | betweenRange": {
+    "message": "({PH1}-{PH2})"
+  },
+  "panels/timeline/components/MetricCard.ts | clsHelpTooltip": {
+    "message": "எதிர்பாராமல் ஷிஃப்ட் செய்யப்பட்ட உள்ளடக்கத்தின் அளவை CLS அளவிடும். CLS குறித்து மேலும் தெரிந்துகொள்ள இங்கே கிளிக் செய்யவும்."
+  },
+  "panels/timeline/components/MetricCard.ts | considerTesting": {
+    "message": "உங்கள் லோக்கல் பரிசோதனைச் சூழல்களையும் கருத்தில்கொள்ளுங்கள்"
+  },
+  "panels/timeline/components/MetricCard.ts | duration": {
+    "message": "லோக்கல் கால அளவு (மிவி)"
+  },
+  "panels/timeline/components/MetricCard.ts | field75thPercentile": {
+    "message": "புலத்தில் 75வது சதமானம்"
+  },
+  "panels/timeline/components/MetricCard.ts | good": {
+    "message": "நன்று"
+  },
+  "panels/timeline/components/MetricCard.ts | gtRange": {
+    "message": "(>{PH1})"
+  },
+  "panels/timeline/components/MetricCard.ts | inpHelpTooltip": {
+    "message": "கிளிக், தட்டல் மற்றும் கீபோர்டு செயல்பாடுகள் அனைத்திற்குமான ஒட்டுமொத்த பதிலளிக்கும் தன்மையை INP அளவிடும். INP குறித்து மேலும் தெரிந்துகொள்ள இங்கே கிளிக் செய்யவும்."
+  },
+  "panels/timeline/components/MetricCard.ts | interactToMeasure": {
+    "message": "INPயைக் கணக்கிட, இணையப் பக்கத்தில் ஏதேனும் ஒரு செயலை மேற்கொள்ளவும்."
+  },
+  "panels/timeline/components/MetricCard.ts | lcpHelpTooltip": {
+    "message": "காட்சிப் பகுதியில் காட்டப்படும் மிகப்பெரிய அளவிலான படம், வார்த்தைத் தொகுப்பு அல்லது வீடியோவின் ரென்டெர் நேரத்தை LCP அறிக்கையிடும். LCP குறித்து மேலும் தெரிந்துகொள்ள இங்கே கிளிக் செய்யவும்."
+  },
+  "panels/timeline/components/MetricCard.ts | leqRange": {
+    "message": "(≤{PH1})"
+  },
+  "panels/timeline/components/MetricCard.ts | localValue": {
+    "message": "லோக்கல்"
+  },
+  "panels/timeline/components/MetricCard.ts | needsImprovement": {
+    "message": "மேம்படுத்த வேண்டும்"
+  },
+  "panels/timeline/components/MetricCard.ts | percentage": {
+    "message": "{PH1}%"
+  },
+  "panels/timeline/components/MetricCard.ts | phase": {
+    "message": "நிலை"
+  },
+  "panels/timeline/components/MetricCard.ts | poor": {
+    "message": "மோசம்"
+  },
+  "panels/timeline/components/MetricCard.ts | recDynamicContentCLS": {
+    "message": "மாறக்கூடிய தகவல்களின் அடிப்படையில் லே-அவுட் ஷிஃப்ட்கள் நிகழலாம்."
+  },
+  "panels/timeline/components/MetricCard.ts | recDynamicContentLCP": {
+    "message": "உள்ளடக்கம் மாறக்கூடியதாக இருந்தால் பக்க ஏற்றங்களுக்கு இடையேயான LCP எலிமெண்ட் வேறுபடலாம்."
+  },
+  "panels/timeline/components/MetricCard.ts | recJourneyCLS": {
+    "message": "ஒரு பக்கத்துடன் பயனர் இன்டராக்ட் செய்யும் விதத்தின் அடிப்படையில் லே-அவுட் ஷிஃப்ட்கள் நிகழலாம். பக்கத்தை ஸ்க்ரோல் செய்வது போன்ற பொதுவான இன்டராக்ஷன்களைப் பரிசோதனை செய்வதை உறுதிசெய்துகொள்ளுங்கள்."
+  },
+  "panels/timeline/components/MetricCard.ts | recJourneyINP": {
+    "message": "ஒரு பக்கத்துடன் பயனர் இன்டராக்ட் செய்யும் விதத்தின் அடிப்படையில் இன்டராக்ஷன் தாமதங்களில் மாற்றங்கள் ஏற்படும். பொதுவான இன்டராக்ஷன்களைப் பரிசோதனை செய்வதை உறுதிசெய்துகொள்ளுங்கள்."
+  },
+  "panels/timeline/components/MetricCard.ts | recThrottlingINP": {
+    "message": "மெதுவான CPU வேகங்கள் காரணமாக அசல் பயனர்களின் இன்டராக்ஷன் நேரம் அதிகரிக்கக்கூடும். CPU த்ராட்லிங்கை அதிகரிப்பது மெதுவாக இயங்கும் சாதனத்தை சிமுலேட் செய்யும்."
+  },
+  "panels/timeline/components/MetricCard.ts | recThrottlingLCP": {
+    "message": "மெதுவான நெட்வொர்க் நிலைகள் காரணமாக அசல் பயனர்களுக்குப் பக்கம் காட்டப்பட வெகுநேரம் ஆகலாம். நெட்வொர்க் த்ராட்லிங்கை அதிகரிப்பது மெதுவான நெட்வொர்க் நிலைகளை சிமுலேட் செய்யும்."
+  },
+  "panels/timeline/components/MetricCard.ts | recViewportCLS": {
+    "message": "திரையின் அளவைப் பொறுத்து லே-அவுட் ஷிஃப்ட்கள் நிகழலாம். பொதுவான திரை அளவுகளை நீங்கள் பரிசோதனை செய்வதை உறுதிசெய்துகொள்ளுங்கள்."
+  },
+  "panels/timeline/components/MetricCard.ts | recViewportLCP": {
+    "message": "திரை அளவின் அடிப்படையில் LCP எலிமெண்ட் முடிவு செய்யப்படலாம். பொதுவான காட்சிப் பகுதி அளவுகளைப் பரிசோதனை செய்வதை உறுதிசெய்துகொள்ளுங்கள்."
+  },
+  "panels/timeline/components/MetricCard.ts | viewCardDetails": {
+    "message": "கார்டு விவரங்களைக் காட்டும்"
+  },
   "panels/timeline/components/MetricCompareStrings.ts | goodBetterCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} சிறப்பாக உள்ளது. இது, உங்கள் பயனர்களின் அனுபவத்தைவிட குறிப்பிடத்தக்க வகையில் அதிகமாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} நன்றாக உள்ளது. ஆனால், இது உங்கள் பயனரின் அனுபவத்தைவிட குறிப்பிடத்தக்க வகையில் சிறப்பாக உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodGoodDetailedCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} சிறப்பாக உள்ளது. இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. அத்துடன், அசல் தரவின் 75வது சதமானம் {PH1} {PH3} சிறப்பாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} சிறப்பாக உள்ளது. இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. அத்துடன், அசல் தரவின் 75வது சதமானம் {PH1} மதிப்பு {PH3} நன்றாக உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodNeedsImprovementDetailedCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} சிறப்பாக உள்ளது. இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. இருப்பினும், அசல் தரவின் 75வது சதமானம் {PH1} {PH3} ஐ மேம்படுத்த வேண்டும்."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} சிறப்பாக உள்ளது. இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. இருப்பினும், அசல் தரவின் 75வது சதமானம் {PH1} மதிப்பு {PH3} ஐ மேம்படுத்த வேண்டும்."
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodPoorDetailedCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} சிறப்பாக உள்ளது. இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. இருப்பினும், அசல் தரவின் 75வது சதமானம் {PH1} {PH3} மோசமாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} சிறப்பாக உள்ளது. இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. இருப்பினும், அசல் தரவின் 75வது சதமானம் {PH1} மதிப்பு {PH3} மோசமாக உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodSimilarCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} சிறப்பாக உள்ளது. இது, உங்கள் பயனர்களின் அனுபவத்தைப் போன்றே உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2}சிறப்பாக உள்ளது. இது, உங்கள் பயனர்களின் அனுபவத்தைப் போன்றே உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodSummarized": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} சிறப்பாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} நன்றாக உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodWorseCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} சிறப்பாக உள்ளது. இது, உங்கள் பயனர்களின் அனுபவத்தைவிட குறிப்பிடத்தக்க வகையில் மோசமாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} நன்றாக உள்ளது. ஆனால், இது உங்கள் பயனரின் அனுபவத்தைவிட குறிப்பிடத்தக்க அளவு மோசமாக உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementBetterCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} ஐ மேம்படுத்த வேண்டும். இது, உங்கள் பயனர்களின் அனுபவத்தைவிட குறிப்பிடத்தக்க வகையில் அதிகமாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} ஐ மேம்படுத்த வேண்டும். ஆனால், இது உங்கள் பயரின் அனுபவத்தைவிட குறிப்பிடத்தக்க வகையில் சிறப்பாக உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementGoodDetailedCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} ஐ மேம்படுத்த வேண்டும். இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. இருப்பினும், அசல் தரவின் 75வது சதமானம் {PH1} {PH3} சிறப்பாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} ஐ மேம்படுத்த வேண்டும். இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. இருப்பினும், அசல் தரவின் 75வது சதமானம் {PH1} மதிப்பு {PH3} சிறப்பாக உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementNeedsImprovementDetailedCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} ஐ மேம்படுத்த வேண்டும். இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. அத்துடன், அசல் தரவின் 75வது சதமானம் {PH1} {PH3} ஐ மேம்படுத்த வேண்டும்."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} ஐ மேம்படுத்த வேண்டும். இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. அத்துடன், அசல் தரவின் 75வது சதமானம் {PH1} மதிப்பு {PH3} ஐ மேம்படுத்த வேண்டும்."
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementPoorDetailedCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} ஐ மேம்படுத்த வேண்டும். இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. இருப்பினும், அசல் தரவின் 75வது சதமானம் {PH1} {PH3} மோசமாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} ஐ மேம்படுத்த வேண்டும். இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. இருப்பினும், அசல் தரவின் 75வது சதமானம் {PH1} மதிப்பு {PH3} மோசமாக உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementSimilarCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} ஐ மேம்படுத்த வேண்டும். இது, உங்கள் பயனர்களின் அனுபவத்தைப் போன்றே உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} ஐ மேம்படுத்த வேண்டும். இது, உங்கள் பயனர்களின் அனுபவத்தைப் போன்றே உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementSummarized": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} ஐ மேம்படுத்த வேண்டும்."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} ஐ மேம்படுத்த வேண்டும்."
   },
   "panels/timeline/components/MetricCompareStrings.ts | needsImprovementWorseCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} ஐ மேம்படுத்த வேண்டும். இது, உங்கள் பயனர்களின் அனுபவத்தைவிட குறிப்பிடத்தக்க வகையில் மோசமாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} ஐ மேம்படுத்த வேண்டும். ஆனால், இது உங்கள் பயனர்களின் அனுபவத்தைவிட குறிப்பிடத்தக்க வகையில் மோசமாக உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorBetterCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} மோசமாக உள்ளது. இது, உங்கள் பயனர்களின் அனுபவத்தைவிட குறிப்பிடத்தக்க வகையில் அதிகமாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} மோசமாக உள்ளது. ஆனால், இது உங்கள் பயனரின் அனுபவத்தைவிட குறிப்பிடத்தக்க வகையில் சிறப்பாக உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorGoodDetailedCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} மோசமாக உள்ளது. இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. இருப்பினும், அசல் தரவின் 75வது சதமானம் {PH1} {PH3} சிறப்பாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} மோசமாக உள்ளது. இது, அசல் பயனர்{PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. இருப்பினும், அசல் தரவின் 75வது சதமானம் {PH1} மதிப்பு {PH3} சிறப்பாக உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorNeedsImprovementDetailedCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} மோசமாக உள்ளது. இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. இருப்பினும், அசல் தரவின் 75வது சதமானம் {PH1} {PH3} ஐ மேம்படுத்த வேண்டும்."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} மோசமாக உள்ளது. இது, அசல் பயனர்{PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. இருப்பினும், அசல் தரவின் 75வது சதமானம் {PH1} மதிப்பு {PH3} ஐ மேம்படுத்த வேண்டும்."
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorPoorDetailedCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} மோசமாக உள்ளது. இது, அசல் பயனர் {PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. அத்துடன், அசல் தரவின் 75வது சதமானமும் {PH1} {PH3} மோசமாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} மோசமாக உள்ளது. இது, அசல் பயனர்{PH1} அனுபவங்களின் {PH4} போன்றதாகவே வகைப்படுத்தப்பட்டுள்ளது. அத்துடன், அசல் தரவின் 75வது சதமானம் {PH1} மதிப்பு {PH3} மோசமாக உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorSimilarCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} மோசமாக உள்ளது. இது, உங்கள் பயனர்களின் அனுபவத்தைப் போன்றே உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} மோசமாக உள்ளது. இது, உங்கள் பயனர்களின் அனுபவத்தைப் போன்றே உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorSummarized": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} மோசமாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} மோசமாக உள்ளது."
   },
   "panels/timeline/components/MetricCompareStrings.ts | poorWorseCompare": {
-    "message": "உங்கள் லோக்கல் {PH1} {PH2} மோசமாக உள்ளது. இது, உங்கள் பயனர்களின் அனுபவத்தைவிட குறிப்பிடத்தக்க வகையில் மோசமாக உள்ளது."
+    "message": "உங்கள் லோக்கல் {PH1} மதிப்பு {PH2} மோசமாக உள்ளது. ஆனால், இது பயனரின் அனுபவத்தைவிட குறிப்பிடத்தக்க வகையில் மோசமாக உள்ளது."
   },
   "panels/timeline/components/NetworkRequestDetails.ts | FromCache": {
     "message": " (தற்காலிகச் சேமிப்பிலிருந்து)"
@@ -13778,29 +14009,26 @@
   "panels/timeline/components/NetworkRequestDetails.ts | FromServiceWorker": {
     "message": " (service worker இலிருந்து)"
   },
-  "panels/timeline/components/NetworkRequestDetails.ts | contentDownloading": {
-    "message": "உள்ளடக்கத்தைப் பதிவிறக்குகிறது"
+  "panels/timeline/components/NetworkRequestDetails.ts | blocking": {
+    "message": "தடுக்கிறது"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | decodedBody": {
     "message": "டீகோட் செய்யப்பட்ட பகுதி"
   },
-  "panels/timeline/components/NetworkRequestDetails.ts | duration": {
-    "message": "கால அளவு"
-  },
   "panels/timeline/components/NetworkRequestDetails.ts | encodedData": {
-    "message": "என்கோட் செய்யப்பட்ட தரவு"
+    "message": "என்கோடிங் செய்த தரவு"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | fromCache": {
     "message": "தற்காலிகச் சேமிப்பிலிருந்து"
   },
-  "panels/timeline/components/NetworkRequestDetails.ts | initialPriority": {
-    "message": "ஆரம்பநிலை முன்னுரிமை"
+  "panels/timeline/components/NetworkRequestDetails.ts | inBodyParserBlocking": {
+    "message": "பகுதியில் உள்ள பாகுபடுத்தியைத் தடுத்தல்"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | initiatedBy": {
     "message": "தொடங்கியது:"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | mimeType": {
-    "message": "Mime வகை"
+    "message": "MIME வகை"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | networkRequest": {
     "message": "நெட்வொர்க் கோரிக்கை"
@@ -13814,23 +14042,20 @@
   "panels/timeline/components/NetworkRequestDetails.ts | priority": {
     "message": "முன்னுரிமை"
   },
-  "panels/timeline/components/NetworkRequestDetails.ts | queuingAndConnecting": {
-    "message": "வரிசைப்படுத்தி இணைக்கிறது"
+  "panels/timeline/components/NetworkRequestDetails.ts | renderBlocking": {
+    "message": "ரென்டரிங்கைத் தடுத்தல்"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | requestMethod": {
     "message": "கோரிக்கை முறை"
-  },
-  "panels/timeline/components/NetworkRequestDetails.ts | requestSentAndWaiting": {
-    "message": "கோரிக்கை அனுப்பப்பட்டது, காத்திருக்கிறது."
-  },
-  "panels/timeline/components/NetworkRequestDetails.ts | waitingOnMainThread": {
-    "message": "முக்கியத் தொடரிழையில் காத்திருக்கிறது"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | yes": {
     "message": "ஆம்"
   },
   "panels/timeline/components/NetworkRequestTooltip.ts | contentDownloading": {
-    "message": "உள்ளடக்கத்தைப் பதிவிறக்குகிறது"
+    "message": "உள்ளடக்கப் பதிவிறக்கம்"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | duration": {
+    "message": "கால அளவு"
   },
   "panels/timeline/components/NetworkRequestTooltip.ts | priority": {
     "message": "முன்னுரிமை"
@@ -13845,7 +14070,7 @@
     "message": "கோரிக்கை அனுப்பப்பட்டது, காத்திருக்கிறது."
   },
   "panels/timeline/components/NetworkRequestTooltip.ts | waitingOnMainThread": {
-    "message": "முக்கியத் தொடரிழையில் காத்திருக்கிறது"
+    "message": "முக்கிய த்ரெட்டில் காத்திருக்கிறது"
   },
   "panels/timeline/components/NetworkThrottlingSelector.ts | add": {
     "message": "சேர்…"
@@ -13865,6 +14090,144 @@
   "panels/timeline/components/NetworkThrottlingSelector.ts | presets": {
     "message": "முன்னமைவுகள்"
   },
+  "panels/timeline/components/RelatedInsightChips.ts | insightKeyword": {
+    "message": "புள்ளிவிவரம்"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | annotationGetStarted": {
+    "message": "உங்களுக்காகவும் பிறருக்காகவும் டிரேஸில் குறிப்பைச் சேர்த்தல்"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | deleteAnnotationTutorialDescription": {
+    "message": "நீக்குதல் செயல்பாட்டை அணுக, பக்கப்பட்டியில் குறிப்புகள் பக்கம் தேர்ந்தெடுக்கப்பட்டுள்ள பட்டியலின் மேலே கர்சரைக் கொண்டுசெல்லவும்."
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | deleteAnnotationTutorialTitle": {
+    "message": "குறிப்பை நீக்குதல்"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | deleteButton": {
+    "message": "குறிப்பை நீக்கு: {PH1}"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | entryLabelDescriptionLabel": {
+    "message": "\"{PH2}\" வார்த்தையுடன் \"{PH1}\" நிகழ்விற்கான குறிப்பு சேர்க்கப்பட்டது"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | entryLabelTutorialDescription": {
+    "message": "எலிமெண்ட்டிற்கு லேபிளை உருவாக்க அதன் மீது இரு கிளிக் செய்து டைப் செய்யவும்."
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | entryLabelTutorialTitle": {
+    "message": "லேபிளிடவும்"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | entryLinkDescriptionLabel": {
+    "message": "\"{PH1}\" நிகழ்வு மற்றும் \"{PH2}\" நிகழ்விற்கு இடையேயான இணைப்பு"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | entryLinkTutorialDescription": {
+    "message": "ஒரு உள்ளீட்டை இரு கிளிக் செய்து அருகில் இருக்கும் முன்செல்வதற்கான அம்புக்குறியைக் கிளிக் செய்தபிறகு இலக்கு உள்ளீட்டைத் தேர்ந்தெடுக்கவும்."
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | entryLinkTutorialTitle": {
+    "message": "இரண்டையும் சேர்த்தல்"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | timeRangeDescriptionLabel": {
+    "message": "நேர வரம்பு {PH1} இல் தொடங்கி {PH2} இல் நிறைவடைகிறது"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | timeRangeTutorialDescription": {
+    "message": "ஃபிளேம்சார்ட்டில் shift பட்டனைப் பயன்படுத்தி இழுத்த பிறகு நேர வரம்புக் குறிப்பை டைப் செய்யவும்."
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | timeRangeTutorialTitle": {
+    "message": "நேர வரம்பை வரையறுத்தல்"
+  },
+  "panels/timeline/components/SidebarInsightsTab.ts | feedbackButton": {
+    "message": "கருத்து"
+  },
+  "panels/timeline/components/SidebarInsightsTab.ts | feedbackTooltip": {
+    "message": "நுண்தகவல் என்பது பரிசோதனை நிலையில் உள்ள அம்சம் ஆகும். இதை மேம்படுத்த உங்கள் கருத்து உதவும்."
+  },
+  "panels/timeline/components/SidebarSingleInsightSet.ts | metricScore": {
+    "message": "{PH1}: {PH2} {PH3} ஸ்கோர்"
+  },
+  "panels/timeline/components/Utils.ts | fms": {
+    "message": "{PH1}[மிவி]()"
+  },
+  "panels/timeline/components/Utils.ts | fs": {
+    "message": "{PH1}[வி]()"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | animation": {
+    "message": "அனிமேஷன்"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | fontRequest": {
+    "message": "எழுத்து வடிவத்திற்கான கோரிக்கை"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | injectedIframe": {
+    "message": "சேர்க்கப்பட்டுள்ள iframe"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | layoutShiftCluster": {
+    "message": "{PH1} இல் லே-அவுட் ஷிஃப்ட் கிளஸ்டர்"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | topCulprits": {
+    "message": "லே-அவுட் ஷிஃப்ட்டுக்கான முக்கியமான காரணங்கள்"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | unsizedImages": {
+    "message": "அளவு குறிப்பிடப்படாத படங்கள்"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | worstCluster": {
+    "message": "மோசமான கிளஸ்டர்"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | worstLayoutShiftCluster": {
+    "message": "மோசமான லே-அவுட் ஷிஃப்ட் கிளஸ்டர்"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | failedAriaLabel": {
+    "message": "புள்ளிவிவரத்தைச் சரிபார்க்க முடியவில்லை: {PH1}"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | failedRedirects": {
+    "message": "திசைதிருப்புதல்கள் இருந்தன"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | failedServerResponseTime": {
+    "message": "சேவையகம் மெதுவாகப் பதிலளித்தது"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | failedTextCompression": {
+    "message": "சுருக்குதல் பயன்படுத்தப்படவில்லை"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | passingRedirects": {
+    "message": "திசைதிருப்புதல்களைத் தவிர்க்கும்"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | passingServerResponseTime": {
+    "message": "சேவையகம் விரைவாகப் பதிலளித்தது"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | passingTextCompression": {
+    "message": "வார்த்தைச் சுருக்குதலைப் பயன்படுத்துகிறது"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | redirectsLabel": {
+    "message": "திசைதிருப்புதல்கள்"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | serverResponseTimeLabel": {
+    "message": "சேவையக பதிலளிப்பு நேரம்"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | successAriaLabel": {
+    "message": "புள்ளிவிவரம் சரிபார்க்கப்பட்டது: {PH1}"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | uncompressedDownload": {
+    "message": "சுருக்கப்படாத பதிவிறக்கம்"
+  },
+  "panels/timeline/components/insights/FontDisplay.ts | fontColumn": {
+    "message": "எழுத்து வடிவம்"
+  },
+  "panels/timeline/components/insights/FontDisplay.ts | wastedTimeColumn": {
+    "message": "வீண் செய்யப்பட்ட நேரம்"
+  },
+  "panels/timeline/components/insights/InteractionToNextPaint.ts | duration": {
+    "message": "கால அளவு"
+  },
+  "panels/timeline/components/insights/InteractionToNextPaint.ts | inputDelay": {
+    "message": "உள்ளீட்டுத் தாமதம்"
+  },
+  "panels/timeline/components/insights/InteractionToNextPaint.ts | phase": {
+    "message": "நிலை"
+  },
+  "panels/timeline/components/insights/InteractionToNextPaint.ts | presentationDelay": {
+    "message": "காட்சிப்படுத்தல் தாமதம்"
+  },
+  "panels/timeline/components/insights/InteractionToNextPaint.ts | processingDuration": {
+    "message": "செயலாக்க நேரம்"
+  },
+  "panels/timeline/components/insights/LCPDiscovery.ts | failedAriaLabel": {
+    "message": "புள்ளிவிவரத்தைச் சரிபார்க்க முடியவில்லை: {PH1}"
+  },
   "panels/timeline/components/insights/LCPDiscovery.ts | fetchPriorityApplied": {
     "message": "fetchpriority=high பயன்படுத்தப்பட்டுள்ளது"
   },
@@ -13877,17 +14240,68 @@
   "panels/timeline/components/insights/LCPDiscovery.ts | requestDiscoverable": {
     "message": "முதல் ஆவணத்தில் கோரிக்கையைக் கண்டறியலாம்"
   },
+  "panels/timeline/components/insights/LCPDiscovery.ts | successAriaLabel": {
+    "message": "புள்ளிவிவரம் சரிபார்க்கப்பட்டது: {PH1}"
+  },
   "panels/timeline/components/insights/LCPPhases.ts | elementRenderDelay": {
-    "message": "உறுப்பு ரென்டரிங் தாமதம்"
+    "message": "எலிமெண்ட் ரென்டரிங் தாமதம்"
+  },
+  "panels/timeline/components/insights/LCPPhases.ts | percentLCP": {
+    "message": "LCPயின் %"
+  },
+  "panels/timeline/components/insights/LCPPhases.ts | phase": {
+    "message": "நிலை"
   },
   "panels/timeline/components/insights/LCPPhases.ts | resourceLoadDelay": {
-    "message": "ஆதாரத்தை ஏற்றுவதில் தாமதம்"
+    "message": "ரிசோர்ஸை ஏற்றுவதில் தாமதம்"
   },
   "panels/timeline/components/insights/LCPPhases.ts | resourceLoadDuration": {
     "message": "ரிசோர்ஸ் ஏற்றப்படும் கால அளவு"
   },
   "panels/timeline/components/insights/LCPPhases.ts | timeToFirstByte": {
     "message": "முதல் பைட்டுக்கான நேரம்"
+  },
+  "panels/timeline/components/insights/RenderBlocking.ts | duration": {
+    "message": "கால அளவு"
+  },
+  "panels/timeline/components/insights/RenderBlocking.ts | renderBlockingRequest": {
+    "message": "கோரிக்கை"
+  },
+  "panels/timeline/components/insights/SlowCSSSelector.ts | elapsed": {
+    "message": "எடுத்துக்கொண்ட நேரம்"
+  },
+  "panels/timeline/components/insights/SlowCSSSelector.ts | matchAttempts": {
+    "message": "பொருந்தும் முயற்சிகள்"
+  },
+  "panels/timeline/components/insights/SlowCSSSelector.ts | matchCount": {
+    "message": "பொருந்தும் எண்ணிக்கை"
+  },
+  "panels/timeline/components/insights/SlowCSSSelector.ts | topSelectors": {
+    "message": "முதன்மைத் தேர்விகள்"
+  },
+  "panels/timeline/components/insights/SlowCSSSelector.ts | total": {
+    "message": "மொத்தம்"
+  },
+  "panels/timeline/components/insights/ThirdParties.ts | columnBlockingTime": {
+    "message": "தடுக்கும் நேரம்"
+  },
+  "panels/timeline/components/insights/ThirdParties.ts | columnThirdParty": {
+    "message": "மூன்றாம் தரப்பு"
+  },
+  "panels/timeline/components/insights/ThirdParties.ts | columnTransferSize": {
+    "message": "டிரான்ஸ்ஃபர் அளவு"
+  },
+  "panels/timeline/overlays/components/EntriesLinkOverlay.ts | diagram": {
+    "message": "உள்ளீடுகளுக்கு இடையேயான இணைப்புகள்"
+  },
+  "panels/timeline/overlays/components/EntryLabelOverlay.ts | entryLabel": {
+    "message": "உள்ளீட்டு லேபிள்"
+  },
+  "panels/timeline/overlays/components/EntryLabelOverlay.ts | inputTextPrompt": {
+    "message": "குறிப்பு லேபிளை டைப் செய்யுங்கள்"
+  },
+  "panels/timeline/overlays/components/TimeRangeOverlay.ts | timeRange": {
+    "message": "நேர வரம்பு"
   },
   "panels/timeline/timeline-meta.ts | hideChromeFrameInLayersView": {
     "message": "லேயர்கள் காட்சியில் chrome ஃபிரேமை மறை"
@@ -13927,6 +14341,387 @@
   },
   "panels/timeline/timeline-meta.ts | stop": {
     "message": "நிறுத்து"
+  },
+  "panels/timeline/utils/EntryName.ts | anonymous": {
+    "message": "(அறியப்படாதது)"
+  },
+  "panels/timeline/utils/EntryName.ts | eventDispatchS": {
+    "message": "நிகழ்வு: {PH1}"
+  },
+  "panels/timeline/utils/EntryName.ts | frame": {
+    "message": "ஃபிரேம்"
+  },
+  "panels/timeline/utils/EntryName.ts | wsConnectionClosed": {
+    "message": "WebSocket மூடப்பட்டது"
+  },
+  "panels/timeline/utils/EntryName.ts | wsConnectionOpened": {
+    "message": "WebSocket திறக்கப்பட்டது"
+  },
+  "panels/timeline/utils/EntryName.ts | wsConnectionOpenedWithUrl": {
+    "message": "WebSocket திறக்கப்பட்டது: {PH1}"
+  },
+  "panels/timeline/utils/EntryStyles.ts | abortPostTaskCallback": {
+    "message": "postTaskகை ரத்துசெய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | animation": {
+    "message": "அனிமேஷன்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | animationFrameFired": {
+    "message": "அனிமேஷன் ஃபிரேம் செயல்படுத்தப்பட்டது"
+  },
+  "panels/timeline/utils/EntryStyles.ts | async": {
+    "message": "ஒத்திசையாதவை"
+  },
+  "panels/timeline/utils/EntryStyles.ts | asyncTask": {
+    "message": "ஒத்திசையாத பணி"
+  },
+  "panels/timeline/utils/EntryStyles.ts | cacheModule": {
+    "message": "தற்காலிகச் சேமிப்பு மாடியூல் குறியீடு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | cacheScript": {
+    "message": "தற்காலிகச் சேமிப்பு ஸ்கிரிப்ட் குறியீடு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | cachedWasmModule": {
+    "message": "தற்காலிக நினைவகத்தில் சேமிக்கப்பட்ட Wasm மாடியூல்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | cancelAnimationFrame": {
+    "message": "அனிமேஷன் ஃபிரேமை ரத்துசெய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | cancelIdleCallback": {
+    "message": "ஐடில் கால்பேக்கை ரத்துசெய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | commit": {
+    "message": "அனுப்புதல்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | compileCode": {
+    "message": "குறியீட்டை கம்பைல் செய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | compileModule": {
+    "message": "மாடியூலைக் கம்பைல் செய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | compileScript": {
+    "message": "ஸ்கிரிப்ட்டைக் கம்பைல் செய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | compiledWasmModule": {
+    "message": "கம்பைல் செய்த Wasm மாடியூல்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | compositeLayers": {
+    "message": "தொகுப்பு லேயர்கள்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | computeIntersections": {
+    "message": "இண்டர்செக்ஷன்களைக் கணக்கிடு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | consoleTime": {
+    "message": "கன்சோல் நேரம்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | cppGc": {
+    "message": "CPP GC"
+  },
+  "panels/timeline/utils/EntryStyles.ts | createWebsocket": {
+    "message": "WebSocketடை உருவாக்கு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | decrypt": {
+    "message": "டீக்ரிப்ட் செய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | decryptReply": {
+    "message": "பதிலை டீக்ரிப்ட் செய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | deserializeCodeCache": {
+    "message": "குறியீட்டுத் தற்காலிகச் சேமிப்பைப் படி"
+  },
+  "panels/timeline/utils/EntryStyles.ts | destroyWebsocket": {
+    "message": "WebSocketடை அழி"
+  },
+  "panels/timeline/utils/EntryStyles.ts | digest": {
+    "message": "செயல்பாட்டு விவரங்கள்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | digestReply": {
+    "message": "செயல்பாட்டு விவரங்களின் பதில்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | domGc": {
+    "message": "DOM GC"
+  },
+  "panels/timeline/utils/EntryStyles.ts | domcontentloadedEvent": {
+    "message": "DOMContentLoaded நிகழ்வு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | drawFrame": {
+    "message": "டிரா ஃபிரேம்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | drawing": {
+    "message": "வரைதல்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | embedderCallback": {
+    "message": "எம்பெடர் கால்பேக்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | encrypt": {
+    "message": "என்கிரிப்ட் செய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | encryptReply": {
+    "message": "பதிலை என்கிரிப்ட் செய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | evaluateModule": {
+    "message": "மாடியூலை எவால்யூவேட் செய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | evaluateScript": {
+    "message": "ஸ்கிரிப்ட்டை எவால்யூவேட் செய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | event": {
+    "message": "நிகழ்வு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | eventTiming": {
+    "message": "நிகழ்வின் நேரம்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | experience": {
+    "message": "அனுபவம்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | finishLoading": {
+    "message": "ஏற்றுதலை நிறைவுசெய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | fireIdleCallback": {
+    "message": "ஐடில் கால்பேக்கைச் செயல்படுத்து"
+  },
+  "panels/timeline/utils/EntryStyles.ts | firstContentfulPaint": {
+    "message": "உள்ளடக்கத்துடன் முதல் தோற்றம்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | firstPaint": {
+    "message": "முதல் தோற்றம்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | frameStart": {
+    "message": "ஃபிரேம் தொடக்கம்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | frameStartMainThread": {
+    "message": "ஃபிரேம் தொடக்கம் (முக்கியத் தொடரிழை)"
+  },
+  "panels/timeline/utils/EntryStyles.ts | frameStartedLoading": {
+    "message": "ஃபிரேம் காட்டப்படுகிறது"
+  },
+  "panels/timeline/utils/EntryStyles.ts | functionCall": {
+    "message": "ஃபங்ஷன் கால்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | gcEvent": {
+    "message": "GC நிகழ்வு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | gpu": {
+    "message": "GPU"
+  },
+  "panels/timeline/utils/EntryStyles.ts | hitTest": {
+    "message": "ஹிட் சோதனை"
+  },
+  "panels/timeline/utils/EntryStyles.ts | idle": {
+    "message": "செயல்படவில்லை"
+  },
+  "panels/timeline/utils/EntryStyles.ts | imageDecode": {
+    "message": "படத்தை டீகோட் செய்தல்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | installTimer": {
+    "message": "டைமரை நிறுவு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | invalidateLayout": {
+    "message": "தவறான தளவமைப்பு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | jsFrame": {
+    "message": "JS ஃபிரேம்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | largestContentfulPaint": {
+    "message": "பெரிய பகுதியைக் காண்பிக்கும் நேரம்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | layerize": {
+    "message": "லேயராக்குதல்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | layout": {
+    "message": "தளவமைப்பு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | layoutShift": {
+    "message": "லேஅவுட் ஷிஃப்ட்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | layoutShiftCluster": {
+    "message": "லே-அவுட் ஷிஃப்ட் கிளஸ்டர்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | loading": {
+    "message": "ஏற்றுகிறது"
+  },
+  "panels/timeline/utils/EntryStyles.ts | majorGc": {
+    "message": "மேஜர் GC"
+  },
+  "panels/timeline/utils/EntryStyles.ts | messaging": {
+    "message": "மெசேஜிங்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | minorGc": {
+    "message": "மைனர் GC"
+  },
+  "panels/timeline/utils/EntryStyles.ts | onMessage": {
+    "message": "மெசேஜில்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | onloadEvent": {
+    "message": "ஏற்றுதல் நிகழ்வு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | optimizeCode": {
+    "message": "குறியீட்டை மேம்படுத்து"
+  },
+  "panels/timeline/utils/EntryStyles.ts | other": {
+    "message": "பிற"
+  },
+  "panels/timeline/utils/EntryStyles.ts | paint": {
+    "message": "பெயிண்ட்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | paintImage": {
+    "message": "படத்தைப் பெயிண்ட் செய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | paintSetup": {
+    "message": "பெயிண்ட் அமைவு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | painting": {
+    "message": "பெயிண்டிங்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | parseAndCompile": {
+    "message": "பாகுபடுத்திவிட்டு கம்பைல் செய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | parseHtml": {
+    "message": "HTMLலைப் பாகுபடுத்து"
+  },
+  "panels/timeline/utils/EntryStyles.ts | parseStylesheet": {
+    "message": "ஸ்டைல்ஷீட்டைப் பாகுபடுத்து"
+  },
+  "panels/timeline/utils/EntryStyles.ts | prePaint": {
+    "message": "ப்ரீ-பெயிண்ட்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | profilingOverhead": {
+    "message": "ப்ரொஃபைலிங் சுமை"
+  },
+  "panels/timeline/utils/EntryStyles.ts | rasterizePaint": {
+    "message": "பெயிண்ட்டை ராஸ்டெரைஸ் செய்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | rasterizing": {
+    "message": "ராஸ்டெரைஸிங்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | recalculateStyle": {
+    "message": "ஸ்டைலை மீண்டும் கணக்கிடு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | receiveData": {
+    "message": "தரவைப் பெறுக"
+  },
+  "panels/timeline/utils/EntryStyles.ts | receiveResponse": {
+    "message": "பதிலைப் பெறுக"
+  },
+  "panels/timeline/utils/EntryStyles.ts | receiveWebsocketHandshake": {
+    "message": "WebSocket ஹேண்ட்ஷேக்கைப் பெறு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | removeTimer": {
+    "message": "டைமரை அகற்று"
+  },
+  "panels/timeline/utils/EntryStyles.ts | rendering": {
+    "message": "ரெண்டரிங்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | requestAnimationFrame": {
+    "message": "அனிமேஷன் ஃபிரேமைக் கேள்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | requestIdleCallback": {
+    "message": "ஐடில் கால்பேக்கைக் கேள்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | requestMainThreadFrame": {
+    "message": "முக்கியத் தொடரிழை ஃபிரேமைக் கேள்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | runMicrotasks": {
+    "message": "சிறிய பணிகளைச் செயல்படுத்து"
+  },
+  "panels/timeline/utils/EntryStyles.ts | runPostTaskCallback": {
+    "message": "postTaskகைச் செயல்படுத்து"
+  },
+  "panels/timeline/utils/EntryStyles.ts | schedulePostMessage": {
+    "message": "postMessageஐத் திட்டமிடுதல்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | schedulePostTaskCallback": {
+    "message": "postTaskகைத் திட்டமிடு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | scheduleStyleRecalculation": {
+    "message": "ஸ்டைல் மறு கணக்கீட்டைத் திட்டமிடுக"
+  },
+  "panels/timeline/utils/EntryStyles.ts | scripting": {
+    "message": "ஸ்கிரிப்ட்டிங்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | scroll": {
+    "message": "ஸ்க்ரோல்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | sendRequest": {
+    "message": "கோரிக்கையை அனுப்பு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | sendWebsocketHandshake": {
+    "message": "WebSocket ஹேண்ட்ஷேக்கை அனுப்பு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | sign": {
+    "message": "கையொப்பம்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | signReply": {
+    "message": "கையொப்பமிட்ட பதில்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | streamingCompileTask": {
+    "message": "ஸ்ட்ரீமிங்கைக் கம்பைல் செய்யும் பணி"
+  },
+  "panels/timeline/utils/EntryStyles.ts | streamingWasmResponse": {
+    "message": "Wasm பதிலை ஸ்ட்ரீம் செய்கிறது"
+  },
+  "panels/timeline/utils/EntryStyles.ts | system": {
+    "message": "சிஸ்டம்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | task": {
+    "message": "பணி"
+  },
+  "panels/timeline/utils/EntryStyles.ts | timerFired": {
+    "message": "டைமர் செயல்படுத்தப்பட்டது"
+  },
+  "panels/timeline/utils/EntryStyles.ts | timestamp": {
+    "message": "நேரமுத்திரை"
+  },
+  "panels/timeline/utils/EntryStyles.ts | updateLayer": {
+    "message": "லேயரைப் புதுப்பி"
+  },
+  "panels/timeline/utils/EntryStyles.ts | updateLayerTree": {
+    "message": "லேயர் வரிசையைப் புதுப்பி"
+  },
+  "panels/timeline/utils/EntryStyles.ts | userTiming": {
+    "message": "பயனர் நேரம்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | verify": {
+    "message": "சரிபார்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | verifyReply": {
+    "message": "பதிலைச் சரிபார்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | waitingForNetwork": {
+    "message": "நெட்வொர்க்கிற்காகக் காத்திருக்கிறது"
+  },
+  "panels/timeline/utils/EntryStyles.ts | wasmModuleCacheHit": {
+    "message": "Wasm மாடியூல் தற்காலிகச் சேமிப்பு ஹிட்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | wasmModuleCacheInvalid": {
+    "message": "தவறான Wasm மாடியூல் தற்காலிகச் சேமிப்பு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | willSendRequest": {
+    "message": "கோரிக்கையை அனுப்பும்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | wsMessageReceived": {
+    "message": "WebSocket மெசேஜைப் பெறு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | wsMessageSent": {
+    "message": "WebSocket மெசேஜ் அனுப்பு"
+  },
+  "panels/timeline/utils/EntryStyles.ts | xhrLoad": {
+    "message": "XHR ஏற்றம்"
+  },
+  "panels/timeline/utils/EntryStyles.ts | xhrReadyStateChange": {
+    "message": "XHR readyState மாற்றம்"
+  },
+  "panels/utils/utils.ts | requestContentHeadersOverridden": {
+    "message": "கோரிக்கை உள்ளடக்கம், தலைப்புகள் ஆகிய இரண்டும் மீறிச் செயல்படுகின்றன"
+  },
+  "panels/utils/utils.ts | requestContentOverridden": {
+    "message": "கோரிக்கை உள்ளடக்கம் ஓவர்-ரைடு செய்யப்பட்டது"
+  },
+  "panels/utils/utils.ts | requestHeadersOverridden": {
+    "message": "கோரிக்கை ஹெட்டர்கள் மீறிச் செயல்படுகின்றன"
+  },
+  "panels/utils/utils.ts | thirdPartyPhaseout": {
+    "message": "Chrome கொடியிடல்கள் அல்லது பிரவுசர் உள்ளமைவின் காரணமாக இந்தக் கோரிக்கைக்கான குக்கீகள் தடுக்கப்பட்டுள்ளன. ‘சிக்கல்கள்’ பேனலில் மேலும் தெரிந்துகொள்ளலாம்."
   },
   "panels/web_audio/AudioContextContentBuilder.ts | callbackBufferSize": {
     "message": "கால்பேக் இடையக அளவு"
@@ -14066,6 +14861,33 @@
   "panels/webauthn/webauthn-meta.ts | webauthn": {
     "message": "WebAuthn"
   },
+  "panels/whats_new/ReleaseNoteView.ts | close": {
+    "message": "மூடுக"
+  },
+  "panels/whats_new/ReleaseNoteView.ts | learnMore": {
+    "message": "மேலும் அறிக"
+  },
+  "panels/whats_new/whats_new-meta.ts | bug": {
+    "message": "பிழை"
+  },
+  "panels/whats_new/whats_new-meta.ts | doNotShowWhatsNewAfterEachUpdate": {
+    "message": "ஒவ்வொரு புதுப்பிப்பிற்குப் பிறகும் புதியவற்றைக் காட்டாதே"
+  },
+  "panels/whats_new/whats_new-meta.ts | releaseNotes": {
+    "message": "வெளியீட்டுக் குறிப்புகள்"
+  },
+  "panels/whats_new/whats_new-meta.ts | reportADevtoolsIssue": {
+    "message": "டெவெலப்பர் கருவிகள் குறித்த சிக்கலைப் புகாரளி"
+  },
+  "panels/whats_new/whats_new-meta.ts | showWhatsNew": {
+    "message": "புதியவற்றைக் காட்டு"
+  },
+  "panels/whats_new/whats_new-meta.ts | showWhatsNewAfterEachUpdate": {
+    "message": "ஒவ்வொரு புதுப்பிப்பிற்குப் பிறகும் புதியவற்றைக் காட்டு"
+  },
+  "panels/whats_new/whats_new-meta.ts | whatsNew": {
+    "message": "புதியவை"
+  },
   "ui/components/data_grid/DataGrid.ts | enterToSort": {
     "message": "நெடுவரிசை வரிசைப்படுத்தப்பட்டுள்ள நிலை: {PH1}. வரிசைப்படுத்துதல் வடிப்பானைப் பயன்படுத்த Enter பட்டனை அழுத்தவும்"
   },
@@ -14138,6 +14960,9 @@
   "ui/components/issue_counter/IssueLinkIcon.ts | issueUnavailable": {
     "message": "சிக்கலைத் தற்போது கண்டறிய முடியவில்லை"
   },
+  "ui/components/markdown_view/CodeBlock.ts | code": {
+    "message": "குறியீடு"
+  },
   "ui/components/markdown_view/CodeBlock.ts | copied": {
     "message": "கிளிப்போர்டுக்கு நகலெடுக்கப்பட்டது"
   },
@@ -14179,6 +15004,9 @@
   },
   "ui/components/request_link_icon/RequestLinkIcon.ts | shortenedURL": {
     "message": "சுருக்கப்பட்ட URL"
+  },
+  "ui/components/settings/SettingCheckbox.ts | learnMore": {
+    "message": "மேலும் அறிக"
   },
   "ui/components/survey_link/SurveyLink.ts | anErrorOccurredWithTheSurvey": {
     "message": "கருத்துக்கணிப்பைத் திறப்பதில் பிழை ஏற்பட்டது"
@@ -14726,6 +15554,12 @@
   "ui/legacy/components/data_grid/DataGrid.ts | sortByString": {
     "message": "இதன்படி வரிசைப்படுத்து"
   },
+  "ui/legacy/components/data_grid/DataGridWithPreview.ts | numberEntries": {
+    "message": "இந்த அட்டவணையில் காட்டப்படும் உள்ளீடுகளின் எண்ணிக்கை: {PH1}"
+  },
+  "ui/legacy/components/data_grid/DataGridWithPreview.ts | selectAValueToPreview": {
+    "message": "மாதிரிக்காட்சியைப் பார்க்க ஒரு மதிப்பைத் தேர்ந்தெடுக்கவும்"
+  },
   "ui/legacy/components/data_grid/ShowMoreDataGridNode.ts | showAllD": {
     "message": "அனைத்தையும் ({PH1}) காட்டு"
   },
@@ -14852,8 +15686,8 @@
   "ui/legacy/components/object_ui/ObjectPropertiesSection.ts | noProperties": {
     "message": "பண்புகள் இல்லை"
   },
-  "ui/legacy/components/object_ui/ObjectPropertiesSection.ts | revealInMemoryInpector": {
-    "message": "நினைவகக் கண்காணிப்புப் பேனலில் காட்டும்"
+  "ui/legacy/components/object_ui/ObjectPropertiesSection.ts | openInMemoryInpector": {
+    "message": "மெமரி இன்ஸ்பெக்டர் பேனலில் திறக்கும்"
   },
   "ui/legacy/components/object_ui/ObjectPropertiesSection.ts | showAllD": {
     "message": "{PH1} உரை உள்ளடக்கத்தையும் காட்டு"
@@ -14903,8 +15737,14 @@
   "ui/legacy/components/perf_ui/FilmStripView.ts | screenshotForSSelectToView": {
     "message": "{PH1}க்கான ஸ்கிரீன்ஷாட் - முந்தைய கோரிக்கைகளைப் பார்க்க தேர்ந்தெடுக்கவும்."
   },
+  "ui/legacy/components/perf_ui/FlameChart.ts | deleteAnnotations": {
+    "message": "குறிப்புகளை நீக்கு"
+  },
   "ui/legacy/components/perf_ui/FlameChart.ts | enterTrackConfigurationMode": {
     "message": "டிராக்குகளை உள்ளமை…"
+  },
+  "ui/legacy/components/perf_ui/FlameChart.ts | eventSelectedFromGroup": {
+    "message": "{PH2}க்குள் {PH1} நிகழ்வு தேர்ந்தெடுக்கப்பட்டது. இந்த நிகழ்வை ஃபோகஸ் செய்ய \"enter\" அழுத்தவும்."
   },
   "ui/legacy/components/perf_ui/FlameChart.ts | exitTrackConfigurationMode": {
     "message": "டிராக்குகளை உள்ளமைப்பதை நிறைவுசெய்"
@@ -15062,6 +15902,9 @@
   "ui/legacy/components/source_frame/SourceFrame.ts | allowPasting": {
     "message": "ஒட்டுவதை அனுமதி"
   },
+  "ui/legacy/components/source_frame/SourceFrame.ts | binaryContentError": {
+    "message": "எடிட்டரால் பைனரித் தரவைக் காட்ட முடியது. இந்த ரிசோர்ஸை ஆய்வு செய்ய \"நெட்வொர்க்\" பேனலில் உள்ள “பதிலளித்தல்” பக்கத்தைப் பயன்படுத்தவும்."
+  },
   "ui/legacy/components/source_frame/SourceFrame.ts | bytecodePositionXs": {
     "message": "பைட்கோடின் நிலை 0x{PH1}"
   },
@@ -15161,8 +16004,8 @@
   "ui/legacy/components/utils/JSPresentationUtils.ts | showLess": {
     "message": "குறைவாகக் காட்டு"
   },
-  "ui/legacy/components/utils/JSPresentationUtils.ts | showSMoreFrames": {
-    "message": "{n,plural, =1{மேலும் # ஃபிரேமைக் காட்டு}other{மேலும் # ஃபிரேம்களைக் காட்டு}}"
+  "ui/legacy/components/utils/JSPresentationUtils.ts | showMoreFrames": {
+    "message": "தவிர்க்க வேண்டியவற்றின் பட்டியலில் உள்ள ஃபிரேம்களைக் காட்டு"
   },
   "ui/legacy/components/utils/JSPresentationUtils.ts | unknownSource": {
     "message": "தெரியவில்லை"

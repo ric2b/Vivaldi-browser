@@ -1257,7 +1257,9 @@ static inline void ensure_mv_buffer(RefCntBuffer *buf, AV1_COMMON *cm) {
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void cfl_init(CFL_CTX *cfl, const SequenceHeader *seq_params);
+#endif
 
 static inline int av1_num_planes(const AV1_COMMON *cm) {
   return cm->seq_params->monochrome ? 1 : MAX_MB_PLANE;
@@ -1300,7 +1302,9 @@ static inline void av1_init_macroblockd(AV1_COMMON *cm, MACROBLOCKD *xd) {
   }
   xd->mi_stride = cm->mi_params.mi_stride;
   xd->error_info = cm->error;
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
   cfl_init(&xd->cfl, cm->seq_params);
+#endif
 }
 
 static inline void set_entropy_context(MACROBLOCKD *xd, int mi_row, int mi_col,

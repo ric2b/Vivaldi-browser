@@ -32,11 +32,12 @@ TEST(safe_struct, basic) {
     }
     ASSERT_EQ(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, safe_info.sType);
     ASSERT_EQ(0, strcmp("test", safe_info.pApplicationInfo->pApplicationName));
-    ASSERT_EQ(42, safe_info.pApplicationInfo->applicationVersion);
+    ASSERT_EQ(42u, safe_info.pApplicationInfo->applicationVersion);
 
     auto debug_ci = vku::FindStructInPNextChain<VkDebugUtilsMessengerCreateInfoEXT>(safe_info.pNext);
     ASSERT_NE(nullptr, debug_ci);
-    ASSERT_EQ(VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT, debug_ci->messageSeverity);
+    ASSERT_EQ(static_cast<VkDebugUtilsMessageSeverityFlagsEXT>(VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT),
+              debug_ci->messageSeverity);
 }
 
 TEST(safe_struct, safe_void_pointer_copies) {
@@ -111,11 +112,11 @@ TEST(safe_struct, custom_safe_pnext_copy) {
 
         auto safe_pri = reinterpret_cast<const vku::safe_VkPipelineRenderingCreateInfo *>(safe_gpci.pNext);
         // Ensure original input struct was not modified
-        ASSERT_EQ(pri.colorAttachmentCount, 1);
+        ASSERT_EQ(pri.colorAttachmentCount, 1u);
         ASSERT_EQ(pri.pColorAttachmentFormats, &format);
 
         // Ensure safe struct was modified
-        ASSERT_EQ(safe_pri->colorAttachmentCount, 0);
+        ASSERT_EQ(safe_pri->colorAttachmentCount, 0u);
         ASSERT_EQ(safe_pri->pColorAttachmentFormats, nullptr);
     }
 
@@ -129,11 +130,11 @@ TEST(safe_struct, custom_safe_pnext_copy) {
         auto safe_gpl_info = reinterpret_cast<const vku::safe_VkGraphicsPipelineLibraryCreateInfoEXT *>(safe_gpci.pNext);
         auto safe_pri = reinterpret_cast<const vku::safe_VkPipelineRenderingCreateInfo *>(safe_gpl_info->pNext);
         // Ensure original input struct was not modified
-        ASSERT_EQ(pri.colorAttachmentCount, 1);
+        ASSERT_EQ(pri.colorAttachmentCount, 1u);
         ASSERT_EQ(pri.pColorAttachmentFormats, &format);
 
         // Ensure safe struct was modified
-        ASSERT_EQ(safe_pri->colorAttachmentCount, 0);
+        ASSERT_EQ(safe_pri->colorAttachmentCount, 0u);
         ASSERT_EQ(safe_pri->pColorAttachmentFormats, nullptr);
     }
 
@@ -148,11 +149,11 @@ TEST(safe_struct, custom_safe_pnext_copy) {
 
         auto safe_pri = reinterpret_cast<const vku::safe_VkPipelineRenderingCreateInfo *>(safe_gpci.pNext);
         // Ensure original input struct was not modified
-        ASSERT_EQ(pri.colorAttachmentCount, 1);
+        ASSERT_EQ(pri.colorAttachmentCount, 1u);
         ASSERT_EQ(pri.pColorAttachmentFormats, &format);
 
         // Ensure safe struct was modified
-        ASSERT_EQ(safe_pri->colorAttachmentCount, 1);
+        ASSERT_EQ(safe_pri->colorAttachmentCount, 1u);
         ASSERT_EQ(*safe_pri->pColorAttachmentFormats, format);
     }
 }
@@ -167,7 +168,7 @@ TEST(safe_struct, extension_add_remove) {
     ci.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
 
     vku::safe_VkDeviceCreateInfo safe_ci(&ci);
-    ASSERT_EQ(3, vku::FindExtension(safe_ci, "VK_KHR_maintenance4"));
+    ASSERT_EQ(3u, vku::FindExtension(safe_ci, "VK_KHR_maintenance4"));
     ASSERT_EQ(safe_ci.enabledExtensionCount, vku::FindExtension(safe_ci, "VK_KHR_maintenance0"));
 
     ASSERT_EQ(false, vku::RemoveExtension(safe_ci, "VK_KHR_maintenance0"));
@@ -179,7 +180,7 @@ TEST(safe_struct, extension_add_remove) {
     }
     ASSERT_EQ(false, vku::RemoveExtension(safe_ci, "VK_KHR_maintenance0"));
 
-    ASSERT_EQ(0, safe_ci.enabledExtensionCount);
+    ASSERT_EQ(0u, safe_ci.enabledExtensionCount);
     ASSERT_EQ(nullptr, safe_ci.ppEnabledExtensionNames);
 
     for (const auto &ext : extensions) {

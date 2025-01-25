@@ -25,6 +25,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_service_test.h"
+#include "chrome/browser/apps/link_capturing/link_capturing_features.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/preloading/prerender/prerender_utils.h"
@@ -427,6 +428,11 @@ IN_PROC_BROWSER_TEST_P(HostedOrWebAppTest, DISABLED_OpenLinkInNewTab) {
 #define MAYBE_CtrlClickLink CtrlClickLink
 #endif
 IN_PROC_BROWSER_TEST_P(HostedOrWebAppTest, MAYBE_CtrlClickLink) {
+  if (apps::features::IsNavigationCapturingReimplEnabled() &&
+      GetParam() == AppType::WEB_APP) {
+    GTEST_SKIP() << "Ctrl-click tests for web apps are thoroughly handled in "
+                    "WebAppLinkCapturingParameterizedBrowserTest";
+  }
   WaitUntilBrowserBecomeActiveOrLastActive(browser());
   ExpectBrowserBecomesActiveOrLastActive(browser());
 
@@ -616,6 +622,7 @@ IN_PROC_BROWSER_TEST_P(HostedAppTestWithPrerendering, EffectiveUrlOnTrigger) {
           ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
                                     ui::PAGE_TRANSITION_FROM_ADDRESS_BAR),
           /*should_warm_up_compositor=*/false,
+          /*should_prepare_paint_tree=*/false,
           content::PreloadingHoldbackStatus::kUnspecified,
           /*preloading_attempt=*/nullptr, /*url_match_predicate=*/{},
           /*prerender_navigation_handle_callback=*/{});
@@ -636,15 +643,11 @@ IN_PROC_BROWSER_TEST_P(HostedAppTestWithPrerendering,
   // Start prerendering for the app URL on the non-app's context. This should
   // fail as the app URL has the effective URL.
   std::unique_ptr<content::PrerenderHandle> prerender_handle =
-      GetNonAppWebContents()->StartPrerendering(
+      prerender_helper().AddEmbedderTriggeredPrerenderAsync(
           app_url, content::PreloadingTriggerType::kEmbedder,
           prerender_utils::kDirectUrlInputMetricSuffix,
           ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
-                                    ui::PAGE_TRANSITION_FROM_ADDRESS_BAR),
-          /*should_warm_up_compositor=*/false,
-          content::PreloadingHoldbackStatus::kUnspecified,
-          /*preloading_attempt=*/nullptr, /*url_match_predicate=*/{},
-          /*prerender_navigation_handle_callback=*/{});
+                                    ui::PAGE_TRANSITION_FROM_ADDRESS_BAR));
   EXPECT_FALSE(prerender_handle);
 
   histogram_tester().ExpectUniqueSample(
@@ -664,15 +667,11 @@ IN_PROC_BROWSER_TEST_P(HostedAppTestWithPrerendering,
   // Start prerendering for the URL that redirected to the app URL on the
   // non-app's context. This should fail as the final URL has the effective URL.
   std::unique_ptr<content::PrerenderHandle> prerender_handle =
-      GetNonAppWebContents()->StartPrerendering(
+      prerender_helper().AddEmbedderTriggeredPrerenderAsync(
           prerendering_url, content::PreloadingTriggerType::kEmbedder,
           prerender_utils::kDirectUrlInputMetricSuffix,
           ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
-                                    ui::PAGE_TRANSITION_FROM_ADDRESS_BAR),
-          /*should_warm_up_compositor=*/false,
-          content::PreloadingHoldbackStatus::kUnspecified,
-          /*preloading_attempt=*/nullptr, /*url_match_predicate=*/{},
-          /*prerender_navigation_handle_callback=*/{});
+                                    ui::PAGE_TRANSITION_FROM_ADDRESS_BAR));
   EXPECT_TRUE(prerender_handle);
   content::FrameTreeNodeId host_id =
       prerender_helper().GetHostForUrl(prerendering_url);
@@ -691,15 +690,11 @@ IN_PROC_BROWSER_TEST_P(HostedAppTestWithPrerendering,
 
   // Start prerendering for the app URL on the non-app's context.
   std::unique_ptr<content::PrerenderHandle> prerender_handle =
-      GetNonAppWebContents()->StartPrerendering(
+      prerender_helper().AddEmbedderTriggeredPrerenderAsync(
           app_url, content::PreloadingTriggerType::kEmbedder,
           prerender_utils::kDirectUrlInputMetricSuffix,
           ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
-                                    ui::PAGE_TRANSITION_FROM_ADDRESS_BAR),
-          /*should_warm_up_compositor=*/false,
-          content::PreloadingHoldbackStatus::kUnspecified,
-          /*preloading_attempt=*/nullptr, /*url_match_predicate=*/{},
-          /*prerender_navigation_handle_callback=*/{});
+                                    ui::PAGE_TRANSITION_FROM_ADDRESS_BAR));
   EXPECT_TRUE(prerender_handle);
 
   // Start a hosted app. This makes the app URL have an effective URL.

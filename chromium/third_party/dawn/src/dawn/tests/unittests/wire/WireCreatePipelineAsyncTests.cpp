@@ -26,9 +26,12 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <memory>
+#include <utility>
 
+#include "dawn/common/StringViewUtils.h"
 #include "dawn/dawn_proc.h"
 #include "dawn/native/DawnNative.h"
+#include "dawn/tests/StringViewMatchers.h"
 #include "dawn/tests/unittests/wire/WireFutureTest.h"
 #include "dawn/tests/unittests/wire/WireTest.h"
 #include "dawn/utils/TerribleCommandBuffer.h"
@@ -39,10 +42,12 @@ namespace dawn::wire {
 namespace {
 
 using testing::_;
+using testing::EmptySizedString;
 using testing::InvokeWithoutArgs;
+using testing::NonEmptySizedString;
 using testing::NotNull;
 using testing::Return;
-using testing::StrEq;
+using testing::SizedString;
 
 using WireCreateComputePipelineAsyncTestBase =
     WireFutureTest<WGPUCreateComputePipelineAsyncCallback,
@@ -131,14 +136,16 @@ TEST_P(WireCreateComputePipelineAsyncTest, CreateSuccess) {
 
     EXPECT_CALL(api, OnDeviceCreateComputePipelineAsync2(apiDevice, _, _))
         .WillOnce(InvokeWithoutArgs([&] {
-            api.CallDeviceCreateComputePipelineAsync2Callback(
-                apiDevice, WGPUCreatePipelineAsyncStatus_Success, apiPipeline, "");
+            api.CallDeviceCreateComputePipelineAsync2Callback(apiDevice,
+                                                              WGPUCreatePipelineAsyncStatus_Success,
+                                                              apiPipeline, kEmptyOutputStringView);
         }));
 
     FlushClient();
     FlushFutures();
     ExpectWireCallbacksWhen([&](auto& mockCb) {
-        EXPECT_CALL(mockCb, Call(WGPUCreatePipelineAsyncStatus_Success, NotNull(), StrEq(""), this))
+        EXPECT_CALL(mockCb,
+                    Call(WGPUCreatePipelineAsyncStatus_Success, NotNull(), SizedString(""), this))
             .Times(1);
 
         FlushCallbacks();
@@ -153,14 +160,14 @@ TEST_P(WireCreateComputePipelineAsyncTest, CreateError) {
         .WillOnce(InvokeWithoutArgs([&] {
             api.CallDeviceCreateComputePipelineAsync2Callback(
                 apiDevice, WGPUCreatePipelineAsyncStatus_ValidationError, nullptr,
-                "Some error message");
+                ToOutputStringView("Some error message"));
         }));
 
     FlushClient();
     FlushFutures();
     ExpectWireCallbacksWhen([&](auto& mockCb) {
         EXPECT_CALL(mockCb, Call(WGPUCreatePipelineAsyncStatus_ValidationError, _,
-                                 StrEq("Some error message"), this))
+                                 SizedString("Some error message"), this))
             .Times(1);
 
         FlushCallbacks();
@@ -173,14 +180,16 @@ TEST_P(WireCreateRenderPipelineAsyncTest, CreateSuccess) {
 
     EXPECT_CALL(api, OnDeviceCreateRenderPipelineAsync2(apiDevice, _, _))
         .WillOnce(InvokeWithoutArgs([&] {
-            api.CallDeviceCreateRenderPipelineAsync2Callback(
-                apiDevice, WGPUCreatePipelineAsyncStatus_Success, apiPipeline, "");
+            api.CallDeviceCreateRenderPipelineAsync2Callback(apiDevice,
+                                                             WGPUCreatePipelineAsyncStatus_Success,
+                                                             apiPipeline, kEmptyOutputStringView);
         }));
 
     FlushClient();
     FlushFutures();
     ExpectWireCallbacksWhen([&](auto& mockCb) {
-        EXPECT_CALL(mockCb, Call(WGPUCreatePipelineAsyncStatus_Success, NotNull(), StrEq(""), this))
+        EXPECT_CALL(mockCb, Call(WGPUCreatePipelineAsyncStatus_Success, NotNull(),
+                                 EmptySizedString(), this))
             .Times(1);
 
         FlushCallbacks();
@@ -195,14 +204,14 @@ TEST_P(WireCreateRenderPipelineAsyncTest, CreateError) {
         .WillOnce(InvokeWithoutArgs([&] {
             api.CallDeviceCreateRenderPipelineAsync2Callback(
                 apiDevice, WGPUCreatePipelineAsyncStatus_ValidationError, nullptr,
-                "Some error message");
+                ToOutputStringView("Some error message"));
         }));
 
     FlushClient();
     FlushFutures();
     ExpectWireCallbacksWhen([&](auto& mockCb) {
         EXPECT_CALL(mockCb, Call(WGPUCreatePipelineAsyncStatus_ValidationError, _,
-                                 StrEq("Some error message"), this))
+                                 SizedString("Some error message"), this))
             .Times(1);
 
         FlushCallbacks();
@@ -216,14 +225,15 @@ TEST_P(WireCreateRenderPipelineAsyncTest, CreateThenDisconnect) {
 
     EXPECT_CALL(api, OnDeviceCreateRenderPipelineAsync2(apiDevice, _, _))
         .WillOnce(InvokeWithoutArgs([&] {
-            api.CallDeviceCreateRenderPipelineAsync2Callback(
-                apiDevice, WGPUCreatePipelineAsyncStatus_Success, apiPipeline, "");
+            api.CallDeviceCreateRenderPipelineAsync2Callback(apiDevice,
+                                                             WGPUCreatePipelineAsyncStatus_Success,
+                                                             apiPipeline, kEmptyOutputStringView);
         }));
 
     FlushClient();
     ExpectWireCallbacksWhen([&](auto& mockCb) {
-        EXPECT_CALL(mockCb,
-                    Call(WGPUCreatePipelineAsyncStatus_InstanceDropped, nullptr, NotNull(), this))
+        EXPECT_CALL(mockCb, Call(WGPUCreatePipelineAsyncStatus_InstanceDropped, nullptr,
+                                 NonEmptySizedString(), this))
             .Times(1);
 
         GetWireClient()->Disconnect();
@@ -237,14 +247,15 @@ TEST_P(WireCreateComputePipelineAsyncTest, CreateThenDisconnect) {
 
     EXPECT_CALL(api, OnDeviceCreateComputePipelineAsync2(apiDevice, _, _))
         .WillOnce(InvokeWithoutArgs([&] {
-            api.CallDeviceCreateComputePipelineAsync2Callback(
-                apiDevice, WGPUCreatePipelineAsyncStatus_Success, apiPipeline, "");
+            api.CallDeviceCreateComputePipelineAsync2Callback(apiDevice,
+                                                              WGPUCreatePipelineAsyncStatus_Success,
+                                                              apiPipeline, kEmptyOutputStringView);
         }));
 
     FlushClient();
     ExpectWireCallbacksWhen([&](auto& mockCb) {
-        EXPECT_CALL(mockCb,
-                    Call(WGPUCreatePipelineAsyncStatus_InstanceDropped, nullptr, NotNull(), this))
+        EXPECT_CALL(mockCb, Call(WGPUCreatePipelineAsyncStatus_InstanceDropped, nullptr,
+                                 NonEmptySizedString(), this))
             .Times(1);
 
         GetWireClient()->Disconnect();
@@ -257,8 +268,8 @@ TEST_P(WireCreateRenderPipelineAsyncTest, CreateAfterDisconnect) {
     GetWireClient()->Disconnect();
 
     ExpectWireCallbacksWhen([&](auto& mockCb) {
-        EXPECT_CALL(mockCb,
-                    Call(WGPUCreatePipelineAsyncStatus_InstanceDropped, nullptr, NotNull(), this))
+        EXPECT_CALL(mockCb, Call(WGPUCreatePipelineAsyncStatus_InstanceDropped, nullptr,
+                                 NonEmptySizedString(), this))
             .Times(1);
 
         DeviceCreateRenderPipelineAsync(cDevice, &mDescriptor, this);
@@ -271,8 +282,8 @@ TEST_P(WireCreateComputePipelineAsyncTest, CreateAfterDisconnect) {
     GetWireClient()->Disconnect();
 
     ExpectWireCallbacksWhen([&](auto& mockCb) {
-        EXPECT_CALL(mockCb,
-                    Call(WGPUCreatePipelineAsyncStatus_InstanceDropped, nullptr, NotNull(), this))
+        EXPECT_CALL(mockCb, Call(WGPUCreatePipelineAsyncStatus_InstanceDropped, nullptr,
+                                 NonEmptySizedString(), this))
             .Times(1);
 
         DeviceCreateComputePipelineAsync(cDevice, &mDescriptor, this);
@@ -309,52 +320,43 @@ TEST(WireCreatePipelineAsyncTestNullBackend, ServerDeletedBeforeCallback) {
     dawnProcSetProcs(&dawn::wire::client::GetProcs());
 
     auto reserved = wireClient->ReserveInstance();
-    WGPUInstance instance = reserved.instance;
+    wgpu::Instance instance = wgpu::Instance::Acquire(reserved.instance);
     wireServer->InjectInstance(dawn::native::GetProcs().createInstance(nullptr), reserved.handle);
 
-    WGPURequestAdapterOptions adapterOptions = {};
-    adapterOptions.backendType = WGPUBackendType_Null;
+    wgpu::RequestAdapterOptions adapterOptions = {};
+    adapterOptions.backendType = wgpu::BackendType::Null;
 
-    WGPUAdapter adapter;
-    wgpuInstanceRequestAdapter(
-        instance, &adapterOptions,
-        [](WGPURequestAdapterStatus status, WGPUAdapter adapter, const char*, void* userdata) {
-            *static_cast<WGPUAdapter*>(userdata) = adapter;
-        },
-        &adapter);
+    wgpu::Adapter adapter;
+    instance.RequestAdapter(&adapterOptions, wgpu::CallbackMode::AllowSpontaneous,
+                            [&adapter](wgpu::RequestAdapterStatus, wgpu::Adapter result,
+                                       wgpu::StringView) { adapter = std::move(result); });
     ASSERT_TRUE(c2sBuf->Flush());
     ASSERT_TRUE(s2cBuf->Flush());
 
-    WGPUDeviceDescriptor deviceDesc = {};
-    WGPUDevice device;
-    wgpuAdapterRequestDevice(
-        adapter, &deviceDesc,
-        [](WGPURequestDeviceStatus status, WGPUDevice device, const char*, void* userdata) {
-            *static_cast<WGPUDevice*>(userdata) = device;
-        },
-        &device);
+    wgpu::DeviceDescriptor deviceDesc = {};
+    wgpu::Device device;
+    adapter.RequestDevice(&deviceDesc, wgpu::CallbackMode::AllowSpontaneous,
+                          [&device](wgpu::RequestDeviceStatus, wgpu::Device result,
+                                    wgpu::StringView) { device = std::move(result); });
     ASSERT_TRUE(c2sBuf->Flush());
     ASSERT_TRUE(s2cBuf->Flush());
 
-    WGPUShaderSourceWGSL wgslDesc = {};
-    wgslDesc.chain.sType = WGPUSType_ShaderSourceWGSL;
-    wgslDesc.code = "@compute @workgroup_size(64) fn main() {}";
+    wgpu::ShaderSourceWGSL wgslDesc = {};
+    wgslDesc.code.data = "@compute @workgroup_size(64) fn main() {}";
 
-    WGPUShaderModuleDescriptor smDesc = {};
-    smDesc.nextInChain = &wgslDesc.chain;
+    wgpu::ShaderModuleDescriptor smDesc = {};
+    smDesc.nextInChain = &wgslDesc;
 
-    WGPUShaderModule sm = wgpuDeviceCreateShaderModule(device, &smDesc);
+    wgpu::ShaderModule sm = device.CreateShaderModule(&smDesc);
 
-    WGPUComputePipelineDescriptor computeDesc = {};
+    wgpu::ComputePipelineDescriptor computeDesc = {};
     computeDesc.compute.module = sm;
 
-    WGPUComputePipeline pipeline = nullptr;
-    wgpuDeviceCreateComputePipelineAsync(
-        device, &computeDesc,
-        [](WGPUCreatePipelineAsyncStatus status, WGPUComputePipeline pipeline, const char* message,
-           void* userdata) { *static_cast<WGPUComputePipeline*>(userdata) = pipeline; },
-        &pipeline);
-
+    wgpu::ComputePipeline pipeline;
+    device.CreateComputePipelineAsync(
+        &computeDesc, wgpu::CallbackMode::AllowSpontaneous,
+        [&pipeline](wgpu::CreatePipelineAsyncStatus, wgpu::ComputePipeline result,
+                    wgpu::StringView) { pipeline = std::move(result); });
     ASSERT_TRUE(c2sBuf->Flush());
 
     // Delete the server. It should force async work to complete.
@@ -364,11 +366,11 @@ TEST(WireCreatePipelineAsyncTestNullBackend, ServerDeletedBeforeCallback) {
     ASSERT_TRUE(s2cBuf->Flush());
     ASSERT_NE(pipeline, nullptr);
 
-    wgpuComputePipelineRelease(pipeline);
-    wgpuShaderModuleRelease(sm);
-    wgpuDeviceRelease(device);
-    wgpuAdapterRelease(adapter);
-    wgpuInstanceRelease(instance);
+    pipeline = nullptr;
+    sm = nullptr;
+    device = nullptr;
+    adapter = nullptr;
+    instance = nullptr;
 
     s2cBuf->SetHandler(nullptr);
 }

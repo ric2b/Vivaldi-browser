@@ -74,6 +74,7 @@
 #include "browser/vivaldi_webcontents_util.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
+#include "extensions/api/guest_view/parent_tab_user_data.h"
 #include "extensions/api/guest_view/vivaldi_web_view_constants.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/helper/vivaldi_init_helpers.h"
@@ -220,7 +221,7 @@ static std::string ContentSettingsTypeToString(
     case ContentSettingsType::POPUPS:
       return "popups";
     case ContentSettingsType::GEOLOCATION:
-      return "location";
+      return "geolocation";
     case ContentSettingsType::MIXEDSCRIPT:
       return "mixed-script";
     case ContentSettingsType::PROTOCOL_HANDLERS:
@@ -818,7 +819,80 @@ void WebViewGuest::SetIsNavigatingAwayFromVivaldiUI(bool away) {
 void WebViewGuest::VivaldiCreateWebContents(
     std::unique_ptr<GuestViewBase> owned_this,
     const base::Value::Dict& create_params,
-    WebContentsCreatedCallback webcontentents_created_callback) {
+    GuestPageCreatedCallback guestpage_created_callback) {
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  content::BrowserContext* context = browser_context();
+  std::unique_ptr<WebContents> new_contents;
+
+  // Optimize for the most common path.
+  if (auto tab_id = create_params.FindInt("tab_id")) {
+    // If we created the WebContents through CreateNewWindow and created this
+    // guest with InitWithWebContents we cannot delete the tabstrip contents,
+    // and we don't need to recreate the webcontents either. Just use the
+    // WebContents owned by the tab-strip.
+    content::WebContents* tabstrip_contents = nullptr;
+    bool include_incognito = true;
+    WindowController* browser;
+    int tab_index;
+
+    if (extensions::ExtensionTabUtil::GetTabById(
+            *tab_id, profile, include_incognito, &browser,
+            &tabstrip_contents, &tab_index)) {
+      new_contents.reset(
+          tabstrip_contents);  // Tabstrip must not lose ownership. Will
+                               // override and release in
+                               // ClearOwnedGuestContents
+      // Make sure we clean up WebViewguests with the same webcontents.
+      extensions::WebViewGuest* web_view_guest =
+          extensions::WebViewGuest::FromWebContents(tabstrip_contents);
+      if (web_view_guest) {
+        zoom::ZoomController::FromWebContents(tabstrip_contents)
+            ->RemoveObserver(web_view_guest);
+
+        web_view_guest->GetJavaScriptDialogManager(tabstrip_contents)
+            ->CancelDialogs(tabstrip_contents, false);
+        // To avoid chromium patches. No other reason.
+        static_cast<content::WebContentsImpl*>(tabstrip_contents)
+            ->SetJavaScriptDialogManager(nullptr);
+
+        web_view_guest->WebContentsDestroyed();
+      }
+
+      std::optional<int> parent_tab_id = create_params.FindInt("parent_tab_id");
+      if (parent_tab_id) {
+        auto* tab_data = ::vivaldi::ParentTabUserData::GetParentTabUserData(
+            new_contents.get());
+        tab_data->SetParentTabId(*parent_tab_id);
+      }
+
+      CreatePluginGuest(new_contents.get());
+
+      // Fire a WebContentsCreated event informing the client that script-
+      // injection can be done.
+      SendEventToView(*this, webview::kEventWebContentsCreated,
+                      base::Value::Dict());
+
+      AttachWebContentsObservers(new_contents.get());
+
+      std::move(guestpage_created_callback)
+          .Run(std::move(owned_this), std::move(new_contents));
+
+      return;
+
+    }
+    // Should not happen that a tab-id lookup should fail.
+    // Investigate any reports as soon as possible. The tabstrip
+    // must have the index it has reported it has.
+    LOG(ERROR)
+        << "WebViewGuest::VivaldiCreateWebContents lookup failed for tab_id: "
+        << *tab_id;
+    new_contents.reset(); // Just to be on the safe side, to make sure it is nullptr
+    std::move(guestpage_created_callback)
+        .Run(std::move(owned_this), std::move(new_contents));
+    return;
+  }
+
   RenderProcessHost* owner_render_process_host =
       owner_web_contents()->GetPrimaryMainFrame()->GetProcess();
   // browser_context_ is always owner_web_contents->GetBrowserContext().
@@ -834,8 +908,8 @@ void WebViewGuest::VivaldiCreateWebContents(
   if (!base::IsStringUTF8(storage_partition_id)) {
     bad_message::ReceivedBadMessage(owner_render_process_host,
                                     bad_message::WVG_PARTITION_ID_NOT_UTF8);
-    std::move(webcontentents_created_callback)
-        .Run(std::move(owned_this), nullptr);
+    std::move(guestpage_created_callback)
+        .Run(std::move(owned_this), std::unique_ptr<content::WebContents>());
     return;
   }
   std::string partition_domain = GetOwnerSiteURL().host();
@@ -893,64 +967,7 @@ void WebViewGuest::VivaldiCreateWebContents(
         browser_context(), partition_config);
   }
 
-  std::unique_ptr<WebContents> new_contents;
-
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  content::BrowserContext* context = browser_context();
-  if (auto tab_id = create_params.FindInt("tab_id")) {
-    // If we created the WebContents through CreateNewWindow and created this
-    // guest with InitWithWebContents we cannot delete the tabstrip contents,
-    // and we don't need to recreate the webcontents either. Just use the
-    // WebContents owned by the tab-strip.
-    content::WebContents* tabstrip_contents = nullptr;
-    bool include_incognito = true;
-    Browser* browser;
-    int tab_index;
-
-    if (extensions::ExtensionTabUtil::GetTabById(
-            *tab_id, profile, include_incognito, &browser, nullptr,
-            &tabstrip_contents, &tab_index)) {
-      new_contents.reset(
-          tabstrip_contents);  // Tabstrip must not lose ownership. Will
-                               // override and release in
-                               // ClearOwnedGuestContents
-
-      // Make sure we clean up WebViewguests with the same webcontents.
-      extensions::WebViewGuest* web_view_guest =
-          extensions::WebViewGuest::FromWebContents(tabstrip_contents);
-      if (web_view_guest) {
-        zoom::ZoomController::FromWebContents(tabstrip_contents)
-            ->RemoveObserver(web_view_guest);
-
-        web_view_guest->GetJavaScriptDialogManager(tabstrip_contents)
-            ->CancelDialogs(tabstrip_contents, false);
-        // To avoid chromium patches. No other reason.
-        static_cast<content::WebContentsImpl*>(tabstrip_contents)
-            ->SetJavaScriptDialogManager(nullptr);
-
-        web_view_guest->WebContentsDestroyed();
-      }
-
-      CreatePluginGuest(new_contents.get());
-
-      // Fire a WebContentsCreated event informing the client that script-
-      // injection can be done.
-      SendEventToView(*this, webview::kEventWebContentsCreated,
-                      base::Value::Dict());
-    } else {
-      if (!guest_site_instance) {
-        // Create the SiteInstance in a new BrowsingInstance, which will ensure
-        // that webview tags are also not allowed to send messages across
-        // different partitions.
-        guest_site_instance =
-            content::SiteInstance::CreateForURL(browser_context(), guest_site);
-      }
-      WebContents::CreateParams params(browser_context(),
-                                       std::move(guest_site_instance));
-      params.guest_delegate = this;
-      new_contents = WebContents::Create(params);
-    }
-  } else if ((tab_id = create_params.FindInt("inspect_tab_id"))) {
+  if (auto tab_id = create_params.FindInt("inspect_tab_id")) {
     // We want to attach this guest view to the already existing WebContents
     // currently used for DevTools.
     if (inspecting_tab_id_ == 0 || inspecting_tab_id_ != *tab_id) {
@@ -987,8 +1004,9 @@ void WebViewGuest::VivaldiCreateWebContents(
         DCHECK(devtools_contents);
         if (!devtools_contents) {
           // TODO(tomas@vivaldi.com): Band-aid for VB-48293
-          std::move(webcontentents_created_callback)
-              .Run(std::move(owned_this), nullptr);
+          std::move(guestpage_created_callback)
+              .Run(std::move(owned_this),
+                   std::unique_ptr<content::WebContents>());
           return;
         }
         content::WebContentsImpl* contents =
@@ -1026,6 +1044,8 @@ void WebViewGuest::VivaldiCreateWebContents(
       }
     }
   } else {
+    // This is for opening content for webviews used in various parts in our ui.
+    // Devtools and extension popups.
     if (auto* window_id = create_params.FindString(webview::kWindowID)) {
       int windowId = atoi(window_id->c_str());
       BrowserList* list = BrowserList::GetInstance();
@@ -1097,7 +1117,7 @@ void WebViewGuest::VivaldiCreateWebContents(
             new_contents.get(),
             std::make_unique<PageSpecificContentSettingsDelegate>(
                 new_contents.get()));
-
+        // TODO: Is this used for panels now that it is owned by the tabstrip?
         if (view_name && IsPanelId(*view_name)) {
           VivaldiPanelHelper::CreateForWebContents(new_contents.get(), *view_name);
         }
@@ -1132,7 +1152,7 @@ void WebViewGuest::VivaldiCreateWebContents(
 
   AttachWebContentsObservers(new_contents.get());
 
-  std::move(webcontentents_created_callback)
+  std::move(guestpage_created_callback)
       .Run(std::move(owned_this), std::move(new_contents));
 }
 

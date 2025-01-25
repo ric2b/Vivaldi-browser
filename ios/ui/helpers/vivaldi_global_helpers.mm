@@ -6,6 +6,7 @@
 #import "app/vivaldi_constants.h"
 #import "base/apple/bundle_locations.h"
 #import "base/apple/foundation_util.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/components/webui/web_ui_url_constants.h"
 #import "url/gurl.h"
 
@@ -40,23 +41,9 @@ using vivaldi::kVivaldiUIScheme;
   return CGRectZero;
 }
 
-
 + (BOOL)isValidOrientation {
   UIDeviceOrientation orientation= [[UIDevice currentDevice] orientation];
   return UIDeviceOrientationIsValidInterfaceOrientation(orientation);
-}
-
-
-+ (BOOL)isiPadOrientationPortrait {
-
-  UIDeviceOrientation orientation= [[UIDevice currentDevice] orientation];
-
-  // If orientation is not valid, show the landscape layout.
-  if (!self.isValidOrientation) {
-    return NO;
-  }
-
-  return UIDeviceOrientationIsPortrait(orientation);
 }
 
 + (BOOL)isDeviceTablet {
@@ -64,61 +51,18 @@ using vivaldi::kVivaldiUIScheme;
       == UIUserInterfaceIdiomPad;
 }
 
-+ (BOOL)isSplitOrSlideOver {
-  if (self.keyWindow) {
-    return (self.keyWindow.frame.size.width !=
-            self.keyWindow.screen.bounds.size.width);
-  }
-  return NO;
++ (BOOL)canShowSidePanelForTraitEnvironment:(id<UITraitEnvironment>)trait {
+  if (!trait)
+    return NO;
+
+  return [self canShowSidePanelForTrait:trait.traitCollection];
 }
 
-+ (IPadLayoutState)iPadLayoutState {
++ (BOOL)canShowSidePanelForTrait:(UITraitCollection*)trait {
+  if (!trait)
+    return NO;
 
-  CGSize screenSize = [self screenSize].size;
-  CGSize windowSize = [self windowSize].size;
-  CGFloat screenWidth = screenSize.width;
-  CGFloat windowWidth = windowSize.width;
-  if (CGSizeEqualToSize(screenSize, windowSize)) {
-    return LayoutStateFullScreen;
-  }
-
-  CGFloat percent = (windowWidth / screenWidth) * 100.0;
-  if (percent <= 55.0 && percent >= 45.0) {
-    // In between 55% and 45% -> 1/2
-    return LayoutStateHalfScreen;
-  } else if (percent > 55.0) {
-    // More than 55% -> 2/3
-    return LayoutStateTwoThirdScreen;
-  } else {
-    // Less than 45% -> 1/3
-    return LayoutStateOneThirdScreen;
-  }
-}
-
-+ (BOOL)isVerticalTraitCompact {
-  UIUserInterfaceSizeClass verticalSizeClass =
-      self.keyWindow.traitCollection.verticalSizeClass;
-  return verticalSizeClass == UIUserInterfaceSizeClassCompact;
-}
-
-+ (BOOL)isHorizontalTraitRegular {
-  UIUserInterfaceSizeClass horizontalSizeClass =
-      self.keyWindow.traitCollection.horizontalSizeClass;
-  return horizontalSizeClass == UIUserInterfaceSizeClassRegular;
-}
-
-+ (BOOL)isVerticalTraitRegular {
-  UIUserInterfaceSizeClass verticalSizeClass =
-      self.keyWindow.traitCollection.verticalSizeClass;
-  return verticalSizeClass == UIUserInterfaceSizeClassRegular;
-}
-
-+ (BOOL)canShowSidePanel {
-  return self.isDeviceTablet &&
-      ((self.isHorizontalTraitRegular && self.isVerticalTraitRegular) ||
-       self.iPadLayoutState == LayoutStateFullScreen ||
-       (self.isHorizontalTraitRegular &&
-        self.iPadLayoutState == LayoutStateTwoThirdScreen));
+  return [self isDeviceTablet] && !IsSplitToolbarMode(trait);
 }
 
 + (UIEdgeInsets)safeAreaInsets {
@@ -152,8 +96,7 @@ using vivaldi::kVivaldiUIScheme;
   CIContext *context =
       [CIContext
           contextWithOptions:@{kCIContextWorkingColorSpace: [NSNull null]}];
-  size_t count = 4;
-  UInt8 bitmap[count];
+  UInt8 bitmap[4];
   [context render:outputImage
          toBitmap:&bitmap
          rowBytes:4
@@ -271,7 +214,14 @@ using vivaldi::kVivaldiUIScheme;
     return nil;
   }
   NSString *host = url.host;
-  return host;
+
+  NSString* replaceRange = @"www.";
+  if (([host length] >= [replaceRange length]) &&
+      ([[host substringToIndex: [replaceRange length]]
+        isEqualToString:replaceRange]))
+    return [host substringFromIndex: [replaceRange length]];
+  else
+    return host;
 }
 
 + (NSComparisonResult)compare:(NSString*)first

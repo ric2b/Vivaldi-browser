@@ -2,24 +2,27 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-CN">
 <translation id="1063263220330818888">隐身搜索</translation>
+<translation id="1097355661841455597">我们很想听听您的想法。</translation>
 <translation id="1137850887415122856">要锁定“隐身”标签，请设置 Touch ID、Face ID 或密码。</translation>
 <translation id="1310184829257917508">要求隐身打开其他应用程序的链接</translation>
-<translation id="1512201558627495343">新建隐身标签</translation>
 <translation id="207677936531967364">新隐身标签</translation>
+<translation id="2418705169960294134">新建隐身标签</translation>
 <translation id="2899836479226240291">将 Vivaldi 设为默认浏览器应用即可自动打开链接。</translation>
-<translation id="3365529507898144230">保存在相册中</translation>
+<translation id="3463990832590571933">在隐身标签页打开图片</translation>
 <translation id="3473652525653758699">新建隐身窗口</translation>
 <translation id="3501504415290398157">使用 <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> 解锁您的隐身标签。</translation>
 <translation id="3692650606013198282">隐身模式打开</translation>
-<translation id="3709782636417497984">在新的隐身标签页中打开</translation>
 <translation id="3981599532037327317">以隐身模式打开 ${url}</translation>
 <translation id="398477389655464998">复制链接到突出显示</translation>
-<translation id="4620246317052452550">您浏览过的网页</translation>
+<translation id="4026745073321351206">🙄发现问题了吗？</translation>
 <translation id="4755216899422789286">在 Vivaldi 中打开链接</translation>
+<translation id="5431239785743546285">您已读过的页面</translation>
 <translation id="6233792867654386826">在 Vivaldi 中打开输入的链接。</translation>
 <translation id="6827597288286078054">隐身搜索</translation>
 <translation id="7307970171564921489">使用 <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> 解锁隐身标签</translation>
 <translation id="7347289093190902150">隐身模式打开？</translation>
 <translation id="7549299604720382000">新建隐身标签</translation>
+<translation id="7920949005883349320">隐私与安全</translation>
+<translation id="8031932676440435547">保存在相册中</translation>
 <translation id="8326104954595890674">新隐身标签</translation>
 </translationbundle>

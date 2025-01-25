@@ -98,7 +98,7 @@ std::vector<T>&& Append(std::vector<T>&& so_far,
   return Append(std::move(so_far), std::move(new_elements)...);
 }
 
-// Creates an empty vector with |size| elements reserved. Intended to be used as
+// Creates an empty vector with `size` elements reserved. Intended to be used as
 // GetEmptyVectorOfSize<T>(sizeof...(variadic_input))
 template <typename T>
 std::vector<T> GetVectorWithCapacity(size_t size) {
@@ -107,7 +107,7 @@ std::vector<T> GetVectorWithCapacity(size_t size) {
   return results;
 }
 
-// Returns true if an element equal to |element| is found in |container|.
+// Returns true if an element equal to `element` is found in `container`.
 // C.begin() must return an iterator to the beginning of C and C.end() must
 // return an iterator to the end.
 template <typename C, typename E>
@@ -116,7 +116,7 @@ bool Contains(const C& container, const E& element) {
          container.end();
 }
 
-// Returns true if any element in |container| returns true for |predicate|.
+// Returns true if any element in `container` returns true for `predicate`.
 // C.begin() must return an iterator to the beginning of C and C.end() must
 // return an iterator to the end.
 template <typename C, typename P>

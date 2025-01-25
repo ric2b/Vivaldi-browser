@@ -10,6 +10,8 @@
 #include "base/no_destructor.h"
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 
+class ProfileIOS;
+
 namespace commerce {
 
 class ShoppingService;
@@ -21,8 +23,8 @@ class ShoppingServiceFactory : public BrowserStateKeyedServiceFactory {
 
   static ShoppingServiceFactory* GetInstance();
 
-  static ShoppingService* GetForBrowserState(web::BrowserState* state);
-  static ShoppingService* GetForBrowserStateIfExists(web::BrowserState* state);
+  static ShoppingService* GetForProfile(ProfileIOS* profile);
+  static ShoppingService* GetForProfileIfExists(ProfileIOS* profile);
 
  private:
   friend class base::NoDestructor<ShoppingServiceFactory>;

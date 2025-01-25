@@ -927,6 +927,9 @@ message ConfigureNetworkRequest {
 
   // The priority of the Network, calculated by shill Manager.
   NetworkPriority priority = 6;
+
+  // The session_id attached to this request. Only for logging purposes.
+  int32 session_id = 7;
 }
 
 // ConfigureNetwork response object.

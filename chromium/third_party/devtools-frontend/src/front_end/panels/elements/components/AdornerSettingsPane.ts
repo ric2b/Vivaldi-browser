@@ -8,7 +8,7 @@ import * as Input from '../../../ui/components/input/input.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import {type AdornerSettingsMap} from './AdornerManager.js';
+import type {AdornerSettingsMap} from './AdornerManager.js';
 import adornerSettingsPaneStyles from './adornerSettingsPane.css.js';
 
 const UIStrings = {
@@ -45,7 +45,6 @@ export interface AdornerSettingsPaneData {
 }
 
 export class AdornerSettingsPane extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-adorner-settings-pane`;
   readonly #shadow = this.attachShadow({mode: 'open'});
   #settings: AdornerSettingsMap = new Map();
 
@@ -109,13 +108,13 @@ export class AdornerSettingsPane extends HTMLElement {
         <div class="setting-list" @change=${this.#onChange}>
           ${settingTemplates}
         </div>
-        <${Buttons.Button.Button.litTagName} aria-label=${i18nString(UIStrings.closeButton)}
+        <devtools-button aria-label=${i18nString(UIStrings.closeButton)}
                                              .iconName=${'cross'}
                                              .size=${Buttons.Button.Size.SMALL}
                                              .title=${i18nString(UIStrings.closeButton)}
                                              .variant=${Buttons.Button.Variant.ICON}
                                              jslog=${VisualLogging.close().track({click: true})}
-                                             @click=${this.hide}></${Buttons.Button.Button.litTagName}>
+                                             @click=${this.hide}></devtools-button>
       </div>
     `, this.#shadow, {
       host: this,

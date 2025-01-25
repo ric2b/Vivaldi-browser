@@ -10,11 +10,10 @@
   flex-grow: 1;
 }
 
-.navigations-wrapper {
+.insight-sets-wrapper {
   display: flex;
   flex-flow: column nowrap;
-  align-items: stretch;
-  height: 100%;
+  flex-grow: 1; /* so it fills the available vertical height in the sidebar */
 
   details {
     flex-grow: 0;
@@ -33,6 +32,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font: var(--sys-typescale-body4-medium);
+    display: flex;
+    align-items: center;
 
     &:focus {
       background-color: var(--sys-color-tonal-container);
@@ -51,8 +52,45 @@
   }
 }
 
-.insights-category-select {
-  width: max-content;
-  margin-top: 10px;
-  margin-left: 10px;
+.zoom-button {
+  margin-left: auto;
+}
+
+.zoom-icon {
+  visibility: hidden;
+
+  &.active devtools-button {
+    visibility: visible;
+  }
+}
+
+.dropdown-icon {
+  &.active devtools-button {
+    transform: rotate(90deg);
+  }
+}
+
+.feedback-wrapper {
+  position: relative;
+  padding: var(--sys-size-6);
+
+  .tooltip {
+    visibility: hidden;
+    transition-property: visibility;
+    position: absolute;
+    bottom: 35px; /* height of button + a little extra padding */
+    width: 90%;
+    max-width: 300px;
+    left: var(--sys-size-6);
+    z-index: 1;
+    box-sizing: border-box;
+    padding: var(--sys-size-5) var(--sys-size-6);
+    border-radius: var(--sys-shape-corner-small);
+    background-color: var(--sys-color-cdt-base-container);
+    box-shadow: var(--drop-shadow-depth-3);
+  }
+
+  devtools-button:hover + .tooltip {
+    visibility: visible;
+  }
 }

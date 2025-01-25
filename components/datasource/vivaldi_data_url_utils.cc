@@ -212,6 +212,6 @@ scoped_refptr<base::RefCountedMemory> ReadFileOnBlockingThread(
     return nullptr;
   }
 
-  return base::RefCountedBytes::TakeVector(&buffer);
+  return base::MakeRefCounted<base::RefCountedBytes>(std::move(buffer));
 }
 }  // namespace vivaldi_data_url_utils

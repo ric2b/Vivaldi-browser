@@ -15,11 +15,13 @@
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
+#include "components/autofill/core/browser/ui/payments/payments_ui_closed_reasons.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
@@ -71,7 +73,7 @@ void SaveCardBubbleViews::Hide() {
   // posted in CloseBubble() completes, but we need to fix references sooner.
   if (controller_) {
     controller_->OnBubbleClosed(
-        GetPaymentsBubbleClosedReasonFromWidget(GetWidget()));
+        GetPaymentsUiClosedReasonFromWidget(GetWidget()));
   }
   controller_ = nullptr;
 }
@@ -95,8 +97,9 @@ void SaveCardBubbleViews::AddedToWidget() {
   if (!controller_->IsUploadSave())
     return;
 
-  GetBubbleFrameView()->SetTitleView(CreateTitleView(
-      GetWindowTitle(), TitleWithIconAndSeparatorView::Icon::GOOGLE_PAY));
+  GetBubbleFrameView()->SetTitleView(
+      std::make_unique<TitleWithIconAfterLabelView>(
+          GetWindowTitle(), TitleWithIconAfterLabelView::Icon::GOOGLE_PAY));
 }
 
 std::u16string SaveCardBubbleViews::GetWindowTitle() const {
@@ -106,7 +109,7 @@ std::u16string SaveCardBubbleViews::GetWindowTitle() const {
 void SaveCardBubbleViews::WindowClosing() {
   if (controller_) {
     controller_->OnBubbleClosed(
-        GetPaymentsBubbleClosedReasonFromWidget(GetWidget()));
+        GetPaymentsUiClosedReasonFromWidget(GetWidget()));
     controller_ = nullptr;
   }
 }
@@ -277,5 +280,8 @@ void SaveCardBubbleViews::Init() {
           : views::DialogContentType::kControl));
   AddChildView(CreateMainContentView());
 }
+
+BEGIN_METADATA(SaveCardBubbleViews)
+END_METADATA
 
 }  // namespace autofill

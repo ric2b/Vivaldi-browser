@@ -153,11 +153,18 @@ TabSearchUI::TabSearchUI(content::WebUI* web_ui)
       {"thumbsDown", IDS_TAB_ORGANIZATION_THUMBS_DOWN},
       {"thumbsUp", IDS_TAB_ORGANIZATION_THUMBS_UP},
       // Declutter UI strings
+      {"closeTabs", IDS_DECLUTTER_CLOSE_TABS},
+      {"declutterCloseTabAriaLabel", IDS_DECLUTTER_CLOSE_TAB_ARIA_LABEL},
+      {"declutterCloseTabTooltip", IDS_DECLUTTER_CLOSE_TAB_TOOLTIP},
+      {"declutterEmptyBody", IDS_DECLUTTER_EMPTY_BODY},
+      {"declutterEmptyTitle", IDS_DECLUTTER_EMPTY_TITLE},
+      {"declutterTimestamp", IDS_DECLUTTER_TIMESTAMP},
       {"declutterTitle", IDS_DECLUTTER_TITLE},
       // Selector UI strings
       {"autoTabGroupsSelectorHeading", IDS_AUTO_TAB_GROUPS_SELECTOR_HEADING},
       {"autoTabGroupsSelectorSubheading",
        IDS_AUTO_TAB_GROUPS_SELECTOR_SUBHEADING},
+      {"backButtonAriaLabel", IDS_TAB_ORGANIZATION_BACK_BUTTON_ARIA_LABEL},
       {"declutterSelectorSubheading", IDS_DECLUTTER_SELECTOR_SUBHEADING},
   };
   source->AddLocalizedStrings(kStrings);
@@ -188,10 +195,12 @@ TabSearchUI::TabSearchUI(content::WebUI* web_ui)
       "tabOrganizationModelStrategyEnabled",
       base::FeatureList::IsEnabled(features::kTabOrganizationModelStrategy));
 
-  source->AddInteger("tabIndex", TabIndex());
   source->AddBoolean("showTabOrganizationFRE", ShowTabOrganizationFRE());
-  source->AddBoolean("declutterEnabled",
-                     features::IsTabstripDeclutterEnabled());
+  source->AddBoolean(
+      "declutterEnabled",
+      features::IsTabstripDeclutterEnabled() && !profile->IsIncognitoProfile());
+  source->AddBoolean("dedupeEnabled", features::IsTabstripDedupeEnabled() &&
+                                          !profile->IsIncognitoProfile());
 
   ui::Accelerator accelerator(ui::VKEY_A,
                               ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR);
@@ -200,11 +209,11 @@ TabSearchUI::TabSearchUI(content::WebUI* web_ui)
   // configurable, replace the hardcoded 7 below with the value of that
   // parameter.
   source->AddString("declutterBody",
-                    l10n_util::GetStringFUTF16(IDS_DECLUTTER_BODY, u"7")),
+                    l10n_util::GetStringFUTF16(IDS_DECLUTTER_BODY, u"7"));
 
-      webui::SetupWebUIDataSource(
-          source, base::make_span(kTabSearchResources, kTabSearchResourcesSize),
-          IDR_TAB_SEARCH_TAB_SEARCH_HTML);
+  webui::SetupWebUIDataSource(
+      source, base::make_span(kTabSearchResources, kTabSearchResourcesSize),
+      IDR_TAB_SEARCH_TAB_SEARCH_HTML);
 
   content::URLDataSource::Add(
       profile, std::make_unique<FaviconSource>(
@@ -274,9 +283,4 @@ void TabSearchUI::CreatePageHandler(
 bool TabSearchUI::ShowTabOrganizationFRE() {
   PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
   return prefs->GetBoolean(tab_search_prefs::kTabOrganizationShowFRE);
-}
-
-int TabSearchUI::TabIndex() {
-  PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
-  return prefs->GetInteger(tab_search_prefs::kTabSearchTabIndex);
 }

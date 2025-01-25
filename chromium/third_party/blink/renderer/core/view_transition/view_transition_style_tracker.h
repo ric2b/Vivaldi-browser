@@ -5,6 +5,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_VIEW_TRANSITION_VIEW_TRANSITION_STYLE_TRACKER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_VIEW_TRANSITION_VIEW_TRANSITION_STYLE_TRACKER_H_
 
+#include <unordered_map>
+
 #include "base/containers/flat_map.h"
 #include "base/unguessable_token.h"
 #include "cc/layers/view_transition_content_layer.h"
@@ -24,6 +26,7 @@
 #include "third_party/blink/renderer/platform/heap/heap_traits.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/geometry/vector2d_f.h"
 
 namespace blink {
 
@@ -59,24 +62,17 @@ class ViewTransitionStyleTracker
  public:
   // Properties that transition on container elements.
   struct ContainerProperties {
-    ContainerProperties() = default;
-    ContainerProperties(const PhysicalSize& size, const gfx::Transform& matrix)
-        : border_box_size_in_css_space(size), snapshot_matrix(matrix) {}
+    bool operator==(const ContainerProperties& other) const = default;
 
-    bool operator==(const ContainerProperties& other) const {
-      return border_box_size_in_css_space ==
-                 other.border_box_size_in_css_space &&
-             snapshot_matrix == other.snapshot_matrix;
-    }
-    bool operator!=(const ContainerProperties& other) const {
-      return !(*this == other);
-    }
-
-    PhysicalSize border_box_size_in_css_space;
+    PhysicalRect border_box_rect_in_css_space;
 
     // Transforms a point from local space into the snapshot viewport. For
     // details of the snapshot viewport, see README.md.
     gfx::Transform snapshot_matrix;
+
+    // This is needed to correctly position nested groups, to ensure the border
+    // is not computed twice when determining their relative transform.
+    gfx::Vector2dF border_offset;
   };
 
   explicit ViewTransitionStyleTracker(
@@ -96,8 +92,12 @@ class ViewTransitionStyleTracker
   // set elements and names is valid. Returns true if capture phase started,
   // and false if the transition should be aborted. If `snap_browser_controls`
   // is set, browser controls will be forced to a fully shown state to ensure a
-  // consistent state for cross-document transitions.
+  // consistent state for cross-document transitiopns.
   bool Capture(bool snap_browser_controls);
+
+  void SetCaptureRectsFromCompositor(
+      const std::unordered_map<viz::ViewTransitionElementResourceId,
+                               gfx::RectF>&);
 
   // Notifies when caching snapshots for elements in the old DOM finishes. This
   // is dispatched before script is notified to ensure this class releases any
@@ -228,6 +228,8 @@ class ViewTransitionStyleTracker
       const AtomicString& name,
       const StyleViewTransitionGroup& group) const;
 
+  AtomicString GenerateAutoName(Element&, const TreeScope*);
+
   struct ElementData : public GarbageCollected<ElementData> {
     void Trace(Visitor* visitor) const;
 
@@ -236,6 +238,8 @@ class ViewTransitionStyleTracker
     gfx::RectF GetCapturedSubrect(bool use_cached_data) const;
     gfx::RectF GetBorderBoxRect(bool use_cached_data,
                                 float device_scale_factor) const;
+
+    bool ShouldPropagateVisualOverflowRectAsMaxExtentsRect() const;
 
     // Caches the current state for the old snapshot.
     void CacheStateForOldSnapshot();
@@ -246,8 +250,8 @@ class ViewTransitionStyleTracker
 
     // Computed info for each element participating in the transition for the
     // |target_element|. This information is mirrored into the UA stylesheet.
-    // This is stored in a vector to be able to stack animations.
-    Vector<ContainerProperties> container_properties;
+    // It is std::nullopt before it is populated for the first time.
+    std::optional<ContainerProperties> container_properties;
 
     // Computed info cached before the DOM switches to the new state.
     ContainerProperties cached_container_properties;
@@ -291,6 +295,10 @@ class ViewTransitionStyleTracker
     Vector<AtomicString> class_list;
 
     AtomicString containing_group_name;
+
+    // Whether effects and box decorations are captured as style or as part of
+    // the snapshot. See https://github.com/w3c/csswg-drafts/issues/10585
+    bool use_layered_capture;
   };
 
   // In physical pixels. Returns the snapshot root rect, relative to the
@@ -411,6 +419,8 @@ class ViewTransitionStyleTracker
     AtomicString contain;
   };
   HashMap<AtomicString, AncestorGroupNames> group_state_map_;
+
+  base::Token token_;
 };
 
 }  // namespace blink

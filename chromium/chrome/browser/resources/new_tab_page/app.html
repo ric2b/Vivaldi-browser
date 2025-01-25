@@ -41,7 +41,7 @@
   ${this.lazyRender_ ? html`
     ${this.shortcutsEnabled_ ? html`
       <cr-most-visited id="mostVisited" .theme="${this.theme_?.mostVisited || null}"
-          ?single-row="${this.singleRowShortcutsEnabled_}" reflow-on-overflow>
+          single-row reflow-on-overflow>
       </cr-most-visited>
     ` : ''}
     ${this.middleSlotPromoEnabled_ ? html`
@@ -51,15 +51,7 @@
       </ntp-middle-slot-promo>
     ` : ''}
     ${this.modulesEnabled_ ? html`
-      ${!this.modulesRedesignedEnabled_ ? html`
-        <ntp-modules id="modules"
-            ?modules-shown-to-user="${this.modulesShownToUser}"
-            @modules-shown-to-user-changed="${this.onModulesShownToUserChanged_}"
-            @customize-module="${this.onCustomizeModule_}"
-            @modules-loaded="${this.onModulesLoaded_}"
-            ?hidden="${!this.promoAndModulesLoaded_}">
-        </ntp-modules>
-      ` : html`
+      ${html`
         <ntp-modules-v2 id="modules"
             ?modules-shown-to-user="${this.modulesShownToUser}"
             @modules-shown-to-user-changed="${this.onModulesShownToUserChanged_}"

@@ -289,12 +289,11 @@ bool CanSupportPersistentLicense() {
 // Remove `kPersistentLicense` support if it's not supported by the platform.
 base::flat_set<CdmSessionType> UpdatePersistentLicenseSupport(
     bool can_persist_data,
-    const base::flat_set<CdmSessionType> session_types) {
-  auto updated_session_types = session_types;
+    base::flat_set<CdmSessionType> session_types) {
   if (!can_persist_data || !CanSupportPersistentLicense()) {
-    updated_session_types.erase(CdmSessionType::kPersistentLicense);
+    session_types.erase(CdmSessionType::kPersistentLicense);
   }
-  return updated_session_types;
+  return session_types;
 }
 
 void AddWidevine(const media::KeySystemCapability& capability,
@@ -495,8 +494,10 @@ void AddMediaFoundationClearKey(
       // MediaFoundation Clear Key Key System uses Windows Media Foundation's
       // decoders. H264 ("avc1.64001E") for video and MP4 AAC ("mp4a.40.2") for
       // audio are always supported. VideoCodec::kH264 is an EME_CODEC_AVC1.
-      // AudioCodec::kAAC is an EME_CODEC_AAC.
-      media::EME_CODEC_AVC1 | media::EME_CODEC_AAC,
+      // AudioCodec::kAAC is an EME_CODEC_AAC. DolbyVision Profile 5
+      // ("dvh1.05.06") and 8.1/8.4 ("dvhe.08.07") are also always supported.
+      media::EME_CODEC_AVC1 | media::EME_CODEC_AAC |
+          media::EME_CODEC_DOLBY_VISION_HEVC,
       // On Windows, MediaFoundation Clear Key CDM requires identifier,
       // persistent state and HW secure codecs. We pretent to require these for
       // testing purposes.

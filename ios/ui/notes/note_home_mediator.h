@@ -8,7 +8,7 @@
 #import "base/memory/raw_ptr.h"
 #import "base/strings/utf_offset_string_conversions.h"
 
-class ChromeBrowserState;
+class ProfileIOS;
 @protocol NoteHomeConsumer;
 @class NoteHomeSharedState;
 
@@ -19,7 +19,7 @@ class ChromeBrowserState;
 @property(nonatomic, weak) id<NoteHomeConsumer> consumer;
 
 - (instancetype)initWithSharedState:(NoteHomeSharedState*)sharedState
-                       browserState:(ChromeBrowserState*)browserState
+                            profile:(ProfileIOS*)profile
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 

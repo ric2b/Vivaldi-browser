@@ -81,6 +81,8 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     private float mChildVerticalTranslation;
     private float mChildAlpha = 1.0f;
 
+    private final int mBaseBottomPadding;
+
     // Vivaldi
     private LocationBarLayout mLocationBarLayout;
     private static Callback mSearchEngineSuggestionCallback;
@@ -271,12 +273,12 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         addOnChildAttachStateChangeListener(mSelectionController);
 
         final Resources resources = context.getResources();
-        int paddingBottom =
+        mBaseBottomPadding =
                 resources.getDimensionPixelOffset(R.dimen.omnibox_suggestion_list_padding_bottom);
         int paddingTop = shouldAnchorToBottom() // Vivaldi
                 ? resources.getDimensionPixelOffset(R.dimen.omnibox_suggestion_list_padding_top)
                 : resources.getDimensionPixelOffset(R.dimen.search_accelerator_height_padding); // Vivaldi
-        this.setPaddingRelative(0, paddingTop, 0, paddingBottom);
+        this.setPaddingRelative(0, paddingTop, 0, mBaseBottomPadding);
 
         if (OmniboxFeatures.sAsyncViewInflation.isEnabled()) {
             setRecycledViewPool(new PreWarmingRecycledViewPool(mAdapter, context));
@@ -661,6 +663,12 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
                 omniboxAlignment.isOnlyHorizontalDifference(mOmniboxAlignment);
         boolean isWidthDifference = omniboxAlignment.doesWidthDiffer(mOmniboxAlignment);
         mOmniboxAlignment = omniboxAlignment;
+        this.setPaddingRelative(
+                getPaddingStart(),
+                getPaddingTop(),
+                getPaddingEnd(),
+                mBaseBottomPadding + mOmniboxAlignment.paddingBottom);
+
         if (isOnlyHorizontalDifference) {
             adjustHorizontalPosition();
             return;

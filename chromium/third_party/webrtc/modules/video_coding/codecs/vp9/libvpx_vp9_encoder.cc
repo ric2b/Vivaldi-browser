@@ -14,39 +14,62 @@
 #ifdef RTC_ENABLE_VP9
 
 #include <algorithm>
-#include <limits>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <iterator>
 #include <optional>
 #include <utility>
 #include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/memory/memory.h"
-#include "absl/strings/match.h"
-#include "api/video/color_space.h"
+#include "absl/container/inlined_vector.h"
+#include "api/array_view.h"
+#include "api/environment/environment.h"
+#include "api/fec_controller_override.h"
+#include "api/field_trials_view.h"
+#include "api/scoped_refptr.h"
+#include "api/transport/rtp/dependency_descriptor.h"
+#include "api/video/encoded_image.h"
 #include "api/video/i010_buffer.h"
+#include "api/video/render_resolution.h"
+#include "api/video/video_bitrate_allocation.h"
+#include "api/video/video_bitrate_allocator.h"
+#include "api/video/video_codec_constants.h"
+#include "api/video/video_codec_type.h"
+#include "api/video/video_frame.h"
+#include "api/video/video_frame_buffer.h"
+#include "api/video/video_frame_type.h"
 #include "api/video_codecs/scalability_mode.h"
-#include "common_video/include/video_frame_buffer.h"
-#include "common_video/libyuv/include/webrtc_libyuv.h"
+#include "api/video_codecs/video_codec.h"
+#include "api/video_codecs/video_encoder.h"
+#include "api/video_codecs/vp9_profile.h"
 #include "modules/rtp_rtcp/include/rtp_rtcp_defines.h"
+#include "modules/video_coding/codecs/interface/common_constants.h"
+#include "modules/video_coding/codecs/interface/libvpx_interface.h"
+#include "modules/video_coding/codecs/vp9/include/vp9.h"
+#include "modules/video_coding/codecs/vp9/include/vp9_globals.h"
 #include "modules/video_coding/codecs/vp9/libvpx_vp9_encoder.h"
+#include "modules/video_coding/include/video_codec_interface.h"
+#include "modules/video_coding/include/video_error_codes.h"
 #include "modules/video_coding/svc/create_scalability_structure.h"
 #include "modules/video_coding/svc/scalability_mode_util.h"
 #include "modules/video_coding/svc/scalable_video_controller.h"
 #include "modules/video_coding/svc/scalable_video_controller_no_layering.h"
 #include "modules/video_coding/svc/svc_rate_allocator.h"
-#include "modules/video_coding/utility/simulcast_utility.h"
-#include "modules/video_coding/utility/vp9_uncompressed_header_parser.h"
+#include "modules/video_coding/utility/framerate_controller_deprecated.h"
 #include "rtc_base/checks.h"
+#include "rtc_base/containers/flat_map.h"
 #include "rtc_base/experiments/field_trial_list.h"
 #include "rtc_base/experiments/field_trial_parser.h"
 #include "rtc_base/experiments/rate_control_settings.h"
 #include "rtc_base/logging.h"
+#include "rtc_base/numerics/safe_conversions.h"
 #include "rtc_base/strings/string_builder.h"
-#include "rtc_base/time_utils.h"
 #include "rtc_base/trace_event.h"
-#include "third_party/libyuv/include/libyuv/convert.h"
 #include "vpx/vp8cx.h"
 #include "vpx/vpx_encoder.h"
+#include "vpx/vpx_image.h"
 
 #if (defined(WEBRTC_ARCH_ARM) || defined(WEBRTC_ARCH_ARM64)) && \
     (defined(WEBRTC_ANDROID) || defined(WEBRTC_IOS))
@@ -229,7 +252,8 @@ void LibvpxVp9Encoder::EncoderOutputCodedPacketCallback(vpx_codec_cx_pkt* pkt,
 LibvpxVp9Encoder::LibvpxVp9Encoder(const Environment& env,
                                    Vp9EncoderSettings settings,
                                    std::unique_ptr<LibvpxInterface> interface)
-    : libvpx_(std::move(interface)),
+    : env_(env),
+      libvpx_(std::move(interface)),
       encoded_image_(),
       encoded_complete_callback_(nullptr),
       profile_(settings.profile),
@@ -528,8 +552,7 @@ int LibvpxVp9Encoder::InitEncode(const VideoCodec* inst,
   }
 
   if (enable_svc_for_simulcast_ && codec_.numberOfSimulcastStreams > 1) {
-    if (!SimulcastUtility::ValidSimulcastParameters(
-            codec_, codec_.numberOfSimulcastStreams)) {
+    if (!SimulcastToSvcConverter::IsConfigSupported(codec_)) {
       return WEBRTC_VIDEO_CODEC_ERR_SIMULCAST_PARAMETERS_NOT_SUPPORTED;
     }
     RTC_LOG(LS_INFO) << "Rewriting simulcast config to SVC.";
@@ -793,7 +816,7 @@ int LibvpxVp9Encoder::InitAndSetControlSettings() {
   RTC_DCHECK_EQ(performance_flags_by_spatial_index_.size(),
                 static_cast<size_t>(num_spatial_layers_));
 
-  SvcRateAllocator init_allocator(codec_);
+  SvcRateAllocator init_allocator(codec_, env_.field_trials());
   current_bitrate_allocation_ =
       init_allocator.Allocate(VideoBitrateAllocationParameters(
           codec_.startBitrate * 1000, codec_.maxFramerate));
@@ -1708,8 +1731,8 @@ void LibvpxVp9Encoder::GetEncodedLayerFrame(const vpx_codec_cx_pkt* pkt) {
 
   TRACE_COUNTER1("webrtc", "EncodedFrameSize", encoded_image_.size());
   encoded_image_.SetRtpTimestamp(input_image_->rtp_timestamp());
-  encoded_image_.SetCaptureTimeIdentifier(
-      input_image_->capture_time_identifier());
+  encoded_image_.SetPresentationTimestamp(
+      input_image_->presentation_timestamp());
   encoded_image_.SetColorSpace(input_image_->color_space());
   encoded_image_._encodedHeight =
       pkt->data.frame.height[layer_id.spatial_layer_id];

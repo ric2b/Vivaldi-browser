@@ -24,7 +24,7 @@
         "type": "object",
         "description": "Represents a specific search engine. Urls and post params should only be used when editing the properties of a TemplateURL",
         "properties": {
-          "id": {
+          "guid": {
             "type": "string"
           },
           "readOnly": {
@@ -117,6 +117,22 @@
             "type": "string"
           }
         }
+      },
+      {
+        "id": "SwitchPromptData",
+        "type": "object",
+        "properties": {
+          "shouldPrompt": {
+            "description": "True if the user should be prompted to switch search engines.",
+            "type": "boolean"
+          },
+          "currentSearchEngine": {
+            "$ref": "TemplateURL"
+          },
+          "partnerSearchEngine": {
+            "$ref": "TemplateURL"
+          }
+        }
       }
     ],
     "functions": [
@@ -169,7 +185,7 @@
           "name": "callback",
           "parameters": [
             {
-              "name": "id",
+              "name": "guid",
               "type": "string"
             }
           ]
@@ -181,7 +197,7 @@
         "description": "Removes a template url.",
         "parameters": [
           {
-            "name": "id",
+            "name": "guid",
             "type": "string"
           }
         ],
@@ -221,14 +237,14 @@
         "description": "reorders by moving a search engine before another one",
         "parameters": [
           {
-            "name": "id",
+            "name": "guid",
             "description": "The search engine to move",
             "type": "string"
           },
           {
-            "name": "successor_id",
+            "name": "successor_guid",
             "optional": true,
-            "description": "The search engine will be moved before the one with this id or to the end if omitted. Must be different from id.",
+            "description": "The search engine will be moved before the one with this guid or to the end if omitted. Must be different from guid.",
             "type": "string"
           }
         ],
@@ -252,7 +268,7 @@
             "$ref": "DefaultType"
           },
           {
-            "name": "id",
+            "name": "guid",
             "type": "string"
           }
         ],
@@ -272,7 +288,7 @@
         "description": "Provides the request info to use for performing a search",
         "parameters": [
           {
-            "name": "id",
+            "name": "guid",
             "type": "string"
           },
           {
@@ -296,7 +312,7 @@
         "description": "Provides the request info to use for requesting suggestions",
         "parameters": [
           {
-            "name": "id",
+            "name": "guid",
             "type": "string"
           },
           {
@@ -324,6 +340,28 @@
             "type": "boolean"
           }
         ]
+      },
+      {
+        "name": "getSwitchPromptData",
+        "type": "function",
+        "description": "Gathers and returns the needed info for partner search engine switch dialog.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "SwitchPromptData",
+              "description": "Bundle of info about current/partner search engine status."
+            }
+          ]
+        }
+      },
+      {
+        "name": "markSwitchPromptAsSeen",
+        "type": "function",
+        "description": "Mark the current switch search engine prompt as seen.",
+        "parameters": []
       }
     ],
     "events": [

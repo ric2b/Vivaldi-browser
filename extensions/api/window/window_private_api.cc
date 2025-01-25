@@ -36,6 +36,7 @@
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/api/zoom/zoom_api.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "extensions/vivaldi_associated_tabs.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "ui/window_registry_service.h"
@@ -59,13 +60,13 @@ WindowType ConvertToJSWindowType(VivaldiBrowserWindow::WindowType type) {
 }
 
 using vivaldi::window_private::WindowState;
-WindowState ConvertToJSWindowState(ui::WindowShowState state) {
+WindowState ConvertToJSWindowState(ui::mojom::WindowShowState state) {
   switch (state) {
-    case ui::SHOW_STATE_FULLSCREEN:
+    case ui::mojom::WindowShowState::kFullscreen:
       return WindowState::kFullscreen;
-    case ui::SHOW_STATE_MAXIMIZED:
+    case ui::mojom::WindowShowState::kMaximized:
       return WindowState::kMaximized;
-    case ui::SHOW_STATE_MINIMIZED:
+    case ui::mojom::WindowShowState::kMinimized:
       return WindowState::kMinimized;
     default:
       return WindowState::kNormal;
@@ -74,23 +75,23 @@ WindowState ConvertToJSWindowState(ui::WindowShowState state) {
   //return WindowState::kNormal;
 }
 
-ui::WindowShowState ConvertToWindowShowState(
+ui::mojom::WindowShowState ConvertToWindowShowState(
     vivaldi::window_private::WindowState state) {
   using vivaldi::window_private::WindowState;
   switch (state) {
     case WindowState::kNormal:
-      return ui::SHOW_STATE_NORMAL;
+      return ui::mojom::WindowShowState::kNormal;
     case WindowState::kMinimized:
-      return ui::SHOW_STATE_MINIMIZED;
+      return ui::mojom::WindowShowState::kMinimized;
     case WindowState::kMaximized:
-      return ui::SHOW_STATE_MAXIMIZED;
+      return ui::mojom::WindowShowState::kMaximized;
     case WindowState::kFullscreen:
-      return ui::SHOW_STATE_FULLSCREEN;
+      return ui::mojom::WindowShowState::kFullscreen;
     case WindowState::kNone:
-      return ui::SHOW_STATE_DEFAULT;
+      return ui::mojom::WindowShowState::kDefault;
   }
   NOTREACHED();
-  //return ui::SHOW_STATE_DEFAULT;
+  //return  ui::mojom::WindowShowState::kDefault;
 }
 }  // namespace vivaldi
 
@@ -218,6 +219,9 @@ void VivaldiBrowserObserver::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
+
+  ::vivaldi::HandleAssociatedTabs(tab_strip_model, change);
+
   if (!selection.active_tab_changed() || !selection.new_contents)
     return;
 
@@ -303,7 +307,8 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
 
   gfx::Rect window_bounds;
 
-  ui::WindowShowState ignored_show_state = ui::SHOW_STATE_DEFAULT;
+  ui::mojom::WindowShowState ignored_show_state =
+      ui::mojom::WindowShowState::kDefault;
   WindowSizer::GetBrowserWindowBoundsAndShowState(
       gfx::Rect(), nullptr, &window_bounds, &ignored_show_state);
 
@@ -348,7 +353,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   window_params.state =
       params->options.state != vivaldi::window_private::WindowState::kNone
     ? vivaldi::ConvertToWindowShowState(params->options.state)
-    : ui::SHOW_STATE_DEFAULT;
+          : ui::mojom::WindowShowState::kDefault;
   window_params.resource_relative_url = std::move(params->url);
   window_params.creator_frame = render_frame_host();
   window_params.window_key = window_key;
@@ -458,7 +463,7 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
     return RespondNow(Error(error));
   }
   Browser* browser = controller->GetBrowser();
-  ui::WindowShowState show_state =
+  ui::mojom::WindowShowState show_state =
       vivaldi::ConvertToWindowShowState(params->state);
 
   // Don't trigger onStateChanged event for changes coming from JS. The
@@ -468,7 +473,7 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
       ->SetWindowState(show_state);
 
   switch (show_state) {
-    case ui::SHOW_STATE_MINIMIZED:
+    case ui::mojom::WindowShowState::kMinimized:
       was_fullscreen = browser->window()->IsFullscreen();
       browser->extension_window_controller()->window()->Minimize();
       if (was_fullscreen) {
@@ -476,7 +481,7 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
             false, extension()->url());
       }
       break;
-    case ui::SHOW_STATE_MAXIMIZED:
+    case ui::mojom::WindowShowState::kMaximized:
       was_fullscreen = browser->window()->IsFullscreen();
 #if BUILDFLAG(IS_MAC)
       // NOTE(bjorgvin@vivaldi.com): VB-82933 SetFullscreenMode has to be after
@@ -496,11 +501,11 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
       browser->extension_window_controller()->window()->Maximize();
 #endif
       break;
-    case ui::SHOW_STATE_FULLSCREEN:
+    case ui::mojom::WindowShowState::kFullscreen:
       browser->extension_window_controller()->SetFullscreenMode(
           true, extension()->url());
       break;
-    case ui::SHOW_STATE_NORMAL:
+    case ui::mojom::WindowShowState::kNormal:
       was_fullscreen = browser->window()->IsFullscreen();
       if (was_fullscreen) {
         browser->extension_window_controller()->SetFullscreenMode(

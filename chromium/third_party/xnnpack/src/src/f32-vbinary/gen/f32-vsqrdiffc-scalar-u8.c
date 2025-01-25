@@ -19,7 +19,7 @@ void xnn_f32_vsqrdiffc_ukernel__scalar_u8(
     const float* input_a,
     const float* input_b,
     float* output,
-    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -57,7 +57,6 @@ void xnn_f32_vsqrdiffc_ukernel__scalar_u8(
     vacc5 = vacc5 * vacc5;
     vacc6 = vacc6 * vacc6;
     vacc7 = vacc7 * vacc7;
-
 
     output[0] = vacc0;
     output[1] = vacc1;

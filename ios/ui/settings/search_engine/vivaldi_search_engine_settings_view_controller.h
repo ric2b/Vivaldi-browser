@@ -7,9 +7,10 @@
 #import "ios/chrome/browser/ui/settings/settings_root_table_view_controller.h"
 #import "ios/ui/settings/search_engine/vivaldi_search_engine_settings_consumer.h"
 
-class ChromeBrowserState;
+class ProfileIOS;
 
 @protocol VivaldiSearchEngineSettingsViewControllerDelegate
+- (void)searchSuggestionsEnabled:(BOOL)enabled;
 - (void)searchEngineNicknameEnabled:(BOOL)enabled;
 @end
 
@@ -18,8 +19,8 @@ class ChromeBrowserState;
     : SettingsRootTableViewController <SettingsControllerProtocol,
                                        VivaldiSearchEngineSettingsConsumer>
 
-// The designated initializer. `browserState` must not be nil.
-- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState
+// The designated initializer. `profile` must not be nil.
+- (instancetype)initWithProfile:(ProfileIOS*)profile
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)initWithStyle:(UITableViewStyle)style NS_UNAVAILABLE;
 

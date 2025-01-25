@@ -425,6 +425,9 @@ struct Extensions
     // GL_EXT_shader_framebuffer_fetch
     bool shaderFramebufferFetchEXT = false;
 
+    // GL_ARM_shader_framebuffer_fetch_depth_stencil
+    bool shaderFramebufferFetchDepthStencilARM = false;
+
     // GL_EXT_shader_framebuffer_fetch_non_coherent
     bool shaderFramebufferFetchNonCoherentEXT = false;
 
@@ -572,6 +575,9 @@ struct Extensions
     // GL_OES_texture_npot
     bool textureNpotOES = false;
 
+    // GL_EXT_texture_query_lod
+    bool textureQueryLodEXT = false;
+
     // GL_EXT_texture_rg
     bool textureRgEXT = false;
 
@@ -640,6 +646,9 @@ struct Extensions
 
     // GL_CHROMIUM_bind_uniform_location
     bool bindUniformLocationCHROMIUM = false;
+
+    // GL_ANGLE_blob_cache
+    bool blobCacheANGLE = false;
 
     // GL_ANGLE_client_arrays
     bool clientArraysANGLE = false;

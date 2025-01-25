@@ -13,7 +13,7 @@
 #import "base/time/time.h"
 #import "third_party/abseil-cpp/absl/types/optional.h"
 
-class ChromeBrowserState;
+class ProfileIOS;
 class GURL;
 @class MDCSnackbarMessage;
 
@@ -74,7 +74,7 @@ MDCSnackbarMessage* CreateOrUpdateNoteWithToast(
     const GURL& url,
     const vivaldi::NoteNode* folder,
     vivaldi::NotesModel* note_model,
-    ChromeBrowserState* browser_state);
+    ProfileIOS* profile);
 
 // Creates a new note with |title|, |url|, at |position| under parent
 // |folder|. Returns a snackbar with an undo action. Returns nil if operation
@@ -85,7 +85,7 @@ MDCSnackbarMessage* CreateNoteAtPositionWithToast(
     const vivaldi::NoteNode* folder,
     int position,
     vivaldi::NotesModel* note_model,
-    ChromeBrowserState* browser_state);
+    ProfileIOS* profile);
 
 // Updates a note node position, and returns a snackbar with an undo action.
 // Returns nil if the operation wasn't successful or there's nothing to undo.
@@ -94,7 +94,7 @@ MDCSnackbarMessage* UpdateNotePositionWithToast(
     const vivaldi::NoteNode* folder,
     size_t position,
     vivaldi::NotesModel* note_model,
-    ChromeBrowserState* browser_state);
+    ProfileIOS* profile);
 
 // Deletes all notes in |model| that are in |notes|, and returns a
 // snackbar with an undo action. Returns nil if the operation wasn't successful
@@ -102,7 +102,7 @@ MDCSnackbarMessage* UpdateNotePositionWithToast(
 MDCSnackbarMessage* DeleteNotesWithToast(
     const std::set<const vivaldi::NoteNode*>& notes,
     vivaldi::NotesModel* model,
-    ChromeBrowserState* browser_state);
+    ProfileIOS* profile);
 
 // Deletes all nodes in |notes|.
 void DeleteNotes(const std::set<const vivaldi::NoteNode*>& notes,
@@ -115,7 +115,7 @@ MDCSnackbarMessage* MoveNotesWithToast(
     const std::set<const vivaldi::NoteNode*>& notes,
     vivaldi::NotesModel* model,
     const vivaldi::NoteNode* folder,
-    ChromeBrowserState* browser_state);
+    ProfileIOS* profile);
 
 // Move all |notes| to the given |folder|.
 // Returns whether this method actually moved notes (for example, only

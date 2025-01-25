@@ -3709,7 +3709,7 @@ int RGB565ToARGB(const uint8_t* src_rgb565,
 #if defined(HAS_RGB565TOARGBROW_NEON)
   if (TestCpuFlag(kCpuHasNEON)) {
     RGB565ToARGBRow = RGB565ToARGBRow_Any_NEON;
-    if (IS_ALIGNED(width, 8)) {
+    if (IS_ALIGNED(width, 16)) {
       RGB565ToARGBRow = RGB565ToARGBRow_NEON;
     }
   }
@@ -3792,7 +3792,7 @@ int ARGB1555ToARGB(const uint8_t* src_argb1555,
 #if defined(HAS_ARGB1555TOARGBROW_NEON)
   if (TestCpuFlag(kCpuHasNEON)) {
     ARGB1555ToARGBRow = ARGB1555ToARGBRow_Any_NEON;
-    if (IS_ALIGNED(width, 8)) {
+    if (IS_ALIGNED(width, 16)) {
       ARGB1555ToARGBRow = ARGB1555ToARGBRow_NEON;
     }
   }

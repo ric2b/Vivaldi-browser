@@ -6,6 +6,7 @@
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_FORM_PARSING_FORM_FIELD_PARSER_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -110,8 +111,6 @@ struct ParsingContext {
   const bool autofill_enable_support_for_parsing_with_shared_labels{
       base::FeatureList::IsEnabled(
           features::kAutofillEnableSupportForParsingWithSharedLabels)};
-  const bool autofill_always_parse_placeholders{
-      base::FeatureList::IsEnabled(features::kAutofillAlwaysParsePlaceholders)};
 
   std::optional<RegexMatchesCache> matches_cache;
   raw_ref<AutofillRegexCache> regex_cache;
@@ -124,6 +123,12 @@ struct ParsingContext {
 // name, phone number, or address field.
 class FormFieldParser {
  public:
+  struct MatchInfo {
+    MatchAttribute matched_attribute;
+    // TODO(crbug.com/320965828): Add other details such as the regex that
+    // matched or how well the regex matched to improve match prioritisation.
+  };
+
   FormFieldParser(const FormFieldParser&) = delete;
   FormFieldParser& operator=(const FormFieldParser&) = delete;
 
@@ -166,8 +171,8 @@ class FormFieldParser {
       const std::vector<std::unique_ptr<AutofillField>>& fields,
       FieldCandidatesMap& field_candidates);
 
-  // Returns true if `field` matches one of the the passed `patterns`.
-  static bool FieldMatchesMatchPatternRef(
+  // Returns a MatchInfo if `field` matches one of the the passed `patterns`.
+  static std::optional<MatchInfo> FieldMatchesMatchPatternRef(
       ParsingContext& context,
       base::span<const MatchPatternRef> patterns,
       const AutofillField& field,
@@ -182,7 +187,8 @@ class FormFieldParser {
                               DenseSet<MatchAttribute> match_attributes,
                               const char* regex_name = "") {
     return FormFieldParser::Match(context, field, pattern, match_attributes,
-                                  regex_name);
+                                  regex_name)
+        .has_value();
   }
 
   static bool ParseInAnyOrderForTesting(
@@ -215,7 +221,6 @@ class FormFieldParser {
   static constexpr float kBaseNameParserScore = 0.9f;
   static constexpr float kBaseMerchantPromoCodeParserScore = 0.85f;
   static constexpr float kBaseSearchParserScore = 0.8f;
-  static constexpr float kBaseNumericQuantityParserScore = 0.75f;
   static constexpr float kBaseImprovedPredictionsScore = 0.7f;
 
   // Only derived classes may instantiate.
@@ -310,11 +315,12 @@ class FormFieldParser {
 
   // Matches the regular expression |pattern| against the components of
   // |field| as specified in |match_type|.
-  static bool Match(ParsingContext& context,
-                    const AutofillField* field,
-                    std::u16string_view pattern,
-                    DenseSet<MatchAttribute> match_attributes,
-                    const char* regex_name = "");
+  static std::optional<MatchInfo> Match(
+      ParsingContext& context,
+      const AutofillField* field,
+      std::u16string_view pattern,
+      DenseSet<MatchAttribute> match_attributes,
+      const char* regex_name = "");
 
   // Perform a "pass" over the |fields| where each pass uses the supplied
   // |parse| method to match content to a given field type.

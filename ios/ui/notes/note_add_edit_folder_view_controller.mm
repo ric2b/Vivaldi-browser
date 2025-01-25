@@ -48,8 +48,8 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
 @property(nonatomic, assign) vivaldi::NotesModel* notes;
 // The Browser in which notes are presented
 @property(nonatomic, assign) Browser* browser;
-// The user's browser state model used.
-@property(nonatomic, assign) ChromeBrowserState* browserState;
+// The user's profile used.
+@property(nonatomic, assign) ProfileIOS* profile;
 // The parent item of the child about to create/or going to be edited.
 @property(nonatomic,assign) NoteNode* parentItem;
 // The item that keeps track of the current parent selected. This only lives on
@@ -73,7 +73,7 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
 @synthesize folderViewController = _folderViewController;
 @synthesize notes = _notes;
 @synthesize browser = _browser;
-@synthesize browserState = _browserState;
+@synthesize profile = _profile;
 @synthesize parentItem = _parentItem;
 @synthesize folderItem = _folderItem;
 @synthesize editingItem = _editingItem;
@@ -110,10 +110,8 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
   self = [super init];
   if (self) {
     _browser = browser;
-    _browserState =
-        _browser->GetBrowserState()->GetOriginalChromeBrowserState();
-    _notes =
-      vivaldi::NotesModelFactory::GetForBrowserState(_browserState);
+    _profile = _browser->GetProfile()->GetOriginalProfile();
+    _notes = vivaldi::NotesModelFactory::GetForProfile(_profile);
   }
   return self;
 }

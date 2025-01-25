@@ -3,11 +3,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import http
 import json
 import os
 import sys
 import unittest
 import unittest.mock
+import urllib.error
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT_DIR)
@@ -195,6 +197,43 @@ class NinjalogUploaderTest(unittest.TestCase):
 
         self.assertEqual(ninjalog_uploader.GetJflag(['ninja', '-j']), None)
 
+    def test_get_gce_metadata(self):
+        with unittest.mock.patch('urllib.request.urlopen') as urlopen_mock:
+            urlopen_mock.side_effect = urllib.error.HTTPError(
+                'http://test/not-found', http.HTTPStatus.NOT_FOUND, 'not found',
+                None, None)
+            self.assertEqual(ninjalog_uploader.GetGCEMetadata(), {})
+
+        with unittest.mock.patch(
+                'ninjalog_uploader._getGCEInfo') as getGCEInfo_mock:
+            getGCEInfo_mock.return_value = {
+                "instance": {
+                    "machineType":
+                    "projects/12345/machineTypes/n2d-standard-128",
+                },
+                "project": {
+                    "projectId": "cloudtop-test"
+                }
+            }
+            self.assertEqual(ninjalog_uploader.GetGCEMetadata(), {
+                'gce_machine_type': 'n2d-standard-128',
+                'is_cloudtop': True,
+            })
+
+        with unittest.mock.patch(
+                'ninjalog_uploader._getGCEInfo') as getGCEInfo_mock:
+            getGCEInfo_mock.return_value = {
+                "instance": {
+                    "machineType":
+                    "projects/12345/machineTypes/n2d-standard-128",
+                },
+                "project": {
+                    "projectId": "gce-project"
+                }
+            }
+            self.assertEqual(ninjalog_uploader.GetGCEMetadata(), {
+                'gce_machine_type': 'n2d-standard-128',
+            })
 
 if __name__ == '__main__':
     unittest.main()

@@ -40,7 +40,7 @@ KeyedService* SyncedFileStoreFactory::BuildServiceInstanceFor(
 
 content::BrowserContext* SyncedFileStoreFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
+  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 bool SyncedFileStoreFactory::ServiceIsNULLWhileTesting() const {

@@ -14,10 +14,9 @@
 namespace vivaldi {
 
 syncer::SyncInvalidationsService*
-VivaldiSyncInvalidationsServiceFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+VivaldiSyncInvalidationsServiceFactory::GetForProfile(ProfileIOS* profile) {
   return static_cast<syncer::SyncInvalidationsService*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, /*create=*/true));
+      GetInstance()->GetServiceForBrowserState(profile, /*create=*/true));
 }
 
 VivaldiSyncInvalidationsServiceFactory*
@@ -37,12 +36,11 @@ VivaldiSyncInvalidationsServiceFactory::
 std::unique_ptr<KeyedService>
 VivaldiSyncInvalidationsServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   return std::make_unique<VivaldiSyncInvalidationsService>(
       GetApplicationContext()->GetLocalState()->GetString(
           vivaldiprefs::kVivaldiSyncNotificationsServerUrl),
-      VivaldiAccountManagerFactory::GetForBrowserState(browser_state),
+      VivaldiAccountManagerFactory::GetForProfile(profile),
       base::BindRepeating([]() {
         // Probably OK to use the system network context here, since the
         // websocket connection established for invalidation doesn't rely

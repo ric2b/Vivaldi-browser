@@ -95,6 +95,7 @@ cc_library(
         "//internal/platform/implementation/shared:count_down_latch",
         "//internal/proto:credential_cc_proto",
         # TODO: Support WebRTC
+        "//third_party/webrtc/files/stable/webrtc/api:scoped_refptr",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
@@ -105,6 +106,7 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/time",
     ],
 )
 
@@ -133,6 +135,7 @@ cc_library(
     defines = ["NO_WEBRTC"],
     visibility = [
         "//connections:__subpackages__",
+        "//connections:partners",
         "//fastpair:__subpackages__",
         "//internal/account:__subpackages__",
         "//internal/auth:__subpackages__",

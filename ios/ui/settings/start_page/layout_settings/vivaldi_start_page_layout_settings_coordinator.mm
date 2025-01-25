@@ -62,8 +62,8 @@
 
   self.mediator =
       [[VivaldiStartPageLayoutSettingsMediator alloc]
-            initWithOriginalPrefService:self.browser->GetBrowserState()
-                   ->GetOriginalChromeBrowserState()
+            initWithOriginalPrefService:self.browser->GetProfile()
+                   ->GetOriginalProfile()
                    ->GetPrefs()];
   self.mediator.consumer = self.viewProvider;
   self.viewProvider.settingsStateConsumer = self.mediator;

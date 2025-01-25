@@ -173,7 +173,7 @@ struct State {
 }  // namespace
 
 Result<SuccessType> PreservePadding(Module& ir) {
-    auto result = ValidateAndDumpIfNeeded(ir, "PreservePadding transform");
+    auto result = ValidateAndDumpIfNeeded(ir, "core.PreservePadding", kPreservePaddingCapabilities);
     if (result != Success) {
         return result;
     }

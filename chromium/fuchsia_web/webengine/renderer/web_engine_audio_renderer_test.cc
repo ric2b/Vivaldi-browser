@@ -13,6 +13,7 @@
 #include "base/containers/queue.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
@@ -74,10 +75,7 @@ class TestDemuxerStream : public media::DemuxerStream {
     SatisfyRead();
   }
   media::AudioDecoderConfig audio_decoder_config() override { return config_; }
-  media::VideoDecoderConfig video_decoder_config() override {
-    NOTREACHED_IN_MIGRATION();
-    return media::VideoDecoderConfig();
-  }
+  media::VideoDecoderConfig video_decoder_config() override { NOTREACHED(); }
   Type type() const override { return AUDIO; }
   media::StreamLiveness liveness() const override {
     return media::StreamLiveness::kRecorded;
@@ -314,8 +312,8 @@ class TestAudioConsumer
   fidl::Binding<fuchsia::media::audio::VolumeControl> volume_control_binding_;
   std::unique_ptr<TestStreamSink> stream_sink_;
 
-  base::RunLoop* wait_stream_sink_created_loop_ = nullptr;
-  base::RunLoop* wait_started_loop_ = nullptr;
+  raw_ptr<base::RunLoop> wait_stream_sink_created_loop_ = nullptr;
+  raw_ptr<base::RunLoop> wait_started_loop_ = nullptr;
 
   bool create_stream_sink_called_ = false;
 
@@ -532,7 +530,7 @@ class WebEngineAudioRendererTestBase : public testing::Test {
   TestRendererClient client_;
 
   std::unique_ptr<media::AudioRenderer> audio_renderer_;
-  media::TimeSource* time_source_;
+  raw_ptr<media::TimeSource> time_source_;
   base::TimeDelta demuxer_stream_pos_;
 };
 

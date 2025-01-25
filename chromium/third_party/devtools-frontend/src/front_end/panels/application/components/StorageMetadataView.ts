@@ -2,16 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../ui/components/report_view/report_view.js';
+
 import * as i18n from '../../../core/i18n/i18n.js';
-import * as Platform from '../../../core/platform/platform.js';
 import * as SDK from '../../../core/sdk/sdk.js';
 import type * as Protocol from '../../../generated/protocol.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as LegacyWrapper from '../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
-import * as ReportView from '../../../ui/components/report_view/report_view.js';
 import * as UI from '../../../ui/legacy/legacy.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -108,7 +110,6 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 export class StorageMetadataView extends LegacyWrapper.LegacyWrapper.WrappableComponent {
-  static readonly litTagName = LitHtml.literal`devtools-storage-metadata-view`;
   readonly #shadow = this.attachShadow({mode: 'open'});
   #storageBucketsModel?: SDK.StorageBucketsModel.StorageBucketsModel;
   #storageKey: SDK.StorageKeyManager.StorageKey|null = null;
@@ -139,10 +140,10 @@ export class StorageMetadataView extends LegacyWrapper.LegacyWrapper.WrappableCo
     return coordinator.write('StorageMetadataView render', async () => {
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
-      LitHtml.render(LitHtml.html`
-        <${ReportView.ReportView.Report.litTagName} .data=${{reportTitle: this.getTitle() ?? i18nString(UIStrings.loading)} as ReportView.ReportView.ReportData}>
+      LitHtml.render(html`
+        <devtools-report .data=${{reportTitle: this.getTitle() ?? i18nString(UIStrings.loading)}}>
           ${await this.renderReportContent()}
-        </${ReportView.ReportView.Report.litTagName}>`, this.#shadow, {host: this});
+        </devtools-report>`, this.#shadow, {host: this});
       // clang-format on
     });
   }
@@ -157,13 +158,11 @@ export class StorageMetadataView extends LegacyWrapper.LegacyWrapper.WrappableCo
   }
 
   key(content: string|LitHtml.TemplateResult): LitHtml.TemplateResult {
-    return LitHtml.html`<${ReportView.ReportView.ReportKey.litTagName}>${content}</${
-        ReportView.ReportView.ReportKey.litTagName}>`;
+    return html`<devtools-report-key>${content}</devtools-report-key>`;
   }
 
   value(content: string|LitHtml.TemplateResult): LitHtml.TemplateResult {
-    return LitHtml.html`<${ReportView.ReportView.ReportValue.litTagName}>${content}</${
-        ReportView.ReportView.ReportValue.litTagName}>`;
+    return html`<devtools-report-value>${content}</devtools-report-value>`;
   }
 
   async renderReportContent(): Promise<LitHtml.LitTemplate> {
@@ -184,13 +183,13 @@ export class StorageMetadataView extends LegacyWrapper.LegacyWrapper.WrappableCo
                                                          null;
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
+    return html`
         ${this.key(i18nString(UIStrings.origin))}
-        ${this.value(LitHtml.html`<div class="text-ellipsis" title=${origin}>${origin}</div>`)}
+        ${this.value(html`<div class="text-ellipsis" title=${origin}>${origin}</div>`)}
         ${(topLevelSite || topLevelSiteIsOpaque) ? this.key(i18nString(UIStrings.topLevelSite)) : LitHtml.nothing}
         ${topLevelSite ? this.value(topLevelSite) : LitHtml.nothing}
         ${topLevelSiteIsOpaque ? this.value(i18nString(UIStrings.opaque)) : LitHtml.nothing}
-        ${thirdPartyReason ? LitHtml.html`${this.key(i18nString(UIStrings.isThirdParty))}${this.value(thirdPartyReason)}` : LitHtml.nothing}
+        ${thirdPartyReason ? html`${this.key(i18nString(UIStrings.isThirdParty))}${this.value(thirdPartyReason)}` : LitHtml.nothing}
         ${hasNonce || topLevelSiteIsOpaque ?
         this.key(i18nString(UIStrings.isOpaque)) : LitHtml.nothing}
         ${hasNonce ? this.value(i18nString(UIStrings.yes)) : LitHtml.nothing}
@@ -208,7 +207,7 @@ export class StorageMetadataView extends LegacyWrapper.LegacyWrapper.WrappableCo
     const {bucket: {name}, persistent, durability, quota} = this.#storageBucket;
 
     // clang-format off
-    return LitHtml.html`
+    return html`
       ${this.key(i18nString(UIStrings.bucketName))}
       ${this.value(name || 'default')}
       ${this.key(i18nString(UIStrings.persistent))}
@@ -216,7 +215,7 @@ export class StorageMetadataView extends LegacyWrapper.LegacyWrapper.WrappableCo
       ${this.key(i18nString(UIStrings.durability))}
       ${this.value(durability)}
       ${this.key(i18nString(UIStrings.quota))}
-      ${this.value(Platform.NumberUtilities.bytesToString(quota))}
+      ${this.value(i18n.ByteUtilities.bytesToString(quota))}
       ${this.key(i18nString(UIStrings.expiration))}
       ${this.value(this.#getExpirationString())}`;
   }
@@ -237,15 +236,15 @@ export class StorageMetadataView extends LegacyWrapper.LegacyWrapper.WrappableCo
 
   #renderBucketControls(): LitHtml.TemplateResult {
     // clang-format off
-    return LitHtml.html`
-      <${ReportView.ReportView.ReportSection.litTagName}>
-        <${Buttons.Button.Button.litTagName}
+    return html`
+      <devtools-report-section>
+        <devtools-button
           aria-label=${i18nString(UIStrings.deleteBucket)}
           .variant=${Buttons.Button.Variant.PRIMARY}
           @click=${this.#deleteBucket}>
           ${i18nString(UIStrings.deleteBucket)}
-        </${Buttons.Button.Button.litTagName}>
-      </${ReportView.ReportView.ReportSection.litTagName}>`;
+        </devtools-button>
+      </devtools-report-section>`;
     // clang-format on
   }
 

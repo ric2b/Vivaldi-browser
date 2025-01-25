@@ -167,6 +167,7 @@ chromium-metrics-reviews@google.com.
   <int value="317" label="Autocomplete Searches and URLs"/>
   <int value="318" label="Make Searches and Browsing Better"/>
   <int value="319" label="Google Drive Search Suggestions"/>
+  <int value="320" label="Graduation"/>
   <int value="400" label="Touchpad: Tap-To-Click"/>
   <int value="401" label="Touchpad: Tap Dragging"/>
   <int value="402" label="Touchpad: Reverse Scrolling"/>
@@ -215,6 +216,7 @@ chromium-metrics-reviews@google.com.
   <int value="443" label="Charging sounds: On/Off"/>
   <int value="444" label="Low battery sound: On/Off"/>
   <int value="445" label="Battery Saver: On/Off"/>
+  <int value="446" label="Touchpad: Simulate Right Click"/>
   <int value="500" label="Open Wallpaper"/>
   <int value="501" label="Ambient Mode On/Off"/>
   <int value="502" label="Ambient Mode Source"/>
@@ -236,6 +238,8 @@ chromium-metrics-reviews@google.com.
   <int value="611" label="Search: Quick Answers Unit Conversion"/>
   <int value="612" label="Mahi: On/Off"/>
   <int value="613" label="MagicBoost: On/Off"/>
+  <int value="614" label="Lobster: On/Off"/>
+  <int value="615" label="Sunfish: On/Off"/>
   <int value="700" label="Manage Android Preferences"/>
   <int value="701" label="Remove Play Store"/>
   <int value="702" label="Turn On Play Store"/>
@@ -369,6 +373,8 @@ chromium-metrics-reviews@google.com.
   <int value="1549" label="Magnifier follows ChromeVox focus"/>
   <int value="1550" label="Main node annotations enabled"/>
   <int value="1551" label="Flash screen for notifications"/>
+  <int value="1552" label="Always show scrollbars"/>
+  <int value="1553" label="Face control"/>
   <int value="1600" label="Powerwash"/>
   <int value="1601" label="Sanitize ChromeOS"/>
   <int value="1700" label="Change Chrome Channel"/>

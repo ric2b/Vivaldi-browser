@@ -163,7 +163,7 @@
 
 - (void)showSecurityHelpPage {
   UrlLoadParams params = UrlLoadParams::InNewTab(GURL(kPageInfoHelpCenterURL));
-  params.in_incognito = self.browser->GetBrowserState()->IsOffTheRecord();
+  params.in_incognito = self.browser->GetProfile()->IsOffTheRecord();
   UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
   [self handleDoneButtonTap];
 }
@@ -171,7 +171,7 @@
 - (void)showAboutThisSitePage:(GURL)URL {
   web::NavigationManager::WebLoadParams webParams =
       web::NavigationManager::WebLoadParams(URL);
-  bool in_incognito = self.browser->GetBrowserState()->IsOffTheRecord();
+  bool in_incognito = self.browser->GetProfile()->IsOffTheRecord();
 
   // Add X-Client-Data header.
   NSMutableDictionary<NSString*, NSString*>* combinedExtraHeaders =
@@ -190,6 +190,10 @@
   web::WebState* webState =
       self.browser->GetWebStateList()->GetActiveWebState();
   return [PageInfoSiteSecurityMediator configurationForWebState:webState];
+}
+
+- (void)showLastVisitedPage {
+  // No op.
 }
 
 #pragma mark - PageInfoCommands

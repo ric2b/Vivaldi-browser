@@ -6,7 +6,7 @@
 #include "base/no_destructor.h"
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 
-class ChromeBrowserState;
+class ProfileIOS;
 
 namespace adblock_filter {
 
@@ -14,9 +14,9 @@ class RuleService;
 
 class RuleServiceFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static RuleService* GetForBrowserState(ChromeBrowserState* browser_state);
-  static RuleService* GetForBrowserStateIfExists(
-      ChromeBrowserState* browser_state);
+  static RuleService* GetForProfile(ProfileIOS* profile);
+  static RuleService* GetForProfileIfExists(
+      ProfileIOS* profile);
   static RuleServiceFactory* GetInstance();
 
  private:

@@ -23,14 +23,14 @@ void xnn_f32_rdsum_ukernel_7p7x__sse_c32(
     size_t input_stride,
     const float* zero,
     float* output,
-    const union xnn_f32_scale_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_scale_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(rows != 0);
   assert(channels != 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const __m128 vscale = _mm_load_ps(params->sse.scale);
+  const __m128 vscale = _mm_set1_ps(params->scalar.scale);
 
   size_t input_increment = 7 * input_stride;
   for (; channels >= 32; channels -= 32) {

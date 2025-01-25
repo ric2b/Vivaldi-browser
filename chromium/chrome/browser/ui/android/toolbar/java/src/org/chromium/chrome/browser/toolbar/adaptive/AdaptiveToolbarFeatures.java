@@ -198,7 +198,7 @@ public class AdaptiveToolbarFeatures {
     /**
      * Returns top choice from segmentation results based on device form-factor.
      *
-     * @param context @{@link Context} to determine form factor.
+     * @param context Context to determine form factor.
      * @param segmentationResults List of rank-ordered results obtained from segmentation.
      * @return Top result to use for UI flows.
      */
@@ -221,7 +221,7 @@ public class AdaptiveToolbarFeatures {
      * Returns the default variant to be shown in segmentation experiment when the backend results
      * are unavailable or not configured.
      *
-     * @param context @{@link Context} to determine form-factor.
+     * @param context Context to determine form-factor.
      */
     static @AdaptiveToolbarButtonVariant int getSegmentationDefault(Context context) {
         assert isCustomizationEnabled();
@@ -250,7 +250,7 @@ public class AdaptiveToolbarFeatures {
     /**
      * Returns the default segment to be selected in absence of a valid segmentation result.
      *
-     * @param context @{@link Context} to determine form-factor. Defaults defer by form-factor.
+     * @param context Context to determine form-factor. Defaults defer by form-factor.
      */
     static String getDefaultSegment(Context context) {
         if (sDefaultSegmentForTesting != null) return sDefaultSegmentForTesting;

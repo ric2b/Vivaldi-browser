@@ -250,6 +250,13 @@ class QUICHE_EXPORT QuicConfig {
 
   bool HasReceivedConnectionOptions() const;
 
+  // Sets the data length to be sent for transport parameter 'discard'. The data
+  // to send in the transport parameter will be all zeros. Negative values means
+  // do not send.
+  void SetDiscardLengthToSend(int32_t discard_length);
+
+  int32_t GetDiscardLengthReceived() const { return discard_length_received_; }
+
   void SetGoogleHandshakeMessageToSend(std::string message);
 
   const std::optional<std::string>& GetReceivedGoogleHandshakeMessage() const;
@@ -440,6 +447,10 @@ class QUICHE_EXPORT QuicConfig {
   // either via the kSPAD connection option or the QUIC protocol flag
   // quic_always_support_server_preferred_address.
   bool SupportsServerPreferredAddress(Perspective perspective) const;
+
+  // Returns true if this config supports reliable stream reset.
+  void SetReliableStreamReset(bool reliable_stream_reset);
+  bool SupportsReliableStreamReset() const;
 
   // Original destination connection ID.
   void SetOriginalConnectionIdToSend(
@@ -703,9 +714,20 @@ class QUICHE_EXPORT QuicConfig {
   TransportParameters::ParameterMap custom_transport_parameters_to_send_;
   TransportParameters::ParameterMap received_custom_transport_parameters_;
 
+  // Length of the data to send in the 'discard' transport parameter. Negative
+  // values means do not send.
+  int32_t discard_length_to_send_ = -1;
+
+  // Length of the receive data in the 'discard' transport parameter. Negative
+  // values means 'discard' data not received.
+  int32_t discard_length_received_ = -1;
+
   // Google internal handshake message.
   std::optional<std::string> google_handshake_message_to_send_;
   std::optional<std::string> received_google_handshake_message_;
+
+  // Support for RESET_STREAM_AT frame.
+  bool reliable_stream_reset_;
 };
 
 }  // namespace quic

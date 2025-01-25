@@ -37,7 +37,6 @@ const char *const vivaldi_extra_locales_array[] = {
   "sq",
 };
 
-bool using_legacy_menu = false;
 }  // namespace
 
 bool IsVivaldiUrl(const std::string& url_str) {
@@ -66,13 +65,6 @@ bool IsVivaldiExtraLocale(std::string_view locale) {
   }());
   return std::binary_search(std::begin(vivaldi_extra_locales_array),
                             std::end(vivaldi_extra_locales_array), locale);
-}
-
-bool BASE_EXPORT UsingCompactLegacyMenu() {
-  return using_legacy_menu;
-}
-void BASE_EXPORT SetUsingCompactLegacyMenu(bool flag) {
-  using_legacy_menu = flag;
 }
 
 }  // namespace vivaldi

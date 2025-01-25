@@ -53,7 +53,7 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/models/simple_menu_model.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/views/controls/menu/menu_runner.h"
 
 #include "chrome/browser/ui/browser_commands.h"
@@ -175,6 +175,7 @@ static struct ImportItemToStringMapping {
     {importer::SPEED_DIAL, "speeddial"},
     {importer::CONTACTS, "contacts"},
     {importer::EXTENSIONS, "extensions"},
+    {importer::TABS, "tabs"},
     // clang-format on
 };
 
@@ -558,6 +559,7 @@ void ImportDataGetProfilesFunction::Finished() {
     profile->email = ((browser_services & importer::EMAIL) != 0);
     profile->contacts = ((browser_services & importer::CONTACTS) != 0);
     profile->extensions = ((browser_services & importer::EXTENSIONS) != 0);
+    profile->tabs = ((browser_services & importer::TABS) != 0);
 
     profile->import_type = MapImportType(source_profile.importer_type);
 
@@ -661,6 +663,9 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
   }
   if (params->types_to_import.extensions) {
     selected_items |= importer::EXTENSIONS;
+  }
+  if (params->types_to_import.tabs) {
+    selected_items |= importer::TABS;
   }
 
   imported_items_ = (selected_items & supported_items);

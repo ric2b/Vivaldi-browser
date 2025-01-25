@@ -39,6 +39,8 @@ extern NSString* vlanguageSetting;
 // Image name for contents setting
 extern NSString* vContentsSetting;
 
+// Image name for share feedback
+extern NSString* vShareFeedbackSetting;
 // Image name for about
 extern NSString* vAboutSetting;
 
@@ -47,5 +49,8 @@ extern NSString* vToolbarMenu;
 
 // Image name for appearance setting
 extern NSString* vAppearanceSetting;
+
+// Image name for page zoom
+extern NSString* vPageZoomIcon;
 
 #endif  // IOS_UI_SETTINGS_VIVALDI_SETTINGS_CONSTANTS_H_

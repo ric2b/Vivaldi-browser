@@ -24,6 +24,7 @@
 #include "chrome/browser/ash/login/oobe_screen.h"
 #include "chrome/browser/ash/login/quickstart_controller.h"
 #include "chrome/browser/ash/login/screen_manager.h"
+#include "chrome/browser/ash/login/screens/account_selection_screen.h"
 #include "chrome/browser/ash/login/screens/add_child_screen.h"
 #include "chrome/browser/ash/login/screens/ai_intro_screen.h"
 #include "chrome/browser/ash/login/screens/assistant_optin_flow_screen.h"
@@ -323,15 +324,15 @@ class WizardController : public OobeUI::Observer {
   void ShowAssistantOptInFlowScreen();
   void ShowMultiDeviceSetupScreen();
   void ShowGestureNavigationScreen();
-  void ShowPinSetupScreen();
+  void ShowPinSetupScreenAsSecondaryFactor();
+  void ShowPinSetupScreenAsMainFactor();
+  void ShowPinSetupScreenForRecovery();
   void ShowMarketingOptInScreen();
   void ShowPackagedLicenseScreen();
   void ShowEduCoexistenceLoginScreen();
   void ShowParentalHandoffScreen();
   void ShowOsInstallScreen();
   void ShowOsTrialScreen();
-  void ShowLacrosDataMigrationScreen();
-  void ShowLacrosDataBackwardMigrationScreen();
   void ShowConsolidatedConsentScreen();
   void ShowCryptohomeRecoverySetupScreen();
   void ShowAuthenticationSetupScreen();
@@ -356,6 +357,8 @@ class WizardController : public OobeUI::Observer {
   void ShowPersonalizedRecomendAppsScreen();
   void ShowPerksDiscoveryScreen();
   void ShowSplitModifierKeyboardInfoScreen();
+  void ShowAccountSelectionScreen();
+  void ShowAppLaunchSplashScreen();
 
   // Shows images login screen.
   void ShowLoginScreen();
@@ -472,11 +475,14 @@ class WizardController : public OobeUI::Observer {
   void OnPersonalizedRecomendAppsScreenExit(
       PersonalizedRecommendAppsScreen::Result result);
   void OnPerksDiscoveryScreenExit(PerksDiscoveryScreen::Result result);
+  void OnAppLaunchSplashScreenExit();
+
   // Callback invoked once it has been determined whether the device is disabled
   // or not.
   void OnDeviceDisabledChecked(bool device_disabled);
   void OnSplitModifierKeyboardInfoScreenExit(
       SplitModifierKeyboardInfoScreen::Result result);
+  void OnAccountSelectionScreenExit(AccountSelectionScreen::Result result);
 
   // Shows update screen and starts update process.
   void InitiateOOBEUpdate();
@@ -578,7 +584,8 @@ class WizardController : public OobeUI::Observer {
 
   // The `BaseScreen*` here point to the objects owned by the `screen_manager_`.
   // So it should be safe to store the pointers.
-  base::flat_map<BaseScreen*, BaseScreen*> previous_screens_;
+  base::flat_map<BaseScreen*, raw_ptr<BaseScreen, CtnExperimental>>
+      previous_screens_;
 
   raw_ptr<WizardContext> wizard_context_;
 

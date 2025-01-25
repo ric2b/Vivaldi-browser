@@ -53,13 +53,12 @@ class QuicServiceBase : public QuicConnection::Delegate,
   // QuicConnection::Delegate overrides.
   uint64_t OnCryptoHandshakeComplete(std::string_view instance_name) override;
   void OnIncomingStream(uint64_t instance_id, QuicStream* stream) override;
-  void OnConnectionClosed(uint64_t instance_id) override;
+  void OnConnectionClosed(std::string_view instance_name) override;
   QuicStream::Delegate& GetStreamDelegate(uint64_t instance_id) override;
   void OnClientCertificates(std::string_view instance_name,
                             const std::vector<std::string>& certs) override;
 
   // QuicStreamManager::Delegate overrides.
-  void OnConnectionDestroyed(QuicProtocolConnection& connection) override;
   void OnDataReceived(uint64_t instance_id,
                       uint64_t protocol_connection_id,
                       ByteView bytes) override;
@@ -132,8 +131,15 @@ class QuicServiceBase : public QuicConnection::Delegate,
  private:
   void CloseAllConnections();
 
-  // Delete dead QUIC connections and schedule the next call to this function.
-  void Cleanup();
+  // Schedule the call to `Cleanup` for `instance_name`. This is called when
+  // connection for `instance_name` needs to be destroyed, but have to wait for
+  // the next event loop because related resources are still needed by the
+  // underlying QUIC implementation during the process of closing.
+  void ScheduleCleanup(std::string_view instance_name);
+
+  // Delete dead QUIC connection for `instance_name` and notify
+  // `connection_factory_` to delete related socket if needed.
+  void Cleanup(std::string_view instance_name);
 
   // Value that will be used for the next new instance.
   uint64_t next_instance_id_ = 1u;
@@ -142,13 +148,12 @@ class QuicServiceBase : public QuicConnection::Delegate,
   // completed the QUIC handshake.
   std::map<uint64_t, ServiceConnectionData> connections_;
 
-  // Connections (instance IDs) that need to be destroyed, but have to wait
-  // for the next event loop due to the underlying QUIC implementation's way of
-  // referencing them.
-  std::vector<uint64_t> delete_connections_;
+  // Map an instance name to alarm used to delete dead QUIC connection.
+  std::map<std::string, std::unique_ptr<Alarm>> cleanup_alarms_;
 
+  const ClockNowFunctionPtr now_function_;
+  TaskRunner& task_runner_;
   ProtocolConnectionServiceObserver& observer_;
-  Alarm cleanup_alarm_;
 };
 
 }  // namespace openscreen::osp

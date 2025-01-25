@@ -57,9 +57,9 @@ bool TestVerifyCRL(TestStepResult expected_result,
 }
 
 // Verifies that the certificate chain provided is not revoked according to
-// the provided Cast CRL at |cert_time|.
-// The provided CRL is verified at |crl_time|.
-// If |crl_required| is set, then a valid Cast CRL must be provided.
+// the provided Cast CRL at `cert_time`.
+// The provided CRL is verified at `crl_time`.
+// If `crl_required` is set, then a valid Cast CRL must be provided.
 // Otherwise, a missing CRL is be ignored.
 bool TestVerifyRevocation(Error::Code expected_result,
                           const std::vector<std::string>& der_certs,

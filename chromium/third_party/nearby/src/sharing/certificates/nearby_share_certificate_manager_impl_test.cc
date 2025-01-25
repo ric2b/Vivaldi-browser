@@ -112,14 +112,14 @@ class NearbyShareCertificateManagerImplTest
     contact_manager_ = std::make_unique<FakeNearbyShareContactManager>();
 
     AccountManager::Account account{
+        .display_name = GetNearbyShareTestMetadata().full_name(),
+        .picture_url = GetNearbyShareTestMetadata().icon_url(),
         .email = kTestMetadataAccountName,
     };
 
     fake_account_manager_.SetAccount(account);
 
-    fake_account_manager_.Login(
-        "test_client_id", "test_client_secret",
-        [](AccountManager::Account account) {}, [](absl::Status status) {});
+    fake_account_manager_.Login("test_client_id", "test_client_secret");
 
     NearbyShareSchedulerFactory::SetFactoryForTesting(&scheduler_factory_);
     NearbyShareCertificateStorageImpl::Factory::SetFactoryForTesting(
@@ -128,10 +128,6 @@ class NearbyShareCertificateManagerImplTest
     // Set default device data.
     local_device_data_manager_->SetDeviceName(
         GetNearbyShareTestMetadata().device_name());
-    local_device_data_manager_->SetFullName(
-        GetNearbyShareTestMetadata().full_name());
-    local_device_data_manager_->SetIconUrl(
-        GetNearbyShareTestMetadata().icon_url());
     SetBluetoothMacAddress(kTestUnparsedBluetoothMacAddress);
     SetMockBluetoothAddress(kTestUnparsedBluetoothMacAddress);
 
@@ -815,9 +811,12 @@ TEST_F(NearbyShareCertificateManagerImplTest,
        RefreshPrivateCertificates_MissingFullNameAndIconUrl) {
   cert_store_->ReplacePrivateCertificates({});
 
-  // Full name and icon URL are missing in the local device data manager.
-  local_device_data_manager_->SetFullName(std::nullopt);
-  local_device_data_manager_->SetIconUrl(std::nullopt);
+  // Full name and icon URL are missing in the account.
+  AccountManager::Account account{
+      .email = kTestMetadataAccountName,
+  };
+
+  fake_account_manager_.SetAccount(account);
 
   cert_manager_->Start();
   HandlePrivateCertificateRefresh(/*expect_private_cert_refresh=*/true,

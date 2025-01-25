@@ -250,7 +250,7 @@ class SyncedNoteTracker {
 
   // Index for efficient lookups by client tag hash.
   std::unordered_map<syncer::ClientTagHash,
-                     const SyncedNoteTrackerEntity*,
+                     raw_ptr<const SyncedNoteTrackerEntity, CtnExperimental>,
                      syncer::ClientTagHash::Hash>
       client_tag_hash_to_entities_map_;
 

@@ -8,15 +8,17 @@
 #import "base/memory/singleton.h"
 #import "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 
+class ProfileIOS;
+
 namespace power_bookmarks {
 class PowerBookmarkService;
 }
 
-// Factory to create one PowerBookmarkService per browser state.
+// Factory to create one PowerBookmarkService per profile.
 class PowerBookmarkServiceFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static power_bookmarks::PowerBookmarkService* GetForBrowserState(
-      web::BrowserState* state);
+  static power_bookmarks::PowerBookmarkService* GetForProfile(
+      ProfileIOS* profile);
   static PowerBookmarkServiceFactory* GetInstance();
 
   PowerBookmarkServiceFactory(const PowerBookmarkServiceFactory&) = delete;

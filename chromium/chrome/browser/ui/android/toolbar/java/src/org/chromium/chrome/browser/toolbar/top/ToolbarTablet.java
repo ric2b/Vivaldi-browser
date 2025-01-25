@@ -51,6 +51,7 @@ import org.chromium.chrome.browser.toolbar.KeyboardNavigationListener;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
+import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.top.CaptureReadinessResult.TopToolbarBlockCaptureReason;
@@ -129,7 +130,7 @@ public class ToolbarTablet extends ToolbarLayout
     private boolean mIsShiftDownForReload;
 
     /** Vivaldi **/
-    public static ChromeImageButton sPanelButton;
+    public ChromeImageButton mPanelButton;
 
     /**
      * Vivaldi reload button.
@@ -182,12 +183,12 @@ public class ToolbarTablet extends ToolbarLayout
             mVivaldiReloadButton = findViewById(R.id.reload_button);
             mVivaldiReloadButton.setOnClickListener(
                     view -> stopOrReloadCurrentTab(mIsShiftDownForReload));
-            sPanelButton = findViewById(R.id.panel_button);
+            mPanelButton = findViewById(R.id.panel_button);
             mBackButton.setImageDrawable(getResources()
                     .getDrawable(R.drawable.vivaldi_bottom_nav_back_56dp));
             mForwardButton.setImageDrawable(getResources()
                     .getDrawable(R.drawable.vivaldi_bottom_nav_forward_56dp));
-            mModelSelectorButton = findViewById((R.id.vivaldi_model_selector_button));
+            mModelSelectorButton = findViewById(R.id.vivaldi_model_selector_button);
             mModelSelectorButton.setOnClickListener(this);
             // Vivaldi Ref. VAB-8862 Start
             LinearLayout linearlayout = (LinearLayout) findViewById(
@@ -643,7 +644,7 @@ public class ToolbarTablet extends ToolbarLayout
 
         // Vivaldi
         ImageViewCompat.setImageTintList(mModelSelectorButton, tint);
-        ImageViewCompat.setImageTintList(sPanelButton, tint);
+        ImageViewCompat.setImageTintList(mPanelButton, tint);
         ImageViewCompat.setImageTintList(mVivaldiReloadButton, tint);
         // End Vivaldi
 
@@ -776,7 +777,8 @@ public class ToolbarTablet extends ToolbarLayout
             BooleanSupplier partnerHomepageEnabledSupplier,
             OfflineDownloader offlineDownloader,
             UserEducationHelper userEducationHelper,
-            ObservableSupplier<Tracker> trackerSupplier) {
+            ObservableSupplier<Tracker> trackerSupplier,
+            ToolbarProgressBar progressBar) {
         super.initialize(
                 toolbarDataProvider,
                 tabController,
@@ -786,7 +788,8 @@ public class ToolbarTablet extends ToolbarLayout
                 partnerHomepageEnabledSupplier,
                 offlineDownloader,
                 userEducationHelper,
-                trackerSupplier);
+                trackerSupplier,
+                progressBar);
         mHistoryDelegate = historyDelegate;
         mOfflineDownloader = offlineDownloader;
         menuButtonCoordinator.setVisibility(true);
@@ -881,8 +884,8 @@ public class ToolbarTablet extends ToolbarLayout
             ImageViewCompat.setImageTintList(mOptionalButton, null);
         }
 
-        if (buttonSpec.getIPHCommandBuilder() != null) {
-            buttonSpec.getIPHCommandBuilder().setAnchorView(mOptionalButton);
+        if (buttonSpec.getIphCommandBuilder() != null) {
+            buttonSpec.getIphCommandBuilder().setAnchorView(mOptionalButton);
         }
         mOptionalButton.setOnClickListener(buttonSpec.getOnClickListener());
         if (buttonSpec.getOnLongClickListener() == null) {
@@ -1115,4 +1118,8 @@ public class ToolbarTablet extends ToolbarLayout
         mHomeButton.setVisibility(visible);
     }
     // End Vivaldi
+
+    @Override
+    public ChromeImageButton getPanelButton() { return mPanelButton; }
+
 }

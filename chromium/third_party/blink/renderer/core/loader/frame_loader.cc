@@ -140,14 +140,15 @@ namespace blink {
 
 namespace {
 
-void LogJavaScriptUrlHistogram(LocalDOMWindow* origin_window, String script) {
+void LogJavaScriptUrlHistogram(LocalDOMWindow* origin_window,
+                               const StringView& script) {
   origin_window->CountUse(WebFeature::kExecutedJavaScriptURLFromFrame);
   if (script.length() > 6) {
     return;
   }
 
-  script = script.StripWhiteSpace().Replace(";", "");
-  if (script == "''" || script == "\"\"") {
+  String stripped_script = script.ToString().StripWhiteSpace().Replace(";", "");
+  if (stripped_script == "''" || stripped_script == "\"\"") {
     origin_window->CountUse(WebFeature::kExecutedEmptyJavaScriptURLFromFrame);
   }
 }
@@ -333,11 +334,10 @@ void FrameLoader::SaveScrollAnchor() {
     const SerializedAnchor& serialized_anchor =
         scroll_anchor->GetSerializedAnchor();
     if (serialized_anchor.IsValid()) {
-      history_item->SetScrollAnchorData(
-          {serialized_anchor.selector,
-           gfx::PointF(serialized_anchor.relative_offset.X(),
-                       serialized_anchor.relative_offset.Y()),
-           serialized_anchor.simhash});
+      auto offset = serialized_anchor.GetScrollOffset(*layout_scrollable_area);
+      history_item->SetScrollAnchorData({serialized_anchor.selector,
+                                         gfx::PointF(offset.x(), offset.y()),
+                                         serialized_anchor.simhash});
     }
   }
 }
@@ -613,8 +613,7 @@ DetermineRequestContextFromNavigationType(
     case kWebNavigationTypeRestore:
       return mojom::blink::RequestContextType::INTERNAL;
   }
-  NOTREACHED_IN_MIGRATION();
-  return mojom::blink::RequestContextType::HYPERLINK;
+  NOTREACHED();
 }
 
 static network::mojom::RequestDestination
@@ -632,8 +631,7 @@ DetermineRequestDestinationFromNavigationType(
     case kWebNavigationTypeRestore:
       return network::mojom::RequestDestination::kEmpty;
   }
-  NOTREACHED_IN_MIGRATION();
-  return network::mojom::RequestDestination::kDocument;
+  NOTREACHED();
 }
 
 void FrameLoader::StartNavigation(FrameLoadRequest& request,
@@ -874,7 +872,7 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
       argv.push_back("Main resource");
       argv.push_back(url.GetString());
       activity_logger->LogEvent(frame_->DomWindow(), "blinkRequestResource",
-                                argv.size(), argv.data());
+                                argv);
     }
   }
 

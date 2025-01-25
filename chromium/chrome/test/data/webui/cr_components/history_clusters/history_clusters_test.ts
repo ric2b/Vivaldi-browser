@@ -15,7 +15,7 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {TestMock} from 'chrome://webui-test/test_mock.js';
-import {microtasksFinished} from 'chrome://webui-test/test_util.js';
+import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
 let handler: TestMock<PageHandlerRemote>&PageHandlerRemote;
 let callbackRouterRemote: PageRemote;
@@ -46,13 +46,13 @@ suite('history-clusters', () => {
     createBrowserProxy();
   });
 
-  function getTestResult(): QueryResult {
+  function getTestVisit(): URLVisit {
     const rawVisitData: RawVisitData = {
       url: {url: ''},
       visitTime: {internalValue: BigInt(0)},
     };
 
-    const urlVisit1: URLVisit = {
+    return {
       visitId: BigInt(1),
       normalizedUrl: {url: 'https://www.google.com'},
       urlForDisplay: 'https://www.google.com',
@@ -67,10 +67,12 @@ suite('history-clusters', () => {
       isKnownToSync: false,
       hasUrlKeyedImage: false,
     };
+  }
 
+  function getTestResult(): QueryResult {
     const cluster1: Cluster = {
       id: BigInt(111),
-      visits: [urlVisit1],
+      visits: [getTestVisit()],
       label: '',
       labelMatchPositions: [],
       relatedSearches: [],
@@ -192,11 +194,10 @@ suite('history-clusters', () => {
 
     urlVisitHeader!.click();
 
-    const openHistoryClusterArgs =
-        await handler.whenCalled('openHistoryCluster');
+    const openHistoryUrlArgs = await handler.whenCalled('openHistoryUrl');
 
-    assertEquals(urlVisit!.$.url.innerHTML, openHistoryClusterArgs[0].url);
-    assertEquals(1, handler.getCallCount('openHistoryCluster'));
+    assertEquals(urlVisit!.$.url.innerHTML, openHistoryUrlArgs[0].url);
+    assertEquals(1, handler.getCallCount('openHistoryUrl'));
   });
 
   test('Navigate to url visit via keyboard', async () => {
@@ -225,12 +226,11 @@ suite('history-clusters', () => {
     urlVisitHeader!.dispatchEvent(shiftEnter);
 
     // Navigates to the first match is selected.
-    const openHistoryClusterArgs =
-        await handler.whenCalled('openHistoryCluster');
+    const openHistoryUrlArgs = await handler.whenCalled('openHistoryUrl');
 
-    assertEquals(urlVisit!.$.url.innerHTML, openHistoryClusterArgs[0].url);
-    assertEquals(true, openHistoryClusterArgs[1].shiftKey);
-    assertEquals(1, handler.getCallCount('openHistoryCluster'));
+    assertEquals(urlVisit!.$.url.innerHTML, openHistoryUrlArgs[0].url);
+    assertEquals(true, openHistoryUrlArgs[1].shiftKey);
+    assertEquals(1, handler.getCallCount('openHistoryUrl'));
   });
 
   test('url visit requests image', async () => {
@@ -301,7 +301,7 @@ suite('history-clusters', () => {
     assertEquals(123, clustersElement.$.clusters.scrollOffset);
   });
 
-  test('loads more results for tall monitors', async () => {
+  test('loads and renders more results for tall monitors', async () => {
     const clustersElement = new HistoryClustersElement();
     clustersElement.scrollTarget = document.body;
     document.body.appendChild(clustersElement);
@@ -336,5 +336,38 @@ suite('history-clusters', () => {
     assertEquals(
         1, handler.getCallCount('loadMoreClusters'),
         'should load more results for tall scroll target');
+    await microtasksFinished();
+    // Initial 2 results are rendered.
+    assertEquals(
+        2,
+        clustersElement.shadowRoot!.querySelectorAll('history-cluster').length);
+
+    // More clusters requested. Simulate a response.
+    callbackRouterRemote.onClustersQueryResult(Object.assign(
+        getTestResult(), {canLoadMore: false, isContinuation: true}));
+    await microtasksFinished();
+    assertEquals(
+        4,
+        clustersElement.shadowRoot!.querySelectorAll('history-cluster').length);
+  });
+
+  test('Cluster removed', async () => {
+    const clustersElement = await setupClustersElement();
+    assertEquals(
+        2,
+        clustersElement.shadowRoot!.querySelectorAll('history-cluster').length);
+
+    callbackRouterRemote.onVisitsRemoved([getTestVisit()]);
+    await Promise.all([
+      callbackRouterRemote.$.flushForTesting(),
+      eventToPromise('remove-cluster', clustersElement),
+    ]);
+    await microtasksFinished();
+
+    // Cluster 1 is removed since it contained only 1 visit, which matched the
+    // removed one.
+    assertEquals(
+        1,
+        clustersElement.shadowRoot!.querySelectorAll('history-cluster').length);
   });
 });

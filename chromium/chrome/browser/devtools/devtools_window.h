@@ -291,6 +291,10 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   // content::DevToolsUIBindings::Delegate overrides
   void ActivateWindow() override;
 
+  void MainWebContentRenderFrameHostChanged(
+      content::RenderFrameHost* old_frame,
+      content::RenderFrameHost* new_frame);
+
   // Vivaldi methods:
   bool IsClosing() { return life_stage_ == kClosing; }
   bool IsDocked() { return is_docked_; }
@@ -521,6 +525,21 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   FrontendType frontend_type_;
   raw_ptr<Profile> profile_;
   raw_ptr<content::WebContents> main_web_contents_;
+
+  class MainWebContentsObserver : public content::WebContentsObserver {
+   public:
+    MainWebContentsObserver(content::WebContents& web_contents,
+                            DevToolsWindow& window)
+        : WebContentsObserver(&web_contents), window_(window) {}
+    ~MainWebContentsObserver() override;
+
+   private:
+    void RenderFrameHostChanged(content::RenderFrameHost* old_frame,
+                                content::RenderFrameHost* new_frame) override;
+
+    raw_ref<DevToolsWindow> window_;
+  };
+  MainWebContentsObserver main_web_contents_observer_;
 
   // DevToolsWindow is informed of the creation of the |toolbox_web_contents_|
   // in WebContentsCreated right before ownership is passed to to DevToolsWindow

@@ -14,10 +14,6 @@ BASE_FEATURE(kNewOverflowMenu,
              "NewOverflowMenu",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kOverflowMenuCustomization,
-             "OverflowMenuCustomization",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 bool IsNewOverflowMenuEnabled() {
 
   // Vivaldi: We will present the new overflow menu always.
@@ -25,9 +21,4 @@ bool IsNewOverflowMenuEnabled() {
     return true; // End Vivaldi
 
   return base::FeatureList::IsEnabled(kNewOverflowMenu);
-}
-
-bool IsOverflowMenuCustomizationEnabled() {
-  return IsNewOverflowMenuEnabled() &&
-         base::FeatureList::IsEnabled(kOverflowMenuCustomization);
 }

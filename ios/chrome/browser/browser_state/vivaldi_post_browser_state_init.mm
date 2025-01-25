@@ -14,6 +14,8 @@
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/notes/notes_factory.h"
+#import "ios/translate/vivaldi_ios_translate_client.h"
+#import "ios/translate/vivaldi_ios_translate_service.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace vivaldi_default_bookmarks {
@@ -24,8 +26,7 @@ class UpdaterClientImpl : public UpdaterClient {
   UpdaterClientImpl(const UpdaterClientImpl&) = delete;
   UpdaterClientImpl& operator=(const UpdaterClientImpl&) = delete;
 
-  static std::unique_ptr<UpdaterClientImpl> Create(
-      ChromeBrowserState* browser_state);
+  static std::unique_ptr<UpdaterClientImpl> Create(ProfileIOS* profile);
 
   bookmarks::BookmarkModel* GetBookmarkModel() override;
   FaviconServiceGetter GetFaviconServiceGetter() override;
@@ -33,30 +34,30 @@ class UpdaterClientImpl : public UpdaterClient {
   const std::string& GetApplicationLocale() override;
 
  private:
-  UpdaterClientImpl(ChromeBrowserState* browser_state);
-  const raw_ptr<ChromeBrowserState> browser_state_;
+  UpdaterClientImpl(ProfileIOS* profile);
+  const raw_ptr<ProfileIOS> profile_;
 };
 
 /*static*/
 std::unique_ptr<UpdaterClientImpl> UpdaterClientImpl::Create(
-    ChromeBrowserState* browser_state) {
+    ProfileIOS* profile) {
   // Allow to upgrade bookmarks even with a private profile as a command line
   // switch can trigger the first window in Vivaldi to be incognito one. So
   // get the original recording profile.
   return std::unique_ptr<UpdaterClientImpl>(
-      new UpdaterClientImpl(browser_state->GetOriginalChromeBrowserState()));
+      new UpdaterClientImpl(profile->GetOriginalProfile()));
 }
 
-UpdaterClientImpl::UpdaterClientImpl(ChromeBrowserState* browser_state)
-    : browser_state_(browser_state) {}
+UpdaterClientImpl::UpdaterClientImpl(ProfileIOS* profile)
+    : profile_(profile) {}
 UpdaterClientImpl::~UpdaterClientImpl() = default;
 
 bookmarks::BookmarkModel* UpdaterClientImpl::GetBookmarkModel() {
-  return ios::BookmarkModelFactory::GetForBrowserState(browser_state_);
+  return ios::BookmarkModelFactory::GetForProfile(profile_);
 }
 
 PrefService* UpdaterClientImpl::GetPrefService() {
-  return browser_state_->GetPrefs();
+  return profile_->GetPrefs();
 }
 
 const std::string& UpdaterClientImpl::GetApplicationLocale() {
@@ -64,27 +65,33 @@ const std::string& UpdaterClientImpl::GetApplicationLocale() {
 }
 
 FaviconServiceGetter UpdaterClientImpl::GetFaviconServiceGetter() {
-  auto get_favicon_service = [](ChromeBrowserState* browser_state) {
-    return ios::FaviconServiceFactory::GetForBrowserState(
-        browser_state, ServiceAccessType::IMPLICIT_ACCESS);
+  auto get_favicon_service = [](ProfileIOS* profile) {
+    return ios::FaviconServiceFactory::GetForProfile(
+        profile, ServiceAccessType::IMPLICIT_ACCESS);
   };
-  return base::BindRepeating(get_favicon_service, browser_state_);
+  return base::BindRepeating(get_favicon_service, profile_);
 }
 }  // namespace
 }  // namespace vivaldi_default_bookmarks
 
 namespace vivaldi {
-void PostBrowserStateInit(ChromeBrowserState* browser_state) {
-  vivaldi::SearchEnginesUpdater::Update(
-      browser_state->GetSharedURLLoaderFactory());
+void PostBrowserStateInit(ProfileIOS* profile) {
+  vivaldi::SearchEnginesUpdater::UpdateSearchEngines(
+      profile->GetSharedURLLoaderFactory());
+  vivaldi::SearchEnginesUpdater::UpdateSearchEnginesPrompt(
+      profile->GetSharedURLLoaderFactory());
+
   vivaldi_partners::RemovedPartnersTracker::Create(
-      browser_state->GetPrefs(),
-          ios::BookmarkModelFactory::GetForBrowserState(browser_state));
+      profile->GetPrefs(),
+          ios::BookmarkModelFactory::GetForProfile(profile));
 
   vivaldi_default_bookmarks::UpdatePartners(
-      vivaldi_default_bookmarks::UpdaterClientImpl::Create(browser_state));
+      vivaldi_default_bookmarks::UpdaterClientImpl::Create(profile));
 
-  NotesModelFactory::GetForBrowserState(browser_state);
-  adblock_filter::RuleServiceFactory::GetForBrowserState(browser_state);
+  NotesModelFactory::GetForProfile(profile);
+  adblock_filter::RuleServiceFactory::GetForProfile(profile);
+
+  VivaldiIOSTranslateService::Initialize();
+  VivaldiIOSTranslateClient::LoadTranslationScript();
 }
 }  // namespace vivaldi

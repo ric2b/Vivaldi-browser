@@ -27,7 +27,7 @@ void xnn_qd8_f32_qc4w_gemm_minmax_ukernel_4x8c8__avx2_madd(
     float* restrict c,
     size_t cm_stride,
     size_t cn_stride,
-    const union xnn_f32_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)],
+    const struct xnn_f32_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)],
     const struct xnn_qd8_quantization_params quantization_params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(mr != 0);
@@ -61,15 +61,18 @@ void xnn_qd8_f32_qc4w_gemm_minmax_ukernel_4x8c8__avx2_madd(
     c3 = c2;
   }
 
+  const __m256i vsign_mask = _mm256_set1_epi8(0x80);
+  XNN_FORCE_REALIZATION(vsign_mask);
   const __m256i vinput_zero_point0 = _mm256_set1_epi32((int) quantization_params[0].zero_point + 128);
   const __m256i vinput_zero_point1 = _mm256_set1_epi32((int) quantization_params[1].zero_point + 128);
   const __m256i vinput_zero_point2 = _mm256_set1_epi32((int) quantization_params[2].zero_point + 128);
   const __m256i vinput_zero_point3 = _mm256_set1_epi32((int) quantization_params[3].zero_point + 128);
-  const __m256 voutput_min = _mm256_set1_ps(params->avxvnni.min);
-  const __m256 voutput_max = _mm256_set1_ps(params->avxvnni.max);
-  const __m256i vsign_mask = _mm256_set1_epi8(params->avxvnni.sign_mask);  // 0x80
-  const __m256i vmask = _mm256_set1_epi8(params->avxvnni.mask);  // 0x0F
-  assert(params->avxvnni.mask == (int8_t) 0x0F);
+  const __m256 voutput_min = _mm256_set1_ps(params->scalar.min);
+  const __m256 voutput_max = _mm256_set1_ps(params->scalar.max);
+  // XNN_FORCE_REALIZATION(voutput_min);
+  // XNN_FORCE_REALIZATION(voutput_max);
+  const __m256i vmask = _mm256_set1_epi8(0x0F);
+  XNN_FORCE_REALIZATION(vmask);
   do {
     const __m256i vksum01234567 = _mm256_load_si256(w);
     __m256i vsum0x01234567 = _mm256_mullo_epi32(vksum01234567, vinput_zero_point0);
@@ -169,10 +172,6 @@ void xnn_qd8_f32_qc4w_gemm_minmax_ukernel_4x8c8__avx2_madd(
     const __m256i vsum3x02134657 = _mm256_hadd_epi32(vacc3x0123, vacc3x4567);
     __m256i vacc3x01234567 = _mm256_permute4x64_epi64(vsum3x02134657, _MM_SHUFFLE(3, 1, 2, 0));
 
-    vacc0x01234567 = _mm256_srai_epi32(vacc0x01234567, 4);
-    vacc1x01234567 = _mm256_srai_epi32(vacc1x01234567, 4);
-    vacc2x01234567 = _mm256_srai_epi32(vacc2x01234567, 4);
-    vacc3x01234567 = _mm256_srai_epi32(vacc3x01234567, 4);
     __m256 vout0x01234567 = _mm256_cvtepi32_ps(vacc0x01234567);
     __m256 vout1x01234567 = _mm256_cvtepi32_ps(vacc1x01234567);
     __m256 vout2x01234567 = _mm256_cvtepi32_ps(vacc2x01234567);

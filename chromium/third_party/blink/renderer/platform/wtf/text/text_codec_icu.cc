@@ -323,7 +323,7 @@ void TextCodecICU::CreateICUConverter() const {
   DCHECK(!converter_icu_);
 
 #if defined(USING_SYSTEM_ICU)
-  const char* name = encoding_.GetName();
+  const AtomicString& name = encoding_.GetName();
   needs_gbk_fallbacks_ =
       name[0] == 'G' && name[1] == 'B' && name[2] == 'K' && !name[3];
 #endif
@@ -342,7 +342,7 @@ void TextCodecICU::CreateICUConverter() const {
   }
 
   err = U_ZERO_ERROR;
-  converter_icu_ = ucnv_open(encoding_.GetName(), &err);
+  converter_icu_ = ucnv_open(encoding_.GetName().Utf8().c_str(), &err);
   DLOG_IF(ERROR, err == U_AMBIGUOUS_ALIAS_WARNING)
       << "ICU ambiguous alias warning for encoding: " << encoding_.GetName();
   if (converter_icu_)
@@ -396,8 +396,7 @@ class ErrorCallbackSetter final {
   UConverterToUCallback saved_action_;
 };
 
-String TextCodecICU::Decode(const char* bytes,
-                            wtf_size_t length,
+String TextCodecICU::Decode(base::span<const uint8_t> data,
                             FlushBehavior flush,
                             bool stop_on_error,
                             bool& saw_error) {
@@ -418,8 +417,8 @@ String TextCodecICU::Decode(const char* bytes,
 
   UChar buffer[kConversionBufferSize];
   UChar* buffer_limit = buffer + kConversionBufferSize;
-  const char* source = reinterpret_cast<const char*>(bytes);
-  const char* source_limit = source + length;
+  const char* source = reinterpret_cast<const char*>(data.data());
+  const char* source_limit = source + data.size();
   int32_t* offsets = nullptr;
   UErrorCode err = U_ZERO_ERROR;
 
@@ -444,21 +443,21 @@ String TextCodecICU::Decode(const char* bytes,
   // Chrome's copy of ICU does not have the issue described below.
   return result.ToString();
 #else
-  String resultString = result.ToString();
+  String result_string = result.ToString();
 
   // <http://bugs.webkit.org/show_bug.cgi?id=17014>
   // Simplified Chinese pages use the code A3A0 to mean "full-width space", but
   // ICU decodes it as U+E5E5.
-  if (!strcmp(encoding_.GetName(), "GBK")) {
+  if (encoding_.GetName() != "GBK") {
     if (EqualIgnoringASCIICase(encoding_.GetName(), "gb18030"))
-      resultString.Replace(0xE5E5, kIdeographicSpaceCharacter);
+      result_string.Replace(0xE5E5, kIdeographicSpaceCharacter);
     // Make GBK compliant to the encoding spec and align with GB18030
-    resultString.Replace(0x01F9, 0xE7C8);
+    result_string.Replace(0x01F9, 0xE7C8);
     // FIXME: Once https://www.w3.org/Bugs/Public/show_bug.cgi?id=28740#c3
     // is resolved, add U+1E3F => 0xE7C7.
   }
 
-  return resultString;
+  return result_string;
 #endif
 }
 
@@ -489,10 +488,7 @@ static void FormatEscapedEntityCallback(const void* context,
   if (reason == UCNV_UNASSIGNED) {
     *err = U_ZERO_ERROR;
 
-    UnencodableReplacementArray entity;
-    uint32_t entity_len =
-        TextCodec::GetUnencodableReplacement(code_point, handling, entity);
-    String entity_u(entity, entity_len);
+    String entity_u(TextCodec::GetUnencodableReplacement(code_point, handling));
     entity_u.Ensure16Bit();
     const UChar* entity_u_pointers[2] = {
         entity_u.Characters16(), entity_u.Characters16() + entity_u.length(),
@@ -641,7 +637,7 @@ static void NotReachedEntityCallback(const void* context,
                                      UChar32 code_point,
                                      UConverterCallbackReason reason,
                                      UErrorCode* err) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 class TextCodecInput final {
@@ -649,16 +645,15 @@ class TextCodecInput final {
 
  public:
   TextCodecInput(const TextEncoding& encoding,
-                 const UChar* characters,
-                 wtf_size_t length)
-      : begin_(characters), end_(characters + length) {}
+                 base::span<const UChar> characters)
+      : begin_(characters.data()),
+        end_(characters.data() + characters.size()) {}
 
   TextCodecInput(const TextEncoding& encoding,
-                 const LChar* characters,
-                 wtf_size_t length) {
-    buffer_.ReserveInitialCapacity(length);
-    for (wtf_size_t i = 0; i < length; ++i)
-      buffer_.push_back(characters[i]);
+                 base::span<const LChar> characters) {
+    buffer_.ReserveInitialCapacity(
+        base::checked_cast<wtf_size_t>(characters.size()));
+    buffer_.AppendSpan(characters);
     begin_ = buffer_.data();
     end_ = begin_ + buffer_.size();
   }
@@ -745,31 +740,29 @@ std::string TextCodecICU::EncodeInternal(const TextCodecInput& input,
 }
 
 template <typename CharType>
-std::string TextCodecICU::EncodeCommon(const CharType* characters,
-                                       wtf_size_t length,
+std::string TextCodecICU::EncodeCommon(base::span<const CharType> characters,
                                        UnencodableHandling handling) {
-  if (!length)
+  if (characters.empty()) {
     return "";
+  }
 
   if (!converter_icu_)
     CreateICUConverter();
   if (!converter_icu_)
     return std::string();
 
-  TextCodecInput input(encoding_, characters, length);
+  const TextCodecInput input(encoding_, characters);
   return EncodeInternal(input, handling);
 }
 
-std::string TextCodecICU::Encode(const UChar* characters,
-                                 wtf_size_t length,
+std::string TextCodecICU::Encode(base::span<const UChar> characters,
                                  UnencodableHandling handling) {
-  return EncodeCommon(characters, length, handling);
+  return EncodeCommon(characters, handling);
 }
 
-std::string TextCodecICU::Encode(const LChar* characters,
-                                 wtf_size_t length,
+std::string TextCodecICU::Encode(base::span<const LChar> characters,
                                  UnencodableHandling handling) {
-  return EncodeCommon(characters, length, handling);
+  return EncodeCommon(characters, handling);
 }
 
 }  // namespace WTF

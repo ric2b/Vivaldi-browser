@@ -26,6 +26,11 @@
 #import "ios/public/provider/chrome/browser/text_zoom/text_zoom_api.h"
 #import "services/metrics/public/cpp/ukm_builders.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/settings/pagezoom/vivaldi_pagezoom_settings_prefs.h"
+// End Vivaldi
+
 namespace {
 
 // Content size category to report UMA metrics.
@@ -247,7 +252,24 @@ void FontSizeTabHelper::PageLoaded(
     web::WebState* web_state,
     web::PageLoadCompletionStatus load_completion_status) {
   DCHECK_EQ(web_state, web_state_);
+
+  // Vivaldi
+  if (!CurrentPageSupportsTextZoom()) {
+    return;
+  }
+  PrefService* prefService = GetPrefService();
+  BOOL globalZoomEnabled =
+    [VivaldiPageZoomSettingPrefs
+      getGlobalPageZoomEnabledWithPrefService:prefService];
+  if (vivaldi::IsVivaldiRunning() && prefService && globalZoomEnabled) {
+     int zoom_level =
+       [VivaldiPageZoomSettingPrefs getPageZoomLevelWithPrefService:prefService];
+     SetPageFontSize(zoom_level);
+     tab_helper_has_zoomed_ = true;
+  } else {
   NewPageZoom();
+  } // End Vivaldi
+
 }
 
 void FontSizeTabHelper::DidFinishNavigation(web::WebState* web_state,
@@ -283,6 +305,22 @@ void FontSizeTabHelper::CreateNotificationObserver() {
 void FontSizeTabHelper::WebFrameBecameAvailable(
     web::WebFramesManager* web_frames_manager,
     web::WebFrame* web_frame) {
+
+  // Vivaldi
+  if (!CurrentPageSupportsTextZoom()) {
+    return;
+  }
+  PrefService* prefService = GetPrefService();
+  BOOL globalZoomEnabled =
+    [VivaldiPageZoomSettingPrefs
+      getGlobalPageZoomEnabledWithPrefService:prefService];
+  if (vivaldi::IsVivaldiRunning() && prefService && globalZoomEnabled) {
+      // Get and apply the global zoom level
+      int zoomLevel = [VivaldiPageZoomSettingPrefs
+                        getPageZoomLevelWithPrefService:prefService];
+      SetPageFontSize(zoomLevel);
+      tab_helper_has_zoomed_ = true;
+  } else {
   // Make sure that any new web frame starts with the correct zoom level.
   int size = GetFontSize();
   // Prevent any zooming errors by only zooming when necessary. This is mostly
@@ -291,6 +329,8 @@ void FontSizeTabHelper::WebFrameBecameAvailable(
   if (tab_helper_has_zoomed_ || size != 100) {
     FontSizeJavaScriptFeature::GetInstance()->AdjustFontSize(web_frame, size);
   }
+  } // End Vivaldi
+
 }
 
 void FontSizeTabHelper::NewPageZoom() {

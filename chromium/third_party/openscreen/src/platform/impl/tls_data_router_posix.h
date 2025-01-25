@@ -91,7 +91,7 @@ class TlsDataRouterPosix : public SocketHandleWaiter::Subscriber {
   // Mutex guarding connections_ vector.
   mutable std::mutex connections_mutex_;
 
-  // Mutex guarding |accept_socket_mappings_|.
+  // Mutex guarding `accept_socket_mappings_`.
   mutable std::mutex accept_socket_mutex_;
 
   // Function to get the current time.

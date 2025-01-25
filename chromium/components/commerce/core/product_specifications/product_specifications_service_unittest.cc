@@ -329,7 +329,7 @@ class ProductSpecificationsServiceTest : public testing::Test {
 
   void VerifyProductSpecificationsSet(
       const base::Uuid uuid,
-      const std::optional<ProductSpecificationsSet> expected) {
+      std::optional<ProductSpecificationsSet> expected) {
     base::RunLoop loop;
     service()->GetSetByUuid(
         uuid, base::BindOnce(
@@ -344,7 +344,7 @@ class ProductSpecificationsServiceTest : public testing::Test {
                       EXPECT_EQ(expected.value().urls(), set.value().urls());
                     }
                   },
-                  expected)
+                  std::move(expected))
                   .Then(loop.QuitClosure()));
     loop.Run();
   }
@@ -391,6 +391,7 @@ class ProductSpecificationsServiceSyncDisabledTest
             .value());
     ON_CALL(processor_, IsTrackingMetadata())
         .WillByDefault(testing::Return(false));
+    service()->DisableInitializedForTesting();
   }
 
   ProductSpecificationsSet* initial_set() { return initial_set_.get(); }
@@ -713,7 +714,7 @@ TEST_F(ProductSpecificationsServiceTest,
   std::vector<UrlInfo> expected_product_urls;
   for (size_t i = 1; i <= kMaxTableSize; i++) {
     expected_product_urls.push_back(
-        UrlInfo(GURL(base::StringPrintf("https://example.com/%zu", i)), u""));
+        UrlInfo(GURL(base::StringPrintf("https://example.com/%d", i)), u""));
   }
   // Randomize order
   // Items are ordered according to the input order, but some randomization
@@ -793,7 +794,7 @@ TEST_F(ProductSpecificationsServiceTest,
   std::vector<UrlInfo> initial_url_list;
   for (size_t i = 0; i < kMaxTableSize + 1; i++) {
     initial_url_list.push_back(
-        UrlInfo(GURL(base::StringPrintf("http://example.com/%zu", i)), u""));
+        UrlInfo(GURL(base::StringPrintf("http://example.com/%d", i)), u""));
   }
 
   // The expected URL set should be the max count without the extra.
@@ -883,7 +884,7 @@ TEST_F(ProductSpecificationsServiceTest, TestSetUrlsMultiSpecifics_MaxSize) {
   std::vector<UrlInfo> url_list;
   for (size_t i = 0; i < kMaxTableSize; i++) {
     url_list.push_back(
-        UrlInfo(GURL(base::StringPrintf("http://example.com/%zu", i)), u""));
+        UrlInfo(GURL(base::StringPrintf("http://example.com/%d", i)), u""));
   }
 
   // The expected URL set should be the max count without the extra.

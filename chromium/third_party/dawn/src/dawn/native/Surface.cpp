@@ -39,6 +39,10 @@
 #include "dawn/native/ValidationUtils_autogen.h"
 #include "dawn/native/utils/WGPUHelpers.h"
 
+#if DAWN_PLATFORM_IS(WINDOWS)
+#include "dawn/common/windows_with_undefs.h"
+#endif  // DAWN_PLATFORM_IS(WINDOWS)
+
 #if defined(DAWN_USE_WINDOWS_UI)
 #include <windows.ui.core.h>
 #include <windows.ui.xaml.controls.h>
@@ -270,9 +274,7 @@ Surface::Surface(InstanceBase* instance, const UnpackedPtr<SurfaceDescriptor>& d
     : ErrorMonad(),
       mInstance(instance),
       mCapabilityCache(std::make_unique<AdapterSurfaceCapCache>()) {
-    if (descriptor->label != nullptr && strlen(descriptor->label) != 0) {
-        mLabel = descriptor->label;
-    }
+    mLabel = std::string(descriptor->label);
 
     // Type is validated in validation, otherwise this may crash with an assert failure.
     wgpu::SType type =
@@ -345,23 +347,6 @@ Surface::~Surface() {
         mRecycledSwapChain->DetachFromSurface();
         mRecycledSwapChain = nullptr;
     }
-}
-
-SwapChainBase* Surface::GetAttachedSwapChain() {
-    DAWN_ASSERT(!IsError());
-    DAWN_ASSERT(mIsSwapChainManagedBySurface == ManagesSwapChain::Unknown ||
-                mIsSwapChainManagedBySurface == ManagesSwapChain::No);
-    mIsSwapChainManagedBySurface = ManagesSwapChain::No;
-
-    return mSwapChain.Get();
-}
-void Surface::SetAttachedSwapChain(SwapChainBase* swapChain) {
-    DAWN_ASSERT(!IsError());
-    DAWN_ASSERT(mIsSwapChainManagedBySurface == ManagesSwapChain::Unknown ||
-                mIsSwapChainManagedBySurface == ManagesSwapChain::No);
-    mIsSwapChainManagedBySurface = ManagesSwapChain::No;
-
-    mSwapChain = swapChain;
 }
 
 InstanceBase* Surface::GetInstance() const {
@@ -446,11 +431,6 @@ MaybeError Surface::Configure(const SurfaceConfiguration* configIn) {
 
     SurfaceConfiguration config = *configIn;
     mCurrentDevice = config.device;  // next errors are routed to the new device
-    DAWN_INVALID_IF(mIsSwapChainManagedBySurface == ManagesSwapChain::No,
-                    "%s cannot be configured because it is used by legacy swapchain %s.", this,
-                    mSwapChain.Get());
-
-    mIsSwapChainManagedBySurface = ManagesSwapChain::Yes;
 
     DAWN_TRY(mCapabilityCache->WithAdapterCapabilities(
         GetCurrentDevice()->GetAdapter(), this,
@@ -497,15 +477,11 @@ MaybeError Surface::Unconfigure() {
     DAWN_INVALID_IF(!mSwapChain.Get(), "%s is not configured.", this);
 
     if (mSwapChain != nullptr) {
-        if (mIsSwapChainManagedBySurface == ManagesSwapChain::Yes) {
-            if (mRecycledSwapChain != nullptr) {
-                mRecycledSwapChain->DetachFromSurface();
-                mRecycledSwapChain = nullptr;
-            }
-            mRecycledSwapChain = mSwapChain;
-        } else {
-            mSwapChain->DetachFromSurface();
+        if (mRecycledSwapChain != nullptr) {
+            mRecycledSwapChain->DetachFromSurface();
+            mRecycledSwapChain = nullptr;
         }
+        mRecycledSwapChain = mSwapChain;
         mSwapChain = nullptr;
     }
 
@@ -559,30 +535,12 @@ MaybeError Surface::GetCurrentTexture(SurfaceTexture* surfaceTexture) const {
     return {};
 }
 
-ResultOrError<wgpu::TextureFormat> Surface::GetPreferredFormat(AdapterBase* adapter) const {
-    GetInstance()->EmitDeprecationWarning(
-        "GetPreferredFormat is deprecated, use GetCapabilities().format[0] instead as the "
-        "preferred format.");
-
-    wgpu::TextureFormat format = wgpu::TextureFormat::Undefined;
-
-    DAWN_TRY(mCapabilityCache->WithAdapterCapabilities(
-        adapter, this, [&](const PhysicalDeviceSurfaceCapabilities& caps) -> MaybeError {
-            DAWN_INVALID_IF(caps.formats.empty(), "No format is supported by %s for %s.", adapter,
-                            this);
-            format = caps.formats.front();
-            return {};
-        }));
-
-    return format;
-}
-
 MaybeError Surface::Present() {
     DAWN_INVALID_IF(IsError(), "%s is invalid.", this);
     DAWN_INVALID_IF(!mSwapChain.Get(), "%s is not configured.", this);
 
     auto deviceLock(GetCurrentDevice()->GetScopedLock());
-    mSwapChain->APIPresent();
+    DAWN_TRY(mSwapChain->Present());
 
     return {};
 }
@@ -624,21 +582,6 @@ void Surface::APIGetCurrentTexture(SurfaceTexture* surfaceTexture) const {
     }
 }
 
-wgpu::TextureFormat Surface::APIGetPreferredFormat(AdapterBase* adapter) const {
-    ResultOrError<wgpu::TextureFormat> resultOrError = GetPreferredFormat(adapter);
-    wgpu::TextureFormat format;
-    if (!GetCurrentDevice()) {
-        if (mInstance->ConsumedError(std::move(resultOrError), &format)) {
-            return wgpu::TextureFormat::Undefined;
-        }
-    } else if (GetCurrentDevice()->ConsumedError(std::move(resultOrError), &format,
-                                                 "calling %s.GetPreferredFormat(%s).", this,
-                                                 adapter)) {
-        return wgpu::TextureFormat::Undefined;
-    }
-    return format;
-}
-
 void Surface::APIPresent() {
     MaybeError maybeError = Present();
     if (!GetCurrentDevice()) {
@@ -657,12 +600,8 @@ void Surface::APIUnconfigure() {
     }
 }
 
-void Surface::APISetLabel(const char* label) {
-    mLabel = label ? label : "";
-}
-
-void Surface::APISetLabel2(std::optional<std::string_view> label) {
-    mLabel = utils::NormalizeLabel(label);
+void Surface::APISetLabel(StringView label) {
+    mLabel = utils::NormalizeMessageString(label);
 }
 
 }  // namespace dawn::native

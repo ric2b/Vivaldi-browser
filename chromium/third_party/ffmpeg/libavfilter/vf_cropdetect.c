@@ -31,7 +31,7 @@
 #include "libavutil/qsort.h"
 
 #include "avfilter.h"
-#include "internal.h"
+#include "filters.h"
 #include "video.h"
 #include "edge_common.h"
 

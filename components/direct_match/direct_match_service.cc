@@ -33,6 +33,7 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/common/chrome_paths.h"
 #endif
+
 namespace direct_match {
 
 namespace {
@@ -93,6 +94,8 @@ DirectMatchService::DirectMatchService()
 
 DirectMatchService::~DirectMatchService() {}
 
+DirectMatchService::Observer::~Observer() = default;
+
 #if BUILDFLAG(IS_IOS)
 void DirectMatchService::Load(
     const scoped_refptr<network::SharedURLLoaderFactory>& url_loader_factory) {
@@ -133,6 +136,14 @@ void DirectMatchService::Load(Profile* profile) {
   DirectMatchService::RunDirectMatchDownload();
 }
 #endif
+
+void DirectMatchService::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void DirectMatchService::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
 
 void DirectMatchService::RunDirectMatchDownload() {
   net::NetworkTrafficAnnotationTag traffic_annotation =
@@ -184,7 +195,9 @@ void DirectMatchService::RunDirectMatchDownload() {
 void DirectMatchService::OnDirectMatchDownloadDone(
     const size_t loader_idx,
     std::unique_ptr<std::string> response_body) {
+
   if (!response_body || response_body->empty()) {
+
     report_backoff_.InformOfRequest(false);
     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
@@ -198,6 +211,7 @@ void DirectMatchService::OnDirectMatchDownloadDone(
   }
   if (!vivaldi::VerifyJsonSignature(*response_body)) {
     LOG(WARNING) << "Direct Match has invalid signature";
+
     return;
   } else {
     VLOG(1) << "Direct Match signature verified.";
@@ -205,8 +219,9 @@ void DirectMatchService::OnDirectMatchDownloadDone(
   absl::optional<base::Value> json =
       base::JSONReader::Read(*response_body, base::JSON_ALLOW_TRAILING_COMMAS |
                                                  base::JSON_ALLOW_COMMENTS);
-  if (!json) {
+ if (!json) {
     LOG(ERROR) << "Invalid Direct Match list JSON";
+
     return;
   }
   /*
@@ -243,6 +258,11 @@ void DirectMatchService::OnDirectMatchDownloadDone(
     direct_match_units_.push_back(std::move(data));
   }
   LOG(INFO) << "Downloaded Direct Match list from server.";
+
+  for (Observer& observer : observers_) {
+    observer.OnFinishedDownloadingDirectMatchUnits();
+  }
+
   HandleIcons();
 }
 
@@ -345,6 +365,11 @@ void DirectMatchService::RemoveUnusedIcons(
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&RemoveUnusedIconsThread, std::move(icons),
                      user_data_dir_));
+
+  // Notify observers that all icons are available.
+  for (Observer& observer : observers_) {
+    observer.OnFinishedDownloadingDirectMatchUnitsIcon();
+   }
 }
 
 /* static */
@@ -373,21 +398,65 @@ std::string DirectMatchService::GetIconPath(std::string image_url) {
 #endif
 }
 
-const DirectMatchService::DirectMatchUnit* DirectMatchService::GetDirectMatch(
+std::vector<const DirectMatchService::DirectMatchUnit*>
+DirectMatchService::GetMatchingUnits(
+  std::function<bool(const DirectMatchUnit&)> predicate) const {
+  std::vector<const DirectMatchService::DirectMatchUnit*> matching_units;
+  for (const auto& unit : direct_match_units_) {
+    if (predicate(unit)) {
+      matching_units.push_back(&unit);
+    }
+  }
+  // Sort the matching units by 'position' in ascending order
+  std::sort(matching_units.begin(), matching_units.end(),
+            [](const DirectMatchUnit* a, const DirectMatchUnit* b) {
+              return a->position < b->position;
+            });
+  return matching_units;
+}
+
+std::pair<DirectMatchService::DirectMatchUnit*, bool>
+DirectMatchService::GetDirectMatch(
     std::string query) {
   std::u16string lowercase_query =
       base::i18n::FoldCase(base::UTF8ToUTF16(query));
-  size_t match_len = lowercase_query.size();
+  DirectMatchService::DirectMatchUnit* candidate = nullptr;
+  bool candidate_allowed_to_be_default_match = false;
+
   for (auto& unit : direct_match_units_) {
+    if (!unit.display_locations.address_bar)
+      continue;
     bool has_banned_word =
         std::any_of(unit.blocked_names.begin(), unit.blocked_names.end(),
                     [lowercase_query](const base::Value& blocked_name) {
                       return base::i18n::FoldCase(base::UTF8ToUTF16(
                                  blocked_name.GetString())) == lowercase_query;
                     });
-    if (unit.match_offset > match_len || has_banned_word) {
+    if (has_banned_word) {
       continue;
     }
+
+    auto updateCandidate =
+        [&candidate, &unit, &query, &candidate_allowed_to_be_default_match]() {
+      bool unit_allowed_to_be_default_match =
+          // VAB-10348 fuzzy match can not be default
+          base::StartsWith(unit.name,
+                          query,
+                          base::CompareCase::INSENSITIVE_ASCII) &&
+          // VB-111392 Allow match shorter than match_offset
+          query.length() >= unit.match_offset;
+      if (!candidate || (!candidate_allowed_to_be_default_match &&
+            unit_allowed_to_be_default_match) ||
+          // Example: typing 'ali' should match on AliExpress with match_offset
+          // 3 instead of Alibaba with match_offset 4.
+          candidate->match_offset > unit.match_offset) {
+        candidate = &unit;
+        candidate_allowed_to_be_default_match =
+            unit_allowed_to_be_default_match;
+      }
+    };
+
+    size_t match_len = lowercase_query.size();
     std::u16string name =
         base::i18n::FoldCase(base::UTF8ToUTF16(unit.name)).substr(0, match_len);
     float acceptable_dist = GetAcceptableDirectMatchDistance(name);
@@ -396,21 +465,38 @@ const DirectMatchService::DirectMatchUnit* DirectMatchService::GetDirectMatch(
             name, lowercase_query, false) <= acceptable_dist;
     // Return unit if distance is ok on name.
     if (match_on_name) {
-      return &unit;
-    }
-    for (base::Value& alternative_name : unit.alternative_names) {
-      std::u16string lowercase_alternative_name =
-          base::i18n::FoldCase(base::UTF8ToUTF16(alternative_name.GetString()))
-              .substr(0, match_len);
-      // Return unit if distance is ok on alternative name.
-      if (qwerty_weighted_distance_.QwertyWeightedDamerauLevenshtein(
-              lowercase_alternative_name, lowercase_query, false) <=
-          acceptable_dist) {
-        return &unit;
+      updateCandidate();
+    } else {
+      for (base::Value& alternative_name : unit.alternative_names) {
+        std::u16string lowercase_alternative_name =
+            base::i18n::FoldCase(base::UTF8ToUTF16(alternative_name.GetString()))
+                .substr(0, match_len);
+        // Return unit if distance is ok on alternative name.
+        if (qwerty_weighted_distance_.QwertyWeightedDamerauLevenshtein(
+                lowercase_alternative_name, lowercase_query, false) <=
+            acceptable_dist) {
+          updateCandidate();
+        }
       }
     }
   }
-  return nullptr;
+  return { candidate, candidate_allowed_to_be_default_match };
+}
+
+std::vector<const DirectMatchService::DirectMatchUnit*>
+DirectMatchService::GetDirectMatchesForCategory(size_t category_id) const {
+  return GetMatchingUnits([category_id](const DirectMatchUnit& unit) {
+    return unit.display_locations.sd_dialog && unit.category == category_id;
+  });
+}
+
+std::vector<const DirectMatchService::DirectMatchUnit*>
+DirectMatchService::GetPopularSites() const {
+
+  std::vector<const DirectMatchService::DirectMatchUnit*> matching_units;
+  return GetMatchingUnits([](const DirectMatchUnit& unit) {
+    return unit.display_locations.sd_dialog;
+  });
 }
 
 /**
@@ -450,10 +536,8 @@ DirectMatchService::DirectMatchUnit::DirectMatchUnit(base::Value::Dict* unit) {
       name = std::move(value.GetString());
     } else if (key == "title") {
       title = std::move(value.GetString());
-    } else if (key == "click_url") {
-      click_url = std::move(value.GetString());
-    } else if (key == "target_url") {
-      target_url = std::move(value.GetString());
+    } else if (key == "redirect_url") {
+      redirect_url = std::move(value.GetString());
     } else if (key == "image_url") {
       image_url = std::move(value.GetString());
       image_path = GetIconPath(image_url);
@@ -463,6 +547,20 @@ DirectMatchService::DirectMatchUnit::DirectMatchUnit(base::Value::Dict* unit) {
       alternative_names = std::move(value.GetList());
     } else if (key == "blocked_names") {
       blocked_names = std::move(value.GetList());
+    } else if (key == "category") {
+      category = static_cast<size_t>(value.GetInt());
+    }  else if (key == "position") {
+      position = static_cast<size_t>(value.GetInt());
+    } else if (key == "display_locations") {
+      if (auto* display_dict = value.GetIfDict()) {
+        if (auto address_bar_value = display_dict->FindBool("address_bar")) {
+          display_locations.address_bar = *address_bar_value;
+        }
+
+        if (auto sd_dialog_value = display_dict->FindBool("sd_dialog")) {
+          display_locations.sd_dialog = *sd_dialog_value;
+        }
+      }
     }
   }
 }

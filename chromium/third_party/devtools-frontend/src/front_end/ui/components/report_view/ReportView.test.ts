@@ -7,6 +7,8 @@ import * as LitHtml from '../../lit-html/lit-html.js';
 
 import * as ReportView from './report_view.js';
 
+const {html} = LitHtml;
+
 describe('ReportView', () => {
   describe('header', () => {
     it('shows the provided report title', () => {
@@ -25,9 +27,9 @@ describe('ReportView', () => {
       const report = new ReportView.ReportView.Report();
       // clang-format off
       LitHtml.render(
-          LitHtml.html`
-        <${ReportView.ReportView.ReportKey.litTagName}>This is the key</${ReportView.ReportView.ReportKey.litTagName}>
-        <${ReportView.ReportView.ReportValue.litTagName}>This is the value</${ReportView.ReportView.ReportValue.litTagName}>
+          html`
+        <devtools-report-key>This is the key</devtools-report-key>
+        <devtools-report-value>This is the value</devtools-report-value>
       `,
           report, {host: this});
       // clang-format on

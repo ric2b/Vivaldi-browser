@@ -118,7 +118,6 @@ class NearbyShareSettingsTest : public ::testing::Test {
  public:
   NearbyShareSettingsTest()
       : local_device_data_manager_(kDefaultDeviceName) {
-    FakeTaskRunner::ResetPendingTasksCount();
     prefs::RegisterNearbySharingPrefs(preference_manager_);
     nearby_share_settings_ = std::make_unique<NearbyShareSettings>(
         &context_, context_.GetClock(), fake_device_info_, preference_manager_,
@@ -146,7 +145,7 @@ class NearbyShareSettingsTest : public ::testing::Test {
   // Waits for running tasks to complete.
   void Flush() {
     absl::SleepFor(absl::Seconds(1));
-    FakeTaskRunner::WaitForRunningTasksWithTimeout(absl::Milliseconds(200));
+    context_.fake_task_runner()->SyncWithTimeout(absl::Milliseconds(200));
   }
 
   void FastForward(absl::Duration duration) {
@@ -280,6 +279,26 @@ TEST_F(NearbyShareSettingsTest,
 }
 
 TEST_F(NearbyShareSettingsTest,
+       SetPersistentThenTemporaryVisibilityExpiresAndRestoresOriginal) {
+  // Set our initial visibility to self share.
+  settings()->SetVisibility(DeviceVisibility::DEVICE_VISIBILITY_SELF_SHARE);
+  // Set persistent everyone mode.
+  settings()->SetVisibility(DeviceVisibility::DEVICE_VISIBILITY_EVERYONE);
+  // Set everyone mode temporarily.
+  settings()->SetVisibility(
+      DeviceVisibility::DEVICE_VISIBILITY_EVERYONE,
+      absl::Seconds(prefs::kDefaultMaxVisibilityExpirationSeconds));
+  // Fast forward to the expiration time.
+  FastForward(absl::Seconds(prefs::kDefaultMaxVisibilityExpirationSeconds + 1));
+  // Verify that the visibility has expired and we are back to self share.
+  Flush();
+  EXPECT_EQ(settings()->GetVisibility(),
+            DeviceVisibility::DEVICE_VISIBILITY_SELF_SHARE);
+  EXPECT_EQ(settings()->GetFallbackVisibility().visibility,
+            DeviceVisibility::DEVICE_VISIBILITY_UNSPECIFIED);
+}
+
+TEST_F(NearbyShareSettingsTest,
        GetFallbackVisibilityReturnsUnspecifiedIfPermanent) {
   // Set our initial visibility to self share.
   settings()->SetVisibility(DeviceVisibility::DEVICE_VISIBILITY_SELF_SHARE);
@@ -367,6 +386,23 @@ TEST_F(NearbyShareSettingsTest, TemporaryVisibilityIsCorrect) {
       now + absl::Seconds(prefs::kDefaultMaxVisibilityExpirationSeconds);
   EXPECT_LT(fallback_visibility.fallback_time - expected_fallback_time,
             absl::Seconds(1));
+}
+
+TEST_F(NearbyShareSettingsTest, SetVisibilityWithExpirationTooLong) {
+  // Set visibility with expiration longer than the max.
+  settings()->SetVisibility(DeviceVisibility::DEVICE_VISIBILITY_SELF_SHARE,
+                            absl::Hours(1));
+  // Expiration capped at 10minutes.
+  absl::Time expected_fallback_time =
+      context_.GetClock()->Now() + absl::Minutes(10);
+  NearbyShareSettings::FallbackVisibilityInfo fallback_visibility =
+      settings()->GetFallbackVisibility();
+  // default visibility was hidden.
+  EXPECT_EQ(fallback_visibility.visibility,
+            DeviceVisibility::DEVICE_VISIBILITY_HIDDEN);
+  absl::Duration time_diff = fallback_visibility.fallback_time -
+                             expected_fallback_time;
+  EXPECT_LT(absl::AbsDuration(time_diff), absl::Seconds(1));
 }
 
 TEST(NearbyShareVisibilityTest, RestoresFallbackVisibility_ExpiredTimer) {

@@ -12,6 +12,8 @@
 
 #include "base/functional/callback_helpers.h"
 #include "base/functional/overloaded.h"
+#include "base/logging.h"
+#include "base/memory/weak_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_run_loop_timeout.h"
@@ -208,6 +210,24 @@ InteractionSequence::StepBuilder InteractiveTestApi::Confirm(
   return builder;
 }
 
+InteractionSequence::StepBuilder InteractiveTestApi::DumpElements() {
+  return WithElement(kInteractiveTestPivotElementId,
+                     [this](ui::TrackedElement* el) {
+                       private_test_impl()
+                           .DebugDumpElements(el->context())
+                           .PrintTo(COMPACT_GOOGLE_LOG_INFO.stream());
+                     });
+}
+
+InteractionSequence::StepBuilder InteractiveTestApi::DumpElementsInContext() {
+  return WithElement(kInteractiveTestPivotElementId,
+                     [this](ui::TrackedElement* el) {
+                       private_test_impl()
+                           .DebugDumpContext(el->context())
+                           .PrintTo(COMPACT_GOOGLE_LOG_INFO.stream());
+                     });
+}
+
 // static
 InteractionSequence::StepBuilder InteractiveTestApi::WaitForShow(
     ElementSpecifier element,
@@ -351,16 +371,38 @@ InteractiveTestApi::StepBuilder InteractiveTestApi::SetOnIncompatibleAction(
       base::Unretained(this), action, std::string(reason)));
 }
 
+constexpr char kInteractiveErrorMessage[] = R"(
+
+The test verb you are trying to use requires an interactive test environment.
+
+This is one in which the test can safely control things like mouse movement and
+window activation, without having to worry about other processes making changes
+that can cause flakiness.
+
+Q: But I was just selecting a menu item!
+A: In tests where process exclusivity is not guaranteed, if the test application
+   loses focus, the menu could unexpectedly close, leading to flakiness. We want
+   to preemptively avoid these flakes.
+
+Solutions:
+ - Use PressButton() instead of MoveMouseTo() + ClickMouse()
+ - Move your browser test from browser_tests to interactive_ui_tests
+ - Move your Ash test into chromeos_integration_tests
+
+How to make a browser test interactive:
+ - Rename your test file from *_browsertest.cc to *_interactive_uitest.cc
+    * e.g. my_system_browsertest.cc -> my_system_interactive_uitest.cc
+ - Rename your test class from *Browsertest to *UiTest
+    * e.g. MySystemBrowserTest -> MySystemUiTest
+ - Edit chrome/test/BUILD.gn to move your test from the "browser_tests" target
+   to the "interactive_ui_tests" target.
+    * Ensure that if your test only ran in certain configurations, in
+      browser_tests, it is gated by the same conditions in interactive_ui_tests.
+)";
+
 void InteractiveTestApi::RequireInteractiveTest() {
   CHECK(internal::InteractiveTestPrivate::allow_interactive_test_verbs_)
-      << "The test verb you are trying to use requires an interactive test."
-         " environment. This is one in which the test can safely control things"
-         " like mouse movement and window activation, without having to worry"
-         " about other processes making changes that can cause flakiness."
-         "\n"
-         "\nFor chromium browser tests, you can fix this issue by using "
-         "different verbs (e.g. PressButton() instead of MoveMouseTo(),"
-         " ClickMouse()), or you can move the test to interactive_ui_tests.";
+      << kInteractiveErrorMessage;
 }
 
 bool InteractiveTestApi::RunTestSequenceImpl(
@@ -382,21 +424,26 @@ bool InteractiveTestApi::RunTestSequenceImpl(
     base::test::ScopedRunLoopTimeout timeout(
         FROM_HERE, std::nullopt,
         base::BindRepeating(
-            [](base::WeakPtr<InteractionSequence> sequence) {
+            [](base::WeakPtr<InteractionSequence> sequence,
+               base::WeakPtr<internal::InteractiveTestPrivate> impl) {
               std::ostringstream oss;
+              ui::ElementContext context;
               if (sequence) {
-                oss << internal::kInteractiveTestFailedMessagePrefix
-                    << sequence->BuildAbortedData(
-                           InteractionSequence::AbortedReason::
-                               kSequenceTimedOut);
+                const auto data = sequence->BuildAbortedData(
+                    InteractionSequence::AbortedReason::kSequenceTimedOut);
+                oss << internal::kInteractiveTestFailedMessagePrefix << data;
+                context = data.context;
               } else {
                 oss << "Interactive test: timeout after test sequence "
                        "destroyed; a failure message may already have been "
                        "logged.";
               }
+              if (impl) {
+                impl->DebugDumpElements(context).PrintTo(oss);
+              }
               return oss.str();
             },
-            sequence->AsWeakPtr()));
+            sequence->AsWeakPtr(), private_test_impl().GetAsWeakPtr()));
     sequence->RunSynchronouslyForTesting();
   }
 

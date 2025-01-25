@@ -137,7 +137,7 @@ bool CompoundRtcpParser::Parse(ByteView buffer, FrameId max_feedback_frame_id) {
   std::vector<PacketNack> packet_nacks;
   bool picture_loss_indicator = false;
 
-  // The data contained in |buffer| can be a "compound packet," which means that
+  // The data contained in `buffer` can be a "compound packet," which means that
   // it can be the concatenation of multiple RTCP packets. The loop here
   // processes each one-by-one.
   while (!buffer.empty()) {

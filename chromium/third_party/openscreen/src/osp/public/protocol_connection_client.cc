@@ -7,7 +7,6 @@
 namespace openscreen::osp {
 
 ProtocolConnectionClient::ProtocolConnectionClient() = default;
-
 ProtocolConnectionClient::~ProtocolConnectionClient() = default;
 
 }  // namespace openscreen::osp

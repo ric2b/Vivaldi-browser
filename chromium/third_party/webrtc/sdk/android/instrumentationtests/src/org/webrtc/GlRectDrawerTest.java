@@ -51,8 +51,8 @@ public class GlRectDrawerTest {
       int width, int height, ByteBuffer actual, ByteBuffer expected) {
     actual.rewind();
     expected.rewind();
-    assertEquals(actual.remaining(), width * height * 3);
-    assertEquals(expected.remaining(), width * height * 3);
+    assertEquals(actual.remaining(), width * ((long) height) * 3L);
+    assertEquals(expected.remaining(), width * ((long) height) * 3L);
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
         final int actualR = actual.get() & 0xFF;
@@ -227,9 +227,7 @@ public class GlRectDrawerTest {
   @Test
   @MediumTest
   public void testOesRendering() throws InterruptedException {
-    /**
-     * Stub class to convert RGB ByteBuffers to OES textures by drawing onto a SurfaceTexture.
-     */
+    // Stub class to convert RGB ByteBuffers to OES textures by drawing onto a SurfaceTexture.
     class StubOesTextureProducer {
       private final EglBase eglBase;
       private final GlRectDrawer drawer;

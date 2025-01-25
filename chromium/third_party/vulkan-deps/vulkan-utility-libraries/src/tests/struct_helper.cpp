@@ -27,11 +27,11 @@ TEST(struct_helper, structure_type_matches) {
         nullptr, static_cast<VkBufferCreateFlags>(VK_BUFFER_CREATE_SPARSE_BINDING_BIT), std::numeric_limits<uint64_t>::max(),
         static_cast<VkBufferUsageFlags>(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), VK_SHARING_MODE_EXCLUSIVE, 0U, nullptr);
     ASSERT_EQ(VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, buffer_create_info.sType);
-    ASSERT_EQ(VK_BUFFER_CREATE_SPARSE_BINDING_BIT, buffer_create_info.flags);
+    ASSERT_EQ(static_cast<VkBufferCreateFlags>(VK_BUFFER_CREATE_SPARSE_BINDING_BIT), buffer_create_info.flags);
     ASSERT_EQ(std::numeric_limits<uint64_t>::max(), buffer_create_info.size);
-    ASSERT_EQ(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, buffer_create_info.usage);
+    ASSERT_EQ(static_cast<VkBufferUsageFlags>(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), buffer_create_info.usage);
     ASSERT_EQ(VK_SHARING_MODE_EXCLUSIVE, buffer_create_info.sharingMode);
-    ASSERT_EQ(0, buffer_create_info.queueFamilyIndexCount);
+    ASSERT_EQ(0u, buffer_create_info.queueFamilyIndexCount);
     ASSERT_EQ(nullptr, buffer_create_info.pQueueFamilyIndices);
 }
 

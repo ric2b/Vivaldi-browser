@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="es-419">
+<translation id="2947471979790858922">Tu actividad en estas pestañas privadas se eliminará de este dispositivo</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+                    =1 {Encuentra tus pestañas cerradas en pestañas recientes en el menú principal de Vivaldi. Tu pestaña privada no estará disponible.}
+                    other {Encuentra tus pestañas cerradas en pestañas recientes en el menú principal de Vivaldi. Tus # pestañas privadas no estarán disponibles.}}</translation>
+<translation id="4871187110787939393">¿Quieres cerrar todas las pestañas privadas?</translation>
 </translationbundle>

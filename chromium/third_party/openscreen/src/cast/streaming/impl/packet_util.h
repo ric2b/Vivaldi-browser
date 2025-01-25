@@ -37,7 +37,7 @@ constexpr Integer FieldBitmask(unsigned field_size_in_bits) {
   return (Integer{1} << field_size_in_bits) - 1;
 }
 
-// Reserves |num_bytes| from the beginning of the given span, returning the
+// Reserves `num_bytes` from the beginning of the given span, returning the
 // reserved space.
 inline ByteBuffer ReserveSpace(int num_bytes, ByteBuffer& out) {
   const ByteBuffer reserved = out.subspan(0, num_bytes);

@@ -198,12 +198,6 @@ bool PathProvider(int key, base::FilePath* result) {
   base::FilePath cur;
   switch (key) {
     case chrome::DIR_USER_DATA:
-#if BUILDFLAG(IS_CHROMEOS_LACROS) && DCHECK_IS_ON()
-      // Check that the user data directory is not accessed before
-      // initialization when prelaunching at login screen.
-      DCHECK(chromeos::lacros_paths::IsInitializedUserDataDir() ||
-             !chromeos::IsLaunchedWithPostLoginParams());
-#endif
       if (!GetDefaultUserDataDirectory(&cur)) {
         return false;
       }
@@ -471,22 +465,6 @@ bool PathProvider(int key, base::FilePath* result) {
 #endif
       break;
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-    case chrome::FILE_RESOURCES_FOR_SHARING_PACK:
-      if (!GetDefaultUserDataDirectory(&cur)) {
-        return false;
-      }
-      cur = cur.Append(FILE_PATH_LITERAL(crosapi::kSharedResourcesPackName));
-      break;
-    case chrome::FILE_ASH_RESOURCES_PACK:
-      if (!base::PathService::Get(chromeos::lacros_paths::ASH_RESOURCES_DIR,
-                                  &cur)) {
-        return false;
-      }
-      cur = cur.Append("resources.pak");
-      break;
-#endif
-
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     case chrome::DIR_CHROMEOS_WALLPAPERS:
       if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur)) {
@@ -547,6 +525,12 @@ bool PathProvider(int key, base::FilePath* result) {
         return false;
       }
       break;
+#if BUILDFLAG(IS_MAC)
+    case chrome::DIR_OUTER_BUNDLE: {
+      cur = base::apple::OuterBundlePath();
+      break;
+    }
+#endif
 #if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_OPENBSD)
     case chrome::DIR_POLICY_FILES: {
 #if defined(OS_LINUX)

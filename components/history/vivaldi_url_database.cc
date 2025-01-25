@@ -99,8 +99,9 @@ history::TypedUrlResults URLDatabase::GetVivaldiTypedHistory(
   sql.append("k.url_id IS NOT NULL, k.normalized_term ");
   sql.append("FROM urls AS u ");
   sql.append("LEFT JOIN keyword_search_terms AS k ON u.id = k.url_id ");
-  sql.append("WHERE (u.typed_count > 0 AND u.url LIKE ?) ");
-  sql.append("OR k.normalized_term LIKE ? ");
+  sql.append("WHERE ((u.typed_count > 0 AND u.url LIKE ?) ");
+  sql.append("OR k.normalized_term LIKE ? )");
+  sql.append("AND LENGTH(u.url) < 2048 ");
   sql.append("ORDER BY u.last_visit_time DESC LIMIT ?");
 
   std::u16string lower_query(base::i18n::ToLower(base::UTF8ToUTF16(query)));

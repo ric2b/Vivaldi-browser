@@ -41,8 +41,6 @@ class SafeStructOutputGenerator(BaseGenerator):
             'VkMicromapBuildInfoEXT',
             'VkAccelerationStructureTrianglesOpacityMicromapEXT',
             'VkAccelerationStructureTrianglesDisplacementMicromapNV',
-            # The VkDescriptorType field needs to handle every type which is something best done manually
-            'VkDescriptorDataEXT',
              # Special case because its pointers may be non-null but ignored
             'VkGraphicsPipelineCreateInfo',
             # Special case because it has custom construct parameters
@@ -61,6 +59,8 @@ class SafeStructOutputGenerator(BaseGenerator):
         # These 'data' union are decided by the 'type' in the same parent struct
         self.union_of_pointers = [
             'VkDescriptorDataEXT',
+            'VkIndirectCommandsTokenDataEXT',
+            'VkIndirectExecutionSetInfoEXT',
         ]
         self.union_of_pointer_callers = [
             'VkDescriptorGetInfoEXT',

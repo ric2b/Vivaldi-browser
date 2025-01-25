@@ -2,12 +2,16 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-BR">
 <translation id="1016495303386450659">Item atualizado</translation>
+<translation id="1033201038396796706">Modo escuro, taxa de atualização ou problemas de tema</translation>
 <translation id="1041637248958093184">Pesquisas, sites visitados, cookies e arquivos temporários não serão armazenados pelo Vivaldi ao usar as abas privadas.</translation>
 <translation id="1066692930984703744">Habilite bloqueio de rastreadores e anúncios para uma navegação mais rápida e segura</translation>
 <translation id="1116694919640316211">Sobre</translation>
 <translation id="1123707809902612118">Bloqueio de Rastreadores e Propagandas</translation>
+<translation id="1134179431044204911">Acho difícil usar gestos ou navegação</translation>
+<translation id="1149336474099429879">Permite acesso rápido a sites específicos diretamente da barra de endereço, economizando cliques em comparação com um mecanismo de busca. Saiba mais sobre [Correspondência direta]</translation>
 <translation id="1151972924205500581">Senha obrigatória</translation>
 <translation id="1166425484559430538">Seus dados de sincronização são criptografados. Forneça sua senha de criptografia para descriptografar os dados.</translation>
+<translation id="1173894706177603556">Renomear</translation>
 <translation id="1181037720776840403">Remover</translation>
 <translation id="1182668946911971500">Barra de notas</translation>
 <translation id="1198271701881992799">Vamos começar</translation>
@@ -28,12 +32,15 @@
 <translation id="1381484244248892686">Você pode usar senhas salvas em qualquer dispositivo. Eles são salvos no Gerenciador de Senhas do Vivaldi para <ph name="EMAIL" /></translation>
 <translation id="1383876407941801731">Pesquisar</translation>
 <translation id="1397515084080510783">Nenhuma aba sincronizada</translation>
+<translation id="1401336397986481078">Adicionado a</translation>
 <translation id="1410197035576869800">Ícone da aplicação</translation>
+<translation id="1430308140197327248">Mostrar Endereço Completo</translation>
 <translation id="1430638949087011281">Sem bloqueio</translation>
 <translation id="1446108955355168157">Para criptografar e proteger seus dados de sincronização (senhas, marcadores, notas e muito mais), crie uma senha de criptografia. Esta senha nunca será enviada para nós.</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> itens</translation>
 <translation id="1468415711258933398">Aba padrão</translation>
 <translation id="1521731267649138856">seu endereço de e-mail de recuperação.</translation>
+<translation id="1535446875484049224">O modo escuro está com falhas ou não parece certo</translation>
 <translation id="1573784689611551537">Gerenciar fontes de bloqueio de anúncios</translation>
 <translation id="1577761519530347814">Sincronizar senhas armazenadas</translation>
 <translation id="1644574205037202324">Histórico</translation>
@@ -45,7 +52,9 @@
 <translation id="1751280147639351837">Bloqueador de Anúncios e Rastreadores</translation>
 <translation id="1752547299766512813">Salvar Senhas</translation>
 <translation id="1754797958074421486">Termos de Uso</translation>
+<translation id="1763111582687651119">Habilitar Apelidos nos Mecanismos de Busca</translation>
 <translation id="1771413903824396513">Por Apelido</translation>
+<translation id="1771605894228673800">Quero um recurso VPN integrado</translation>
 <translation id="1804522390855853698">Chinês(<ph name="ORIGIN" />)</translation>
 <translation id="1807246157184219062">Claro</translation>
 <translation id="1809939268435598390">Excluir Pasta</translation>
@@ -53,8 +62,11 @@
 <translation id="1828800626900562968">Toque no ícone de mais abaixo para criar uma nova aba.</translation>
 <translation id="1861262398884155592">Esta pasta está vazia</translation>
 <translation id="1929299157575856072">NÍVEL DE BLOQUEIO PADRÃO</translation>
+<translation id="1968240832686794952">Abrir imagem em uma aba em segundo plano</translation>
+<translation id="1994506778397655062">Abrir numa nova aba em segundo plano</translation>
+<translation id="1996915956617647318">Ocultar Editar</translation>
 <translation id="2030706494969937066">Falha ao recuperar suas credenciais. Por favor faça login novamente.</translation>
-<translation id="2034405583989639424">Editar Discagem Rápida</translation>
+<translation id="2034405583989639424">Editar Speed Dial</translation>
 <translation id="2048247880942380698">Árabe (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Desfazer</translation>
 <translation id="2129408066358825297">Idade</translation>
@@ -64,6 +76,7 @@
 <translation id="2272338747456392228">Conta está bloqueada</translation>
 <translation id="2273327106802955778">Mais menu</translation>
 <translation id="2324160330092901720">Um código de verificação foi enviado à <ph name="EMAIL_ID" /></translation>
+<translation id="2330644510603114741">Comportamento das Abas</translation>
 <translation id="2336309953058658733">Esvaziar a lixeira</translation>
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2386793615875593361">1 selecionado</translation>
@@ -88,8 +101,10 @@
 <translation id="2677862276555105603">Anúncio
 bloqueado</translation>
 <translation id="2678542925523700624">Estoniano (<ph name="ORIGIN" />)</translation>
+<translation id="2702801445560668637">Lista de leitura</translation>
 <translation id="2709516037105925701">Autocompletar</translation>
 <translation id="271033894570825754">Novo</translation>
+<translation id="2725892265692641195">Novo <ph name="ITEM_TYPE" /></translation>
 <translation id="2745324713975967671">Senha de criptografia</translation>
 <translation id="276436995507680929">Sincronizar a lista de leitura</translation>
 <translation id="2765217105034171413">Pequeno</translation>
@@ -101,18 +116,23 @@ bloqueado</translation>
 <translation id="2874111661876416905">Pesquise com Vivaldi</translation>
 <translation id="2884735088411646852">Ordenar</translation>
 <translation id="2898963176829412617">Nova pasta…</translation>
+<translation id="2918704853620385162">Abrir Nova Aba ao Fechar Última Aba</translation>
 <translation id="2924890236896835588">Nome do grupo</translation>
+<translation id="294138200684170250">Bloqueador de anúncios e rastreadores, e configurações de site</translation>
 <translation id="2961573414320947355">Quer abrir todos os links do Vivaldi? Certifique-se de nos definir como padrão.</translation>
 <translation id="3006429105107822794">Você não precisará se lembrar dessa senha. Ele será salvo no Gerenciador de Senhas do Vivaldi.</translation>
 <translation id="3018244467214569202">Grego (<ph name="ORIGIN" />)</translation>
-<translation id="3029426144711327484">Mostrar Discagem Rápida</translation>
+<translation id="3029426144711327484">Mostrar Speed Dial</translation>
 <translation id="3039671569659952257">Excluir pasta</translation>
+<translation id="3065031457538473619">Priorizar marcadores nas sugestões de auto-completar</translation>
 <translation id="3073196329485613487">Faça login na sua conta</translation>
 <translation id="307859903981308731">Ao continuar, você concorda com os termos do Vivaldi</translation>
 <translation id="3086746722712840547">nota</translation>
 <translation id="3087734570205094154">Embaixo</translation>
+<translation id="309084557304084991">Não quero marcadores pré-carregados e discagens rápidas</translation>
 <translation id="3091563570137981919">Bloqueio de rastreios e anúncios</translation>
 <translation id="3134385238404760368">Nenhuma aba recente</translation>
+<translation id="3142562627629111859">Novo Grupo</translation>
 <translation id="3157931365184549694">Restaurar</translation>
 <translation id="3159285901314605198">Imagem de fundo</translation>
 <translation id="3177673846235066154">O servidor rejeitou as suas credenciais.</translation>
@@ -136,18 +156,29 @@ bloqueado</translation>
 <translation id="3601414719864711130">Por Data</translation>
 <translation id="3602290021589620013">Pré-visualizar</translation>
 <translation id="3607176258839749451">O registro falhou devido a um erro. Por favor, tente novamente mais tarde.</translation>
+<translation id="3628734956995390149">{count, plural,
+          =1 {Marcador movido para "{title}"}
+          other {{count} marcadores movidos para "{title}"}}</translation>
+<translation id="3638687955382971136">Ampliar texto</translation>
 <translation id="3646647753063635401">Sincronizar todos os dados, e ativar automaticamente a sincronização de novos tipos de dados</translation>
 <translation id="3682791711395736890">Ver versão desktop do site</translation>
-<translation id="3692650606013198282">Abrir em privado</translation>
+<translation id="3689125468279190285">Exibir botão página inicial</translation>
 <translation id="3699026013955941879">O código expirou. Favor pedir um novo código de ativação.</translation>
 <translation id="3700829948786686853">Bem vindo ao Vivaldi</translation>
+<translation id="3719826155360621982">Página principal</translation>
+<translation id="373855430416507951">Procurar na página</translation>
+<translation id="3745190878148784130">Ocultar Ampliar texto</translation>
 <translation id="3766350025418769949">Você pode usar as senhas salvas no Gerenciador de Senhas do Vivaldi em outros aplicativos do seu iPad.</translation>
+<translation id="3815158430926662417">Não consigo entrar na minha conta do Vivaldi Sync</translation>
 <translation id="3817539520771282781">por tipo</translation>
+<translation id="383723620494271391">Mais alguma coisa que você deseja adicionar?</translation>
 <translation id="3842727926262967527">Selecione onde você prefere ter a barra de abas e o campo de endereço.</translation>
 <translation id="3845564230651302310">Aplicando novas configurações do bloqueador...</translation>
 <translation id="3858860766373142691">Nome</translation>
+<translation id="3861379244432690245">Habilitar Correspondência Direta</translation>
 <translation id="3866249974567520381">Descrição</translation>
 <translation id="3872195896030547485">Por favor insira um endereço de e-mail válido.</translation>
+<translation id="3891045256838140223">Você poderia compartilhar conosco o que não está certo?</translation>
 <translation id="3897092660631435901">Menu</translation>
 <translation id="3920366244737784074">Adicionar <ph name="ITEM_TYPE" /></translation>
 <translation id="3921585859122905677">Posição da barra de endereços</translation>
@@ -158,6 +189,7 @@ bloqueado</translation>
 <translation id="4002066346123236978">Título</translation>
 <translation id="4032606071208172574">(Padrão)</translation>
 <translation id="4048057312173843244">As abas sincronizadas de outros dispositivos aparecerão aqui. Faça login no Sync para usar este serviço.</translation>
+<translation id="4071269289580887166">Site para desktop</translation>
 <translation id="4073968054795398875">O servidor de sincronização está apresentando problemas. Tentando reiniciar a sincronização em breve...</translation>
 <translation id="4084682180776658562">Marcador</translation>
 <translation id="4096707694175478403">Painel</translation>
@@ -177,6 +209,7 @@ bloqueado</translation>
 bloqueados</translation>
 <translation id="4299298331965375737">Tornar o Vivaldi seu navegador padrão?</translation>
 <translation id="4304224509867189079">Login</translation>
+<translation id="4314476537497682637">Ocultar site para desktop</translation>
 <translation id="4316955624679873896">Marcado em</translation>
 <translation id="432696242656678770">Russo (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Espanhol (<ph name="ORIGIN" />)</translation>
@@ -212,6 +245,7 @@ bloqueados</translation>
 <translation id="473775607612524610">Atualizar</translation>
 <translation id="4739712911308055817">Não buscado</translation>
 <translation id="4750394297954878236">Sugestões</translation>
+<translation id="4759238208242260848">Downloads</translation>
 <translation id="4759399863961855552">Ordenação</translation>
 <translation id="4780953868408193639">Rastreador
 bloqueado</translation>
@@ -219,12 +253,15 @@ bloqueado</translation>
 <translation id="4818836520802586445">Cor de destaque</translation>
 <translation id="4821701638681626529">Vivaldi não registra histórico de navegação ao usar abas privadas</translation>
 <translation id="4833044618885331665">Você deve atualizar o Vivaldi para usar a sincronização.</translation>
+<translation id="484344804915260122">Preciso de um tradutor integrado</translation>
 <translation id="484462545196658690">Automático</translation>
 <translation id="4852383705713307704">Anúncio bloqueado</translation>
+<translation id="4899260893220375866">Preciso de mais controle sobre cookies e permissões de sites</translation>
 <translation id="4903325570808402486">Sincronizar configurações do Vivaldi (nem todas são sincronizáveis ainda)</translation>
 <translation id="4929196061847506605">Poderoso. Pessoal. Privado.</translation>
 <translation id="4936710149174207991">Não sincronizado</translation>
 <translation id="4943266325467647391">O rastreador e bloqueador de anúncios integrado do Vivaldi protege você contra malware e anúncios.</translation>
+<translation id="4950266778127803750">Mostrar Botão [x] nas Abas ao Fundo</translation>
 <translation id="495421405224926623">Li e concordo com os Termos de Uso e Política de Privacidade</translation>
 <translation id="497942794017668482">Bloqueando Rastreadores e Propagandas</translation>
 <translation id="4993477362660748586">Sincronização</translation>
@@ -237,8 +274,8 @@ bloqueado</translation>
 <translation id="5122095890854520072">Letão (<ph name="ORIGIN" />)</translation>
 <translation id="5153806174841856652">Falha de autenticação</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Reenviar Código<ph name="END_LINK" /></translation>
+<translation id="5166345991950198590">Mostrar os principais sites</translation>
 <translation id="5191012692655103305">Buscando abas e histórico...</translation>
-<translation id="5221269430020540672">Abrir imagem na aba em segundo plano</translation>
 <translation id="5238642303473095117">Excluir Dados</translation>
 <translation id="5245732982828228444">Você encontrará suas notas aqui</translation>
 <translation id="5249199221558969362">Insira um número realista de tempo de vida.</translation>
@@ -252,10 +289,14 @@ bloqueado</translation>
 <translation id="5398772614898833570">Propagandas bloqueadas</translation>
 <translation id="5421638721143596928">Falha ao descriptografar suas credenciais. Por favor faça login novamente.</translation>
 <translation id="5439835075346716808">O registro foi temporariamente bloqueado deste IP. Por favor, tente novamente mais tarde.</translation>
+<translation id="5475116651001049780">Ocultar site para móveis</translation>
 <translation id="5486261815000869482">Confirmar senha</translation>
 <translation id="5494016731375030300">Abas fechadas recentemente</translation>
+<translation id="5519187824830275200">Ocultar Adicionar à ....</translation>
 <translation id="5564687523685713029">Mostrar apenas grupos</translation>
+<translation id="5577770221789895760">Selecione qual página abrir quando o botão Início for tocado.</translation>
 <translation id="5600792731098584229">Tamanho da discagem rápida</translation>
+<translation id="5607445917275004427">Mostrar Endereço Completo na Barra de Endereços, ao invés de apenas o Domínio.</translation>
 <translation id="5639137028584114536">A sua organização requer que navegue de forma privada. As abas não são salvas no modo privado.
         <ph name="BEGIN_LINK" />Saiba mais<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">Lista</translation>
@@ -272,23 +313,29 @@ bloqueado</translation>
 <translation id="5871497086027727873">1 item movido</translation>
 <translation id="5898502570200301364">Você pode usar as senhas salvas no Gerenciador de Senhas do Vivaldi em outros aplicativos do seu iPhone.</translation>
 <translation id="5900160494089383343">Esse nome de usuário não está disponível.</translation>
+<translation id="5914847543920496660">Eu prefiro software livre pela transparência</translation>
+<translation id="591684450784861763">Adicionar página a...</translation>
 <translation id="6005497458542935062">Mover para fora da pasta</translation>
 <translation id="6042308850641462728">Mais</translation>
 <translation id="6077943432358741146">Discagem Rápida</translation>
 <translation id="6079696972035130497">Ilimitado</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> itens movidos</translation>
 <translation id="6147094071357011481">As abas fechadas recentemente não estão disponíveis</translation>
+<translation id="6180515952840978051">Acho difícil salvar o site como uma discagem rápida</translation>
 <translation id="6193995664633100765">Indiano (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">Opções de aparência do site</translation>
 <translation id="6257488392933423163">Ver como HTML</translation>
 <translation id="6365929278691047681">Alemão (<ph name="ORIGIN" />)</translation>
 <translation id="6406506848690869874">Sincronização</translation>
+<translation id="641394169129472837">Selecione qual página abrir quando o botão Nova aba for tocado.</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> selecionados</translation>
+<translation id="6442584491342758233">Correspondência direta</translation>
 <translation id="6468130661190228905">Desculpe, parece que você precisa esperar um pouco antes de ingressar em nossa comunidade. Exigimos que nossos membros tenham pelo menos 16 anos para ingressar.</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importar<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Chave encriptada de backup</translation>
 <translation id="6527303717912515753">Compartilhar</translation>
 <translation id="6535988230515403205">Polaco (<ph name="ORIGIN" />)</translation>
+<translation id="6536226749629478563">Quero melhor segurança no gerenciamento de senhas</translation>
 <translation id="659351303388691480">Limpando Dados de Navegação...</translation>
 <translation id="6602272356389933803">Aparência e Tema</translation>
 <translation id="6614744450826097546">Detalhes do anúncio</translation>
@@ -302,13 +349,13 @@ bloqueado</translation>
 <translation id="6703516503311038964">Quero receber as notícias do Vivaldi</translation>
 <translation id="6724024423419410528">Cores</translation>
 <translation id="6745857330065678428">Herdar cor de destaque da página</translation>
-<translation id="6757792528048321576">Bloqueador de Anúncios e Rastreadores</translation>
 <translation id="6798469570047202628">Senha digitada errada</translation>
 <translation id="681368974849482173">Item criado</translation>
 <translation id="6830986331692390764">Limpando dados da Sincronização. Por favor espere.</translation>
 <translation id="6875510405870945573">Escolher seu nível de preferência de bloqueio.</translation>
 <translation id="6887143077297974801">Falha no início da sincronização.</translation>
 <translation id="691132463664340655">Tema do navegador</translation>
+<translation id="6918338082370824763">Página específica</translation>
 <translation id="6937750621455385628">Você deve usar uma conta Vivaldi para fazer login.</translation>
 <translation id="6945221475159498467">Selecionar</translation>
 <translation id="6946395294519639514">Com os Painéis, você pode manter as ferramentas de fácil acesso na barra lateral do navegador.</translation>
@@ -316,12 +363,15 @@ bloqueado</translation>
 <translation id="6951948201878750661">Toque para selecionar esta cor</translation>
 <translation id="6967884871145366229">Gerenciar configurações de privacidade</translation>
 <translation id="6973630695168034713">Pastas</translation>
+<translation id="6976865195058364361">Priorizar apelidos de marcadores nas sugestões de auto-completar</translation>
 <translation id="7006864796794806241">Recuperar senha</translation>
 <translation id="7029809446516969842">Senhas</translation>
 <translation id="7041964446309059643">Manual</translation>
 <translation id="7083011465470143310">Esqueceu a <ph name="BEGIN_LINK" />senha<ph name="END_LINK" />?</translation>
 <translation id="7110758301321962823">Recuperar usuário</translation>
 <translation id="7158507293261405349">Adicionar novo grupo</translation>
+<translation id="7180919683305939836">Quero recursos com tecnologia de IA (resumo, bate-papo, etc.)</translation>
+<translation id="7182884564543065232">Alguns sites não abrem</translation>
 <translation id="7192066917392691622">Decrescente</translation>
 <translation id="7194677467200983873">Última sincronização:</translation>
 <translation id="7203411967620588391">Editar <ph name="ITEM_TYPE" /></translation>
@@ -334,21 +384,26 @@ bloqueado</translation>
 <translation id="7347289093190902150">Abrir em privado?</translation>
 <translation id="7362952245780030555">Escolher entre abas do computador ou o Alternador de Abas.</translation>
 <translation id="7379938540614588640">Holandês (<ph name="ORIGIN" />)</translation>
+<translation id="7386354767119759965">Site para móvel</translation>
 <translation id="7388525939184421699">Adicionar Nova Fonte</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7417521636956146248">Os mecanismos de pesquisa serão redefinidos para as configurações padrão, o que também redefinirá seus mecanismos de pesquisa personalizados.</translation>
 <translation id="7454640759045234067">Rastreadores bloqueados</translation>
 <translation id="7461899062138731833">FONTES</translation>
-<translation id="7490291412537629707">Abrir em uma nova aba em segundo plano</translation>
+<translation id="749277285729135008">Focar na Barra de Endereços em Novas Abas</translation>
 <translation id="750493650310597496">0 selecionado</translation>
 <translation id="7525067979554623046">Criar</translation>
 <translation id="753732157349120914">Alternador de Abas</translation>
+<translation id="755410338177348055">Áudio ou vídeo continua armazenado em buffer ou congelado</translation>
+<translation id="7562758693157424472">Você pode reservar um momento para compartilhar suas idéias conosco?</translation>
 <translation id="7573518470897278603">Ver versão móvel do site</translation>
 <translation id="7574321014880720413">Adicionar Novo Domínio</translation>
 <translation id="7587132259180664054">E-mail enviado com sucesso</translation>
 <translation id="7587287726969638956">Aparência do site</translation>
+<translation id="7593546601395782810">Ocultar notas</translation>
 <translation id="7602336701644200880">Falha no envio de e-mail. Por favor, tente novamente.</translation>
 <translation id="7606108789437688910">Abrir endereços de notas no modo anônimo</translation>
+<translation id="7616284412875773842">Decepcionado</translation>
 <translation id="7622661618259256505">Escolha uma senha com ao menos 12 caracteres.</translation>
 <translation id="7658239707568436148">Cancelar</translation>
 <translation id="767363698559661695">Defina seu estilo de aba</translation>
@@ -357,13 +412,17 @@ bloqueado</translation>
 <translation id="7730831244010940855">Usar o Vivaldi como seu navegador padrão no iPad?</translation>
 <translation id="7732622593814325274">Gerenciar fontes de bloqueio do rastreador</translation>
 <translation id="7765158879357617694">Mover</translation>
-<translation id="7771452384635174008">Leiaute</translation>
-<translation id="7791161131809889864">Abra tudo em segundo plano</translation>
+<translation id="7771452384635174008">Layout</translation>
+<translation id="7781069478569868053">Página de Nova Aba</translation>
 <translation id="7801204999757211519">Já tem uma conta? <ph name="BEGIN_LINK" />Log in ➔<ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">Criar um novo grupo?</translation>
 <translation id="7914995060146784406">Editar nota</translation>
 <translation id="7925340978147141704">Mostrar senha</translation>
+<translation id="7930665886069596866">Uma funcionalidade não funciona corretamente</translation>
+<translation id="7931102520806266819">Abrir em privado</translation>
 <translation id="8008214489230610096">Confirmar email de recuperação</translation>
+<translation id="8038592796033755028">Dispositivos de <ph name="USERNAME" /></translation>
+<translation id="8041093619605951337">Feliz</translation>
 <translation id="8046542428651654244">Atualizar miniatura</translation>
 <translation id="804786196054284061">Contrato de licença de usuário final</translation>
 <translation id="8053851743673939284">Francês (<ph name="ORIGIN" />)</translation>
@@ -377,7 +436,6 @@ bloqueado</translation>
 <translation id="8142291334394582384">Ordem de sugestão de pesquisa reversa</translation>
 <translation id="8147118677117542370">Por favor, forneça sua idade.</translation>
 <translation id="8165573437634525334">Dados protegidos por senha criptografada</translation>
-<translation id="8182979418912184986">Nova aba privada</translation>
 <translation id="8237090677709100373">Código de cor personalizada</translation>
 <translation id="8257908958623224237">Conflito com dados de outro cliente.</translation>
 <translation id="8261506727792406068">Excluir</translation>
@@ -388,15 +446,17 @@ bloqueado</translation>
 <translation id="8304044605002588416">Personalizar botão da página inicial</translation>
 <translation id="8326104954595890674">Nova aba privada</translation>
 <translation id="8329813750766387010">Atualizado: <ph name="DATE" /></translation>
+<translation id="8339701072035560935">Página em branco</translation>
 <translation id="8347535536909603600">Remover avisos de cookies (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">Para ver as abas de outros dispositivos, você precisa ativar o Sync.</translation>
 <translation id="8366175803122817174">Abrir endereços de todas as notas</translation>
-<translation id="8384409685584033392">Informação da página</translation>
+<translation id="8395378633507873708">Barra de Endereços</translation>
 <translation id="839736845446313156">Registrar</translation>
 <translation id="8414685983518053656">Notas</translation>
 <translation id="8423076545503792640">Falha no pedido devido a um erro. Tente novamente mais tarde.</translation>
 <translation id="8428213095426709021">Configurações</translation>
 <translation id="8458397775385147834">1 item excluído</translation>
+<translation id="8466547766474747336">Um recurso que eu quero está faltando</translation>
 <translation id="8500459200727969761">Restaurar listas integradas</translation>
 <translation id="8503813439785031346">Nome do usuário</translation>
 <translation id="8515808232153642813">descriptografar</translation>
@@ -413,6 +473,7 @@ bloqueado</translation>
 <translation id="8763006697839582351">Abrir em privado no Vivaldi</translation>
 <translation id="8765173886020357878">Sugestões de pesquisa</translation>
 <translation id="8804164990146287819">Política de privacidade</translation>
+<translation id="8805346136361295421">Ocultar procurar na página</translation>
 <translation id="8818152010000655963">Papel de parede</translation>
 <translation id="8819841443522803117">É hora de mudar seu navegador padrão? Escolha Vivaldi.</translation>
 <translation id="8820817407110198400">Marcadores</translation>
@@ -421,6 +482,9 @@ bloqueado</translation>
 <translation id="89390081013973080">Configurado! Tempo de decidir que dados a sincronizar entre os aparelhos.</translation>
 <translation id="8964449607824577665">Sem a sua senha de criptografia atual, não poderemos descriptografar seus dados. A redefinição desta senha requer a exclusão de todos os dados de sincronização existentes nos servidores Vivaldi.</translation>
 <translation id="8965371804397726192">Iniciar sincronização de todos os dados</translation>
+<translation id="8993821994276892302">{count, plural,
+          =1 {Marcador movido para "{title}"}
+          other {Marcadores movidos para "{title}"}}</translation>
 <translation id="9028089729841356743">Erro de rede.</translation>
 <translation id="9043882097999887291">Propagandas
 bloqueadas</translation>
@@ -429,12 +493,16 @@ bloqueadas</translation>
 <translation id="9083392325882095631">1 item</translation>
 <translation id="9091665118798175641">Sincronizar dados para prenchimento automático de formulários</translation>
 <translation id="9097127519290088802">Senha de criptografia necessária</translation>
+<translation id="9152984048904392513">Abrir tudo em segundo plano</translation>
 <translation id="9195659219948942754">Continue usando os dados sincronizados na sua conta Vivaldi</translation>
 <translation id="9212737146310746733">Persa (<ph name="ORIGIN" />)</translation>
 <translation id="9218693288527810093">Bloqueio de Rastreadores</translation>
 <translation id="924053859552461110">Personalizar página inicial</translation>
+<translation id="932327136139879170">Início</translation>
 <translation id="937440209447114831">Não bloqueamos nenhum anúncio ou rastreador.</translation>
 <translation id="958688202859970851">As abas visitadas recentemente aparecerão aqui</translation>
 <translation id="984650419570014454">Código de verificação deve ter 6 digitos.</translation>
+<translation id="987264212798334818">Geral</translation>
 <translation id="992440609313570947">Novo no Vivaldi? <ph name="BEGIN_LINK" />Crie uma conta ➔<ph name="END_LINK" /></translation>
+<translation id="998988732385109770">Os marcadores são difíceis de usar ou gerenciar</translation>
 </translationbundle>

@@ -117,13 +117,13 @@ void YetAnotherBitVector::ClearAll() {
 }
 
 void YetAnotherBitVector::ShiftRight(int steps) {
-  // Negative |steps| should probably mean "shift left," but this is not
+  // Negative `steps` should probably mean "shift left," but this is not
   // implemented.
   OSP_CHECK_GE(steps, 0);
   OSP_CHECK_LE(steps, size_);
 
   if (using_array_storage()) {
-    // If |steps| is greater than one integer's worth of bits, first shift the
+    // If `steps` is greater than one integer's worth of bits, first shift the
     // array elements right. This is effectively shifting all the bits right by
     // some multiple of 64.
     const int num_integers = array_size();
@@ -137,7 +137,7 @@ void YetAnotherBitVector::ShiftRight(int steps) {
       steps %= kBitsPerInteger;
     }
 
-    // With |steps| now less than 64, shift the bits right within each array
+    // With `steps` now less than 64, shift the bits right within each array
     // element. Start from the back of the array, working towards the front, and
     // propagating any bits that are moving across array elements.
     if (steps > 0) {
@@ -232,7 +232,7 @@ int YetAnotherBitVector::CountBitsSet(int begin, int end) const {
                        MakeBitmask(begin % kBitsPerInteger, end - begin));
     } else if (first < last) {
       // Count a subset of the bits in the first and last integers (according to
-      // |begin| and |end|), and all of the bits in the integers in-between.
+      // `begin` and `end`), and all of the bits in the integers in-between.
       const uint64_t* p = &bits_.as_array[first];
       count = PopCount((*p) &
                        MakeBitmask(begin % kBitsPerInteger, kBitsPerInteger));

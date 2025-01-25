@@ -29,7 +29,7 @@ export {PasskeysBrowserProxy, PasskeysBrowserProxyImpl} from './passkeys_browser
 export {PasswordDetailsSectionElement} from './password_details_section.js';
 export {PasswordListItemElement} from './password_list_item.js';
 export {PasswordManagerAppElement} from './password_manager_app.js';
-export {AccountStorageOptInStateChangedListener, BlockedSite, BlockedSitesListChangedListener, CredentialsChangedListener, PasswordCheckInteraction, PasswordCheckStatusChangedListener, PasswordManagerAuthTimeoutListener, PasswordManagerImpl, PasswordManagerProxy, PasswordsFileExportProgressListener, PasswordViewPageInteractions} from './password_manager_proxy.js';
+export {AccountStorageEnabledStateChangedListener, BlockedSite, BlockedSitesListChangedListener, CredentialsChangedListener, PasswordCheckInteraction, PasswordCheckStatusChangedListener, PasswordManagerAuthTimeoutListener, PasswordManagerImpl, PasswordManagerProxy, PasswordsFileExportProgressListener, PasswordViewPageInteractions} from './password_manager_proxy.js';
 export {PasswordsExporterElement} from './passwords_exporter.js';
 export {PasswordsImporterElement} from './passwords_importer.js';
 export {PasswordsSectionElement} from './passwords_section.js';
@@ -44,5 +44,5 @@ export {SharePasswordLoadingDialogElement} from './sharing/share_password_loadin
 export {SharePasswordRecipientElement} from './sharing/share_password_recipient.js';
 export {PasswordManagerSideBarElement} from './side_bar.js';
 export {SiteFaviconElement} from './site_favicon.js';
-export {AccountInfo, SyncBrowserProxy, SyncBrowserProxyImpl, SyncInfo, TrustedVaultBannerState} from './sync_browser_proxy.js';
+export {AccountInfo, BatchUploadPasswordsEntryPoint, SyncBrowserProxy, SyncBrowserProxyImpl, SyncInfo, TrustedVaultBannerState} from './sync_browser_proxy.js';
 export {PasswordManagerToolbarElement} from './toolbar.js';

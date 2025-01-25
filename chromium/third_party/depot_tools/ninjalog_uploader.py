@@ -27,12 +27,14 @@ import multiprocessing
 import os
 import pathlib
 import platform
+import re
 import subprocess
 import sys
 import time
 import urllib.request
 
 import build_telemetry
+import gclient_utils
 
 # Configs that should not be uploaded as is.
 SENSITIVE_CONFIGS = (
@@ -160,10 +162,14 @@ def GetMetadata(cmdline, ninjalog, exit_code, build_duration, user):
         "build_duration_sec": build_duration,
         "platform": platform.system(),
         "cpu_core": multiprocessing.cpu_count(),
+        "is_cog": gclient_utils.IsEnvCog(),
+        "is_cloudtop": False,
         "build_configs": build_configs,
         "explicit_build_config_keys": explicit_keys,
         "targets": GetBuildTargetFromCommandLine(cmdline),
     }
+
+    metadata.update(GetGCEMetadata())
 
     invocation_id = os.environ.get("AUTONINJA_BUILD_ID")
     if invocation_id:
@@ -173,6 +179,33 @@ def GetMetadata(cmdline, ninjalog, exit_code, build_duration, user):
         metadata["jobs"] = jflag
 
     return metadata
+
+
+def GetGCEMetadata():
+    gce = _getGCEInfo()
+    if not gce:
+        return {}
+    md = {}
+    if "cloudtop" in gce.get("project", {}).get("projectId", ""):
+        md["is_cloudtop"] = True
+    match = re.search(r"machineTypes/([^/]+)",
+                      gce.get("instance", {}).get("machineType", ""))
+    if match:
+        md["gce_machine_type"] = match.group(1)
+    return md
+
+
+def _getGCEInfo():
+    url = "http://metadata.google.internal/computeMetadata/v1/?recursive=true"
+    request = urllib.request.Request(url, headers={"Metadata-Flavor": "Google"})
+    try:
+        response = urllib.request.urlopen(request)
+        meta = json.load(response)
+    except Exception as e:
+        # Only GCE machines can access to the metadata server.
+        logging.warning(e)
+        return
+    return meta
 
 
 def GetNinjalog(cmdline):

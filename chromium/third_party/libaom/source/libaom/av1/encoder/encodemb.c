@@ -831,9 +831,11 @@ static void encode_block_intra(int plane, int block, int blk_row, int blk_col,
   // skip_txfm = 1 is very expensive.
   mbmi->skip_txfm = 0;
 
+#if !CONFIG_REALTIME_ONLY
   if (plane == AOM_PLANE_Y && xd->cfl.store_y) {
     cfl_store_tx(xd, blk_row, blk_col, tx_size, plane_bsize);
   }
+#endif
 }
 
 static void encode_block_intra_and_set_context(int plane, int block,

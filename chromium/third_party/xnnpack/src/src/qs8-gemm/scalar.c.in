@@ -14,8 +14,6 @@ $if VARIANT == "LRINTF":
 #include "xnnpack/math.h"
 $if NR % 4 != 0:
   #include "xnnpack/unaligned.h"
-$if DATATYPE in ["QB4_F16"]:
-  #include <fp16/fp16.h>
 
 $#
 $INDENT = 0
@@ -39,11 +37,11 @@ $#
 $DATATYPE_SPEC = {"QC8": "qs8_qc8w", "QS8": "qs8", "QU8": "qu8", "QD8": "qd8_f32_qc8w", "QC4": "qd8_f32_qc4w", "QB4_F16": "qd8_f16_qb4w", "QB4_F32": "qd8_f32_qb4w"}[DATATYPE]
 $VARIANT_SPEC = "_" + VARIANT.lower() if VARIANT else ""
 $REQUANTIZATION_SPEC = "_" + REQUANTIZATION.lower() if REQUANTIZATION else ""
-$PARAMS_STRUCT = REQUANTIZATION.lower() + "_scalar" + ("_" + VARIANT.lower() if VARIANT else "")
-$PARAMS_UNION = {"QC8": "xnn_qs8_qc8w_conv_minmax_params", "QS8": "xnn_qs8_conv_minmax_params", "QU8": "xnn_qu8_conv_minmax_params", "QD8": "xnn_f32_minmax_params", "QC4": "xnn_f32_qc4w_minmax_params", "QB4_F16": "xnn_f16_qb4w_minmax_params", "QB4_F32": "xnn_f32_qb4w_minmax_params"}[DATATYPE]
+$PARAMS_STRUCT = REQUANTIZATION.lower() + "_scalar"
+$PARAMS_TYPE = {"QC8": "union xnn_qs8_qc8w_conv_minmax_params", "QS8": "union xnn_qs8_conv_minmax_params", "QU8": "union xnn_qu8_conv_minmax_params", "QD8": "union xnn_f32_minmax_params", "QC4": "struct xnn_f32_qc4w_minmax_params", "QB4_F16": "struct xnn_f16_qb4w_minmax_params", "QB4_F32": "struct xnn_f32_qb4w_minmax_params"}[DATATYPE]
 $SCALING_PARAMS = "xnn_qd8_quantization_params" if DATATYPE in ["QD8", "QC4", "QB4_F16", "QB4_F32"] else ""
 $XINT8_T = "uint8_t" if DATATYPE == "QU8" else "int8_t"
-$OUT_T = {"QC8": "int8_t", "QS8": "int8_t", "QU8": "uint8_t", "QB4_F16": "uint16_t", "QD8": "float", "QC4": "float", "QB4_F32": "float"}[DATATYPE]
+$OUT_T = {"QC8": "int8_t", "QS8": "int8_t", "QU8": "uint8_t", "QB4_F16": "xnn_float16", "QD8": "float", "QC4": "float", "QB4_F32": "float"}[DATATYPE]
 $MIN_F32 = "__builtin_wasm_min_f32" if WASM else "math_min_f32"
 $MAX_F32 = "__builtin_wasm_max_f32" if WASM else "math_max_f32"
 $BLOCKWISE = True if DATATYPE in ["QB4_F16", "QB4_F32"] else False
@@ -58,20 +56,17 @@ void xnn_${DATATYPE_SPEC}_gemm_minmax${REQUANTIZATION_SPEC}_ukernel_${MR}x${NR}_
     size_t cm_stride,
     size_t cn_stride,
     $if DATATYPE in ["QD8", "QC4", "QB4_F16", "QB4_F32"]:
-      const union ${PARAMS_UNION} params[restrict XNN_MIN_ELEMENTS(1)],
+      const ${PARAMS_TYPE} params[restrict XNN_MIN_ELEMENTS(1)],
       const struct ${SCALING_PARAMS} quantization_params[restrict XNN_MIN_ELEMENTS(1)])
     $else:
-      const union ${PARAMS_UNION} params[restrict XNN_MIN_ELEMENTS(1)])
+      const ${PARAMS_TYPE} params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(mr != 0);
   assert(mr <= ${MR});
   assert(nc != 0);
   assert(kc != 0);
   $if BLOCKWISE:
-    $if DATATYPE == "QB4_F16":
-      size_t bl = params->fp16arith.blocksize;
-    $else:
-      size_t bl = params->scalar.blocksize;
+    size_t bl = params->scalar.blocksize;
     assert(bl <= round_up_po2(kc, 2));
     assert(bl != 0);
     assert(bl % 32 == 0);
@@ -96,6 +91,34 @@ void xnn_${DATATYPE_SPEC}_gemm_minmax${REQUANTIZATION_SPEC}_ukernel_${MR}x${NR}_
         a${M} = a${M-1};
         c${M} = c${M-1};
       }
+
+  $if DATATYPE not in ["QD8", "QC4", "QB4_F16", "QB4_F32"]:
+    $if REQUANTIZATION == "FP32":
+      const int32_t output_min_less_zero_point = (int32_t) params->${PARAMS_STRUCT}.output_min - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
+      const int32_t output_max_less_zero_point = (int32_t) params->${PARAMS_STRUCT}.output_max - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
+      $if DATATYPE != "QC8":
+        const float vscale = params->${PARAMS_STRUCT}.scale;
+      $if VARIANT == "FMAGIC":
+        const float voutput_min_less_zero_point = output_min_less_zero_point;
+        const float voutput_max_less_zero_point = output_max_less_zero_point;
+        const float vmagic_bias = 12582912.0f;
+        const int32_t vmagic_bias_less_output_zero_point = INT32_C(0x4B400000) - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
+      $elif VARIANT == "IMAGIC":
+        const float vmagic_bias = 12582912.0f;
+        const int32_t vmagic_min = (int32_t) float_as_uint32(12582912.0f + output_min_less_zero_point);
+        const int32_t vmagic_max = (int32_t) float_as_uint32(12582912.0f + output_max_less_zero_point);
+        const int32_t vmagic_bias_less_zero_point = INT32_C(0x4B400000) - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
+      $elif VARIANT == "LRINTF":
+        const float voutput_min_less_zero_point = output_min_less_zero_point;
+        const float voutput_max_less_zero_point = output_max_less_zero_point;
+        const int32_t voutput_zero_point = params->${PARAMS_STRUCT}.output_zero_point;
+    $elif REQUANTIZATION == "RNDNU":
+      const int32_t vmultiplier = params->${PARAMS_STRUCT}.multiplier;
+      const int64_t vrounding = params->${PARAMS_STRUCT}.rounding;
+      const uint32_t vshift = params->${PARAMS_STRUCT}.shift;
+      const int32_t voutput_min_less_zero_point = (int32_t) params->${PARAMS_STRUCT}.output_min - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
+      const int32_t voutput_max_less_zero_point = (int32_t) params->${PARAMS_STRUCT}.output_max - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
+      const int32_t voutput_zero_point = params->${PARAMS_STRUCT}.output_zero_point;
 
   $if DATATYPE == "QU8":
     const int32_t vb_zero_point = params->${PARAMS_STRUCT}.kernel_zero_point;
@@ -254,7 +277,7 @@ void xnn_${DATATYPE_SPEC}_gemm_minmax${REQUANTIZATION_SPEC}_ukernel_${MR}x${NR}_
         w = (const float*) w + ${NR * 2};
 
       $if DATATYPE in ["QB4_F16"]:
-        const float voutput_min = fp16_ieee_to_fp32_value(params->fp16arith.min);
+        const float voutput_min = xnn_float16_to_float(params->scalar.min);
       $else:
         const float voutput_min = params->scalar.min;
       $for N in range(NR):
@@ -262,7 +285,7 @@ void xnn_${DATATYPE_SPEC}_gemm_minmax${REQUANTIZATION_SPEC}_ukernel_${MR}x${NR}_
           vout${M}x${N} = ${MAX_F32}(vout${M}x${N}, voutput_min);
 
       $if DATATYPE in ["QB4_F16"]:
-        const float voutput_max = fp16_ieee_to_fp32_value(params->fp16arith.max);
+        const float voutput_max = xnn_float16_to_float(params->scalar.max);
       $else:
         const float voutput_max = params->scalar.max;
       $for N in range(NR):
@@ -273,7 +296,7 @@ void xnn_${DATATYPE_SPEC}_gemm_minmax${REQUANTIZATION_SPEC}_ukernel_${MR}x${NR}_
         $for M in range(MR):
           $for N in range(NR):
             $if DATATYPE in ["QB4_F16"]:
-              c${M}[${N}] = fp16_ieee_from_fp32_value(vout${M}x${N});
+              c${M}[${N}] = xnn_float16_from_float(vout${M}x${N});
             $else:
               c${M}[${N}] = vout${M}x${N};
 
@@ -282,7 +305,7 @@ void xnn_${DATATYPE_SPEC}_gemm_minmax${REQUANTIZATION_SPEC}_ukernel_${MR}x${NR}_
 
         $for M in range(MR):
           $if DATATYPE in ["QB4_F16"]:
-            c${M} = (uint16_t*) ((uintptr_t) c${M} + cn_stride);
+            c${M} = (${OUT_T}*) ((uintptr_t) c${M} + cn_stride);
           $else:
             c${M} = (float*) ((uintptr_t) c${M} + cn_stride);
 
@@ -293,7 +316,7 @@ void xnn_${DATATYPE_SPEC}_gemm_minmax${REQUANTIZATION_SPEC}_ukernel_${MR}x${NR}_
             $for M in range(MR):
               $for N in range(1 << LOG2N):
                 $if DATATYPE in ["QB4_F16"]:
-                  c${M}[${N}] = fp16_ieee_from_fp32_value(vout${M}x${N});
+                  c${M}[${N}] = xnn_float16_from_float(vout${M}x${N});
                 $else:
                   c${M}[${N}] = vout${M}x${N};
               $if LOG2N != 0:
@@ -323,33 +346,27 @@ void xnn_${DATATYPE_SPEC}_gemm_minmax${REQUANTIZATION_SPEC}_ukernel_${MR}x${NR}_
                 vfpacc${M}x${N} *= vscale${N};
           w = (const void*) ((const float*) w + ${NR});
         $else:
-          const float vscale = params->${PARAMS_STRUCT}.scale;
           $for M in range(MR):
             $for N in range(NR):
               vfpacc${M}x${N} *= vscale;
 
         $if VARIANT == "FMAGIC":
-          const float voutput_min_less_zero_point = params->${PARAMS_STRUCT}.output_min_less_zero_point;
           $for M in range(MR):
             $for N in range(NR):
               vfpacc${M}x${N} = ${MAX_F32}(vfpacc${M}x${N}, voutput_min_less_zero_point);
 
-          const float voutput_max_less_zero_point = params->${PARAMS_STRUCT}.output_max_less_zero_point;
           $for M in range(MR):
             $for N in range(NR):
               vfpacc${M}x${N} = ${MIN_F32}(vfpacc${M}x${N}, voutput_max_less_zero_point);
 
-          const float vmagic_bias = params->${PARAMS_STRUCT}.magic_bias;
           $for M in range(MR):
             $for N in range(NR):
               vfpacc${M}x${N} += vmagic_bias;
 
-          const int32_t vmagic_bias_less_output_zero_point = params->${PARAMS_STRUCT}.magic_bias_less_output_zero_point;
           $for M in range(MR):
             $for N in range(NR):
               int32_t vout${M}x${N} = (int32_t) float_as_uint32(vfpacc${M}x${N}) - vmagic_bias_less_output_zero_point;
         $elif VARIANT == "IMAGIC":
-          const float vmagic_bias = params->${PARAMS_STRUCT}.magic_bias;
           $for M in range(MR):
             $for N in range(NR):
               vfpacc${M}x${N} += vmagic_bias;
@@ -358,27 +375,22 @@ void xnn_${DATATYPE_SPEC}_gemm_minmax${REQUANTIZATION_SPEC}_ukernel_${MR}x${NR}_
             $for N in range(NR):
               int32_t vout${M}x${N} = (int32_t) float_as_uint32(vfpacc${M}x${N});
 
-          const int32_t vmagic_min = params->${PARAMS_STRUCT}.magic_min;
           $for M in range(MR):
             $for N in range(NR):
               vout${M}x${N} = math_max_s32(vout${M}x${N}, vmagic_min);
 
-          const int32_t vmagic_max = params->${PARAMS_STRUCT}.magic_max;
           $for M in range(MR):
             $for N in range(NR):
               vout${M}x${N} = math_min_s32(vout${M}x${N}, vmagic_max);
 
-          const int32_t vmagic_bias_less_zero_point = params->${PARAMS_STRUCT}.magic_bias_less_zero_point;
           $for M in range(MR):
             $for N in range(NR):
               vout${M}x${N} -= vmagic_bias_less_zero_point;
         $elif VARIANT == "LRINTF":
-          const float voutput_min_less_zero_point = params->${PARAMS_STRUCT}.output_min_less_zero_point;
           $for M in range(MR):
             $for N in range(NR):
               vfpacc${M}x${N} = ${MAX_F32}(vfpacc${M}x${N}, voutput_min_less_zero_point);
 
-          const float voutput_max_less_zero_point = params->${PARAMS_STRUCT}.output_max_less_zero_point;
           $for M in range(MR):
             $for N in range(NR):
               vfpacc${M}x${N} = ${MIN_F32}(vfpacc${M}x${N}, voutput_max_less_zero_point);
@@ -387,33 +399,26 @@ void xnn_${DATATYPE_SPEC}_gemm_minmax${REQUANTIZATION_SPEC}_ukernel_${MR}x${NR}_
             $for N in range(NR):
               const int32_t vrndacc${M}x${N} = (int32_t) lrintf(vfpacc${M}x${N});
 
-          const int32_t voutput_zero_point = params->${PARAMS_STRUCT}.output_zero_point;
           $for M in range(MR):
             $for N in range(NR):
               int32_t vout${M}x${N} = vrndacc${M}x${N} + voutput_zero_point;
       $elif REQUANTIZATION == "RNDNU":
-        const int32_t vmultiplier = params->${PARAMS_STRUCT}.multiplier;
-        const int64_t vrounding = params->${PARAMS_STRUCT}.rounding;
         $for M in range(MR):
           $for N in range(NR):
             const int64_t vextacc${M}x${N} = math_mulext_s32(vacc${M}x${N}, vmultiplier) + vrounding;
 
-        const uint32_t vshift = params->${PARAMS_STRUCT}.shift;
         $for M in range(MR):
           $for N in range(NR):
             int32_t vout${M}x${N} = (int32_t) math_asr_s64(vextacc${M}x${N}, vshift);
 
-        const int32_t voutput_min_less_zero_point = params->${PARAMS_STRUCT}.output_min_less_zero_point;
         $for M in range(MR):
           $for N in range(NR):
             vout${M}x${N} = math_max_s32(vout${M}x${N}, voutput_min_less_zero_point);
 
-        const int32_t voutput_max_less_zero_point = params->${PARAMS_STRUCT}.output_max_less_zero_point;
         $for M in range(MR):
           $for N in range(NR):
             vout${M}x${N} = math_min_s32(vout${M}x${N}, voutput_max_less_zero_point);
 
-        const int32_t voutput_zero_point = params->${PARAMS_STRUCT}.output_zero_point;
         $for M in range(MR):
           $for N in range(NR):
             vout${M}x${N} += voutput_zero_point;

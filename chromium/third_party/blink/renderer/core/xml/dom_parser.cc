@@ -19,6 +19,7 @@
 
 #include "third_party/blink/renderer/core/xml/dom_parser.h"
 
+#include "third_party/blink/renderer/bindings/core/v8/v8_supported_type.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_init.h"
 #include "third_party/blink/renderer/core/frame/deprecation/deprecation.h"
@@ -30,17 +31,18 @@
 
 namespace blink {
 
-Document* DOMParser::parseFromString(const String& str, const String& type) {
+Document* DOMParser::parseFromString(const String& str,
+                                     const V8SupportedType& type) {
   Document* doc = DocumentInit::Create()
                       .WithURL(window_->Url())
-                      .WithTypeFrom(type)
+                      .WithTypeFrom(type.AsAtomicString())
                       .WithExecutionContext(window_)
                       .WithAgent(*window_->GetAgent())
                       .CreateDocument();
   doc->setAllowDeclarativeShadowRoots(false);
   doc->CountUse(mojom::blink::WebFeature::kParseFromString);
   doc->SetContentFromDOMParser(str);
-  doc->SetMimeType(AtomicString(type));
+  doc->SetMimeType(type.AsAtomicString());
   return doc;
 }
 

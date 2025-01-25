@@ -31,12 +31,12 @@
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
-import * as TraceEngine from '../../models/trace/trace.js';
+import * as Trace from '../../models/trace/trace.js';
 import * as TraceBounds from '../../services/trace_bounds/trace_bounds.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
-import {type TimelineModeViewDelegate} from './TimelinePanel.js';
+import type {TimelineModeViewDelegate} from './TimelinePanel.js';
 
 const UIStrings = {
   /**
@@ -86,7 +86,7 @@ export class CountersGraph extends UI.Widget.VBox {
   private readonly counterUI: CounterUI[];
   private readonly countersByName: Map<string, Counter>;
   private readonly gpuMemoryCounter: Counter;
-  #events: TraceEngine.Types.TraceEvents.TraceEventData[]|null = null;
+  #events: Trace.Types.Events.Event[]|null = null;
   currentValuesBar?: HTMLElement;
   private markerXPosition?: number;
   #onTraceBoundsChangeBound = this.#onTraceBoundsChange.bind(this);
@@ -141,8 +141,7 @@ export class CountersGraph extends UI.Widget.VBox {
     this.countersByName.set(
         'jsHeapSizeUsed',
         this.createCounter(
-            i18nString(UIStrings.jsHeap), 'js-heap-size-used', 'hsl(220, 90%, 43%)',
-            Platform.NumberUtilities.bytesToString));
+            i18nString(UIStrings.jsHeap), 'js-heap-size-used', 'hsl(220, 90%, 43%)', i18n.ByteUtilities.bytesToString));
     this.countersByName.set(
         'documents', this.createCounter(i18nString(UIStrings.documents), 'documents', 'hsl(0, 90%, 43%)'));
     this.countersByName.set('nodes', this.createCounter(i18nString(UIStrings.nodes), 'nodes', 'hsl(120, 90%, 43%)'));
@@ -151,8 +150,7 @@ export class CountersGraph extends UI.Widget.VBox {
         this.createCounter(i18nString(UIStrings.listeners), 'js-event-listeners', 'hsl(38, 90%, 43%)'));
 
     this.gpuMemoryCounter = this.createCounter(
-        i18nString(UIStrings.gpuMemory), 'gpu-memory-used-kb', 'hsl(300, 90%, 43%)',
-        Platform.NumberUtilities.bytesToString);
+        i18nString(UIStrings.gpuMemory), 'gpu-memory-used-kb', 'hsl(300, 90%, 43%)', i18n.ByteUtilities.bytesToString);
     this.countersByName.set('gpuMemoryUsedKB', this.gpuMemoryCounter);
 
     TraceBounds.TraceBounds.onChange(this.#onTraceBoundsChangeBound);
@@ -166,14 +164,12 @@ export class CountersGraph extends UI.Widget.VBox {
     }
   }
 
-  setModel(
-      traceEngineData: TraceEngine.Handlers.Types.TraceParseData|null,
-      events: TraceEngine.Types.TraceEvents.TraceEventData[]|null): void {
+  setModel(parsedTrace: Trace.Handlers.Types.ParsedTrace|null, events: Trace.Types.Events.Event[]|null): void {
     this.#events = events;
-    if (!events || !traceEngineData) {
+    if (!events || !parsedTrace) {
       return;
     }
-    const minTime = TraceEngine.Helpers.Timing.traceWindowMilliSeconds(traceEngineData.Meta.traceBounds).min;
+    const minTime = Trace.Helpers.Timing.traceWindowMilliSeconds(parsedTrace.Meta.traceBounds).min;
     this.calculator.setZeroTime(minTime);
 
     for (let i = 0; i < this.counters.length; ++i) {
@@ -184,7 +180,7 @@ export class CountersGraph extends UI.Widget.VBox {
     let counterEventsFound = 0;
     for (let i = 0; i < events.length; ++i) {
       const event = events[i];
-      if (!TraceEngine.Types.TraceEvents.isTraceEventUpdateCounters(event)) {
+      if (!Trace.Types.Events.isUpdateCounters(event)) {
         continue;
       }
       counterEventsFound++;
@@ -196,7 +192,7 @@ export class CountersGraph extends UI.Widget.VBox {
       for (const name in counters) {
         const counter = this.countersByName.get(name);
         if (counter) {
-          const {startTime} = TraceEngine.Helpers.Timing.eventTimingsMilliSeconds(event);
+          const {startTime} = Trace.Helpers.Timing.eventTimingsMilliSeconds(event);
           counter.appendSample(
               startTime, counters[name as 'documents' | 'jsEventListeners' | 'jsHeapSizeUsed' | 'nodes']);
         }

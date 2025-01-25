@@ -163,7 +163,7 @@ class BuildSettings {
 
   // See 40045b9 for the reason behind using 1.7.2 as the default version.
   Version ninja_required_version_{1, 7, 2};
-  bool no_stamp_files_ = false;
+  bool no_stamp_files_ = true;
 
   SourceFile build_config_file_;
   SourceFile arg_file_template_path_;

@@ -4,28 +4,13 @@
  * found in the LICENSE file.
  */
 
-:host {
-  overflow: hidden;
-}
-
-.header {
-  padding: 0 0 6px;
-  border-bottom: 1px solid var(--sys-color-divider);
-  font-size: 18px;
-  font-weight: normal;
-  flex: none;
-}
-
 .add-locations-button {
-  flex: none;
-  margin: 10px 5px;
-  min-width: 140px;
-  align-self: flex-start;
+  margin-bottom: var(--sys-size-5);
+  border: none;
 }
 
 .locations-list {
-  max-width: 600px;
-  min-width: 340px;
+  margin-top: var(--sys-size-3);
   flex: auto;
 }
 
@@ -84,4 +69,19 @@
 
 .locations-input-container {
   padding: 1px;
+}
+
+.settings-card-container-wrapper {
+  scrollbar-gutter: stable;
+  padding-bottom: var(--sys-size-8);
+  overflow: auto;
+  position: absolute;
+  inset: var(--sys-size-8) 0 0;
+}
+
+.settings-card-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sys-size-9);
 }

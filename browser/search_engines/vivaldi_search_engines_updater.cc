@@ -7,7 +7,7 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "components/search_engines/search_engines_manager.h"
+#include "components/search_engines/search_engines_managers_factory.h"
 
 #include "net/base/load_flags.h"
 #include "prefs/vivaldi_pref_names.h"
@@ -23,25 +23,47 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #endif
 
-#include "components/signature/vivaldi_signature.h"
-
 namespace vivaldi {
 
 namespace {
 constexpr int kSearchEnginesResponse = 1024 * 1024;
 }  // namespace
 
+void SearchEnginesUpdater::UpdateSearchEngines(
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+  if (!vivaldi::UsesCustomSearchEnginesUrl()) {
+    vivaldi::SearchEnginesUpdater::Update(
+        url_loader_factory, vivaldi::SignedResourceUrl::kSearchEnginesUrl,
+        SearchEnginesManagersFactory::GetSearchEnginesJsonUpdatePath());
+  }
+}
 
-void SearchEnginesUpdater::Update(scoped_refptr<network::SharedURLLoaderFactory>
-                                  url_loader_factory) {
-  if (vivaldi::IsDebuggingSearchEngines() &&
-      !vivaldi::UsesCustomSearchEnginesUrl()) {
+void SearchEnginesUpdater::UpdateSearchEnginesPrompt(
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+  if (!vivaldi::UsesCustomSearchEnginesPromptUrl()) {
+    vivaldi::SearchEnginesUpdater::Update(
+        url_loader_factory, vivaldi::SignedResourceUrl::kSearchEnginesPromptUrl,
+        SearchEnginesManagersFactory::GetSearchEnginesPromptJsonUpdatePath());
+  }
+}
+
+void SearchEnginesUpdater::Update(
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    SignedResourceUrl url_id,
+    std::optional<base::FilePath> download_path) {
+  if (vivaldi::IsDebuggingSearchEngines()) {
     VLOG(1) << "Debugging search engines, skipping the update.";
     return;
   }
 
   auto resource_request = std::make_unique<network::ResourceRequest>();
-  std::string url = GetSignedResourceUrl(SignedResourceUrl::kSearchEnginesUrl);
+  std::string url = GetSignedResourceUrl(url_id);
+
+  if (!download_path) {
+    LOG(ERROR) << "Don't know where to save the content: " << url;
+    return;
+  }
+
   VLOG(1) << "Fetching search engines from: " << url;
   resource_request->url = GURL(url);
   resource_request->method = "GET";
@@ -75,23 +97,16 @@ void SearchEnginesUpdater::Update(scoped_refptr<network::SharedURLLoaderFactory>
   url_loader->DownloadToString(
       url_loader_factory.get(),
       base::BindOnce(&SearchEnginesUpdater::OnRequestResponse,
-                     std::move(url_loader)),
+                     std::move(url_loader), *download_path),
       kSearchEnginesResponse);
 }
 
 void SearchEnginesUpdater::OnRequestResponse(
     std::unique_ptr<network::SimpleURLLoader> guard,
+    const base::FilePath& download_path,
     std::unique_ptr<std::string> response_body) {
   if (!response_body) {
-    LOG(WARNING) << "Unable to download search_engines.json";
-    return;
-  }
-  auto download_path =
-      SearchEnginesManager::GetInstance()->GetSearchEnginesJsonUpdatePath();
-  if (!download_path) {
-    LOG(ERROR)
-        << "search_engines.json downloaded, but don't know where to save the "
-           "content.";
+    LOG(WARNING) << "Unable to download " << download_path.BaseName();
     return;
   }
 
@@ -102,7 +117,8 @@ void SearchEnginesUpdater::OnRequestResponse(
       base::BindOnce(
           [](base::FilePath path, std::unique_ptr<std::string> data) {
             if (!VerifyJsonSignature(*data)) {
-              LOG(WARNING) << "The downloaded search_engines.json has invalid signature.";
+              LOG(WARNING) << "The downloaded " << path
+                           << " has invalid signature.";
               return;
             }
             if (base::WriteFile(path, *data)) {
@@ -111,7 +127,7 @@ void SearchEnginesUpdater::OnRequestResponse(
               LOG(WARNING) << "Failed to store " << path;
             }
           },
-          *download_path, std::move(response_body)));
+          download_path, std::move(response_body)));
 }
 
 }  // namespace vivaldi

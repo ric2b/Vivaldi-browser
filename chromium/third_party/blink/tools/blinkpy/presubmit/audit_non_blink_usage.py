@@ -74,6 +74,7 @@ _CONFIG = [
             'base::as_writable_chars',
             'base::AutoReset',
             'base::bit_cast',
+            'base::CheckedContiguousIterator',
             'base::ConditionVariable',
             'base::Contains',
             'base::CPU',
@@ -123,6 +124,7 @@ _CONFIG = [
             'base::Process',
             'base::RadToDeg',
             'base::ranges::.+',
+            'base::raw_span',
             'base::RefCountedData',
             'base::RemoveChars',
             'base::RepeatingTimer',
@@ -140,7 +142,6 @@ _CONFIG = [
             'base::Span(OrSize|Reader|Writer)',
             'base::StringPiece',
             'base::SubstringSetMatcher',
-            'base::SupportsWeakPtr',
             'base::SysInfo',
             'base::ThreadChecker',
             'base::ThreadTicks',
@@ -331,8 +332,10 @@ _CONFIG = [
             'base::MappedReadOnlyRegion',
             'base::ReadOnlySharedMemoryMapping',
             'base::ReadOnlySharedMemoryRegion',
+            'base::StructuredSharedMemory',
             'base::UnsafeSharedMemoryRegion',
             'base::WritableSharedMemoryMapping',
+            'base::subtle::SharedAtomic',
         ]
     },
     {
@@ -347,8 +350,20 @@ _CONFIG = [
         ],
     },
     {
-        'paths': ['third_party/blink/common/interest_group/interest_group.cc',
-                  'third_party/blink/public/common/interest_group/interest_group.h'],
+        'paths': ['third_party/blink/common/context_menu_data/'],
+        'allowed': [
+            'ui::mojom::MenuSourceType',
+        ],
+    },
+    {
+        'paths': ['third_party/blink/common/indexeddb/indexeddb_key.cc'],
+        'allowed': ['base::HexEncode'],
+    },
+    {
+        'paths': [
+            'third_party/blink/common/interest_group/interest_group.cc',
+            'third_party/blink/public/common/interest_group/interest_group.h'
+        ],
         'allowed': [
             # For hashing of k-anonymity keys
             'crypto::SHA256HashString',
@@ -369,6 +384,29 @@ _CONFIG = [
             # delegating to MIME utilities in other components
             'net::MatchesMimeType',
             'media::IsSupportedMediaMimeType',
+        ],
+    },
+    {
+        'paths': ['third_party/blink/common/loader/mime_sniffing_throttle.cc'],
+        'allowed': ['base::EqualsCaseInsensitiveASCII'],
+    },
+    {
+        'paths': [
+            'third_party/blink/common/page_state/page_state_serialization.cc',
+        ],
+        'allowed': [
+            'base::ToVector',
+            'mojom::Element',
+            'network::DataElementBytes',
+        ],
+    },
+    {
+        'paths': [
+            'third_party/blink/common/performance/performance_scenarios.cc',
+        ],
+        'allowed': [
+            # Used in both browser and renderer process so can't use Oilpan.
+            'base::NoDestructor',
         ],
     },
     {
@@ -521,6 +559,7 @@ _CONFIG = [
             'cc::LayerTreeHost',
             'cc::PictureLayer',
             'cc::SurfaceLayer',
+            'cc::TextureLayerImpl',
 
             # cc::Layer helper data structs.
             'cc::AnchorPositionScrollData',
@@ -654,6 +693,7 @@ _CONFIG = [
             'scroll_customization::.+',
             'scroll_into_view_util::.+',
             'scroll_timeline_util::.+',
+            'shadow_element_utils::.+',
             'style_change_extra_data::.+',
             'style_change_reason::.+',
             'svg_path_parser::.+',
@@ -859,8 +899,9 @@ _CONFIG = [
         'allowed': ['base::BufferIterator'],
     },
     {
-        'paths':
-        ['third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h'],
+        'paths': [
+            'third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h'
+        ],
         'allowed': ['base::FastHash'],
     },
     {
@@ -943,7 +984,7 @@ _CONFIG = [
             'gpu::SHARED_IMAGE_USAGE_DISPLAY_READ',
             'gpu::SHARED_IMAGE_USAGE_SCANOUT',
             'gpu::SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE',
-            'gpu::SharedImageUsageSet'
+            'gpu::SharedImageUsageSet',
         ],
     },
     {
@@ -975,18 +1016,10 @@ _CONFIG = [
             'viz::SurfaceId',
         ],
     },
-    { # Needed for display-state CSS media query
-        'paths': [
-            'third_party/blink/renderer/core/frame',
-            'third_party/blink/renderer/core/css'
-        ],
-        'allowed': [
-            'ui::WindowShowState',
-            'ui::SHOW_STATE_.+',
-        ],
-    },
     {
-        'paths': ['third_party/blink/renderer/core/exported/web_form_control_element.cc'],
+        'paths': [
+            'third_party/blink/renderer/core/exported/web_form_control_element.cc'
+        ],
         'allowed': [
             'base::i18n::LEFT_TO_RIGHT',
             'base::i18n::RIGHT_TO_LEFT',
@@ -1061,8 +1094,10 @@ _CONFIG = [
         ]
     },
     {
-        'paths': ['third_party/blink/renderer/core/frame/visual_viewport.cc',
-                  'third_party/blink/renderer/core/frame/visual_viewport.h'],
+        'paths': [
+            'third_party/blink/renderer/core/frame/visual_viewport.cc',
+            'third_party/blink/renderer/core/frame/visual_viewport.h'
+        ],
         'allowed': [
             'cc::SolidColorScrollbarLayer',
         ],
@@ -1074,6 +1109,8 @@ _CONFIG = [
             'cc::CompositorCommitData',
             'cc::InputHandlerScrollResult',
             'cc::SwapPromise',
+            'stylus_handwriting::win::IsStylusHandwritingWinEnabled',
+            'stylus_handwriting::win::ProximateBoundsCollectionHalfLimit',
             'viz::CompositorFrameMetadata',
             'viz::FrameTimingDetails',
         ],
@@ -1183,10 +1220,13 @@ _CONFIG = [
             'gfx::PointF',
             'gfx::Rect',
             'gfx::RectF',
+            'gfx::Vector2dF',
 
             # The Blink public API is shared between non-Blink and Blink code
             # and must use the regular variants.
             'mojom::.+',
+            'ui::mojom::WindowShowState',
+            'ui::mojom::WindowShowState::.+',
 
             # Metadata for the Storage Access API.
             'net::StorageAccessApiStatus',
@@ -1209,7 +1249,17 @@ _CONFIG = [
     },
     {
         'paths': [
+            'third_party/blink/public/common/context_menu_data/',
+        ],
+        'allowed': [
+            'ui::mojom::MenuSourceType',
+        ],
+    },
+    {
+        'paths': [
             'third_party/blink/public/platform/web_audio_device.h',
+            'third_party/blink/public/web/web_local_frame_client.h',
+            'third_party/blink/renderer/modules/audio_output_devices/html_media_element_audio_output_device.cc',
         ],
         'allowed': [
             'media::OutputDeviceStatus',
@@ -1217,9 +1267,18 @@ _CONFIG = [
     },
     {
         'paths': [
+            'third_party/blink/public/web/web_dom_activity_logger.h',
+        ],
+        'allowed': [
+            'v8::Local',
+            'v8::Value',
+        ],
+    },
+    {
+        'paths': [
             'third_party/blink/renderer/core/scheduler/scripted_idle_task_controller.cc',
             'third_party/blink/renderer/core/scheduler/scripted_idle_task_controller.h',
-            ],
+        ],
         'allowed': [
             'base::DelayedTaskHandle',
             # Temporarily added to generate the value of a crash key.
@@ -1395,6 +1454,7 @@ _CONFIG = [
             'display::Display',
             'gl::GpuPreference',
             'gpu::ClientSharedImage',
+            'gpu::ContextSupport',
             'gpu::gles2::GLES2Interface',
             'gpu::Mailbox',
             'gpu::MailboxHolder',
@@ -1435,7 +1495,7 @@ _CONFIG = [
             'gpu::Capabilities',
         ],
     },
-   {
+    {
         'paths': [
             'third_party/blink/renderer/core/html/media/',
         ],
@@ -1453,7 +1513,10 @@ _CONFIG = [
         'allowed': [
             'base::MD5Digest',
             'base::MD5Sum',
+            'base::SPLIT_WANT_NONEMPTY',
+            'base::SplitStringPiece',
             'base::StringPiece',
+            'base::TRIM_WHITESPACE',
         ]
     },
     {
@@ -1518,9 +1581,7 @@ _CONFIG = [
             # usage more broadly in Blink.
             'fidl::InterfaceHandle',
         ],
-        'inclass_allowed': [
-            'base::SequencedTaskRunner::GetCurrentDefault'
-        ]
+        'inclass_allowed': ['base::SequencedTaskRunner::GetCurrentDefault']
     },
     {
         'paths': [
@@ -2030,10 +2091,7 @@ _CONFIG = [
         'paths': [
             'third_party/blink/renderer/core/view_transition/',
         ],
-        'allowed': [
-            'base::flat_map',
-            'cc::ScopedPauseRendering'
-        ],
+        'allowed': ['base::flat_map', 'cc::ScopedPauseRendering'],
     },
     {
         'paths': [
@@ -2211,7 +2269,7 @@ _CONFIG = [
             'aggregation_service::.+',
         ]
     },
-     {
+    {
         'paths': [
             'third_party/blink/renderer/core/scheduler/',
             'third_party/blink/renderer/modules/shared_storage/',
@@ -2220,7 +2278,7 @@ _CONFIG = [
             _DISALLOW_CONTINUATION_DATA_[0],
         ]
     },
-     {
+    {
         'paths': [
             'third_party/blink/public/common/permissions_policy/permissions_policy.h',
         ],
@@ -2242,6 +2300,14 @@ _CONFIG = [
         ],
         'allowed': [
             'gpu::SharedImageInterface',
+        ]
+    },
+    {
+        'paths': [
+            'third_party/blink/public/platform/web_media_player_client.h',
+        ],
+        'allowed': [
+            'media::.+',
         ]
     },
 ]

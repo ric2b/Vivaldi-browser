@@ -25,7 +25,6 @@
 #include "filters.h"
 #include "formats.h"
 #include "video.h"
-#include "internal.h"
 
 enum DisplayScale   { LINEAR, SQRT, CBRT, LOG, RLOG, NB_SCALES };
 enum AmplitudeScale { ALINEAR, ALOG, NB_ASCALES };
@@ -93,28 +92,21 @@ static const AVOption ahistogram_options[] = {
 
 AVFILTER_DEFINE_CLASS(ahistogram);
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
     AVFilterFormats *formats = NULL;
-    AVFilterChannelLayouts *layouts = NULL;
-    AVFilterLink *inlink = ctx->inputs[0];
-    AVFilterLink *outlink = ctx->outputs[0];
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_YUVA444P, AV_PIX_FMT_NONE };
     int ret = AVERROR(EINVAL);
 
     formats = ff_make_format_list(sample_fmts);
-    if ((ret = ff_formats_ref         (formats, &inlink->outcfg.formats        )) < 0 ||
-        (layouts = ff_all_channel_counts()) == NULL ||
-        (ret = ff_channel_layouts_ref (layouts, &inlink->outcfg.channel_layouts)) < 0)
-        return ret;
-
-    formats = ff_all_samplerates();
-    if ((ret = ff_formats_ref(formats, &inlink->outcfg.samplerates)) < 0)
+    if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
     formats = ff_make_format_list(pix_fmts);
-    if ((ret = ff_formats_ref(formats, &outlink->incfg.formats)) < 0)
+    if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
     return 0;
@@ -161,12 +153,13 @@ static int get_log_bin_sign(float in, int w)
 static int config_output(AVFilterLink *outlink)
 {
     AudioHistogramContext *s = outlink->src->priv;
+    FilterLink *l = ff_filter_link(outlink);
 
     outlink->w = s->w;
     outlink->h = s->h;
     outlink->sample_aspect_ratio = (AVRational){1,1};
-    outlink->frame_rate = s->frame_rate;
-    outlink->time_base = av_inv_q(outlink->frame_rate);
+    l->frame_rate = s->frame_rate;
+    outlink->time_base = av_inv_q(l->frame_rate);
 
     s->histogram_h = s->h * s->phisto;
     s->ypos = s->h * s->phisto;
@@ -509,6 +502,6 @@ const AVFilter ff_avf_ahistogram = {
     .activate      = activate,
     FILTER_INPUTS(ahistogram_inputs),
     FILTER_OUTPUTS(ahistogram_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .priv_class    = &ahistogram_class,
 };

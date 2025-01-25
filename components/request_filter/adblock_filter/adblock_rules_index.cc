@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "adblock_rules_index.h"
 #include "base/strings/string_split.h"
 #include "components/ad_blocker/parse_utils.h"
 #include "components/request_filter/adblock_filter/adblock_rule_pattern_matcher.h"
@@ -262,13 +263,15 @@ bool DoesOriginMatchDomainList(const url::Origin& origin,
   return !!longest_matching_included_domain_length;
 }
 
-const flat::RequestFilterRule* GetRuleFromId(
+RulesIndex::RuleAndSource GetRequestFilterRuleAndSourceFromId(
     const RulesIndex::RulesBufferMap& rule_buffers,
     const flat::RuleId& rule_id) {
   auto rule_buffer = rule_buffers.find(rule_id.source_id());
   DCHECK(rule_buffer != rule_buffers.end());
-  return rule_buffer->second.rules_list()->request_filter_rules_list()->Get(
-      rule_id.rule_nr());
+  return RulesIndex::RuleAndSource{
+      rule_buffer->second.rules_list()->request_filter_rules_list()->Get(
+          rule_id.rule_nr()),
+      rule_id.source_id()};
 }
 
 const flat::CosmeticRule* GetCosmeticRuleFromId(
@@ -291,10 +294,10 @@ const flat::ScriptletInjectionRule* GetScriptletInjectionRuleFromId(
 }
 
 bool AddActivationsFromRule(RulesIndex::ActivationResults& activations,
-                            const flat::RequestFilterRule* rule) {
+                            RulesIndex::RuleAndSource rule_and_source) {
   bool result = false;
   for (uint8_t i = 1; i < flat::ActivationType_ANY; i <<= 1) {
-    if ((rule->activation_types() & i) == 0)
+    if ((rule_and_source.rule->activation_types() & i) == 0)
       continue;
 
     auto& existing = activations[flat::ActivationType(i)];
@@ -303,11 +306,12 @@ bool AddActivationsFromRule(RulesIndex::ActivationResults& activations,
     // so the type can't be anything else.
     CHECK(existing.type == RulesIndex::ActivationResult::MATCH);
 
-    if (existing.rule &&
-        GetRulePriority(*existing.rule) > GetRulePriority(*rule)) {
+    if (existing.rule_and_source &&
+        GetRulePriority(*existing.rule_and_source->rule) >
+            GetRulePriority(*rule_and_source.rule)) {
       continue;
     }
-    existing.rule = rule;
+    existing.rule_and_source = rule_and_source;
     result = true;
   }
 
@@ -327,23 +331,25 @@ void GetActivationsFromCandidates(
 
   for (const flat::RuleId* rule_id : *candidates->Get(0)->rules()) {
     DCHECK_NE(rule_id, nullptr);
-    const flat::RequestFilterRule* rule = GetRuleFromId(rule_buffers, *rule_id);
+    RulesIndex::RuleAndSource rule_and_source =
+        GetRequestFilterRuleAndSourceFromId(rule_buffers, *rule_id);
+    const flat::RequestFilterRule& rule = *rule_and_source.rule;
 
     RulesIndex::ActivationResults modified_activations = *activations;
     // Avoid expensive tests if the rule wouldn't change anything.
-    if (!AddActivationsFromRule(modified_activations, rule)) {
+    if (!AddActivationsFromRule(modified_activations, rule_and_source)) {
       continue;
     }
 
-    if (!DoesRulePartyMatch(*rule, is_third_party)) {
+    if (!DoesRulePartyMatch(rule, is_third_party)) {
       continue;
     }
 
-    if (!DoesOriginMatchDomainList(document_origin, *rule, false)) {
+    if (!DoesOriginMatchDomainList(document_origin, rule, false)) {
       continue;
     }
 
-    if (!DoesUrlMatchRulePattern(*rule, url)) {
+    if (!DoesUrlMatchRulePattern(rule, url)) {
       continue;
     }
 
@@ -355,7 +361,7 @@ void GetActivationsFromCandidates(
 
 // `sorted_candidates` is sorted by GetRulePriority. This returns the first
 // matching rule in `sorted_candidates` or null if no rule matches.
-const flat::RequestFilterRule* FindMatchAmongCandidates(
+std::optional<RulesIndex::RuleAndSource> FindMatchAmongCandidates(
     const FlatRulesByModifierList* sorted_candidates_by_modifier,
     const RulesIndex::RulesBufferMap& rule_buffers,
     const RulePatternMatcher::UrlInfo& url,
@@ -377,33 +383,39 @@ const flat::RequestFilterRule* FindMatchAmongCandidates(
       [rule_buffers](const flat::RuleId* lhs, const flat::RuleId* rhs) {
         DCHECK(lhs);
         DCHECK(rhs);
-        return GetRulePriority(*GetRuleFromId(rule_buffers, *lhs)) >
-               GetRulePriority(*GetRuleFromId(rule_buffers, *rhs));
+        return GetRulePriority(
+                   *GetRequestFilterRuleAndSourceFromId(rule_buffers, *lhs)
+                        .rule) >
+               GetRulePriority(
+                   *GetRequestFilterRuleAndSourceFromId(rule_buffers, *rhs)
+                        .rule);
       }));
 
   for (const flat::RuleId* rule_id : *sorted_candidates) {
     DCHECK_NE(rule_id, nullptr);
-    const flat::RequestFilterRule* rule = GetRuleFromId(rule_buffers, *rule_id);
-    if (current_rule_priority >= GetRulePriority(*rule))
-      return nullptr;
+    RulesIndex::RuleAndSource rule_and_source =
+        GetRequestFilterRuleAndSourceFromId(rule_buffers, *rule_id);
+    const flat::RequestFilterRule& rule = *rule_and_source.rule;
+    if (current_rule_priority >= GetRulePriority(*rule_and_source.rule))
+      return std::nullopt;
 
-    if (!DoesRuleFlagsMatch(*rule, resource_type, is_third_party)) {
+    if (!DoesRuleFlagsMatch(rule, resource_type, is_third_party)) {
       continue;
     }
 
-    if (!DoesOriginMatchDomainList(document_origin, *rule,
+    if (!DoesOriginMatchDomainList(document_origin, rule,
                                    disable_generic_rules)) {
       continue;
     }
 
-    if (!DoesUrlMatchRulePattern(*rule, url)) {
+    if (!DoesUrlMatchRulePattern(rule, url)) {
       continue;
     }
 
-    if (rule->ad_domains_and_query_triggers()) {
+    if (rule.ad_domains_and_query_triggers()) {
       bool query_and_trigger_match = false;
       for (const auto* ad_domain_and_query_trigger :
-           *rule->ad_domains_and_query_triggers()) {
+           *rule.ad_domains_and_query_triggers()) {
         query_and_trigger_match = ad_attribution_matches.Run(
             url.fold_case_spec(), ad_domain_and_query_trigger->string_view());
         if (query_and_trigger_match) {
@@ -416,10 +428,10 @@ const flat::RequestFilterRule* FindMatchAmongCandidates(
       }
     }
 
-    return rule;
+    return rule_and_source;
   }
 
-  return nullptr;
+  return std::nullopt;
 }
 
 // `sorted_candidates` is sorted with by GetRulePriority. The modifier value of
@@ -445,58 +457,65 @@ void FindModifierRulesMatchesCandidates(
         [rule_buffers](const flat::RuleId* lhs, const flat::RuleId* rhs) {
           DCHECK(lhs);
           DCHECK(rhs);
-          return GetRulePriority(*GetRuleFromId(rule_buffers, *lhs)) >
-                 GetRulePriority(*GetRuleFromId(rule_buffers, *rhs));
+          return GetRulePriority(
+                     *GetRequestFilterRuleAndSourceFromId(rule_buffers, *lhs)
+                          .rule) >
+                 GetRulePriority(
+                     *GetRequestFilterRuleAndSourceFromId(rule_buffers, *rhs)
+                          .rule);
         }));
 
     for (const flat::RuleId* rule_id : *sorted_candidates) {
       CHECK_NE(rule_id, nullptr);
-      const flat::RequestFilterRule* rule =
-          GetRuleFromId(rule_buffers, *rule_id);
+      RulesIndex::RuleAndSource rule_and_source =
+          GetRequestFilterRuleAndSourceFromId(rule_buffers, *rule_id);
+      const flat::RequestFilterRule& rule = *rule_and_source.rule;
 
-      CHECK(rule->modifier() != flat::Modifier_NO_MODIFIER);
+      CHECK(rule.modifier() != flat::Modifier_NO_MODIFIER);
 
-      RulesIndex::FoundModifiers& found = result[rule->modifier()];
-      if (rule->decision() == flat::Decision_MODIFY) {
+      RulesIndex::FoundModifiers& found = result[rule.modifier()];
+      if (rule.decision() == flat::Decision_MODIFY) {
         found.found_modify_rules = true;
       }
-      if (found.pass_all_rule && rule->decision() <= flat::Decision_PASS) {
+      if (found.pass_all_rule &&
+          rule_and_source.rule->decision() <= flat::Decision_PASS) {
         break;
       }
 
-      if (!IsFullModifierPassRule(*rule)) {
-        for (const auto* modifer_value : *rule->modifier_values()) {
+      if (!IsFullModifierPassRule(rule)) {
+        for (const auto* modifer_value : *rule.modifier_values()) {
           auto existing = found.value_with_decision.find(modifer_value->str());
           if (existing != found.value_with_decision.end() &&
-              GetRulePriority(*existing->second) > GetRulePriority(*rule)) {
+              GetRulePriority(*existing->second.rule) >
+                  GetRulePriority(*rule_and_source.rule)) {
             continue;
           }
         }
       }
 
-      if (!DoesRuleFlagsMatch(*rule, resource_type, is_third_party)) {
+      if (!DoesRuleFlagsMatch(rule, resource_type, is_third_party)) {
         continue;
       }
 
-      if (!DoesOriginMatchDomainList(document_origin, *rule,
+      if (!DoesOriginMatchDomainList(document_origin, rule,
                                      disable_generic_rules)) {
         continue;
       }
 
-      if (!DoesUrlMatchRulePattern(*rule, url)) {
+      if (!DoesUrlMatchRulePattern(rule, url)) {
         continue;
       }
 
-      if (IsFullModifierPassRule(*rule)) {
-        found.pass_all_rule = rule;
+      if (IsFullModifierPassRule(rule)) {
+        found.pass_all_rule = rule_and_source;
         std::erase_if(found.value_with_decision,
                       [](const auto& value_with_decision) {
-                        return value_with_decision.second->decision() !=
+                        return value_with_decision.second.rule->decision() !=
                                flat::Decision_MODIFY_IMPORTANT;
                       });
       } else {
-        for (const auto* modifier_value : *rule->modifier_values()) {
-          found.value_with_decision[modifier_value->str()] = rule;
+        for (const auto* modifier_value : *rule.modifier_values()) {
+          found.value_with_decision[modifier_value->str()] = rule_and_source;
         }
       }
     }
@@ -678,7 +697,7 @@ RulesIndex::ActivationResults RulesIndex::GetActivationsForFrame(
     url = frame->GetLastCommittedURL();
   }
 
-  if (url && !url->is_valid()) {// Nothing to add here if the url isn't valid.
+  if (url && !url->is_valid()) {  // Nothing to add here if the url isn't valid.
     return RulesIndex::ActivationResults{};
   }
 
@@ -743,12 +762,12 @@ RulesIndex::ActivationResults RulesIndex::GetActivationsForFrame(
         continue;
       }
 
-      CHECK(parent_activation.rule);
+      CHECK(parent_activation.rule_and_source);
 
-      if (!local_activation.rule ||
-          GetRulePriority(*local_activation.rule) <
-              GetRulePriority(*parent_activation.rule)) {
-        local_activation.rule = parent_activation.rule;
+      if (!local_activation.rule_and_source ||
+          GetRulePriority(*local_activation.rule_and_source->rule) <
+              GetRulePriority(*parent_activation.rule_and_source->rule)) {
+        local_activation.rule_and_source = parent_activation.rule_and_source;
         local_activation.type = ActivationResult::PARENT;
       }
     }
@@ -763,43 +782,46 @@ RulesIndex::ActivationResults RulesIndex::GetActivationsForFrame(
   return activations;
 }
 
-const flat::RequestFilterRule* RulesIndex::FindMatchingBeforeRequestRule(
+std::optional<RulesIndex::RuleAndSource>
+RulesIndex::FindMatchingBeforeRequestRule(
     const GURL& url,
     const url::Origin& document_origin,
     flat::ResourceType resource_type,
     bool is_third_party,
     bool disable_generic_rules,
     AdAttributionMatches ad_attribution_matches) {
-  const flat::RequestFilterRule* result = nullptr;
+  std::optional<RulesIndex::RuleAndSource> result = std::nullopt;
 
   // Ignore URLs that are greater than the max URL length. Since those will be
   // disallowed elsewhere in the loading stack, we can save compute time by
   // avoiding matching here.
   if (!url.is_valid() || url.spec().length() > url::kMaxURLChars) {
-    return nullptr;
+    return std::nullopt;
   }
   RulePatternMatcher::UrlInfo url_info(url);
 
   if (resource_type == flat::ResourceType_NONE)
     return result;
 
-  auto handle_matches =
-      [this, &result, &url_info, document_origin, resource_type, is_third_party,
-       disable_generic_rules,
-       ad_attribution_matches](const FlatRulesByModifierList* rule_list) {
-        const flat::RequestFilterRule* rule = FindMatchAmongCandidates(
-            rule_list, rules_buffers_, url_info, document_origin, resource_type,
-            is_third_party, disable_generic_rules, ad_attribution_matches,
-            result ? GetRulePriority(*result) : -1);
-        if (!rule)
-          return false;
+  auto handle_matches = [this, &result, &url_info, document_origin,
+                         resource_type, is_third_party, disable_generic_rules,
+                         ad_attribution_matches](
+                            const FlatRulesByModifierList* rule_list) {
+    std::optional<RulesIndex::RuleAndSource> rule_and_source =
+        FindMatchAmongCandidates(rule_list, rules_buffers_, url_info,
+                                 document_origin, resource_type, is_third_party,
+                                 disable_generic_rules, ad_attribution_matches,
+                                 result ? GetRulePriority(*result->rule) : -1);
+    if (!rule_and_source)
+      return false;
 
-        if (result == nullptr)
-          result = rule;
-        else if (GetRulePriority(*rule) > GetRulePriority(*result))
-          result = rule;
-        return GetRulePriority(*result) == GetMaxRulePriority();
-      };
+    if (!result)
+      result = rule_and_source;
+    else if (GetRulePriority(*rule_and_source->rule) >
+             GetRulePriority(*result->rule))
+      result = rule_and_source;
+    return GetRulePriority(*result->rule) == GetMaxRulePriority();
+  };
 
   FindMatchingRuleInMap(url_info.fold_case_spec(),
                         rules_index_->before_request_map(), handle_matches);

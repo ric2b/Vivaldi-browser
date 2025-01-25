@@ -62,7 +62,7 @@ class TlsConnectionFactoryPosix : public TlsConnectionFactory,
   void Initialize();
 
   // Handles their respective SSL handshake calls.  These will continue to be
-  // scheduled on |task_runner_| until the handshake completes.
+  // scheduled on `task_runner_` until the handshake completes.
   void Connect(std::unique_ptr<TlsConnectionPosix> connection);
   void Accept(std::unique_ptr<TlsConnectionPosix> connection);
 

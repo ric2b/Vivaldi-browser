@@ -20,7 +20,7 @@ limitations under the License.
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "xla/hlo/ir/hlo_module.h"
-#include "xla/service/hlo_pass_interface.h"
+#include "xla/hlo/pass/hlo_pass_interface.h"
 
 namespace xla {
 
@@ -103,6 +103,8 @@ class CollectivePipeliner : public HloModulePass {
     // Determines whether a loop invariant instruction can be considered
     // in the pipelining chain.
     bool should_add_loop_invariant_op_in_chain = false;
+    // Postprocessing hook which runs for every successfully pipelined op.
+    HloPostprocessor postprocess_pipelined_ops = std::nullopt;
   };
   static const char* const kInsertedByPreviousStep;
   static const char* const kSunkByPreviousStep;

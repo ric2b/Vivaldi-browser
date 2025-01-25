@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ssl/https_upgrades_navigation_throttle.h"
 
+#include <utility>
+
 #include "base/feature_list.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
@@ -87,7 +89,8 @@ HttpsUpgradesNavigationThrottle::MaybeCreateThrottleFor(
 
   // StatefulSSLHostStateDelegate can be null during tests.
   if (state &&
-      state->IsHttpsEnforcedForUrl(handle->GetURL(), storage_partition)) {
+      state->IsHttpsEnforcedForUrl(handle->GetURL(), storage_partition) &&
+      !MustDisableSiteEngagementHeuristic(profile)) {
     interstitial_state.enabled_by_engagement_heuristic = true;
   }
 
@@ -148,9 +151,7 @@ HttpsUpgradesNavigationThrottle::WillStartRequest() {
   if ((handle->GetPageTransition() & ui::PAGE_TRANSITION_FORWARD_BACK &&
        tab_helper->has_failed_upgrade(handle->GetURL())) &&
       !handle->GetURL().SchemeIsCryptographic()) {
-    if (IsInterstitialEnabled(interstitial_state_) &&
-        !(ShouldExcludeUrlFromInterstitial(interstitial_state_,
-                                           handle->GetURL()))) {
+    if (IsInterstitialEnabled(interstitial_state_)) {
       security_interstitials::https_only_mode::RecordInterstitialReason(
           interstitial_state_);
 
@@ -165,7 +166,7 @@ HttpsUpgradesNavigationThrottle::WillStartRequest() {
           AssociateBlockingPage(handle, std::move(blocking_page));
       return content::NavigationThrottle::ThrottleCheckResult(
           content::NavigationThrottle::CANCEL, net::ERR_BLOCKED_BY_CLIENT,
-          interstitial_html);
+          std::move(interstitial_html));
     }
 
     // Otherwise, just record metrics and continue.
@@ -211,9 +212,7 @@ HttpsUpgradesNavigationThrottle::WillRedirectRequest() {
 
   if (tab_helper->is_navigation_fallback() &&
       !handle->GetURL().SchemeIsCryptographic() &&
-      IsInterstitialEnabled(interstitial_state_) &&
-      !ShouldExcludeUrlFromInterstitial(interstitial_state_,
-                                        handle->GetURL())) {
+      IsInterstitialEnabled(interstitial_state_)) {
     security_interstitials::https_only_mode::RecordInterstitialReason(
         interstitial_state_);
 
@@ -225,7 +224,7 @@ HttpsUpgradesNavigationThrottle::WillRedirectRequest() {
         AssociateBlockingPage(handle, std::move(blocking_page));
     return content::NavigationThrottle::ThrottleCheckResult(
         content::NavigationThrottle::CANCEL, net::ERR_BLOCKED_BY_CLIENT,
-        interstitial_html);
+        std::move(interstitial_html));
   }
 
   // Otherwise, just record metrics and continue.

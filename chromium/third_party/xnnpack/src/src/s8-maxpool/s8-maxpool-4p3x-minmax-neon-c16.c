@@ -19,14 +19,14 @@ void xnn_s8_maxpool_minmax_ukernel_4p3x__neon_c16(
     int8_t* output,
     size_t input_increment,
     size_t output_increment,
-    const union xnn_s8_minmax_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_s8_minmax_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(output_pixels != 0);
   assert(kernel_elements != 0);
   assert(channels != 0);
 
-  const int8x16_t voutput_max = vld1q_dup_s8(&params->neon.max);
-  const int8x16_t voutput_min = vld1q_dup_s8(&params->neon.min);
+  const int8x16_t voutput_max = vld1q_dup_s8(&params->scalar.max);
+  const int8x16_t voutput_min = vld1q_dup_s8(&params->scalar.min);
   do {
     int8_t* o = output;
     {

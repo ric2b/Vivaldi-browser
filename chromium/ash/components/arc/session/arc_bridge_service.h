@@ -29,6 +29,7 @@ class AppInstance;
 class AppPermissionsInstance;
 class AppfuseHost;
 class AppfuseInstance;
+class ArcShellExecutionInstance;
 class ArcWifiHost;
 class ArcWifiInstance;
 class AudioHost;
@@ -64,8 +65,6 @@ class InputMethodManagerHost;
 class InputMethodManagerInstance;
 class IntentHelperHost;
 class IntentHelperInstance;
-class KeyboardShortcutHost;
-class KeyboardShortcutInstance;
 class KeymasterHost;
 class KeymasterInstance;
 class MediaSessionInstance;
@@ -82,6 +81,7 @@ class ObbMounterHost;
 class ObbMounterInstance;
 class OemCryptoHost;
 class OemCryptoInstance;
+class OnDeviceSafetyInstance;
 class PipHost;
 class PipInstance;
 class PolicyHost;
@@ -97,7 +97,6 @@ class ScreenCaptureHost;
 class ScreenCaptureInstance;
 class SharesheetHost;
 class SharesheetInstance;
-class StorageManagerInstance;
 class SystemStateHost;
 class SystemStateInstance;
 class SystemUiInstance;
@@ -173,6 +172,9 @@ class ArcBridgeService {
   ConnectionHolder<mojom::AppfuseInstance, mojom::AppfuseHost>* appfuse() {
     return &appfuse_;
   }
+  ConnectionHolder<mojom::ArcShellExecutionInstance>* arc_shell_execution() {
+    return &arc_shell_execution_;
+  }
   ConnectionHolder<mojom::ArcWifiInstance, mojom::ArcWifiHost>* arc_wifi() {
     return &arc_wifi_;
   }
@@ -245,11 +247,6 @@ class ArcBridgeService {
   intent_helper() {
     return &intent_helper_;
   }
-  ConnectionHolder<mojom::KeyboardShortcutInstance,
-                   mojom::KeyboardShortcutHost>*
-  keyboard_shortcut() {
-    return &keyboard_shortcut_;
-  }
   ConnectionHolder<mojom::KeymasterInstance, mojom::KeymasterHost>*
   keymaster() {
     return &keymaster_;
@@ -282,6 +279,9 @@ class ArcBridgeService {
   oemcrypto() {
     return &oemcrypto_;
   }
+  ConnectionHolder<mojom::OnDeviceSafetyInstance>* on_device_safety() {
+    return &on_device_safety_;
+  }
   ConnectionHolder<chromeos::payments::mojom::PaymentAppInstance>*
   payment_app() {
     return &payment_app_;
@@ -309,10 +309,6 @@ class ArcBridgeService {
   ConnectionHolder<mojom::SharesheetInstance, mojom::SharesheetHost>*
   sharesheet() {
     return &sharesheet_;
-  }
-
-  ConnectionHolder<mojom::StorageManagerInstance>* storage_manager() {
-    return &storage_manager_;
   }
   ConnectionHolder<mojom::SystemStateInstance, mojom::SystemStateHost>*
   system_state() {
@@ -367,6 +363,7 @@ class ArcBridgeService {
   ConnectionHolder<mojom::CompatibilityModeInstance> compatibility_mode_;
   ConnectionHolder<mojom::CrashCollectorInstance, mojom::CrashCollectorHost>
       crash_collector_;
+  ConnectionHolder<mojom::ArcShellExecutionInstance> arc_shell_execution_;
   ConnectionHolder<mojom::DigitalGoodsInstance> digital_goods_;
   ConnectionHolder<mojom::DiskSpaceInstance, mojom::DiskSpaceHost> disk_space_;
   ConnectionHolder<mojom::EnterpriseReportingInstance,
@@ -384,8 +381,6 @@ class ArcBridgeService {
       input_method_manager_;
   ConnectionHolder<mojom::IntentHelperInstance, mojom::IntentHelperHost>
       intent_helper_;
-  ConnectionHolder<mojom::KeyboardShortcutInstance, mojom::KeyboardShortcutHost>
-      keyboard_shortcut_;
   ConnectionHolder<mojom::KeymasterInstance, mojom::KeymasterHost> keymaster_;
   ConnectionHolder<mojom::keymint::KeyMintInstance, mojom::keymint::KeyMintHost>
       keymint_;
@@ -399,6 +394,7 @@ class ArcBridgeService {
   ConnectionHolder<mojom::ObbMounterInstance, mojom::ObbMounterHost>
       obb_mounter_;
   ConnectionHolder<mojom::OemCryptoInstance, mojom::OemCryptoHost> oemcrypto_;
+  ConnectionHolder<mojom::OnDeviceSafetyInstance> on_device_safety_;
   ConnectionHolder<chromeos::payments::mojom::PaymentAppInstance> payment_app_;
   ConnectionHolder<mojom::PipInstance, mojom::PipHost> pip_;
   ConnectionHolder<mojom::PolicyInstance, mojom::PolicyHost> policy_;
@@ -412,7 +408,6 @@ class ArcBridgeService {
       screen_capture_;
   ConnectionHolder<mojom::SharesheetInstance, mojom::SharesheetHost>
       sharesheet_;
-  ConnectionHolder<mojom::StorageManagerInstance> storage_manager_;
   ConnectionHolder<mojom::SystemStateInstance, mojom::SystemStateHost>
       system_state_;
   ConnectionHolder<mojom::SystemUiInstance> system_ui_;

@@ -41,6 +41,11 @@
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
+// TODO(crbug.com/374808149): Clean up the killswitch.
+BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
+             "PrimaryToolbarViewDidLoadUpdateViews",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 @interface PrimaryToolbarViewController ()
 
 // Redefined to be a PrimaryToolbarView.
@@ -194,6 +199,13 @@ using vivaldi::IsVivaldiRunning;
   // set to topLayoutGuide after the view creation on iOS 10.
   [self.view setUp];
 
+  // Reference the location bar container as the top omnibox layout guide.
+  // Force the synchronous layout update, as this fixes the screen rotation
+  // animation in this case.
+  [self.layoutGuideCenter referenceView:self.view.locationBarContainer
+                              underName:kTopOmniboxGuide
+         forcesSynchronousLayoutUpdates:YES];
+
   // Note:(prio@vivaldi.com) - Add the guide in ToolbarCoordinator since its
   // used for both top and bottom omnibox.
   if (!IsVivaldiRunning()) {
@@ -229,10 +241,14 @@ using vivaldi::IsVivaldiRunning;
   // change.
   if (@available(iOS 17, *)) {
     [self registerForTraitChanges:@[
-      UITraitVerticalSizeClass.self, UITraitHorizontalSizeClass.self
+      UITraitVerticalSizeClass.class, UITraitHorizontalSizeClass.class
     ]
                        withAction:@selector(updateViews:
                                       previousTraitCollection:)];
+    // TODO(crbug.com/374808149): Clean up the killswitch.
+    if (base::FeatureList::IsEnabled(kPrimaryToolbarViewDidLoadUpdateViews)) {
+      [self updateViews:self.view previousTraitCollection:nil];
+    }
   }
 }
 

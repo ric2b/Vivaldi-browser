@@ -35,3 +35,7 @@ NSString* const kSiriManageSettings = @"ManageSettingsIntent";
 NSString* const kSiriOpenLatestTab = @"OpenLatestTabIntent";
 NSString* const kSiriOpenLensFromIntents = @"OpenLensIntent";
 NSString* const kSiriClearBrowsingData = @"ClearBrowsingDataIntent";
+
+// Vivaldi
+NSString* const kShowUninstallSurvey = @"ShowUninstallSurvey";
+// End Vivaldi

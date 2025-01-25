@@ -52,10 +52,10 @@ class WebSocketStream::UnderlyingSource final : public UnderlyingSourceBase {
       : UnderlyingSourceBase(script_state), creator_(creator) {}
 
   // UnderlyingSourceBase implementation.
-  ScriptPromiseUntyped Pull(ScriptState*, ExceptionState&) override;
-  ScriptPromiseUntyped Cancel(ScriptState*,
-                              ScriptValue reason,
-                              ExceptionState&) override;
+  ScriptPromise<IDLUndefined> Pull(ScriptState*, ExceptionState&) override;
+  ScriptPromise<IDLUndefined> Cancel(ScriptState*,
+                                     ScriptValue reason,
+                                     ExceptionState&) override;
 
   // API for WebSocketStream.
   void DidReceiveTextMessage(const String&);
@@ -124,22 +124,22 @@ class WebSocketStream::UnderlyingSink final : public UnderlyingSinkBase {
   bool is_writing_ = false;
 };
 
-ScriptPromiseUntyped WebSocketStream::UnderlyingSource::Pull(
+ScriptPromise<IDLUndefined> WebSocketStream::UnderlyingSource::Pull(
     ScriptState* script_state,
     ExceptionState&) {
   DVLOG(1) << "WebSocketStream::UnderlyingSource " << this << " Pull()";
   creator_->channel_->RemoveBackpressure();
-  return ScriptPromiseUntyped::CastUndefined(script_state);
+  return ToResolvedUndefinedPromise(script_state);
 }
 
-ScriptPromiseUntyped WebSocketStream::UnderlyingSource::Cancel(
+ScriptPromise<IDLUndefined> WebSocketStream::UnderlyingSource::Cancel(
     ScriptState* script_state,
     ScriptValue reason,
     ExceptionState& exception_state) {
   DVLOG(1) << "WebSocketStream::UnderlyingSource " << this << " Cancel()";
   closed_ = true;
   creator_->CloseMaybeWithReason(reason, exception_state);
-  return ScriptPromiseUntyped::CastUndefined(script_state);
+  return ToResolvedUndefinedPromise(script_state);
 }
 
 void WebSocketStream::UnderlyingSource::DidReceiveTextMessage(

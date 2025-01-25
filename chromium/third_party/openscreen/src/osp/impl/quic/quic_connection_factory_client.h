@@ -23,6 +23,12 @@ class QuicConnectionFactoryClient : public QuicConnectionFactoryBase {
   };
 
   explicit QuicConnectionFactoryClient(TaskRunner& task_runner);
+  QuicConnectionFactoryClient(const QuicConnectionFactoryClient&) = delete;
+  QuicConnectionFactoryClient& operator=(const QuicConnectionFactoryClient&) =
+      delete;
+  QuicConnectionFactoryClient(QuicConnectionFactoryClient&&) noexcept = delete;
+  QuicConnectionFactoryClient& operator=(
+      QuicConnectionFactoryClient&&) noexcept = delete;
   ~QuicConnectionFactoryClient() override;
 
   // UdpSocket::Client overrides.

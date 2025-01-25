@@ -23,13 +23,13 @@
 #include "chrome/browser/ash/app_mode/kiosk_controller.h"
 #include "chrome/browser/ash/app_mode/kiosk_system_session.h"
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
-#include "chromeos/ash/components/kiosk/vision/internals_page_processor.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/web_contents.h"
 
 namespace ash {
 
+class AppLaunchSplashScreen;
 class CrashRecoveryLauncher;
 class KioskLaunchController;
 
@@ -48,7 +48,8 @@ class KioskControllerImpl : public KioskController,
 
   void StartSession(const KioskAppId& app,
                     bool is_auto_launch,
-                    LoginDisplayHost* host) override;
+                    LoginDisplayHost* host,
+                    AppLaunchSplashScreen* splash_screen) override;
   void StartSessionAfterCrash(const KioskAppId& app, Profile* profile) override;
 
   bool IsSessionStarting() const override;

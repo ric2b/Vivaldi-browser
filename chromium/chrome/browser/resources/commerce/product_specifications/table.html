@@ -1,7 +1,6 @@
 <style include="cr-icons cr-hidden-style shared-vars">
   :host {
     --column-width: 220px;
-    --detail-container-margin-bottom: 24px;
     --new-column-selector-width: 42px;
     --table-gap: 8px;
   }
@@ -95,15 +94,13 @@
     display: flex;
     flex-direction: column;
     gap: var(--table-gap);
+    margin-bottom: 24px;
     width: var(--column-width);
-  }
-
-  .detail-text {
-    margin-bottom: var(--detail-container-margin-bottom);
   }
 
   .detail-title {
     border-bottom: 1px solid var(--color-product-specifications-divider);
+    color: var(--cr-primary-text-color);
     font-weight: 500;
     padding-bottom: 4px;
     padding-inline-end: 50px;
@@ -183,11 +180,10 @@
       <template is="dom-repeat" items="[[column.productDetails]]" as="detail"
           index-as="rowIndex">
         <div class="detail-container"
-            aria-label="[[detail.title]]"
             hidden$="[[!showRow_(detail.title, rowIndex)]]">
           <template is="dom-if" if="[[detail.title]]">
             <div class="detail-title">
-              <span aria-hidden="true">[[detail.title]]</span>
+              <span>[[detail.title]]</span>
             </div>
           </template>
           <template is="dom-if" if="[[contentIsString_(detail.content)]]">
@@ -202,8 +198,9 @@
             </description-section>
           </template>
           <template is="dom-if"
-              if="[[contentIsBuyingOptionsLink_(detail.content)]]">
-            <buying-options-section jackpot-url="[[detail.content.jackpotUrl]]">
+              if="[[contentIsBuyingOptions_(detail.content)]]">
+            <buying-options-section price="[[detail.content.price]]"
+                jackpot-url="[[detail.content.jackpotUrl]]">
             </buying-options-section>
           </template>
         </div>

@@ -6,7 +6,7 @@
 #include "base/no_destructor.h"
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 
-class ChromeBrowserState;
+class ProfileIOS;
 
 namespace sync_notes {
 class NoteSyncService;
@@ -18,8 +18,7 @@ class NoteSyncServiceFactory : public BrowserStateKeyedServiceFactory {
  public:
   // Returns the instance of NoteSyncService associated with this profile
   // (creating one if none exists).
-  static sync_notes::NoteSyncService* GetForBrowserState(
-      ChromeBrowserState* browser_state);
+  static sync_notes::NoteSyncService* GetForProfile(ProfileIOS* profile);
 
   // Returns an instance of the NoteSyncServiceFactory singleton.
   static NoteSyncServiceFactory* GetInstance();

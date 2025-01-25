@@ -9,15 +9,15 @@
 
 #include "base/no_destructor.h"
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
-#import "ios/chrome/browser/https_upgrades/model/https_upgrade_service_impl.h"
-#include "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
+#include "ios/chrome/browser/https_upgrades/model/https_upgrade_service_impl.h"
+
+class ProfileIOS;
 
 // Singleton that owns all HttpsUpgradeService and associates them with
-// ChromeBrowserState.
+// ProfileIOS.
 class HttpsUpgradeServiceFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static HttpsUpgradeService* GetForBrowserState(
-      web::BrowserState* browser_state);
+  static HttpsUpgradeService* GetForProfile(ProfileIOS* profile);
   static HttpsUpgradeServiceFactory* GetInstance();
 
   HttpsUpgradeServiceFactory(const HttpsUpgradeServiceFactory&) = delete;

@@ -209,7 +209,7 @@ WebDatabaseTable::TypeKey GetKey() {
 KeywordTable::KeywordTable() {
 }
 
-KeywordTable::~KeywordTable() {}
+KeywordTable::~KeywordTable() = default;
 
 KeywordTable* KeywordTable::FromWebDatabase(WebDatabase* db) {
   return static_cast<KeywordTable*>(db->GetTable(GetKey()));
@@ -647,7 +647,7 @@ bool KeywordTable::GetKeywordAsString(TemplateURLID id,
                                       const std::string& table_name,
                                       std::string* result) {
   const std::string query = base::StrCat(
-      	{"SELECT ", ColumnsForVersion(WebDatabase::kCurrentVersionNumber, WebDatabase::kVivaldiCurrentVersionNumber, true),
+        {"SELECT ", ColumnsForVersion(WebDatabase::kCurrentVersionNumber, WebDatabase::kVivaldiCurrentVersionNumber, true),
        " FROM ", table_name, " WHERE id=?"});
   sql::Statement s(db()->GetUniqueStatement(query));
   s.BindInt64(0, id);

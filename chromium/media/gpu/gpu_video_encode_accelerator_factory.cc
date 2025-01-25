@@ -119,13 +119,20 @@ std::vector<VEAFactoryFunction> GetVEAFactoryFunctions(
 
 #if BUILDFLAG(USE_VAAPI)
 #if BUILDFLAG(IS_LINUX)
-  if (base::FeatureList::IsEnabled(kVaapiVideoEncodeLinux))
+  if (base::FeatureList::IsEnabled(kAcceleratedVideoEncodeLinux)) {
     vea_factory_functions.push_back(base::BindRepeating(&CreateVaapiVEA));
+  }
 #else
   vea_factory_functions.push_back(base::BindRepeating(&CreateVaapiVEA));
 #endif
 #elif BUILDFLAG(USE_V4L2_CODEC)
+#if BUILDFLAG(IS_LINUX)
+  if (base::FeatureList::IsEnabled(kAcceleratedVideoEncodeLinux)) {
+    vea_factory_functions.push_back(base::BindRepeating(&CreateV4L2VEA));
+  }
+#else
   vea_factory_functions.push_back(base::BindRepeating(&CreateV4L2VEA));
+#endif
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
@@ -176,7 +183,9 @@ GpuVideoEncodeAcceleratorFactory::CreateVEA(
     const gpu::GpuPreferences& gpu_preferences,
     const gpu::GpuDriverBugWorkarounds& gpu_workarounds,
     const gpu::GPUInfo::GPUDevice& gpu_device,
-    std::unique_ptr<MediaLog> media_log) {
+    std::unique_ptr<MediaLog> media_log,
+    GetCommandBufferHelperCB get_command_buffer_helper_cb,
+    scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner) {
   // NullMediaLog silently and safely does nothing.
   if (!media_log)
     media_log = std::make_unique<media::NullMediaLog>();
@@ -186,6 +195,10 @@ GpuVideoEncodeAcceleratorFactory::CreateVEA(
     std::unique_ptr<VideoEncodeAccelerator> vea = create_vea.Run();
     if (!vea)
       continue;
+    if (!get_command_buffer_helper_cb.is_null()) {
+      vea->SetCommandBufferHelperCB(get_command_buffer_helper_cb,
+                                    gpu_task_runner);
+    }
     if (!vea->Initialize(config, client, media_log->Clone())) {
       DLOG(ERROR) << "VEA initialize failed (" << config.AsHumanReadableString()
                   << ")";

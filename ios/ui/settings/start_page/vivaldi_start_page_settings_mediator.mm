@@ -4,6 +4,7 @@
 #import "components/prefs/ios/pref_observer_bridge.h"
 #import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
@@ -16,12 +17,18 @@
 @end
 
 @implementation VivaldiStartPageSettingsMediator {
-  // Preference service from the application context.
+  // Preference service from profile.
   PrefService* _prefs;
+  // Preference service from the application context.
+  PrefService* _localPrefs;
   // Pref observer to track changes to prefs.
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
+  // Pref observer to track changes to local prefs.
+  std::unique_ptr<PrefObserverBridge> _localPrefObserverBridge;
   // Registrar for pref changes notifications.
   PrefChangeRegistrar _prefChangeRegistrar;
+  // Registrar for local pref changes notifications.
+  PrefChangeRegistrar _localPrefChangeRegistrar;
   // Observer for frequently visited pages visibility state
   PrefBackedBoolean* _showFrequentlyVisited;
   // Observer for speed dials visibility state
@@ -38,6 +45,13 @@
     _prefObserverBridge.reset(new PrefObserverBridge(self));
     _prefObserverBridge->ObserveChangesForPreference(
         vivaldiprefs::kVivaldiStartPageLayoutStyle, &_prefChangeRegistrar);
+
+    _localPrefs = GetApplicationContext()->GetLocalState();
+    _localPrefChangeRegistrar.Init(_localPrefs);
+    _localPrefObserverBridge.reset(new PrefObserverBridge(self));
+    _localPrefObserverBridge->ObserveChangesForPreference(
+          vivaldiprefs::kVivaldiStartPageOpenWithItem,
+              &_localPrefChangeRegistrar);
 
     _showFrequentlyVisited =
         [[PrefBackedBoolean alloc]
@@ -60,7 +74,11 @@
 
     [self booleanDidChange:_showCustomizeStartPageButton];
 
-    [VivaldiStartPagePrefs setPrefService:_prefs];
+    [VivaldiStartPagePrefs setLocalPrefService:_localPrefs];
+
+    // Make sure consumers are updated when prefs are initiated
+    [self onPreferenceChanged:vivaldiprefs::kVivaldiStartPageLayoutStyle];
+    [self onPreferenceChanged:vivaldiprefs::kVivaldiStartPageOpenWithItem];
   }
   return self;
 }
@@ -93,6 +111,8 @@
   [self.consumer setPreferenceSpeedDialLayout:[self currentLayoutStyle]];
   [self.consumer setPreferenceShowCustomizeStartPageButton:
       [_showCustomizeStartPageButton value]];
+  [self.consumer
+      setPreferenceStartPageReopenWithItem:[self reopenStartPageWith]];
 }
 
 #pragma mark - PrefObserverDelegate
@@ -100,7 +120,11 @@
 - (void)onPreferenceChanged:(const std::string&)preferenceName {
   if (preferenceName == vivaldiprefs::kVivaldiStartPageLayoutStyle) {
     [self.consumer setPreferenceSpeedDialLayout:[self currentLayoutStyle]];
-  }
+  } else if (preferenceName ==
+              vivaldiprefs::kVivaldiStartPageOpenWithItem) {
+    [self.consumer
+        setPreferenceStartPageReopenWithItem:[self reopenStartPageWith]];
+   }
 }
 
 #pragma mark - BooleanObserver
@@ -143,9 +167,18 @@
   // No op.
 }
 
+- (void)setPreferenceStartPageReopenWithItem:
+    (VivaldiStartPageStartItemType)item {
+  [VivaldiStartPagePrefsHelper setReopenStartPageWithItem:item];
+}
+
 #pragma mark - Private
 - (VivaldiStartPageLayoutStyle)currentLayoutStyle {
   return [VivaldiStartPagePrefsHelper getStartPageLayoutStyle];
+}
+
+- (VivaldiStartPageStartItemType)reopenStartPageWith {
+  return [VivaldiStartPagePrefsHelper getReopenStartPageWithItem];
 }
 
 @end

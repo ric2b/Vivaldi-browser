@@ -48,16 +48,15 @@
 - (void)start {
   _viewController = [[NotificationsOptInViewController alloc] init];
   NotificationsOptInMediator* mediator = [[NotificationsOptInMediator alloc]
-      initWithAuthenticationService:AuthenticationServiceFactory::
-                                        GetForBrowserState(
-                                            self.browser->GetBrowserState())];
+      initWithAuthenticationService:AuthenticationServiceFactory::GetForProfile(
+                                        self.browser->GetProfile())];
   mediator.consumer = _viewController;
   mediator.presenter = self;
   _viewController.delegate = mediator;
   _viewController.notificationsDelegate = mediator;
   _viewController.presentationController.delegate = self;
   _viewController.isContentNotificationEnabled =
-      IsContentNotificationEnabled(self.browser->GetBrowserState());
+      IsContentNotificationEnabled(self.browser->GetProfile());
   [mediator configureConsumer];
   self.mediator = mediator;
   [self.baseViewController presentViewController:_viewController
@@ -79,16 +78,16 @@
 
 - (void)presentSignIn {
   __weak __typeof(self) weakSelf = self;
-  ShowSigninCommandCompletionCallback callback =
+  ShowSigninCommandCompletionCallback completion =
       ^(SigninCoordinatorResult result, SigninCompletionInfo* completionInfo) {
         if (result != SigninCoordinatorResultSuccess) {
           [weakSelf.mediator disableUserSelectionForItem:kContent];
         }
       };
   // If there are 0 identities, kInstantSignin requires less taps.
-  ChromeBrowserState* browserState = self.browser->GetBrowserState();
+  ProfileIOS* profile = self.browser->GetProfile();
   AuthenticationOperation operation =
-      ChromeAccountManagerServiceFactory::GetForBrowserState(browserState)
+      ChromeAccountManagerServiceFactory::GetForProfile(profile)
               ->HasIdentities()
           ? AuthenticationOperation::kSigninOnly
           : AuthenticationOperation::kInstantSignin;
@@ -100,7 +99,7 @@
                     ACCESS_POINT_NOTIFICATIONS_OPT_IN_SCREEN_CONTENT_TOGGLE
             promoAction:signin_metrics::PromoAction::
                             PROMO_ACTION_NO_SIGNIN_PROMO
-               callback:callback];
+             completion:completion];
   [HandlerForProtocol(self.browser->GetCommandDispatcher(), ApplicationCommands)
               showSignin:command
       baseViewController:_viewController];

@@ -21,7 +21,7 @@ void StatisticsCollector::CollectPacketSentEvent(ByteView packet,
                                                  PacketMetadata metadata) {
   PacketEvent event;
 
-  // Populate the new PacketEvent by parsing the wire-format |packet|.
+  // Populate the new PacketEvent by parsing the wire-format `packet`.
   event.timestamp = now_();
   event.type = StatisticsEventType::kPacketSentToNetwork;
 

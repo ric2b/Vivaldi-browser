@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ai/ai_context_bound_object_set.h"
 
+#include <memory>
+
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/supports_user_data.h"
@@ -16,79 +18,6 @@ namespace {
 const char kAIContextBoundObjectSetUserDataKey[] = "ai_context_bound_objects";
 
 }  // namespace
-
-// The following two classes ensure the `AIContextBoundObjectSet` and the
-// `AIContextBoundObject`s will be destroyed when the document or worker host is
-// gone. `AIContextBoundObjectSetSupportsUserData` is for workers and
-// `AIContextBoundObjectSetDocumentUserData` is for document.
-class AIContextBoundObjectSetSupportsUserData
-    : public AIContextBoundObjectSet,
-      public base::SupportsUserData::Data {
- public:
-  explicit AIContextBoundObjectSetSupportsUserData(base::SupportsUserData* host)
-      : host_(host) {}
-  ~AIContextBoundObjectSetSupportsUserData() override = default;
-
-  static AIContextBoundObjectSetSupportsUserData* GetOrCreateFor(
-      base::PassKey<AIContextBoundObjectSet> pass_key,
-      base::SupportsUserData* host) {
-    if (!host->GetUserData(kAIContextBoundObjectSetUserDataKey)) {
-      host->SetUserData(
-          kAIContextBoundObjectSetUserDataKey,
-          std::make_unique<AIContextBoundObjectSetSupportsUserData>(host));
-    }
-    return static_cast<AIContextBoundObjectSetSupportsUserData*>(
-        host->GetUserData(kAIContextBoundObjectSetUserDataKey));
-  }
-
- private:
-  raw_ptr<base::SupportsUserData> host_;
-};
-
-class AIContextBoundObjectSetDocumentUserData
-    : public AIContextBoundObjectSet,
-      public content::DocumentUserData<
-          AIContextBoundObjectSetDocumentUserData> {
- public:
-  ~AIContextBoundObjectSetDocumentUserData() override = default;
-
- protected:
-  explicit AIContextBoundObjectSetDocumentUserData(
-      content::RenderFrameHost* rfh)
-      : content::DocumentUserData<AIContextBoundObjectSetDocumentUserData>(
-            rfh) {}
-
- private:
-  friend DocumentUserData;
-  DOCUMENT_USER_DATA_KEY_DECL();
-};
-
-DOCUMENT_USER_DATA_KEY_IMPL(AIContextBoundObjectSetDocumentUserData);
-
-// static
-AIContextBoundObjectSet::ReceiverContextRawRef
-AIContextBoundObjectSet::ToReceiverContextRawRef(ReceiverContext context) {
-  if (std::holds_alternative<content::RenderFrameHost*>(context)) {
-    return raw_ref<content::RenderFrameHost>(
-        *std::get<content::RenderFrameHost*>(context));
-  }
-  CHECK(std::holds_alternative<base::SupportsUserData*>(context));
-  return raw_ref<base::SupportsUserData>(
-      *std::get<base::SupportsUserData*>(context));
-}
-
-// static
-AIContextBoundObjectSet::ReceiverContext
-AIContextBoundObjectSet::ToReceiverContext(
-    ReceiverContextRawRef context_raw_ref) {
-  if (std::holds_alternative<raw_ref<content::RenderFrameHost>>(
-          context_raw_ref)) {
-    return &std::get<raw_ref<content::RenderFrameHost>>(context_raw_ref).get();
-  }
-  CHECK(
-      std::holds_alternative<raw_ref<base::SupportsUserData>>(context_raw_ref));
-  return &std::get<raw_ref<base::SupportsUserData>>(context_raw_ref).get();
-}
 
 AIContextBoundObjectSet::AIContextBoundObjectSet() = default;
 AIContextBoundObjectSet::~AIContextBoundObjectSet() = default;
@@ -117,20 +46,14 @@ void AIContextBoundObjectSet::RemoveContextBoundObject(
 }
 
 AIContextBoundObjectSet* AIContextBoundObjectSet::GetFromContext(
-    ReceiverContext context) {
-  // For document, the set is wrapped as a `DocumentUserData`.
-  if (std::holds_alternative<content::RenderFrameHost*>(context)) {
-    return AIContextBoundObjectSetDocumentUserData::
-        GetOrCreateForCurrentDocument(
-            std::get<content::RenderFrameHost*>(context));
+    base::SupportsUserData& context_user_data) {
+  if (!context_user_data.GetUserData(kAIContextBoundObjectSetUserDataKey)) {
+    context_user_data.SetUserData(kAIContextBoundObjectSetUserDataKey,
+                                  // Constructor is
+                                  std::make_unique<AIContextBoundObjectSet>());
   }
-
-  // For workers, the context bound objects will be stored in the
-  // `AIContextBoundObjectSet` that's attached as a `SupportsUserData::Data`.
-  CHECK(std::holds_alternative<base::SupportsUserData*>(context));
-  return AIContextBoundObjectSetSupportsUserData::GetOrCreateFor(
-      base::PassKey<AIContextBoundObjectSet>(),
-      std::get<base::SupportsUserData*>(context));
+  return static_cast<AIContextBoundObjectSet*>(
+      context_user_data.GetUserData(kAIContextBoundObjectSetUserDataKey));
 }
 
 size_t AIContextBoundObjectSet::GetSizeForTesting() {

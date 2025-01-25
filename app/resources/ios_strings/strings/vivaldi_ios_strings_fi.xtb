@@ -2,24 +2,27 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fi">
 <translation id="1063263220330818888">Yksityinen haku</translation>
+<translation id="1097355661841455597">Haluaisimme kuulla mietteitäsi.</translation>
 <translation id="1137850887415122856">Yksityisvälilehtien lukitseminen edellyttää Touch ID:n, Face ID:n tai pääsykoodin määritystä.</translation>
 <translation id="1310184829257917508">Kysy, avataanko linkit muista sovelluksista yksityistilassa</translation>
-<translation id="1512201558627495343">Uusi yksityisvälilehti</translation>
 <translation id="207677936531967364">Uusi sivu yksityisvälilehdellä</translation>
+<translation id="2418705169960294134">Uusi yksityisvälilehti</translation>
 <translation id="2899836479226240291">Voit avata linkit automaattisesti Vivaldissa määrittämällä sen oletusselaimeksi.</translation>
-<translation id="3365529507898144230">Tallenna Kuviin</translation>
+<translation id="3463990832590571933">Avaa uuteen yksityisvälilehteen</translation>
 <translation id="3473652525653758699">Uusi yksityisikkuna</translation>
 <translation id="3501504415290398157">Avaa yksityisvälilehtien lukitus <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />.</translation>
 <translation id="3692650606013198282">Avaa yksityistilassa</translation>
-<translation id="3709782636417497984">Avaa uudessa ykistyisvälilehdessä</translation>
 <translation id="3981599532037327317">Avaa ${url} yksityistilassa</translation>
 <translation id="398477389655464998">Kopioi linkki korostukseen</translation>
-<translation id="4620246317052452550">Lukemasi sivut</translation>
+<translation id="4026745073321351206">🙄 Havaitsitko ongelman?</translation>
 <translation id="4755216899422789286">Avaa URL-osoitteet Vivaldissa</translation>
+<translation id="5431239785743546285">Lukemasi sivut</translation>
 <translation id="6233792867654386826">Avaa syötetyt URL-osoitteet Vivaldissa.</translation>
 <translation id="6827597288286078054">Yksityinen haku</translation>
 <translation id="7307970171564921489">Avaa ykistyisvälilehdet <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Avaataanko yksityistilassa?</translation>
 <translation id="7549299604720382000">Uusi yksityinen välilehti</translation>
+<translation id="7920949005883349320">Yksityisyys ja tietoturva</translation>
+<translation id="8031932676440435547">Tallenna kuviin</translation>
 <translation id="8326104954595890674">Uusi yksityisvälilehti</translation>
 </translationbundle>

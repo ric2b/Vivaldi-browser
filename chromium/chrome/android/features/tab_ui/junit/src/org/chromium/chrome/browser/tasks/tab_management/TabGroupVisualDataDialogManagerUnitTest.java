@@ -38,8 +38,8 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeatures;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeaturesJni;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
@@ -148,7 +148,7 @@ public class TabGroupVisualDataDialogManagerUnitTest {
         doReturn(true).when(mTabModel).isIncognitoBranded();
         doReturn(false)
                 .when(mTracker)
-                .shouldTriggerHelpUI(TAB_GROUP_CREATION_DIALOG_SYNC_TEXT_FEATURE);
+                .shouldTriggerHelpUi(TAB_GROUP_CREATION_DIALOG_SYNC_TEXT_FEATURE);
 
         mTabGroupVisualDataDialogManager.showDialog(
                 TAB1_ID, mTabGroupModelFilter, mDialogController);
@@ -171,7 +171,7 @@ public class TabGroupVisualDataDialogManagerUnitTest {
         doReturn(false).when(mTabModel).isIncognitoBranded();
         doReturn(true)
                 .when(mTracker)
-                .shouldTriggerHelpUI(TAB_GROUP_CREATION_DIALOG_SYNC_TEXT_FEATURE);
+                .shouldTriggerHelpUi(TAB_GROUP_CREATION_DIALOG_SYNC_TEXT_FEATURE);
         when(mSyncService.getActiveDataTypes()).thenReturn(Collections.emptySet());
 
         mTabGroupVisualDataDialogManager.showDialog(
@@ -200,7 +200,7 @@ public class TabGroupVisualDataDialogManagerUnitTest {
         doReturn(false).when(mTabModel).isIncognitoBranded();
         doReturn(true)
                 .when(mTracker)
-                .shouldTriggerHelpUI(TAB_GROUP_CREATION_DIALOG_SYNC_TEXT_FEATURE);
+                .shouldTriggerHelpUi(TAB_GROUP_CREATION_DIALOG_SYNC_TEXT_FEATURE);
         when(mSyncService.getActiveDataTypes())
                 .thenReturn(Collections.singleton(DataType.SAVED_TAB_GROUP));
 

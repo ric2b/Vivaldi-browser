@@ -19,7 +19,7 @@ namespace bookmarks {
 class BookmarkModel;
 }
 
-class ChromeBrowserState;
+class ProfileIOS;
 
 // VivaldiSpeedDialHomeMediator manages model interactions for the
 // VivaldiNewTabPageViewController.
@@ -28,8 +28,8 @@ class ChromeBrowserState;
 
 @property(nonatomic, weak) id<SpeedDialHomeConsumer> consumer;
 
-- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState
-                       bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel;
+- (instancetype)initWithProfile:(ProfileIOS*)profile
+                  bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel;
 
 /// Starts this mediator. Populates the speed dial folders on the top menu and
 /// loads the associated items to the child pages.

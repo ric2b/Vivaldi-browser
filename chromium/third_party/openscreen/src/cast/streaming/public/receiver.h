@@ -49,7 +49,7 @@ class ReceiverPacketRouter;
 // there are two pairs in a normal system, one for the audio stream and one for
 // video stream. A local player is responsible for synchronizing the playout of
 // the frames of each stream to achieve lip-sync. See the discussion in
-// encoded_frame.h for how the |reference_time| and |rtp_timestamp| of the
+// encoded_frame.h for how the `reference_time` and `rtp_timestamp` of the
 // EncodedFrames are used to achieve this.
 //
 // See the Receiver Demo app for a reference implementation that both shows and
@@ -107,8 +107,8 @@ class Receiver : public ReceiverBase {
  public:
   using ReceiverBase::Consumer;
 
-  // Constructs a Receiver that attaches to the given |environment| and
-  // |packet_router|. The config contains the settings that were
+  // Constructs a Receiver that attaches to the given `environment` and
+  // `packet_router`. The config contains the settings that were
   // agreed-upon by both sides from the OFFER/ANSWER exchange (i.e., the part of
   // the overall end-to-end connection process that occurs before Cast Streaming
   // is started).
@@ -152,7 +152,7 @@ class Receiver : public ReceiverBase {
                             std::vector<uint8_t> packet);
 
  private:
-  // An entry in the circular queue (see |pending_frames_|).
+  // An entry in the circular queue (see `pending_frames_`).
   struct PendingFrame {
     FrameCollector collector;
 
@@ -183,7 +183,7 @@ class Receiver : public ReceiverBase {
   // packets to be sent periodically for the life of this Receiver.
   void SendRtcp();
 
-  // Helpers to map the given |frame_id| to the element in the |pending_frames_|
+  // Helpers to map the given `frame_id` to the element in the `pending_frames_`
   // circular queue. There are both const and non-const versions, but neither
   // mutate any state (i.e., they are just look-ups).
   const PendingFrame& GetQueueEntry(FrameId frame_id) const;
@@ -199,12 +199,12 @@ class Receiver : public ReceiverBase {
   std::chrono::milliseconds ResolveTargetPlayoutDelay(FrameId frame_id) const;
 
   // Called to move the checkpoint forward. This scans the queue, starting from
-  // |new_checkpoint|, to find the latest in a contiguous sequence of completed
+  // `new_checkpoint`, to find the latest in a contiguous sequence of completed
   // frames. Then, it records that frame as the new checkpoint, and immediately
   // sends a feedback RTCP packet to the Sender.
   void AdvanceCheckpoint(FrameId new_checkpoint);
 
-  // Helper to force-drop all frames before |first_kept_frame|, even if they
+  // Helper to force-drop all frames before `first_kept_frame`, even if they
   // were never consumed. This will also auto-cancel frames that were never
   // completely received, artificially moving the checkpoint forward, and
   // notifying the Sender of that. The caller of this method is responsible for
@@ -212,7 +212,7 @@ class Receiver : public ReceiverBase {
   // frames.
   void DropAllFramesBefore(FrameId first_kept_frame);
 
-  // Sets the |consumption_alarm_| to check whether any frames are ready,
+  // Sets the `consumption_alarm_` to check whether any frames are ready,
   // including possibly skipping over late frames in order to make not-yet-late
   // frames become ready. The default argument value means "without delay."
   void ScheduleFrameReadyCheck(Clock::time_point when = Alarm::kImmediately);
@@ -248,15 +248,15 @@ class Receiver : public ReceiverBase {
 
   // Tracks the offset between the Receiver's [local] clock and the Sender's
   // clock. This is invalid until the first Sender Report has been successfully
-  // processed (i.e., |last_sender_report_| is not nullopt).
+  // processed (i.e., `last_sender_report_` is not nullopt).
   ClockDriftSmoother smoothed_clock_offset_;
 
   // The ID of the latest frame whose existence is known to this Receiver. This
-  // value must always be greater than or equal to |checkpoint_frame()|.
+  // value must always be greater than or equal to `checkpoint_frame()`.
   FrameId latest_frame_expected_ = FrameId::leader();
 
   // The ID of the last frame consumed. This value must always be less than or
-  // equal to |checkpoint_frame()|, since it's impossible to consume incomplete
+  // equal to `checkpoint_frame()`, since it's impossible to consume incomplete
   // frames!
   FrameId last_frame_consumed_ = FrameId::leader();
 
@@ -270,8 +270,8 @@ class Receiver : public ReceiverBase {
   // the consumer consumes them.
   //
   // Use GetQueueEntry() to access a slot. The currently-active slots are those
-  // for the frames after |last_frame_consumed_| and up-to/including
-  // |latest_frame_expected_|.
+  // for the frames after `last_frame_consumed_` and up-to/including
+  // `latest_frame_expected_`.
   std::array<PendingFrame, kMaxUnackedFrames> pending_frames_{};
 
   // Tracks the recent changes to the target playout delay, which is controlled

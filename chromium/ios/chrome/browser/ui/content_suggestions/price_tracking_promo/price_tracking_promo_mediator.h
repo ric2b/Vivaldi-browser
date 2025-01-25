@@ -22,6 +22,7 @@ class ShoppingService;
 @protocol NewTabPageActionsDelegate;
 class PrefService;
 @class PriceTrackingPromoItem;
+class FaviconLoader;
 @protocol PriceTrackingPromoActionDelegate;
 class PushNotificationService;
 @protocol SnackbarCommands;
@@ -39,6 +40,9 @@ class AuthenticationService;
 // Price Tracking Promo is removed from the magic stack.
 - (void)removePriceTrackingPromo;
 
+// Price Tracking promo was tapped on.
+- (void)promoWasTapped;
+
 @end
 
 @interface PriceTrackingPromoMediator : NSObject <PriceTrackingPromoCommands>
@@ -53,6 +57,7 @@ class AuthenticationService;
                  localState:(PrefService*)localState
     pushNotificationService:(PushNotificationService*)pushNotificationService
       authenticationService:(AuthenticationService*)authenticationService
+              faviconLoader:(FaviconLoader*)faviconLoader
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;

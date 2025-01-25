@@ -12,6 +12,7 @@ enum PanelPage {
   ReadinglistPage = 1,
   HistoryPage = 2,
   NotesPage = 3,
+  TranslatePage = 4,
 };
 
 // Handles setting up and showing the panels
@@ -23,6 +24,10 @@ NS_DESIGNATED_INITIALIZER;
 
 // Called before the instance is deallocated.
 - (void)shutdown;
+
+/// `searchString` argument is used to pass search string for history
+/// and source text for translate panel. Other pages do not
+/// use this value.
 - (void)presentPanel:(PanelPage)page
     withSearchString:(NSString*)searchString;
 - (void)dismissPanelModalControllerAnimated:(BOOL)animated;

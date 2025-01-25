@@ -1,77 +1,61 @@
 #version 310 es
 
-int tint_ftoi(float v) {
-  return ((v <= 2147483520.0f) ? ((v < -2147483648.0f) ? (-2147483647 - 1) : int(v)) : 2147483647);
-}
-
-shared int g1;
-void tint_zero_workgroup_memory(uint local_idx) {
-  if ((local_idx < 1u)) {
-    atomicExchange(g1, 0);
-  }
-  barrier();
-}
-
-layout(binding = 0, std430) buffer s_block_ssbo {
-  int inner;
-} s;
 
 struct S {
   int a;
   int b;
 };
 
+layout(binding = 0, std430)
+buffer s_block_1_ssbo {
+  int inner;
+} v;
+shared int g1;
 int accept_value(int val) {
   return val;
 }
-
 int accept_ptr_deref_call_func(inout int val) {
-  int tint_symbol_3 = val;
-  int tint_symbol_4 = accept_value(val);
-  return (tint_symbol_3 + tint_symbol_4);
+  int v_1 = val;
+  return (v_1 + accept_value(val));
 }
-
 int accept_ptr_deref_pass_through(inout int val) {
-  int tint_symbol_1 = val;
-  int tint_symbol_2 = accept_ptr_deref_call_func(val);
-  return (tint_symbol_1 + tint_symbol_2);
+  int v_2 = val;
+  return (v_2 + accept_ptr_deref_call_func(val));
 }
-
 int accept_ptr_to_struct_and_access(inout S val) {
   return (val.a + val.b);
 }
-
 int accept_ptr_to_struct_access_pass_ptr(inout S val) {
   val.a = 2;
   return val.a;
 }
-
-int accept_ptr_vec_access_elements(inout vec3 v1) {
-  v1.x = cross(v1, v1).x;
-  return tint_ftoi(v1.x);
+int tint_f32_to_i32(float value) {
+  return mix(2147483647, mix((-2147483647 - 1), int(value), (value >= -2147483648.0f)), (value <= 2147483520.0f));
 }
-
+int accept_ptr_vec_access_elements(inout vec3 v1) {
+  v1[0u] = cross(v1, v1)[0u];
+  return tint_f32_to_i32(v1.x);
+}
 int call_builtin_with_mod_scope_ptr() {
   return atomicOr(g1, 0);
 }
-
-void tint_symbol(uint local_invocation_index) {
-  tint_zero_workgroup_memory(local_invocation_index);
+void tint_symbol_inner(uint tint_local_index) {
+  if ((tint_local_index == 0u)) {
+    atomicExchange(g1, 0);
+  }
+  barrier();
   int v1 = 0;
   S v2 = S(0, 0);
   vec3 v4 = vec3(0.0f);
   int t1 = atomicOr(g1, 0);
-  int tint_symbol_5 = accept_ptr_deref_pass_through(v1);
-  int tint_symbol_6 = accept_ptr_to_struct_and_access(v2);
-  int tint_symbol_7 = accept_ptr_to_struct_and_access(v2);
-  int tint_symbol_8 = accept_ptr_vec_access_elements(v4);
-  int tint_symbol_9 = accept_ptr_to_struct_access_pass_ptr(v2);
-  int tint_symbol_10 = call_builtin_with_mod_scope_ptr();
-  s.inner = ((((((tint_symbol_5 + tint_symbol_6) + tint_symbol_7) + tint_symbol_8) + tint_symbol_9) + tint_symbol_10) + t1);
+  int v_3 = accept_ptr_deref_pass_through(v1);
+  int v_4 = (v_3 + accept_ptr_to_struct_and_access(v2));
+  int v_5 = (v_4 + accept_ptr_to_struct_and_access(v2));
+  int v_6 = (v_5 + accept_ptr_vec_access_elements(v4));
+  int v_7 = (v_6 + accept_ptr_to_struct_access_pass_ptr(v2));
+  v.inner = ((v_7 + call_builtin_with_mod_scope_ptr()) + t1);
 }
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  tint_symbol(gl_LocalInvocationIndex);
-  return;
+  tint_symbol_inner(gl_LocalInvocationIndex);
 }

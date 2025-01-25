@@ -29,6 +29,7 @@
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/signin/public/identity_manager/scope_set.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+#include "net/base/net_errors.h"
 #include "net/http/http_status_code.h"
 #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -57,6 +58,13 @@ constexpr char kPlusAddressOauthErrorHistogram[] =
 std::string LatencyHistogramFor(PlusAddressNetworkRequestType type) {
   return base::ReplaceStringPlaceholders(
       "PlusAddresses.NetworkRequest.$1.Latency",
+      {metrics::PlusAddressNetworkRequestTypeToString(type)},
+      /*offsets=*/nullptr);
+}
+
+std::string NetErrorCodeHistogramFor(PlusAddressNetworkRequestType type) {
+  return base::ReplaceStringPlaceholders(
+      "PlusAddresses.NetworkRequest.$1.NetErrorCode",
       {metrics::PlusAddressNetworkRequestTypeToString(type)},
       /*offsets=*/nullptr);
 }
@@ -279,6 +287,9 @@ class PlusAddressCreationRequests
     }
   }
   std::string LatencyHistogram() { return LatencyHistogramFor(GetParam()); }
+  std::string NetErrorCodeHistogram() {
+    return NetErrorCodeHistogramFor(GetParam());
+  }
   std::string ResponseCodeHistogram() {
     return ResponseCodeHistogramFor(GetParam());
   }
@@ -303,12 +314,12 @@ TEST_P(PlusAddressCreationRequests, HandlesConcurrentRequests) {
   // The first callback should be run once the server responds to its request.
   url_loader_factory().SimulateResponseForPendingRequest(
       Endpoint(), test::MakeCreationResponse(profile));
-  EXPECT_TRUE(first_request.IsReady());
+  EXPECT_TRUE(first_request.Wait());
 
   // Same for the second callback.
   url_loader_factory().SimulateResponseForPendingRequest(
       Endpoint(), test::MakeCreationResponse(profile));
-  EXPECT_TRUE(second_request.IsReady());
+  EXPECT_TRUE(second_request.Wait());
 }
 
 TEST_P(PlusAddressCreationRequests, RequestsOauthToken) {
@@ -332,7 +343,7 @@ TEST_P(PlusAddressCreationRequests, RequestsOauthToken) {
   ASSERT_FALSE(future.IsReady());
   url_loader_factory().SimulateResponseForPendingRequest(
       Endpoint(), test::MakeCreationResponse(profile));
-  EXPECT_TRUE(future.IsReady());
+  EXPECT_TRUE(future.Wait());
   EXPECT_EQ(future.Get()->plus_address, profile.plus_address);
 }
 
@@ -349,15 +360,44 @@ TEST_P(PlusAddressCreationRequests, RunCallbackOnSuccess) {
   const std::string json = test::MakeCreationResponse(profile);
   url_loader_factory().SimulateResponseForPendingRequest(Endpoint(), json);
 
-  ASSERT_TRUE(future.IsReady());
+  ASSERT_TRUE(future.Wait());
   EXPECT_TRUE(future.Get().has_value());
   EXPECT_EQ(future.Get()->plus_address, profile.plus_address);
 
   // Verify expected metrics.
   histogram_tester.ExpectUniqueTimeSample(LatencyHistogram(), kLatency, 1);
+  histogram_tester.ExpectUniqueSample(NetErrorCodeHistogram(), net::OK, 1);
   histogram_tester.ExpectUniqueSample(ResponseCodeHistogram(), 200, 1);
   histogram_tester.ExpectUniqueSample(ResponseByteSizeHistogram(), json.size(),
                                       1);
+}
+
+// Tests that if the client does not receive a server response within
+// `kPlusAddressRequestTimeout`, then the request fails with a
+// `PlusAddressRequestErrorType::kClientTimeout` error.
+TEST_P(PlusAddressCreationRequests, ClientTimeout) {
+  const PlusProfile profile = test::CreatePlusProfile();
+  base::HistogramTester histogram_tester;
+  base::test::TestFuture<const PlusProfileOrError&> future;
+  MakeCreationRequest(profile, future.GetCallback());
+  identity_env().WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
+      kToken, base::Time::Max());
+
+  FastForwardBy(features::kPlusAddressRequestTimeout.Get() + base::Seconds(1));
+
+  ASSERT_TRUE(future.Wait());
+  const PlusProfileOrError& response = future.Get();
+  ASSERT_FALSE(response.has_value());
+  EXPECT_EQ(response.error().type(),
+            PlusAddressRequestErrorType::kClientTimeout);
+  EXPECT_TRUE(response.error().IsTimeoutError());
+
+  // Verify expected metrics.
+  histogram_tester.ExpectTotalCount(LatencyHistogram(), 1);
+  histogram_tester.ExpectUniqueSample(NetErrorCodeHistogram(),
+                                      net::ERR_TIMED_OUT, 1);
+  histogram_tester.ExpectTotalCount(ResponseCodeHistogram(), 0);
+  histogram_tester.ExpectTotalCount(ResponseByteSizeHistogram(), 0);
 }
 
 // Tests that calls to the `Reserve` and `Create` endpoints run the callback
@@ -376,7 +416,7 @@ TEST_P(PlusAddressCreationRequests, RunCallbackOnNetworkError) {
       Endpoint(), "", net::HTTP_NOT_FOUND));
 
   // The request fails and the appropriate callback is run.
-  ASSERT_TRUE(future.IsReady());
+  ASSERT_TRUE(future.Wait());
   EXPECT_FALSE(future.Get().has_value());
   EXPECT_EQ(future.Get().error(),
             PlusAddressRequestError::AsNetworkError(net::HTTP_NOT_FOUND));
@@ -401,7 +441,7 @@ TEST_P(PlusAddressCreationRequests, RunCallbackOnClientError) {
   url_loader_factory().SimulateResponseForPendingRequest(Endpoint(), json);
 
   // The request fails and the appropriate callback is run.
-  ASSERT_TRUE(future.IsReady());
+  ASSERT_TRUE(future.Wait());
   EXPECT_FALSE(future.Get().has_value());
   EXPECT_EQ(future.Get().error().type(),
             PlusAddressRequestErrorType::kParsingError);
@@ -424,7 +464,7 @@ TEST_P(PlusAddressCreationRequests, RunCallbackOnOauthError) {
   EXPECT_EQ(url_loader_factory().NumPending(), 0);
 
   // The callback is still run with an OAuth error.
-  ASSERT_TRUE(future.IsReady());
+  ASSERT_TRUE(future.Wait());
   EXPECT_FALSE(future.Get().has_value());
   EXPECT_EQ(future.Get().error().type(),
             PlusAddressRequestErrorType::kOAuthError);
@@ -482,17 +522,55 @@ TEST_F(PlusAddressHttpClientRequests,
   const std::string json = test::MakePreallocateResponse({address1, address2});
   EXPECT_TRUE(url_loader_factory().SimulateResponseForPendingRequest(
       kFullPreallocateEndpoint, json));
-  ASSERT_TRUE(future.IsReady());
+  ASSERT_TRUE(future.Wait());
   EXPECT_EQ(future.Get(), std::vector({address1, address2}));
 
   histogram_tester.ExpectTotalCount(
       LatencyHistogramFor(PlusAddressNetworkRequestType::kPreallocate), 1);
+  histogram_tester.ExpectUniqueSample(
+      NetErrorCodeHistogramFor(PlusAddressNetworkRequestType::kPreallocate),
+      net::OK, 1);
   histogram_tester.ExpectUniqueSample(
       ResponseCodeHistogramFor(PlusAddressNetworkRequestType::kPreallocate),
       net::HTTP_OK, 1);
   histogram_tester.ExpectTotalCount(
       ResponseByteSizeHistogramFor(PlusAddressNetworkRequestType::kPreallocate),
       1);
+}
+
+// Tests that if the client does not receive a server response within
+// to a preallocation call `kPlusAddressRequestTimeout`, then the request fails
+// with a `PlusAddressRequestErrorType::kClientTimeout` error.
+TEST_F(PlusAddressHttpClientRequests, PreallocatePlusAddresses_ClientTimeout) {
+  using Result = PlusAddressHttpClient::PreallocatePlusAddressesResult;
+  const PlusProfile profile = test::CreatePlusProfile();
+  base::HistogramTester histogram_tester;
+  base::test::TestFuture<Result> future;
+
+  client().PreallocatePlusAddresses(future.GetCallback());
+  identity_env().WaitForAccessTokenRequestIfNecessaryAndRespondWithToken(
+      kToken, base::Time::Max());
+
+  FastForwardBy(features::kPlusAddressRequestTimeout.Get() + base::Seconds(1));
+
+  ASSERT_TRUE(future.Wait());
+  const Result& response = future.Get();
+  ASSERT_FALSE(response.has_value());
+  EXPECT_EQ(response.error().type(),
+            PlusAddressRequestErrorType::kClientTimeout);
+  EXPECT_TRUE(response.error().IsTimeoutError());
+
+  // Verify expected metrics.
+  histogram_tester.ExpectTotalCount(
+      LatencyHistogramFor(PlusAddressNetworkRequestType::kPreallocate), 1);
+  histogram_tester.ExpectUniqueSample(
+      NetErrorCodeHistogramFor(PlusAddressNetworkRequestType::kPreallocate),
+      net::ERR_TIMED_OUT, 1);
+  histogram_tester.ExpectTotalCount(
+      ResponseCodeHistogramFor(PlusAddressNetworkRequestType::kPreallocate), 0);
+  histogram_tester.ExpectTotalCount(
+      ResponseByteSizeHistogramFor(PlusAddressNetworkRequestType::kPreallocate),
+      0);
 }
 
 // Tests that a malformed server response from the preallocation endpoint is
@@ -506,7 +584,7 @@ TEST_F(PlusAddressHttpClientRequests, PreallocatePlusAddresses_ParsingError) {
 
   EXPECT_TRUE(url_loader_factory().SimulateResponseForPendingRequest(
       kFullPreallocateEndpoint, "[]"));
-  ASSERT_TRUE(future.IsReady());
+  ASSERT_TRUE(future.Wait());
   EXPECT_EQ(future.Get(), base::unexpected(PlusAddressRequestError(
                               PlusAddressRequestErrorType::kParsingError)));
 }
@@ -522,7 +600,7 @@ TEST_F(PlusAddressHttpClientRequests, PreallocatePlusAddresses_NetworkError) {
 
   EXPECT_TRUE(url_loader_factory().SimulateResponseForPendingRequest(
       kFullPreallocateEndpoint, "", net::HTTP_NOT_FOUND));
-  ASSERT_TRUE(future.IsReady());
+  ASSERT_TRUE(future.Wait());
   EXPECT_EQ(future.Get(),
             base::unexpected(
                 PlusAddressRequestError::AsNetworkError(net::HTTP_NOT_FOUND)));
@@ -540,7 +618,7 @@ TEST_F(PlusAddressHttpClientRequests, PreallocatePlusAddresses_SignoutError) {
   EXPECT_EQ(url_loader_factory().NumPending(), 1);
   client().Reset();
   EXPECT_EQ(url_loader_factory().NumPending(), 0);
-  ASSERT_TRUE(future.IsReady());
+  ASSERT_TRUE(future.Wait());
   EXPECT_EQ(future.Get(), base::unexpected(PlusAddressRequestError(
                               PlusAddressRequestErrorType::kUserSignedOut)));
 }
@@ -559,7 +637,7 @@ TEST_F(PlusAddressHttpClientRequests, ResetWhileWaitingForNetwork) {
   EXPECT_EQ(url_loader_factory().NumPending(), 1);
   client().Reset();
   EXPECT_EQ(url_loader_factory().NumPending(), 0);
-  ASSERT_TRUE(future.IsReady());
+  ASSERT_TRUE(future.Wait());
   EXPECT_EQ(future.Get(), base::unexpected(PlusAddressRequestError(
                               PlusAddressRequestErrorType::kUserSignedOut)));
 }
@@ -574,7 +652,7 @@ TEST_F(PlusAddressHttpClientRequests, ResetWhileWaitingForOAuth) {
   client().ReservePlusAddress(origin, /*refresh=*/false, future.GetCallback());
   EXPECT_EQ(url_loader_factory().NumPending(), 0);
   client().Reset();
-  ASSERT_TRUE(future.IsReady());
+  ASSERT_TRUE(future.Wait());
   EXPECT_EQ(future.Get(), base::unexpected(PlusAddressRequestError(
                               PlusAddressRequestErrorType::kUserSignedOut)));
 }
@@ -663,7 +741,7 @@ TEST_F(PlusAddressAuthToken, RequestedBeforeSignin) {
   SignIn();
   WaitAndRespondToTokenRequest(base::Time::Now() + kTestTokenLifetime);
 
-  EXPECT_TRUE(callback.IsReady());
+  EXPECT_TRUE(callback.Wait());
   EXPECT_THAT(histogram_tester.GetAllSamples(kPlusAddressOauthErrorHistogram),
               BucketsAre(base::Bucket(GoogleServiceAuthError::State::NONE, 1)));
 }
@@ -685,7 +763,7 @@ TEST_F(PlusAddressAuthToken, RequestedAfterExpiration) {
   // Sign in, get a token, and fast-forward to after it is expired.
   SignIn();
   WaitAndRespondToTokenRequest(base::Time::Now() + kTestTokenLifetime);
-  EXPECT_TRUE(first_callback.IsReady());
+  EXPECT_TRUE(first_callback.Wait());
   EXPECT_THAT(histogram_tester.GetAllSamples(kPlusAddressOauthErrorHistogram),
               BucketsAre(base::Bucket(GoogleServiceAuthError::State::NONE, 1)));
   task_environment().FastForwardBy(kTestTokenLifetime + base::Seconds(1));
@@ -697,7 +775,7 @@ TEST_F(PlusAddressAuthToken, RequestedAfterExpiration) {
   // Callback is only run once the new OAuth token request has completed.
   EXPECT_FALSE(second_callback.IsReady());
   WaitAndRespondToTokenRequest(base::Time::Now() + kTestTokenLifetime);
-  EXPECT_TRUE(second_callback.IsReady());
+  EXPECT_TRUE(second_callback.Wait());
   EXPECT_THAT(histogram_tester.GetAllSamples(kPlusAddressOauthErrorHistogram),
               BucketsAre(base::Bucket(GoogleServiceAuthError::State::NONE, 2)));
 }

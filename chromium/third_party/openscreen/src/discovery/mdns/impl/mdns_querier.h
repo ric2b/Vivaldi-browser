@@ -41,9 +41,9 @@ class MdnsQuerier : public MdnsReceiver::ResponseClient {
   ~MdnsQuerier() override;
 
   // Starts an mDNS query with the given name, DNS type, and DNS class.  Updated
-  // records are passed to |callback|.  The caller must ensure |callback|
+  // records are passed to `callback`.  The caller must ensure `callback`
   // remains alive while it is registered with a query.
-  // NOTE: This call is only valid for |dns_type| values:
+  // NOTE: This call is only valid for `dns_type` values:
   // - DnsType::kA
   // - DnsType::kPTR
   // - DnsType::kTXT
@@ -56,7 +56,7 @@ class MdnsQuerier : public MdnsReceiver::ResponseClient {
                   MdnsRecordChangedCallback* callback);
 
   // Stops an mDNS query with the given name, DNS type, and DNS class.
-  // |callback| must be the same callback pointer that was previously passed to
+  // `callback` must be the same callback pointer that was previously passed to
   // StartQuery.
   void StopQuery(const DomainName& name,
                  DnsType dns_type,
@@ -92,9 +92,9 @@ class MdnsQuerier : public MdnsReceiver::ResponseClient {
                           ReportingClient& reporting_client,
                           const Config& config);
 
-    // Returns all trackers with the associated |name| such that its type
-    // represents a type corresponding to |dns_type| and class corresponding to
-    // |dns_class|.
+    // Returns all trackers with the associated `name` such that its type
+    // represents a type corresponding to `dns_type` and class corresponding to
+    // `dns_class`.
     std::vector<RecordTrackerConstRef> Find(const DomainName& name);
     std::vector<RecordTrackerConstRef> Find(const DomainName& name,
                                             DnsType dns_type,
@@ -109,7 +109,7 @@ class MdnsQuerier : public MdnsReceiver::ResponseClient {
     // provided applicability check. Returns the number of trackers erased.
     int Erase(const DomainName& name, TrackerApplicableCheck check);
 
-    // Updates all record trackers in the domain |record.name()| which match the
+    // Updates all record trackers in the domain `record.name()` which match the
     // provided applicability check using the provided record. Returns the
     // number of records successfully updated.
     int Update(const MdnsRecord& record, TrackerApplicableCheck check);
@@ -162,7 +162,7 @@ class MdnsQuerier : public MdnsReceiver::ResponseClient {
   void OnMessageReceived(const MdnsMessage& message) override;
 
   // Expires the record tracker provided. This callback is passed to owned
-  // MdnsRecordTracker instances in |records_|.
+  // MdnsRecordTracker instances in `records_`.
   void OnRecordExpired(const MdnsRecordTracker* tracker,
                        const MdnsRecord& record);
 
@@ -175,10 +175,10 @@ class MdnsQuerier : public MdnsReceiver::ResponseClient {
   // RFC6891.
   void ProcessRecord(const MdnsRecord& records);
 
-  // Processes a shared record update as a record of type |type|.
+  // Processes a shared record update as a record of type `type`.
   void ProcessSharedRecord(const MdnsRecord& record, DnsType type);
 
-  // Processes a unique record update as a record of type |type|.
+  // Processes a unique record update as a record of type `type`.
   void ProcessUniqueRecord(const MdnsRecord& record, DnsType type);
 
   // Called when exactly one tracker is associated with a provided key.

@@ -43,6 +43,7 @@ bool ContentCredentialManager::HasBinding() const {
 
 void ContentCredentialManager::DisconnectBinding() {
   receiver_.reset();
+  impl_.ResetPendingRequest();
 }
 
 void ContentCredentialManager::Store(const CredentialInfo& credential,
@@ -56,10 +57,11 @@ void ContentCredentialManager::PreventSilentAccess(
 }
 
 void ContentCredentialManager::Get(CredentialMediationRequirement mediation,
-                                   bool include_passwords,
+                                   int requested_credential_type_flags,
                                    const std::vector<GURL>& federations,
                                    GetCallback callback) {
-  impl_.Get(mediation, include_passwords, federations, std::move(callback));
+  impl_.Get(mediation, requested_credential_type_flags,
+            federations, std::move(callback));
 }
 
 }  // namespace password_manager

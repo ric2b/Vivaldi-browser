@@ -14,6 +14,10 @@
 - (void)recentTabsScrollViewDidScroll:
     (RecentTabsTableViewController*)recentTabsTableViewController;
 
+// Vivaldi
+- (void)recentTabsSyncStateDidEnable:(BOOL)syncEnabled;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_RECENT_TABS_RECENT_TABS_TABLE_VIEW_CONTROLLER_UI_DELEGATE_H_

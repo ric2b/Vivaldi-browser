@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <cstdio>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -31,14 +32,14 @@ class Logger {
  public:
   // Writes a log to the global singleton instance of Logger.
   template <typename... Args>
-  static void Log(const std::string& message, Args&&... args) {
-    Logger::Get()->WriteLog(message, std::forward<Args>(args)...);
+  static void Log(const std::string& message) {
+    Logger::Get()->WriteLog(message);
   }
 
   // Writes an error to the global singleton instance of Logger.
   template <typename... Args>
-  static void Error(const std::string& message, Args&&... args) {
-    Logger::Get()->WriteError(message, std::forward<Args>(args)...);
+  static void Error(const std::string& message) {
+    Logger::Get()->WriteError(message);
   }
 
   // Returns the singleton instance of Logger.
@@ -75,47 +76,18 @@ class Logger {
   const char* MakePrintable(const std::string& data);
 
   // Writes a log message to this instance of Logger's text file.
-  template <typename... Args>
-  void WriteToStream(const std::string& message, Args&&... args) {
+  void WriteToStream(const std::string& message) {
     VerifyInitialized();
-
-    // NOTE: wihout the #pragma suppressions, the below line fails. There is a
-    // warning generated since the compiler is attempting to prevent a string
-    // format vulnerability. This is not a risk for us since this code is only
-    // used at compile time. The below #pragma commands suppress the warning for
-    // just the one dprintf(...) line.
-    // For more details: https://www.owasp.org/index.php/Format_string_attack
-    char* str_buffer;
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wformat-security"
-#elif defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wformat-security"
-#endif  // defined(__clang__)
-    int byte_count = asprintf(&str_buffer, message.c_str(),
-                              this->MakePrintable(std::forward<Args>(args))...);
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#elif defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif  // defined(__clang__)
-    CHECK_GE(byte_count, 0);
-    std::cerr << str_buffer << std::endl;
-    free(str_buffer);
+    std::cerr << message << std::endl;
   }
 
   // Writes an error message.
-  template <typename... Args>
-  void WriteError(const std::string& message, Args&&... args) {
-    WriteToStream("Error: " + message, std::forward<Args>(args)...);
+  void WriteError(const std::string& message) {
+    WriteToStream("Error: " + message);
   }
 
   // Writes a log message.
-  template <typename... Args>
-  void WriteLog(const std::string& message, Args&&... args) {
-    WriteToStream(message, std::forward<Args>(args)...);
-  }
+  void WriteLog(const std::string& message) { WriteToStream(message); }
 };
 
 #endif  // TOOLS_CDDL_LOGGING_H_

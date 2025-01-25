@@ -25,6 +25,7 @@
 #include "ui/accessibility/platform/browser_accessibility_mac.h"
 #include "ui/accessibility/platform/browser_accessibility_manager.h"
 #include "ui/accessibility/platform/browser_accessibility_manager_mac.h"
+#include "ui/accessibility/platform/inspect/ax_inspect_utils_mac.h"
 #include "ui/accessibility/platform/test_ax_node_id_delegate.h"
 #include "url/gurl.h"
 
@@ -107,40 +108,6 @@ NSString* GetAXUIElementStringValue(AXUIElementRef element) {
   return stringValue;
 }
 
-// Returns a table element within the descendants of `element`.
-AXUIElementRef FindTable(AXUIElementRef element) {
-  AXUIElementRef table = NULL;
-  CFArrayRef children = NULL;
-  CFStringRef role = NULL;
-
-  AXUIElementCopyAttributeValue(element, kAXRoleAttribute, (CFTypeRef*)&role);
-  if (role) {
-    if (CFStringCompare(role, CFSTR("AXTable"), 0) == kCFCompareEqualTo) {
-      table = element;
-      CFRetain(table);
-    }
-    CFRelease(role);
-  }
-
-  if (table) {
-    return table;
-  }
-
-  AXUIElementCopyAttributeValue(element, kAXChildrenAttribute,
-                                (CFTypeRef*)&children);
-  if (children) {
-    CFIndex count = CFArrayGetCount(children);
-    for (CFIndex i = 0; i < count && !table; i++) {
-      AXUIElementRef child =
-          (AXUIElementRef)CFArrayGetValueAtIndex(children, i);
-
-      table = FindTable(child);
-    }
-    CFRelease(children);
-  }
-
-  return table;
-}
 }  // namespace
 
 // A table cell as seen by an assitive technology when navigating a web page.
@@ -256,13 +223,14 @@ class BrowserAccessibilityCocoaBrowserTest : public ContentBrowserTest {
   ~BrowserAccessibilityCocoaBrowserTest() override {}
 
  protected:
-  BrowserAccessibility* FindNode(ax::mojom::Role role) {
-    BrowserAccessibility* root = GetManager()->GetBrowserAccessibilityRoot();
+  ui::BrowserAccessibility* FindNode(ax::mojom::Role role) {
+    ui::BrowserAccessibility* root =
+        GetManager()->GetBrowserAccessibilityRoot();
     CHECK(root);
     return FindNodeInSubtree(*root, role);
   }
 
-  BrowserAccessibilityManager* GetManager() {
+  ui::BrowserAccessibilityManager* GetManager() {
     WebContentsImpl* web_contents =
         static_cast<WebContentsImpl*>(shell()->web_contents());
     return web_contents->GetRootBrowserAccessibilityManager();
@@ -292,33 +260,34 @@ class BrowserAccessibilityCocoaBrowserTest : public ContentBrowserTest {
       NSAccessibilityElement* element) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    [element accessibilitySetValue:@(1)
-                      forAttribute:NSAccessibilityFocusedAttribute];
+    [element setAccessibilityFocused:YES];
 #pragma clang diagnostic pop
     WaitForAccessibilityFocusChange();
   }
 
   NSDictionary* GetUserInfoForSelectedTextChangedNotification() {
-    auto* manager = static_cast<BrowserAccessibilityManagerMac*>(GetManager());
+    auto* manager =
+        static_cast<ui::BrowserAccessibilityManagerMac*>(GetManager());
     return manager->GetUserInfoForSelectedTextChangedNotification();
   }
 
-  AXTextEdit GetTextEditForNodeId(int32_t id) {
-    auto* manager = static_cast<BrowserAccessibilityManagerMac*>(GetManager());
+  ui::AXTextEdit GetTextEditForNodeId(int32_t id) {
+    auto* manager =
+        static_cast<ui::BrowserAccessibilityManagerMac*>(GetManager());
     return manager->text_edits_[id];
   }
 
   ui::TestAXNodeIdDelegate node_id_delegate_;
 
  private:
-  BrowserAccessibility* FindNodeInSubtree(BrowserAccessibility& node,
-                                          ax::mojom::Role role) {
+  ui::BrowserAccessibility* FindNodeInSubtree(ui::BrowserAccessibility& node,
+                                              ax::mojom::Role role) {
     if (node.GetRole() == role)
       return &node;
-    for (BrowserAccessibility::PlatformChildIterator it =
+    for (ui::BrowserAccessibility::PlatformChildIterator it =
              node.PlatformChildrenBegin();
          it != node.PlatformChildrenEnd(); ++it) {
-      BrowserAccessibility* result = FindNodeInSubtree(*it, role);
+      ui::BrowserAccessibility* result = FindNodeInSubtree(*it, role);
       if (result)
         return result;
     }
@@ -341,12 +310,14 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   ASSERT_TRUE(waiter.WaitForNotification());
 
   pid_t pid = getpid();
-  AXUIElementRef axApplication = AXUIElementCreateApplication(pid);
-  AXUIElementRef table = FindTable(axApplication);
+  base::apple::ScopedCFTypeRef<AXUIElementRef> axApplication(
+      AXUIElementCreateApplication(pid));
+  base::apple::ScopedCFTypeRef<AXUIElementRef> table =
+      ui::FindAXUIElement(axApplication.get(), "AXTable");
 
   ASSERT_TRUE(table);
 
-  AXTestTable* axTable = [[AXTestTable alloc] initWithAXUIElement:table];
+  AXTestTable* axTable = [[AXTestTable alloc] initWithAXUIElement:table.get()];
   NSArray* rows = [axTable rows];
 
   EXPECT_TRUE(rows.count == 60);
@@ -365,9 +336,6 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
 
     rowNumber++;
   }
-
-  CFRelease(table);
-  CFRelease(axApplication);
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
@@ -383,7 +351,7 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), url));
   ASSERT_TRUE(waiter.WaitForNotification());
 
-  BrowserAccessibility* text_field = FindNode(ax::mojom::Role::kTextField);
+  ui::BrowserAccessibility* text_field = FindNode(ax::mojom::Role::kTextField);
   ASSERT_NE(nullptr, text_field);
   EXPECT_TRUE(ExecJs(shell()->web_contents(),
                      "document.querySelector('input').focus()"));
@@ -397,7 +365,7 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
                                                ui::kAXModeComplete,
                                                ax::mojom::Event::kValueChanged);
   ASSERT_TRUE(value_waiter.WaitForNotification());
-  AXTextEdit text_edit = [cocoa_text_field computeTextEdit];
+  ui::AXTextEdit text_edit = [cocoa_text_field computeTextEdit];
   EXPECT_NE(text_edit.edit_text_marker, nil);
 
   auto ax_position = ui::AXTextMarkerToAXPosition(text_edit.edit_text_marker);
@@ -427,7 +395,7 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), url));
   ASSERT_TRUE(waiter.WaitForNotification());
 
-  BrowserAccessibility* content_editable =
+  ui::BrowserAccessibility* content_editable =
       GetManager()->GetBrowserAccessibilityRoot()->PlatformGetChild(0);
   ASSERT_NE(nullptr, content_editable);
   EXPECT_TRUE(ExecJs(shell()->web_contents(),
@@ -441,7 +409,7 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
         ax::mojom::Event::kValueChanged);
     ASSERT_TRUE(value_waiter.WaitForNotification());
 
-    AXTextEdit text_edit = GetTextEditForNodeId(content_editable->GetId());
+    ui::AXTextEdit text_edit = GetTextEditForNodeId(content_editable->GetId());
     EXPECT_NE(text_edit.edit_text_marker, nil);
     EXPECT_EQ(u"", text_edit.deleted_text);
     EXPECT_EQ(u"B", text_edit.inserted_text);
@@ -472,7 +440,7 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
         ax::mojom::Event::kValueChanged);
     ASSERT_TRUE(value_waiter.WaitForNotification());
 
-    AXTextEdit text_edit = GetTextEditForNodeId(content_editable->GetId());
+    ui::AXTextEdit text_edit = GetTextEditForNodeId(content_editable->GetId());
     EXPECT_NE(text_edit.edit_text_marker, nil);
     EXPECT_EQ(u"", text_edit.deleted_text);
     EXPECT_EQ(u"B", text_edit.inserted_text);
@@ -516,7 +484,7 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), url));
   ASSERT_TRUE(waiter.WaitForNotification());
 
-  BrowserAccessibility* table = FindNode(ax::mojom::Role::kTable);
+  ui::BrowserAccessibility* table = FindNode(ax::mojom::Role::kTable);
   ASSERT_NE(nullptr, table);
   BrowserAccessibilityCocoa* cocoa_table = table->GetNativeViewAccessible();
 
@@ -550,7 +518,7 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), url));
   ASSERT_TRUE(waiter.WaitForNotification());
 
-  BrowserAccessibility* text = FindNode(ax::mojom::Role::kStaticText);
+  ui::BrowserAccessibility* text = FindNode(ax::mojom::Role::kStaticText);
   ASSERT_NE(nullptr, text);
 
   BrowserAccessibilityCocoa* cocoa_text = text->GetNativeViewAccessible();
@@ -747,11 +715,11 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   ASSERT_EQ(expected_descriptions.size(), tree.nodes[0].child_ids.size());
   int child_count = static_cast<int>(expected_descriptions.size());
 
-  std::unique_ptr<BrowserAccessibilityManagerMac> manager(
-      new BrowserAccessibilityManagerMac(tree, node_id_delegate_, nullptr));
+  std::unique_ptr<ui::BrowserAccessibilityManagerMac> manager(
+      new ui::BrowserAccessibilityManagerMac(tree, node_id_delegate_, nullptr));
 
   for (int child_index = 0; child_index < child_count; child_index++) {
-    BrowserAccessibility* child =
+    ui::BrowserAccessibility* child =
         manager->GetBrowserAccessibilityRoot()->PlatformGetChild(child_index);
     BrowserAccessibilityCocoa* child_obj = child->GetNativeViewAccessible();
 
@@ -835,10 +803,10 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   tree.nodes[11].AddStringAttribute(ax::mojom::StringAttribute::kName,
                                     "cell2_row3");
 
-  std::unique_ptr<BrowserAccessibilityManagerMac> manager(
-      new BrowserAccessibilityManagerMac(tree, node_id_delegate_, nullptr));
+  std::unique_ptr<ui::BrowserAccessibilityManagerMac> manager(
+      new ui::BrowserAccessibilityManagerMac(tree, node_id_delegate_, nullptr));
 
-  BrowserAccessibility* table =
+  ui::BrowserAccessibility* table =
       manager->GetBrowserAccessibilityRoot()->PlatformGetChild(0);
   BrowserAccessibilityCocoa* table_obj = table->GetNativeViewAccessible();
   NSArray* row_nodes = table_obj.accessibilityRows;
@@ -885,10 +853,10 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   tree.nodes[3].role = ax::mojom::Role::kRow;
   tree.nodes[3].AddStringAttribute(ax::mojom::StringAttribute::kName, "row2");
 
-  std::unique_ptr<BrowserAccessibilityManagerMac> manager(
-      new BrowserAccessibilityManagerMac(tree, node_id_delegate_, nullptr));
+  std::unique_ptr<ui::BrowserAccessibilityManagerMac> manager(
+      new ui::BrowserAccessibilityManagerMac(tree, node_id_delegate_, nullptr));
 
-  BrowserAccessibility* column =
+  ui::BrowserAccessibility* column =
       manager->GetBrowserAccessibilityRoot()->PlatformGetChild(0);
   BrowserAccessibilityCocoa* col_obj = column->GetNativeViewAccessible();
   EXPECT_NSEQ(@"AXColumn", col_obj.role);
@@ -933,7 +901,7 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), url));
   ASSERT_TRUE(waiter.WaitForNotification());
 
-  BrowserAccessibility* table = FindNode(ax::mojom::Role::kTable);
+  ui::BrowserAccessibility* table = FindNode(ax::mojom::Role::kTable);
   BrowserAccessibilityCocoa* table_obj = table->GetNativeViewAccessible();
 
   EXPECT_NSEQ(@"AXTable", table_obj.role);
@@ -965,7 +933,7 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   ASSERT_TRUE(NavigateToURL(shell(), url));
   ASSERT_TRUE(waiter.WaitForNotification());
 
-  BrowserAccessibility* tree = FindNode(ax::mojom::Role::kTree);
+  ui::BrowserAccessibility* tree = FindNode(ax::mojom::Role::kTree);
   BrowserAccessibilityCocoa* cocoa_tree = tree->GetNativeViewAccessible();
 
   NSArray* tree_children = cocoa_tree.children;

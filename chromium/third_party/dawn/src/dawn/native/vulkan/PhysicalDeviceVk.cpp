@@ -351,6 +351,11 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
         EnableFeature(Feature::Float32Filterable);
     }
+    if ((r32Properties.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) &&
+        (rg32Properties.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) &&
+        (rgba32Properties.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT)) {
+        EnableFeature(Feature::Float32Blendable);
+    }
 
     // Multiplanar formats.
     constexpr VkFormat multiplanarFormats[] = {
@@ -377,7 +382,6 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
         EnableFeature(Feature::MultiPlanarFormatExtendedUsages);
     }
 
-    EnableFeature(Feature::SurfaceCapabilities);
     EnableFeature(Feature::TransientAttachments);
     EnableFeature(Feature::AdapterPropertiesVk);
     EnableFeature(Feature::DawnLoadResolveTexture);
@@ -472,6 +476,7 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     if (CheckSemaphoreSupport(DeviceExt::ExternalSemaphoreFD,
                               VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT_KHR)) {
         EnableFeature(Feature::SharedFenceVkSemaphoreSyncFD);
+        EnableFeature(Feature::SharedFenceSyncFD);
     }
     if (CheckSemaphoreSupport(DeviceExt::ExternalSemaphoreFD,
                               VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR)) {

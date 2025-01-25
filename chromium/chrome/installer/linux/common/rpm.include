@@ -13,7 +13,7 @@ determine_rpm_package_manager() {
     "fedora"|"rhel"|"centos"|"amzn"|"mageia"|"openmandriva")
       PACKAGEMANAGERS=(yum)
       ;;
-    "suse"|"sles"|"sled"|"opensuse"|"opensuse-leap"|"opensuse-tumbleweed")
+    "suse"|"sles"|"sled"|"opensuse"|"opensuse-leap"|"opensuse-tumbleweed"|"opensuse-slowroll")
       PACKAGEMANAGERS=(zypp)
       ;;
     esac

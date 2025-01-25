@@ -69,8 +69,8 @@ const uint8_t kValidAudioRtpPacket[] = {
 };
 // clang-format on
 
-// Returns a copy of an |original| RTCP packet, but with its send-to SSRC
-// modified to the given |alternate_ssrc|.
+// Returns a copy of an `original` RTCP packet, but with its send-to SSRC
+// modified to the given `alternate_ssrc`.
 std::vector<uint8_t> MakeRtcpPacketWithAlternateReceiverSsrc(
     ByteView original,
     Ssrc alternate_ssrc) {
@@ -81,7 +81,7 @@ std::vector<uint8_t> MakeRtcpPacketWithAlternateReceiverSsrc(
   return out;
 }
 
-// Serializes the |flag| and |send_time| into the front of |buffer| so the tests
+// Serializes the `flag` and `send_time` into the front of `buffer` so the tests
 // can make unique packets and confirm their identities after passing through
 // various components.
 ByteBuffer MakeFakePacketWithFlag(char flag,
@@ -101,7 +101,7 @@ ByteBuffer MakeFakePacket(Clock::time_point send_time, ByteBuffer buffer) {
   return MakeFakePacketWithFlag('?', send_time, buffer);
 }
 
-// Returns the flag that was placed in the given |fake_packet|, or '?' if
+// Returns the flag that was placed in the given `fake_packet`, or '?' if
 // unknown.
 char ParseFlag(ByteView fake_packet) {
   constexpr auto kFlagOffset = sizeof(Clock::duration::rep);
@@ -111,7 +111,7 @@ char ParseFlag(ByteView fake_packet) {
   return '?';
 }
 
-// Deserializes and returns the timestamp that was placed in the given |packet|
+// Deserializes and returns the timestamp that was placed in the given `packet`
 // by MakeFakePacketWithFlag().
 Clock::time_point ParseTimestamp(ByteView fake_packet) {
   Clock::duration::rep ticks = 0;
@@ -121,7 +121,7 @@ Clock::time_point ParseTimestamp(ByteView fake_packet) {
   return Clock::time_point() + Clock::duration(ticks);
 }
 
-// Returns an empty version of |buffer|.
+// Returns an empty version of `buffer`.
 ByteBuffer ToEmptyPacketBuffer(Clock::time_point send_time, ByteBuffer buffer) {
   return buffer.subspan(0, 0);
 }

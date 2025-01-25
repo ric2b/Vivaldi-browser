@@ -9,15 +9,15 @@
 #include <string>
 #include <vector>
 
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "ui/base/ui_base_types.h"
+#include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/gfx/range/range.h"
 
 class Browser;
+class BrowserWindowInterface;
 class Tab;
 class TabStrip;
 
@@ -119,7 +119,7 @@ class TabStripController {
   // Shows a context menu for the tab at the specified point in screen coords.
   virtual void ShowContextMenuForTab(Tab* tab,
                                      const gfx::Point& p,
-                                     ui::MenuSourceType source_type) = 0;
+                                     ui::mojom::MenuSourceType source_type) = 0;
 
   // Returns true if the associated TabStrip's delegate supports tab moving or
   // detaching. Used by the Frame to determine if dragging on the Tab
@@ -222,9 +222,14 @@ class TabStripController {
   // Returns the profile associated with the Tabstrip.
   virtual Profile* GetProfile() const = 0;
 
+  // Returns the interface for the browser hosting the tab strip.
+  virtual BrowserWindowInterface* GetBrowserWindowInterface() = 0;
+
+  // TODO(tluk): Migrate use of Browser to BrowserWindowInterface and remove
+  // this method.
   virtual const Browser* GetBrowser() const = 0;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Returns whether the current app instance is locked for OnTask. Only
   // relevant for non-web browser scenarios.
   virtual bool IsLockedForOnTask() = 0;

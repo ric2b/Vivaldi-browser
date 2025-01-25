@@ -9,17 +9,13 @@
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 
 class BrowserDownloadService;
-
-namespace web {
-class BrowserState;
-}  // namespace web
+class ProfileIOS;
 
 // Singleton that creates BrowserDownloadService and associates that service
-// with web::BrowserState.
+// with a Profile.
 class BrowserDownloadServiceFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static BrowserDownloadService* GetForBrowserState(
-      web::BrowserState* browser_state);
+  static BrowserDownloadService* GetForProfile(ProfileIOS* profile);
   static BrowserDownloadServiceFactory* GetInstance();
 
   BrowserDownloadServiceFactory(const BrowserDownloadServiceFactory&) = delete;

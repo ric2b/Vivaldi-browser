@@ -29,7 +29,6 @@
 #include "libavutil/imgutils.h"
 #include "filters.h"
 #include "dnn_filter_common.h"
-#include "internal.h"
 #include "video.h"
 #include "libswscale/swscale.h"
 #include "libavutil/time.h"
@@ -57,7 +56,7 @@ static const AVOption dnn_processing_options[] = {
     { NULL }
 };
 
-AVFILTER_DNN_DEFINE_CLASS(dnn_processing);
+AVFILTER_DNN_DEFINE_CLASS(dnn_processing, DNN_TF | DNN_OV | DNN_TH);
 
 static av_cold int init(AVFilterContext *context)
 {

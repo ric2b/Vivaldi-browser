@@ -45,13 +45,18 @@ public class NativePageBitmapCapturer implements UnownedUserData {
             return false;
         }
 
+        if (shouldUseFallbackUx(tab)) {
+            PostTask.postTask(TaskTraits.UI_USER_VISIBLE, () -> callback.onResult(null));
+            return true;
+        }
+
         UnownedUserDataHost host = tab.getWindowAndroid().getUnownedUserDataHost();
         if (CAPTURER_KEY.retrieveDataFromHost(host) == null) {
             CAPTURER_KEY.attachToHost(host, new NativePageBitmapCapturer());
         }
 
         // TODO(crbug.com/330230340): capture bitmap asynchronously.
-        Bitmap bitmap = capture(tab);
+        Bitmap bitmap = capture(tab, false, 0);
         PostTask.postTask(TaskTraits.UI_USER_VISIBLE, () -> callback.onResult(bitmap));
         return true;
     }
@@ -60,15 +65,16 @@ public class NativePageBitmapCapturer implements UnownedUserData {
      * Synchronous version of {@link #maybeCaptureNativeView(Tab, Callback)}.
      *
      * @param tab The target tab to be captured.
+     * @param topControlsHeight The height of the top controls.
      * @return Null if fails; otherwise, a Bitmap object.
      */
     @Nullable
-    public static Bitmap maybeCaptureNativeViewSync(@NonNull Tab tab) {
+    public static Bitmap maybeCaptureNativeViewSync(@NonNull Tab tab, int topControlsHeight) {
         if (!isCapturable(tab)) {
             return null;
         }
 
-        return capture(tab);
+        return capture(tab, true, topControlsHeight);
     }
 
     private static boolean isCapturable(Tab tab) {
@@ -81,20 +87,40 @@ public class NativePageBitmapCapturer implements UnownedUserData {
         if (!NativePage.isNativePageUrl(lastCommittedUrl, tab.isIncognitoBranded(), false)) {
             return false;
         }
-        if (tab.getWindowAndroid() == null) return false;
 
-        View view = tab.getView();
-        // The view is not laid out yet.
-        if (view.getWidth() == 0 || view.getHeight() == 0) return false;
-        if (tab.getWebContents() == null
-                || tab.getWebContents().getViewAndroidDelegate() == null
-                || tab.getWebContents().getViewAndroidDelegate().getContainerView() == null) {
-            return false;
-        }
         return true;
     }
 
-    private static Bitmap capture(Tab tab) {
+    private static boolean shouldUseFallbackUx(Tab tab) {
+        if (tab.getWindowAndroid() == null) return true;
+
+        View view = tab.getView();
+        // The view is not laid out yet.
+        if (view.getWidth() == 0 || view.getHeight() == 0) return true;
+        if (tab.getWebContents() == null
+                || tab.getWebContents().getViewAndroidDelegate() == null
+                || tab.getWebContents().getViewAndroidDelegate().getContainerView() == null
+                || tab.getWebContents().getViewAndroidDelegate().getContainerView().getHeight()
+                        == 0) {
+            return true;
+        }
+
+        GURL lastCommittedUrl = tab.getWebContents().getLastCommittedUrl();
+        boolean isLastPageNative =
+                NativePage.isNativePageUrl(lastCommittedUrl, tab.isIncognitoBranded(), false);
+        // crbug.com/376115165: Show fallback screenshots when navigating between native pages.
+        // Native page views show before the navigation commit, which causes the content/ to
+        // capture a wrong screenshot.
+        // TODO(crbug.com/378565245): Capture screenshots when navigating between native pages.
+        if (isLastPageNative
+                && NativePage.isNativePageUrl(tab.getUrl(), tab.isIncognitoBranded(), false)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static Bitmap capture(Tab tab, boolean fullscreen, int topControlsHeight) {
         UnownedUserDataHost host = tab.getWindowAndroid().getUnownedUserDataHost();
         if (CAPTURER_KEY.retrieveDataFromHost(host) == null) {
             CAPTURER_KEY.attachToHost(host, new NativePageBitmapCapturer());
@@ -122,7 +148,12 @@ public class NativePageBitmapCapturer implements UnownedUserData {
         // TODO(crbug.com/330230340): capture bitmap asynchronously.
 
         // Translate to exclude the area of the top controls if present.
-        canvas.translate(0, -tab.getNativePage().getHeightOverlappedWithTopControls());
+        // When requesting a fullscreen bitmap, the content will translate the layer up. Add
+        // top controls height to translate the content down to counter that.
+        canvas.translate(
+                0,
+                -tab.getNativePage().getHeightOverlappedWithTopControls()
+                        + (fullscreen ? topControlsHeight : 0));
         canvas.scale(scale, scale);
         view.draw(canvas);
         return bitmap;

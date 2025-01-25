@@ -128,7 +128,6 @@ class QUICHE_EXPORT QuicBufferedPacketStore {
     // stored when the replaced CID is generated.
     ConnectionIdGeneratorInterface* connection_id_generator = nullptr;
     // The original connection ID of the connection.
-    // Only used when replace_cid_on_first_packet_ is true.
     QuicConnectionId original_connection_id;
     // Set to the result of ConnectionIdGenerator::MaybeReplaceConnectionId,
     // when the first IETF INITIAL packet is enqueued.
@@ -141,10 +140,6 @@ class QUICHE_EXPORT QuicBufferedPacketStore {
     // All ACK packets sent by the dispatcher, ordered by sending packet number.
     absl::InlinedVector<DispatcherSentPacket, 2> dispatcher_sent_packets;
   };
-
-  using BufferedPacketMap =
-      quiche::QuicheLinkedHashMap<QuicConnectionId, BufferedPacketList,
-                                  QuicConnectionIdHash>;
 
   // Tag type for the list of sessions with full CHLO buffered.
   struct QUICHE_EXPORT BufferedSessionsWithChloList {};
@@ -162,8 +157,7 @@ class QUICHE_EXPORT QuicBufferedPacketStore {
     virtual ~VisitorInterface() {}
 
     // Called for each expired connection when alarm fires.
-    virtual void OnExpiredPackets(QuicConnectionId connection_id,
-                                  BufferedPacketList early_arrived_packets) = 0;
+    virtual void OnExpiredPackets(BufferedPacketList early_arrived_packets) = 0;
 
     enum class HandleCidCollisionResult {
       kOk,
@@ -268,18 +262,10 @@ class QUICHE_EXPORT QuicBufferedPacketStore {
   // Is there any connection in the store that contains a full CHLO?
   bool HasChlosBuffered() const;
 
-  bool replace_cid_on_first_packet() const {
-    return replace_cid_on_first_packet_;
-  }
-
   // Returns the BufferedPacketList for |connection_id|, returns
   // nullptr if not found.
   const BufferedPacketList* GetPacketList(
       const QuicConnectionId& connection_id) const;
-
-  bool ack_buffered_initial_packets() const {
-    return ack_buffered_initial_packets_;
-  }
 
  private:
   friend class test::QuicBufferedPacketStorePeer;
@@ -302,9 +288,6 @@ class QUICHE_EXPORT QuicBufferedPacketStore {
   //
   void RemoveFromStore(BufferedPacketListNode& node);
 
-  const bool replace_cid_on_first_packet_ =
-      GetQuicRestartFlag(quic_dispatcher_replace_cid_on_first_packet);
-
   // Debug helper to check invariants that need to be true for |packet_list|,
   // assuming |packet_list| is in |buffer_session_map_|. Returns true if all
   // invariants are true, and false otherwise.
@@ -325,25 +308,18 @@ class QUICHE_EXPORT QuicBufferedPacketStore {
 
   QuicDispatcherStats& stats_;
 
-  // A map to store packet queues with creation time for each connection.
-  // Only used when !replace_cid_on_first_packet_.
-  BufferedPacketMap undecryptable_packets_;
-
   // Map from connection ID to the list of buffered packets for that connection.
   // The key can be either the original or the replaced connection ID.
   // The value is never nullptr.
-  // Only used when replace_cid_on_first_packet_ is true.
   absl::flat_hash_map<QuicConnectionId, std::shared_ptr<BufferedPacketListNode>,
                       QuicConnectionIdHash>
       buffered_session_map_;
 
   // Main list of all buffered sessions, in insertion order.
-  // Only used when replace_cid_on_first_packet_ is true.
   quiche::QuicheIntrusiveList<BufferedPacketListNode> buffered_sessions_;
   size_t num_buffered_sessions_ = 0;
 
   // Secondary list of all buffered sessions with full CHLO.
-  // Only used when replace_cid_on_first_packet_ is true.
   quiche::QuicheIntrusiveList<BufferedPacketListNode,
                               BufferedSessionsWithChloList>
       buffered_sessions_with_chlo_;
@@ -361,16 +337,6 @@ class QUICHE_EXPORT QuicBufferedPacketStore {
   // This alarm fires every |connection_life_span_| to clean up
   // packets staying in the store for too long.
   std::unique_ptr<QuicAlarm> expiration_alarm_;
-
-  // Keeps track of connection with CHLO buffered up already and the order they
-  // arrive.
-  // Only used when !replace_cid_on_first_packet_.
-  quiche::QuicheLinkedHashMap<QuicConnectionId, bool, QuicConnectionIdHash>
-      connections_with_chlo_;
-
-  const bool ack_buffered_initial_packets_ =
-      replace_cid_on_first_packet_ &&
-      GetQuicRestartFlag(quic_dispatcher_ack_buffered_initial_packets);
 };
 
 // Collects packets serialized by a QuicPacketCreator.

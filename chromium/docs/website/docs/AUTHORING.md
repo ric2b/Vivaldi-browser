@@ -36,6 +36,8 @@ supported:
     be used in other breadcrumbs lists.
 *   `redirect`: To automatically redirect this page/URL to somewhere else,
     set this to a URL.
+*   `skip_subpages`: If true (it is undefined by default), this page will be
+    omitted from a parent's subPages collection.
 *   `use_title_as_h1`: If this is set to `true` (the default), the title
     will be included as an H1.
 

@@ -74,32 +74,16 @@ AutocompleteMatch DirectMatchToAutocompleteMatch(
   const std::u16string name = base::UTF8ToUTF16(direct_match.name);
   const std::u16string local_favicon_path =
       base::UTF8ToUTF16(direct_match.image_path);
+  const GURL& redirect_url = GURL(direct_match.redirect_url);
 
-  std::string dm_target_url = direct_match.target_url;
-  std::string date_search_pattern = "%YYYYMMDDHH%";
-  size_t pos = dm_target_url.find(date_search_pattern);
-  if (pos != std::string::npos) {
-    std::string gmt_formatted_date = base::UnlocalizedTimeFormatWithPattern(
-        base::Time::Now(), "yyyyMMddHH", icu::TimeZone::getGMT());
-    dm_target_url.replace(pos, date_search_pattern.length(),
-                          gmt_formatted_date);
-  }
-
-  const GURL& url = GURL(dm_target_url);
-
-  match.destination_url = url;
+  match.destination_url = redirect_url;
   match.RecordAdditionalInfo("Title", title);
-  match.RecordAdditionalInfo("URL", url.spec());
+  match.RecordAdditionalInfo("URL", redirect_url.spec());
   match.RecordAdditionalInfo("Name", name);
   match.RecordAdditionalInfo("Icon", local_favicon_path);
 
-  match.contents = url_formatter::FormatUrl(
-      url,
-      AutocompleteMatch::GetFormatTypes(/*preserve_scheme=*/false,
-                                        /*preserve_subdomain=*/false),
-      base::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
+  match.contents = name;
   match.description = title;
-  match.destination_url = url;
   match.local_favicon_path = local_favicon_path;
 
   auto contents_terms = FindTermMatches(input.text(), match.contents);
@@ -134,49 +118,54 @@ AutocompleteMatch DirectMatchToAutocompleteMatch(
 
 void DirectMatchProvider::StartDirectMatchSearch(
     const AutocompleteInput& input) {
-  if (!direct_match_service_) {
+  if (!direct_match_service_ || input.prevent_inline_autocomplete()) {
     return;
   }
 
   const std::u16string input_text = input.text();
+  const std::string input_text_utf8 = base::UTF16ToUTF8(input_text);
 
-  const direct_match::DirectMatchService::DirectMatchUnit* unit_found =
-      direct_match_service_->GetDirectMatch(base::UTF16ToUTF8(input_text));
-  if (unit_found) {
-    query_parser::QueryWordVector dm_words;
-    query_parser::QueryParser::ExtractQueryWords(input_text, &dm_words);
+  auto [ unit_found, allowed_to_be_default_match ] =
+      direct_match_service_->GetDirectMatch(input_text_utf8);
+  if (!unit_found) {
+    return;
+  }
+  query_parser::QueryWordVector dm_words;
+  query_parser::QueryParser::ExtractQueryWords(input_text, &dm_words);
 
-    query_parser::QueryNodeVector query_nodes;
-    query_parser::QueryParser::ParseQueryNodes(
-        input_text, query_parser::MatchingAlgorithm::ALWAYS_PREFIX_SEARCH,
-        &query_nodes);
+  query_parser::QueryNodeVector query_nodes;
+  query_parser::QueryParser::ParseQueryNodes(
+      input_text, query_parser::MatchingAlgorithm::ALWAYS_PREFIX_SEARCH,
+      &query_nodes);
 
-    query_parser::Snippet::MatchPositions dm_match_pos;
-    for (const auto& query_node : query_nodes) {
-      query_node->HasMatchIn(dm_words, &dm_match_pos);
-    }
+  query_parser::Snippet::MatchPositions dm_match_pos;
+  for (const auto& query_node : query_nodes) {
+    query_node->HasMatchIn(dm_words, &dm_match_pos);
+  }
+  PrefService* prefs = client_->GetPrefs();
+  bool dm_boost =
+      prefs->GetBoolean(vivaldiprefs::kAddressBarSearchDirectMatchBoosted);
 
-    auto relevance = CalculateDirectMatchRelevance(*unit_found, &dm_match_pos);
+  auto relevance =
+      CalculateDirectMatchRelevance(*unit_found, &dm_match_pos, dm_boost);
 
-    AutocompleteMatch match = DirectMatchToAutocompleteMatch(
-        *unit_found, AutocompleteMatchType::DIRECT_MATCH, relevance, this,
-        client_->GetSchemeClassifier(), input);
-
-    match.allowed_to_be_default_match = !input.prevent_inline_autocomplete() ||
-                                        match.inline_autocompletion.empty();
-
-    if (!input.prevent_inline_autocomplete() && match.relevance > 0) {
-      match.RecordAdditionalInfo("Title", unit_found->name);
-      match.RecordAdditionalInfo("URL", unit_found->target_url);
-      match.RecordAdditionalInfo("Path", unit_found->title);
-      matches_.push_back(match);
-    }
+  AutocompleteMatch match = DirectMatchToAutocompleteMatch(
+      *unit_found, AutocompleteMatchType::DIRECT_MATCH, relevance, this,
+      client_->GetSchemeClassifier(), input);
+  if (match.relevance > 0) {
+    match.boosted = dm_boost;
+    match.allowed_to_be_default_match = allowed_to_be_default_match;
+    match.RecordAdditionalInfo("Title", unit_found->name);
+    match.RecordAdditionalInfo("URL", unit_found->redirect_url);
+    match.RecordAdditionalInfo("Path", unit_found->title);
+    matches_.push_back(match);
   }
 }
 
 int DirectMatchProvider::CalculateDirectMatchRelevance(
     const direct_match::DirectMatchService::DirectMatchUnit& direct_match,
-    query_parser::Snippet::MatchPositions* match_positions) const {
+    query_parser::Snippet::MatchPositions* match_positions,
+    bool dm_boost) const {
   size_t direct_match_name_length = direct_match.name.length();
 
   ScoringFunctor dm_position_functor =
@@ -187,12 +176,12 @@ int DirectMatchProvider::CalculateDirectMatchRelevance(
       dm_position_functor.ScoringFactor() / (direct_match_name_length + 10),
 
       1.0);
-  const int kBaseDirectMatchScore = 1480;
-  const int kMaxDirectMatchScore = 1599;
+  const int kBaseDirectMatchScore = 1450;
+  const int kMaxDirectMatchScore = 1589;
   const double kDMScoreRange =
       static_cast<double>(kMaxDirectMatchScore - kBaseDirectMatchScore);
   int relevance =
       static_cast<int>(normalized_sum * kDMScoreRange) + kBaseDirectMatchScore;
 
-  return std::min(kMaxDirectMatchScore, relevance);
+  return std::min(kMaxDirectMatchScore, relevance + (dm_boost ? 0 : -450));
 }

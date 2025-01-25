@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/component_export.h"
+#include "base/containers/flat_set.h"
 #include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
@@ -22,6 +23,7 @@
 #include "cc/base/rtree.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_action_handler_registry.h"
+#include "ui/accessibility/ax_location_and_scroll_updates.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_node_id_forward.h"
@@ -270,7 +272,7 @@ class COMPONENT_EXPORT(AX_PLATFORM) BrowserAccessibilityManager
 
   // Called when the renderer process updates the location of accessibility
   // objects. Calls SendLocationChangeEvents(), which can be overridden.
-  void OnLocationChanges(const std::vector<AXLocationChanges>& changes);
+  void OnLocationChanges(const AXLocationAndScrollUpdates& changes);
 
   // Called when a new find in page result is received. We hold on to this
   // information and don't activate it until the user requests it.
@@ -403,20 +405,22 @@ class COMPONENT_EXPORT(AX_PLATFORM) BrowserAccessibilityManager
 
   // AXTreeObserver implementation.
   void OnNodeCreated(AXTree* tree, AXNode* node) override;
-  void OnNodeDeleted(AXTree* tree, int32_t node_id) override;
   void OnNodeReparented(AXTree* tree, AXNode* node) override;
+  void OnAtomicUpdateStarting(
+      AXTree* tree,
+      const std::set<AXNodeID>& deleted_node_ids,
+      const std::set<AXNodeID>& reparented_node_ids) override;
   void OnAtomicUpdateFinished(
       AXTree* tree,
       bool root_changed,
       const std::vector<AXTreeObserver::Change>& changes) override;
 
   // AXTreeManager overrides.
-  AXNode* GetNode(const AXNodeID node_id) const override;
+  AXNode* GetNode(AXNodeID node_id) const override;
   void UpdateAttributesOnParent(AXNode* parent) override;
 
   // AXPlatformTreeManager overrides.
-  AXPlatformNode* GetPlatformNodeFromTree(
-      const AXNodeID node_id) const override;
+  AXPlatformNode* GetPlatformNodeFromTree(AXNodeID node_id) const override;
   AXPlatformNode* GetPlatformNodeFromTree(const AXNode&) const override;
   AXPlatformNodeDelegate* RootDelegate() const override;
 
@@ -510,7 +514,7 @@ class COMPONENT_EXPORT(AX_PLATFORM) BrowserAccessibilityManager
   // their location has changed. This is called by OnLocationChanges
   // after it's updated the internal data structure.
   virtual void SendLocationChangeEvents(
-      const std::vector<AXLocationChanges>& changes);
+      const std::vector<AXLocationChange>& changes);
 
   // Given the data from an atomic update, collect the nodes that need updating
   // assuming that this platform is one where plain text node content is

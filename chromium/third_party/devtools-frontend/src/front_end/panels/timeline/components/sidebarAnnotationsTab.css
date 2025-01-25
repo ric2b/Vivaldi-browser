@@ -20,20 +20,23 @@
   margin-top: auto;
 }
 
-.bin-icon {
-  visibility: hidden;
-}
-
 .annotation-container {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0 10px;
 
-  &:hover {
+  .delete-button {
+    visibility: hidden;
+    border: none;
+    background: none;
+  }
+
+  &:hover,
+  &:focus-within {
     background-color: var(--sys-color-neutral-container);
 
-    .bin-icon {
+    button.delete-button {
       visibility: visible;
     }
   }
@@ -43,8 +46,8 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  word-break: break-all;
-  padding-top: 15px;
+  word-break: break-word;
+  padding: var(--sys-size-8) 0;
   gap: 6px;
 }
 
@@ -55,7 +58,7 @@
 
   &.time-range {
     background-color: var(--app-color-performance-sidebar-time-range);
-    color: var(--app-color-performance-sidebar-time-range-text);
+    color: var(--app-color-performance-sidebar-label-text-light);
   }
 }
 
@@ -96,21 +99,6 @@
 }
 
 .tutorial-title,
-.tutorial-description,
-.tutorial-shortcut {
+.tutorial-description {
   margin: 5px 0;
-}
-
-.tutorial-shortcut {
-  padding: 0.1em 0.6em;
-  border: 1px solid var(--sys-color-neutral-outline);
-  font-size: 11px;
-  background-color: var(--sys-color-neutral-container);
-  color: var(--sys-color-on-surface);
-  border-radius: 3px;
-  display: inline-block;
-  margin: 0 0.1em;
-  text-shadow: 0 1px 0 var(--sys-color-cdt-base-container);
-  line-height: 1.5;
-  white-space: nowrap;
 }

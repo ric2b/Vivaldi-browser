@@ -115,12 +115,11 @@ Error SenderSessionMessenger::SendOutboundMessage(SenderMessage message) {
                                        jsonified.value());
 }
 
-Error SenderSessionMessenger::SendRpcMessage(
-    const std::vector<uint8_t>& message) {
-  return SendOutboundMessage(
-      SenderMessage{openscreen::cast::SenderMessage::Type::kRpc,
-                    -1 /* sequence_number, unused by RPC messages */,
-                    true /* valid */, message});
+Error SenderSessionMessenger::SendRpcMessage(ByteView message) {
+  return SendOutboundMessage(SenderMessage{
+      openscreen::cast::SenderMessage::Type::kRpc,
+      -1 /* sequence_number, unused by RPC messages */, true /* valid */,
+      std::vector<uint8_t>(message.begin(), message.end())});
 }
 
 Error SenderSessionMessenger::SendRequest(SenderMessage message,

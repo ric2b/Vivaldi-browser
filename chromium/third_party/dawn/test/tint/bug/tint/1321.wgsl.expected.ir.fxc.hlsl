@@ -1,14 +1,14 @@
 
 int foo() {
-  return 1;
+  return int(1);
 }
 
 void main() {
   float arr[4] = (float[4])0;
   {
-    float a = arr[foo()];
+    int v = foo();
     while(true) {
-      float x = a;
+      float x = arr[v];
       break;
     }
   }

@@ -29,8 +29,7 @@ LanguageDetectionModelServiceFactory::GetInstance() {
 
 // static
 language_detection::LanguageDetectionModelService*
-LanguageDetectionModelServiceFactory::GetForBrowserState(
-    ChromeBrowserState* state) {
+LanguageDetectionModelServiceFactory::GetForProfile(ProfileIOS* state) {
   return static_cast<language_detection::LanguageDetectionModelService*>(
       GetInstance()->GetServiceForBrowserState(state, true));
 }
@@ -47,16 +46,22 @@ LanguageDetectionModelServiceFactory::~LanguageDetectionModelServiceFactory() {}
 std::unique_ptr<KeyedService>
 LanguageDetectionModelServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
+
+#if defined(VIVALDI_BUILD)
+  if (!optimization_guide::features::IsOptimizationTargetPredictionEnabled()) {
+    return nullptr;
+  }
+#else
   if (!translate::IsTFLiteLanguageDetectionEnabled() ||
       !optimization_guide::features::IsOptimizationTargetPredictionEnabled()) {
     return nullptr;
   }
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
+#endif // End Vivaldi
+
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   // The optimization guide service must be available for the translate model
   // service to be created.
-  auto* opt_guide =
-      OptimizationGuideServiceFactory::GetForProfile(browser_state);
+  auto* opt_guide = OptimizationGuideServiceFactory::GetForProfile(profile);
   if (opt_guide) {
     scoped_refptr<base::SequencedTaskRunner> background_task_runner =
         base::ThreadPool::CreateSequencedTaskRunner(

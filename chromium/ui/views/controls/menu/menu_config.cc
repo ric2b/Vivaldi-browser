@@ -39,13 +39,10 @@ int MenuConfig::CornerRadiusForMenu(const MenuController* controller) const {
                                                      : touchable_corner_radius;
   }
 
-  if (vivaldi::IsVivaldiRunning()) {
-    // Always 0 for main menus as those can not have a border that obstructs
-    // navigation on the menu bar.
-    if (vivaldi::UsingCompactLegacyMenu() ||
-        (controller && !controller->IsContextMenu())) {
-      return 0;
-    }
+  if (vivaldi::IsVivaldiRunning() &&
+      (MenuController::VivaldiGetCompactLayout() ||
+      !MenuController::VivaldiGetContextMenu())) {
+    return 0;
   }
 
   if (controller && (controller->IsCombobox() ||
@@ -80,7 +77,8 @@ bool MenuConfig::ShouldShowAcceleratorText(const MenuItemView* item,
 }
 
 void MenuConfig::InitCommon() {
-  if (vivaldi::UsingCompactLegacyMenu()) {
+  if (vivaldi::IsVivaldiRunning() &&
+      MenuController::VivaldiGetCompactLayout()) {
     return;
   }
 

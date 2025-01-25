@@ -16,6 +16,8 @@ limitations under the License.
 #include "tensorflow/core/tpu/tpu_compile.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
@@ -58,7 +60,6 @@ limitations under the License.
 #include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/strcat.h"
 #include "tensorflow/core/platform/types.h"
-#include "tensorflow/core/protobuf/config.pb.h"
 #include "tensorflow/core/protobuf/tpu/compile_metadata.pb.h"
 #include "tensorflow/core/tpu/kernels/tpu_compile_op_support.h"
 #include "tensorflow/core/tpu/tpu_defs.h"
@@ -449,7 +450,7 @@ Status RunShapeInferenceOnComputation(
 Status CompileTFFunctionToHlo(
     const FunctionLibraryDefinition& flib_def, int graph_def_version,
     const XlaShapeLayoutHelpers::ShapeDeterminationFns shape_determination_fns,
-    const std::vector<TensorShape>& arg_shapes,
+    const std::vector<TensorShape>& arg_shapes, const DeviceType& device_type,
     const GuaranteedConsts& guaranteed_constants, const NameAttrList& function,
     const tpu::TPUCompileMetadataProto& metadata,
     xla::CompileOnlyClient* client,
@@ -458,7 +459,7 @@ Status CompileTFFunctionToHlo(
     bool use_tuple_args, XlaCompiler::CompilationResult* compilation_result) {
   XlaCompiler::Options compiler_options;
   FunctionLibraryDefinition flib_definition(flib_def);
-  compiler_options.device_type = DeviceType(DEVICE_TPU_XLA_JIT);
+  compiler_options.device_type = device_type;
   compiler_options.client = client;
   compiler_options.flib_def = &flib_definition;
   compiler_options.allow_cpu_custom_calls = false;

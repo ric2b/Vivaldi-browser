@@ -467,14 +467,10 @@ MAKE_SDSF_SKIP_SAD_WRAPPER(aom_highbd_sad_skip_32x32)
 MAKE_SDSF_SKIP_SAD_WRAPPER(aom_highbd_sad_skip_32x16)
 MAKE_SDSF_SKIP_SAD_WRAPPER(aom_highbd_sad_skip_16x32)
 MAKE_SDSF_SKIP_SAD_WRAPPER(aom_highbd_sad_skip_16x16)
-MAKE_SDSF_SKIP_SAD_WRAPPER(aom_highbd_sad_skip_16x8)
 MAKE_SDSF_SKIP_SAD_WRAPPER(aom_highbd_sad_skip_8x16)
-MAKE_SDSF_SKIP_SAD_WRAPPER(aom_highbd_sad_skip_8x8)
-MAKE_SDSF_SKIP_SAD_WRAPPER(aom_highbd_sad_skip_4x8)
 
 #if !CONFIG_REALTIME_ONLY
 MAKE_SDSF_SKIP_SAD_WRAPPER(aom_highbd_sad_skip_64x16)
-MAKE_SDSF_SKIP_SAD_WRAPPER(aom_highbd_sad_skip_32x8)
 MAKE_SDSF_SKIP_SAD_WRAPPER(aom_highbd_sad_skip_16x64)
 MAKE_SDSF_SKIP_SAD_WRAPPER(aom_highbd_sad_skip_4x16)
 MAKE_SDSF_SKIP_SAD_WRAPPER(aom_highbd_sad_skip_8x32)
@@ -490,14 +486,10 @@ MAKE_SDSF_SKIP_SAD_4D_WRAPPER(aom_highbd_sad_skip_32x32x4d)
 MAKE_SDSF_SKIP_SAD_4D_WRAPPER(aom_highbd_sad_skip_32x16x4d)
 MAKE_SDSF_SKIP_SAD_4D_WRAPPER(aom_highbd_sad_skip_16x32x4d)
 MAKE_SDSF_SKIP_SAD_4D_WRAPPER(aom_highbd_sad_skip_16x16x4d)
-MAKE_SDSF_SKIP_SAD_4D_WRAPPER(aom_highbd_sad_skip_16x8x4d)
 MAKE_SDSF_SKIP_SAD_4D_WRAPPER(aom_highbd_sad_skip_8x16x4d)
-MAKE_SDSF_SKIP_SAD_4D_WRAPPER(aom_highbd_sad_skip_8x8x4d)
-MAKE_SDSF_SKIP_SAD_4D_WRAPPER(aom_highbd_sad_skip_4x8x4d)
 
 #if !CONFIG_REALTIME_ONLY
 MAKE_SDSF_SKIP_SAD_4D_WRAPPER(aom_highbd_sad_skip_64x16x4d)
-MAKE_SDSF_SKIP_SAD_4D_WRAPPER(aom_highbd_sad_skip_32x8x4d)
 MAKE_SDSF_SKIP_SAD_4D_WRAPPER(aom_highbd_sad_skip_16x64x4d)
 MAKE_SDSF_SKIP_SAD_4D_WRAPPER(aom_highbd_sad_skip_4x16x4d)
 MAKE_SDSF_SKIP_SAD_4D_WRAPPER(aom_highbd_sad_skip_8x32x4d)
@@ -660,13 +652,9 @@ static inline void highbd_set_var_fns(AV1_PRIMARY *const ppi) {
         HIGHBD_SDSFP_WRAPPER(32, 16, 8)
         HIGHBD_SDSFP_WRAPPER(16, 32, 8)
         HIGHBD_SDSFP_WRAPPER(16, 16, 8)
-        HIGHBD_SDSFP_WRAPPER(16, 8, 8)
         HIGHBD_SDSFP_WRAPPER(8, 16, 8)
-        HIGHBD_SDSFP_WRAPPER(8, 8, 8)
-        HIGHBD_SDSFP_WRAPPER(4, 8, 8)
 #if !CONFIG_REALTIME_ONLY
         HIGHBD_SDSFP_WRAPPER(64, 16, 8)
-        HIGHBD_SDSFP_WRAPPER(32, 8, 8)
         HIGHBD_SDSFP_WRAPPER(16, 64, 8)
         HIGHBD_SDSFP_WRAPPER(8, 32, 8)
         HIGHBD_SDSFP_WRAPPER(4, 16, 8)
@@ -760,14 +748,10 @@ static inline void highbd_set_var_fns(AV1_PRIMARY *const ppi) {
         HIGHBD_SDSFP_WRAPPER(32, 16, 10)
         HIGHBD_SDSFP_WRAPPER(16, 32, 10)
         HIGHBD_SDSFP_WRAPPER(16, 16, 10)
-        HIGHBD_SDSFP_WRAPPER(16, 8, 10)
         HIGHBD_SDSFP_WRAPPER(8, 16, 10)
-        HIGHBD_SDSFP_WRAPPER(8, 8, 10)
-        HIGHBD_SDSFP_WRAPPER(4, 8, 10)
 
 #if !CONFIG_REALTIME_ONLY
         HIGHBD_SDSFP_WRAPPER(64, 16, 10)
-        HIGHBD_SDSFP_WRAPPER(32, 8, 10)
         HIGHBD_SDSFP_WRAPPER(16, 64, 10)
         HIGHBD_SDSFP_WRAPPER(8, 32, 10)
         HIGHBD_SDSFP_WRAPPER(4, 16, 10)
@@ -861,14 +845,10 @@ static inline void highbd_set_var_fns(AV1_PRIMARY *const ppi) {
         HIGHBD_SDSFP_WRAPPER(32, 16, 12)
         HIGHBD_SDSFP_WRAPPER(16, 32, 12)
         HIGHBD_SDSFP_WRAPPER(16, 16, 12)
-        HIGHBD_SDSFP_WRAPPER(16, 8, 12)
         HIGHBD_SDSFP_WRAPPER(8, 16, 12)
-        HIGHBD_SDSFP_WRAPPER(8, 8, 12)
-        HIGHBD_SDSFP_WRAPPER(4, 8, 12)
 
 #if !CONFIG_REALTIME_ONLY
         HIGHBD_SDSFP_WRAPPER(64, 16, 12)
-        HIGHBD_SDSFP_WRAPPER(32, 8, 12)
         HIGHBD_SDSFP_WRAPPER(16, 64, 12)
         HIGHBD_SDSFP_WRAPPER(8, 32, 12)
         HIGHBD_SDSFP_WRAPPER(4, 16, 12)
@@ -1074,10 +1054,12 @@ static inline void refresh_reference_frames(AV1_COMP *cpi) {
   }
 }
 
+#if !CONFIG_REALTIME_ONLY
 void av1_update_film_grain_parameters_seq(struct AV1_PRIMARY *ppi,
                                           const AV1EncoderConfig *oxcf);
 void av1_update_film_grain_parameters(struct AV1_COMP *cpi,
                                       const AV1EncoderConfig *oxcf);
+#endif
 
 void av1_scale_references(AV1_COMP *cpi, const InterpFilter filter,
                           const int phase, const int use_optimized_scaler);

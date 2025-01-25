@@ -107,11 +107,11 @@ static inline void read_coeffs_reverse(aom_reader *r, TX_SIZE tx_size,
   }
 }
 
-uint8_t av1_read_coeffs_txb(const AV1_COMMON *const cm, DecoderCodingBlock *dcb,
-                            aom_reader *const r, const int blk_row,
-                            const int blk_col, const int plane,
-                            const TXB_CTX *const txb_ctx,
-                            const TX_SIZE tx_size) {
+static uint8_t read_coeffs_txb(const AV1_COMMON *const cm,
+                               DecoderCodingBlock *dcb, aom_reader *const r,
+                               const int blk_row, const int blk_col,
+                               const int plane, const TXB_CTX *const txb_ctx,
+                               const TX_SIZE tx_size) {
   MACROBLOCKD *const xd = &dcb->xd;
   FRAME_CONTEXT *const ec_ctx = xd->tile_ctx;
   const int32_t max_value = (1 << (7 + xd->bd)) - 1;
@@ -322,10 +322,9 @@ uint8_t av1_read_coeffs_txb(const AV1_COMMON *const cm, DecoderCodingBlock *dcb,
   return cul_level;
 }
 
-void av1_read_coeffs_txb_facade(const AV1_COMMON *const cm,
-                                DecoderCodingBlock *dcb, aom_reader *const r,
-                                const int plane, const int row, const int col,
-                                const TX_SIZE tx_size) {
+void av1_read_coeffs_txb(const AV1_COMMON *const cm, DecoderCodingBlock *dcb,
+                         aom_reader *const r, const int plane, const int row,
+                         const int col, const TX_SIZE tx_size) {
 #if TXCOEFF_TIMER
   struct aom_usec_timer timer;
   aom_usec_timer_start(&timer);
@@ -343,7 +342,7 @@ void av1_read_coeffs_txb_facade(const AV1_COMMON *const cm,
   get_txb_ctx(plane_bsize, tx_size, plane, pd->above_entropy_context + col,
               pd->left_entropy_context + row, &txb_ctx);
   const uint8_t cul_level =
-      av1_read_coeffs_txb(cm, dcb, r, row, col, plane, &txb_ctx, tx_size);
+      read_coeffs_txb(cm, dcb, r, row, col, plane, &txb_ctx, tx_size);
   av1_set_entropy_contexts(xd, pd, plane, plane_bsize, tx_size, cul_level, col,
                            row);
 

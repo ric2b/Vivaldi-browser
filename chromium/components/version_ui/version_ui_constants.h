@@ -64,6 +64,7 @@ extern const char kTargetsUName[];
 extern const char kTargetsU[];
 extern const char kGmsName[];
 extern const char kGmsVersion[];
+extern const char kIsDesktopAndroid[];
 #endif
 #if BUILDFLAG(IS_CHROMEOS)
 extern const char kPlatform[];
@@ -85,6 +86,8 @@ extern const char kTitle[];
 extern const char kUserAgent[];
 extern const char kUserAgentName[];
 extern const char kVariationsCmdName[];
+extern const char kCopyVariationsLabel[];
+extern const char kCopyVariationsNotice[];
 extern const char kVariationsName[];
 extern const char kVariationsSeed[];
 extern const char kVariationsSeedName[];

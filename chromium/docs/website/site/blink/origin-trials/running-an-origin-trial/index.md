@@ -251,7 +251,7 @@ trial has a predefined end date (rather than running indefinitely until the
 feature ships). That said, there are situations where it is beneficial to allow
 experimentation to continue beyond the planned end date of the trial.
 
-There two general cases where experimentation may continue beyond the planned
+There are two general cases where experimentation may continue beyond the planned
 end date:
 
 1.  Unexpected delays in releasing

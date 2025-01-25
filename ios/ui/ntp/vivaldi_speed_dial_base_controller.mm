@@ -6,10 +6,12 @@
 
 #import "base/strings/sys_string_conversions.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
+#import "components/direct_match/direct_match_service.h"
 #import "ios/chrome/browser/bookmarks/model/bookmarks_utils.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_utils_ios.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/features/vivaldi_features.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -23,19 +25,20 @@
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/direct_match/direct_match_service_factory.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_coordinator.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_entry_point.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_container_cell.h"
+#import "ios/ui/ntp/nsd/vivaldi_nsd_coordinator.h"
 #import "ios/ui/ntp/top_toolbar/top_toolbar_swift.h"
 #import "ios/ui/ntp/top_toolbar/vivaldi_ntp_top_toolbar_view_consumer.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/ntp/vivaldi_ntp_util.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_base_controller_flow_layout.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
-#import "ios/ui/ntp/vivaldi_speed_dial_shared_state.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_sorting_mode.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_view_controller.h"
 #import "ios/ui/settings/start_page/quick_settings/vivaldi_start_page_quick_settings_coordinator.h"
@@ -99,7 +102,9 @@ NSUInteger toolbarVisibleThreshold = 2;
                                             UIGestureRecognizerDelegate,
                                           VivaldiNTPTopToolbarViewConsumer,
                                         VivaldiSpeedDialContainerDelegate,
+                                            VivaldiNSDCoordinatorDelegate,
                                                     SpeedDialHomeConsumer> {
+  direct_match::DirectMatchService* _directMatchService;
   // Start page settings coordinator.
   VivaldiStartPageQuickSettingsCoordinator* _startPageSettingsCoordinator;
 }
@@ -108,11 +113,8 @@ NSUInteger toolbarVisibleThreshold = 2;
 @property (weak, nonatomic) UICollectionView *collectionView;
 // Container view for holding the menu items and sort button.
 @property(nonatomic, weak) UIView* topScrollMenuContainer;
-// Top toolbar menu view provider
-@property(nonatomic, strong)
-    VivaldiNTPTopToolbarViewProvider* topToolbarViewProvider;
-// Top toolbar menu view controller
-@property(nonatomic, strong) UIViewController* topToolbarViewController;
+// Top toolbar menu view
+@property(nonatomic, strong)VivaldiNTPTopToolbarView* topToolbarView;
 // More action button
 @property(nonatomic, weak) UIButton* moreButton;
 // More action button container
@@ -135,8 +137,8 @@ NSUInteger toolbarVisibleThreshold = 2;
 @property(nonatomic, assign) Browser* browser;
 // Bookmarks model that holds all the bookmarks data
 @property (assign,nonatomic) BookmarkModel* bookmarks;
-// The user's browser state model used.
-@property(nonatomic, assign) ChromeBrowserState* browserState;
+// The user's profile used.
+@property(nonatomic, assign) ProfileIOS* profile;
 // The service class that manages the speed dial thumbnail locally such as
 // store/remove or fetch.
 @property(nonatomic, strong) VivaldiThumbnailService* vivaldiThumbnailService;
@@ -146,6 +148,8 @@ NSUInteger toolbarVisibleThreshold = 2;
 // Coodrinator for bookmarks editor
 @property(nonatomic, strong)
     VivaldiBookmarksEditorCoordinator* bookmarksEditorCoordinator;
+// Coodrinator for new speed dial dialog
+@property(nonatomic, strong) VivaldiNSDCoordinator* nsdCoordinator;
 // Coordinator in charge of handling sharing use cases.
 @property(nonatomic, strong) SharingCoordinator* sharingCoordinator;
 
@@ -169,6 +173,8 @@ NSUInteger toolbarVisibleThreshold = 2;
 // Bool to keep track if top sites result is ready. The results can be empty,
 // this only checks if we got a response from backend for the query.
 @property(nonatomic,assign) BOOL isTopSitesResultsAvailable;
+// Bool to keep track if new speed dial dialog is presented.
+@property(nonatomic,assign) BOOL isNewSpeedDialDialogPresenting;
 // Height constraint of the top menu container
 @property (assign, nonatomic) NSLayoutConstraint* menuContainerHeight;
 // Collection view top constraint when top toolbar is present
@@ -194,11 +200,11 @@ NSUInteger toolbarVisibleThreshold = 2;
 
 @implementation VivaldiSpeedDialBaseController
 
-@synthesize browserState = _browserState;
+@synthesize profile = _profile;
 @synthesize speedDialViewController = _speedDialViewController;
 @synthesize collectionView = _collectionView;
 @synthesize topScrollMenuContainer = _topScrollMenuContainer;
-@synthesize topToolbarViewProvider = _topToolbarViewProvider;
+@synthesize topToolbarView = _topToolbarView;
 @synthesize moreButton = _moreButton;
 @synthesize moreButtonContainer = _moreButtonContainer;
 @synthesize manualSortAction = _manualSortAction;
@@ -220,13 +226,18 @@ NSUInteger toolbarVisibleThreshold = 2;
   if (self) {
     _browser = browser;
     _bookmarks = bookmarkModel;
-    _browserState =
-        _browser->GetBrowserState()->GetOriginalChromeBrowserState();
+    _profile = _browser->GetProfile()->GetOriginalProfile();
     _faviconLoader =
-        IOSChromeFaviconLoaderFactory::GetForBrowserState(_browserState);
+        IOSChromeFaviconLoaderFactory::GetForProfile(_profile);
+    _directMatchService =
+        direct_match::DirectMatchServiceFactory::GetForProfile(_profile);
     _vivaldiThumbnailService = [VivaldiThumbnailService new];
     _thumbnailCapturer = [[VivaldiThumbnailCapturer alloc] init];
-    [VivaldiStartPagePrefs setPrefService:self.browserState->GetPrefs()];
+    [VivaldiStartPagePrefs setPrefService:_profile->GetPrefs()];
+
+    PrefService* localPrefs = GetApplicationContext()->GetLocalState();
+    [VivaldiStartPagePrefs setLocalPrefService:localPrefs];
+
     if (_bookmarks && _bookmarks->loaded()) {
       [self updateBookmarkBarNodeIfNeeded];
     }
@@ -238,9 +249,10 @@ NSUInteger toolbarVisibleThreshold = 2;
   _bookmarkBarItem = nil;
   _speedDialViewController.delegate = nil;
   _bookmarksEditorCoordinator = nil;
-  _topToolbarViewProvider.consumer = nil;
-  _topToolbarViewProvider = nil;
-  _topToolbarViewController = nil;
+  [_nsdCoordinator stop];
+  _nsdCoordinator = nil;
+  _topToolbarView.consumer = nil;
+  _topToolbarView = nil;
   _vivaldiThumbnailService = nullptr;
   _startPageSettingsCoordinator = nullptr;
   [self.sharingCoordinator stop];
@@ -428,22 +440,12 @@ NSUInteger toolbarVisibleThreshold = 2;
   _topScrollMenuContainer = topScrollMenuContainer;
   topScrollMenuContainer.backgroundColor = UIColor.clearColor;
 
-  VivaldiNTPTopToolbarViewProvider* toolbarViewProvider =
-      [VivaldiNTPTopToolbarViewProvider new];
-  _topToolbarViewProvider = toolbarViewProvider;
+  VivaldiNTPTopToolbarView* topToolbarView = [VivaldiNTPTopToolbarView new];
+  topToolbarView.consumer = self;
+  _topToolbarView = topToolbarView;
 
-  UIViewController* toolbarViewController =
-      [toolbarViewProvider makeViewController];
-  toolbarViewController.view.backgroundColor = UIColor.clearColor;
-  _topToolbarViewController = toolbarViewController;
-  toolbarViewProvider.consumer = self;
-
-  // TODO: (prio@vivaldi.com)
-  // Figure out a way to add the toolbar view controller as child view
-  // controller for this view to silent the warning visible on context menu
-  // present from toolbar.
-  [self.topScrollMenuContainer addSubview:toolbarViewController.view];
-  [toolbarViewController.view anchorTop:self.topScrollMenuContainer.topAnchor
+  [self.topScrollMenuContainer addSubview:topToolbarView];
+  [topToolbarView anchorTop:self.topScrollMenuContainer.topAnchor
                               leading:self.topScrollMenuContainer.leadingAnchor
                                bottom:self.topScrollMenuContainer.bottomAnchor
                              trailing:nil
@@ -520,7 +522,7 @@ NSUInteger toolbarVisibleThreshold = 2;
   } else {
     [self.topScrollMenuContainer addSubview: _moreButtonContainer];
     [_moreButtonContainer anchorTop:nil
-                      leading:self.topToolbarViewController.view.trailingAnchor
+                      leading:self.topToolbarView.trailingAnchor
                        bottom:nil
                      trailing:self.topScrollMenuContainer.trailingAnchor
                       padding:moreButtonPadding
@@ -870,19 +872,85 @@ NSUInteger toolbarVisibleThreshold = 2;
 
 #pragma mark - PRIVATE METHODS
 
-/// Set current selected index of the menu on the shared state
+/// Set current selected index of the menu to the pref
 - (void)setSelectedMenuItemIndex:(NSInteger)index {
-  VivaldiSpeedDialSharedState *sharedState =
-      [VivaldiSpeedDialSharedState manager];
-  sharedState.selectedIndex = index;
+  [VivaldiStartPagePrefsHelper setStartPageLastVisitedGroupIndex:index];
   [self resetMoreButtonContextMenuOptions];
 }
 
-/// Returns the currently selected index of the menu from the shared state
+/// Returns the currently selected index of the menu from the preferences.
 - (NSInteger)selectedMenuItemIndex {
-  VivaldiSpeedDialSharedState *sharedState =
-      [VivaldiSpeedDialSharedState manager];
-  return sharedState.selectedIndex;
+
+  // If new speed dial dialog is presented we stay to last visited folder
+  // when BookmarksModel changes which allows users to see what they added
+  // immediately after closing the dialog.
+  if (self.isNewSpeedDialDialogPresenting) {
+    return [self indexForLastVisitedGroup];
+  }
+
+  // Retrieve the user's preference for the start page opening item.
+  VivaldiStartPageStartItemType openWith =
+      [VivaldiStartPagePrefsHelper getReopenStartPageWithItem];
+
+  NSInteger index = 0; // Default index
+
+  switch (openWith) {
+    // Case when the user prefers to open with the first group or
+    // default preference.
+    case VivaldiStartPageStartItemTypeFirstGroup:
+    default: {
+      // If "Frequently Visited" is not shown, select the first
+      // menu item (index 0).
+      if (!self.showFrequentlyVisited) {
+        index = 0;
+      } else {
+        // If there are items in "Speed Dial" folders,
+        // select the second menu item (index 1); otherwise, select the first.
+        index = self.speedDialFolderItems.count > 0 ? 1 : 0;
+      }
+      break;
+    }
+
+    // Case when the user prefers to open with "Top Sites".
+    case VivaldiStartPageStartItemTypeTopSites:
+      // Always select the first menu item (index 0).
+      index = 0;
+      break;
+
+    // Case when the user prefers to open with the last visited group.
+    case VivaldiStartPageStartItemTypeLastVisited: {
+      index = [self indexForLastVisitedGroup];
+      break;
+    }
+  }
+
+  // Safety Check: Ensure that the index is within
+  // the bounds of speedDialMenuItems.
+  if (self.speedDialMenuItems.count == 0) {
+    // No menu items are available;
+    // return NSNotFound to indicate no valid selection.
+    return NSNotFound;
+  } else if (index >= (NSInteger)self.speedDialMenuItems.count) {
+    // Adjust the index to the last valid index if it's out of bounds.
+    index = self.speedDialMenuItems.count - 1;
+  }
+
+  return index;
+}
+
+/// Returns the selected item index for last visiter group
+- (NSUInteger)indexForLastVisitedGroup {
+  // Retrieve the index of the last visited group from preferences.
+  NSInteger cachedIndex =
+      [VivaldiStartPagePrefsHelper getStartPageLastVisitedGroupIndex];
+  // If the cached index is valid, use it; otherwise,
+  // select the first menu item (index 0).
+  if (cachedIndex >= 0 && cachedIndex <
+      (NSInteger)self.speedDialMenuItems.count) {
+    return cachedIndex;
+  } else {
+    return 0;
+  }
 }
 
 /// Gets the sorting mode from prefs and update the selection state on the context menu.
@@ -1098,18 +1166,46 @@ NSUInteger toolbarVisibleThreshold = 2;
                         entryPoint:(VivaldiBookmarksEditorEntryPoint)entryPoint
                          isEditing:(BOOL)isEditing {
 
-  VivaldiBookmarksEditorCoordinator* bookmarksEditorCoordinator =
-      [[VivaldiBookmarksEditorCoordinator alloc]
-               initWithBaseViewController:self
-                                  browser:_browser
-                                     item:item
-                                   parent:parent
-                               entryPoint:entryPoint
-                                isEditing:isEditing
-                             allowsCancel:YES];
-  _bookmarksEditorCoordinator = bookmarksEditorCoordinator;
-  _bookmarksEditorCoordinator.allowsNewFolders = YES;
-  [bookmarksEditorCoordinator start];
+  if (IsNewSpeedDialDialogEnabled()) {
+    if (entryPoint == VivaldiBookmarksEditorEntryPointSpeedDial) {
+      VivaldiNSDCoordinator* newSpeedDialCoordinator =
+          [[VivaldiNSDCoordinator alloc]
+                   initWithBaseViewController:self
+                                      browser:_browser
+                                       parent:parent];
+      _nsdCoordinator = newSpeedDialCoordinator;
+      _nsdCoordinator.allowsNewFolders = YES;
+      _nsdCoordinator.delegate = self;
+      [newSpeedDialCoordinator start];
+      self.isNewSpeedDialDialogPresenting = YES;
+    } else {
+      VivaldiBookmarksEditorCoordinator* bookmarksEditorCoordinator =
+          [[VivaldiBookmarksEditorCoordinator alloc]
+                   initWithBaseViewController:self
+                                      browser:_browser
+                                         item:item
+                                       parent:parent
+                                   entryPoint:entryPoint
+                                    isEditing:isEditing
+                                 allowsCancel:YES];
+      _bookmarksEditorCoordinator = bookmarksEditorCoordinator;
+      _bookmarksEditorCoordinator.allowsNewFolders = YES;
+      [bookmarksEditorCoordinator start];
+    }
+  } else {
+    VivaldiBookmarksEditorCoordinator* bookmarksEditorCoordinator =
+        [[VivaldiBookmarksEditorCoordinator alloc]
+                 initWithBaseViewController:self
+                                    browser:_browser
+                                       item:item
+                                     parent:parent
+                                 entryPoint:entryPoint
+                                  isEditing:isEditing
+                               allowsCancel:YES];
+    _bookmarksEditorCoordinator = bookmarksEditorCoordinator;
+    _bookmarksEditorCoordinator.allowsNewFolders = YES;
+    [bookmarksEditorCoordinator start];
+  }
 }
 
 - (void)captureThumbnailForItem:(VivaldiSpeedDialItem*)item
@@ -1178,7 +1274,7 @@ NSUInteger toolbarVisibleThreshold = 2;
     dispatch_async(dispatch_get_main_queue(), ^{
       __strong __typeof(weakSelf) strongSelf = weakSelf;
       if (strongSelf) {
-        [strongSelf.topToolbarViewProvider
+        [strongSelf.topToolbarView
             selectItemWithIndex:strongSelf.selectedMenuItemIndex];
       }
     });
@@ -1278,6 +1374,7 @@ NSUInteger toolbarVisibleThreshold = 2;
     [cell configureWith:@[]
                  parent:_bookmarkBarItem
           faviconLoader:self.faviconLoader
+     directMatchService:_directMatchService
             layoutStyle:[self currentLayoutStyle]
            layoutColumn:[self currentLayoutColumn]
            showAddGroup:YES
@@ -1295,6 +1392,7 @@ NSUInteger toolbarVisibleThreshold = 2;
       [cell configureWith:childItems
                    parent:_bookmarkBarItem
             faviconLoader:self.faviconLoader
+       directMatchService:_directMatchService
               layoutStyle:VivaldiStartPageLayoutStyleSmall
              layoutColumn:[self currentLayoutColumn]
              showAddGroup:NO
@@ -1313,6 +1411,7 @@ NSUInteger toolbarVisibleThreshold = 2;
       [cell configureWith:childItems
                    parent:parent
             faviconLoader:self.faviconLoader
+       directMatchService:_directMatchService
               layoutStyle:[self currentLayoutStyle]
              layoutColumn:[self currentLayoutColumn]
              showAddGroup:NO
@@ -1387,13 +1486,13 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
 
   if (currentIndexPath &&
       currentIndexPath.row < long(self.speedDialMenuItems.count)) {
-    [self.topToolbarViewProvider selectItemWithIndex:currentIndexPath.row];
+    [self.topToolbarView selectItemWithIndex:currentIndexPath.row];
     [self setSelectedMenuItemIndex:currentIndexPath.row];
   }
 
   if (currentIndexPath &&
       currentIndexPath.row == long(self.speedDialMenuItems.count)) {
-    [self.topToolbarViewProvider removeSelection];
+    [self.topToolbarView removeToolbarSelection];
   }
 }
 
@@ -1434,7 +1533,7 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   if (items.count <= 0) {
     [self.speedDialMenuItems removeAllObjects];
     [self.speedDialFolderItems removeAllObjects];
-    [self.topToolbarViewProvider removeAllItems];
+    [self.topToolbarView removeAllItems];
     return;
   }
 
@@ -1461,7 +1560,7 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
 
   if ([self showSpeedDials] ||
       (IsTopSitesEnabled() && [self showFrequentlyVisited])) {
-    [self.topToolbarViewProvider
+    [self.topToolbarView
          updateToolbarWithItems:items
               selectedIndex:self.selectedMenuItemIndex];
   }
@@ -1561,6 +1660,16 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   return nil;
 }
 
+#pragma mark - VivaldiNSDCoordinatorDelegate
+- (void)newSpeedDialCoordinatorDidDismiss {
+  if (self.nsdCoordinator) {
+    self.nsdCoordinator.delegate = nil;
+    [self.nsdCoordinator stop];
+    self.nsdCoordinator = nil;
+    self.isNewSpeedDialDialogPresenting = NO;
+  }
+}
+
 #pragma mark - VIVALDI_SPEED_DIAL_CONTAINER_DELEGATE
 - (void)didSelectItem:(VivaldiSpeedDialItem*)item
                parent:(VivaldiSpeedDialItem*)parent {
@@ -1588,7 +1697,7 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
                                          animated:YES];
     self.speedDialViewController = controller;
   } else {
-    BOOL isOffTheRecord = _browserState->IsOffTheRecord();
+    BOOL isOffTheRecord = _profile->IsOffTheRecord();
 
     // Trigger thumbnail update for only SD items, and not for frequently
     // visited pages.
@@ -1621,7 +1730,9 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
                    parent:(VivaldiSpeedDialItem*)parent {
   VivaldiBookmarksEditorEntryPoint entryPoint = item.isFolder ?
       VivaldiBookmarksEditorEntryPointFolder :
-      VivaldiBookmarksEditorEntryPointSpeedDial;
+        (IsNewSpeedDialDialogEnabled() ?
+            VivaldiBookmarksEditorEntryPointBookmark :
+            VivaldiBookmarksEditorEntryPointSpeedDial);
 
   [self presentBookmarkEditorWithItem:item
                                parent:parent

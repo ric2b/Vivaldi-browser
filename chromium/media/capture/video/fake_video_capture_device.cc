@@ -327,8 +327,7 @@ std::unique_ptr<FrameDeliverer> FrameDelivererFactory::CreateFrameDeliverer(
       painter_format = PacmanFramePainter::Format::NV12;
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
-      painter_format = PacmanFramePainter::Format::I420;
+      NOTREACHED();
   }
   auto frame_painter =
       std::make_unique<PacmanFramePainter>(painter_format, device_state_);
@@ -548,9 +547,10 @@ void FakePhotoDevice::TakePhoto(VideoCaptureDevice::TakePhotoCallback callback,
   // Create a PNG-encoded frame and send it back to |callback|.
   auto required_sk_n32_buffer_size = VideoFrame::AllocationSize(
       PIXEL_FORMAT_ARGB, fake_device_state_->format.frame_size);
-  std::unique_ptr<uint8_t[]> buffer(new uint8_t[required_sk_n32_buffer_size]);
-  memset(buffer.get(), 0, required_sk_n32_buffer_size);
-  sk_n32_painter_->PaintFrame(elapsed_time, buffer.get());
+  // Memory is already zero-initialized:
+  base::HeapArray<uint8_t> buffer =
+      base::HeapArray<uint8_t>::WithSize(required_sk_n32_buffer_size);
+  sk_n32_painter_->PaintFrame(elapsed_time, buffer.data());
   mojom::BlobPtr blob = mojom::Blob::New();
   const gfx::PNGCodec::ColorFormat encoding_source_format =
 #if SK_PMCOLOR_BYTE_ORDER(R, G, B, A)
@@ -558,15 +558,14 @@ void FakePhotoDevice::TakePhoto(VideoCaptureDevice::TakePhotoCallback callback,
 #else
       gfx::PNGCodec::FORMAT_BGRA;
 #endif
-  const bool result = gfx::PNGCodec::Encode(
-      buffer.get(), encoding_source_format,
+  std::optional<std::vector<uint8_t>> result = gfx::PNGCodec::Encode(
+      buffer.data(), encoding_source_format,
       fake_device_state_->format.frame_size,
-      VideoFrame::RowBytes(0 /* plane */, PIXEL_FORMAT_ARGB,
+      VideoFrame::RowBytes(/*plane=*/0, PIXEL_FORMAT_ARGB,
                            fake_device_state_->format.frame_size.width()),
-      true /* discard_transparency */, std::vector<gfx::PNGCodec::Comment>(),
-      &blob->data);
-  DCHECK(result);
+      /*discard_transparency=*/true, std::vector<gfx::PNGCodec::Comment>());
 
+  blob->data = std::move(result.value());
   blob->mime_type = "image/png";
   std::move(callback).Run(std::move(blob));
 }
@@ -910,12 +909,14 @@ void JpegEncodingFrameDeliverer::PaintAndDeliverNextFrame(
   SkPixmap src(info, &sk_n32_buffer_[0],
                VideoFrame::RowBytes(0 /* plane */, PIXEL_FORMAT_ARGB,
                                     device_state()->format.frame_size.width()));
-  bool success = gfx::JPEGCodec::Encode(src, kQuality, &jpeg_buffer_);
-  if (!success) {
+  std::optional<std::vector<uint8_t>> jpeg_buffer =
+      gfx::JPEGCodec::Encode(src, kQuality);
+  if (!jpeg_buffer) {
     DLOG(ERROR) << "Jpeg encoding failed";
     return;
   }
 
+  jpeg_buffer_ = std::move(jpeg_buffer.value());
   const size_t frame_size = jpeg_buffer_.size();
   base::TimeTicks now = base::TimeTicks::Now();
   client()->OnIncomingCapturedData(

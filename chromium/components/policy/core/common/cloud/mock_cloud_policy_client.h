@@ -63,7 +63,8 @@ class MockCloudPolicyClient : public CloudPolicyClient {
                const std::string&,
                const std::string&,
                const std::string&,
-               const base::TimeDelta&),
+               const base::TimeDelta&,
+               ResultCallback),
               (override));
   MOCK_METHOD(void, FetchPolicy, (PolicyFetchReason), (override));
   MOCK_METHOD(void,
@@ -72,6 +73,7 @@ class MockCloudPolicyClient : public CloudPolicyClient {
                const std::vector<enterprise_management::RemoteCommandResult>&,
                enterprise_management::PolicyFetchRequest::SignatureType,
                const std::string&,
+               RemoteCommandsFetchReason,
                RemoteCommandCallback),
               (override));
   MOCK_METHOD(void,
@@ -129,11 +131,10 @@ class MockCloudPolicyClient : public CloudPolicyClient {
               (std::unique_ptr<enterprise_management::UploadEuiccInfoRequest>,
                StatusCallback),
               (override));
-  MOCK_METHOD(
-      void,
-      UploadSecurityEventReport,
-      (content::BrowserContext*, bool, base::Value::Dict, ResultCallback),
-      (override));
+  MOCK_METHOD(void,
+              UploadSecurityEventReport,
+              (bool, base::Value::Dict, ResultCallback),
+              (override));
   MOCK_METHOD(void,
               UploadAppInstallReport,
               (base::Value::Dict value, ResultCallback callback),

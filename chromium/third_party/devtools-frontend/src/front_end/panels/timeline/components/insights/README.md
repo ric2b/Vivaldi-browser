@@ -6,19 +6,21 @@ If you want to add an insight to the Performance panel sidebar, you need to crea
 
 When creating your component, extend the `BaseInsight` class (defined in `insights/Helpers.ts`). This class will set up some of the setters and data you need. Your component will then have access to a `this.data` object which will have on it:
 
-1. `insights`: the `TraceEngineInsightData` generated for the current trace.
-2. `navigationId`: the currently active navigation ID (as some Insights are per-navigation).
+1. `insights`: the `TraceInsightSets` generated for the current trace.
+2. `insightSetKey`: the currently active navigation ID, or NO_NAVIGATION.
 3. `activeInsight`: an object representing the current active (meaning the user has clicked to expand it) insight.
-4. `activeCategory`: an `InsightsCategories` enum member representing if the user has chosen a category from the dropdown.
+4. `activeCategory`: an `Insights.Types.Category` enum member representing if the user has chosen a category from the dropdown.
 
 In your component you can access all this data via `this.data.X`, where `X` is one of the keys listed above.
 
 You will have to define 4 properties on your component:
 
 1. `static readonly litTagName` is the HTML tag name given to your element (define this just as you do for all custom elements).
-2. `override insightCategory: InsightsCategories` is the category that your insight applies to. This is so it can be filtered when the user uses the sidebar dropdown to change category.
+2. `override insightCategory: Insights.Types.Category` is the category that your insight applies to. This is so it can be filtered when the user uses the sidebar dropdown to change category.
 3. `override internalName: string` is a name used to identify the insight. It **must be unique across all insights** and is used to track if it is active or not.
 4. `override userVisibleTitle: string` is the user facing name used in the sidebar when the insight is rendered.
+
+> Go to KnownContextValues.ts and add your insight: `timeline.toggle-insight.your-insight-name` and `timeline.insights.your-insight-name`.
 
 > Note that in most components, we use private methods and variables for storing this data, but because we are extending a base class, these are all `protected` instead.
 
@@ -41,21 +43,22 @@ override render(): void {
 
 Within your `renderMyInsight` method (please choose a better name!), you should use the `SidebarInsight` component and use its `slot`s to place your content in. You also have access to the `this.isActive()` method to determine if this insight is expanded or not.
 
-```
+```ts
 <${SidebarInsight.SidebarInsight.litTagName} .data=${{
   title: this.userVisibleTitle,
+  description: this.description,
   expanded: this.isActive(),
-} as SidebarInsight.InsightDetails}
+}}
 @insighttoggleclick=${this.onSidebarClick}
 >
-  <div slot="insight-description" class="insight-description">
-    <!-- the description (in the UI, this is above the border when expanded) goes here-->
-  </div>
-  <div slot="insight-content" class="insight-content">
+  <div slot="insight-content" class="insight-section">
     <!-- this content will be shown below the border in expanded mode -->
   </div>
 </${SidebarInsight.SidebarInsight}>
 ```
+
+If the content of your insight has multiple sections, remove `class="insight-section"` from the slot and place each section
+in its own `<div class="insight-section">` inside the slot.
 
 ## 3. Override the `createOverlays()` method
 
@@ -78,4 +81,4 @@ override connectedCallback(): void {
 
 ## 5. Render!
 
-Add your insight to the UI in `SidebarSingleNavigation.ts` in the `#renderInsights` method.
+Add your insight to the UI in `SidebarSingleInsightSet.ts` in the `#renderInsights` method.

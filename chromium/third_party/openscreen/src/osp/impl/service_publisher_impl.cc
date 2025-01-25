@@ -60,37 +60,48 @@ void ServicePublisherImpl::OnError(const Error& error) {
 }
 
 bool ServicePublisherImpl::Start() {
-  if (state_ != State::kStopped)
+  if (state_ != State::kStopped) {
     return false;
+  }
+
   state_ = State::kStarting;
   delegate_->StartPublisher(config_);
   return true;
 }
+
 bool ServicePublisherImpl::StartAndSuspend() {
-  if (state_ != State::kStopped)
+  if (state_ != State::kStopped) {
     return false;
+  }
+
   state_ = State::kStarting;
   delegate_->StartAndSuspendPublisher(config_);
   return true;
 }
+
 bool ServicePublisherImpl::Stop() {
-  if (state_ == State::kStopped || state_ == State::kStopping)
+  if (state_ == State::kStopped || state_ == State::kStopping) {
     return false;
+  }
 
   state_ = State::kStopping;
   delegate_->StopPublisher();
   return true;
 }
+
 bool ServicePublisherImpl::Suspend() {
-  if (state_ != State::kRunning && state_ != State::kStarting)
+  if (state_ != State::kRunning && state_ != State::kStarting) {
     return false;
+  }
 
   delegate_->SuspendPublisher();
   return true;
 }
+
 bool ServicePublisherImpl::Resume() {
-  if (state_ != State::kSuspended)
+  if (state_ != State::kSuspended) {
     return false;
+  }
 
   delegate_->ResumePublisher(config_);
   return true;
@@ -121,21 +132,27 @@ void ServicePublisherImpl::SetState(State state) {
 
 void ServicePublisherImpl::MaybeNotifyObserver() {
   switch (state_) {
-    case State::kRunning:
+    case State::kRunning: {
       for (auto* observer : observers_) {
         observer->OnStarted();
       }
       break;
-    case State::kStopped:
+    }
+
+    case State::kStopped: {
       for (auto* observer : observers_) {
         observer->OnStopped();
       }
       break;
-    case State::kSuspended:
+    }
+
+    case State::kSuspended: {
       for (auto* observer : observers_) {
         observer->OnSuspended();
       }
       break;
+    }
+
     default:
       break;
   }

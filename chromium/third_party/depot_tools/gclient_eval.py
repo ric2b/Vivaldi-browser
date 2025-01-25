@@ -244,6 +244,11 @@ _GCLIENT_SCHEMA = schema.Schema(
         # Also see 'skip_child_includes' and 'specific_include_rules'.
         schema.Optional('include_rules'): [schema.Optional(str)],
 
+        # Commits that add include_rules entries on the paths with this set
+        # will require an OWNERS review from them.
+        schema.Optional('new_usages_require_review'):
+        bool,
+
         # Optionally discards rules from parent directories, similar to
         # "noparent" in OWNERS files. For example, if
         # //base/allocator/partition_allocator has "noparent = True" then it

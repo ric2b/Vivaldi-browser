@@ -5,6 +5,7 @@
 
 #include <assert.h>
 #include <inttypes.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -16,6 +17,7 @@
 #include "xnnpack/config-types.h"
 #include "xnnpack/config.h"
 #include "xnnpack/log.h"
+#include "xnnpack/math.h"
 #include "xnnpack/microkernel-type.h"
 #include "xnnpack/normalization.h"
 #include "xnnpack/operator-type.h"
@@ -275,39 +277,38 @@ static enum xnn_status reshape_transpose_nd(
       context->const_size_ukernel = transpose_config->x8.const_size_ukernel;
       transpose_op->compute[0].tile[0] = transpose_config->x8.tile_size;
       transpose_op->compute[0].tile[1] = transpose_config->x8.tile_size;
-      if (transpose_config->x8.init.x16 != NULL) {
-        transpose_config->x8.init.x8(&context->params.x8_params);
-      }
       break;
     case 2:
       transpose_op->compute[0].tile[0] = transpose_config->x16.tile_size;
       transpose_op->compute[0].tile[1] = transpose_config->x16.tile_size;
       context->const_size_ukernel = transpose_config->x16.const_size_ukernel;
-      if (transpose_config->x16.init.x16 != NULL) {
-        transpose_config->x16.init.x16(&context->params.x16_params);
-      }
       break;
     case 3:
       transpose_op->compute[0].tile[0] = transpose_config->x24.tile_size;
       transpose_op->compute[0].tile[1] = transpose_config->x24.tile_size;
       context->const_size_ukernel = transpose_config->x24.const_size_ukernel;
-      if (transpose_config->x24.init.x24 != NULL) {
-        transpose_config->x24.init.x24(&context->params.x24_params);
-      }
       break;
     case 4:
       transpose_op->compute[0].tile[0] = transpose_config->x32.tile_size;
       transpose_op->compute[0].tile[1] = transpose_config->x32.tile_size;
       context->const_size_ukernel = transpose_config->x32.const_size_ukernel;
-      if (transpose_config->x32.init.x32 != NULL) {
-        transpose_config->x32.init.x32(&context->params.x32_params);
-      }
       break;
-    default:
-      transpose_op->compute[0].tile[0] = transpose_config->xx.tile_size;
-      transpose_op->compute[0].tile[1] = transpose_config->xx.tile_size;
+    default: {
+      // Chose the tile size such that ~64k of data are processed per
+      // microkernel call.
+      const size_t target_size = (1 << 16);
+      const size_t num_tiles = max(1, target_size / normalized_element_size);
+      if (1 < normalized_dims) {
+        transpose_op->compute[0].tile[1] =
+            min((size_t)sqrtf(num_tiles),
+                transpose_op->compute[0].range[normalized_dims - 1]);
+        transpose_op->compute[0].tile[0] =
+            min(num_tiles / transpose_op->compute[0].tile[1],
+                transpose_op->compute[0].range[normalized_dims - 2]);
+      }
       context->variable_size_ukernel = transpose_config->xx.variable_size_ukernel;
       variable_size_ukernel = true;
+    }
   }
 
   struct univector_contiguous_context* univector_context = &transpose_op->context.univector_contiguous;

@@ -29,7 +29,7 @@ RequestFilterManagerFactory::~RequestFilterManagerFactory() {}
 
 content::BrowserContext* RequestFilterManagerFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
+  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 KeyedService* RequestFilterManagerFactory::BuildServiceInstanceFor(

@@ -153,6 +153,8 @@ class Parser {
                 return core::BuiltinValue::kVertexIndex;
             case spv::BuiltIn::WorkgroupId:
                 return core::BuiltinValue::kWorkgroupId;
+            case spv::BuiltIn::ClipDistance:
+                return core::BuiltinValue::kClipDistances;
             default:
                 TINT_UNIMPLEMENTED() << "unhandled SPIR-V BuiltIn: " << static_cast<uint32_t>(b);
         }
@@ -317,10 +319,7 @@ class Parser {
     /// @param id a SPIR-V result ID for a function declaration instruction
     /// @returns a Tint function object
     core::ir::Function* Function(uint32_t id) {
-        return functions_.GetOrAdd(id, [&] {
-            return b_.Function(ty_.void_(), core::ir::Function::PipelineStage::kUndefined,
-                               std::nullopt);
-        });
+        return functions_.GetOrAdd(id, [&] { return b_.Function(ty_.void_()); });
     }
 
     /// @param id a SPIR-V result ID
@@ -473,9 +472,10 @@ class Parser {
 
             switch (spv::ExecutionMode(mode)) {
                 case spv::ExecutionMode::LocalSize:
-                    func->SetWorkgroupSize(execution_mode.GetSingleWordInOperand(2),
-                                           execution_mode.GetSingleWordInOperand(3),
-                                           execution_mode.GetSingleWordInOperand(4));
+                    func->SetWorkgroupSize(
+                        b_.Constant(u32(execution_mode.GetSingleWordInOperand(2))),
+                        b_.Constant(u32(execution_mode.GetSingleWordInOperand(3))),
+                        b_.Constant(u32(execution_mode.GetSingleWordInOperand(4))));
                     break;
                 case spv::ExecutionMode::DepthReplacing:
                 case spv::ExecutionMode::OriginUpperLeft:
@@ -546,6 +546,12 @@ class Parser {
             indices.Push(Value(inst.GetSingleWordOperand(i)));
         }
         auto* base = Value(inst.GetSingleWordOperand(2));
+
+        if (indices.IsEmpty()) {
+            // There are no indices, so just forward the base object.
+            AddValue(inst.result_id(), base);
+            return;
+        }
 
         // Propagate the access mode of the base object.
         auto access_mode = core::Access::kUndefined;
@@ -645,6 +651,9 @@ class Parser {
                     break;
                 case spv::Decoration::Sample:
                     interpolation().sampling = core::InterpolationSampling::kSample;
+                    break;
+                case spv::Decoration::Index:
+                    io_attributes.blend_src = deco->GetSingleWordOperand(2);
                     break;
                 default:
                     TINT_UNIMPLEMENTED() << "unhandled decoration " << d;

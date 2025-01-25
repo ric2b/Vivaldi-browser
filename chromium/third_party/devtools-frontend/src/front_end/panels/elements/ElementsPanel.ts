@@ -45,16 +45,16 @@ import * as TreeOutline from '../../ui/components/tree_outline/tree_outline.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
-import {type AXTreeNodeData} from './AccessibilityTreeUtils.js';
+import type {AXTreeNodeData} from './AccessibilityTreeUtils.js';
 import {AccessibilityTreeView} from './AccessibilityTreeView.js';
 import {ColorSwatchPopoverIcon} from './ColorSwatchPopoverIcon.js';
 import * as ElementsComponents from './components/components.js';
 import {ComputedStyleWidget} from './ComputedStyleWidget.js';
 import elementsPanelStyles from './elementsPanel.css.js';
-import {type ElementsTreeElement} from './ElementsTreeElement.js';
+import type {ElementsTreeElement} from './ElementsTreeElement.js';
 import {ElementsTreeElementHighlighter} from './ElementsTreeElementHighlighter.js';
 import {ElementsTreeOutline} from './ElementsTreeOutline.js';
-import {type MarkerDecorator} from './MarkerDecorator.js';
+import type {MarkerDecorator} from './MarkerDecorator.js';
 import {MetricsSidebarPane} from './MetricsSidebarPane.js';
 import {
   Events as StylesSidebarPaneEvents,
@@ -110,7 +110,7 @@ const UIStrings = {
   /**
    * @description A context menu item to reveal a node in the DOM tree of the Elements Panel
    */
-  revealInElementsPanel: 'Reveal in Elements panel',
+  openInElementsPanel: 'Open in Elements panel',
   /**
    * @description Warning/error text displayed when a node cannot be found in the current page.
    */
@@ -461,10 +461,11 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
   }
 
   override focus(): void {
-    if (this.treeOutlines.size) {
-      this.treeOutlines.values().next().value.focus();
-    } else {
+    const firstTreeOutline = this.treeOutlines.values().next();
+    if (firstTreeOutline.done) {
       this.domTreeContainer.focus();
+    } else {
+      firstTreeOutline.value.focus();
     }
   }
 
@@ -1082,13 +1083,13 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
     UI.ARIAUtils.setLabel(contentElement, i18nString(UIStrings.sidePanelContent));
 
     const stylesView = new UI.View.SimpleView(
-        i18nString(UIStrings.styles), /* isWebComponent */ undefined, SidebarPaneTabId.STYLES as Lowercase<string>);
+        i18nString(UIStrings.styles), /* useShadowDom */ undefined, SidebarPaneTabId.STYLES as Lowercase<string>);
     this.sidebarPaneView.appendView(stylesView);
     stylesView.element.classList.add('flex-auto');
     stylesSplitWidget.show(stylesView.element);
 
     const computedView = new UI.View.SimpleView(
-        i18nString(UIStrings.computed), /* isWebComponent */ undefined, SidebarPaneTabId.COMPUTED as Lowercase<string>);
+        i18nString(UIStrings.computed), /* useShadowDom */ undefined, SidebarPaneTabId.COMPUTED as Lowercase<string>);
     computedView.element.classList.add('composite', 'fill');
 
     tabbedPane.addEventListener(UI.TabbedPane.Events.TabSelected, tabSelected, this);
@@ -1292,7 +1293,7 @@ export class ContextMenuProvider implements
       return;
     }
     contextMenu.revealSection().appendItem(
-        i18nString(UIStrings.revealInElementsPanel), () => Common.Revealer.reveal(object),
+        i18nString(UIStrings.openInElementsPanel), () => Common.Revealer.reveal(object),
         {jslogContext: 'elements.reveal-node'});
   }
 }

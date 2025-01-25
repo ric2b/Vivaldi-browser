@@ -1,17 +1,13 @@
-SKIP: INVALID
+#version 310 es
+precision highp float;
+precision highp int;
 
-
-enable chromium_experimental_framebuffer_fetch;
-
-@fragment
-fn f(@color(0) fbf : vec4f) {
-  g(fbf.y);
+in vec4 f_Input;
+void g(float a) {
 }
-
-fn g(a : f32) {
+void f_inner(vec4 fbf) {
+  g(fbf[1u]);
 }
-
-Failed to generate: <dawn>/test/tint/extensions/texel_fetch/zero_outputs/single_input.wgsl:1:8 error: GLSL backend does not support extension 'chromium_experimental_framebuffer_fetch'
-enable chromium_experimental_framebuffer_fetch;
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
+void main() {
+  f_inner(f_Input);
+}

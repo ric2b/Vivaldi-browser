@@ -423,11 +423,7 @@ class BotUpdateApi(recipe_api.RecipeApi):
         commit_positions=self._test_data.get('commit_positions', True),
     ))
 
-    name = 'bot_update'
-    if not patch:
-      name += ' (without patch)'
-    if suffix:
-      name += ' - %s' % suffix
+    name = self.step_name(patch, suffix)
 
     # Ah hah! Now that everything is in place, lets run bot_update!
     step_result = None
@@ -691,3 +687,11 @@ class BotUpdateApi(recipe_api.RecipeApi):
 
     self.ensure_checkout(
         patch=False, no_fetch_tags=True, update_presentation=False)
+
+  def step_name(self, patch, suffix):
+    name = 'bot_update'
+    if not patch:
+      name += ' (without patch)'
+    if suffix:
+      name += f' - {suffix}'
+    return name

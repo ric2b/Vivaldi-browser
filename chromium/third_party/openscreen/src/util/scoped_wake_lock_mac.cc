@@ -30,10 +30,9 @@ class ScopedWakeLockMac : public ScopedWakeLock {
   static LockState lock_state_;
 };
 
-SerialDeletePtr<ScopedWakeLock> ScopedWakeLock::Create(
-    TaskRunner& task_runner) {
-  return SerialDeletePtr<ScopedWakeLock>(task_runner,
-                                         new ScopedWakeLockMac(task_runner));
+ScopedWakeLockPtr ScopedWakeLock::Create(TaskRunner& task_runner) {
+  return TaskRunnerDeleter::MakeUnique<ScopedWakeLockMac>(task_runner,
+                                                          task_runner);
 }
 
 ScopedWakeLockMac::ScopedWakeLockMac(TaskRunner& task_runner)

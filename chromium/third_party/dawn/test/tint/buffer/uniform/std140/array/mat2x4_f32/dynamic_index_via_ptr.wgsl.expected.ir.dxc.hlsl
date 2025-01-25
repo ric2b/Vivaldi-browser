@@ -3,9 +3,9 @@ cbuffer cbuffer_a : register(b0) {
   uint4 a[8];
 };
 RWByteAddressBuffer s : register(u1);
-static int counter = 0;
+static int counter = int(0);
 int i() {
-  counter = (counter + 1);
+  counter = (counter + int(1));
   return counter;
 }
 
@@ -16,7 +16,7 @@ float2x4 v(uint start_byte_offset) {
 
 typedef float2x4 ary_ret[4];
 ary_ret v_2(uint start_byte_offset) {
-  float2x4 a[4] = (float2x4[4])0;
+  float2x4 a_1[4] = (float2x4[4])0;
   {
     uint v_3 = 0u;
     v_3 = 0u;
@@ -25,14 +25,14 @@ ary_ret v_2(uint start_byte_offset) {
       if ((v_4 >= 4u)) {
         break;
       }
-      a[v_4] = v((start_byte_offset + (v_4 * 32u)));
+      a_1[v_4] = v((start_byte_offset + (v_4 * 32u)));
       {
         v_3 = (v_4 + 1u);
       }
       continue;
     }
   }
-  float2x4 v_5[4] = a;
+  float2x4 v_5[4] = a_1;
   return v_5;
 }
 
@@ -40,10 +40,9 @@ ary_ret v_2(uint start_byte_offset) {
 void f() {
   uint v_6 = (32u * uint(i()));
   uint v_7 = (16u * uint(i()));
-  float2x4 v_8[4] = v_2(0u);
+  float2x4 l_a[4] = v_2(0u);
   float2x4 l_a_i = v(v_6);
   float4 l_a_i_i = asfloat(a[((v_6 + v_7) / 16u)]);
-  float2x4 l_a[4] = v_8;
-  s.Store(0u, asuint((((asfloat(a[((v_6 + v_7) / 16u)][(((v_6 + v_7) % 16u) / 4u)]) + l_a[0][0][0u]) + l_a_i[0][0u]) + l_a_i_i[0u])));
+  s.Store(0u, asuint((((asfloat(a[((v_6 + v_7) / 16u)][(((v_6 + v_7) % 16u) / 4u)]) + l_a[int(0)][int(0)][0u]) + l_a_i[int(0)][0u]) + l_a_i_i[0u])));
 }
 

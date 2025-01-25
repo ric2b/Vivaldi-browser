@@ -17,7 +17,7 @@ public class SecurityStatusIcon {
             @ConnectionSecurityLevel int securityLevel,
             boolean isSmallDevice,
             boolean skipIconForNeutralState,
-            boolean useUpdatedConnectionSecurityIndicators,
+            boolean useLockIconForSecureState,
             Integer trackerBlockerIcon) { // Vivaldi
         // Vivaldi: We replace the pageInfo icon with VivaldiTrackerBlocker icon in the url bar.
         int validRefreshIcon = trackerBlockerIcon == null ? R.drawable.omnibox_https_valid_refresh
@@ -33,9 +33,9 @@ public class SecurityStatusIcon {
                 return R.drawable.omnibox_dangerous;
             case ConnectionSecurityLevel.SECURE_WITH_POLICY_INSTALLED_CERT:
             case ConnectionSecurityLevel.SECURE:
-                return useUpdatedConnectionSecurityIndicators
-                        ? validRefreshIcon // Vivaldi
-                        : R.drawable.omnibox_https_valid;
+                return useLockIconForSecureState
+                        ? R.drawable.omnibox_https_valid
+                        : validRefreshIcon; // Vivaldi
             default:
                 assert false;
         }

@@ -228,10 +228,10 @@ void main() {
       } else {
         break;
       }
-      float3 v_41 = m[c];
+      uint v_41 = c;
       float v_42 = float(((c * 3u) + 1u));
       float v_43 = float(((c * 3u) + 2u));
-      v_41 = float3(v_42, v_43, float(((c * 3u) + 3u)));
+      m[v_41] = float3(v_42, v_43, float(((c * 3u) + 3u)));
       {
         c = (c + 1u);
       }
@@ -240,33 +240,26 @@ void main() {
   }
   float3x3 a = m;
   v_40(0u, a);
-  S v_44 = {m};
-  S a_1 = v_44;
+  S a_1 = {m};
   v_39(0u, a_1);
-  float3x3 v_45[1] = (float3x3[1])0;
-  S2 v_46 = {v_45};
-  S2 a_2 = v_46;
+  float3x3 v_44[1] = {m};
+  S2 a_2 = {v_44};
   v_36(0u, a_2);
-  S v_47 = {m};
-  S3 v_48 = {v_47};
-  S3 a_3 = v_48;
+  S v_45 = {m};
+  S3 a_3 = {v_45};
   v_30(0u, a_3);
-  S v_49 = {m};
-  S v_50[1] = (S[1])0;
-  S4 v_51 = {v_50};
-  S4 a_4 = v_51;
+  S v_46 = {m};
+  S v_47[1] = {v_46};
+  S4 a_4 = {v_47};
   v_26(0u, a_4);
-  float3x3 v_52[1] = (float3x3[1])0;
-  float3x3 a_5[1] = v_52;
+  float3x3 a_5[1] = {m};
   v_17(0u, a_5);
-  S v_53 = {m};
-  S v_54[1] = (S[1])0;
-  S a_6[1] = v_54;
+  S v_48 = {m};
+  S a_6[1] = {v_48};
   v_12(0u, a_6);
-  float3x3 v_55[1] = (float3x3[1])0;
-  S2 v_56 = {v_55};
-  S2 v_57[1] = (S2[1])0;
-  S2 a_7[1] = v_57;
+  float3x3 v_49[1] = {m};
+  S2 v_50 = {v_49};
+  S2 a_7[1] = {v_50};
   v_6(0u, a_7);
 }
 

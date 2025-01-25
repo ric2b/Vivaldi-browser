@@ -53,7 +53,7 @@ class MockPaymentsAutofillClient : public payments::TestPaymentsAutofillClient {
 
 class AutofillMetricsBaseTest {
  public:
-  explicit AutofillMetricsBaseTest(bool is_in_any_main_frame = true);
+  AutofillMetricsBaseTest();
   virtual ~AutofillMetricsBaseTest();
 
  protected:
@@ -165,8 +165,7 @@ class AutofillMetricsBaseTest {
 
   void SubmitForm(const FormData& form) {
     autofill_manager().OnFormSubmitted(
-        form, /*known_success=*/false,
-        mojom::SubmissionSource::FORM_SUBMISSION);
+        form, mojom::SubmissionSource::FORM_SUBMISSION);
   }
 
   // Mocks a credit card fetching was completed. This mock starts from the
@@ -194,8 +193,8 @@ class AutofillMetricsBaseTest {
       const FormData& form,
       size_t field_index = 0,
       SuggestionType suggestion_type = SuggestionType::kAddressEntry) {
-    autofill_manager().DidShowSuggestions({suggestion_type}, form,
-                                          form.fields()[field_index]);
+    autofill_manager().DidShowSuggestions(
+        {suggestion_type}, form, form.fields()[field_index].global_id());
   }
 
   void FillTestProfile(const FormData& form) {
@@ -205,7 +204,8 @@ class AutofillMetricsBaseTest {
   void FillProfileByGUID(const FormData& form,
                          const std::string& profile_guid) {
     autofill_manager().FillOrPreviewProfileForm(
-        mojom::ActionPersistence::kFill, form, form.fields().front(),
+        mojom::ActionPersistence::kFill, form,
+        form.fields().front().global_id(),
         *personal_data().address_data_manager().GetProfileByGUID(profile_guid),
         {.trigger_source = AutofillTriggerSource::kPopup});
   }
@@ -255,7 +255,6 @@ class AutofillMetricsBaseTest {
         *autofill_client_->GetPaymentsAutofillClient());
   }
 
-  const bool is_in_any_main_frame_ = true;
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   test::AutofillUnitTestEnvironment autofill_test_environment_;

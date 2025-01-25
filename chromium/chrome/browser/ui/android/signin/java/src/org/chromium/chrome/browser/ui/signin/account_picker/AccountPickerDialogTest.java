@@ -40,6 +40,7 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
+import org.chromium.components.signin.test.util.TestAccounts;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
 import org.chromium.ui.test.util.BlankUiTestActivityTestCase;
@@ -65,18 +66,12 @@ public class AccountPickerDialogTest extends BlankUiTestActivityTestCase {
 
     @Mock private AccountPickerCoordinator.Listener mListenerMock;
 
-    private final String mFullName1 = "Test Account1";
-
-    private final String mAccountName1 = "test.account1@gmail.com";
-
-    private final String mAccountName2 = "test.account2@gmail.com";
-
     private AccountPickerDialogCoordinator mCoordinator;
 
     @Before
     public void setUp() {
-        mAccountManagerTestRule.addAccount(mAccountName1, mFullName1, null, null);
-        mAccountManagerTestRule.addAccount(mAccountName2, "", null, null);
+        mAccountManagerTestRule.addAccount(TestAccounts.ACCOUNT1);
+        mAccountManagerTestRule.addAccount(TestAccounts.ACCOUNT2);
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     mCoordinator =
@@ -115,17 +110,19 @@ public class AccountPickerDialogTest extends BlankUiTestActivityTestCase {
     @MediumTest
     @EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     public void testSelectDefaultAccount() {
-        onView(withText(mAccountName1)).inRoot(isDialog()).check(matches(isDisplayed()));
-        onView(withText(mFullName1)).inRoot(isDialog()).perform(click());
-        verify(mListenerMock).onAccountSelected(mAccountName1);
+        onView(withText(TestAccounts.ACCOUNT1.getEmail()))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withText(TestAccounts.ACCOUNT1.getFullName())).inRoot(isDialog()).perform(click());
+        verify(mListenerMock).onAccountSelected(TestAccounts.ACCOUNT1.getEmail());
     }
 
     @Test
     @MediumTest
     @EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     public void testSelectNonDefaultAccount() {
-        onView(withText(mAccountName2)).inRoot(isDialog()).perform(click());
-        verify(mListenerMock).onAccountSelected(mAccountName2);
+        onView(withText(TestAccounts.ACCOUNT2.getEmail())).inRoot(isDialog()).perform(click());
+        verify(mListenerMock).onAccountSelected(TestAccounts.ACCOUNT2.getEmail());
     }
 
     @Test

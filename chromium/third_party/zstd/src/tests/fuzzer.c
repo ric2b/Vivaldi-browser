@@ -2450,7 +2450,7 @@ static int basicUnitTests(U32 const seed, double compressibility)
                                                  3742, 3675, 3674, 3665, 3664,
                                                  3663, 3662, 3661, 3660, 3660,
                                                  3660, 3660, 3660 };
-            size_t const target_wdict_cSize[22+1] =  { 2830, 2896, 2893, 2820, 2940,
+            size_t const target_wdict_cSize[22+1] =  { 2830, 2896, 2893, 2840, 2950,
                                                        2950, 2950, 2925, 2900, 2892,
                                                        2910, 2910, 2910, 2780, 2775,
                                                        2765, 2760, 2755, 2754, 2753,
@@ -3653,16 +3653,19 @@ static int basicUnitTests(U32 const seed, double compressibility)
         ZSTD_freeDCtx(dctx);
     }
 
-    /* long rle test */
+    /* rle detection test: must compress better blocks with a single identical byte repeated */
     {   size_t sampleSize = 0;
-        size_t expectedCompressedSize = 39; /* block 1, 2: compressed, block 3: RLE, zstd 1.4.4 */
-        DISPLAYLEVEL(3, "test%3i : Long RLE test : ", testNb++);
-        memset((char*)CNBuffer+sampleSize, 'B', 256 KB - 1);
-        sampleSize += 256 KB - 1;
-        memset((char*)CNBuffer+sampleSize, 'A', 96 KB);
-        sampleSize += 96 KB;
+        size_t maxCompressedSize = 46; /* block 1, 2: compressed, block 3: RLE, zstd 1.4.4 */
+        DISPLAYLEVEL(3, "test%3i : RLE detection test : ", testNb++);
+        memset((char*)CNBuffer+sampleSize, 'B', 256 KB - 2);
+        sampleSize += 256 KB - 2;
+        memset((char*)CNBuffer+sampleSize, 'A', 100 KB);
+        sampleSize += 100 KB;
         cSize = ZSTD_compress(compressedBuffer, ZSTD_compressBound(sampleSize), CNBuffer, sampleSize, 1);
-        if (ZSTD_isError(cSize) || cSize > expectedCompressedSize) goto _output_error;
+        if (ZSTD_isError(cSize) || cSize > maxCompressedSize) {
+            DISPLAYLEVEL(4, "error: cSize %u > %u expected ! \n", (unsigned)cSize, (unsigned)maxCompressedSize);
+            goto _output_error;
+        }
         { CHECK_NEWV(regenSize, ZSTD_decompress(decodedBuffer, sampleSize, compressedBuffer, cSize));
           if (regenSize!=sampleSize) goto _output_error; }
         DISPLAYLEVEL(3, "OK \n");

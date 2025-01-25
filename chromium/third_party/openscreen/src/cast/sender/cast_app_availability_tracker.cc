@@ -146,7 +146,7 @@ std::vector<std::string> CastAppAvailabilityTracker::GetAvailableReceivers(
     const CastMediaSource& source) const {
   std::vector<std::string> receiver_ids;
   // For each receiver, check if there is at least one available app in
-  // |source|.
+  // `source`.
   for (const auto& availabilities : app_availabilities_) {
     for (const std::string& app_id : source.app_ids()) {
       const auto& availabilities_map = availabilities.second;

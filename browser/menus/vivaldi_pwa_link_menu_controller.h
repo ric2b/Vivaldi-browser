@@ -8,7 +8,7 @@
 #ifndef BROWSER_MENUS_VIVALDI_PWA_LINK_MENU_CONTROLLER_H_
 #define BROWSER_MENUS_VIVALDI_PWA_LINK_MENU_CONTROLLER_H_
 
-#include "ui/base/models/simple_menu_model.h"
+#include "ui/menus/simple_menu_model.h"
 
 class Browser;
 class Profile;

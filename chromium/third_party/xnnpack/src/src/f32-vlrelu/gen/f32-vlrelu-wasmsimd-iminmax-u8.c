@@ -19,14 +19,14 @@ void xnn_f32_vlrelu_ukernel__wasmsimd_iminmax_u8(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_lrelu_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f32_lrelu_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const v128_t vslope = wasm_v128_load64_splat(params->wasmsimd.slope);
+  const v128_t vslope = wasm_v128_load32_splat(&params->scalar.slope);
   const v128_t vzero = wasm_i32x4_const_splat(0);
   for (; batch >= 8 * sizeof(float); batch -= 8 * sizeof(float)) {
     v128_t vx0123 = wasm_v128_load(input);

@@ -301,6 +301,7 @@ class StructureType(Record, Type):
                 m for m in json_data['members'] if is_enabled(m)
             ]
         Type.__init__(self, name, dict(json_data, **json_data_override))
+        self.out = json_data.get('out', False)
         self.chained = json_data.get('chained', None)
         self.extensible = json_data.get('extensible', None)
         if self.chained:
@@ -332,14 +333,18 @@ class StructureType(Record, Type):
 
     @property
     def output(self):
-        return self.chained == "out" or self.extensible == "out"
+        # self.out is a temporary way to express that this is an output structure
+        # without also making it extensible. See
+        # https://dawn-review.googlesource.com/c/dawn/+/212174/comment/2271690b_1fd82ea9/
+        return self.chained == "out" or self.extensible == "out" or self.out
 
     @property
     def has_free_members_function(self):
         if not self.output:
             return False
         for m in self.members:
-            if m.annotation != 'value':
+            if m.annotation != 'value' \
+                or m.type.name.canonical_case() == 'string view':
                 return True
         return False
 
@@ -416,8 +421,6 @@ def linked_record_members(json_data, types):
                     member.constant_length = 1
                 else:
                     assert False
-            elif m['length'] == 'strlen':
-                member.length = 'strlen'
             elif isinstance(m['length'], int):
                 assert m['length'] > 0
                 member.length = "constant"
@@ -741,7 +744,7 @@ def compute_kotlin_params(loaded_json, kotlin_json):
                     container_type = deepcopy(argument)
                     container_type.length = 'size_t'
                     return container_type
-                if (method.return_type.name.get() == 'status'
+                if (method.return_type.name.get() in ['status', 'void']
                         and argument.type.category == 'structure'):
                     return argument
 
@@ -765,8 +768,7 @@ def compute_kotlin_params(loaded_json, kotlin_json):
         # TODO(352710628) support converting callback info.
         if structure.name.canonical_case().endswith(" callback info"):
             return False
-        if (structure.name.canonical_case() == "string view"
-                or structure.name.canonical_case() == "nullable string view"):
+        if structure.name.canonical_case() == "string view":
             return False
         return True
 
@@ -814,9 +816,6 @@ def as_cType(c_prefix, name):
     # Special case for 'bool' because it has a typedef for compatibility.
     if name.native and name.get() != 'bool':
         return name.concatcase()
-    elif name.get() == 'nullable string view':
-        # nullable string view type doesn't exist in C.
-        return c_prefix + 'StringView'
     else:
         return c_prefix + name.CamelCase()
 
@@ -1240,6 +1239,10 @@ class MultiGeneratorFromDawnJSON(Generator):
                     'api_cpp_chained_struct.h',
                     'src/emdawnwebgpu/include/webgpu/webgpu_cpp_chained_struct.h',
                     [RENDER_PARAMS_BASE, params_emscripten]))
+            renders.append(
+                FileRender('api_cpp_print.h',
+                           'src/emdawnwebgpu/include/dawn/webgpu_cpp_print.h',
+                           [RENDER_PARAMS_BASE, params_emscripten]))
 
         if 'emdawnwebgpu_js' in targets:
             assert api == 'webgpu'
@@ -1431,8 +1434,7 @@ class MultiGeneratorFromDawnJSON(Generator):
 
             by_category = params_kotlin['by_category']
             for structure in by_category['structure']:
-                if (structure.name.get() != "string view"
-                        and structure.name.get() != "nullable string view"):
+                if structure.name.get() != "string view":
                     renders.append(
                         FileRender('art/api_kotlin_structure.kt',
                                    'java/' + jni_name(structure) + '.kt', [
@@ -1484,7 +1486,7 @@ class MultiGeneratorFromDawnJSON(Generator):
             params_kotlin = compute_kotlin_params(loaded_json, kotlin_json)
 
             imported_templates += [
-                "art/api_jni_types.kt",
+                "art/api_jni_types.cpp",
                 "art/kotlin_record_conversion.cpp",
             ]
 

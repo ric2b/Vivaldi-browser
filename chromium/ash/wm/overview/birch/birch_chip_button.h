@@ -11,12 +11,13 @@
 #include "base/gtest_prod_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/models/image_model.h"
-#include "ui/base/models/simple_menu_model.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/views/metadata/view_factory.h"
 
 namespace views {
+class AnimatedImageView;
+class BoxLayoutView;
 class FlexLayout;
-class ImageView;
 class Label;
 }  // namespace views
 
@@ -24,6 +25,7 @@ namespace ash {
 
 class BirchItem;
 class PillButton;
+class TabAppSelectionHost;
 
 // A compact view of an app, displaying its icon, name, a brief description, and
 // an optional call to action.
@@ -37,6 +39,21 @@ class ASH_EXPORT BirchChipButton : public BirchChipButtonBase,
   BirchChipButton& operator=(const BirchChipButton&) = delete;
   ~BirchChipButton() override;
 
+  views::View* addon_view() { return addon_view_; }
+  const views::View* addon_view() const { return addon_view_; }
+
+  TabAppSelectionHost* tab_app_selection_widget() {
+    return tab_app_selection_widget_.get();
+  }
+
+  void OnSelectionWidgetVisibilityChanged();
+
+  void ShutdownSelectionWidget();
+
+  // Called when the coral selection view has an item removed, then we need to
+  // update the `CoralGroupedIconImage`.
+  void ReloadIcon();
+
   // BirchChipButtonBase:
   void Init(BirchItem* item) override;
   const BirchItem* GetItem() const override;
@@ -46,26 +63,27 @@ class ASH_EXPORT BirchChipButton : public BirchChipButtonBase,
   // ui::SimpleMenuModel::Delegate:
   void ExecuteCommand(int command_id, int event_flags) override;
 
-  const views::View* addon_view_for_testing() const { return addon_view_; }
-
  private:
   FRIEND_TEST_ALL_PREFIXES(BirchBarTest, NoCrashOnSettingIconAfterShutdown);
   FRIEND_TEST_ALL_PREFIXES(BirchBarTest, UpdateLostMediaChip);
+  FRIEND_TEST_ALL_PREFIXES(CoralBrowserTest, AsyncGroupTitle);
+  FRIEND_TEST_ALL_PREFIXES(CoralBrowserTest, GroupTitleLoadingFail);
+
   class ChipMenuController;
 
   void SetAddon(std::unique_ptr<views::View> addon_view);
 
-  // Stylizes the icon based on the type of the item, the type of the item's
-  // secondary icon, and whether the icon image needs to be minified.
-  // `use_smaller_dimension` will only be true for icons loaded via
-  // `DownloadImageFromUrl` in `BirchItem`.
-  void StylizeIconForItemType(BirchItemType type,
-                              SecondaryIconType secondary_icon_type,
-                              bool use_smaller_dimension);
-
   // Sets the item icon.
-  void SetIconImage(const ui::ImageModel& icon_image,
-                    SecondaryIconType secondary_icon_image);
+  void SetIconImage(PrimaryIconType primary_icon_type,
+                    SecondaryIconType secondary_icon_type,
+                    const ui::ImageModel& icon_image);
+
+  // Callback for the coral addon button. Should only be clicked for a coral
+  // item.
+  void OnCoralAddonClicked();
+
+  // Builds `title_loading_animated_image_`.
+  void BuildTitleLoadingAnimation();
 
   // The chip context menu controller.
   std::unique_ptr<ChipMenuController> chip_menu_controller_;
@@ -76,11 +94,15 @@ class ASH_EXPORT BirchChipButton : public BirchChipButtonBase,
   // The components owned by the chip view.
   raw_ptr<views::FlexLayout> flex_layout_ = nullptr;
   raw_ptr<views::View> icon_parent_view_ = nullptr;
-  raw_ptr<views::ImageView> primary_icon_view_ = nullptr;
-  raw_ptr<views::ImageView> secondary_icon_view_ = nullptr;
+  raw_ptr<views::BoxLayoutView> titles_container_ = nullptr;
   raw_ptr<views::Label> title_ = nullptr;
+  raw_ptr<views::AnimatedImageView> title_loading_animated_image_ = nullptr;
   raw_ptr<views::Label> subtitle_ = nullptr;
   raw_ptr<views::View> addon_view_ = nullptr;
+
+  // The selection menu to select tabs and apps for coral launching. Created
+  // once the coral add on button is clicked.
+  std::unique_ptr<TabAppSelectionHost> tab_app_selection_widget_;
 
   base::WeakPtrFactory<BirchChipButton> weak_factory_{this};
 };

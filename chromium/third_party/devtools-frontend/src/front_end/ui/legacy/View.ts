@@ -4,8 +4,8 @@
 
 import * as Platform from '../../core/platform/platform.js';
 
-import {type TabbedPane} from './TabbedPane.js';
-import {type ToolbarItem, type ToolbarMenuButton} from './Toolbar.js';
+import type {TabbedPane} from './TabbedPane.js';
+import type {ToolbarItem, ToolbarMenuButton} from './Toolbar.js';
 import {ViewManager} from './ViewManager.js';
 import {VBox, type Widget} from './Widget.js';
 
@@ -33,8 +33,8 @@ export class SimpleView extends VBox implements View {
   readonly #title: Platform.UIString.LocalizedString;
   readonly #viewId: Lowercase<string>;
 
-  constructor(title: Platform.UIString.LocalizedString, isWebComponent?: boolean, viewId?: Lowercase<string>) {
-    super(isWebComponent);
+  constructor(title: Platform.UIString.LocalizedString, useShadowDom?: boolean, viewId?: Lowercase<string>) {
+    super(useShadowDom);
     this.#title = title;
     if (viewId) {
       if (!Platform.StringUtilities.isExtendedKebabCase(viewId)) {

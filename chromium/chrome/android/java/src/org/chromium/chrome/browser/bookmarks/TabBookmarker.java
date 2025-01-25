@@ -33,7 +33,6 @@ public class TabBookmarker {
     private final Supplier<BookmarkModel> mBookmarkModelSupplier;
     private final Supplier<BottomSheetController> mBottomSheetControllerSupplier;
     private final Supplier<SnackbarManager> mSnackbarManagerSupplier;
-    private final boolean mIsCustomTab;
 
     /**
      * Constructor.
@@ -55,7 +54,6 @@ public class TabBookmarker {
         mBookmarkModelSupplier = bookmarkModelSupplier;
         mBottomSheetControllerSupplier = bottomSheetControllerSupplier;
         mSnackbarManagerSupplier = snackbarManagerSupplier;
-        mIsCustomTab = isCustomTab;
     }
 
     /**
@@ -127,6 +125,13 @@ public class TabBookmarker {
                     }
 
                     BookmarkId bookmarkId = bookmarkModel.getUserBookmarkIdForTab(tabToBookmark);
+                    // Vivaldi - open Edit dialog only if the URL is added as a Normal Bookmark,
+                    // not as a Reading list item.
+                    // Add tab as a new bookmark if it doesn't exist in BookmarkType.NORMAL
+                    if (bookmarkId != null && bookmarkId.getType() == BookmarkType.READING_LIST)
+                        bookmarkId = bookmarkModel.getMostRecentlyAddedUserNormalBookmarkIdForUrl(
+                                tabToBookmark.getOriginalUrl());
+                    if (bookmarkModel.isInsideTrashFolder(bookmarkId)) bookmarkId = null;
                     BookmarkItem currentBookmarkItem =
                             bookmarkId == null ? null : bookmarkModel.getBookmarkById(bookmarkId);
                     onBookmarkModelLoaded(

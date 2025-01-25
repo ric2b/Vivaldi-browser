@@ -15,11 +15,6 @@
 #import "ios/public/provider/chrome/browser/follow/follow_api.h"
 
 // static
-FollowService* FollowServiceFactory::GetForBrowserState(ProfileIOS* profile) {
-  return GetForProfile(profile);
-}
-
-// static
 FollowService* FollowServiceFactory::GetForProfile(ProfileIOS* profile) {
   return static_cast<FollowService*>(
       GetInstance()->GetServiceForBrowserState(profile, true));
@@ -42,12 +37,11 @@ FollowServiceFactory::~FollowServiceFactory() = default;
 
 std::unique_ptr<KeyedService> FollowServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
 
   FollowConfiguration* configuration = [[FollowConfiguration alloc] init];
   configuration.feedService =
-      DiscoverFeedServiceFactory::GetForBrowserState(browser_state);
+      DiscoverFeedServiceFactory::GetForProfile(profile);
 
   return ios::provider::CreateFollowService(configuration);
 }

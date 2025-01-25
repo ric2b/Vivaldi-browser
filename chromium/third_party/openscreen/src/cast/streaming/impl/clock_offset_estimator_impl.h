@@ -13,8 +13,8 @@
 #include <utility>
 
 #include "cast/streaming/impl/clock_offset_estimator.h"
-#include "cast/streaming/rtp_time.h"
 #include "cast/streaming/impl/statistics_defines.h"
+#include "cast/streaming/rtp_time.h"
 #include "platform/base/trivial_clock_traits.h"
 
 namespace openscreen::cast {

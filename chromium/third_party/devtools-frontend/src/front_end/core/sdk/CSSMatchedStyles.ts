@@ -5,9 +5,9 @@
 import * as Protocol from '../../generated/protocol.js';
 import * as Platform from '../platform/platform.js';
 
-import {cssMetadata} from './CSSMetadata.js';
-import {type CSSModel} from './CSSModel.js';
-import {type CSSProperty} from './CSSProperty.js';
+import {CSSMetadata, cssMetadata, CSSWideKeyword} from './CSSMetadata.js';
+import type {CSSModel} from './CSSModel.js';
+import {CSSProperty} from './CSSProperty.js';
 import * as PropertyParser from './CSSPropertyParser.js';
 import {
   CSSFontPaletteValuesRule,
@@ -17,7 +17,7 @@ import {
   CSSStyleRule,
 } from './CSSRule.js';
 import {CSSStyleDeclaration, Type} from './CSSStyleDeclaration.js';
-import {type DOMNode} from './DOMModel.js';
+import type {DOMNode} from './DOMModel.js';
 
 function containsStyle(styles: CSSStyleDeclaration[]|Set<CSSStyleDeclaration>, query: CSSStyleDeclaration): boolean {
   if (!query.styleSheetId || !query.range) {
@@ -177,6 +177,7 @@ export interface CSSMatchedStylesPayload {
   propertyRules: Protocol.CSS.CSSPropertyRule[];
   cssPropertyRegistrations: Protocol.CSS.CSSPropertyRegistration[];
   fontPaletteValuesRule: Protocol.CSS.CSSFontPaletteValuesRule|undefined;
+  activePositionFallbackIndex: number;
 }
 
 export class CSSRegisteredProperty {
@@ -250,6 +251,7 @@ export class CSSMatchedStyles {
   #styleToDOMCascade: Map<CSSStyleDeclaration, DOMInheritanceCascade>;
   #parentLayoutNodeId: Protocol.DOM.NodeId|undefined;
   #positionTryRules: CSSPositionTryRule[];
+  #activePositionFallbackIndex: number;
   #mainDOMCascade?: DOMInheritanceCascade;
   #pseudoDOMCascades?: Map<Protocol.DOM.PseudoType, DOMInheritanceCascade>;
   #customHighlightPseudoDOMCascades?: Map<string, DOMInheritanceCascade>;
@@ -270,6 +272,7 @@ export class CSSMatchedStyles {
     propertyRules,
     cssPropertyRegistrations,
     fontPaletteValuesRule,
+    activePositionFallbackIndex,
   }: CSSMatchedStylesPayload) {
     this.#cssModelInternal = cssModel;
     this.#nodeInternal = node;
@@ -292,6 +295,7 @@ export class CSSMatchedStyles {
     this.#inheritedStyles = new Set();
     this.#styleToDOMCascade = new Map();
     this.#registeredPropertyMap = new Map();
+    this.#activePositionFallbackIndex = activePositionFallbackIndex;
   }
 
   private async init({
@@ -676,6 +680,10 @@ export class CSSMatchedStyles {
     return this.#positionTryRules;
   }
 
+  activePositionFallbackIndex(): number {
+    return this.#activePositionFallbackIndex;
+  }
+
   pseudoStyles(pseudoType: Protocol.DOM.PseudoType): CSSStyleDeclaration[] {
     Platform.assertNotNullOrUndefined(this.#pseudoDOMCascades);
     const domCascade = this.#pseudoDOMCascades.get(pseudoType);
@@ -703,13 +711,18 @@ export class CSSMatchedStyles {
   }
 
   availableCSSVariables(style: CSSStyleDeclaration): string[] {
-    const domCascade = this.#styleToDOMCascade.get(style) || null;
+    const domCascade = this.#styleToDOMCascade.get(style);
     return domCascade ? domCascade.findAvailableCSSVariables(style) : [];
   }
 
   computeCSSVariable(style: CSSStyleDeclaration, variableName: string): CSSVariableValue|null {
-    const domCascade = this.#styleToDOMCascade.get(style) || null;
+    const domCascade = this.#styleToDOMCascade.get(style);
     return domCascade ? domCascade.computeCSSVariable(style, variableName) : null;
+  }
+
+  resolveGlobalKeyword(property: CSSProperty, keyword: CSSWideKeyword): CSSValueSource|null {
+    const resolved = this.#styleToDOMCascade.get(property.ownerStyle)?.resolveGlobalKeyword(property, keyword);
+    return resolved ? new CSSValueSource(resolved) : null;
   }
 
   isInherited(style: CSSStyleDeclaration): boolean {
@@ -826,10 +839,31 @@ class NodeCascade {
   }
 }
 
+function isRegular(declaration: CSSProperty|CSSRegisteredProperty): declaration is CSSProperty {
+  return 'ownerStyle' in declaration;
+}
+export class CSSValueSource {
+  readonly declaration: CSSProperty|CSSRegisteredProperty;
+  constructor(declaration: CSSProperty|CSSRegisteredProperty) {
+    this.declaration = declaration;
+  }
+
+  get value(): string|null {
+    return isRegular(this.declaration) ? this.declaration.value : this.declaration.initialValue();
+  }
+  get style(): CSSStyleDeclaration {
+    return isRegular(this.declaration) ? this.declaration.ownerStyle : this.declaration.style();
+  }
+  get name(): string {
+    return isRegular(this.declaration) ? this.declaration.name : this.declaration.propertyName();
+  }
+}
+
 export interface CSSVariableValue {
   value: string;
-  declaration: CSSProperty|CSSRegisteredProperty;
+  declaration: CSSValueSource;
 }
+
 class SCCRecordEntry {
   private rootDiscoveryTime: number;
   get isRootEntry(): boolean {
@@ -879,6 +913,13 @@ class SCCRecord {
   }
 }
 
+function* forEach<T>(array: T[], startAfter?: T): Generator<T> {
+  const startIdx = startAfter !== undefined ? array.indexOf(startAfter) + 1 : 0;
+  for (let i = startIdx; i < array.length; ++i) {
+    yield array[i];
+  }
+}
+
 class DOMInheritanceCascade {
   readonly #nodeCascades: NodeCascade[];
   readonly #propertiesState: Map<CSSProperty, PropertyState>;
@@ -916,6 +957,91 @@ class DOMInheritanceCascade {
     return Array.from(availableCSSVariables.keys());
   }
 
+  #findPropertyInPreviousStyle(property: CSSProperty, filter: (property: CSSProperty) => boolean): CSSProperty|null {
+    const cascade = this.#styleToNodeCascade.get(property.ownerStyle);
+    if (!cascade) {
+      return null;
+    }
+
+    for (const style of forEach(cascade.styles, property.ownerStyle)) {
+      const candidate =
+          style.allProperties().findLast(candidate => candidate.name === property.name && filter(candidate));
+      if (candidate) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  #findPropertyInParentCascade(property: CSSProperty): CSSProperty|null {
+    const nodeCascade = this.#styleToNodeCascade.get(property.ownerStyle);
+    if (!nodeCascade) {
+      return null;
+    }
+    for (const cascade of forEach(this.#nodeCascades, nodeCascade)) {
+      for (const style of cascade.styles) {
+        const inheritedProperty =
+            style.allProperties().findLast(inheritedProperty => inheritedProperty.name === property.name);
+        if (inheritedProperty) {
+          return inheritedProperty;
+        }
+      }
+    }
+    return null;
+  }
+
+  #findPropertyInParentCascadeIfInherited(property: CSSProperty): CSSProperty|null {
+    if (!cssMetadata().isPropertyInherited(property.name) ||
+        !(this.#findCustomPropertyRegistration(property)?.inherits() ?? true)) {
+      return null;
+    }
+    return this.#findPropertyInParentCascade(property);
+  }
+
+  #findCustomPropertyRegistration(property: CSSProperty): CSSRegisteredProperty|null {
+    const registration = this.#registeredProperties.find(registration => registration.propertyName() === property.name);
+    return registration ? registration : null;
+  }
+
+  resolveGlobalKeyword(property: CSSProperty, keyword: CSSWideKeyword): null|CSSProperty|CSSRegisteredProperty {
+    const isPreviousLayer = (other: CSSProperty): boolean => {
+      // If there's no parent rule on then it isn't layered and is thus not in a previous one.
+      if (!(other.ownerStyle.parentRule instanceof CSSStyleRule)) {
+        return false;
+      }
+      // Element-attached style -> author origin counts as a previous layer transition for revert-layer.
+      if (property.ownerStyle.type === Type.Inline) {
+        return true;
+      }
+      // Compare layers
+      if (property.ownerStyle.parentRule instanceof CSSStyleRule &&
+          other.ownerStyle.parentRule?.origin === Protocol.CSS.StyleSheetOrigin.Regular) {
+        return JSON.stringify(other.ownerStyle.parentRule.layers) !==
+            JSON.stringify(property.ownerStyle.parentRule.layers);
+      }
+      return false;
+    };
+
+    switch (keyword) {
+      case CSSWideKeyword.INITIAL:
+        return this.#findCustomPropertyRegistration(property);
+      case CSSWideKeyword.INHERIT:
+        return this.#findPropertyInParentCascade(property) ?? this.#findCustomPropertyRegistration(property);
+      case CSSWideKeyword.REVERT:
+        return this.#findPropertyInPreviousStyle(
+                   property,
+                   other => other.ownerStyle.parentRule !== null &&
+                       other.ownerStyle.parentRule.origin !==
+                           (property.ownerStyle.parentRule?.origin ?? Protocol.CSS.StyleSheetOrigin.Regular)) ??
+            this.resolveGlobalKeyword(property, CSSWideKeyword.UNSET);
+      case CSSWideKeyword.REVERT_LAYER:
+        return this.#findPropertyInPreviousStyle(property, isPreviousLayer) ??
+            this.resolveGlobalKeyword(property, CSSWideKeyword.REVERT);
+      case CSSWideKeyword.UNSET:
+        return this.#findPropertyInParentCascadeIfInherited(property) ?? this.#findCustomPropertyRegistration(property);
+    }
+  }
+
   computeCSSVariable(style: CSSStyleDeclaration, variableName: string): CSSVariableValue|null {
     const nodeCascade = this.#styleToNodeCascade.get(style);
     if (!nodeCascade) {
@@ -937,9 +1063,24 @@ class DOMInheritanceCascade {
       return computedCSSVariables.get(variableName) || null;
     }
 
-    const definedValue = availableCSSVariables.get(variableName);
+    let definedValue = availableCSSVariables.get(variableName);
     if (definedValue === undefined || definedValue === null) {
       return null;
+    }
+
+    if (definedValue.declaration.declaration instanceof CSSProperty && definedValue.declaration.value &&
+        CSSMetadata.isCSSWideKeyword(definedValue.declaration.value)) {
+      const resolvedProperty =
+          this.resolveGlobalKeyword(definedValue.declaration.declaration, definedValue.declaration.value);
+      if (!resolvedProperty) {
+        return definedValue;
+      }
+      const declaration = new CSSValueSource(resolvedProperty);
+      const {value} = declaration;
+      if (!value) {
+        return definedValue;
+      }
+      definedValue = {declaration, value};
     }
 
     const ast = PropertyParser.tokenizeDeclaration(`--${variableName}`, definedValue.value);
@@ -959,8 +1100,7 @@ class DOMInheritanceCascade {
 
     const matching = PropertyParser.BottomUpTreeMatching.walk(
         ast, [new PropertyParser.VariableMatcher((match: PropertyParser.VariableMatch) => {
-          const parentStyle = 'ownerStyle' in definedValue.declaration ? definedValue.declaration.ownerStyle :
-                                                                         definedValue.declaration.style();
+          const parentStyle = definedValue.declaration.style;
           const nodeCascade = this.#styleToNodeCascade.get(parentStyle);
           if (!nodeCascade) {
             return null;
@@ -972,16 +1112,19 @@ class DOMInheritanceCascade {
               record.updateRoot(childRecord);
               return null;
             }
-          } else {
-            const cssVariableValue = this.innerComputeCSSVariable(nodeCascade, match.name, sccRecord);
-            // Variable reference is resolved, so return it.
-            const childRecord = sccRecord.get(nodeCascade, match.name);
-            // The SCC record for the referenced variable may not exist if the var was already computed in a previous
-            // iteration. That means it's in a different SCC.
-            childRecord && record.updateRoot(childRecord);
-            if (cssVariableValue?.value) {
-              return cssVariableValue?.value;
-            }
+
+            // We've seen the variable before, so we can look up the text directly.
+            return this.#computedCSSVariables.get(nodeCascade)?.get(match.name)?.value ?? null;
+          }
+
+          const cssVariableValue = this.innerComputeCSSVariable(nodeCascade, match.name, sccRecord);
+          // Variable reference is resolved, so return it.
+          const newChildRecord = sccRecord.get(nodeCascade, match.name);
+          // The SCC record for the referenced variable may not exist if the var was already computed in a previous
+          // iteration. That means it's in a different SCC.
+          newChildRecord && record.updateRoot(newChildRecord);
+          if (cssVariableValue?.value !== undefined) {
+            return cssVariableValue.value;
           }
 
           // Variable reference is not resolved, use the fallback.
@@ -993,7 +1136,7 @@ class DOMInheritanceCascade {
         })]);
 
     const decl = PropertyParser.ASTUtils.siblings(PropertyParser.ASTUtils.declValue(matching.ast.tree));
-    const computedText = matching.getComputedTextRange(decl[0], decl[decl.length - 1]);
+    const computedText = decl.length > 0 ? matching.getComputedTextRange(decl[0], decl[decl.length - 1]) : '';
 
     if (record.isRootEntry) {
       // Variables are kept on the stack until all descendents in the same SCC have been visited. That's the case when
@@ -1001,13 +1144,13 @@ class DOMInheritanceCascade {
       const scc = sccRecord.finishSCC(record);
       if (scc.length > 1) {
         for (const entry of scc) {
-          console.assert(entry.nodeCascade !== nodeCascade, 'Circles should be within the cascade');
+          console.assert(entry.nodeCascade === nodeCascade, 'Circles should be within the cascade');
           computedCSSVariables.set(entry.name, null);
         }
         return null;
       }
     }
-    if (matching.hasUnresolvedVarsRange(decl[0], decl[decl.length - 1])) {
+    if (decl.length > 0 && matching.hasUnresolvedVarsRange(decl[0], decl[decl.length - 1])) {
       computedCSSVariables.set(variableName, null);
       return null;
     }
@@ -1087,7 +1230,8 @@ class DOMInheritanceCascade {
     for (const rule of this.#registeredProperties) {
       const initialValue = rule.initialValue();
       accumulatedCSSVariables.set(
-          rule.propertyName(), initialValue !== null ? {value: initialValue, declaration: rule} : null);
+          rule.propertyName(),
+          initialValue !== null ? {value: initialValue, declaration: new CSSValueSource(rule)} : null);
     }
     for (let i = this.#nodeCascades.length - 1; i >= 0; --i) {
       const nodeCascade = this.#nodeCascades[i];
@@ -1096,7 +1240,7 @@ class DOMInheritanceCascade {
         const propertyName = (entry[0] as string);
         const property = (entry[1] as CSSProperty);
         if (propertyName.startsWith('--')) {
-          accumulatedCSSVariables.set(propertyName, {value: property.value, declaration: property});
+          accumulatedCSSVariables.set(propertyName, {value: property.value, declaration: new CSSValueSource(property)});
           variableNames.push(propertyName);
         }
       }

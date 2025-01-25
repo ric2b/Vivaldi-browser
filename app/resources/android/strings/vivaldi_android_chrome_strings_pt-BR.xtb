@@ -3,15 +3,13 @@
 <translationbundle lang="pt-BR">
 <translation id="1397811292916898096">Pesquisar com o <ph name="PRODUCT_NAME" /></translation>
 <translation id="1456207338570705181">Tocar para Pesquisar é um recurso apenas disponível quando o Google é seu mecanismo de busca padrão no Vivaldi. Ele envia a palavra selecionada e a página atual como contexto para o Google Search. Você pode desabilitá-lo nas <ph name="BEGIN_LINK" />Configurações<ph name="END_LINK" />.</translation>
-<translation id="1598449788754183301">Alternar entre guias normais/privadas</translation>
+<translation id="1598449788754183301">Alternar entre abas normais/privadas</translation>
 <translation id="1644574205037202324">Histórico</translation>
-<translation id="17513872634828108">Abas abertas</translation>
 <translation id="1829244130665387512">Encontrar na página</translation>
 <translation id="1910514478706885609">Abrir em nova pilha de abas</translation>
 <translation id="1925021887439448749">Digitar endereço web personalizado</translation>
 <translation id="2038563949887743358">Ativar "Ver versão para computador"</translation>
-<translation id="2139186145475833000">Adicionar à Tela Inicial</translation>
-<translation id="2149973817440762519">Editar Marcadores</translation>
+<translation id="2149973817440762519">Editar Marcador</translation>
 <translation id="2306442503286132111">Marcador salvo na pasta <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Aparência</translation>
 <translation id="2501278716633472235">Voltar</translation>
@@ -22,27 +20,29 @@
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> marcador}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> marcadores}}</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Todos os direitos reservados.</translation>
-<translation id="3234355010754616171">Nova guia privada</translation>
+<translation id="3234355010754616171">Nova aba privada</translation>
 <translation id="3377025655491224618">Aba Privada</translation>
 <translation id="3504699618187058974">Empilhar abas</translation>
 <translation id="3518985090088779359">Aceitar e continuar</translation>
 <translation id="3571177741182643350">Artigos Não-Lidos - Disponíveis Offline:</translation>
 <translation id="3602290021589620013">Pré-visualizar</translation>
 <translation id="3700829948786686853">Bem-vindo ao Vivaldi</translation>
-<translation id="3719826155360621982">Página inicial</translation>
+<translation id="3719826155360621982">Página Inicial</translation>
 <translation id="385051799172605136">Voltar</translation>
 <translation id="399014816462153200">Artigos Lidos:</translation>
 <translation id="4121750346708795461">Ao utilizar este aplicativo, você concorda com o <ph name="BEGIN_LINK1" />Acordo de Licença de Usuário Final<ph name="END_LINK1" /> e com a <ph name="BEGIN_LINK2" />Política de Privacidade<ph name="END_LINK2" /> do Vivaldi.</translation>
 <translation id="4137746084635924146">Idioma atual do dispositivo</translation>
 <translation id="4167670741834902166">Nova Aba Privada</translation>
 <translation id="4195643157523330669">Abrir em uma nova aba</translation>
+<translation id="4225895483398857530">Atalho da barra de ferramentas</translation>
 <translation id="4243710787042215766">Abrir na aba privada</translation>
+<translation id="4304713468139749426">Gerenciador de Senhas</translation>
 <translation id="451872707440238414">Pesquisar seus marcadores</translation>
 <translation id="4526803704855831732">Abas Privadas</translation>
 <translation id="4719086422742491124">Saiba mais sobre tópicos em sites sem deixar a página. Selecione uma ou mais palavras para pesquisar.
 
 Tocar para Pesquisar é um recurso apenas disponível quando o Google é seu mecanismo de busca padrão no Vivaldi.</translation>
-<translation id="4759238208242260848">Downloads</translation>
+<translation id="4759238208242260848">Baixados</translation>
 <translation id="4850886885716139402">Ver</translation>
 <translation id="4883379392681899581">Sair do modo privado</translation>
 <translation id="4943872375798546930">Nenhum resultado</translation>
@@ -50,29 +50,30 @@ Tocar para Pesquisar é um recurso apenas disponível quando o Google é seu mec
 <translation id="5079259810715830221">Quando um site da Google pergunta se pode carregar links previamente de suas páginas (pré-carregamento), o navegador Vivaldi encripta e carrega essas páginas através dos servidores da Google sem utilizar cookies. Isso esconde a sua identidade do site pré-carregado.</translation>
 <translation id="5118676864324397542">Armazenamento do <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Privado</translation>
-<translation id="5233638681132016545">Nova guia</translation>
+<translation id="5233638681132016545">Nova aba</translation>
 <translation id="5375131951310889874">Saiba mais sobre tópicos em sites sem deixar a página. Tocar para Pesquisar é um recurso apenas disponível quando o Google é seu mecanismo de busca padrão no Vivaldi. Ele envia a palavra e o conteúdo relacionado ao redor dela para o Google Search, retornando definições, imagens, resultados de busca, etc...
 
 Para ajustar o termo pesquisado, pressione por mais tempo para selecionar. Para refinar sua pesquisa, deslize o painel até em cima e toque na caixa de pesquisa.</translation>
 <translation id="572328651809341494">Abas recentes</translation>
 <translation id="6150320133806434356">Marcador salvo</translation>
-<translation id="6336451774241870485">Nova guia privada</translation>
-<translation id="6404511346730675251">Editar marcador</translation>
+<translation id="6336451774241870485">Nova aba privada</translation>
+<translation id="6404511346730675251">Editar Marcador</translation>
 <translation id="6585139692466700358">Sugerir para traduzir paginas noutros idiomas, utilizando o serviço de tradução do Vivaldi</translation>
 <translation id="6593061639179217415">Versão para computador</translation>
-<translation id="6610147964972079463">Fechar guias privadas</translation>
+<translation id="6610147964972079463">Fechar abas privadas</translation>
 <translation id="7029995644714925509">Quando um site te pergunta se pode carregar links previamente de suas páginas (pré-carregamento), o navegador Vivaldi encripta e carrega essas páginas através dos servidores da Google sem utilizar cookies. Isso esconde a sua identidade do site pré-carregado.</translation>
 <translation id="706339621163631076">Política de privacidade do Vivaldi</translation>
 <translation id="732145680195464316">Marcador salvo em <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Sobre o Vivaldi</translation>
-<translation id="7465104139234185284">Fechar todas as guias privadas</translation>
+<translation id="7465104139234185284">Fechar todas as abas privadas</translation>
 <translation id="7481312909269577407">Avançar</translation>
 <translation id="7968014550143838305">Adicionado à lista de leitura</translation>
 <translation id="804786196054284061">Acordo de Licença de Usuário Final</translation>
 <translation id="8127542551745560481">Editar página inicial</translation>
-<translation id="8560602726703398413">Encontre sua lista de leitura nos Marcadores</translation>
+<translation id="8560602726703398413">Encontre sua lista de leitura nos marcadores</translation>
 <translation id="85991616550051997">Ir para a página inicial</translation>
 <translation id="8820817407110198400">Marcadores</translation>
+<translation id="9042893549633094279">Privacidade e segurança</translation>
 <translation id="9063523880881406963">Desativar "Ver versão para computador"</translation>
 <translation id="9080642952018487277">Entrar no modo privado</translation>
 <translation id="96681097142096641">Ver página simplificada?</translation>

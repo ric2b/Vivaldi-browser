@@ -102,10 +102,11 @@ void CommonTest(CFX_SkiaDeviceDriver* driver, const State& state) {
   CFX_Path path2;
   path2.AppendRect(0, 0, 2, 2);
   if (state.m_change == State::Change::kYes) {
-    if (state.m_graphic == State::Graphic::kPath)
-      graphState.m_LineCap = CFX_GraphStateData::LineCap::kRound;
-    else if (state.m_graphic == State::Graphic::kText)
+    if (state.m_graphic == State::Graphic::kPath) {
+      graphState.set_line_cap(CFX_GraphStateData::LineCap::kRound);
+    } else if (state.m_graphic == State::Graphic::kText) {
       fontSize = 2;
+    }
   }
   if (state.m_clip == State::Clip::kSame)
     driver->SetClip_PathFill(clipPath, &clipMatrix, CFX_FillRenderOptions());
@@ -263,7 +264,7 @@ TEST_F(FxgeSkiaEmbedderTest, RenderBigImageTwice) {
   }
 
   ASSERT_TRUE(OpenDocument("bug_2034.pdf"));
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   std::set<int> image_ids;
@@ -281,14 +282,12 @@ TEST_F(FxgeSkiaEmbedderTest, RenderBigImageTwice) {
       }));
 
   // Render top half.
-  RenderPageToSkCanvas(page, /*start_x=*/0, /*start_y=*/0,
+  RenderPageToSkCanvas(page.get(), /*start_x=*/0, /*start_y=*/0,
                        /*size_x=*/kPageWidth, /*size_y=*/kPageHeight, canvas);
 
   // Render bottom half.
-  RenderPageToSkCanvas(page, /*start_x=*/0, /*start_y=*/-kPageHeight / 2,
+  RenderPageToSkCanvas(page.get(), /*start_x=*/0, /*start_y=*/-kPageHeight / 2,
                        /*size_x=*/kPageWidth, /*size_y=*/kPageHeight, canvas);
 
   EXPECT_THAT(image_ids, SizeIs(1));
-
-  UnloadPage(page);
 }

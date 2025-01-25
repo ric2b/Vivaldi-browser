@@ -20,7 +20,12 @@ class QuicConnectionFactoryServer : public QuicConnectionFactoryBase {
  public:
   class ServerDelegate {
    public:
-    virtual ~ServerDelegate() = default;
+    ServerDelegate();
+    ServerDelegate(const ServerDelegate&) = delete;
+    ServerDelegate& operator=(const ServerDelegate&) = delete;
+    ServerDelegate(ServerDelegate&&) noexcept = delete;
+    ServerDelegate& operator=(ServerDelegate&&) noexcept = delete;
+    virtual ~ServerDelegate();
 
     virtual QuicConnection::Delegate& GetConnectionDelegate() = 0;
     virtual void OnIncomingConnection(
@@ -28,6 +33,12 @@ class QuicConnectionFactoryServer : public QuicConnectionFactoryBase {
   };
 
   explicit QuicConnectionFactoryServer(TaskRunner& task_runner);
+  QuicConnectionFactoryServer(const QuicConnectionFactoryServer&) = delete;
+  QuicConnectionFactoryServer& operator=(const QuicConnectionFactoryServer&) =
+      delete;
+  QuicConnectionFactoryServer(QuicConnectionFactoryServer&&) noexcept = delete;
+  QuicConnectionFactoryServer& operator=(
+      QuicConnectionFactoryServer&&) noexcept = delete;
   ~QuicConnectionFactoryServer() override;
 
   // UdpSocket::Client overrides.

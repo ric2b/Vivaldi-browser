@@ -25,6 +25,9 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProper
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.OPEN_RUNNABLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.TITLE_DATA;
 
+import android.content.Context;
+import android.view.ContextThemeWrapper;
+
 import androidx.core.util.Pair;
 import androidx.test.core.app.ApplicationProvider;
 
@@ -48,12 +51,11 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.hub.PaneManager;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab_group_sync.TabGroupUiActionHandler;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
-import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.ConfirmationResult;
+import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
 import org.chromium.components.data_sharing.DataSharingService;
 import org.chromium.components.data_sharing.DataSharingService.GroupDataOrFailureOutcome;
 import org.chromium.components.data_sharing.GroupData;
@@ -69,6 +71,7 @@ import org.chromium.components.tab_group_sync.LocalTabGroupId;
 import org.chromium.components.tab_group_sync.SavedTabGroup;
 import org.chromium.components.tab_group_sync.SavedTabGroupTab;
 import org.chromium.components.tab_group_sync.TabGroupSyncService;
+import org.chromium.components.tab_group_sync.TabGroupUiActionHandler;
 import org.chromium.components.tab_group_sync.TriggerSource;
 import org.chromium.components.tab_groups.TabGroupColorId;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -85,7 +88,6 @@ import java.util.List;
 /** Tests for {@link TabGroupListMediator}. */
 @RunWith(BaseRobolectricTestRunner.class)
 @DisableFeatures(ChromeFeatureList.DATA_SHARING)
-@EnableFeatures(ChromeFeatureList.TAB_GROUP_PARITY_ANDROID)
 public class TabGroupListMediatorUnitTest {
     private static final String SYNC_GROUP_ID1 = "remote one";
     private static final String SYNC_GROUP_ID2 = "remote two";
@@ -120,7 +122,7 @@ public class TabGroupListMediatorUnitTest {
 
     @Captor private ArgumentCaptor<TabModelObserver> mTabModelObserver;
     @Captor private ArgumentCaptor<TabGroupSyncService.Observer> mTabGroupSyncObserverCaptor;
-    @Captor private ArgumentCaptor<Callback<Integer>> mConfirmationResultCallbackCaptor;
+    @Captor private ArgumentCaptor<Callback<Integer>> mActionConfirmationResultCallbackCaptor;
 
     @Captor
     private ArgumentCaptor<SyncService.SyncStateChangedListener> mSyncStateChangedListenerCaptor;
@@ -131,9 +133,14 @@ public class TabGroupListMediatorUnitTest {
 
     private PropertyModel mPropertyModel;
     private ModelList mModelList;
+    private Context mContext;
 
     @Before
     public void setUp() {
+        mContext =
+                new ContextThemeWrapper(
+                        ApplicationProvider.getApplicationContext(),
+                        R.style.Theme_BrowserUI_DayNight);
         mPropertyModel = new PropertyModel(TabGroupListProperties.ALL_KEYS);
         mModelList = new ModelList();
         when(mPaneManager.getPaneForId(PaneId.TAB_SWITCHER)).thenReturn(mTabSwitcherPaneBase);
@@ -144,7 +151,7 @@ public class TabGroupListMediatorUnitTest {
 
     private TabGroupListMediator createMediator() {
         return new TabGroupListMediator(
-                ApplicationProvider.getApplicationContext(),
+                mContext,
                 mModelList,
                 mPropertyModel,
                 mTabGroupModelFilter,
@@ -521,20 +528,20 @@ public class TabGroupListMediatorUnitTest {
         PropertyModel model1 = mModelList.get(0).model;
         model1.get(DELETE_RUNNABLE).run();
         verify(mActionConfirmationManager)
-                .processDeleteGroupAttempt(mConfirmationResultCallbackCaptor.capture());
-        mConfirmationResultCallbackCaptor
+                .processDeleteGroupAttempt(mActionConfirmationResultCallbackCaptor.capture());
+        mActionConfirmationResultCallbackCaptor
                 .getValue()
-                .onResult(ConfirmationResult.CONFIRMATION_POSITIVE);
+                .onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
         verify(mTabGroupModelFilter).closeTabs(any());
 
         reset(mActionConfirmationManager);
         PropertyModel model2 = mModelList.get(1).model;
         model2.get(DELETE_RUNNABLE).run();
         verify(mActionConfirmationManager)
-                .processDeleteGroupAttempt(mConfirmationResultCallbackCaptor.capture());
-        mConfirmationResultCallbackCaptor
+                .processDeleteGroupAttempt(mActionConfirmationResultCallbackCaptor.capture());
+        mActionConfirmationResultCallbackCaptor
                 .getValue()
-                .onResult(ConfirmationResult.CONFIRMATION_POSITIVE);
+                .onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
         verify(mTabGroupSyncService).removeGroup(SYNC_GROUP_ID2);
     }
 
@@ -561,10 +568,10 @@ public class TabGroupListMediatorUnitTest {
         PropertyModel model1 = mModelList.get(0).model;
         model1.get(DELETE_RUNNABLE).run();
         verify(mActionConfirmationManager)
-                .processDeleteGroupAttempt(mConfirmationResultCallbackCaptor.capture());
-        mConfirmationResultCallbackCaptor
+                .processDeleteGroupAttempt(mActionConfirmationResultCallbackCaptor.capture());
+        mActionConfirmationResultCallbackCaptor
                 .getValue()
-                .onResult(ConfirmationResult.CONFIRMATION_NEGATIVE);
+                .onResult(ActionConfirmationResult.CONFIRMATION_NEGATIVE);
         verify(mTabGroupSyncService, never()).removeGroup(anyString());
     }
 
@@ -595,10 +602,10 @@ public class TabGroupListMediatorUnitTest {
         PropertyModel model1 = mModelList.get(0).model;
         model1.get(DELETE_RUNNABLE).run();
         verify(mActionConfirmationManager)
-                .processDeleteGroupAttempt(mConfirmationResultCallbackCaptor.capture());
-        mConfirmationResultCallbackCaptor
+                .processDeleteGroupAttempt(mActionConfirmationResultCallbackCaptor.capture());
+        mActionConfirmationResultCallbackCaptor
                 .getValue()
-                .onResult(ConfirmationResult.CONFIRMATION_POSITIVE);
+                .onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
         verify(mTabModel).commitTabClosure(ROOT_ID1);
         verify(mTabGroupSyncService).removeGroup(SYNC_GROUP_ID1);
     }
@@ -691,7 +698,8 @@ public class TabGroupListMediatorUnitTest {
                         /* displayName= */ null,
                         EMAIL,
                         MemberRole.OWNER,
-                        /* avatarUrl= */ null);
+                        /* avatarUrl= */ null,
+                        /* givenName= */ null);
         GroupMember[] groupMemberArray = new GroupMember[] {groupMember};
         GroupData groupData =
                 new GroupData(
@@ -708,10 +716,10 @@ public class TabGroupListMediatorUnitTest {
 
         verify(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(
-                        any(), mConfirmationResultCallbackCaptor.capture());
-        mConfirmationResultCallbackCaptor
+                        any(), mActionConfirmationResultCallbackCaptor.capture());
+        mActionConfirmationResultCallbackCaptor
                 .getValue()
-                .onResult(ConfirmationResult.CONFIRMATION_POSITIVE);
+                .onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
 
         verify(mDataSharingService)
                 .deleteGroup(eq(COLLABORATION_ID1), mActionOutcomeCallbackCaptor.capture());
@@ -757,14 +765,16 @@ public class TabGroupListMediatorUnitTest {
                         /* displayName= */ null,
                         EMAIL,
                         MemberRole.MEMBER,
-                        /* avatarUrl= */ null);
+                        /* avatarUrl= */ null,
+                        /* givenName= */ null);
         GroupMember groupMember2 =
                 new GroupMember(
                         GAIA_ID2,
                         /* displayName= */ null,
                         EMAIL,
                         MemberRole.OWNER,
-                        /* avatarUrl= */ null);
+                        /* avatarUrl= */ null,
+                        /* givenName= */ null);
         GroupMember[] groupMemberArray = new GroupMember[] {groupMember1, groupMember2};
         GroupData groupData =
                 new GroupData(
@@ -780,10 +790,10 @@ public class TabGroupListMediatorUnitTest {
         model.get(LEAVE_RUNNABLE).run();
 
         verify(mActionConfirmationManager)
-                .processLeaveGroupAttempt(any(), mConfirmationResultCallbackCaptor.capture());
-        mConfirmationResultCallbackCaptor
+                .processLeaveGroupAttempt(any(), mActionConfirmationResultCallbackCaptor.capture());
+        mActionConfirmationResultCallbackCaptor
                 .getValue()
-                .onResult(ConfirmationResult.CONFIRMATION_POSITIVE);
+                .onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
 
         verify(mDataSharingService)
                 .removeMember(

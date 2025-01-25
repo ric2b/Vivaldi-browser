@@ -18,6 +18,7 @@ DatabaseManagerMechanism::DatabaseManagerMechanism(
     CheckBrowseUrlType check_type,
     bool check_allowlist)
     : SafeBrowsingLookupMechanism(url, threat_types, database_manager),
+      SafeBrowsingDatabaseManager::Client(GetPassKey()),
       check_allowlist_(check_allowlist),
       check_type_(check_type) {}
 
@@ -50,7 +51,10 @@ DatabaseManagerMechanism::StartCheckInternal() {
 }
 
 void DatabaseManagerMechanism::OnCheckUrlForHighConfidenceAllowlist(
-    bool did_match_allowlist) {
+    bool did_match_allowlist,
+    std::optional<
+        SafeBrowsingDatabaseManager::HighConfidenceAllowlistCheckLoggingDetails>
+        logging_details) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(check_allowlist_);
 

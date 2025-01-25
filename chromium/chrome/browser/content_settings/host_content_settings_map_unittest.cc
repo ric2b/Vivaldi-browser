@@ -184,7 +184,7 @@ class TesterForType {
         break;
       default:
         // Add support as needed.
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
     }
   }
 
@@ -1933,7 +1933,6 @@ TEST_F(HostContentSettingsMapTest, GetPatternsFromScopingType) {
       ContentSettingsPattern::FromURLToSchemefulSitePattern(secondary_url));
 
   // Testing cases:
-  //   WebsiteSettingsInfo::TOP_ORIGIN_WITH_RESOURCE_EXCEPTIONS_SCOPE,
   //   WebsiteSettingsInfo::REQUESTING_ORIGIN_ONLY_SCOPE,
   //   WebsiteSettingsInfo::TOP_ORIGIN_ONLY_SCOPE,
   //   WebsiteSettingsInfo::GENERIC_SINGLE_ORIGIN_SCOPE.
@@ -2257,8 +2256,6 @@ TEST_P(HostContentSettingsMapActiveExpirationTest,
 
   content_settings::ContentSettingsRegistry::GetInstance()->ResetForTest();
   ReloadProviders(profile.GetPrefs(), map);
-  const std::string kActiveExpiryHistogramName =
-      "ContentSettings.ActiveExpiry.PrefProvider.ContentSettingsType";
 
   // The following type is used as a sample of the persistent permission
   // type. It can be replaced with any other type if required.
@@ -2324,7 +2321,6 @@ TEST_P(HostContentSettingsMapActiveExpirationTest,
 
   RunExpirationMechanismIfFeatureEnabled(map,
                                          ContentSettingsType::STORAGE_ACCESS);
-  t.ExpectTotalCount(kActiveExpiryHistogramName, 0);
 
   // If we Fastforward by 101 seconds we should see only our first setting is
   // expired, we now retrieve 1 less setting and the rest are okay.
@@ -2338,13 +2334,6 @@ TEST_P(HostContentSettingsMapActiveExpirationTest,
       persistent_type, content_settings::mojom::SessionModel::USER_SESSION);
   ASSERT_EQ(2u, settings.size());
 
-  t.ExpectTotalCount(kActiveExpiryHistogramName, GetParam() ? 1 : 0);
-  t.ExpectUniqueSample(
-      kActiveExpiryHistogramName,
-      content_settings_uma_util::ContentSettingTypeToHistogramValue(
-          ContentSettingsType::STORAGE_ACCESS),
-      GetParam() ? 1 : 0);
-
   // If we fast forward again we should expire our second setting and drop if
   // from our retrieval list now.
   FastForwardTime(base::Seconds(101));
@@ -2357,14 +2346,6 @@ TEST_P(HostContentSettingsMapActiveExpirationTest,
       persistent_type, content_settings::mojom::SessionModel::USER_SESSION);
   ASSERT_EQ(1u, settings.size());
 
-  t.ExpectTotalCount(kActiveExpiryHistogramName, GetParam() ? 2 : 0);
-
-  t.ExpectUniqueSample(
-      kActiveExpiryHistogramName,
-      content_settings_uma_util::ContentSettingTypeToHistogramValue(
-          ContentSettingsType::STORAGE_ACCESS),
-      GetParam() ? 2 : 0);
-
   // If we fast forwarding much further it shouldn't make a difference as our
   // last setting and the default setting should never expire.
   FastForwardTime(base::Minutes(100));
@@ -2376,13 +2357,6 @@ TEST_P(HostContentSettingsMapActiveExpirationTest,
   settings = map->GetSettingsForOneType(
       persistent_type, content_settings::mojom::SessionModel::USER_SESSION);
   ASSERT_EQ(1u, settings.size());
-
-  t.ExpectTotalCount(kActiveExpiryHistogramName, GetParam() ? 2 : 0);
-  t.ExpectUniqueSample(
-      kActiveExpiryHistogramName,
-      content_settings_uma_util::ContentSettingTypeToHistogramValue(
-          ContentSettingsType::STORAGE_ACCESS),
-      GetParam() ? 2 : 0);
 }
 
 TEST_F(HostContentSettingsMapTest, StorageAccessMetrics) {

@@ -39,6 +39,7 @@
 #include "ui/base/l10n/time_format.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/base/text/bytes_formatting.h"
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
@@ -576,12 +577,11 @@ DownloadBubbleRowView::DownloadBubbleRowView(
       AddChildView(std::make_unique<views::FlexLayoutView>());
   // All the quick action buttons are added as children. Later on, only the ones
   // that are enabled will be made visible in UpdateButtons().
-  resume_action_ = AddQuickAction(DownloadCommands::RESUME);
-  pause_action_ = AddQuickAction(DownloadCommands::PAUSE);
-  show_in_folder_action_ = AddQuickAction(DownloadCommands::SHOW_IN_FOLDER);
-  cancel_action_ = AddQuickAction(DownloadCommands::CANCEL);
-  open_when_complete_action_ =
-      AddQuickAction(DownloadCommands::OPEN_WHEN_COMPLETE);
+  AddQuickAction(DownloadCommands::RESUME);
+  AddQuickAction(DownloadCommands::PAUSE);
+  AddQuickAction(DownloadCommands::SHOW_IN_FOLDER);
+  AddQuickAction(DownloadCommands::CANCEL);
+  AddQuickAction(DownloadCommands::OPEN_WHEN_COMPLETE);
   quick_action_holder_->SetVisible(false);
   quick_action_holder_->SetProperty(views::kViewIgnoredByLayoutKey, true);
   quick_action_holder_->SetBackground(
@@ -791,8 +791,7 @@ void DownloadBubbleRowView::UpdateRowForFocus(
                           GetFocusManager() &&
                           !Contains(GetFocusManager()->GetFocusedView());
   if (should_set_focus && !info_->quick_actions().empty()) {
-    GetActionButtonForCommand(info_->quick_actions().back().command)
-        ->RequestFocus();
+    quick_actions_[info_->quick_actions().back().command]->RequestFocus();
   }
 }
 
@@ -852,19 +851,17 @@ void DownloadBubbleRowView::OnActionButtonPressed(
 }
 
 void DownloadBubbleRowView::UpdateButtons() {
-  resume_action_->SetVisible(false);
-  pause_action_->SetVisible(false);
-  open_when_complete_action_->SetVisible(false);
-  cancel_action_->SetVisible(false);
-  show_in_folder_action_->SetVisible(false);
-
+  // Things like focus and tooltips are broken if we make an action
+  // button invisible, then visible. Instead, keep track of which action
+  // buttons should be made invisible so we only change visibility once.
+  base::flat_map<DownloadCommands::Command, raw_ptr<views::ImageButton>>
+      buttons_to_remove = quick_actions_;
   for (const auto& action : info_->quick_actions()) {
     if (!DownloadCommands(info_->model()->GetWeakPtr())
              .IsCommandEnabled(action.command)) {
       continue;
     }
-    views::ImageButton* action_button =
-        GetActionButtonForCommand(action.command);
+    views::ImageButton* action_button = quick_actions_[action.command];
     action_button->SetImageModel(
         views::Button::STATE_NORMAL,
         ui::ImageModel::FromVectorIcon(*(action.icon), ui::kColorIcon,
@@ -873,6 +870,11 @@ void DownloadBubbleRowView::UpdateButtons() {
         GetAccessibleNameForQuickAction(action.command));
     action_button->SetTooltipText(action.hover_text);
     action_button->SetVisible(true);
+    buttons_to_remove.erase(action.command);
+  }
+
+  for (const auto& pair : buttons_to_remove) {
+    pair.second->SetVisible(false);
   }
 
   for (const auto& [command, button] : main_page_buttons_) {
@@ -980,8 +982,7 @@ void DownloadBubbleRowView::AddMainPageButton(
   main_page_buttons_[command] = button;
 }
 
-views::ImageButton* DownloadBubbleRowView::AddQuickAction(
-    DownloadCommands::Command command) {
+void DownloadBubbleRowView::AddQuickAction(DownloadCommands::Command command) {
   // Unretained is safe because this owns and outlives the quick action button.
   views::ImageButton* quick_action =
       quick_action_holder_->AddChildView(views::CreateVectorImageButton(
@@ -995,25 +996,7 @@ views::ImageButton* DownloadBubbleRowView::AddQuickAction(
   views::InkDrop::Get(quick_action)
       ->SetBaseColorId(views::TypographyProvider::Get().GetColorId(
           views::style::CONTEXT_BUTTON, views::style::STYLE_SECONDARY));
-  return quick_action;
-}
-
-views::ImageButton* DownloadBubbleRowView::GetActionButtonForCommand(
-    DownloadCommands::Command command) {
-  switch (command) {
-    case DownloadCommands::RESUME:
-      return resume_action_;
-    case DownloadCommands::PAUSE:
-      return pause_action_;
-    case DownloadCommands::OPEN_WHEN_COMPLETE:
-      return open_when_complete_action_;
-    case DownloadCommands::CANCEL:
-      return cancel_action_;
-    case DownloadCommands::SHOW_IN_FOLDER:
-      return show_in_folder_action_;
-    default:
-      return nullptr;
-  }
+  quick_actions_[command] = quick_action;
 }
 
 std::u16string DownloadBubbleRowView::GetAccessibleNameForQuickAction(
@@ -1091,7 +1074,7 @@ std::u16string DownloadBubbleRowView::GetAccessibleNameForMainPageButton(
 void DownloadBubbleRowView::ShowContextMenuForViewImpl(
     View* source,
     const gfx::Point& point,
-    ui::MenuSourceType source_type) {
+    ui::mojom::MenuSourceType source_type) {
   // Similar hack as in MenuButtonController and DownloadItemView.
   // We're about to show the menu from a mouse press. By showing from the
   // mouse press event we block RootView in mouse dispatching. This also
@@ -1207,16 +1190,16 @@ void DownloadBubbleRowView::SimulateMainButtonClickForTesting(
 
 bool DownloadBubbleRowView::IsQuickActionButtonVisibleForTesting(
     DownloadCommands::Command command) {
-  views::ImageButton* button = GetActionButtonForCommand(command);
-  if (!button) {
-    return false;
-  }
-  return button->GetVisible();
+  auto it = quick_actions_.find(command);
+  CHECK(it != quick_actions_.end());
+  return it->second->GetVisible();
 }
 
 views::ImageButton* DownloadBubbleRowView::GetQuickActionButtonForTesting(
     DownloadCommands::Command command) {
-  return GetActionButtonForCommand(command);
+  auto it = quick_actions_.find(command);
+  CHECK(it != quick_actions_.end());
+  return it->second;
 }
 
 void DownloadBubbleRowView::SetInputProtectorForTesting(

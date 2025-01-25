@@ -40,16 +40,14 @@ using namespace tint::core::number_suffixes;  // NOLINT
 using GlslWriter_ShaderIOTest = core::ir::transform::TransformTest;
 
 TEST_F(GlslWriter_ShaderIOTest, NoInputsOrOutputs) {
-    auto* ep = b.Function("foo", ty.void_());
-    ep->SetStage(core::ir::Function::PipelineStage::kCompute);
-    ep->SetWorkgroupSize(1, 1, 1);
+    auto* ep = b.ComputeFunction("foo");
 
     b.Append(ep->Block(), [&] {  //
         b.Return(ep);
     });
 
     auto* src = R"(
-%foo = @compute @workgroup_size(1, 1, 1) func():void {
+%foo = @compute @workgroup_size(1u, 1u, 1u) func():void {
   $B1: {
     ret
   }
@@ -59,7 +57,8 @@ TEST_F(GlslWriter_ShaderIOTest, NoInputsOrOutputs) {
 
     auto* expect = src;
 
-    ShaderIOConfig config;
+    core::ir::transform::PushConstantLayout push_constants;
+    ShaderIOConfig config{push_constants};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -139,7 +138,8 @@ $B1: {  # root
 }
 )";
 
-    ShaderIOConfig config;
+    core::ir::transform::PushConstantLayout push_constants;
+    ShaderIOConfig config{push_constants};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -290,7 +290,8 @@ $B1: {  # root
 }
 )";
 
-    ShaderIOConfig config;
+    core::ir::transform::PushConstantLayout push_constants;
+    ShaderIOConfig config{push_constants};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -411,7 +412,8 @@ $B1: {  # root
 }
 )";
 
-    ShaderIOConfig config;
+    core::ir::transform::PushConstantLayout push_constants;
+    ShaderIOConfig config{push_constants};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -467,7 +469,8 @@ $B1: {  # root
 }
 )";
 
-    ShaderIOConfig config;
+    core::ir::transform::PushConstantLayout push_constants;
+    ShaderIOConfig config{push_constants};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -512,7 +515,8 @@ $B1: {  # root
 }
 )";
 
-    ShaderIOConfig config;
+    core::ir::transform::PushConstantLayout push_constants;
+    ShaderIOConfig config{push_constants};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -631,7 +635,8 @@ $B1: {  # root
 }
 )";
 
-    ShaderIOConfig config;
+    core::ir::transform::PushConstantLayout push_constants;
+    ShaderIOConfig config{push_constants};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -675,8 +680,8 @@ TEST_F(GlslWriter_ShaderIOTest, ReturnValue_DualSourceBlending) {
 
     auto* src = R"(
 Output = struct @align(4) {
-  color1:f32 @offset(0), @location(0)
-  color2:f32 @offset(4), @location(0)
+  color1:f32 @offset(0), @location(0), @blend_src(0)
+  color2:f32 @offset(4), @location(0), @blend_src(1)
 }
 
 %foo = @fragment func():Output {
@@ -717,7 +722,8 @@ $B1: {  # root
 }
 )";
 
-    ShaderIOConfig config;
+    core::ir::transform::PushConstantLayout push_constants;
+    ShaderIOConfig config{push_constants};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -867,7 +873,8 @@ $B1: {  # root
 }
 )";
 
-    ShaderIOConfig config;
+    core::ir::transform::PushConstantLayout push_constants;
+    ShaderIOConfig config{push_constants};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -973,13 +980,14 @@ $B1: {  # root
 }
 )";
 
-    ShaderIOConfig config;
+    core::ir::transform::PushConstantLayout push_constants;
+    ShaderIOConfig config{push_constants};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
 }
 
-// Test that we change the type of the sample mask builtin to an array for SPIR-V.
+// Test that we change the type of the sample mask builtin to an array for GLSL
 TEST_F(GlslWriter_ShaderIOTest, SampleMask) {
     auto* str_ty = ty.Struct(mod.symbols.New("Outputs"),
                              {
@@ -1042,9 +1050,9 @@ Outputs = struct @align(4) {
 }
 
 $B1: {  # root
-  %gl_SampleMaskIn:ptr<__in, u32, read> = var @builtin(sample_mask)
+  %gl_SampleMaskIn:ptr<__in, array<i32, 1>, read> = var @builtin(sample_mask)
   %foo_loc0_Output:ptr<__out, f32, write> = var @location(0)
-  %gl_SampleMask:ptr<__out, u32, write> = var @builtin(sample_mask)
+  %gl_SampleMask:ptr<__out, array<i32, 1>, write> = var @builtin(sample_mask)
 }
 
 %foo_inner = func(%mask_in:u32):Outputs {
@@ -1055,18 +1063,23 @@ $B1: {  # root
 }
 %foo = @fragment func():void {
   $B3: {
-    %8:u32 = load %gl_SampleMaskIn
-    %9:Outputs = call %foo_inner, %8
-    %10:f32 = access %9, 0u
-    store %foo_loc0_Output, %10
-    %11:u32 = access %9, 1u
-    store %gl_SampleMask, %11
+    %8:array<i32, 1> = load %gl_SampleMaskIn
+    %9:i32 = access %8, 0u
+    %10:u32 = convert %9
+    %11:Outputs = call %foo_inner, %10
+    %12:f32 = access %11, 0u
+    store %foo_loc0_Output, %12
+    %13:u32 = access %11, 1u
+    %14:ptr<__out, i32, write> = access %gl_SampleMask, 0u
+    %15:i32 = convert %13
+    store %14, %15
     ret
   }
 }
 )";
 
-    ShaderIOConfig config;
+    core::ir::transform::PushConstantLayout push_constants;
+    ShaderIOConfig config{push_constants};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -1226,13 +1239,14 @@ $B1: {  # root
 }
 )";
 
-    ShaderIOConfig config;
+    core::ir::transform::PushConstantLayout push_constants;
+    ShaderIOConfig config{push_constants};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
 }
 
-TEST_F(GlslWriter_ShaderIOTest, DISABLED_ClampFragDepth) {
+TEST_F(GlslWriter_ShaderIOTest, ClampFragDepth) {
     auto* str_ty = ty.Struct(mod.symbols.New("Outputs"),
                              {
                                  {
@@ -1289,38 +1303,54 @@ Outputs = struct @align(4) {
   depth:f32 @offset(4)
 }
 
+tint_push_constant_struct = struct @align(4), @block {
+  depth_min:f32 @offset(4)
+  depth_max:f32 @offset(8)
+}
+
 $B1: {  # root
+  %tint_push_constants:ptr<push_constant, tint_push_constant_struct, read> = var
   %foo_loc0_Output:ptr<__out, f32, write> = var @location(0)
   %gl_FragDepth:ptr<__out, f32, write> = var @builtin(frag_depth)
 }
 
 %foo_inner = func():Outputs {
   $B2: {
-    %4:Outputs = construct 0.5f, 2.0f
-    ret %4
+    %5:Outputs = construct 0.5f, 2.0f
+    ret %5
   }
 }
 %foo = @fragment func():void {
   $B3: {
-    %6:Outputs = call %foo_inner
-    %7:f32 = access %6, 0u
-    store %foo_loc0_Output, %7
-    %8:f32 = access %6, 1u
-    %9:f32 = clamp %8, 2.0f, 3.0f
-    store %gl_FragDepth, %9
+    %7:Outputs = call %foo_inner
+    %8:f32 = access %7, 0u
+    store %foo_loc0_Output, %8
+    %9:f32 = access %7, 1u
+    %10:ptr<push_constant, f32, read> = access %tint_push_constants, 0u
+    %11:f32 = load %10
+    %12:ptr<push_constant, f32, read> = access %tint_push_constants, 1u
+    %13:f32 = load %12
+    %14:f32 = clamp %9, %11, %13
+    store %gl_FragDepth, %14
     ret
   }
 }
 )";
 
-    ShaderIOConfig config;
-    config.depth_range_offsets = {2, 3};
+    core::ir::transform::PreparePushConstantsConfig push_constants_config;
+    push_constants_config.AddInternalConstant(4, mod.symbols.New("depth_min"), ty.f32());
+    push_constants_config.AddInternalConstant(8, mod.symbols.New("depth_max"), ty.f32());
+    auto push_constants = PreparePushConstants(mod, push_constants_config);
+    EXPECT_EQ(push_constants, Success);
+
+    ShaderIOConfig config{push_constants.Get()};
+    config.depth_range_offsets = {4, 8};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
 }
 
-TEST_F(GlslWriter_ShaderIOTest, DISABLED_ClampFragDepth_MultipleFragmentShaders) {
+TEST_F(GlslWriter_ShaderIOTest, ClampFragDepth_MultipleFragmentShaders) {
     auto* str_ty = ty.Struct(mod.symbols.New("Outputs"),
                              {
                                  {
@@ -1393,7 +1423,13 @@ Outputs = struct @align(4) {
   depth:f32 @offset(4)
 }
 
+tint_push_constant_struct = struct @align(4), @block {
+  depth_min:f32 @offset(4)
+  depth_max:f32 @offset(8)
+}
+
 $B1: {  # root
+  %tint_push_constants:ptr<push_constant, tint_push_constant_struct, read> = var
   %ep1_loc0_Output:ptr<__out, f32, write> = var @location(0)
   %gl_FragDepth:ptr<__out, f32, write> = var @builtin(frag_depth)
   %ep2_loc0_Output:ptr<__out, f32, write> = var @location(0)
@@ -1404,58 +1440,77 @@ $B1: {  # root
 
 %ep1_inner = func():Outputs {
   $B2: {
-    %8:Outputs = construct 0.5f, 2.0f
-    ret %8
+    %9:Outputs = construct 0.5f, 2.0f
+    ret %9
   }
 }
 %ep2_inner = func():Outputs {
   $B3: {
-    %10:Outputs = construct 0.5f, 2.0f
-    ret %10
+    %11:Outputs = construct 0.5f, 2.0f
+    ret %11
   }
 }
 %ep3_inner = func():Outputs {
   $B4: {
-    %12:Outputs = construct 0.5f, 2.0f
-    ret %12
+    %13:Outputs = construct 0.5f, 2.0f
+    ret %13
   }
 }
 %ep1 = @fragment func():void {
   $B5: {
-    %14:Outputs = call %ep1_inner
-    %15:f32 = access %14, 0u
-    store %ep1_loc0_Output, %15
-    %16:f32 = access %14, 1u
-    %17:f32 = clamp %16, 0.0f, 0.0f
-    store %gl_FragDepth, %17
+    %15:Outputs = call %ep1_inner
+    %16:f32 = access %15, 0u
+    store %ep1_loc0_Output, %16
+    %17:f32 = access %15, 1u
+    %18:ptr<push_constant, f32, read> = access %tint_push_constants, 0u
+    %19:f32 = load %18
+    %20:ptr<push_constant, f32, read> = access %tint_push_constants, 1u
+    %21:f32 = load %20
+    %22:f32 = clamp %17, %19, %21
+    store %gl_FragDepth, %22
     ret
   }
 }
 %ep2 = @fragment func():void {
   $B6: {
-    %19:Outputs = call %ep2_inner
-    %20:f32 = access %19, 0u
-    store %ep2_loc0_Output, %20
-    %21:f32 = access %19, 1u
-    %22:f32 = clamp %21, 0.0f, 0.0f
-    store %gl_FragDepth_1, %22
+    %24:Outputs = call %ep2_inner
+    %25:f32 = access %24, 0u
+    store %ep2_loc0_Output, %25
+    %26:f32 = access %24, 1u
+    %27:ptr<push_constant, f32, read> = access %tint_push_constants, 0u
+    %28:f32 = load %27
+    %29:ptr<push_constant, f32, read> = access %tint_push_constants, 1u
+    %30:f32 = load %29
+    %31:f32 = clamp %26, %28, %30
+    store %gl_FragDepth_1, %31
     ret
   }
 }
 %ep3 = @fragment func():void {
   $B7: {
-    %24:Outputs = call %ep3_inner
-    %25:f32 = access %24, 0u
-    store %ep3_loc0_Output, %25
-    %26:f32 = access %24, 1u
-    %27:f32 = clamp %26, 0.0f, 0.0f
-    store %gl_FragDepth_2, %27
+    %33:Outputs = call %ep3_inner
+    %34:f32 = access %33, 0u
+    store %ep3_loc0_Output, %34
+    %35:f32 = access %33, 1u
+    %36:ptr<push_constant, f32, read> = access %tint_push_constants, 0u
+    %37:f32 = load %36
+    %38:ptr<push_constant, f32, read> = access %tint_push_constants, 1u
+    %39:f32 = load %38
+    %40:f32 = clamp %35, %37, %39
+    store %gl_FragDepth_2, %40
     ret
   }
 }
 )";
 
-    ShaderIOConfig config;
+    core::ir::transform::PreparePushConstantsConfig push_constants_config;
+    push_constants_config.AddInternalConstant(4, mod.symbols.New("depth_min"), ty.f32());
+    push_constants_config.AddInternalConstant(8, mod.symbols.New("depth_max"), ty.f32());
+    auto push_constants = PreparePushConstants(mod, push_constants_config);
+    EXPECT_EQ(push_constants, Success);
+
+    ShaderIOConfig config{push_constants.Get()};
+    config.depth_range_offsets = {4, 8};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());

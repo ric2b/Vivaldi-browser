@@ -43,7 +43,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.TabArchiveSettings;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeatures;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeaturesJni;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
+import org.chromium.chrome.browser.tabmodel.TabGroupFeatureUtils;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
 import org.chromium.components.prefs.PrefService;
@@ -57,7 +57,6 @@ import java.util.concurrent.TimeUnit;
 @RunWith(BaseRobolectricTestRunner.class)
 @EnableFeatures({
     ChromeFeatureList.TAB_GROUP_CREATION_DIALOG_ANDROID,
-    ChromeFeatureList.TAB_GROUP_PARITY_ANDROID,
     ChromeFeatureList.TAB_GROUP_SYNC_ANDROID,
     ChromeFeatureList.TAB_GROUP_SYNC_AUTO_OPEN_KILL_SWITCH
 })
@@ -186,7 +185,7 @@ public class TabsSettingsUnitTest {
     @Test
     @SmallTest
     public void testLaunchTabsSettingsGroupCreationDialogEnabled() {
-        TabGroupModelFilter.SHOW_TAB_GROUP_CREATION_DIALOG_SETTING.setForTesting(true);
+        TabGroupFeatureUtils.SHOW_TAB_GROUP_CREATION_DIALOG_SETTING.setForTesting(true);
 
         var histogramWatcher =
                 HistogramWatcher.newSingleRecordWatcher(
@@ -218,8 +217,8 @@ public class TabsSettingsUnitTest {
 
     @Test
     @SmallTest
-    @DisableFeatures(ChromeFeatureList.TAB_GROUP_PARITY_ANDROID)
-    public void testTabGroupCreationDialogSettingsHiddenWhenFeatureOff() {
+    public void testTabGroupCreationDialogSettingsHiddenWhenParamOff() {
+        TabGroupFeatureUtils.SHOW_TAB_GROUP_CREATION_DIALOG_SETTING.setForTesting(false);
         TabsSettings tabsSettings = launchFragment();
         ChromeSwitchPreference showTabGroupCreationDialogSwitch =
                 tabsSettings.findPreference(

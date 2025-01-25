@@ -1,52 +1,54 @@
-/*
- * Copyright (C) 2022 The Android Open Source Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+// Copyright (C) 2022 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 import m from 'mithril';
 import {SortDirection} from '../base/comparison_utils';
 import {sqliteString} from '../base/string_utils';
-import {Actions} from '../common/actions';
-import {DropDirection} from '../common/dragndrop_logic';
-import {COUNT_AGGREGATION} from '../common/empty_state';
-import {PivotTableResult} from '../common/state';
-import {Area} from '../public/selection';
-import {raf} from '../core/raf_scheduler';
-import {ColumnType} from '../trace_processor/query_result';
-import {globals} from './globals';
+import {DropDirection} from '../core/pivot_table_manager';
 import {
-  aggregationIndex,
-  areaFilters,
-  sliceAggregationColumns,
-  tables,
-} from './pivot_table_query_generator';
-import {
+  PivotTableResult,
   Aggregation,
   AggregationFunction,
   columnKey,
   PivotTree,
   TableColumn,
-} from './pivot_table_types';
-import {PopupMenuButton, popupMenuIcon, PopupMenuItem} from './popup_menu';
+  COUNT_AGGREGATION,
+} from '../core/pivot_table_types';
+import {AreaSelection} from '../public/selection';
+import {raf} from '../core/raf_scheduler';
+import {ColumnType} from '../trace_processor/query_result';
+import {
+  aggregationIndex,
+  areaFilters,
+  sliceAggregationColumns,
+  tables,
+} from '../core/pivot_table_query_generator';
+import {
+  PopupMenuButton,
+  popupMenuIcon,
+  PopupMenuItem,
+} from '../widgets/popup_menu';
 import {ReorderableCell, ReorderableCellGroup} from './reorderable_cells';
 import {AttributeModalHolder} from './tables/attribute_modal_holder';
 import {DurationWidget} from './widgets/duration';
-import {addSqlTableTab} from './sql_table_tab_command';
 import {getSqlTableDescription} from './widgets/sql/table/sql_table_registry';
 import {assertExists, assertFalse} from '../base/logging';
 import {Filter, SqlColumn} from './widgets/sql/table/column';
 import {argSqlColumn} from './widgets/sql/table/well_known_columns';
+import {TraceImpl} from '../core/trace_impl';
+import {PivotTableManager} from '../core/pivot_table_manager';
+import {extensions} from '../public/lib/extensions';
 
 interface PathItem {
   tree: PivotTree;
@@ -54,7 +56,8 @@ interface PathItem {
 }
 
 interface PivotTableAttrs {
-  selectionArea: Area;
+  trace: TraceImpl;
+  selectionArea: AreaSelection;
 }
 
 interface DrillFilter {
@@ -105,28 +108,23 @@ export function markFirst(index: number) {
 }
 
 export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
-  constructor() {
-    this.attributeModalHolder = new AttributeModalHolder((arg) => {
-      globals.dispatch(
-        Actions.setPivotTablePivotSelected({
-          column: {kind: 'argument', argument: arg},
-          selected: true,
-        }),
-      );
-      globals.dispatch(
-        Actions.setPivotTableQueryRequested({queryRequested: true}),
-      );
-    });
+  private pivotMgr: PivotTableManager;
+
+  constructor({attrs}: m.CVnode<PivotTableAttrs>) {
+    this.pivotMgr = attrs.trace.pivotTable;
+    this.attributeModalHolder = new AttributeModalHolder((arg) =>
+      this.pivotMgr.setPivotSelected({
+        column: {kind: 'argument', argument: arg},
+        selected: true,
+      }),
+    );
   }
 
   get pivotState() {
-    return globals.state.nonSerializableState.pivotTable;
-  }
-  get constrainToArea() {
-    return globals.state.nonSerializableState.pivotTable.constrainToArea;
+    return this.pivotMgr.state;
   }
 
-  renderDrillDownCell(area: Area, filters: DrillFilter[]) {
+  renderDrillDownCell(attrs: PivotTableAttrs, filters: DrillFilter[]) {
     return m(
       'td',
       m(
@@ -135,10 +133,10 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
           title: 'All corresponding slices',
           onclick: () => {
             const queryFilters = filters.map(renderDrillFilter);
-            if (this.constrainToArea) {
-              queryFilters.push(...areaFilters(area));
+            if (this.pivotState.constrainToArea) {
+              queryFilters.push(...areaFilters(attrs.selectionArea));
             }
-            addSqlTableTab({
+            extensions.addSqlTableTab(attrs.trace, {
               table: assertExists(getSqlTableDescription('slice')),
               // TODO(altimin): this should properly reference the required columns, but it works for now (until the pivot table is going to be rewritten to be more flexible).
               filters: queryFilters,
@@ -151,7 +149,7 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
   }
 
   renderSectionRow(
-    area: Area,
+    attrs: PivotTableAttrs,
     path: PathItem[],
     tree: PivotTree,
     result: PivotTableResult,
@@ -194,7 +192,7 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
       });
     }
 
-    renderedCells.push(this.renderDrillDownCell(area, drillFilters));
+    renderedCells.push(this.renderDrillDownCell(attrs, drillFilters));
     return m('tr', renderedCells);
   }
 
@@ -213,25 +211,25 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
   }
 
   renderTree(
-    area: Area,
+    attrs: PivotTableAttrs,
     path: PathItem[],
     tree: PivotTree,
     result: PivotTableResult,
     sink: m.Vnode[],
   ) {
     if (tree.isCollapsed) {
-      sink.push(this.renderSectionRow(area, path, tree, result));
+      sink.push(this.renderSectionRow(attrs, path, tree, result));
       return;
     }
     if (tree.children.size > 0) {
       // Avoid rendering the intermediate results row for the root of tree
       // and in case there's only one child subtree.
       if (!tree.isCollapsed && path.length > 0 && tree.children.size !== 1) {
-        sink.push(this.renderSectionRow(area, path, tree, result));
+        sink.push(this.renderSectionRow(attrs, path, tree, result));
       }
       for (const [key, childTree] of tree.children.entries()) {
         path.push({tree: childTree, nextKey: key});
-        this.renderTree(area, path, childTree, result, sink);
+        this.renderTree(attrs, path, childTree, result, sink);
         path.pop();
       }
       return;
@@ -240,7 +238,7 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
     // Avoid rendering the intermediate results row if it has only one leaf
     // row.
     if (!tree.isCollapsed && path.length > 0 && tree.rows.length > 1) {
-      sink.push(this.renderSectionRow(area, path, tree, result));
+      sink.push(this.renderSectionRow(attrs, path, tree, result));
     }
     for (const row of tree.rows) {
       const renderedCells = [];
@@ -267,7 +265,7 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
         renderedCells.push(m('td.aggregation' + markFirst(j), renderedValue));
       }
 
-      renderedCells.push(this.renderDrillDownCell(area, drillFilters));
+      renderedCells.push(this.renderDrillDownCell(attrs, drillFilters));
       sink.push(m('tr', renderedCells));
     }
   }
@@ -296,16 +294,12 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
   }
 
   sortingItem(aggregationIndex: number, order: SortDirection): PopupMenuItem {
+    const pivotMgr = this.pivotMgr;
     return {
       itemType: 'regular',
       text: order === 'DESC' ? 'Highest first' : 'Lowest first',
       callback() {
-        globals.dispatch(
-          Actions.setPivotTableSortColumn({aggregationIndex, order}),
-        );
-        globals.dispatch(
-          Actions.setPivotTableQueryRequested({queryRequested: true}),
-        );
+        pivotMgr.setSortColumn(aggregationIndex, order);
       },
     };
   }
@@ -327,14 +321,7 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
     return {
       itemType: 'regular',
       text: nameOverride ?? readableColumnName(aggregation.column),
-      callback: () => {
-        globals.dispatch(
-          Actions.addPivotTableAggregation({aggregation, after: index}),
-        );
-        globals.dispatch(
-          Actions.setPivotTableQueryRequested({queryRequested: true}),
-        );
-      },
+      callback: () => this.pivotMgr.addAggregation(aggregation, index),
     };
   }
 
@@ -372,7 +359,6 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
     removeItem: boolean,
   ): ReorderableCell {
     const popupItems: PopupMenuItem[] = [];
-    const state = globals.state.nonSerializableState.pivotTable;
     if (aggregation.sortDirection === undefined) {
       popupItems.push(
         this.sortingItem(index, 'DESC'),
@@ -394,20 +380,12 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
         if (aggregation.aggregationFunction === otherAgg) {
           continue;
         }
-
+        const pivotMgr = this.pivotMgr;
         popupItems.push({
           itemType: 'regular',
           text: otherAgg,
           callback() {
-            globals.dispatch(
-              Actions.setPivotTableAggregationFunction({
-                index,
-                function: otherAgg,
-              }),
-            );
-            globals.dispatch(
-              Actions.setPivotTableQueryRequested({queryRequested: true}),
-            );
+            pivotMgr.setAggregationFunction(index, otherAgg);
           },
         });
       }
@@ -417,17 +395,12 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
       popupItems.push({
         itemType: 'regular',
         text: 'Remove',
-        callback: () => {
-          globals.dispatch(Actions.removePivotTableAggregation({index}));
-          globals.dispatch(
-            Actions.setPivotTableQueryRequested({queryRequested: true}),
-          );
-        },
+        callback: () => this.pivotMgr.removeAggregation(index),
       });
     }
 
     let hasCount = false;
-    for (const agg of state.selectedAggregations.values()) {
+    for (const agg of this.pivotState.selectedAggregations.values()) {
       if (agg.aggregationFunction === 'COUNT') {
         hasCount = true;
       }
@@ -471,6 +444,7 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
     pivot: TableColumn,
     selectedPivots: Set<string>,
   ): ReorderableCell {
+    const pivotMgr = this.pivotMgr;
     const items: PopupMenuItem[] = [
       {
         itemType: 'regular',
@@ -485,15 +459,7 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
         itemType: 'regular',
         text: 'Remove',
         callback() {
-          globals.dispatch(
-            Actions.setPivotTablePivotSelected({
-              column: pivot,
-              selected: false,
-            }),
-          );
-          globals.dispatch(
-            Actions.setPivotTableQueryRequested({queryRequested: true}),
-          );
+          pivotMgr.setPivotSelected({column: pivot, selected: false});
         },
       });
     }
@@ -509,17 +475,11 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
         if (selectedPivots.has(columnKey(column))) {
           continue;
         }
-
         group.push({
           itemType: 'regular',
           text: columnName,
           callback() {
-            globals.dispatch(
-              Actions.setPivotTablePivotSelected({column, selected: true}),
-            );
-            globals.dispatch(
-              Actions.setPivotTableQueryRequested({queryRequested: true}),
-            );
+            pivotMgr.setPivotSelected({column, selected: true});
           },
         });
       }
@@ -540,25 +500,19 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
   }
 
   renderResultsTable(attrs: PivotTableAttrs) {
-    const state = globals.state.nonSerializableState.pivotTable;
-    if (state.queryResult === null) {
+    const state = this.pivotState;
+    const queryResult = state.queryResult;
+    if (queryResult === undefined) {
       return m('div', 'Loading...');
     }
-    const queryResult: PivotTableResult = state.queryResult;
 
     const renderedRows: m.Vnode[] = [];
 
     // We should not even be showing the tab if there's no results.
-    const tree = state.queryResult.tree;
+    const tree = queryResult.tree;
     assertFalse(tree.children.size === 0 && tree.rows.length === 0);
 
-    this.renderTree(
-      attrs.selectionArea,
-      [],
-      tree,
-      state.queryResult,
-      renderedRows,
-    );
+    this.renderTree(attrs, [], tree, queryResult, renderedRows);
 
     const selectedPivots = new Set(
       this.pivotState.selectedPivots.map(columnKey),
@@ -567,11 +521,11 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
       this.renderPivotColumnHeader(queryResult, pivot, selectedPivots),
     );
 
-    const removeItem = state.queryResult.metadata.aggregationColumns.length > 1;
-    const aggregationTableHeaders =
-      state.queryResult.metadata.aggregationColumns.map((aggregation, index) =>
+    const removeItem = queryResult.metadata.aggregationColumns.length > 1;
+    const aggregationTableHeaders = queryResult.metadata.aggregationColumns.map(
+      (aggregation, index) =>
         this.renderAggregationHeaderCell(aggregation, index, removeItem),
-      );
+    );
 
     return m(
       'table.pivot-table',
@@ -586,23 +540,13 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
           m(ReorderableCellGroup, {
             cells: pivotTableHeaders,
             onReorder: (from: number, to: number, direction: DropDirection) => {
-              globals.dispatch(
-                Actions.changePivotTablePivotOrder({from, to, direction}),
-              );
-              globals.dispatch(
-                Actions.setPivotTableQueryRequested({queryRequested: true}),
-              );
+              this.pivotMgr.setOrder(from, to, direction);
             },
           }),
           m(ReorderableCellGroup, {
             cells: aggregationTableHeaders,
             onReorder: (from: number, to: number, direction: DropDirection) => {
-              globals.dispatch(
-                Actions.changePivotTableAggregationOrder({from, to, direction}),
-              );
-              globals.dispatch(
-                Actions.setPivotTableQueryRequested({queryRequested: true}),
-              );
+              this.pivotMgr.setAggregationOrder(from, to, direction);
             },
           }),
           m(
@@ -616,16 +560,7 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
                     ? 'Query data for the whole timeline'
                     : 'Constrain to selected area',
                   callback: () => {
-                    globals.dispatch(
-                      Actions.setPivotTableConstrainToArea({
-                        constrain: !state.constrainToArea,
-                      }),
-                    );
-                    globals.dispatch(
-                      Actions.setPivotTableQueryRequested({
-                        queryRequested: true,
-                      }),
-                    );
+                    this.pivotMgr.setConstrainedToArea(!state.constrainToArea);
                   },
                 },
               ],
@@ -633,7 +568,7 @@ export class PivotTable implements m.ClassComponent<PivotTableAttrs> {
           ),
         ),
       ),
-      m('tbody', this.renderTotalsRow(state.queryResult), renderedRows),
+      m('tbody', this.renderTotalsRow(queryResult), renderedRows),
     );
   }
 

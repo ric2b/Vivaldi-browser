@@ -20,11 +20,9 @@
 namespace openscreen::osp {
 
 Connection::Delegate::Delegate() = default;
-
 Connection::Delegate::~Delegate() = default;
 
 Connection::Controller::Controller() = default;
-
 Connection::Controller::~Controller() = default;
 
 Connection::Connection(const PresentationInfo& info,
@@ -50,13 +48,12 @@ Error Connection::SendString(std::string_view message) {
     return Error::Code::kNoActiveConnection;
   }
 
-  msgs::PresentationConnectionMessage cbor_message;
   OSP_LOG_INFO << "sending '" << message << "' to (" << presentation_info_.id
                << ", " << connection_id_.value() << ")";
+  msgs::PresentationConnectionMessage cbor_message;
   cbor_message.connection_id = connection_id_.value();
   cbor_message.message.which =
       msgs::PresentationConnectionMessage::Message::Which::kString;
-
   new (&cbor_message.message.str) std::string(message);
 
   return protocol_connection_->WriteMessage(
@@ -68,14 +65,13 @@ Error Connection::SendBinary(std::vector<uint8_t>&& data) {
     return Error::Code::kNoActiveConnection;
   }
 
-  msgs::PresentationConnectionMessage cbor_message;
   OSP_LOG_INFO << "sending " << data.size() << " bytes to ("
                << presentation_info_.id << ", " << connection_id_.value()
                << ")";
+  msgs::PresentationConnectionMessage cbor_message;
   cbor_message.connection_id = connection_id_.value();
   cbor_message.message.which =
       msgs::PresentationConnectionMessage::Message::Which::kBytes;
-
   new (&cbor_message.message.bytes) std::vector<uint8_t>(std::move(data));
 
   return protocol_connection_->WriteMessage(
@@ -191,12 +187,14 @@ ErrorOr<size_t> ConnectionManager::OnStreamMessage(uint64_t instance_id,
   switch (message_type) {
     case msgs::Type::kPresentationConnectionMessage: {
       msgs::PresentationConnectionMessage message;
-      ssize_t bytes_decoded = msgs::DecodePresentationConnectionMessage(
-          buffer, buffer_size, message);
+      const msgs::CborResult bytes_decoded =
+          msgs::DecodePresentationConnectionMessage(buffer, buffer_size,
+                                                    message);
       if (bytes_decoded < 0) {
         if (bytes_decoded == msgs::kParserEOF) {
           return Error::Code::kCborIncompleteMessage;
         }
+
         OSP_LOG_WARN << "presentation-connection-message parse error";
         return Error::Code::kParseError;
       }
@@ -207,28 +205,35 @@ ErrorOr<size_t> ConnectionManager::OnStreamMessage(uint64_t instance_id,
       }
 
       switch (message.message.which) {
-        case decltype(message.message.which)::kString:
+        case decltype(message.message.which)::kString: {
           connection->delegate()->OnStringMessage(message.message.str);
           break;
-        case decltype(message.message.which)::kBytes:
+        }
+
+        case decltype(message.message.which)::kBytes: {
           connection->delegate()->OnBinaryMessage(message.message.bytes);
           break;
-        default:
+        }
+
+        default: {
           OSP_LOG_WARN << "uninitialized message data in "
                           "presentation-connection-message";
           break;
+        }
       }
       return bytes_decoded;
     }
 
     case msgs::Type::kPresentationConnectionCloseEvent: {
       msgs::PresentationConnectionCloseEvent event;
-      ssize_t bytes_decoded = msgs::DecodePresentationConnectionCloseEvent(
-          buffer, buffer_size, event);
+      const msgs::CborResult bytes_decoded =
+          msgs::DecodePresentationConnectionCloseEvent(buffer, buffer_size,
+                                                       event);
       if (bytes_decoded < 0) {
         if (bytes_decoded == msgs::kParserEOF) {
           return Error::Code::kCborIncompleteMessage;
         }
+
         OSP_LOG_WARN << "decode presentation-connection-close-event error: "
                      << bytes_decoded;
         return Error::Code::kParseError;
@@ -258,10 +263,6 @@ Connection* ConnectionManager::GetConnection(uint64_t connection_id) {
 
   OSP_DVLOG << "unknown ID: " << connection_id;
   return nullptr;
-}
-
-size_t ConnectionManager::ConnectionCount() const {
-  return connections_.size();
 }
 
 }  // namespace openscreen::osp

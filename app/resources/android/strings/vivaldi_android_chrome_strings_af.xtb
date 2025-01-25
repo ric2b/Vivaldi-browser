@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Tik-om-te-soek is ’n funksie wat slegs beskikbaar is wanneer Google ingestel is as versteksoekenjin in Vivaldi. Dit stuur die geselekteerde woord en die huidige blad as konteks na Google Search. U kan dit in <ph name="BEGIN_LINK" /> Instellings <ph name="END_LINK" /> afskakel.</translation>
 <translation id="1598449788754183301">Tokkel normale/privaat oortjies</translation>
 <translation id="1644574205037202324">Geskiedenis</translation>
-<translation id="17513872634828108">Open oortjies</translation>
 <translation id="1829244130665387512">Soek op blad</translation>
 <translation id="1910514478706885609">Open in nuwe oortjiegroep</translation>
 <translation id="1925021887439448749">Voer gepasmaakte webadres in</translation>
 <translation id="2038563949887743358">Aktiveer Versoek om werkskermwerf</translation>
-<translation id="2139186145475833000">Voeg by tuisskerm</translation>
 <translation id="2149973817440762519">Wysig boekmerk</translation>
 <translation id="2306442503286132111">Boekmerk is in vouer <ph name="FOLDER_NAME" /> bewaar</translation>
 <translation id="2433507940547922241">Voorkoms</translation>
@@ -36,7 +34,9 @@
 <translation id="4137746084635924146">Huidige toesteltaal</translation>
 <translation id="4167670741834902166">Nuwe privaat oortjie</translation>
 <translation id="4195643157523330669">Open in nuwe oortjie</translation>
+<translation id="4225895483398857530">Nutsbalkkortpad</translation>
 <translation id="4243710787042215766">Open in privaat oortjie</translation>
+<translation id="4304713468139749426">Wagwoordbestuurder</translation>
 <translation id="451872707440238414">Deursoek u boekmerke</translation>
 <translation id="4526803704855831732">Privaat Oortjies</translation>
 <translation id="4719086422742491124">Leer meer oor onderwerpe op webwerwe sonder om die blad te verlaat. Kies een of meer woorde op die blad om daarna te soek.
@@ -73,6 +73,7 @@ Druk lank op die soekterm om die seleksie aan te pas. Om die soekopdrag te verfy
 <translation id="8560602726703398413">Bekyk u leeslys in Boekmerke</translation>
 <translation id="85991616550051997">Gaan na tuisblad</translation>
 <translation id="8820817407110198400">Boekmerke</translation>
+<translation id="9042893549633094279">Privaatheid en sekuriteit</translation>
 <translation id="9063523880881406963">Deaktiveer Versoek om werkskermwerf</translation>
 <translation id="9080642952018487277">Betree privaat modus</translation>
 <translation id="96681097142096641">Bekyk vereenvoudigde bladsy?</translation>

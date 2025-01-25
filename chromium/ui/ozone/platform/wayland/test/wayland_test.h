@@ -133,7 +133,7 @@ class WaylandTestBase {
   std::unique_ptr<WaylandWindow> window_;
   gfx::AcceleratedWidget widget_ = gfx::kNullAcceleratedWidget;
   std::vector<base::test::FeatureRef> enabled_features_{
-      features::kLacrosColorManagement, ui::kWaylandOverlayDelegation};
+      ui::kWaylandOverlayDelegation};
   std::vector<base::test::FeatureRef> disabled_features_;
 
  private:

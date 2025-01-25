@@ -122,7 +122,7 @@ TEST(test_layer_setting_cpp, vkuGetLayerSettingValue_Uint32) {
     std::uint32_t pValues;
     vkuGetLayerSettingValue(layerSettingSet, "my_setting", pValues);
 
-    EXPECT_EQ(76, pValues);
+    EXPECT_EQ(76u, pValues);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -146,9 +146,9 @@ TEST(test_layer_setting_cpp, vkuGetLayerSettingValues_Uint32) {
     std::vector<std::uint32_t> values;
     vkuGetLayerSettingValues(layerSettingSet, "my_setting", values);
 
-    EXPECT_EQ(76, values[0]);
-    EXPECT_EQ(82, values[1]);
-    EXPECT_EQ(2, values.size());
+    EXPECT_EQ(76u, values[0]);
+    EXPECT_EQ(82u, values[1]);
+    EXPECT_EQ(2u, values.size());
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -421,9 +421,9 @@ TEST(test_layer_setting_cpp, vkuGetLayerSettingValue_Frameset) {
     VkuFrameset pValues;
     vkuGetLayerSettingValue(layerSettingSet, "my_setting", pValues);
 
-    EXPECT_EQ(76, pValues.first);
-    EXPECT_EQ(100, pValues.count);
-    EXPECT_EQ(10, pValues.step);
+    EXPECT_EQ(76u, pValues.first);
+    EXPECT_EQ(100u, pValues.count);
+    EXPECT_EQ(10u, pValues.step);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -447,12 +447,12 @@ TEST(test_layer_setting_cpp, vkuGetLayerSettingValues_Frameset) {
     std::vector<VkuFrameset> values;
     vkuGetLayerSettingValues(layerSettingSet, "my_setting", values);
 
-    EXPECT_EQ(76, values[0].first);
-    EXPECT_EQ(100, values[0].count);
-    EXPECT_EQ(10, values[0].step);
-    EXPECT_EQ(1, values[1].first);
-    EXPECT_EQ(100, values[1].count);
-    EXPECT_EQ(1, values[1].step);
+    EXPECT_EQ(76u, values[0].first);
+    EXPECT_EQ(100u, values[0].count);
+    EXPECT_EQ(10u, values[0].step);
+    EXPECT_EQ(1u, values[1].first);
+    EXPECT_EQ(100u, values[1].count);
+    EXPECT_EQ(1u, values[1].step);
     EXPECT_EQ(2, values.size());
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
@@ -476,10 +476,10 @@ TEST(test_layer_setting_cpp, vkuGetLayerSettingValues_VkuCustomSTypeInfo) {
 
     std::vector<VkuCustomSTypeInfo> values;
     vkuGetLayerSettingValues(layerSettingSet, "my_setting", values);
-    EXPECT_EQ(0x76, values[0].first);
-    EXPECT_EQ(0x82, values[0].second);
-    EXPECT_EQ(76, values[1].first);
-    EXPECT_EQ(82, values[1].second);
+    EXPECT_EQ(0x76u, values[0].first);
+    EXPECT_EQ(0x82u, values[0].second);
+    EXPECT_EQ(76u, values[1].first);
+    EXPECT_EQ(82u, values[1].second);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }

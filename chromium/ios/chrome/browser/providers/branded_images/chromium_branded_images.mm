@@ -67,8 +67,7 @@ UIImage* GetBrandedImage(BrandedImage branded_image) {
       return [UIImage imageNamed:@"password_suggestion_key"];
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return nil;
+  NOTREACHED();
 }
 
 }  // namespace provider

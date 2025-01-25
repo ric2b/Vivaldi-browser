@@ -37,7 +37,7 @@ public class AccountCapabilities {
     }
 
     @VisibleForTesting
-    public AccountCapabilities(HashMap<String, Boolean> accountCapabilities) {
+    public AccountCapabilities(Map<String, Boolean> accountCapabilities) {
         mAccountCapabilities = accountCapabilities;
     }
 
@@ -49,7 +49,7 @@ public class AccountCapabilities {
             Map<String, Integer> capabilityResponses) {
         assert capabilityResponses.size()
                 == AccountCapabilitiesConstants.SUPPORTED_ACCOUNT_CAPABILITY_NAMES.size();
-        HashMap<String, Boolean> capabilities = new HashMap<>();
+        Map<String, Boolean> capabilities = new HashMap<>();
         for (String capabilityName :
                 AccountCapabilitiesConstants.SUPPORTED_ACCOUNT_CAPABILITY_NAMES) {
             assert capabilityResponses.containsKey(capabilityName);
@@ -119,6 +119,13 @@ public class AccountCapabilities {
      */
     public @Tribool int canUseChromeIpProtection() {
         return getCapabilityByName(AccountCapabilitiesConstants.CAN_USE_CHROME_IP_PROTECTION_NAME);
+    }
+
+    /**
+     * @return canUseCopyeditorFeature capability value.
+     */
+    public @Tribool int canUseCopyeditorFeature() {
+        return getCapabilityByName(AccountCapabilitiesConstants.CAN_USE_COPYEDITOR_FEATURE_NAME);
     }
 
     /**

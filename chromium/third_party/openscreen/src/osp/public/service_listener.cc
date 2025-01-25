@@ -6,6 +6,9 @@
 
 namespace openscreen::osp {
 
+ServiceListener::Observer::Observer() = default;
+ServiceListener::Observer::~Observer() = default;
+
 bool ServiceListener::Config::IsValid() const {
   return !network_interfaces.empty();
 }

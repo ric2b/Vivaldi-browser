@@ -1,17 +1,11 @@
 SKIP: INVALID
 
+<dawn>/src/tint/lang/glsl/writer/printer/printer.cc:1487 internal compiler error: TINT_UNREACHABLE unhandled core builtin: subgroupAdd
+********************************************************************
+*  The tint shader compiler has encountered an unexpected error.   *
+*                                                                  *
+*  Please help us fix this issue by submitting a bug report at     *
+*  crbug.com/tint with the source program that triggered the bug.  *
+********************************************************************
 
-@group(0) @binding(0) var<storage, read_write> prevent_dce : vec2<f32>;
-
-fn subgroupAdd_dcf73f() -> vec2<f32> {
-  var arg_0 = vec2<f32>(1.0f);
-  var res : vec2<f32> = subgroupAdd(arg_0);
-  return res;
-}
-
-@compute @workgroup_size(1)
-fn compute_main() {
-  prevent_dce = subgroupAdd_dcf73f();
-}
-
-Failed to generate: error: Unknown builtin method: 0x5602751cd498
+tint executable returned error: signal: trace/BPT trap

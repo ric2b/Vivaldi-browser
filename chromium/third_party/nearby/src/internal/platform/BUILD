@@ -62,6 +62,7 @@ cc_library(
     visibility = [
         "//:__subpackages__",
         "//chrome/chromeos/assistant/data_migration/lib:__pkg__",
+        "//connections:partners",
     ],
     deps = [
         "//proto:connections_enums_cc_proto",
@@ -89,6 +90,7 @@ cc_library(
     ],
     visibility = [
         "//connections:__subpackages__",
+        "//connections:partners",
         "//internal/platform/implementation:__subpackages__",
     ],
     deps = [
@@ -261,7 +263,7 @@ cc_library(
         "//internal/weave:__subpackages__",
         "//location/nearby/apps:__subpackages__",
         "//location/nearby/cpp:__subpackages__",
-        "//location/nearby/sharing/sdk/test_client:__pkg__",
+        "//location/nearby/sharing/sdk:__subpackages__",
         "//location/nearby/testing/nearby_native:__subpackages__",
         "//presence:__subpackages__",
         "//sharing:__subpackages__",
@@ -299,7 +301,6 @@ cc_library(
         "wifi_direct.cc",
         "wifi_hotspot.cc",
         "wifi_lan.cc",
-        "wifi_utils.cc",
     ],
     hdrs = [
         "ble.h",
@@ -312,7 +313,6 @@ cc_library(
         "wifi_direct.h",
         "wifi_hotspot.h",
         "wifi_lan.h",
-        "wifi_utils.h",
     ],
     copts = [
         "-DCORE_ADAPTER_DLL",
@@ -333,13 +333,13 @@ cc_library(
         "//internal/base",
         "//internal/platform/implementation:comm",
         "//internal/platform/implementation:platform",
+        "//internal/platform/implementation:wifi_utils",
         # TODO: Support WebRTC
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/functional:any_invocable",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:optional",
     ],
 )
@@ -392,6 +392,7 @@ cc_test(
         "//internal/platform/implementation/g3",  # build_cleaner: keep
         "@com_github_protobuf_matchers//protobuf-matchers",
         "@com_google_absl//absl/hash:hash_testing",
+        "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/synchronization",
         "@com_google_googletest//:gtest_main",
     ],
@@ -456,7 +457,6 @@ cc_test(
         "wifi_lan_connection_info_test.cc",
         "wifi_lan_test.cc",
         "wifi_test.cc",
-        "wifi_utils_test.cc",
     ],
     deps = [
         ":base",

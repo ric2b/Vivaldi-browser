@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as childProcess from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import {asArray, commandLineArgs, DiffBehaviors} from './commandline.js';
@@ -22,11 +24,14 @@ interface Config {
   chromeBinary: string;
   serverType: ServerType;
   debug: boolean;
+  headless: boolean;
   coverage: boolean;
   repetitions: number;
   onDiff: {update: boolean|string[], throw: boolean};
   shuffle: boolean;
   mochaGrep: {invert?: boolean, grep?: string}|{invert?: boolean, fgrep?: string};
+  copyScreenshotGoldens: boolean;
+  configureChrome: (executablePath: string) => void;
 }
 
 function sliceArrayFromElement(array: string[], element: string) {
@@ -74,12 +79,32 @@ function getTestsFromOptions() {
   return [];
 }
 
+function runProcess(exe: string, args: string[], options: childProcess.SpawnSyncOptionsWithStringEncoding) {
+  return childProcess.spawnSync(exe, args, options);
+}
+
+function configureChrome(executablePath: string) {
+  if (os.type() === 'Windows_NT') {
+    const result = runProcess(
+        'python3',
+        [
+          path.join(SOURCE_ROOT, 'scripts', 'deps', 'set_lpac_acls.py'),
+          path.dirname(executablePath),
+        ],
+        {encoding: 'utf-8', stdio: 'inherit'});
+    if (result.error || (result.status ?? 1) !== 0) {
+      throw new Error('Setting permissions failed: ' + result.error?.message);
+    }
+  }
+}
+
 export const TestConfig: Config = {
   tests: getTestsFromOptions(),
   artifactsDir: options['artifacts-dir'] || SOURCE_ROOT,
   chromeBinary: options['chrome-binary'] ?? defaultChromePath(),
   serverType: ServerType.HOSTED_MODE,
   debug: options['debug'],
+  headless: options['headless'],
   coverage: options['coverage'],
   repetitions: options['repeat'],
   onDiff: {
@@ -88,6 +113,8 @@ export const TestConfig: Config = {
   },
   shuffle: options['shuffle'],
   mochaGrep: mochaGrep(),
+  copyScreenshotGoldens: false,
+  configureChrome,
 };
 
 export function loadTests(testDirectory: string) {

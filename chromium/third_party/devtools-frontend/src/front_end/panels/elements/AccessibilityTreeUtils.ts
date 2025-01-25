@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import './components/components.js';
+
 import * as SDK from '../../core/sdk/sdk.js';
-import type * as TreeOutline from '../../ui/components/tree_outline/tree_outline.js';
-import * as ElementsComponents from './components/components.js';
-import * as LitHtml from '../../ui/lit-html/lit-html.js';
 import type * as Protocol from '../../generated/protocol.js';
+import type * as TreeOutline from '../../ui/components/tree_outline/tree_outline.js';
+import * as LitHtml from '../../ui/lit-html/lit-html.js';
+
+const {html} = LitHtml;
 
 export type AXTreeNodeData = SDK.AccessibilityModel.AccessibilityNode;
 export type AXTreeNode = TreeOutline.TreeOutlineUtils.TreeNode<AXTreeNodeData>;
@@ -109,17 +112,17 @@ export async function sdkNodeToAXTreeNodes(sdkNode: SDK.AccessibilityModel.Acces
   }];
 }
 
-type Data = ElementsComponents.AccessibilityTreeNode.AccessibilityTreeNodeData;
-
 export function accessibilityNodeRenderer(node: AXTreeNode): LitHtml.TemplateResult {
-  const tag = ElementsComponents.AccessibilityTreeNode.AccessibilityTreeNode.litTagName;
   const sdkNode = node.treeNodeData;
   const name = sdkNode.name()?.value || '';
   const role = sdkNode.role()?.value || '';
   const properties = sdkNode.properties() || [];
   const ignored = sdkNode.ignored();
   const id = getNodeId(sdkNode);
-  return LitHtml.html`<${tag} .data=${{name, role, ignored, properties, id} as Data}></${tag}>`;
+  return html`<devtools-accessibility-tree-node .data=${{
+    name, role, ignored, properties, id,
+  }
+  }></devtools-accessibility-tree-node>`;
 }
 
 export function getNodeId(node: SDK.AccessibilityModel.AccessibilityNode): string {

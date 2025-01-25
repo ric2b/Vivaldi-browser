@@ -20,13 +20,13 @@ import {
   FOREGROUND_COLOR,
   TRACK_SHELL_WIDTH,
 } from './css_constants';
-import {globals} from './globals';
 import {getMaxMajorTicks, generateTicks, TickType} from './gridline_helper';
 import {Size2D} from '../base/geom';
 import {Panel} from './panel_container';
 import {renderDuration} from './widgets/duration';
 import {canvasClip} from '../base/canvas_utils';
 import {TimeScale} from '../base/time_scale';
+import {TraceImpl} from '../core/trace_impl';
 
 export interface BBox {
   x: number;
@@ -135,6 +135,8 @@ export class TimeSelectionPanel implements Panel {
   readonly kind = 'panel';
   readonly selectable = false;
 
+  constructor(private readonly trace: TraceImpl) {}
+
   render(): m.Children {
     return m('.time-selection-panel');
   }
@@ -153,7 +155,7 @@ export class TimeSelectionPanel implements Panel {
   }
 
   private renderPanel(ctx: CanvasRenderingContext2D, size: Size2D): void {
-    const visibleWindow = globals.timeline.visibleWindow;
+    const visibleWindow = this.trace.timeline.visibleWindow;
     const timescale = new TimeScale(visibleWindow, {
       left: 0,
       right: size.width,
@@ -162,7 +164,7 @@ export class TimeSelectionPanel implements Panel {
 
     if (size.width > 0 && timespan.duration > 0n) {
       const maxMajorTicks = getMaxMajorTicks(size.width);
-      const offset = globals.timestampOffset();
+      const offset = this.trace.timeline.timestampOffset();
       const tickGen = generateTicks(timespan, maxMajorTicks, offset);
       for (const {type, time} of tickGen) {
         const px = Math.floor(timescale.timeToPx(time));
@@ -172,31 +174,39 @@ export class TimeSelectionPanel implements Panel {
       }
     }
 
-    const localArea = globals.timeline.selectedArea;
-    const selection = globals.selectionManager.selection;
+    const localArea = this.trace.timeline.selectedArea;
+    const selection = this.trace.selection.selection;
     if (localArea !== undefined) {
       const start = Time.min(localArea.start, localArea.end);
       const end = Time.max(localArea.start, localArea.end);
       this.renderSpan(ctx, timescale, size, start, end);
-    } else if (selection.kind === 'area') {
-      const start = Time.min(selection.start, selection.end);
-      const end = Time.max(selection.start, selection.end);
-      this.renderSpan(ctx, timescale, size, start, end);
+    } else {
+      if (selection.kind === 'area') {
+        const start = Time.min(selection.start, selection.end);
+        const end = Time.max(selection.start, selection.end);
+        this.renderSpan(ctx, timescale, size, start, end);
+      } else if (selection.kind === 'track_event') {
+        const start = selection.ts;
+        const end = Time.add(selection.ts, selection.dur);
+        if (end > start) {
+          this.renderSpan(ctx, timescale, size, start, end);
+        }
+      }
     }
 
-    if (globals.state.hoverCursorTimestamp !== -1n) {
+    if (this.trace.timeline.hoverCursorTimestamp !== undefined) {
       this.renderHover(
         ctx,
         timescale,
         size,
-        globals.state.hoverCursorTimestamp,
+        this.trace.timeline.hoverCursorTimestamp,
       );
     }
 
-    for (const note of globals.noteManager.notes.values()) {
+    for (const note of this.trace.notes.notes.values()) {
       const noteIsSelected =
         selection.kind === 'note' && selection.id === note.id;
-      if (note.noteType === 'SPAN' && !noteIsSelected) {
+      if (note.noteType === 'SPAN' && noteIsSelected) {
         this.renderSpan(ctx, timescale, size, note.start, note.end);
       }
     }
@@ -211,7 +221,7 @@ export class TimeSelectionPanel implements Panel {
     ts: time,
   ) {
     const xPos = Math.floor(timescale.timeToPx(ts));
-    const domainTime = globals.toDomainTime(ts);
+    const domainTime = this.trace.timeline.toDomainTime(ts);
     const label = stringifyTimestamp(domainTime);
     drawIBar(ctx, xPos, this.getBBoxFromSize(size), label);
   }

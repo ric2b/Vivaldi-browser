@@ -8,10 +8,10 @@ import type * as Root from '../../../front_end/core/root/root.js';
 import {expectError} from '../../conductor/events.js';
 import {click, getBrowserAndPages, goToResource} from '../../shared/helper.js';
 import {CONSOLE_TAB_SELECTOR} from '../helpers/console-helpers.js';
+import {openSoftContextMenuAndClickOnItem} from '../helpers/context-menu-helpers.js';
+import {closeSettings} from '../helpers/settings-helpers.js';
 
-// Failing E2E tests are slowing us down doing the UI updates.
-// We'll fix & re-enable them back after we're in a stable position.
-describe.skip('[crbug.com/365038585] Freestyler', function() {
+describe('Freestyler', function() {
   let preloadScriptId: string;
 
   afterEach(async () => {
@@ -27,24 +27,31 @@ describe.skip('[crbug.com/365038585] Freestyler', function() {
   });
 
   async function setupMocks(
-      aidaAvailability: Partial<Root.Runtime.AidaAvailability>,
-      devToolsFreestylerDogfood: Partial<Root.Runtime.HostConfigFreestylerDogfood>, messages: string[]) {
+      hostConfig: Root.Runtime.HostConfig,
+      messages: string[],
+  ) {
     const {frontend} = getBrowserAndPages();
     await frontend.bringToFront();
-    // TODO: come up with less invasive way to mock host configs.
-    const {identifier} = await frontend.evaluateOnNewDocument(
-        `globalThis.hostConfigForTesting = {...globalThis.hostConfigForTesting, devToolsFreestylerDogfood: ${
-            JSON.stringify(devToolsFreestylerDogfood)}, aidaAvailability: ${JSON.stringify(aidaAvailability)}
-  };
 
-  globalThis.getSyncInformationForTesting = () => {
-    return {
+    const syncInformation = {
       accountEmail: 'some-email',
       isSyncActive: true,
       arePreferencesSynced: false,
     };
-  };
-  `);
+
+    // TODO: come up with less invasive way to mock host configs.
+    const {identifier} = await frontend.evaluateOnNewDocument(`
+      globalThis.hostConfigForTesting = {
+        ...globalThis.hostConfigForTesting ?? {},
+        ...JSON.parse('${JSON.stringify(hostConfig)}'),
+      }
+
+      console.log(globalThis.hostConfigForTesting);
+
+      globalThis.getSyncInformationForTesting = () => {
+        return JSON.parse('${JSON.stringify(syncInformation)}');
+      };
+    `);
 
     preloadScriptId = identifier;
     await frontend.reload({
@@ -84,13 +91,19 @@ describe.skip('[crbug.com/365038585] Freestyler', function() {
     await frontend.keyboard.press('Enter');
   }
 
-  async function openFreestyler(): Promise<void> {
+  async function turnOnAiAssistance() {
     const {frontend} = getBrowserAndPages();
-    await frontend.locator('aria/Customize and control DevTools').click();
-    await frontend.locator('aria/More tools').click();
-    await frontend.locator('aria/AI assistant').click();
-    // Accept consent.
-    await frontend.locator('aria/Accept').click();
+
+    // Click on the settings redirect link.
+    await frontend.locator('pierce/.disabled-view button[role=link]').click();
+    // Enable "AI Assistance" toggle in the settings.
+    await frontend.locator('aria/Enable AI assistance').click();
+    // Close settings to come back to the AI Assistance panel.
+    await closeSettings();
+  }
+
+  async function openFreestyler(): Promise<void> {
+    await openSoftContextMenuAndClickOnItem('pierce/.elements-disclosure li.selected', 'Ask AI');
   }
 
   async function enableDebugModeForFreestyler(): Promise<void> {
@@ -143,11 +156,19 @@ describe.skip('[crbug.com/365038585] Freestyler', function() {
   }
 
   async function runWithMessages(query: string, messages: string[]): Promise<Array<Log>> {
-    await setupMocks({}, {enabled: true}, messages);
+    await setupMocks(
+        {
+          aidaAvailability: {},
+          devToolsFreestyler: {
+            enabled: true,
+          },
+        },
+        messages);
     await goToResource('../resources/recorder/recorder.html');
 
     await inspectNode('div');
     await openFreestyler();
+    await turnOnAiAssistance();
     await enableDebugModeForFreestyler();
     await typeQuery(query);
     return await submitAndWaitTillDone();
@@ -209,7 +230,7 @@ STOP`,
     assert.deepStrictEqual(result.at(-1)!.request.input, 'OBSERVATION: {"aspectRatio":"auto"}');
   });
 
-  it('modifes the inline styles using the extension functions', async () => {
+  it('modifies the inline styles using the extension functions', async () => {
     await runWithMessages('Change the background color for this element to blue', [
       `THOUGHT: I can change the background color of an element by setting the background-color CSS property.
 TITLE: changing the property

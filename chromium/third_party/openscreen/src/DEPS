@@ -287,11 +287,11 @@ include_rules = [
   '-third_party/abseil',
 
   # Abseil allowed headers.
+  # IMPORTANT: Do not add new entries; abseil is being removed from the library.
+  # See https://issuetracker.google.com/158433927
   '+absl/base/thread_annotations.h',
   '+absl/hash/hash.h',
   '+absl/hash/hash_testing.h',
-  '+absl/strings/str_join.h',
-  '+absl/strings/str_split.h',
   '+absl/types/variant.h',
 
   # Similar to abseil, don't include boringssl using root path.  Instead,

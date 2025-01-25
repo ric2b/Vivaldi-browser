@@ -109,7 +109,7 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost
 #endif
 
    protected:
-    virtual ~Delegate() {}
+    virtual ~Delegate() = default;
   };
 
   struct VIZ_HOST_EXPORT InitParams {
@@ -222,9 +222,6 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost
 
   void MaybeSendFontRenderParams();
 
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  void SetForceAllowAccessToGpu(bool enable);
-
  private:
   friend class GpuHostImplTestApi;
 
@@ -320,16 +317,11 @@ class VIZ_HOST_EXPORT GpuHostImpl : public mojom::GpuHost
   std::multimap<int32_t, scoped_refptr<gpu::GpuDiskCache>> client_id_to_caches_;
   std::string shader_prefix_key_;
 
-  const bool shared_bitmap_to_shared_image_flag_;
-
   // These are the channel requests that we have already sent to the GPU
   // service, but haven't heard back about yet.
   base::flat_map<int, EstablishChannelCallback> channel_requests_;
 
   base::OneShotTimer shutdown_timeout_;
-
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  static bool force_allow_access_to_gpu_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

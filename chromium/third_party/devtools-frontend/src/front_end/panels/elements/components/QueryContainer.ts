@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../ui/components/icon_button/icon_button.js';
+import '../../../ui/components/node_text/node_text.js';
+
 import * as SDK from '../../../core/sdk/sdk.js';
-import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
-import * as NodeText from '../../../ui/components/node_text/node_text.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import {type DOMNode} from './Helper.js';
+import type {DOMNode} from './Helper.js';
 import queryContainerStyles from './queryContainer.css.js';
 
 const {render, html} = LitHtml;
@@ -28,8 +29,6 @@ export interface QueryContainerData {
 }
 
 export class QueryContainer extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-query-container`;
-
   readonly #shadow = this.attachShadow({mode: 'open'});
   #queryName?: string;
   #container?: DOMNode;
@@ -90,13 +89,13 @@ export class QueryContainer extends HTMLElement {
         @click=${this.#onContainerLinkClick}
         @mouseenter=${this.#onContainerLinkMouseEnter}
         @mouseleave=${this.#onContainerLinkMouseLeave}
-      ><${NodeText.NodeText.NodeText.litTagName}
+      ><devtools-node-text
           data-node-title=${nodeTitle}
           .data=${{
         nodeTitle,
         nodeId: idToDisplay,
         nodeClasses: classesToDisplay,
-      } as NodeText.NodeText.NodeTextData}></${NodeText.NodeText.NodeText.litTagName}></a>
+      }}></devtools-node-text></a>
       ${this.#isContainerLinkHovered ? this.#renderQueriedSizeDetails() : LitHtml.nothing}
     `, this.#shadow, {
       host: this,
@@ -121,18 +120,18 @@ export class QueryContainer extends HTMLElement {
     // clang-format off
     return html`
       <span class="queried-size-details">
-        (${this.#queriedSizeDetails.queryAxis}<${IconButton.Icon.Icon.litTagName}
+        (${this.#queriedSizeDetails.queryAxis}<devtools-icon
           class=${axisIconClasses} .data=${{
             iconName: 'width',
             color: 'var(--icon-default)',
-          } as IconButton.Icon.IconData}></${IconButton.Icon.Icon.litTagName}>)
+          }}></devtools-icon>)
         ${areBothAxesQueried && this.#queriedSizeDetails.width ? 'width:' : LitHtml.nothing}
         ${this.#queriedSizeDetails.width || LitHtml.nothing}
         ${areBothAxesQueried && this.#queriedSizeDetails.height ? 'height:' : LitHtml.nothing}
         ${this.#queriedSizeDetails.height || LitHtml.nothing}
       </span>
     `;
-    // clang-format on
+            // clang-format on
   }
 }
 

@@ -177,7 +177,7 @@ public class DownloadActivityV2Test extends BlankUiTestActivityTestCase {
     private void setUpUi() {
         DownloadManagerUiConfig config =
                 DownloadManagerUiConfigHelper.fromFlags()
-                        .setOTRProfileID(null)
+                        .setOtrProfileId(null)
                         .setIsSeparateActivity(true)
                         .build();
 
@@ -187,7 +187,7 @@ public class DownloadActivityV2Test extends BlankUiTestActivityTestCase {
                 new ModalDialogManager(mAppModalPresenter, ModalDialogManager.ModalDialogType.APP);
 
         FaviconProvider faviconProvider = (url, faviconSizePx, callback) -> {};
-        Callback<Context> settingsLauncher = context -> {};
+        Callback<Context> settingsNavigation = context -> {};
         ObservableSupplierImpl<Boolean> isPrefetchEnabledSupplier = new ObservableSupplierImpl<>();
         isPrefetchEnabledSupplier.set(true);
 
@@ -196,7 +196,7 @@ public class DownloadActivityV2Test extends BlankUiTestActivityTestCase {
                         getActivity(),
                         config,
                         isPrefetchEnabledSupplier,
-                        settingsLauncher,
+                        settingsNavigation,
                         mSnackbarManager,
                         mModalDialogManager,
                         mTracker,
@@ -215,6 +215,7 @@ public class DownloadActivityV2Test extends BlankUiTestActivityTestCase {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "crbug.com/372835715")
     public void testLaunchingActivity() {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -560,6 +561,7 @@ public class DownloadActivityV2Test extends BlankUiTestActivityTestCase {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "crbug.com/372835715")
     public void testSearchView() throws Exception {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -590,6 +592,7 @@ public class DownloadActivityV2Test extends BlankUiTestActivityTestCase {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "https://crbug.com/372252512")
     public void testDismissSearchViewByBackPress() {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {

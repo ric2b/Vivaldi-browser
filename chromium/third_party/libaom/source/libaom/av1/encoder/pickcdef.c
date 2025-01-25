@@ -826,7 +826,13 @@ void av1_cdef_search(AV1_COMP *cpi) {
   CDEF_CONTROL cdef_control = cpi->oxcf.tool_cfg.cdef_control;
 
   assert(cdef_control != CDEF_NONE);
-  if (cdef_control == CDEF_REFERENCE && cpi->ppi->rtc_ref.non_reference_frame) {
+  // For CDEF_ADAPTIVE, turning off CDEF around qindex 100 was best for still
+  // pictures
+  if ((cdef_control == CDEF_REFERENCE &&
+       cpi->ppi->rtc_ref.non_reference_frame) ||
+      (cdef_control == CDEF_ADAPTIVE && cpi->oxcf.mode == ALLINTRA &&
+       (cpi->oxcf.rc_cfg.mode == AOM_Q || cpi->oxcf.rc_cfg.mode == AOM_CQ) &&
+       cpi->oxcf.rc_cfg.cq_level < 100)) {
     CdefInfo *const cdef_info = &cm->cdef_info;
     cdef_info->nb_cdef_strengths = 1;
     cdef_info->cdef_bits = 0;

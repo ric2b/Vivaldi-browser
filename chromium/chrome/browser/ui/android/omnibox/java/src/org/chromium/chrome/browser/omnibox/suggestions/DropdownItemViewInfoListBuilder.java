@@ -27,6 +27,7 @@ import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionProces
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.components.omnibox.AutocompleteInput;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteResult;
 import org.chromium.components.omnibox.GroupsProto.GroupConfig;
@@ -187,13 +188,15 @@ class DropdownItemViewInfoListBuilder {
      * will be applied. Each suggestion is permitted to be handled by a distinct, separate
      * Processor.
      *
-     * @param groupDetails the details describing this (vertical) suggestions group
-     * @param groupMatches the matches that belong to this suggestions group
-     * @param firstVerticalPosition the index of the first AutocompleteMatch in the target list
+     * @param input The input for which produced the suggestions.
+     * @param groupDetails The details describing this (vertical) suggestions group
+     * @param groupMatches The matches that belong to this suggestions group
+     * @param firstVerticalPosition The index of the first AutocompleteMatch in the target list
      */
     @VisibleForTesting
     @NonNull
     List<DropdownItemViewInfo> buildVerticalSuggestionsGroup(
+            @NonNull AutocompleteInput input,
             @NonNull GroupConfig groupDetails,
             @Nullable GroupConfig previousDetails,
             @NonNull List<AutocompleteMatch> groupMatches,
@@ -245,7 +248,7 @@ class DropdownItemViewInfoListBuilder {
                 }
             }
 
-            processor.populateModel(match, model, indexOnList);
+            processor.populateModel(input, match, model, indexOnList);
             result.add(new DropdownItemViewInfo(processor, model, groupDetails));
         }
 
@@ -262,13 +265,15 @@ class DropdownItemViewInfoListBuilder {
      * <p>Once built, all the matches reported by this call are appended to the target list of
      * DropdownItemViewInfo objects, encompassing all suggestion groups.
      *
-     * @param groupDetails the details describing this (vertical) suggestions group
-     * @param groupMatches the matches that belong to this suggestions group
-     * @param position the index on the target list
+     * @param input The input for which produced the suggestions.
+     * @param groupDetails The details describing this (vertical) suggestions group
+     * @param groupMatches The matches that belong to this suggestions group
+     * @param position The index on the target list
      */
     @VisibleForTesting
     @NonNull
     List<DropdownItemViewInfo> buildHorizontalSuggestionsGroup(
+            @NonNull AutocompleteInput input,
             @NonNull GroupConfig groupDetails,
             @NonNull List<AutocompleteMatch> groupMatches,
             int position) {
@@ -297,7 +302,7 @@ class DropdownItemViewInfoListBuilder {
             @NonNull
             AutocompleteMatch match = groupMatches.get(index);
             assert processor.doesProcessSuggestion(match, position);
-            processor.populateModel(match, model, position);
+            processor.populateModel(input, match, model, position);
         }
 
         result.add(new DropdownItemViewInfo(processor, model, groupDetails));
@@ -310,12 +315,14 @@ class DropdownItemViewInfoListBuilder {
      * <p>Collect suggestions by their Suggestion Group ("section"), and aggregate models for every
      * section in a resulting list of DropdownItemViewInfo.
      *
+     * @param input The input that generated the suggestions.
      * @param autocompleteResult New set of suggestions.
      * @return List of DropdownItemViewInfo representing the corresponding content of the
      *     suggestions list.
      */
     @NonNull
-    List<DropdownItemViewInfo> buildDropdownViewInfoList(AutocompleteResult autocompleteResult) {
+    List<DropdownItemViewInfo> buildDropdownViewInfoList(
+            AutocompleteInput input, AutocompleteResult autocompleteResult) {
         mHeaderProcessor.onSuggestionsReceived();
         for (int index = 0; index < mPriorityOrderedSuggestionProcessors.size(); index++) {
             mPriorityOrderedSuggestionProcessors.get(index).onSuggestionsReceived();
@@ -363,6 +370,7 @@ class DropdownItemViewInfoListBuilder {
             if (currentGroupConfig.getRenderType() == GroupConfig.RenderType.DEFAULT_VERTICAL) {
                 viewInfoList.addAll(
                         buildVerticalSuggestionsGroup(
+                                input,
                                 currentGroupConfig,
                                 previousGroupConfig,
                                 currentGroupMatches,
@@ -371,6 +379,7 @@ class DropdownItemViewInfoListBuilder {
             } else if (currentGroupConfig.getRenderType() == GroupConfig.RenderType.HORIZONTAL) {
                 viewInfoList.addAll(
                         buildHorizontalSuggestionsGroup(
+                                input,
                                 currentGroupConfig,
                                 currentGroupMatches,
                                 nextSuggestionLogicalIndex));
@@ -378,7 +387,8 @@ class DropdownItemViewInfoListBuilder {
                 nextSuggestionLogicalIndex++;
             } else {
                 assert false
-                        : "Unsupported group render type: " + currentGroupConfig.getRenderType();
+                        : "Unsupported group render type: "
+                                + currentGroupConfig.getRenderType().name();
             }
 
             previousGroupConfig = currentGroupConfig;

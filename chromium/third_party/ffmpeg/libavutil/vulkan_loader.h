@@ -40,6 +40,13 @@ static inline uint64_t ff_vk_extensions_to_mask(const char * const *extensions,
         const char *name;
         FFVulkanExtensions flag;
     } extension_map[] = {
+        /* Instance extensions */
+        { VK_EXT_DEBUG_UTILS_EXTENSION_NAME,                         FF_VK_EXT_DEBUG_UTILS            },
+
+        /* Device extensions */
+#ifdef VK_KHR_shader_relaxed_extended_instruction
+        { VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME, FF_VK_EXT_RELAXED_EXTENDED_INSTR },
+#endif
         { VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,   FF_VK_EXT_EXTERNAL_DMABUF_MEMORY },
         { VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME, FF_VK_EXT_DRM_MODIFIER_FLAGS     },
         { VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,        FF_VK_EXT_EXTERNAL_FD_MEMORY     },
@@ -49,16 +56,23 @@ static inline uint64_t ff_vk_extensions_to_mask(const char * const *extensions,
         { VK_EXT_PHYSICAL_DEVICE_DRM_EXTENSION_NAME,       FF_VK_EXT_DEVICE_DRM             },
         { VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME,       FF_VK_EXT_ATOMIC_FLOAT           },
         { VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME,        FF_VK_EXT_COOP_MATRIX            },
+        { VK_NV_OPTICAL_FLOW_EXTENSION_NAME,               FF_VK_EXT_OPTICAL_FLOW           },
+        { VK_EXT_SHADER_OBJECT_EXTENSION_NAME,             FF_VK_EXT_SHADER_OBJECT          },
+        { VK_KHR_VIDEO_MAINTENANCE_1_EXTENSION_NAME,       FF_VK_EXT_VIDEO_MAINTENANCE_1    },
 #ifdef _WIN32
         { VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME,     FF_VK_EXT_EXTERNAL_WIN32_MEMORY  },
         { VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME,  FF_VK_EXT_EXTERNAL_WIN32_SEM     },
 #endif
         { VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME,         FF_VK_EXT_DESCRIPTOR_BUFFER,     },
         { VK_KHR_VIDEO_QUEUE_EXTENSION_NAME,               FF_VK_EXT_VIDEO_QUEUE            },
+        { VK_KHR_VIDEO_ENCODE_QUEUE_EXTENSION_NAME,        FF_VK_EXT_VIDEO_ENCODE_QUEUE     },
         { VK_KHR_VIDEO_DECODE_QUEUE_EXTENSION_NAME,        FF_VK_EXT_VIDEO_DECODE_QUEUE     },
+        { VK_KHR_VIDEO_ENCODE_H264_EXTENSION_NAME,         FF_VK_EXT_VIDEO_ENCODE_H264      },
         { VK_KHR_VIDEO_DECODE_H264_EXTENSION_NAME,         FF_VK_EXT_VIDEO_DECODE_H264      },
+        { VK_KHR_VIDEO_ENCODE_H265_EXTENSION_NAME,         FF_VK_EXT_VIDEO_ENCODE_H265      },
         { VK_KHR_VIDEO_DECODE_H265_EXTENSION_NAME,         FF_VK_EXT_VIDEO_DECODE_H265      },
         { VK_KHR_VIDEO_DECODE_AV1_EXTENSION_NAME,          FF_VK_EXT_VIDEO_DECODE_AV1       },
+        { VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,           FF_VK_EXT_PUSH_DESCRIPTOR        },
     };
 
     FFVulkanExtensions mask = 0x0;

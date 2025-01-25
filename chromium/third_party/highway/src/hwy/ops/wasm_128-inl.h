@@ -538,6 +538,17 @@ HWY_API Vec128<uint16_t, N> AverageRound(const Vec128<uint16_t, N> a,
   return Vec128<uint16_t, N>{wasm_u16x8_avgr(a.raw, b.raw)};
 }
 
+template <class V, HWY_IF_SIGNED_V(V),
+          HWY_IF_T_SIZE_ONE_OF_V(V, (1 << 1) | (1 << 2))>
+HWY_API V AverageRound(V a, V b) {
+  const DFromV<decltype(a)> d;
+  const RebindToUnsigned<decltype(d)> du;
+  const V sign_bit = SignBit(d);
+  return Xor(BitCast(d, AverageRound(BitCast(du, Xor(a, sign_bit)),
+                                     BitCast(du, Xor(b, sign_bit)))),
+             sign_bit);
+}
+
 // ------------------------------ Absolute value
 
 // Returns absolute value, except that LimitsMin() maps to LimitsMax() + 1.
@@ -1093,9 +1104,9 @@ HWY_API Vec128<double, N> operator/(const Vec128<double, N> a,
   return Vec128<double, N>{wasm_f64x2_div(a.raw, b.raw)};
 }
 
-template <typename T, size_t N>
-HWY_API Vec128<T, N> ApproximateReciprocal(const Vec128<T, N> v) {
-  return Set(DFromV<decltype(v)>(), T{1.0}) / v;
+template <class V, HWY_IF_F32(TFromV<V>)>
+HWY_API V ApproximateReciprocal(const V v) {
+  return Set(DFromV<decltype(v)>(), 1.0f) / v;
 }
 
 // Integer overload defined in generic_ops-inl.h.
@@ -1143,10 +1154,10 @@ HWY_API Vec128<double, N> Sqrt(const Vec128<double, N> v) {
 }
 
 // Approximate reciprocal square root
-template <typename T, size_t N>
-HWY_API Vec128<T, N> ApproximateReciprocalSqrt(const Vec128<T, N> v) {
+template <class V, HWY_IF_F32(TFromV<V>)>
+HWY_API V ApproximateReciprocalSqrt(V v) {
   // TODO(eustas): find cheaper a way to calculate this.
-  return Set(DFromV<decltype(v)>(), T{1.0}) / Sqrt(v);
+  return Set(DFromV<decltype(v)>(), static_cast<TFromV<V>>(1.0)) / Sqrt(v);
 }
 
 // ------------------------------ Floating-point rounding
@@ -3186,6 +3197,19 @@ HWY_API Vec128<int64_t, N> InterleaveUpper(Vec128<int64_t, N> a,
 }
 
 template <size_t N>
+HWY_API Vec128<float16_t, N> InterleaveUpper(Vec128<float16_t, N> a,
+                                             Vec128<float16_t, N> b) {
+  return Vec128<float16_t, N>{
+      wasm_i16x8_shuffle(a.raw, b.raw, 4, 12, 5, 13, 6, 14, 7, 15)};
+}
+template <size_t N>
+HWY_API Vec128<bfloat16_t, N> InterleaveUpper(Vec128<bfloat16_t, N> a,
+                                              Vec128<bfloat16_t, N> b) {
+  return Vec128<bfloat16_t, N>{
+      wasm_i16x8_shuffle(a.raw, b.raw, 4, 12, 5, 13, 6, 14, 7, 15)};
+}
+
+template <size_t N>
 HWY_API Vec128<float, N> InterleaveUpper(Vec128<float, N> a,
                                          Vec128<float, N> b) {
   return Vec128<float, N>{wasm_i32x4_shuffle(a.raw, b.raw, 2, 6, 3, 7)};
@@ -4791,9 +4815,17 @@ HWY_API VFromD<DU> ConvertTo(DU du, VFromD<Rebind<double, DU>> v) {
 }
 
 // ------------------------------ NearestInt (Round)
-template <size_t N>
-HWY_API Vec128<int32_t, N> NearestInt(const Vec128<float, N> v) {
+template <typename T, size_t N, HWY_IF_FLOAT3264(T)>
+HWY_API Vec128<MakeSigned<T>, N> NearestInt(const Vec128<T, N> v) {
   return ConvertTo(RebindToSigned<DFromV<decltype(v)>>(), Round(v));
+}
+
+// ------------------------------ DemoteToNearestInt (Round)
+template <class DI32, HWY_IF_I32_D(DI32)>
+HWY_API VFromD<DI32> DemoteToNearestInt(DI32 di32,
+                                        VFromD<Rebind<double, DI32>> v) {
+  // No single instruction, round then demote.
+  return DemoteTo(di32, Round(v));
 }
 
 // ================================================== MISC

@@ -21,10 +21,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/viz/public/mojom/gpu.mojom.h"
-
-#if !BUILDFLAG(IS_CHROMEOS)
 #include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
-#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 namespace viz {
 
@@ -58,10 +55,8 @@ class VIZ_HOST_EXPORT GpuClient : public mojom::Gpu {
   void RemoveDiskCacheHandles();
 
   base::WeakPtr<GpuClient> GetWeakPtr();
-#if !BUILDFLAG(IS_CHROMEOS)
   void BindWebNNContextProvider(
       mojo::PendingReceiver<webnn::mojom::WebNNContextProvider> receiver);
-#endif  // !BUILDFLAG(IS_CHROMEOS)
 
   // mojom::ClientGmbInterface is direct interface between renderer and GPU
   // process to create GpuMemoryBuffers.
@@ -78,9 +73,6 @@ class VIZ_HOST_EXPORT GpuClient : public mojom::Gpu {
   void CreateVideoEncodeAcceleratorProvider(
       mojo::PendingReceiver<media::mojom::VideoEncodeAcceleratorProvider>
           vea_provider_receiver) override;
-
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  void SetForceAllowAccessToGpu(bool enable) override;
 
  private:
   enum class ErrorReason {

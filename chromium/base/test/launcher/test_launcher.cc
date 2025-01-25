@@ -22,6 +22,7 @@
 #include "base/at_exit.h"
 #include "base/clang_profiling_buildflags.h"
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/containers/adapters.h"
 #include "base/containers/contains.h"
 #include "base/environment.h"
@@ -962,7 +963,7 @@ int CountItemsInDirectory(const FilePath& dir) {
 
 // Truncates a snippet in the middle to the given byte limit. byte_limit should
 // be at least 30.
-std::string TruncateSnippet(const std::string_view snippet, size_t byte_limit) {
+std::string TruncateSnippet(std::string_view snippet, size_t byte_limit) {
   if (snippet.length() <= byte_limit) {
     return std::string(snippet);
   }
@@ -1015,9 +1016,11 @@ class TestLauncher::TestInfo {
   // Returns test name excluding DISABLED_ and PRE_ prefixes.
   std::string GetPrefixStrippedName() const;
 
-  const std::string& test_case_name() const { return test_case_name_; }
-  const std::string& test_name() const { return test_name_; }
-  const std::string& file() const { return file_; }
+  const std::string& test_case_name() const LIFETIME_BOUND {
+    return test_case_name_;
+  }
+  const std::string& test_name() const LIFETIME_BOUND { return test_name_; }
+  const std::string& file() const LIFETIME_BOUND { return file_; }
   int line() const { return line_; }
   bool disabled() const { return disabled_; }
   bool pre_test() const { return pre_test_; }
@@ -2385,7 +2388,7 @@ std::string GetTestOutputSnippet(const TestResult& result,
   return snippet;
 }
 
-std::string TruncateSnippetFocused(const std::string_view snippet,
+std::string TruncateSnippetFocused(std::string_view snippet,
                                    size_t byte_limit) {
   // Find the start of anything that looks like a fatal log message.
   // We want to preferentially preserve these from truncation as we

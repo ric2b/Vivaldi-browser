@@ -39,6 +39,12 @@ bool IsShoppingListEligible(AccountChecker* account_checker) {
   return true;
 }
 
+bool IsSubscriptionsApiEnabled(AccountChecker* account_checker) {
+  return IsRegionLockedFeatureEnabled(
+      kSubscriptionsApi, kSubscriptionsApiRegionLaunched,
+      account_checker->GetCountry(), account_checker->GetLocale());
+}
+
 bool IsProductSpecificationsAllowedForEnterprise(PrefService* prefs) {
   // 0 is fully enabled, 1 is enabled without logging, 2 is totally disabled.
   return prefs->GetInteger(optimization_guide::prefs::
@@ -108,8 +114,8 @@ bool CanManageProductSpecificationsSets(
 }
 
 bool CanFetchProductSpecificationsData(AccountChecker* account_checker) {
-  // msbb, enterprise, parental controls, sync type, and model execution
-  // features.
+  // msbb, enterprise, parental controls, sync type, model execution
+  // features, and default search engine selection (namely Google).
   return account_checker &&
          IsProductSpecificationsAllowedForEnterprise(
              account_checker->GetPrefs()) &&
@@ -117,6 +123,7 @@ bool CanFetchProductSpecificationsData(AccountChecker* account_checker) {
          account_checker->IsAnonymizedUrlDataCollectionEnabled() &&
          !account_checker->IsSubjectToParentalControls() &&
          account_checker->CanUseModelExecutionFeatures() &&
+         account_checker->IsDefaultSearchEngineGoogle() &&
          IsSyncingProductSpecifications(account_checker) &&
          CanLoadProductSpecificationsFullPageUi(account_checker);
 }

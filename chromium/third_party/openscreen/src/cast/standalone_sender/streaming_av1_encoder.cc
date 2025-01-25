@@ -58,7 +58,7 @@ StreamingAv1Encoder::StreamingAv1Encoder(const Parameters& params,
   config_.g_timebase.num = Clock::duration::period::num;
   config_.g_timebase.den = Clock::duration::period::den;
 
-  // |g_pass| and |g_lag_in_frames| must be "one pass" and zero, respectively,
+  // `g_pass` and `g_lag_in_frames` must be "one pass" and zero, respectively,
   // because of the way the libaom API is used.
   config_.g_pass = AOM_RC_ONE_PASS;
   config_.g_lag_in_frames = 0;
@@ -93,7 +93,7 @@ StreamingAv1Encoder::~StreamingAv1Encoder() {
 }
 
 int StreamingAv1Encoder::GetTargetBitrate() const {
-  // Note: No need to lock the |mutex_| since this method should be called on
+  // Note: No need to lock the `mutex_` since this method should be called on
   // the same thread as SetTargetBitrate().
   return target_bitrate_;
 }
@@ -104,8 +104,8 @@ void StreamingAv1Encoder::SetTargetBitrate(int new_bitrate) {
   new_bitrate = std::max(new_bitrate, kBytesPerKilobyte);
 
   std::unique_lock<std::mutex> lock(mutex_);
-  // Only assign the new target bitrate if |target_bitrate_| has not yet been
-  // used to signal the |encode_thread_| to end.
+  // Only assign the new target bitrate if `target_bitrate_` has not yet been
+  // used to signal the `encode_thread_` to end.
   if (target_bitrate_ > 0) {
     target_bitrate_ = new_bitrate;
   }
@@ -119,7 +119,7 @@ void StreamingAv1Encoder::EncodeAndSend(
   work_unit.capture_begin_time = frame.capture_begin_time;
   work_unit.capture_end_time = frame.capture_end_time;
 
-  // TODO(jophba): The |VideoFrame| struct should provide the media timestamp,
+  // TODO(jophba): The `VideoFrame` struct should provide the media timestamp,
   // instead of this code inferring it from the reference timestamps, since: 1)
   // the video capturer's clock may tick at a different rate than the system
   // clock; and 2) to reduce jitter.
@@ -145,7 +145,7 @@ void StreamingAv1Encoder::EncodeAndSend(
 
   Clock::duration frame_duration = frame.duration;
   if (frame_duration <= Clock::duration::zero()) {
-    // The caller did not provide the frame duration in |frame|.
+    // The caller did not provide the frame duration in `frame`.
     if (reference_time == start_time_) {
       // Use the max for the first frame so libaom will spend extra effort on
       // its quality.
@@ -237,7 +237,7 @@ void StreamingAv1Encoder::PrepareEncoder(int width,
 
   const int target_kbps = target_bitrate / kBytesPerKilobyte;
 
-  // Translate the |ideal_speed_setting_| into the AOME_SET_CPUUSED setting and
+  // Translate the `ideal_speed_setting_` into the AOME_SET_CPUUSED setting and
   // the minimum quantizer to use.
   int speed;
   int min_quantizer;
@@ -306,7 +306,7 @@ void StreamingAv1Encoder::EncodeFrame(bool force_key_frame,
 
   // The presentation timestamp argument here is fixed to zero to force the
   // encoder to base its single-frame bandwidth calculations entirely on
-  // |frame_duration| and the target bitrate setting.
+  // `frame_duration` and the target bitrate setting.
   const aom_codec_pts_t pts = 0;
   const aom_enc_frame_flags_t flags = force_key_frame ? AOM_EFLAG_FORCE_KF : 0;
   const auto encode_result = aom_codec_encode(

@@ -39,7 +39,7 @@ class BandwidthEstimatorTest : public testing::Test {
 
   BandwidthEstimator* estimator() { return &estimator_; }
 
-  // Returns |t| plus or minus |kMaxFuzzOffset|.
+  // Returns `t` plus or minus `kMaxFuzzOffset`.
   Clock::time_point AddFuzz(Clock::time_point t) {
     return t + Clock::duration(distribution_(rand_));
   }

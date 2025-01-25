@@ -14,7 +14,6 @@
 namespace gfx {
 class ImageSkia;
 class Rect;
-class RoundedCornersF;
 }
 
 namespace ui {
@@ -81,20 +80,6 @@ class ShellToplevelWrapper {
   // Unsets a native window from fullscreen state.
   virtual void UnSetFullscreen() = 0;
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // Sets a native window's immersive mode.
-  virtual void SetUseImmersiveMode(bool immersive) = 0;
-
-  // Sets the top inset (header) height which is reserved or occupied by the top
-  // window frame.
-  virtual void SetTopInset(int height) = 0;
-
-  // Sets the radius of each corner of the drop shadow associated with the
-  // window.
-  virtual void SetShadowCornersRadii(const gfx::RoundedCornersF& radii) = 0;
-
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-
   // Sets a native window to minimized state.
   virtual void SetMinimized() = 0;
 
@@ -141,14 +126,6 @@ class ShellToplevelWrapper {
   // wayland compositor to update the decoration mode for a surface associated
   // with this top level window.
   virtual void SetDecoration(DecorationMode decoration) = 0;
-
-  // Set session id and restore id for the top level.
-  virtual void SetRestoreInfo(int32_t restore_session_id,
-                              int32_t restore_window_id) = 0;
-
-  virtual void SetRestoreInfoWithWindowIdSource(
-      int32_t restore_session_id,
-      const std::string& restore_window_id_source) = 0;
 
   // Request that the server set the orientation lock to the provided lock type.
   // This is only accepted if the requesting window is running in immersive

@@ -12,9 +12,28 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "components/autofill/core/browser/autofill_ai_delegate.h"
 #include "content/public/browser/navigation_handle.h"
 
 namespace autofill {
+
+// Returns whether user interacted with the bubble, based on its closed reason.
+bool GetUserInteractionFromPredictionImprovementsBubbleClosedReason(
+    SaveAutofillPredictionImprovementsController::
+        PredictionImprovementsBubbleClosedReason closed_reason) {
+  using enum SaveAutofillPredictionImprovementsController::
+      PredictionImprovementsBubbleClosedReason;
+  switch (closed_reason) {
+    case kAccepted:
+    case kCancelled:
+    case kClosed:
+      return true;
+    case kUnknown:
+    case kNotInteracted:
+    case kLostFocus:
+      return false;
+  }
+}
 
 SaveAutofillPredictionImprovementsControllerImpl::
     SaveAutofillPredictionImprovementsControllerImpl(
@@ -41,22 +60,62 @@ SaveAutofillPredictionImprovementsController::GetOrCreate(
 }
 
 void SaveAutofillPredictionImprovementsControllerImpl::OfferSave(
-    std::vector<PredictionImprovement> new_prediction_improvements) {
+    std::vector<optimization_guide::proto::UserAnnotationsEntry>
+        new_prediction_improvements,
+    user_annotations::PromptAcceptanceCallback prompt_acceptance_callback,
+    LearnMoreClickedCallback learn_more_clicked_callback,
+    UserFeedbackCallback user_feedback_callback) {
   // Don't show the bubble if it's already visible.
   if (bubble_view()) {
     return;
   }
   prediction_improvements_ = std::move(new_prediction_improvements);
+  prompt_acceptance_callback_ = std::move(prompt_acceptance_callback);
+  learn_more_clicked_callback_ = std::move(learn_more_clicked_callback);
+  user_feedback_callback_ = std::move(user_feedback_callback);
   DoShowBubble();
 }
 
-void SaveAutofillPredictionImprovementsControllerImpl::OnSaveButtonClicked() {}
+void SaveAutofillPredictionImprovementsControllerImpl::OnSaveButtonClicked() {
+  OnBubbleClosed(PredictionImprovementsBubbleClosedReason::kAccepted);
+}
 
 void SaveAutofillPredictionImprovementsControllerImpl::OnBubbleClosed(
     SaveAutofillPredictionImprovementsController::
         PredictionImprovementsBubbleClosedReason closed_reason) {
   set_bubble_view(nullptr);
   UpdatePageActionIcon();
+  if (!prompt_acceptance_callback_.is_null()) {
+    std::move(prompt_acceptance_callback_)
+        .Run({/*prompt_was_accepted=*/closed_reason ==
+                  PredictionImprovementsBubbleClosedReason::kAccepted,
+              /*did_user_interact=*/
+              GetUserInteractionFromPredictionImprovementsBubbleClosedReason(
+                  closed_reason),
+              did_trigger_thumbs_up_, did_trigger_thumbs_down_});
+  }
+}
+
+void SaveAutofillPredictionImprovementsControllerImpl::OnThumbsUpClicked() {
+  if (!user_feedback_callback_.is_null()) {
+    std::move(user_feedback_callback_)
+        .Run(AutofillAiDelegate::UserFeedback::kThumbsUp);
+  }
+  did_trigger_thumbs_up_ = true;
+}
+
+void SaveAutofillPredictionImprovementsControllerImpl::OnThumbsDownClicked() {
+  if (!user_feedback_callback_.is_null()) {
+    std::move(user_feedback_callback_)
+        .Run(AutofillAiDelegate::UserFeedback::kThumbsDown);
+  }
+  did_trigger_thumbs_down_ = true;
+}
+
+void SaveAutofillPredictionImprovementsControllerImpl::OnLearnMoreClicked() {
+  if (!learn_more_clicked_callback_.is_null()) {
+    std::move(learn_more_clicked_callback_).Run();
+  }
 }
 
 PageActionIconType
@@ -79,8 +138,7 @@ SaveAutofillPredictionImprovementsControllerImpl::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-const std::vector<
-    SaveAutofillPredictionImprovementsController::PredictionImprovement>&
+const std::vector<optimization_guide::proto::UserAnnotationsEntry>&
 SaveAutofillPredictionImprovementsControllerImpl::GetPredictionImprovements()
     const {
   return prediction_improvements_;

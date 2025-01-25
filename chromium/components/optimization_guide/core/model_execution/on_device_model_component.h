@@ -64,7 +64,8 @@ class OnDeviceModelComponentStateManager
     // `OnDeviceModelComponentStateManager::SetReady` when the component is
     // ready to use.
     virtual void RegisterInstaller(
-        scoped_refptr<OnDeviceModelComponentStateManager> state_manager) = 0;
+        scoped_refptr<OnDeviceModelComponentStateManager> state_manager,
+        bool is_already_installing) = 0;
 
     // Uninstall the component. Calls
     // `OnDeviceModelComponentStateManager::UninstallComplete()` when uninstall
@@ -126,6 +127,9 @@ class OnDeviceModelComponentStateManager
 
   // Called after the installer is successfully registered.
   void InstallerRegistered();
+
+  // Returns true if the installer is registered.
+  bool IsInstallerRegistered();
 
   // Returns the current OnDeviceModelStatus.
   OnDeviceModelStatus GetOnDeviceModelStatus();

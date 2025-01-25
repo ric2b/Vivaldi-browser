@@ -74,10 +74,10 @@
                                         animated:YES
                                       completion:nil];
 
-  self.mediator = [[VivaldiStartPageQuickSettingsMediator alloc]
-                   initWithOriginalPrefService:self.browser->GetBrowserState()
-                   ->GetOriginalChromeBrowserState()
-                   ->GetPrefs()];
+  self.mediator =
+      [[VivaldiStartPageQuickSettingsMediator alloc]
+          initWithOriginalPrefService:self.browser->GetProfile()
+              ->GetOriginalProfile()->GetPrefs()];
   self.mediator.consumer = self.viewProvider;
 
   self.viewProvider.settingsStateConsumer = self.mediator;

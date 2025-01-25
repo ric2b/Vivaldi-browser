@@ -303,7 +303,22 @@
             }
           }
         }
+      },
+      {
+        "id": "URLPartnerInfo",
+        "description": "Information about the URL given - Is it a partner? What name does it have?",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the partner, or empty if unknown (in which case a generic message should be used)"
+          }
+        }
       }
+
     ],
     "functions": [
       {
@@ -825,6 +840,30 @@
             {
               "name": "exempt",
               "type": "boolean"
+            }
+          ]
+        }
+      },
+      {
+        "name": "isExemptByPartnerURL",
+        "type": "function",
+        "description": "Returns whether a page URL will be exempt from filtering by a partnership exception.",
+        "parameters": [
+          {
+            "name": "url",
+            "type": "string"
+          },
+          {
+            "name": "tab_id",
+            "type": "integer"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "status",
+              "$ref": "URLPartnerInfo"
             }
           ]
         }

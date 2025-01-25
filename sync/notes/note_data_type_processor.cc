@@ -628,7 +628,10 @@ void NoteDataTypeProcessor::HasUnsyncedData(
 
 void NoteDataTypeProcessor::GetAllNodesForDebugging(AllNodesCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(notes_model_);
+
   base::Value::List all_nodes;
+
   // Create a permanent folder since sync server no longer create root folders,
   // and USS won't migrate root folders from directory, we create root folders.
 
@@ -653,7 +656,7 @@ void NoteDataTypeProcessor::GetAllNodesForDebugging(AllNodesCallback callback) {
     }
   }
 
-  std::move(callback).Run(syncer::NOTES, std::move(all_nodes));
+  std::move(callback).Run(std::move(all_nodes));
 }
 
 void NoteDataTypeProcessor::AppendNodeAndChildrenForDebugging(

@@ -1670,6 +1670,14 @@ struct cpuinfo_arm_isa {
 	bool sve;
 	bool sve2;
 	bool i8mm;
+	bool sme;
+	bool sme2;
+	bool sme2p1;
+	bool sme_i16i32;
+	bool sme_bi32i32;
+	bool sme_b16b16;
+	bool sme_f16f16;
+	uint32_t svelen;
 #endif
 	bool rdm;
 	bool fp16arith;
@@ -2037,6 +2045,71 @@ static inline bool cpuinfo_has_arm_sve_bf16(void) {
 static inline bool cpuinfo_has_arm_sve2(void) {
 #if CPUINFO_ARCH_ARM64
 	return cpuinfo_isa.sve2;
+#else
+	return false;
+#endif
+}
+
+// Function to get the max SVE vector length on ARM CPU's which support SVE.
+static inline uint32_t cpuinfo_get_max_arm_sve_length(void) {
+#if CPUINFO_ARCH_ARM64
+	return cpuinfo_isa.svelen * 8; // bytes * 8 = bit length(vector length)
+#else
+	return 0;
+#endif
+}
+
+static inline bool cpuinfo_has_arm_sme(void) {
+#if CPUINFO_ARCH_ARM64
+	return cpuinfo_isa.sme;
+#else
+	return false;
+#endif
+}
+
+static inline bool cpuinfo_has_arm_sme2(void) {
+#if CPUINFO_ARCH_ARM64
+	return cpuinfo_isa.sme2;
+#else
+	return false;
+#endif
+}
+
+static inline bool cpuinfo_has_arm_sme2p1(void) {
+#if CPUINFO_ARCH_ARM64
+	return cpuinfo_isa.sme2p1;
+#else
+	return false;
+#endif
+}
+
+static inline bool cpuinfo_has_arm_sme_i16i32(void) {
+#if CPUINFO_ARCH_ARM64
+	return cpuinfo_isa.sme_i16i32;
+#else
+	return false;
+#endif
+}
+
+static inline bool cpuinfo_has_arm_sme_bi32i32(void) {
+#if CPUINFO_ARCH_ARM64
+	return cpuinfo_isa.sme_bi32i32;
+#else
+	return false;
+#endif
+}
+
+static inline bool cpuinfo_has_arm_sme_b16b16(void) {
+#if CPUINFO_ARCH_ARM64
+	return cpuinfo_isa.sme_b16b16;
+#else
+	return false;
+#endif
+}
+
+static inline bool cpuinfo_has_arm_sme_f16f16(void) {
+#if CPUINFO_ARCH_ARM64
+	return cpuinfo_isa.sme_f16f16;
 #else
 	return false;
 #endif

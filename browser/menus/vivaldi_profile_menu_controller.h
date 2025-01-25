@@ -8,7 +8,7 @@
 #ifndef BROWSER_MENUS_VIVALDI_PROFILE_MENU_CONTROLLER_H_
 #define BROWSER_MENUS_VIVALDI_PROFILE_MENU_CONTROLLER_H_
 
-#include "ui/base/models/simple_menu_model.h"
+#include "ui/menus/simple_menu_model.h"
 
 class ProfileAttributesEntry;
 class Profile;

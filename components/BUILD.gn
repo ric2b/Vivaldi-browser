@@ -88,6 +88,20 @@ action("search_engines_inc") {
   ]
 }
 
+action("search_engines_prompt_inc") {
+  script = "//vivaldi/scripts/xxd.py"
+  prompt_json = "//vivaldi/components/search_engines/search_engines_prompt.json"
+  prompt_inc = "$root_gen_dir/components/search_engines/search_engines_prompt_default.inc"
+
+  inputs = [ prompt_json ]
+  outputs = [ prompt_inc ]
+  args = [
+    "-n", "kDefaultSearchEnginesPromptJson",
+    rebase_path(prompt_json, root_build_dir),
+    rebase_path(prompt_inc, root_build_dir),
+  ]
+}
+
 source_set("user_agent") {
     sources = [
       "//vivaldi/components/user_agent/vivaldi_user_agent.cc",

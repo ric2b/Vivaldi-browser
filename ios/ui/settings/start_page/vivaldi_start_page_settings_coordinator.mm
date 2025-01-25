@@ -50,8 +50,8 @@
       UINavigationItemLargeTitleDisplayModeNever;
 
   self.mediator = [[VivaldiStartPageSettingsMediator alloc]
-      initWithOriginalPrefService:self.browser->GetBrowserState()
-                                      ->GetOriginalChromeBrowserState()
+      initWithOriginalPrefService:self.browser->GetProfile()
+                                      ->GetOriginalProfile()
                                       ->GetPrefs()];
   self.mediator.consumer = self.viewController;
 

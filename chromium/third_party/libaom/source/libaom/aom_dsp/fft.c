@@ -184,15 +184,15 @@ void aom_ifft_2d_gen(const float *input, float *temp, float *output, int n,
   transpose(temp, output, n);
 }
 
-GEN_IFFT_2(void, float, float, float, *, store_float)
-GEN_IFFT_4(void, float, float, float, *, store_float, (float), add_float,
+GEN_IFFT_2(static void, float, float, float, *, store_float)
+GEN_IFFT_4(static void, float, float, float, *, store_float, (float), add_float,
            sub_float)
-GEN_IFFT_8(void, float, float, float, *, store_float, (float), add_float,
+GEN_IFFT_8(static void, float, float, float, *, store_float, (float), add_float,
            sub_float, mul_float)
-GEN_IFFT_16(void, float, float, float, *, store_float, (float), add_float,
-            sub_float, mul_float)
-GEN_IFFT_32(void, float, float, float, *, store_float, (float), add_float,
-            sub_float, mul_float)
+GEN_IFFT_16(static void, float, float, float, *, store_float, (float),
+            add_float, sub_float, mul_float)
+GEN_IFFT_32(static void, float, float, float, *, store_float, (float),
+            add_float, sub_float, mul_float)
 
 void aom_ifft2x2_float_c(const float *input, float *temp, float *output) {
   aom_ifft_2d_gen(input, temp, output, 2, aom_fft1d_2_float, aom_fft1d_2_float,

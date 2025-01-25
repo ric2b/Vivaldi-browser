@@ -13,6 +13,11 @@ namespace openscreen::osp {
 
 class MockMessageCallback final : public MessageDemuxer::MessageCallback {
  public:
+  MockMessageCallback() = default;
+  MockMessageCallback(const MockMessageCallback&) = delete;
+  MockMessageCallback& operator=(const MockMessageCallback&) = delete;
+  MockMessageCallback(MockMessageCallback&&) noexcept = delete;
+  MockMessageCallback& operator=(MockMessageCallback&&) noexcept = delete;
   ~MockMessageCallback() override = default;
 
   MOCK_METHOD6(OnStreamMessage,

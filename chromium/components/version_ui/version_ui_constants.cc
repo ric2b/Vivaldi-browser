@@ -62,6 +62,7 @@ const char kTargetsUName[] = "targets_u_name";
 const char kTargetsU[] = "targets_u";
 const char kGmsName[] = "gms_name";
 const char kGmsVersion[] = "gms_version";
+const char kIsDesktopAndroid[] = "is_desktop_android";
 #endif
 #if BUILDFLAG(IS_CHROMEOS)
 const char kPlatform[] = "platform";
@@ -83,6 +84,8 @@ const char kTitle[] = "title";
 const char kUserAgent[] = "useragent";
 const char kUserAgentName[] = "user_agent_name";
 const char kVariationsCmdName[] = "variations_cmd_name";
+const char kCopyVariationsLabel[] = "copy_variations_label";
+const char kCopyVariationsNotice[] = "copy_variations_notice";
 const char kVariationsName[] = "variations_name";
 const char kVariationsSeed[] = "variations_seed";
 const char kVariationsSeedName[] = "variations_seed_name";

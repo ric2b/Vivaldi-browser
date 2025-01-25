@@ -46,10 +46,6 @@ Tips for efficient tracing:
             "Context switch call stacks" and "CPU sampling call stacks" in order
             to keep the trace as small as possible
 
-These trace analysis instructions are very terse because a full explanation
-would require many pages. If you need assistance then please contact
-brucedawson@chromium.org.
-
 If you have Python installed then IdentifyChromeProcesses.py will be run and a
 list of Chrome process types and PIDs will be printed, which helps with
 identifying the browser process, etc. If you need to identify a specific render

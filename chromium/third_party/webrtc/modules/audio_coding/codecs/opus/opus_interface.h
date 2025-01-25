@@ -246,6 +246,20 @@ int16_t WebRtcOpus_DisableDtx(OpusEncInst* inst);
 int16_t WebRtcOpus_GetUseDtx(OpusEncInst* inst);
 
 /****************************************************************************
+ * WebRtcOpus_GetUseDtx()
+ *
+ * This function gets if the encoder is in DTX.
+ *
+ * Input:
+ *      - inst               : Encoder context
+ *
+ * Return value              :  0 - Encoder is not DTX.
+ *                              1 - Encoder is in DTX.
+ *                             -1 - Error.
+ */
+int16_t WebRtcOpus_GetInDtx(OpusEncInst* inst);
+
+/****************************************************************************
  * WebRtcOpus_EnableCbr()
  *
  * This function enables CBR for encoding.
@@ -407,9 +421,7 @@ void WebRtcOpus_DecoderInit(OpusDecInst* inst);
  *
  * Output:
  *      - decoded            : The decoded vector
- *      - audio_type         : 1 normal, 2 CNG (for Opus it should
- *                             always return 1 since we're not using Opus's
- *                             built-in DTX/CNG scheme)
+ *      - audio_type         : 1 normal, 2 CNG
  *
  * Return value              : >0 - Samples per channel in decoded vector
  *                             -1 - Error

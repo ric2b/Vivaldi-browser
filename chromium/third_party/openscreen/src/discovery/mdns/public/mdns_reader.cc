@@ -36,7 +36,7 @@ MdnsReader::MdnsReader(const Config& config,
       kMaximumAllowedRdataSize(
           static_cast<size_t>(config.maximum_valid_rdata_size)) {
   // TODO(issuetracker.google.com/281739775): Validate
-  // |maximum_valid_rdata_size| > MaxWireSize() for rdata types A, AAAA, SRV,
+  // `maximum_valid_rdata_size` > MaxWireSize() for rdata types A, AAAA, SRV,
   // PTR.
   OSP_CHECK_GT(config.maximum_valid_rdata_size, 0);
 }
@@ -259,7 +259,7 @@ bool MdnsReader::Read(NsecRecordRdata* out) {
   }
 
   // Calculate the next record name length. This may not be equal to the length
-  // of |next_record_name| due to domain name compression.
+  // of `next_record_name` due to domain name compression.
   const int encoded_next_name_length =
       current() - start_position - sizeof(record_length);
   const int remaining_length = record_length - encoded_next_name_length;

@@ -14,17 +14,14 @@
 precision highp float;
 precision highp int;
 
-layout(location = 0) in float x_1;
 uniform highp sampler2D t_s;
-
-void tint_symbol(float x) {
+layout(location = 0) in float tint_symbol_loc0_Input;
+void tint_symbol_inner(float x) {
   if ((x > 0.0f)) {
   } else {
-    vec4 tint_phony = texture(t_s, vec2(0.0f));
+    texture(t_s, vec2(0.0f));
   }
 }
-
 void main() {
-  tint_symbol(x_1);
-  return;
+  tint_symbol_inner(tint_symbol_loc0_Input);
 }

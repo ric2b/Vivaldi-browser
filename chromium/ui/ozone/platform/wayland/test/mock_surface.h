@@ -16,6 +16,7 @@
 #include "ui/ozone/platform/wayland/test/server_object.h"
 #include "ui/ozone/platform/wayland/test/test_alpha_blending.h"
 #include "ui/ozone/platform/wayland/test/test_augmented_surface.h"
+#include "ui/ozone/platform/wayland/test/test_fractional_scale.h"
 #include "ui/ozone/platform/wayland/test/test_overlay_prioritized_surface.h"
 #include "ui/ozone/platform/wayland/test/test_subsurface.h"
 #include "ui/ozone/platform/wayland/test/test_viewport.h"
@@ -28,6 +29,8 @@ namespace wl {
 extern const struct wl_surface_interface kMockSurfaceImpl;
 extern const struct zwp_linux_surface_synchronization_v1_interface
     kMockZwpLinuxSurfaceSynchronizationImpl;
+
+class MockLinuxDrmSyncobjSurface;
 
 // Manage client surface
 class MockSurface : public ServerObject {
@@ -67,6 +70,11 @@ class MockSurface : public ServerObject {
   void set_viewport(TestViewport* viewport) { viewport_ = viewport; }
   TestViewport* viewport() { return viewport_; }
 
+  void set_fractional_scale(TestFractionalScale* fractional_scale) {
+    fractional_scale_ = fractional_scale;
+  }
+  TestFractionalScale* fractional_scale() { return fractional_scale_; }
+
   void set_overlay_prioritized_surface(
       TestOverlayPrioritizedSurface* prioritized_surface) {
     prioritized_surface_ = prioritized_surface;
@@ -79,6 +87,13 @@ class MockSurface : public ServerObject {
     augmented_surface_ = augmented_surface;
   }
   TestAugmentedSurface* augmented_surface() { return augmented_surface_; }
+
+  void set_linux_drm_syncobj_surface(MockLinuxDrmSyncobjSurface* surface) {
+    linux_drm_syncobj_surface_ = surface;
+  }
+  MockLinuxDrmSyncobjSurface* linux_drm_syncobj_surface() {
+    return linux_drm_syncobj_surface_;
+  }
 
   void set_blending(TestAlphaBlending* blending) { blending_ = blending; }
   TestAlphaBlending* blending() { return blending_; }
@@ -122,16 +137,19 @@ class MockSurface : public ServerObject {
   raw_ptr<MockXdgSurface, AcrossTasksDanglingUntriaged> xdg_surface_ = nullptr;
   raw_ptr<TestSubSurface, AcrossTasksDanglingUntriaged> sub_surface_ = nullptr;
   raw_ptr<TestViewport, AcrossTasksDanglingUntriaged> viewport_ = nullptr;
+  raw_ptr<TestFractionalScale> fractional_scale_ = nullptr;
   raw_ptr<TestAlphaBlending, AcrossTasksDanglingUntriaged> blending_ = nullptr;
   raw_ptr<TestOverlayPrioritizedSurface, AcrossTasksDanglingUntriaged>
       prioritized_surface_ = nullptr;
   raw_ptr<TestAugmentedSurface, AcrossTasksDanglingUntriaged>
       augmented_surface_ = nullptr;
+  raw_ptr<MockLinuxDrmSyncobjSurface> linux_drm_syncobj_surface_ = nullptr;
   gfx::Rect opaque_region_ = {-1, -1, 0, 0};
   gfx::Rect input_region_ = {-1, -1, 0, 0};
 
   raw_ptr<wl_resource, AcrossTasksDanglingUntriaged> frame_callback_ = nullptr;
-  base::flat_map<wl_resource*, wl_resource*> linux_buffer_releases_;
+  base::flat_map<wl_resource*, raw_ptr<wl_resource, CtnExperimental>>
+      linux_buffer_releases_;
 
   raw_ptr<wl_resource, AcrossTasksDanglingUntriaged> attached_buffer_ = nullptr;
   raw_ptr<wl_resource, AcrossTasksDanglingUntriaged> prev_attached_buffer_ =

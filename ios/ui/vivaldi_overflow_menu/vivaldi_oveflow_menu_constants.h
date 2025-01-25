@@ -44,6 +44,7 @@ extern NSString* vOverflowReadingList;
 extern NSString* vOverflowDownloads;
 
 extern NSString* vOverflowHelp;
+extern NSString* vOverflowShareFeedback;
 extern NSString* vOverflowAbout;
 
 

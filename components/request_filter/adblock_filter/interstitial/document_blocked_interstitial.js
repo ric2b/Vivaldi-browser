@@ -1,4 +1,5 @@
 // Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+import {preventDefaultOnPoundLinkClicks, SecurityInterstitialCommandId, sendCommand} from 'chrome://interstitials/common/resources/interstitial_common.js';
 
 function setupEvents() {
   document.querySelector('#icon').classList.add('icon');

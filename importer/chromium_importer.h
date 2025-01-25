@@ -35,6 +35,8 @@ class ChromiumImporter : public Importer {
   void ImportBookMarks();
   void ImportHistory();
   void ImportExtensions();
+  void ImportTabs(importer::ImporterType importer_type);
+
   bool ReadAndParseSignons(const base::FilePath& sqlite_file,
                            std::vector<importer::ImportedPasswordForm>* forms,
                            importer::ImporterType importer_type);

@@ -8,6 +8,7 @@
 #include "components/bookmarks/browser/bookmark_uuids.h"
 #include "components/bookmarks/browser/titled_url_index.h"
 #include "components/bookmarks/browser/url_index.h"
+#include "components/bookmarks/common/user_folder_load_stats.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -18,6 +19,25 @@ namespace {
 // Number of top-level permanent folders excluding the managed node and account
 // bookmarks.
 constexpr size_t kNumDefaultTopLevelPermanentFolders = 3u;
+
+void UpdateUserFolderStatsRecursively(const BookmarkNode& node,
+                                      bool top_level,
+                                      UserFolderLoadStats& stats) {
+  DCHECK(!node.is_permanent_node());
+
+  if (!node.is_folder()) {
+    return;
+  }
+
+  stats.total_folders++;
+  if (top_level) {
+    stats.total_top_level_folders++;
+  }
+
+  for (auto& child : node.children()) {
+    UpdateUserFolderStatsRecursively(*child, /*top_level=*/false, stats);
+  }
+}
 
 }  // namespace
 
@@ -145,9 +165,13 @@ void BookmarkLoadDetails::CreateIndices() {
         child.get() == account_mobile_folder_node_ ||
         child.get() == account_trash_folder_node_) {
       // Use a dedicated index for account folders and desdendants.
-      AddNodeToIndexRecursive(child.get(), account_uuid_index_);
+      AddNodeToIndexRecursive(
+          child.get(), account_uuid_index_,
+          child.get()->type() == bookmarks::BookmarkNode::TRASH);
     } else {
-      AddNodeToIndexRecursive(child.get(), local_or_syncable_uuid_index_);
+      AddNodeToIndexRecursive(
+          child.get(), local_or_syncable_uuid_index_,
+          child.get()->type() == bookmarks::BookmarkNode::TRASH);
     }
   }
 
@@ -168,22 +192,47 @@ void BookmarkLoadDetails::ResetPermanentNodePointers() {
 }
 
 const BookmarkNode* BookmarkLoadDetails::RootNodeForTest() const {
-  return url_index_ ? url_index_->root() : root_node_.get();
+  return GetRootNode();
+}
+
+UserFolderLoadStats BookmarkLoadDetails::ComputeUserFolderStats() const {
+  UserFolderLoadStats stats;
+  const BookmarkNode* root = GetRootNode();
+
+  for (const auto& root_child : root->children()) {
+    // Look for user-generated folders under permanent nodes.
+    if (!root_child->is_permanent_node()) {
+      continue;
+    }
+
+    for (const auto& child : root_child->children()) {
+      UpdateUserFolderStatsRecursively(*child, /*top_level=*/true, stats);
+    }
+  }
+
+  return stats;
 }
 
 void BookmarkLoadDetails::AddNodeToIndexRecursive(BookmarkNode* node,
-                                                  UuidIndex& uuid_index) {
+                                                  UuidIndex& uuid_index,
+                                                  bool from_trash_folder) {
   uuid_index.insert(node);
   if (node->is_url()) {
     if (node->url().is_valid()) {
-      titled_url_index_->Add(node);
+      if (!from_trash_folder) {
+        titled_url_index_->Add(node);
+      }
     }
   } else {
     titled_url_index_->AddPath(node);
     for (const auto& child : node->children()) {
-      AddNodeToIndexRecursive(child.get(), uuid_index);
+      AddNodeToIndexRecursive(child.get(), uuid_index, from_trash_folder);
     }
   }
+}
+
+const BookmarkNode* BookmarkLoadDetails::GetRootNode() const {
+  return url_index_ ? url_index_->root() : root_node_.get();
 }
 
 }  // namespace bookmarks

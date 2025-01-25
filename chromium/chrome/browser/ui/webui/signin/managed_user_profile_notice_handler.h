@@ -13,6 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "base/timer/timer.h"
 #include "base/values.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -51,11 +52,8 @@ class ManagedUserProfileNoticeHandler
   ManagedUserProfileNoticeHandler(
       Browser* browser,
       ManagedUserProfileNoticeUI::ScreenType type,
-      bool profile_creation_required_by_policy,
-      bool show_link_data_option,
-      const AccountInfo& account_info,
-      signin::SigninChoiceCallbackVariant process_user_choice_callback,
-      base::OnceClosure done_callback);
+      std::unique_ptr<signin::EnterpriseProfileCreationDialogParams>
+          create_param);
   ~ManagedUserProfileNoticeHandler() override;
 
   ManagedUserProfileNoticeHandler(const ManagedUserProfileNoticeHandler&) =
@@ -105,6 +103,8 @@ class ManagedUserProfileNoticeHandler
   void HandleProceed(const base::Value::List& args);
   void HandleCancel(const base::Value::List& args);
 
+  void OnLongProcessingTime();
+
   // Sends an updated profile info (avatar and strings) to the WebUI.
   // `profile_path` is the path of the profile being updated, this function does
   // nothing if the profile path does not match the current profile.
@@ -135,6 +135,8 @@ class ManagedUserProfileNoticeHandler
                           signin::IdentityManager::Observer>
       observed_account_{this};
 
+  base::OneShotTimer processing_timer_;
+
   raw_ptr<Browser> browser_ = nullptr;
   const ManagedUserProfileNoticeUI::ScreenType type_;
   const bool profile_creation_required_by_policy_;
@@ -144,9 +146,10 @@ class ManagedUserProfileNoticeHandler
   const std::u16string email_;
   const std::string domain_name_;
   const CoreAccountId account_id_;
-  signin::SigninChoiceWithConfirmationCallback
+  signin::SigninChoiceWithConfirmAndRetryCallback
       process_user_choice_with_confirmation_callback_;
   base::OnceClosure done_callback_;
+  base::RepeatingClosure retry_callback_;
   bool canceling_ = false;
   base::WeakPtrFactory<ManagedUserProfileNoticeHandler> weak_ptr_factory_{this};
 };

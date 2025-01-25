@@ -63,8 +63,17 @@ enum class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH)
       kTargetingUserPrefNotFound = 40,
       kTargetingUserPrefParsingFail = 41,
       kMissingActionPerformerAction = 42,
+      kUnknownMinorUserState = 43,
+      kNullptrProfile = 44,
+      kShelfInvisibleAtMatching = 45,
+      kHotseatInvisibleAtMatching = 46,
+      kShelfViewNotAvailableAtMatching = 47,
+      kHotseatAppIconNotPresent = 48,
+      kRecordEventBeforeCampaignsLoaded = 49,
+      kNudgeSheflIconAnchorViewNotFound = 50,
+      kNoBoardInfo = 51,
 
-      kMaxValue = kMissingActionPerformerAction,
+      kMaxValue = kNoBoardInfo,
     };
 
 // Records errors encountered during the campaigns loading and matching flow.

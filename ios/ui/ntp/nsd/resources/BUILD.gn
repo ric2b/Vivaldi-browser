@@ -1,0 +1,68 @@
+# Copyright 2024 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/rules.gni")
+
+bundle_data_xcassets("assets") {
+  catalog = "Assets.xcassets"
+  sources = [
+    # vivaldi_dm_category_travel
+    "Assets.xcassets/vivaldi_dm_category_travel.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_travel.imageset/vivaldi_dm_category_travel.pdf",
+
+    # vivaldi_dm_category_shopping
+    "Assets.xcassets/vivaldi_dm_category_shopping.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_shopping.imageset/vivaldi_dm_category_shopping.pdf",
+
+    # vivaldi_dm_category_gaming
+    "Assets.xcassets/vivaldi_dm_category_gaming.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_gaming.imageset/vivaldi_dm_category_gaming.pdf",
+
+    # vivaldi_dm_category_books
+    "Assets.xcassets/vivaldi_dm_category_books.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_books.imageset/vivaldi_dm_category_books.pdf",
+
+    # vivaldi_dm_category_education
+    "Assets.xcassets/vivaldi_dm_category_education.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_education.imageset/vivaldi_dm_category_education.pdf",
+
+    # vivaldi_dm_category_finance
+    "Assets.xcassets/vivaldi_dm_category_finance.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_finance.imageset/vivaldi_dm_category_finance.pdf",
+
+    # vivaldi_dm_category_food
+    "Assets.xcassets/vivaldi_dm_category_food.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_food.imageset/vivaldi_dm_category_food.pdf",
+
+    # vivaldi_dm_category_health
+    "Assets.xcassets/vivaldi_dm_category_health.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_health.imageset/vivaldi_dm_category_health.pdf",
+
+    # vivaldi_dm_category_news
+    "Assets.xcassets/vivaldi_dm_category_news.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_news.imageset/vivaldi_dm_category_news.pdf",
+
+    # vivaldi_dm_category_parenting
+    "Assets.xcassets/vivaldi_dm_category_parenting.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_parenting.imageset/vivaldi_dm_category_parenting.pdf",
+
+    # vivaldi_dm_category_photography
+    "Assets.xcassets/vivaldi_dm_category_photography.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_photography.imageset/vivaldi_dm_category_photography.pdf",
+
+    # vivaldi_dm_category_social
+    "Assets.xcassets/vivaldi_dm_category_social.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_social.imageset/vivaldi_dm_category_social.pdf",
+
+    # vivaldi_dm_category_sport
+    "Assets.xcassets/vivaldi_dm_category_sport.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_sport.imageset/vivaldi_dm_category_sport.pdf",
+
+    # vivaldi_dm_category_streaming
+    "Assets.xcassets/vivaldi_dm_category_streaming.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_streaming.imageset/vivaldi_dm_category_streaming.pdf",
+
+    # vivaldi_dm_category_tools
+    "Assets.xcassets/vivaldi_dm_category_tools.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_dm_category_tools.imageset/vivaldi_dm_category_tools.pdf",
+  ]
+}

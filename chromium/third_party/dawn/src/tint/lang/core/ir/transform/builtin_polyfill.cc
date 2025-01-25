@@ -31,6 +31,7 @@
 #include "src/tint/lang/core/ir/module.h"
 #include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/core/type/sampled_texture.h"
+#include "src/tint/lang/core/type/texture.h"
 
 using namespace tint::core::fluent_types;     // NOLINT
 using namespace tint::core::number_suffixes;  // NOLINT
@@ -120,10 +121,22 @@ struct State {
                             worklist.Push(builtin);
                         }
                         break;
+                    case core::BuiltinFn::kReflect:
+                        if (config.reflect_vec2_f32) {
+                            // Polyfill for vec2<f32>. See crbug.com/tint/1798
+                            auto* vec_ty = builtin->Result(0)->Type()->As<core::type::Vector>();
+                            if (vec_ty->Width() == 2 && vec_ty->Type()->Is<core::type::F32>()) {
+                                worklist.Push(builtin);
+                            }
+                        }
+                        break;
                     case core::BuiltinFn::kSaturate:
                         if (config.saturate) {
                             worklist.Push(builtin);
                         }
+                        break;
+                    case core::BuiltinFn::kTextureSampleBias:
+                        worklist.Push(builtin);
                         break;
                     case core::BuiltinFn::kTextureSampleBaseClampToEdge:
                         if (config.texture_sample_base_clamp_to_edge_2d_f32) {
@@ -197,11 +210,17 @@ struct State {
                 case core::BuiltinFn::kRadians:
                     Radians(builtin);
                     break;
+                case core::BuiltinFn::kReflect:
+                    Reflect(builtin);
+                    break;
                 case core::BuiltinFn::kSaturate:
                     Saturate(builtin);
                     break;
                 case core::BuiltinFn::kTextureSampleBaseClampToEdge:
                     TextureSampleBaseClampToEdge_2d_f32(builtin);
+                    break;
+                case core::BuiltinFn::kTextureSampleBias:
+                    TextureSampleBiasClamp(builtin);
                     break;
                 case core::BuiltinFn::kDot4I8Packed:
                     Dot4I8Packed(builtin);
@@ -253,8 +272,8 @@ struct State {
     void CountLeadingZeros(ir::CoreBuiltinCall* call) {
         auto* input = call->Args()[0];
         auto* result_ty = input->Type();
-        auto* uint_ty = ty.match_width(ty.u32(), result_ty);
-        auto* bool_ty = ty.match_width(ty.bool_(), result_ty);
+        auto* uint_ty = ty.MatchWidth(ty.u32(), result_ty);
+        auto* bool_ty = ty.MatchWidth(ty.bool_(), result_ty);
 
         // Make an u32 constant with the same component count as result_ty.
         auto V = [&](uint32_t u) { return b.MatchWidth(u32(u), result_ty); };
@@ -315,8 +334,8 @@ struct State {
     void CountTrailingZeros(ir::CoreBuiltinCall* call) {
         auto* input = call->Args()[0];
         auto* result_ty = input->Type();
-        auto* uint_ty = ty.match_width(ty.u32(), result_ty);
-        auto* bool_ty = ty.match_width(ty.bool_(), result_ty);
+        auto* uint_ty = ty.MatchWidth(ty.u32(), result_ty);
+        auto* bool_ty = ty.MatchWidth(ty.bool_(), result_ty);
 
         // Make an u32 constant with the same component count as result_ty.
         auto V = [&](uint32_t u) { return b.MatchWidth(u32(u), result_ty); };
@@ -422,7 +441,7 @@ struct State {
                 // }
                 auto* e = call->Args()[0];
                 auto* result_ty = e->Type();
-                auto* uint_ty = ty.match_width(ty.u32(), result_ty);
+                auto* uint_ty = ty.MatchWidth(ty.u32(), result_ty);
                 auto V = [&](uint32_t u) { return b.MatchWidth(u32(u), result_ty); };
                 b.InsertBefore(call, [&] {
                     auto* s = b.Call<u32>(core::BuiltinFn::kMin, offset, 32_u);
@@ -451,8 +470,8 @@ struct State {
     void FirstLeadingBit(ir::CoreBuiltinCall* call) {
         auto* input = call->Args()[0];
         auto* result_ty = input->Type();
-        auto* uint_ty = ty.match_width(ty.u32(), result_ty);
-        auto* bool_ty = ty.match_width(ty.bool_(), result_ty);
+        auto* uint_ty = ty.MatchWidth(ty.u32(), result_ty);
+        auto* bool_ty = ty.MatchWidth(ty.bool_(), result_ty);
 
         // Make an u32 constant with the same component count as result_ty.
         auto V = [&](uint32_t u) { return b.MatchWidth(u32(u), result_ty); };
@@ -513,8 +532,8 @@ struct State {
     void FirstTrailingBit(ir::CoreBuiltinCall* call) {
         auto* input = call->Args()[0];
         auto* result_ty = input->Type();
-        auto* uint_ty = ty.match_width(ty.u32(), result_ty);
-        auto* bool_ty = ty.match_width(ty.bool_(), result_ty);
+        auto* uint_ty = ty.MatchWidth(ty.u32(), result_ty);
+        auto* bool_ty = ty.MatchWidth(ty.bool_(), result_ty);
 
         // Make an u32 constant with the same component count as result_ty.
         auto V = [&](uint32_t u) { return b.MatchWidth(u32(u), result_ty); };
@@ -616,7 +635,7 @@ struct State {
                 auto* e = call->Args()[0];
                 auto* newbits = call->Args()[1];
                 auto* result_ty = e->Type();
-                auto* uint_ty = ty.match_width(ty.u32(), result_ty);
+                auto* uint_ty = ty.MatchWidth(ty.u32(), result_ty);
                 b.InsertBefore(call, [&] {
                     auto* oc = b.Add<u32>(offset, count);
                     auto* t1 = b.ShiftLeft<u32>(1_u, offset);
@@ -663,6 +682,35 @@ struct State {
         call->Destroy();
     }
 
+    /// Polyfill a `reflect()` builtin call.
+    /// @param call the builtin call instruction
+    void Reflect(ir::CoreBuiltinCall* call) {
+        auto* e1 = call->Args()[0];
+        auto* e2 = call->Args()[1];
+        auto* vec_ty = e1->Type()->As<core::type::Vector>();
+        // Only polyfills vec2<f32> (crbug.com/tint/1798)
+        TINT_ASSERT(vec_ty && vec_ty->Width() == 2 && vec_ty->Type()->Is<core::type::F32>());
+
+        b.InsertBefore(call, [&] {
+            // The generated HLSL must effectively be emitted as:
+            //      e1 + (-2 * dot(e1,e2) * e2)
+            // Rather than the mathemetically equivalent:
+            //      e1 - 2 * dot(e2,e2) * e2
+            //
+            // When FXC compiles HLSL reflect, or the second case above,
+            // it emits a `dp4` instruction for `2 * dot(e1,e2)`, which is
+            // miscompiled by certain Intel drivers. The workaround (first
+            // case above) results in FXC emitting a `dp2` for the dot,
+            // followed by a `mul 2`, which works around the bug.
+            auto* dot = b.Call(ty.f32(), core::BuiltinFn::kDot, e1, e2);
+            auto* factor = b.Multiply(ty.f32(), -2.0_f, dot);
+            auto* vfactor = b.Construct(vec_ty, factor);
+            auto* mul = b.Multiply(vec_ty, vfactor, e2);
+            b.AddWithResult(call->DetachResult(), e1, mul);
+        });
+        call->Destroy();
+    }
+
     /// Polyfill a `saturate()` builtin call.
     /// @param call the builtin call instruction
     void Saturate(ir::CoreBuiltinCall* call) {
@@ -705,6 +753,23 @@ struct State {
                              sampler, clamped, 0_f);
         });
         call->Destroy();
+    }
+
+    /// Polyfill clamping for the (f32) bias parameter of TextureSampleBias
+    /// @param call the builtin call instruction
+    void TextureSampleBiasClamp(ir::CoreBuiltinCall* call) {
+        b.InsertBefore(call, [&] {
+            auto* texture_type = call->Args()[0]->Type()->As<core::type::Texture>();
+            bool is_array_texture = type::IsTextureArray(texture_type->Dim());
+            const uint32_t kBiasParameterIndex = is_array_texture ? 4 : 3;
+            auto* bias_parameter = call->Args()[kBiasParameterIndex];
+            // TODO(crbug.com/371033198): Consider applying clamp here if 'bias_parameter' is a
+            // constant. This might not be the most prudent idea for two reasons: 1. the platform
+            // compilers will perform this optimization 2. it will bifurcate the testing paths.
+            call->SetArg(kBiasParameterIndex, b.Call(ty.f32(), core::BuiltinFn::kClamp,
+                                                     bias_parameter, -16.00_f, 15.99_f)
+                                                  ->Result(0));
+        });
     }
 
     /// Polyfill a `dot4I8Packed()` builtin call
@@ -906,7 +971,7 @@ struct State {
 }  // namespace
 
 Result<SuccessType> BuiltinPolyfill(Module& ir, const BuiltinPolyfillConfig& config) {
-    auto result = ValidateAndDumpIfNeeded(ir, "BuiltinPolyfill transform");
+    auto result = ValidateAndDumpIfNeeded(ir, "core.BuiltinPolyfill");
     if (result != Success) {
         return result;
     }

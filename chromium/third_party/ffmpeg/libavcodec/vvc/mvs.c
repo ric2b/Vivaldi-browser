@@ -88,8 +88,8 @@ static int check_mvset(Mv *mvLXCol, Mv *mvCol,
                        const RefPicList *refPicList, int X, int refIdxLx,
                        const RefPicList *refPicList_col, int listCol, int refidxCol)
 {
-    int cur_lt = refPicList[X].isLongTerm[refIdxLx];
-    int col_lt = refPicList_col[listCol].isLongTerm[refidxCol];
+    int cur_lt = refPicList[X].refs[refIdxLx].is_lt;
+    int col_lt = refPicList_col[listCol].refs[refidxCol].is_lt;
     int col_poc_diff, cur_poc_diff;
 
     if (cur_lt != col_lt) {
@@ -98,8 +98,8 @@ static int check_mvset(Mv *mvLXCol, Mv *mvCol,
         return 0;
     }
 
-    col_poc_diff = colPic - refPicList_col[listCol].list[refidxCol];
-    cur_poc_diff = poc    - refPicList[X].list[refIdxLx];
+    col_poc_diff = colPic - refPicList_col[listCol].refs[refidxCol].poc;
+    cur_poc_diff = poc    - refPicList[X].refs[refIdxLx].poc;
 
     mv_compression(mvCol);
     if (cur_lt || col_poc_diff == cur_poc_diff) {
@@ -126,7 +126,7 @@ int ff_vvc_no_backward_pred_flag(const VVCLocalContext *lc)
 
     for (j = 0; j < 2; j++) {
         for (i = 0; i < lc->sc->sh.r->num_ref_idx_active[j]; i++) {
-            if (rpl[j].list[i] > lc->fc->ps.ph.poc) {
+            if (rpl[j].refs[i].poc > lc->fc->ps.ph.poc) {
                 check_diffpicount++;
                 break;
             }
@@ -297,7 +297,8 @@ static int derive_cb_prof_flag_lx(const VVCLocalContext *lc, const PredictionUni
         if (IS_SAME_MV(cp_mv, cp_mv + 1) && IS_SAME_MV(cp_mv, cp_mv + 2))
             return 0;
     }
-    //fixme: RprConstraintsActiveFlag
+    if (lc->sc->rpl[lx].refs[mi->ref_idx[lx]].is_scaled)
+        return 0;
     return 1;
 }
 
@@ -398,7 +399,6 @@ static void store_cp_mv(const VVCLocalContext *lc, const MotionInfo *mi, const i
             const int offset = (y_cb * min_cb_width + x_cb) * MAX_CONTROL_POINTS;
 
             memcpy(&fc->tab.cp_mv[lx][offset], mi->mv[lx], sizeof(Mv) * num_cp_mv);
-            SAMPLE_CTB(fc->tab.mmi, x_cb, y_cb) = mi->motion_model_idc;
         }
     }
 }
@@ -411,12 +411,11 @@ void ff_vvc_store_sb_mvs(const VVCLocalContext *lc, PredictionUnit *pu)
     const int sbw = cu->cb_width / mi->num_sb_x;
     const int sbh = cu->cb_height / mi->num_sb_y;
     SubblockParams params[2];
-    MvField mvf;
+    MvField mvf = {0};
 
     mvf.pred_flag = mi->pred_flag;
     mvf.bcw_idx = mi->bcw_idx;
     mvf.hpel_if_idx = mi->hpel_if_idx;
-    mvf.ciip_flag = 0;
     for (int i = 0; i < 2; i++) {
         const PredFlag mask = i + 1;
         if (mi->pred_flag & mask) {
@@ -504,12 +503,11 @@ void ff_vvc_store_mvf(const VVCLocalContext *lc, const MvField *mvf)
 void ff_vvc_store_mv(const VVCLocalContext *lc, const MotionInfo *mi)
 {
     const CodingUnit *cu = lc->cu;
-    MvField mvf;
+    MvField mvf = {0};
 
     mvf.hpel_if_idx = mi->hpel_if_idx;
     mvf.bcw_idx = mi->bcw_idx;
     mvf.pred_flag = mi->pred_flag;
-    mvf.ciip_flag = 0;
 
     for (int i = 0; i < 2; i++) {
         const PredFlag mask = i + 1;
@@ -546,25 +544,31 @@ typedef struct NeighbourContext {
     const VVCLocalContext *lc;
 } NeighbourContext;
 
+static int is_available(const VVCFrameContext *fc, const int x0, const int y0)
+{
+    const VVCSPS *sps      = fc->ps.sps;
+    const int x            = x0 >> sps->min_cb_log2_size_y;
+    const int y            = y0 >> sps->min_cb_log2_size_y;
+    const int min_cb_width = fc->ps.pps->min_cb_width;
+
+    return SAMPLE_CTB(fc->tab.cb_width[0], x, y) != 0;
+}
+
 static int is_a0_available(const VVCLocalContext *lc, const CodingUnit *cu)
 {
     const VVCFrameContext *fc   = lc->fc;
     const VVCSPS *sps           = fc->ps.sps;
-    const int x0b               = av_mod_uintp2(cu->x0, sps->ctb_log2_size_y);
+    const int x0b               = av_zero_extend(cu->x0, sps->ctb_log2_size_y);
     int cand_bottom_left;
 
     if (!x0b && !lc->ctb_left_flag) {
         cand_bottom_left = 0;
     } else {
-        const int log2_min_cb_size  = sps->min_cb_log2_size_y;
-        const int min_cb_width      = fc->ps.pps->min_cb_width;
-        const int x                 = (cu->x0 - 1) >> log2_min_cb_size;
-        const int y                 = (cu->y0 + cu->cb_height) >> log2_min_cb_size;
-        const int max_y             = FFMIN(fc->ps.pps->height, ((cu->y0 >> sps->ctb_log2_size_y) + 1) << sps->ctb_log2_size_y);
+        const int max_y = FFMIN(fc->ps.pps->height, ((cu->y0 >> sps->ctb_log2_size_y) + 1) << sps->ctb_log2_size_y);
         if (cu->y0 + cu->cb_height >= max_y)
             cand_bottom_left = 0;
         else
-            cand_bottom_left = SAMPLE_CTB(fc->tab.cb_width[0], x, y) != 0;
+            cand_bottom_left = is_available(fc, cu->x0 - 1, cu->y0 + cu->cb_height);
     }
     return cand_bottom_left;
 }
@@ -609,9 +613,9 @@ static int check_available(Neighbour *n, const VVCLocalContext *lc, const int ch
     if (!n->checked) {
         n->checked = 1;
         n->available = !sps->r->sps_entropy_coding_sync_enabled_flag || ((n->x >> sps->ctb_log2_size_y) <= (cu->x0 >> sps->ctb_log2_size_y));
-        n->available &= cu->pred_mode == pred_flag_to_mode(TAB_MVF(n->x, n->y).pred_flag);
+        n->available = n->available && is_available(fc, n->x, n->y) && cu->pred_mode == pred_flag_to_mode(TAB_MVF(n->x, n->y).pred_flag);
         if (check_mer)
-            n->available &= !is_same_mer(fc, n->x, n->y, cu->x0, cu->y0);
+            n->available = n->available && !is_same_mer(fc, n->x, n->y, cu->x0, cu->y0);
     }
     return n->available;
 }
@@ -1059,9 +1063,9 @@ static int sb_temporal_luma_motion_data(const VVCLocalContext *lc, const MvField
     colPic  = ref->poc;
 
     if (a1) {
-        if ((a1->pred_flag & PF_L0) && colPic == rpl[0].list[a1->ref_idx[0]])
+        if ((a1->pred_flag & PF_L0) && colPic == rpl[L0].refs[a1->ref_idx[L0]].poc)
             *temp_mv = a1->mv[0];
-        else if ((a1->pred_flag & PF_L1) && colPic == rpl[1].list[a1->ref_idx[1]])
+        else if ((a1->pred_flag & PF_L1) && colPic == rpl[L1].refs[a1->ref_idx[L1]].poc)
             *temp_mv = a1->mv[1];
         ff_vvc_round_mv(temp_mv, 0, 4);
     }
@@ -1418,16 +1422,16 @@ static int mvp_candidate(const VVCLocalContext *lc, const int x_cand, const int 
     const MvField* tab_mvf          = fc->tab.mvf;
     const MvField *mvf              = &TAB_MVF(x_cand, y_cand);
     const PredFlag maskx = lx + 1;
-    const int poc = rpl[lx].list[ref_idx[lx]];
+    const int poc = rpl[lx].refs[ref_idx[lx]].poc;
     int available = 0;
 
-    if ((mvf->pred_flag & maskx) && rpl[lx].list[mvf->ref_idx[lx]] == poc) {
+    if ((mvf->pred_flag & maskx) && rpl[lx].refs[mvf->ref_idx[lx]].poc == poc) {
         available = 1;
         *mv = mvf->mv[lx];
     } else {
         const int ly = !lx;
         const PredFlag masky = ly + 1;
-        if ((mvf->pred_flag & masky) && rpl[ly].list[mvf->ref_idx[ly]] == poc) {
+        if ((mvf->pred_flag & masky) && rpl[ly].refs[mvf->ref_idx[ly]].poc == poc) {
             available = 1;
             *mv = mvf->mv[ly];
         }
@@ -1450,15 +1454,15 @@ static int affine_mvp_candidate(const VVCLocalContext *lc,
         const MvField *mvf = &TAB_MVF(x_nb, y_nb);
         RefPicList* rpl = lc->sc->rpl;
         const PredFlag maskx = lx + 1;
-        const int poc = rpl[lx].list[ref_idx[lx]];
+        const int poc = rpl[lx].refs[ref_idx[lx]].poc;
 
-        if ((mvf->pred_flag & maskx) && rpl[lx].list[mvf->ref_idx[lx]] == poc) {
+        if ((mvf->pred_flag & maskx) && rpl[lx].refs[mvf->ref_idx[lx]].poc == poc) {
             available = 1;
             affine_cps_from_nb(lc, x_nb, y_nb, nbw, nbh, lx, cps, num_cp);
         } else {
             const int ly = !lx;
             const PredFlag masky = ly + 1;
-            if ((mvf->pred_flag & masky) && rpl[ly].list[mvf->ref_idx[ly]] == poc) {
+            if ((mvf->pred_flag & masky) && rpl[ly].refs[mvf->ref_idx[ly]].poc == poc) {
                 available = 1;
                 affine_cps_from_nb(lc, x_nb, y_nb, nbw, nbh, ly, cps, num_cp);
             }
@@ -1550,7 +1554,7 @@ static int mvp_history_candidates(const VVCLocalContext *lc,
 {
     const EntryPoint* ep            = lc->ep;
     const RefPicList* rpl           = lc->sc->rpl;
-    const int poc                   = rpl[lx].list[ref_idx];
+    const int poc                   = rpl[lx].refs[ref_idx].poc;
 
     if (ep->num_hmvp == 0)
         return 0;
@@ -1559,7 +1563,7 @@ static int mvp_history_candidates(const VVCLocalContext *lc,
         for (int j = 0; j < 2; j++) {
             const int ly = (j ? !lx : lx);
             PredFlag mask = PF_L0 + ly;
-            if ((h->pred_flag & mask) && poc == rpl[ly].list[h->ref_idx[ly]]) {
+            if ((h->pred_flag & mask) && poc == rpl[ly].refs[h->ref_idx[ly]].poc) {
                 if (mvp_lx_flag == num_cands) {
                     *mv = h->mv[ly];
                     ff_vvc_round_mv(mv, amvr_shift, amvr_shift);
@@ -1696,17 +1700,34 @@ static void ibc_merge_candidates(VVCLocalContext *lc, const int merge_idx, Mv *m
     memset(mv, 0, sizeof(*mv));
 }
 
-void ff_vvc_mvp_ibc(VVCLocalContext *lc, const int mvp_l0_flag, const int amvr_shift, Mv *mv)
+static int ibc_check_mv(VVCLocalContext *lc, Mv *mv)
+{
+    const VVCFrameContext *fc = lc->fc;
+    const VVCSPS *sps         = lc->fc->ps.sps;
+    const CodingUnit *cu      = lc->cu;
+    const Mv *bv              = &cu->pu.mi.mv[L0][0];
+
+    if (sps->ctb_size_y < ((cu->y0 + (bv->y >> 4)) & (sps->ctb_size_y - 1)) + cu->cb_height) {
+        av_log(fc->log_ctx, AV_LOG_ERROR, "IBC region spans multiple CTBs.\n");
+        return AVERROR_INVALIDDATA;
+    }
+
+    return 0;
+}
+
+int ff_vvc_mvp_ibc(VVCLocalContext *lc, const int mvp_l0_flag, const int amvr_shift, Mv *mv)
 {
     LOCAL_ALIGNED_8(Mv, mvp, [1]);
 
     ibc_merge_candidates(lc, mvp_l0_flag, mvp);
     ibc_add_mvp(mv, mvp, amvr_shift);
+    return ibc_check_mv(lc, mv);
 }
 
-void ff_vvc_luma_mv_merge_ibc(VVCLocalContext *lc, const int merge_idx, Mv *mv)
+int ff_vvc_luma_mv_merge_ibc(VVCLocalContext *lc, const int merge_idx, Mv *mv)
 {
     ibc_merge_candidates(lc, merge_idx, mv);
+    return ibc_check_mv(lc, mv);
 }
 
 static int affine_mvp_constructed_cp(NeighbourContext *ctx,
@@ -1725,14 +1746,14 @@ static int affine_mvp_constructed_cp(NeighbourContext *ctx,
         if (check_available(n, ctx->lc, 0)) {
             const PredFlag maskx = lx + 1;
             const MvField* mvf = &TAB_MVF(n->x, n->y);
-            const int poc = rpl[lx].list[ref_idx];
-            if ((mvf->pred_flag & maskx) && rpl[lx].list[mvf->ref_idx[lx]] == poc) {
+            const int poc = rpl[lx].refs[ref_idx].poc;
+            if ((mvf->pred_flag & maskx) && rpl[lx].refs[mvf->ref_idx[lx]].poc == poc) {
                 available = 1;
                 *cp = mvf->mv[lx];
             } else {
                 const int ly = !lx;
                 const PredFlag masky = ly + 1;
-                if ((mvf->pred_flag & masky) && rpl[ly].list[mvf->ref_idx[ly]] == poc) {
+                if ((mvf->pred_flag & masky) && rpl[ly].refs[mvf->ref_idx[ly]].poc == poc) {
                     available = 1;
                     *cp = mvf->mv[ly];
                 }

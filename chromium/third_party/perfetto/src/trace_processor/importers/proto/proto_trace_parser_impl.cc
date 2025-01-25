@@ -158,18 +158,6 @@ void ProtoTraceParserImpl::ParseInlineSchedWaking(uint32_t cpu,
   context_->args_tracker->Flush();
 }
 
-void ProtoTraceParserImpl::ParseLegacyV8ProfileEvent(
-    int64_t ts,
-    LegacyV8CpuProfileEvent event) {
-  base::Status status = context_->legacy_v8_cpu_profile_tracker->AddSample(
-      ts, event.session_id, event.pid, event.tid, event.callsite_id);
-  if (!status.ok()) {
-    context_->storage->IncrementStats(
-        stats::legacy_v8_cpu_profile_invalid_sample);
-  }
-  context_->args_tracker->Flush();
-}
-
 void ProtoTraceParserImpl::ParseChromeEvents(int64_t ts, ConstBytes blob) {
   TraceStorage* storage = context_->storage.get();
   protos::pbzero::ChromeEventBundle::Decoder bundle(blob.data, blob.size);
@@ -367,7 +355,7 @@ void ProtoTraceParserImpl::ParseMetatraceEvent(int64_t ts, ConstBytes blob) {
       name_id = context_->storage->InternString(event.counter_name());
     }
     TrackId track =
-        context_->track_tracker->InternThreadCounterTrack(name_id, utid);
+        context_->track_tracker->LegacyInternThreadCounterTrack(name_id, utid);
     auto opt_id =
         context_->event_tracker->PushCounter(ts, event.counter_value(), track);
     if (opt_id) {

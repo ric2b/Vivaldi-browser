@@ -1,7 +1,7 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8" ?>
 
-<grit latest_public_release="0" current_release="1"
-      output_all_resource_defines="false" source_lang_id="en" enc_check="möl">
+<grit base_dir="." latest_public_release="0" current_release="1"
+      source_lang_id="en" enc_check="möl">
   <outputs>
     <output filename="values-b+ca+valencia/android_webapps_strings.xml" type="android" lang="ca-valencia" />
     <output filename="values-de-rCH/android_webapps_strings.xml" type="android" lang="de-CH" />

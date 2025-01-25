@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "discovery/dnssd/public/dns_sd_service.h"
-#include "platform/api/task_runner_deleter.h"
 
 namespace openscreen {
 
@@ -19,10 +18,9 @@ namespace discovery {
 struct Config;
 class ReportingClient;
 
-std::unique_ptr<DnsSdService, TaskRunnerDeleter> CreateDnsSdService(
-    TaskRunner& task_runner,
-    ReportingClient& reporting_client,
-    const Config& config);
+DnsSdServicePtr CreateDnsSdService(TaskRunner& task_runner,
+                                   ReportingClient& reporting_client,
+                                   const Config& config);
 
 }  // namespace discovery
 }  // namespace openscreen

@@ -1,6 +1,6 @@
-# Copyright 2023 The Khronos Group Inc.
-# Copyright 2023 Valve Corporation
-# Copyright 2023 LunarG, Inc.
+# Copyright 2023-2024 The Khronos Group Inc.
+# Copyright 2023-2024 Valve Corporation
+# Copyright 2023-2024 LunarG, Inc.
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -14,6 +14,8 @@ on:
 
 jobs:
   build_and_test:
+    # Use chromium as a test build, so don't run this job unless something simple works first
+    needs: chromium
     runs-on: ${{matrix.os}}
     strategy:
       matrix:
@@ -43,6 +45,8 @@ jobs:
         working-directory: build/
 
   windows-arm64:
+    # Use chromium as a test build, so don't run this job unless something simple works first
+    needs: chromium
     runs-on: windows-latest
     env:
       CMAKE_GENERATOR: Ninja
@@ -56,6 +60,8 @@ jobs:
       - run: cmake --install build --prefix build/install
  
   android:
+    # Use chromium as a test build, so don't run this job unless something simple works first
+    needs: chromium
     runs-on: ubuntu-22.04
     strategy:
       matrix:
@@ -90,6 +96,7 @@ jobs:
 
   # Test to ensure we don't accidentally break the Chromium build.
   chromium:
+    needs: generate_source
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4

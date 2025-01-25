@@ -52,19 +52,19 @@ GetWipeModelUponSyncDisabledBehaviorForProfileStore() {
 
 // static
 scoped_refptr<password_manager::PasswordStoreInterface>
-IOSChromeProfilePasswordStoreFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state,
+IOSChromeProfilePasswordStoreFactory::GetForProfile(
+    ProfileIOS* profile,
     ServiceAccessType access_type) {
   // `profile` gets always redirected to a non-Incognito profile below, so
   // Incognito & IMPLICIT_ACCESS means that incognito browsing session would
   // result in traces in the normal profile without the user knowing it.
   if (access_type == ServiceAccessType::IMPLICIT_ACCESS &&
-      browser_state->IsOffTheRecord()) {
+      profile->IsOffTheRecord()) {
     return nullptr;
   }
   return base::WrapRefCounted(
       static_cast<password_manager::PasswordStoreInterface*>(
-          GetInstance()->GetServiceForBrowserState(browser_state, true).get()));
+          GetInstance()->GetServiceForBrowserState(profile, true).get()));
 }
 
 // static
@@ -107,7 +107,7 @@ IOSChromeProfilePasswordStoreFactory::BuildServiceInstanceFor(
               profile->GetPrefs(), os_crypt_async));
 
   AffiliationService* affiliation_service =
-      IOSChromeAffiliationServiceFactory::GetForBrowserState(profile);
+      IOSChromeAffiliationServiceFactory::GetForProfile(profile);
   std::unique_ptr<AffiliatedMatchHelper> affiliated_match_helper =
       std::make_unique<AffiliatedMatchHelper>(affiliation_service);
   std::unique_ptr<password_manager::PasswordAffiliationSourceAdapter>
@@ -117,7 +117,7 @@ IOSChromeProfilePasswordStoreFactory::BuildServiceInstanceFor(
   store->Init(profile->GetPrefs(), std::move(affiliated_match_helper));
 
   password_manager::SanitizeAndMigrateCredentials(
-      CredentialsCleanerRunnerFactory::GetForBrowserState(profile), store,
+      CredentialsCleanerRunnerFactory::GetForProfile(profile), store,
       password_manager::kProfileStore, profile->GetPrefs(), base::Seconds(60),
       base::NullCallback());
   if (!profile->IsOffTheRecord()) {

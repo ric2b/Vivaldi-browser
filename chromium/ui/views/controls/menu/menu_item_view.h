@@ -25,6 +25,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/menu/menu_config.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_types.h"
@@ -136,9 +137,11 @@ class VIEWS_EXPORT MenuItemView : public View, public LayoutDelegate {
 
   ~MenuItemView() override;
 
+  // Added by Vivaldi
+  void UpdateCheckBoxVisibility();
+
   // Overridden from View:
   std::u16string GetTooltipText(const gfx::Point& p) const override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool HandleAccessibleAction(const ui::AXActionData& action_data) override;
   FocusBehavior GetFocusBehavior() const override;
 
@@ -596,9 +599,13 @@ class VIEWS_EXPORT MenuItemView : public View, public LayoutDelegate {
   // `vertical_margin_` is not set.
   int GetVerticalMargin() const;
 
+  ViewAccessibility* GetSubmenuViewAccessibility();
+  ViewAccessibility* GetScrollViewContainerViewAccessibility();
   void UpdateAccessibleRole();
-  void UpdateAccessibleKeyShortcuts();
+  void UpdateAccessibleHasPopup();
+  void UpdateAccessibleName();
   void UpdateAccessibleSelection();
+  void UpdateAccessibleKeyShortcuts();
 
   // The delegate. This is only valid for the root menu item. You shouldn't
   // use this directly, instead use GetDelegate() which walks the tree as

@@ -10,11 +10,18 @@ import * as Freestyler from './FreestylerEvaluateAction.js';
 
 describe('FreestylerEvaluateAction', () => {
   describe('error handling', () => {
-    function executeWithResult(mockResult: SDK.RuntimeModel.EvaluationResult): Promise<string> {
+    function executeWithResult(
+        mockResult: SDK.RuntimeModel.EvaluationResult, pausedOnBreakpoint = false): Promise<string> {
       const executionContextStub = sinon.createStubInstance(SDK.RuntimeModel.ExecutionContext);
-      executionContextStub.evaluate.resolves(mockResult);
+      executionContextStub.debuggerModel = sinon.createStubInstance(SDK.DebuggerModel.DebuggerModel);
+      if (pausedOnBreakpoint) {
+        executionContextStub.debuggerModel.selectedCallFrame = () => {
+          return sinon.createStubInstance(SDK.DebuggerModel.CallFrame);
+        };
+      }
+      executionContextStub.callFunctionOn.resolves(mockResult);
       executionContextStub.runtimeModel = sinon.createStubInstance(SDK.RuntimeModel.RuntimeModel);
-      return Freestyler.FreestylerEvaluateAction.execute('', executionContextStub, {throwOnSideEffect: false});
+      return Freestyler.FreestylerEvaluateAction.execute('', [], executionContextStub, {throwOnSideEffect: false});
     }
 
     function mockRemoteObject(overrides: Partial<SDK.RemoteObject.RemoteObject> = {}): SDK.RemoteObject.RemoteObject {
@@ -44,9 +51,20 @@ describe('FreestylerEvaluateAction', () => {
     it('should throw an ExecutionError when the page returned with an error message', async () => {
       try {
         await executeWithResult({error: 'errorMessage'});
+        assert.fail('not reachable');
       } catch (err) {
         assert.instanceOf(err, Freestyler.ExecutionError);
         assert.strictEqual(err.message, 'errorMessage');
+      }
+    });
+
+    it('should throw an ExecutionError when the debugger is paused', async () => {
+      try {
+        await executeWithResult({error: 'errorMessage'}, true);
+        assert.fail('not reachable');
+      } catch (err) {
+        assert.instanceOf(err, Freestyler.ExecutionError);
+        assert.strictEqual(err.message, 'Cannot evaluate JavaScript because the execution is paused on a breakpoint.');
       }
     });
 
@@ -57,6 +75,7 @@ describe('FreestylerEvaluateAction', () => {
              object: mockRemoteObject(),
              exceptionDetails: mockExceptionDetails({description: 'Error description'}),
            });
+           assert.fail('not reachable');
          } catch (err) {
            assert.instanceOf(err, Freestyler.ExecutionError);
            assert.strictEqual(err.message, 'Error description');
@@ -70,6 +89,7 @@ describe('FreestylerEvaluateAction', () => {
              object: mockRemoteObject(),
              exceptionDetails: mockExceptionDetails({description: 'EvalError: Possible side-effect in debug-evaluate'}),
            });
+           assert.fail('not reachable');
          } catch (err) {
            assert.instanceOf(err, Freestyler.SideEffectError);
            assert.strictEqual(err.message, 'EvalError: Possible side-effect in debug-evaluate');
@@ -86,99 +106,103 @@ describe('FreestylerEvaluateAction', () => {
     }
 
     async function executeForTest(code: string) {
-      const actionExpression = `const scope = {$0, $1, getEventListeners}; with (scope) {${code}}`;
+      const actionExpression = `async function ($0) {
+        ${code}
+        ;
+        return ((typeof data !== "undefined") ? data : undefined);
+      }`;
       return Freestyler.FreestylerEvaluateAction.execute(
-          actionExpression, await executionContextForTest(), {throwOnSideEffect: false});
+          actionExpression, [], await executionContextForTest(), {throwOnSideEffect: false});
     }
 
     it('should serialize primitive values correctly', async () => {
-      assert.strictEqual(await executeForTest('"string"'), '\'string\'');
-      assert.strictEqual(await executeForTest('999n'), '999n');
-      assert.strictEqual(await executeForTest('true'), 'true');
-      assert.strictEqual(await executeForTest('undefined'), 'undefined');
-      assert.strictEqual(await executeForTest('42'), '42');
-      assert.strictEqual(await executeForTest('Symbol("sym")'), 'Symbol(sym)');
+      assert.strictEqual(await executeForTest('const data = "string"'), '\'string\'');
+      assert.strictEqual(await executeForTest('const data = 999n'), '999n');
+      assert.strictEqual(await executeForTest('const data = true'), 'true');
+      assert.strictEqual(await executeForTest('const data = undefined'), 'undefined');
+      assert.strictEqual(await executeForTest('const data = 42'), '42');
+      assert.strictEqual(await executeForTest('const data = Symbol("sym")'), 'Symbol(sym)');
     });
 
     describe('HTMLElement', () => {
       it('should work with plain nodes', async () => {
-        const serializedElement = await executeForTest(`{
+        const serializedElement = await executeForTest(`
           const el = document.createElement('div');
 
-          el;
-        }`);
+          const data = el;
+        `);
         assert.strictEqual(serializedElement, '"<div></div>"');
       });
 
       it('should serialize node with classes', async () => {
-        const serializedElement = await executeForTest(`{
+        const serializedElement = await executeForTest(`
           const el = document.createElement('div');
           el.classList.add('section');
           el.classList.add('section-main');
 
-          el;
-        }`);
+          const data = el;
+        `);
         assert.strictEqual(serializedElement, '"<div class=\\"section section-main\\"></div>"');
       });
 
       it('should serialize node with id', async () => {
-        const serializedElement = await executeForTest(`{
+        const serializedElement = await executeForTest(`
           const el = document.createElement('div');
           el.id = 'promotion-section';
 
-          el;
-        }`);
+          const data = el;
+        `);
         assert.strictEqual(serializedElement, '"<div id=\\"promotion-section\\"></div>"');
       });
       it('should serialize node with class and id', async () => {
-        const serializedElement = await executeForTest(`{
+        const serializedElement = await executeForTest(`
           const el = document.createElement('div');
           el.id = 'promotion-section';
           el.classList.add('section');
 
-          el;
-        }`);
+          const data = el;
+        `);
         assert.strictEqual(serializedElement, '"<div id=\\"promotion-section\\" class=\\"section\\"></div>"');
       });
       it('should serialize node with children', async () => {
-        const serializedElement = await executeForTest(`{
+        const serializedElement = await executeForTest(`
           const el = document.createElement('div');
           const p = document.createElement('p');
           el.appendChild(p);
 
-          el;
-        }`);
+          const data = el;
+        `);
         assert.strictEqual(serializedElement, '"<div>...</div>"');
       });
     });
 
     it('should serialize arrays correctly', async () => {
-      assert.strictEqual(await executeForTest('[]'), '[]');
-      assert.strictEqual(await executeForTest('[1]'), '[1]');
-      assert.strictEqual(await executeForTest('[1, 2]'), '[1,2]');
-      assert.strictEqual(await executeForTest('[{key: 1}]'), '[{"key":1}]');
+      assert.strictEqual(await executeForTest('const data = []'), '[]');
+      assert.strictEqual(await executeForTest('const data = [1]'), '[1]');
+      assert.strictEqual(await executeForTest('const data = [1, 2]'), '[1,2]');
+      assert.strictEqual(await executeForTest('const data = [{key: 1}]'), '[{"key":1}]');
     });
 
     it('should serialize objects correctly', async () => {
-      assert.strictEqual(await executeForTest('const object = {key: "str"}; object;'), '{"key":"str"}');
+      assert.strictEqual(await executeForTest('const object = {key: "str"}; const data = object;'), '{"key":"str"}');
       assert.strictEqual(
-          await executeForTest('const object = {key: "str", secondKey: "str2"}; object;'),
+          await executeForTest('const object = {key: "str", secondKey: "str2"}; const data = object;'),
           '{"key":"str","secondKey":"str2"}');
-      assert.strictEqual(await executeForTest('const object = {key: 1}; object;'), '{"key":1}');
+      assert.strictEqual(await executeForTest('const object = {key: 1}; const data = object;'), '{"key":1}');
     });
 
     it('should not continue serializing cycles', async () => {
       assert.strictEqual(
-          await executeForTest(`{
+          await executeForTest(`
         const obj = { a: 1 };
         obj.itself = obj;
-        obj;
-      }`),
+        const data = obj;
+      `),
           '{"a":1,"itself":"(cycle)"}');
     });
 
     it('should not include number keys for CSSStyleDeclaration', async () => {
-      const result = await executeForTest('getComputedStyle(document.body)');
+      const result = await executeForTest('const data = getComputedStyle(document.body)');
       const parsedResult = JSON.parse(result);
       assert.isUndefined(parsedResult[0]);
     });

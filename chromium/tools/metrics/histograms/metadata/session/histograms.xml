@@ -23,7 +23,7 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <histogram name="Session.Android.TabbedSessionContainedGoogleSearch"
-    enum="Boolean" expires_after="2025-02-12">
+    enum="Boolean" expires_after="2025-04-13">
   <owner>nafisabedin@google.com</owner>
   <owner>yfriedman@chromium.org</owner>
   <summary>
@@ -35,7 +35,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.Background.TotalDuration" units="ms"
-    expires_after="2025-02-09">
+    expires_after="2025-04-13">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -79,7 +79,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.IsActive" enum="BooleanActive"
-    expires_after="2025-02-10">
+    expires_after="2025-04-13">
   <owner>rogerm@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -98,7 +98,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.OpenedTabCounts" units="operations"
-    expires_after="2025-02-10">
+    expires_after="2025-04-13">
   <owner>rohitrao@chromium.org</owner>
   <owner>marq@chromium.org</owner>
   <summary>
@@ -885,7 +885,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.TotalDurationMax1Day.{HistorySyncState}" units="ms"
-    expires_after="2025-02-23">
+    expires_after="2025-04-27">
   <owner>mastiz@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <owner>treib@chromium.org</owner>
@@ -924,7 +924,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.TotalDurationMax1Day.{MsbbState}" units="ms"
-    expires_after="2025-02-23">
+    expires_after="2025-04-27">
   <owner>mastiz@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <owner>treib@chromium.org</owner>
@@ -958,7 +958,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.TotalNewDefaultSearchEngineCount" units="count"
-    expires_after="2025-02-16">
+    expires_after="2025-04-20">
   <owner>aattar@google.com</owner>
   <owner>chrome-catan@google.com</owner>
   <summary>
@@ -995,7 +995,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.WebStates.LoadingTimeOnMainThread" units="ms"
-    expires_after="2025-01-19">
+    expires_after="2025-03-23">
   <owner>fedegermi@chromium.org</owner>
   <owner>sdefresne@chromium.org</owner>
   <summary>
@@ -1011,7 +1011,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.WebStates.NativeRestoreHasFetchers"
-    enum="BooleanHasFetchers" expires_after="2025-02-10">
+    enum="BooleanHasFetchers" expires_after="2025-04-13">
   <owner>ajuma@chromium.org</owner>
   <owner>michaeldo@chromium.org</owner>
   <summary>
@@ -1021,7 +1021,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.WebStates.NativeRestoreSession" enum="BooleanSuccess"
-    expires_after="2025-02-09">
+    expires_after="2025-04-13">
   <owner>justincohen@chromium.org</owner>
   <owner>ajuma@chromium.org</owner>
   <summary>
@@ -1032,7 +1032,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.WebStates.NativeRestoreSessionFromCache"
-    enum="BooleanSuccess" expires_after="2025-02-09">
+    enum="BooleanSuccess" expires_after="2025-04-13">
   <owner>justincohen@chromium.org</owner>
   <owner>ajuma@chromium.org</owner>
   <summary>
@@ -1043,7 +1043,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.WebStates.NativeRestoreSessionFromCacheHasData"
-    enum="BooleanHasData" expires_after="2025-02-09">
+    enum="BooleanHasData" expires_after="2025-04-13">
   <owner>ajuma@chromium.org</owner>
   <owner>michaeldo@chromium.org</owner>
   <summary>
@@ -1054,7 +1054,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.WebStates.NativeRestoreSessionHasData"
-    enum="BooleanHasData" expires_after="2025-02-10">
+    enum="BooleanHasData" expires_after="2025-04-13">
   <owner>ajuma@chromium.org</owner>
   <owner>michaeldo@chromium.org</owner>
   <summary>
@@ -1065,7 +1065,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.WebStates.ReadFromFileTime" units="ms"
-    expires_after="2025-02-10">
+    expires_after="2025-04-20">
   <owner>justincohen@chromium.org</owner>
   <owner>rohitrao@chromium.org</owner>
   <summary>
@@ -1075,7 +1075,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.WebStates.SavingTimeOnMainThread" units="ms"
-    expires_after="2025-01-19">
+    expires_after="2025-03-23">
   <owner>fedegermi@chromium.org</owner>
   <owner>sdefresne@chromium.org</owner>
   <summary>
@@ -1092,7 +1092,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.WebStates.SerializedCertPolicyCacheSize" units="KB"
-    expires_after="2024-10-08">
+    expires_after="2025-10-08">
   <owner>ajuma@chromium.org</owner>
   <owner>justincohen@chromium.org</owner>
   <summary>
@@ -1103,7 +1103,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.WebStates.StorageFormat" enum="SessionStorageFormat"
-    expires_after="2025-01-19">
+    expires_after="2025-03-23">
   <owner>fedegermi@chromium.org</owner>
   <owner>sdefresne@chromium.org</owner>
   <summary>
@@ -1114,7 +1114,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.WebStates.StorageMigrationDuration" units="ms"
-    expires_after="2025-01-19">
+    expires_after="2025-03-23">
   <owner>fedegermi@chromium.org</owner>
   <owner>sdefresne@chromium.org</owner>
   <summary>
@@ -1131,7 +1131,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.WebStates.StorageMigrationStatus"
-    enum="SessionStorageMigrationStatus" expires_after="2025-01-19">
+    enum="SessionStorageMigrationStatus" expires_after="2025-03-23">
   <owner>fedegermi@chromium.org</owner>
   <owner>sdefresne@chromium.org</owner>
   <summary>
@@ -1147,7 +1147,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.WebStates.WriteToFileTime" units="ms"
-    expires_after="2025-02-10">
+    expires_after="2025-04-20">
   <owner>justincohen@chromium.org</owner>
   <owner>rohitrao@chromium.org</owner>
   <summary>
@@ -1158,7 +1158,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SessionRestore.ForegroundTabFirstPaint4" units="ms"
-    expires_after="2025-01-26">
+    expires_after="2025-03-30">
   <owner>joenotcharles@google.com</owner>
   <owner>catan-team@chromium.org</owner>
   <improvement direction="LOWER_IS_BETTER"/>
@@ -1175,7 +1175,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SessionRestore.ForegroundTabFirstPaint4.FinishReason"
-    enum="SessionRestoreFinishReason" expires_after="2025-01-26">
+    enum="SessionRestoreFinishReason" expires_after="2025-03-30">
   <owner>joenotcharles@google.com</owner>
   <owner>catan-team@chromium.org</owner>
   <summary>

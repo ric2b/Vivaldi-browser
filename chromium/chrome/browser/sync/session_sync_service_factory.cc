@@ -29,7 +29,7 @@
 #include "components/sync_sessions/sync_sessions_client.h"
 #include "content/public/common/url_utils.h"
 
-#include "components/sync_sessions/vivaldi_specific_observer.h"
+#include "components/sync_sessions/vivaldi_local_session_observer.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/sync/glue/synced_window_delegates_getter_android.h"
@@ -55,7 +55,7 @@ class SyncSessionsClientImpl final : public sync_sessions::SyncSessionsClient {
  public:
   explicit SyncSessionsClientImpl(Profile* profile)
       : profile_(profile), session_sync_prefs_(profile->GetPrefs()),
-        vivaldi_specific_observer_(profile)
+        vivaldi_local_session_observer_(profile)
   {
     window_delegates_getter_ =
 #if BUILDFLAG(IS_ANDROID)
@@ -127,7 +127,7 @@ class SyncSessionsClientImpl final : public sync_sessions::SyncSessionsClient {
   }
 
   void NotifyVivaldiObserver() override {
-    vivaldi_specific_observer_.TriggerSync();
+    vivaldi_local_session_observer_.TriggerSync();
   }
 
  private:
@@ -137,7 +137,7 @@ class SyncSessionsClientImpl final : public sync_sessions::SyncSessionsClient {
   sync_sessions::SessionSyncPrefs session_sync_prefs_;
   base::WeakPtrFactory<SyncSessionsClientImpl> weak_ptr_factory_{this};
 
-  vivaldi::VivSpecificObserver vivaldi_specific_observer_;
+  vivaldi::VivaldiLocalSessionObserver vivaldi_local_session_observer_;
 };
 }  // namespace
 
@@ -181,9 +181,10 @@ SessionSyncServiceFactory::SessionSyncServiceFactory()
 
 SessionSyncServiceFactory::~SessionSyncServiceFactory() = default;
 
-KeyedService* SessionSyncServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+SessionSyncServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
-  return new sync_sessions::SessionSyncServiceImpl(
+  return std::make_unique<sync_sessions::SessionSyncServiceImpl>(
       chrome::GetChannel(), std::make_unique<SyncSessionsClientImpl>(profile));
 }

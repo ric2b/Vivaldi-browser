@@ -9,6 +9,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.Rect;
 import android.net.Uri;
+import android.os.Build;
 import android.text.TextUtils;
 import android.util.SparseArray;
 import android.view.View;
@@ -72,12 +73,15 @@ import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.components.security_state.SecurityStateModel;
+import org.chromium.components.sensitive_content.SensitiveContentClient;
+import org.chromium.components.sensitive_content.SensitiveContentFeatures;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.ChildProcessImportance;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.SelectionPopupController;
+import org.chromium.content_public.browser.Visibility;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsAccessibility;
 import org.chromium.content_public.browser.back_forward_transition.AnimationStage;
@@ -104,7 +108,7 @@ import org.vivaldi.browser.common.VivaldiUrlConstants;
  * Implementation of the interface {@link Tab}. Contains and manages a {@link ContentView}. This
  * class is not intended to be extended.
  */
-class TabImpl implements Tab {
+class TabImpl implements Tab, SensitiveContentClient.Observer {
     /** Used for logging. */
     private static final String TAG = "Tab";
 
@@ -186,7 +190,7 @@ class TabImpl implements Tab {
      * hardware key. A standard tab however should be kept open and the entire activity should be
      * moved to the background.
      */
-    private @Nullable @TabLaunchType Integer mLaunchType;
+    private @TabLaunchType int mLaunchType;
 
     private @Nullable @TabCreationState Integer mCreationState;
 
@@ -248,6 +252,7 @@ class TabImpl implements Tab {
     private int mParentId = INVALID_TAB_ID;
     private int mRootId;
     private @Nullable Token mTabGroupId;
+    private boolean mTabHasSensitiveContent;
     private @TabUserAgent int mUserAgent = TabUserAgent.DEFAULT;
 
     /**
@@ -267,11 +272,11 @@ class TabImpl implements Tab {
     private long mLastNavigationCommittedTimestampMillis = INVALID_TIMESTAMP;
 
     /**
-     * Saves how this tab was initially launched so that we can record metrics on how the
-     * tab was created. This is different than {@link Tab#getLaunchType()}, since {@link
+     * Saves how this tab was initially launched so that we can record metrics on how the tab was
+     * created. This is different than {@link Tab#getLaunchType()}, since {@link
      * Tab#getLaunchType()} will be overridden to "FROM_RESTORE" during tab restoration.
      */
-    private @Nullable @TabLaunchType Integer mTabLaunchTypeAtCreation;
+    private @TabLaunchType int mTabLaunchTypeAtCreation;
 
     /**
      * Variables used to track native page creation prior to mNativePage assignment. Avoids the case
@@ -312,7 +317,7 @@ class TabImpl implements Tab {
      * @param launchType Type indicating how this tab was launched.
      */
     @SuppressLint("HandlerLeak")
-    TabImpl(int id, @NonNull Profile profile, @Nullable @TabLaunchType Integer launchType) {
+    TabImpl(int id, @NonNull Profile profile, @TabLaunchType int launchType) {
         mId = TabIdManager.getInstance().generateValidId(id);
         mProfile = profile;
         assert mProfile != null;
@@ -719,8 +724,10 @@ class TabImpl implements Tab {
 
             LoadUrlResult result = loadUrlInternal(params, fixedUrl);
 
-            for (TabObserver observer : mObservers) {
-                observer.onLoadUrl(this, params, result);
+            try (TraceEvent event = TraceEvent.scoped("Tab.loadUrl.TabObservers.onLoadUrl")) {
+                for (TabObserver observer : mObservers) {
+                    observer.onLoadUrl(this, params, result);
+                }
             }
             return result;
         } finally {
@@ -785,6 +792,8 @@ class TabImpl implements Tab {
         RecordHistogram.recordBooleanHistogram(
                 "Tabs.FreezeAndAppendPendingNavigationResult", success);
         if (success) {
+            // The pending load params were consumed to make the WebContentsState. Invalidate them.
+            mPendingLoadParams = null;
             mUrl = new GURL(mWebContentsState.getVirtualUrlFromState());
         } else {
             // Since we are not allowed to auto-navigate the only remaining fallback is to clobber
@@ -814,8 +823,13 @@ class TabImpl implements Tab {
 
         if (mPendingLoadParams != null) {
             assert isFrozen();
+            // TODO(crbug.com/366242716): This codepath can also be used by CCT, but it's not
+            // clear whether multi-network CCT will ever end up here. As such, we should investigate
+            // whether the parameter targetsNetwork should ever be set to true.
             WebContents webContents =
-                    WarmupManager.getInstance().takeSpareWebContents(isIncognito(), isHidden());
+                    WarmupManager.getInstance()
+                            .takeSpareWebContents(
+                                    isIncognito(), isHidden(), /* targetsNetwork= */ false);
             if (webContents == null) {
                 webContents = WebContentsFactory.createWebContents(mProfile, isHidden(), false);
             }
@@ -953,7 +967,9 @@ class TabImpl implements Tab {
             // call.
             TabImplJni.get().onShow(mNativeTabAndroid);
 
-            if (getWebContents() != null) getWebContents().onShow();
+            if (getWebContents() != null) {
+                getWebContents().updateWebContentsVisibility(Visibility.VISIBLE);
+            }
 
             // If the NativePage was frozen while in the background (see NativePageAssassin),
             // recreate the NativePage now.
@@ -1004,7 +1020,9 @@ class TabImpl implements Tab {
             mIsHidden = true;
             updateInteractableState();
 
-            if (getWebContents() != null) getWebContents().onHide();
+            if (getWebContents() != null) {
+                getWebContents().updateWebContentsVisibility(Visibility.HIDDEN);
+            }
 
             // Allow this tab's NativePage to be frozen if it stays hidden for a while.
             NativePageAssassin.getInstance().tabHidden(this);
@@ -1175,9 +1193,15 @@ class TabImpl implements Tab {
 
             boolean creatingWebContents = webContents == null;
             if (creatingWebContents) {
+                // TODO(crbug.com/366242716): This codepath can also be used by CCT, but it's not
+                // clear whether multi-network CCT will ever end up here. As such, we should
+                // investigate whether the parameter targetsNetwork should ever be set to true.
                 webContents =
                         WarmupManager.getInstance()
-                                .takeSpareWebContents(isIncognito(), initiallyHidden);
+                                .takeSpareWebContents(
+                                        isIncognito(),
+                                        initiallyHidden,
+                                        /* targetsNetwork= */ false);
                 if (webContents == null) {
                     webContents =
                             WebContentsFactory.createWebContents(
@@ -1238,13 +1262,13 @@ class TabImpl implements Tab {
         setRootId(state.rootId == Tab.INVALID_TAB_ID ? mId : state.rootId);
         setTabGroupId(state.tabGroupId);
         setUserAgent(state.userAgent);
+        setTabHasSensitiveContent(state.tabHasSensitiveContent);
     }
 
     /**
-     * @return An {@link ObserverList.RewindableIterator} instance that points to all of
-     *         the current {@link TabObserver}s on this class.  Note that calling
-     *         {@link java.util.Iterator#remove()} will throw an
-     *         {@link UnsupportedOperationException}.
+     * @return An {@link ObserverList.RewindableIterator} instance that points to all of the current
+     *     {@link TabObserver}s on this class. Note that calling {@link java.util.Iterator#remove()}
+     *     will throw an {@link UnsupportedOperationException}.
      */
     ObserverList.RewindableIterator<TabObserver> getTabObservers() {
         return mObservers.rewindableIterator();
@@ -1362,8 +1386,10 @@ class TabImpl implements Tab {
     }
 
     void handleBackForwardTransitionUiChanged() {
+        if (isDestroyed()) return;
+
         for (TabObserver observer : mObservers) {
-            observer.didBackForwardTransitionAnimationChange();
+            observer.didBackForwardTransitionAnimationChange(this);
         }
 
         // Start the cross-fade animation after the invoking animation is done.
@@ -1377,26 +1403,35 @@ class TabImpl implements Tab {
                     mNativePageSmoothTransitionDelegate.cancel();
                     mNativePageSmoothTransitionDelegate = null;
                 } else if (isNativePage()) {
-                    // This means the ntp is fully showing now. Reset back to 1f.
+                    // May reach this if a navigation is committed in the mid of gesture.
                     getView().setAlpha(1f);
                 }
                 return;
             case AnimationStage.OTHER:
+                if (isNativePage()) {
+                    // A transition is starting. Hide the Java view to present that.
+                    // Wait until the content/ draws the transition.
+                    CompositorViewHolder viewHolder =
+                            getActivity().getCompositorViewHolderSupplier().get();
+                    viewHolder.requestRender(() -> getView().setAlpha(0f));
+                }
+                return;
+            case AnimationStage.WAITING_FOR_EMBEDDER_CONTENT_FOR_COMMITTED_ENTRY:
                 if (mNativePageSmoothTransitionDelegate != null) {
+                    // Navigating back to native pages.
                     mNativePageSmoothTransitionDelegate.start(
                             () -> {
                                 getWebContents().onContentForNavigationEntryShown();
                                 notifyContentChanged();
                             });
                     mNativePageSmoothTransitionDelegate = null;
-                } else if (isNativePage()) {
-                    // Do a hidden transition for NTP view.
-                    getView().setAlpha(0.f);
+                } else if (isNativePage()) { // Navigation from native page was cancelled.
+                    if (getView().getAlpha() != 1f) {
+                        // This means the content/ is waiting for the NTP to be fully visible.
+                        getView().setAlpha(1f);
+                        getView().post(getWebContents()::onContentForNavigationEntryShown);
+                    }
                 }
-                return;
-            case AnimationStage.INVOKE_ANIMATION:
-                // invoking animation is in-progress. Wait for it to be finished.
-                return;
         }
     }
 
@@ -1694,7 +1729,7 @@ class TabImpl implements Tab {
                         ? new Rect(0, 0, mContentView.getWidth(), mContentView.getHeight())
                         : new Rect();
         for (TabObserver observer : mObservers) observer.webContentsWillSwap(this);
-        if (hasWebContents) mWebContents.onHide();
+        if (hasWebContents) mWebContents.updateWebContentsVisibility(Visibility.HIDDEN);
         Context appContext = ContextUtils.getApplicationContext();
         Rect bounds = original.isEmpty() ? TabUtils.estimateContentSize(appContext) : null;
         if (bounds != null) original.set(bounds);
@@ -1720,7 +1755,7 @@ class TabImpl implements Tab {
                                         bounds.bottom);
                     }
                     initWebContents(webContents);
-                    webContents.onShow();
+                    webContents.updateWebContentsVisibility(Visibility.VISIBLE);
                 });
 
         if (didStartLoad) {
@@ -1821,9 +1856,7 @@ class TabImpl implements Tab {
 
             ContentView cv = ContentView.createContentView(mThemedApplicationContext, webContents);
             cv.setContentDescription(
-                    mThemedApplicationContext
-                            .getResources()
-                            .getString(R.string.accessibility_content_view));
+                    mThemedApplicationContext.getString(R.string.accessibility_content_view));
             mContentView = cv;
             webContents.setDelegates(
                     PRODUCT_VERSION,
@@ -1874,6 +1907,15 @@ class TabImpl implements Tab {
 
             TabHelpers.initWebContentsHelpers(this);
             notifyContentChanged();
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
+                    && ChromeFeatureList.isEnabled(SensitiveContentFeatures.SENSITIVE_CONTENT)
+                    && ChromeFeatureList.isEnabled(
+                            SensitiveContentFeatures.SENSITIVE_CONTENT_WHILE_SWITCHING_TABS)) {
+                // Adding the observation has to happen after the native `initWebContents`, so that
+                // the {@link SensitiveContentClient} is properly initialized.
+                SensitiveContentClient.fromWebContents(webContents).addObserver(this);
+            }
         } finally {
             TraceEvent.end("ChromeTab.initWebContents");
         }
@@ -2047,13 +2089,21 @@ class TabImpl implements Tab {
             WebContents webContents =
                     WebContentsStateBridge.restoreContentsFromByteBuffer(
                             mWebContentsState, isHidden());
+
+            String failedRestoreUrl = UrlConstants.NTP_URL;
             if (webContents == null) {
                 // State restore failed, just create a new empty web contents as that is the best
-                // that can be done at this point. TODO(jcivelli) http://b/5910521 - we should show
-                // an error page instead of a blank page in that case (and the last loaded URL).
+                // that can be done at this point.
                 webContents = WebContentsFactory.createWebContents(mProfile, isHidden(), false);
                 for (TabObserver observer : mObservers) observer.onRestoreFailed(this);
                 restored = false;
+
+                if (!mUrl.getSpec().isEmpty()) {
+                    failedRestoreUrl = mUrl.getSpec();
+                } else if (!TextUtils.isEmpty(
+                        mWebContentsState.getFallbackUrlForRestorationFailure())) {
+                    failedRestoreUrl = mWebContentsState.getFallbackUrlForRestorationFailure();
+                }
             }
             Supplier<CompositorViewHolder> compositorViewHolderSupplier =
                     getActivity().getCompositorViewHolderSupplier();
@@ -2064,8 +2114,7 @@ class TabImpl implements Tab {
             initWebContents(webContents);
 
             if (!restored) {
-                String url = mUrl.getSpec().isEmpty() ? UrlConstants.NTP_URL : mUrl.getSpec();
-                loadUrl(new LoadUrlParams(url, PageTransition.GENERATED));
+                loadUrl(new LoadUrlParams(failedRestoreUrl, PageTransition.GENERATED));
             }
         } finally {
             TraceEvent.end("Tab.unfreezeContents");
@@ -2129,7 +2178,8 @@ class TabImpl implements Tab {
         return mTimestampMillis;
     }
 
-    private void setTimestampMillis(long timestampMillis) {
+    @Override
+    public void setTimestampMillis(long timestampMillis) {
         mTimestampMillis = timestampMillis;
         for (TabObserver tabObserver : mObservers) {
             tabObserver.onTimestampChanged(this, timestampMillis);
@@ -2230,7 +2280,7 @@ class TabImpl implements Tab {
     }
 
     @Override
-    public @Nullable @TabLaunchType Integer getTabLaunchTypeAtCreation() {
+    public @TabLaunchType int getTabLaunchTypeAtCreation() {
         return mTabLaunchTypeAtCreation;
     }
 
@@ -2274,6 +2324,13 @@ class TabImpl implements Tab {
      */
     private final void destroyWebContents(boolean deleteNativeWebContents) {
         if (mWebContents == null) return;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
+                && ChromeFeatureList.isEnabled(SensitiveContentFeatures.SENSITIVE_CONTENT)
+                && ChromeFeatureList.isEnabled(
+                        SensitiveContentFeatures.SENSITIVE_CONTENT_WHILE_SWITCHING_TABS)) {
+            SensitiveContentClient.fromWebContents(mWebContents).removeObserver(this);
+        }
 
         if (mAutofillProvider != null) {
             mAutofillProvider.destroy();
@@ -2351,7 +2408,7 @@ class TabImpl implements Tab {
             shouldRequestDesktopSite =
                     alwaysRequestDesktopSite
                             // Vivaldi returns true when global or site set
-                            || (TabUtils.readRequestDesktopSiteContentSettings(mProfile, url));
+                            || TabUtils.readRequestDesktopSiteContentSettings(mProfile, url);
         } // End Vivaldi
 
         if (shouldRequestDesktopSite != currentRequestDesktopSite) {
@@ -2415,6 +2472,39 @@ class TabImpl implements Tab {
     public boolean isTrustedWebActivity() {
         if (getWebContents() == null) return false;
         return mWebContentsDelegate.isTrustedWebActivity(getWebContents());
+    }
+
+    @Override
+    public boolean shouldEnableEmbeddedMediaExperience() {
+        if (mWebContentsDelegate == null) return false;
+        return mWebContentsDelegate.shouldEnableEmbeddedMediaExperience();
+    }
+
+    @Override
+    public boolean getTabHasSensitiveContent() {
+        return mTabHasSensitiveContent;
+    }
+
+    @Override
+    public void setTabHasSensitiveContent(boolean contentIsSensitive) {
+        if (mTabHasSensitiveContent == contentIsSensitive || isDestroyed()) return;
+        mTabHasSensitiveContent = contentIsSensitive;
+        for (TabObserver observer : mObservers) {
+            observer.onTabContentSensitivityChanged(this, contentIsSensitive);
+        }
+    }
+
+    @Override
+    public void onTabRestoredFromArchivedTabModel() {
+        for (TabObserver observer : mObservers) {
+            observer.onTabUnarchived(this);
+        }
+    }
+
+    // SensitiveContentClient.Observer
+    @Override
+    public void onContentSensitivityChanged(boolean contentIsSensitive) {
+        setTabHasSensitiveContent(contentIsSensitive);
     }
 
     private boolean isVivaldiPanelPage(String url) {

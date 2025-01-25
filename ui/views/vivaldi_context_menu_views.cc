@@ -7,13 +7,17 @@
 #include "browser/menus/vivaldi_render_view_context_menu.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/prefs/pref_service.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/mojom/menu_source_type.mojom-shared.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_item_view.h"
+#include "ui/views/controls/menu/submenu_view.h"
 #include "ui/views/widget/widget.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi {
 
@@ -47,6 +51,11 @@ VivaldiContextMenuViews::VivaldiContextMenuViews(
         new ToolkitDelegateViews);
     render_view_context_menu->set_toolkit_delegate(std::move(delegate));
   }
+  Profile* profile = Profile::FromBrowserContext(
+      web_contents->GetBrowserContext());
+  views::MenuController::VivaldiSetCompactLayout(
+      profile->GetPrefs()->GetBoolean(vivaldiprefs::kMenuCompact));
+  views::MenuController::VivaldiSetContextMenu(true);
 }
 
 VivaldiContextMenuViews::~VivaldiContextMenuViews() {}
@@ -70,7 +79,7 @@ void VivaldiContextMenuViews::Init(
 
 void VivaldiContextMenuViews::RunMenuAt(views::Widget* parent,
                                         const gfx::Rect& rect,
-                                        ui::MenuSourceType type) {
+                                        ui::mojom::MenuSourceType type) {
   if (render_view_context_menu_) {
     static_cast<ToolkitDelegateViews*>(
         render_view_context_menu_->toolkit_delegate())
@@ -117,13 +126,39 @@ bool VivaldiContextMenuViews::Show() {
   // Enable recursive tasks on the message loop so we can get updates while
   // the context menu is being displayed.
   base::CurrentThread::ScopedAllowApplicationTasksInNativeNestedLoop allow;
-  RunMenuAt(widget, rect, ui::MENU_SOURCE_NONE);
+  RunMenuAt(widget, rect, ui::mojom::MenuSourceType::kNone);
   return true;
 }
 
 void VivaldiContextMenuViews::SetIcon(const gfx::Image& icon, int id) {
   if (menu_view_->GetMenuItemByID(id)) {
     menu_view_->GetMenuItemByID(id)->SetIcon(ui::ImageModel::FromImage(icon));
+  }
+}
+
+void VivaldiContextMenuViews::SetTitle(const std::u16string& title, int id) {
+if (menu_view_->GetMenuItemByID(id)) {
+    menu_view_->GetMenuItemByID(id)->SetTitle(title);
+  }
+}
+
+void RefreshInternal(views::SubmenuView* submenu) {
+  for (views::MenuItemView* item : submenu->GetMenuItems()) {
+    if (item->GetType() == views::MenuItemView::Type::kCheckbox) {
+      item->UpdateCheckBoxVisibility();
+    }
+    if (item->GetType() == views::MenuItemView::Type::kSubMenu ||
+        item->GetType() == views::MenuItemView::Type::kActionableSubMenu) {
+      if (item->GetSubmenu()) {
+        RefreshInternal(item->GetSubmenu());
+      }
+    }
+  }
+}
+
+void VivaldiContextMenuViews::Refresh() {
+  if (menu_view_->GetSubmenu()) {
+    RefreshInternal(menu_view_->GetSubmenu());
   }
 }
 

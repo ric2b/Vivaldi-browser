@@ -126,8 +126,7 @@ String ExceptionCodeToString(ExceptionCode exception_code) {
     case ESErrorType::kTypeError:
       return "TypeError";
     default:
-      NOTREACHED_IN_MIGRATION();
-      return "UnknownError";
+      NOTREACHED();
   }
 }
 
@@ -230,7 +229,8 @@ std::pair<String, String> ComputeGraph(V8TestingScope& scope,
 }
 
 template <typename T>
-MLOperand* BuildConstant(MLGraphBuilder* builder,
+MLOperand* BuildConstant(ScriptState* script_state,
+                         MLGraphBuilder* builder,
                          const Vector<uint32_t>& dimensions,
                          V8MLOperandDataType::Enum data_type,
                          const Vector<T>& values,
@@ -240,14 +240,15 @@ MLOperand* BuildConstant(MLGraphBuilder* builder,
   auto buffer = CreateDOMArrayBufferView(buffer_size, data_type);
   DCHECK_EQ(buffer->byteLength(), values.size() * sizeof(T));
   memcpy(buffer->BaseAddress(), values.data(), buffer->byteLength());
-  return BuildConstant(builder, dimensions, data_type, exception_state, buffer);
+  return BuildConstant(script_state, builder, dimensions, data_type,
+                       exception_state, buffer);
 }
 
 MLOperand* BuildConv2d(
     V8TestingScope& scope,
     MLGraphBuilder* builder,
-    const MLOperand* input,
-    const MLOperand* filter,
+    MLOperand* input,
+    MLOperand* filter,
     const MLConv2dOptions* options = MLConv2dOptions::Create()) {
   auto* output =
       builder->conv2d(input, filter, options, scope.GetExceptionState());
@@ -263,8 +264,8 @@ MLOperand* BuildConv2d(
 
 MLOperand* BuildGemm(V8TestingScope& scope,
                      MLGraphBuilder* builder,
-                     const MLOperand* a,
-                     const MLOperand* b,
+                     MLOperand* a,
+                     MLOperand* b,
                      const MLGemmOptions* options = MLGemmOptions::Create()) {
   auto* output = builder->gemm(a, b, options, scope.GetExceptionState());
   EXPECT_THAT(output, testing::NotNull());
@@ -280,8 +281,8 @@ MLOperand* BuildGemm(V8TestingScope& scope,
 MLOperand* BuildElementWiseBinaryOperator(
     MLGraphBuilder* builder,
     V8TestingScope& scope,
-    const MLOperand* a,
-    const MLOperand* b,
+    MLOperand* a,
+    MLOperand* b,
     webnn::mojom::blink::ElementWiseBinary::Kind kind,
     const MLOperatorOptions* options) {
   switch (kind) {
@@ -309,6 +310,12 @@ MLOperand* BuildElementWiseBinaryOperator(
       return builder->lesser(a, b, options, scope.GetExceptionState());
     case webnn::mojom::blink::ElementWiseBinary::Kind::kLesserOrEqual:
       return builder->lesserOrEqual(a, b, options, scope.GetExceptionState());
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kLogicalAnd:
+      return builder->logicalAnd(a, b, options, scope.GetExceptionState());
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kLogicalOr:
+      return builder->logicalOr(a, b, options, scope.GetExceptionState());
+    case webnn::mojom::blink::ElementWiseBinary::Kind::kLogicalXor:
+      return builder->logicalXor(a, b, options, scope.GetExceptionState());
   }
 }
 
@@ -316,8 +323,8 @@ MLOperand* BuildElementWiseBinary(
     V8TestingScope& scope,
     MLGraphBuilder* builder,
     webnn::mojom::blink::ElementWiseBinary::Kind kind,
-    const MLOperand* a,
-    const MLOperand* b,
+    MLOperand* a,
+    MLOperand* b,
     const MLOperatorOptions* options = MLOperatorOptions::Create()) {
   MLOperand* output =
       BuildElementWiseBinaryOperator(builder, scope, a, b, kind, options);
@@ -627,6 +634,9 @@ class FakeWebNNContextProvider : public blink_mojom::WebNNContextProvider {
          /*greater_or_equal_input=*/webnn::SupportedDataTypes::All(),
          /*lesser_input=*/webnn::SupportedDataTypes::All(),
          /*lesser_or_equal_input=*/webnn::SupportedDataTypes::All(),
+         /*logical_and_input=*/webnn::SupportedDataTypes::All(),
+         /*logical_or_input=*/webnn::SupportedDataTypes::All(),
+         /*logical_xor_input=*/webnn::SupportedDataTypes::All(),
          /*logical_not_input=*/webnn::SupportedDataTypes::All(),
          /*logical_output=*/webnn::SupportedDataTypes::All(),
          /*abs_input=*/webnn::SupportedDataTypes::All(),
@@ -650,6 +660,9 @@ class FakeWebNNContextProvider : public blink_mojom::WebNNContextProvider {
          webnn::SupportedDataTypes::All(),
          /*gather_elements_input=*/webnn::SupportedDataTypes::All(),
          /*gather_elements_indices=*/
+         webnn::SupportedDataTypes::All(),
+         /*gather_nd_input=*/webnn::SupportedDataTypes::All(),
+         /*gather_nd_indices=*/
          webnn::SupportedDataTypes::All(),
          /*gelu_input=*/webnn::SupportedDataTypes::All(),
          /*gemm_input=*/webnn::SupportedDataTypes::All(),
@@ -684,6 +697,8 @@ class FakeWebNNContextProvider : public blink_mojom::WebNNContextProvider {
          /*relu_input=*/webnn::SupportedDataTypes::All(),
          /*resample2d_input=*/webnn::SupportedDataTypes::All(),
          /*reshape_input=*/webnn::SupportedDataTypes::All(),
+         /*scatter_elements_input=*/webnn::SupportedDataTypes::All(),
+         /*scatter_elements_indices=*/webnn::SupportedDataTypes::All(),
          /*scatter_nd_input=*/webnn::SupportedDataTypes::All(),
          /*scatter_nd_indices=*/webnn::SupportedDataTypes::All(),
          /*sigmoid_input=*/webnn::SupportedDataTypes::All(),
@@ -754,12 +769,12 @@ ScriptPromise<MLGraph> BuildSimpleGraph(V8TestingScope& scope,
             DOMException::GetErrorName(DOMExceptionCode::kOperationError)));
   }
 
-  auto* lhs_operand =
-      BuildInput(builder, "lhs", {3, 4, 5}, V8MLOperandDataType::Enum::kFloat32,
-                 scope.GetExceptionState());
-  auto* rhs_operand =
-      BuildInput(builder, "rhs", {3, 4, 5}, V8MLOperandDataType::Enum::kFloat32,
-                 scope.GetExceptionState());
+  auto* lhs_operand = BuildInput(scope.GetScriptState(), builder, "lhs",
+                                 {3, 4, 5}, V8MLOperandDataType::Enum::kFloat32,
+                                 scope.GetExceptionState());
+  auto* rhs_operand = BuildInput(scope.GetScriptState(), builder, "rhs",
+                                 {3, 4, 5}, V8MLOperandDataType::Enum::kFloat32,
+                                 scope.GetExceptionState());
   const MLOperatorOptions* options = MLOperatorOptions::Create();
   auto* output = builder->add(lhs_operand, rhs_operand, options,
                               scope.GetExceptionState());
@@ -808,9 +823,9 @@ MLTensor* CreateMLTensorForOperand(V8TestingScope& scope,
   auto array_buffer_view = CreateArrayBufferViewForOperand(operand);
   auto* desc = MLTensorDescriptor::Create();
   desc->setDataType(operand->dataType());
-  desc->setDimensions(operand->shape());
-  desc->setUsage(V8MLTensorUsage::Constant::kWrite |
-                 V8MLTensorUsage::Constant::kRead);
+  desc->setShape(operand->shape());
+  desc->setReadable(true);
+  desc->setWritable(true);
 
   ScriptPromiseTester tester(
       scope.GetScriptState(),
@@ -824,7 +839,7 @@ MLTensor* CreateMLTensorForOperand(V8TestingScope& scope,
   ml_context->writeTensor(
       scope.GetScriptState(), ml_tensor,
       MaybeShared<DOMArrayBufferView>(array_buffer_view.Get()),
-      /*src_element_offset=*/0, scope.GetExceptionState());
+      scope.GetExceptionState());
   return ml_tensor;
 }
 
@@ -870,7 +885,7 @@ TEST_F(MLGraphTest, BuildTest) {
                                            exception_state);
     ASSERT_THAT(builder, testing::NotNull());
     auto* input =
-        BuildInput(builder, "input", {3, 4, 5},
+        BuildInput(scope.GetScriptState(), builder, "input", {3, 4, 5},
                    V8MLOperandDataType::Enum::kFloat32, exception_state);
     auto [graph, error_name, error_message] =
         BuildGraph(scope, builder, {{"output", input}});
@@ -885,8 +900,8 @@ TEST_F(MLGraphTest, BuildTest) {
                                            exception_state);
     ASSERT_THAT(builder, testing::NotNull());
     auto* constant =
-        BuildConstant(builder, {3, 4, 5}, V8MLOperandDataType::Enum::kFloat32,
-                      exception_state);
+        BuildConstant(scope.GetScriptState(), builder, {3, 4, 5},
+                      V8MLOperandDataType::Enum::kFloat32, exception_state);
     auto [graph, error_name, error_message] =
         BuildGraph(scope, builder, {{"output", constant}});
     EXPECT_EQ(error_name, "TypeError");
@@ -901,11 +916,11 @@ TEST_F(MLGraphTest, BuildTest) {
                                            exception_state);
     ASSERT_THAT(builder, testing::NotNull());
     auto* input =
-        BuildInput(builder, "input", {3, 4, 5},
+        BuildInput(scope.GetScriptState(), builder, "input", {3, 4, 5},
                    V8MLOperandDataType::Enum::kFloat32, exception_state);
     auto* constant =
-        BuildConstant(builder, {3, 4, 5}, V8MLOperandDataType::Enum::kFloat32,
-                      exception_state);
+        BuildConstant(scope.GetScriptState(), builder, {3, 4, 5},
+                      V8MLOperandDataType::Enum::kFloat32, exception_state);
     auto [graph, error_name, error_message] =
         BuildGraph(scope, builder, {{"output1", input}, {"output2", constant}});
     EXPECT_EQ(error_name, "TypeError");
@@ -918,9 +933,9 @@ TEST_F(MLGraphTest, BuildTest) {
     auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
                                            exception_state);
     ASSERT_THAT(builder, testing::NotNull());
-    auto* a = BuildInput(builder, "a", {3, 4, 5},
+    auto* a = BuildInput(scope.GetScriptState(), builder, "a", {3, 4, 5},
                          V8MLOperandDataType::Enum::kFloat32, exception_state);
-    auto* b = BuildInput(builder, "a", {3, 4, 5},
+    auto* b = BuildInput(scope.GetScriptState(), builder, "a", {3, 4, 5},
                          V8MLOperandDataType::Enum::kFloat32, exception_state);
     const MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* c = builder->add(a, b, options, exception_state);
@@ -944,7 +959,7 @@ TEST_F(MLGraphTest, BuildTest) {
     auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
                                            exception_state);
     ASSERT_THAT(builder, testing::NotNull());
-    auto* a = BuildInput(builder, "a", {3, 4, 5},
+    auto* a = BuildInput(scope.GetScriptState(), builder, "a", {3, 4, 5},
                          V8MLOperandDataType::Enum::kFloat32, exception_state);
     const MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* output = builder->add(a, a, options, exception_state);
@@ -970,7 +985,7 @@ TEST_F(MLGraphTest, BuildTest) {
     auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
                                            exception_state);
     ASSERT_THAT(builder, testing::NotNull());
-    auto* a = BuildInput(builder, "a", {3, 4, 5},
+    auto* a = BuildInput(scope.GetScriptState(), builder, "a", {3, 4, 5},
                          V8MLOperandDataType::Enum::kFloat32, exception_state);
     const MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* b = builder->relu(a, options, exception_state);
@@ -995,9 +1010,9 @@ TEST_F(MLGraphTest, BuildTest) {
     auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
                                            exception_state);
     ASSERT_THAT(builder, testing::NotNull());
-    auto* a = BuildInput(builder, "a", {3, 4},
+    auto* a = BuildInput(scope.GetScriptState(), builder, "a", {3, 4},
                          V8MLOperandDataType::Enum::kFloat32, exception_state);
-    auto* b = BuildInput(builder, "b", {4, 3},
+    auto* b = BuildInput(scope.GetScriptState(), builder, "b", {4, 3},
                          V8MLOperandDataType::Enum::kFloat32, exception_state);
     auto* c = BuildGemm(scope, builder, a, b);
 
@@ -1019,14 +1034,15 @@ TEST_F(MLGraphTest, BuildTest) {
     ASSERT_THAT(builder, testing::NotNull());
     // Test building a fake graph with conv2d, add and relu operations.
     auto* input =
-        BuildInput(builder, "input", {1, 1, 5, 5},
+        BuildInput(scope.GetScriptState(), builder, "input", {1, 1, 5, 5},
                    V8MLOperandDataType::Enum::kFloat32, exception_state);
     auto* filter =
-        BuildConstant(builder, {1, 1, 3, 3},
+        BuildConstant(scope.GetScriptState(), builder, {1, 1, 3, 3},
                       V8MLOperandDataType::Enum::kFloat32, exception_state);
     auto* conv2d = BuildConv2d(scope, builder, input, filter);
-    auto* bias = BuildConstant(
-        builder, {1}, V8MLOperandDataType::Enum::kFloat32, exception_state);
+    auto* bias =
+        BuildConstant(scope.GetScriptState(), builder, {1},
+                      V8MLOperandDataType::Enum::kFloat32, exception_state);
     const MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* add = builder->add(conv2d, bias, options, exception_state);
     ASSERT_THAT(add, testing::NotNull());
@@ -1064,7 +1080,8 @@ TEST_F(MLGraphTest, CreateNamedArrayBufferViewsTest) {
            V8MLOperandDataType::Enum::kUint32,
            V8MLOperandDataType::Enum::kInt64,
            V8MLOperandDataType::Enum::kUint64, V8MLOperandDataType::Enum::kInt8,
-           V8MLOperandDataType::Enum::kUint8});
+           V8MLOperandDataType::Enum::kUint8, V8MLOperandDataType::Enum::kUint4,
+           V8MLOperandDataType::Enum::kInt4});
   static_assert(kOperandDataTypes.size() == V8MLOperandDataType::kEnumSize,
                 "The number of operand data types declared here needs to match "
                 "all possible enumeration values defined in the IDL.");
@@ -1083,8 +1100,8 @@ TEST_F(MLGraphTest, CreateNamedArrayBufferViewsTest) {
       SCOPED_TRACE(testing::Message()
                    << "Testing for MLOperandDataType: "
                    << V8MLOperandDataType(operand_data_type).AsString());
-      auto* input = BuildInput(builder, "input", {3, 4}, operand_data_type,
-                               scope.GetExceptionState());
+      auto* input = BuildInput(scope.GetScriptState(), builder, "input", {3, 4},
+                               operand_data_type, scope.GetExceptionState());
       MLNamedArrayBufferViews inputs;
       inputs.emplace_back("input", CreateArrayBufferViewForOperand(input));
       auto inputs_info = TransferNamedArrayBufferViews(
@@ -1119,6 +1136,10 @@ TEST_F(MLGraphTest, CreateNamedArrayBufferViewsTest) {
         case V8MLOperandDataType::Enum::kUint8:
           EXPECT_EQ(input_data_type, DOMArrayBufferView::kTypeUint8);
           break;
+        case V8MLOperandDataType::Enum::kInt4:
+        case V8MLOperandDataType::Enum::kUint4:
+          EXPECT_EQ(input_data_type, DOMArrayBufferView::kTypeUint8);
+          break;
       }
     }
   }
@@ -1135,12 +1156,12 @@ TEST_F(MLGraphTest, ComputeTest) {
   ASSERT_THAT(builder, testing::NotNull());
 
   // Build a fake graph represents computation 'c = a * b';
-  auto* a =
-      BuildInput(builder, "a", {3, 4}, V8MLOperandDataType::Enum::kFloat32,
-                 scope.GetExceptionState());
-  auto* b =
-      BuildInput(builder, "b", {4, 3}, V8MLOperandDataType::Enum::kFloat32,
-                 scope.GetExceptionState());
+  auto* a = BuildInput(scope.GetScriptState(), builder, "a", {3, 4},
+                       V8MLOperandDataType::Enum::kFloat32,
+                       scope.GetExceptionState());
+  auto* b = BuildInput(scope.GetScriptState(), builder, "b", {4, 3},
+                       V8MLOperandDataType::Enum::kFloat32,
+                       scope.GetExceptionState());
   auto* c = BuildGemm(scope, builder, a, b);
   auto [graph, error_name, error_message] =
       BuildGraph(scope, builder, {{"c", c}});
@@ -1318,7 +1339,7 @@ TEST_F(MLGraphTest, CreateWebNNTensorTest) {
 
   auto* desc = MLTensorDescriptor::Create();
   desc->setDataType(V8MLOperandDataType::Enum::kFloat32);
-  desc->setDimensions({2, 2});
+  desc->setShape({2, 2});
 
   ScriptPromiseTester tensor_tester(
       script_state,
@@ -1326,16 +1347,82 @@ TEST_F(MLGraphTest, CreateWebNNTensorTest) {
   tensor_tester.WaitUntilSettled();
   EXPECT_TRUE(tensor_tester.IsFulfilled());
 
-  if (scope.GetExceptionState().Code() ==
-      ToExceptionCode(DOMExceptionCode::kNotSupportedError)) {
-    GTEST_SKIP() << "MLTensor has not been implemented on this platform.";
-  }
-
   MLTensor* ml_tensor = V8ToObject<MLTensor>(&scope, tensor_tester.Value());
-
   ASSERT_THAT(ml_tensor, testing::NotNull());
   EXPECT_EQ(ml_tensor->dataType(), desc->dataType());
-  EXPECT_EQ(ml_tensor->shape(), desc->dimensions());
+  EXPECT_EQ(ml_tensor->shape(), desc->shape());
+}
+
+// Test that callers specifying `MLTensorDescriptor.usage` in place of
+// the respective boolean fields will not break.
+//
+// TODO(crbug.com/343638938): Remove this test after the M132 branch cut.
+TEST_F(MLGraphTest, CreateTensorUsingDeprecatedMLTensorUsageTest) {
+  V8TestingScope scope;
+  // Bind fake WebNN Context in the service for testing.
+  ScopedWebNNServiceBinder scoped_setup_binder(*this, scope);
+
+  auto* options = MLContextOptions::Create();
+  // Create WebNN Context with GPU device type.
+  options->setDeviceType(V8MLDeviceType::Enum::kGpu);
+  auto* script_state = scope.GetScriptState();
+
+  MLContext* ml_context = CreateContext(scope, options);
+
+  {
+    // Specify only a usage.
+    DummyExceptionStateForTesting exception_state;
+    auto* desc = MLTensorDescriptor::Create();
+    desc->setDataType(V8MLOperandDataType::Enum::kFloat32);
+    desc->setShape({2, 2});
+    desc->setUsage(V8MLTensorUsage::Constant::kWrite |
+                   V8MLTensorUsage::Constant::kRead);
+
+    ScriptPromiseTester tensor_tester(
+        script_state,
+        ml_context->createTensor(script_state, desc, exception_state));
+    tensor_tester.WaitUntilSettled();
+    EXPECT_TRUE(tensor_tester.IsFulfilled());
+
+    MLTensor* ml_tensor = V8ToObject<MLTensor>(&scope, tensor_tester.Value());
+    ASSERT_THAT(ml_tensor, testing::NotNull());
+    EXPECT_FALSE(ml_tensor->importableToWebGPU());
+    EXPECT_TRUE(ml_tensor->readable());
+    EXPECT_TRUE(ml_tensor->writable());
+  }
+  {
+    // Specify a usage and boolean fields which are consistent.
+    DummyExceptionStateForTesting exception_state;
+    auto* desc = MLTensorDescriptor::Create();
+    desc->setDataType(V8MLOperandDataType::Enum::kFloat32);
+    desc->setShape({2, 2});
+    desc->setUsage(V8MLTensorUsage::Constant::kRead);
+    desc->setReadable(true);
+
+    ScriptPromiseTester tensor_tester(
+        script_state,
+        ml_context->createTensor(script_state, desc, exception_state));
+    tensor_tester.WaitUntilSettled();
+    EXPECT_TRUE(tensor_tester.IsFulfilled());
+
+    MLTensor* ml_tensor = V8ToObject<MLTensor>(&scope, tensor_tester.Value());
+    ASSERT_THAT(ml_tensor, testing::NotNull());
+    EXPECT_FALSE(ml_tensor->importableToWebGPU());
+    EXPECT_TRUE(ml_tensor->readable());
+    EXPECT_FALSE(ml_tensor->writable());
+  }
+  {
+    // Specify a usage and boolean fields which are inconsistent.
+    DummyExceptionStateForTesting exception_state;
+    auto* desc = MLTensorDescriptor::Create();
+    desc->setDataType(V8MLOperandDataType::Enum::kFloat32);
+    desc->setShape({2, 2});
+    desc->setUsage(V8MLTensorUsage::Constant::kRead);
+    desc->setWritable(true);
+
+    ml_context->createTensor(script_state, desc, exception_state);
+    EXPECT_TRUE(exception_state.HadException());
+  }
 }
 
 TEST_F(MLGraphTest, WriteWebNNTensorTest) {
@@ -1355,9 +1442,9 @@ TEST_F(MLGraphTest, WriteWebNNTensorTest) {
 
   auto* desc = MLTensorDescriptor::Create();
   desc->setDataType(V8MLOperandDataType::Enum::kUint8);
-  desc->setDimensions(kTensorShape);
-  desc->setUsage(V8MLTensorUsage::Constant::kWrite |
-                 V8MLTensorUsage::Constant::kRead);
+  desc->setShape(kTensorShape);
+  desc->setReadable(true);
+  desc->setWritable(true);
 
   ScriptPromiseTester tensor_tester(
       script_state,
@@ -1365,73 +1452,30 @@ TEST_F(MLGraphTest, WriteWebNNTensorTest) {
   tensor_tester.WaitUntilSettled();
   EXPECT_TRUE(tensor_tester.IsFulfilled());
 
-  if (scope.GetExceptionState().Code() ==
-      ToExceptionCode(DOMExceptionCode::kNotSupportedError)) {
-    GTEST_SKIP() << "MLTensor has not been implemented on this platform.";
-  }
-
   MLTensor* ml_tensor = V8ToObject<MLTensor>(&scope, tensor_tester.Value());
-
   ASSERT_THAT(ml_tensor, testing::NotNull());
 
-  const std::array<const uint8_t, kTensorSize> input_data = {0xAA, 0xAA, 0xAA,
-                                                             0xAA};
+  std::array<const uint8_t, kTensorSize> input_data = {0xAA, 0xAA, 0xAA, 0xAA};
   DOMArrayBuffer* array_buffer = DOMArrayBuffer::Create(input_data);
   ASSERT_THAT(array_buffer, testing::NotNull());
 
-  // Writing the full tensor.
+  // Write data to the tensor.
   ml_context->writeTensor(
       script_state, ml_tensor,
       CreateArrayBufferViewFromBytes(array_buffer, input_data),
-      /*src_element_offset=*/0, scope.GetExceptionState());
-  EXPECT_FALSE(scope.GetExceptionState().HadException());
-
-  ml_context->writeTensor(
-      script_state, ml_tensor,
-      MaybeShared<DOMArrayBufferView>(blink::DOMUint32Array::Create(
-          array_buffer, /*byte_offset=*/0,
-          /*length=*/array_buffer->ByteLength() / 4)),
-      /*src_element_offset=*/0, scope.GetExceptionState());
-  EXPECT_FALSE(scope.GetExceptionState().HadException());
-
+      scope.GetExceptionState());
+  ASSERT_FALSE(scope.GetExceptionState().HadException());
   EXPECT_TRUE(
       DownloadMLTensorAndCheck(scope, ml_context, ml_tensor, input_data));
 
-  // Writing to the remainder of the tensor from source offset.
+  // Write different data to the tensor.
+  std::array<const uint8_t, kTensorSize> new_data = {0xAA, 0xCC, 0xBB, 0xBB};
   ml_context->writeTensor(
       script_state, ml_tensor,
-      CreateArrayBufferViewFromBytes(
-          array_buffer,
-          std::array<const uint8_t, kTensorSize>{0xAA, 0xAA, 0xBB, 0xBB}),
-      /*src_element_offset=*/2, scope.GetExceptionState());
-  EXPECT_FALSE(scope.GetExceptionState().HadException());
-
-  // Writing zero bytes at the end of the tensor.
-  ml_context->writeTensor(
-      script_state, ml_tensor,
-      MaybeShared<DOMArrayBufferView>(blink::DOMUint32Array::Create(
-          array_buffer, /*byte_offset=*/0,
-          /*length=*/array_buffer->ByteLength() / 4)),
-      /*src_element_offset=*/1, scope.GetExceptionState());
-  EXPECT_FALSE(scope.GetExceptionState().HadException());
-
-  EXPECT_TRUE(DownloadMLTensorAndCheck(
-      scope, ml_context, ml_tensor,
-      std::array<const uint8_t, kTensorSize>{0xBB, 0xBB, 0xAA, 0xAA}));
-
-  // Writing with both a source offset and size.
-  ml_context->writeTensor(
-      script_state, ml_tensor,
-      CreateArrayBufferViewFromBytes(
-          array_buffer,
-          std::array<const uint8_t, kTensorSize>{0xCC, 0xCC, 0xCC, 0xCC}),
-      /*src_element_offset=*/2, /*src_element_count=*/1,
+      CreateArrayBufferViewFromBytes(array_buffer, new_data),
       scope.GetExceptionState());
-  EXPECT_FALSE(scope.GetExceptionState().HadException());
-
-  EXPECT_TRUE(DownloadMLTensorAndCheck(
-      scope, ml_context, ml_tensor,
-      std::array<const uint8_t, kTensorSize>{0xCC, 0xBB, 0xAA, 0xAA}));
+  ASSERT_FALSE(scope.GetExceptionState().HadException());
+  EXPECT_TRUE(DownloadMLTensorAndCheck(scope, ml_context, ml_tensor, new_data));
 }
 
 // Writing data from an array buffer to a destroyed MLTensor should not crash.
@@ -1449,8 +1493,8 @@ TEST_F(MLGraphTest, WriteWebNNTensorThenDestroyTest) {
 
   auto* desc = MLTensorDescriptor::Create();
   desc->setDataType(V8MLOperandDataType::Enum::kUint8);
-  desc->setDimensions({2, 2});
-  desc->setUsage(V8MLTensorUsage::Constant::kWrite);
+  desc->setShape({2, 2});
+  desc->setWritable(true);
 
   ScriptPromiseTester tensor_tester(
       script_state,
@@ -1458,13 +1502,7 @@ TEST_F(MLGraphTest, WriteWebNNTensorThenDestroyTest) {
   tensor_tester.WaitUntilSettled();
   EXPECT_TRUE(tensor_tester.IsFulfilled());
 
-  if (scope.GetExceptionState().Code() ==
-      ToExceptionCode(DOMExceptionCode::kNotSupportedError)) {
-    GTEST_SKIP() << "MLTensor has not been implemented on this platform.";
-  }
-
   MLTensor* ml_tensor = V8ToObject<MLTensor>(&scope, tensor_tester.Value());
-
   ASSERT_THAT(ml_tensor, testing::NotNull());
 
   ml_tensor->destroy();
@@ -1474,7 +1512,7 @@ TEST_F(MLGraphTest, WriteWebNNTensorThenDestroyTest) {
       CreateDOMArrayBufferView(ml_tensor->PackedByteLength(),
                                V8MLOperandDataType::Enum::kUint8)
           ->BufferBase(),
-      /*src_byte_offset=*/0, scope.GetExceptionState());
+      scope.GetExceptionState());
 }
 
 // Reading data from an array buffer to a destroyed MLTensor should not crash.
@@ -1492,8 +1530,8 @@ TEST_F(MLGraphTest, ReadWebNNTensorThenDestroyTest) {
 
   auto* desc = MLTensorDescriptor::Create();
   desc->setDataType(V8MLOperandDataType::Enum::kFloat32);
-  desc->setDimensions({2, 2});
-  desc->setUsage(V8MLTensorUsage::Constant::kRead);
+  desc->setShape({2, 2});
+  desc->setReadable(true);
 
   ScriptPromiseTester create_tensor_tester(
       script_state,
@@ -1501,14 +1539,8 @@ TEST_F(MLGraphTest, ReadWebNNTensorThenDestroyTest) {
   create_tensor_tester.WaitUntilSettled();
   EXPECT_TRUE(create_tensor_tester.IsFulfilled());
 
-  if (scope.GetExceptionState().Code() ==
-      ToExceptionCode(DOMExceptionCode::kNotSupportedError)) {
-    GTEST_SKIP() << "MLTensor has not been implemented on this platform.";
-  }
-
   MLTensor* ml_tensor =
       V8ToObject<MLTensor>(&scope, create_tensor_tester.Value());
-
   ASSERT_THAT(ml_tensor, testing::NotNull());
 
   ml_tensor->destroy();
@@ -1535,11 +1567,11 @@ TEST_F(MLGraphTest, WebNNGraphDispatchTest) {
 
   // Build the graph.
   auto* lhs_operand =
-      BuildInput(builder, "lhs", dimensions, V8MLOperandDataType::Enum::kUint8,
-                 scope.GetExceptionState());
+      BuildInput(scope.GetScriptState(), builder, "lhs", dimensions,
+                 V8MLOperandDataType::Enum::kUint8, scope.GetExceptionState());
   auto* rhs_operand =
-      BuildInput(builder, "rhs", dimensions, V8MLOperandDataType::Enum::kUint8,
-                 scope.GetExceptionState());
+      BuildInput(scope.GetScriptState(), builder, "rhs", dimensions,
+                 V8MLOperandDataType::Enum::kUint8, scope.GetExceptionState());
   auto* output_operand = BuildElementWiseBinary(
       scope, builder, webnn::mojom::blink::ElementWiseBinary::Kind::kAdd,
       lhs_operand, rhs_operand);
@@ -1547,15 +1579,8 @@ TEST_F(MLGraphTest, WebNNGraphDispatchTest) {
       BuildGraph(scope, builder, {{"output", output_operand}});
   ASSERT_THAT(graph, testing::NotNull());
 
-  // Check if MLTensor is supported.
   MLTensor* input_tensor =
       CreateMLTensorForOperand(scope, ml_context, lhs_operand);
-
-  if (scope.GetExceptionState().Code() ==
-      ToExceptionCode(DOMExceptionCode::kNotSupportedError)) {
-    GTEST_SKIP() << "MLTensor has not been implemented on this platform.";
-  }
-
   ASSERT_THAT(input_tensor, testing::NotNull());
 
   MLNamedTensors inputs(
@@ -1619,8 +1644,8 @@ struct SoftmaxTester {
                                            scope.GetExceptionState());
     ASSERT_THAT(builder, testing::NotNull());
     auto* input_operand =
-        BuildInput(builder, "input", input.dimensions, input.data_type,
-                   scope.GetExceptionState());
+        BuildInput(scope.GetScriptState(), builder, "input", input.dimensions,
+                   input.data_type, scope.GetExceptionState());
     const MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* output_operand =
         builder->softmax(input_operand, options, scope.GetExceptionState());
@@ -1683,9 +1708,9 @@ struct ConstantTester {
     auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
                                            scope.GetExceptionState());
     ASSERT_THAT(builder, testing::NotNull());
-    auto* constant_operand =
-        BuildConstant(builder, constant.dimensions, constant.data_type,
-                      constant.values, scope.GetExceptionState());
+    auto* constant_operand = BuildConstant(
+        scope.GetScriptState(), builder, constant.dimensions,
+        constant.data_type, constant.values, scope.GetExceptionState());
     const MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* output_operand =
         builder->relu(constant_operand, options, scope.GetExceptionState());
@@ -1795,8 +1820,8 @@ struct CastTester {
                                            scope.GetExceptionState());
     ASSERT_THAT(builder, testing::NotNull());
     auto* input_operand =
-        BuildInput(builder, "input", input.dimensions, input.data_type,
-                   scope.GetExceptionState());
+        BuildInput(scope.GetScriptState(), builder, "input", input.dimensions,
+                   input.data_type, scope.GetExceptionState());
     const MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* output_operand =
         builder->cast(input_operand, V8MLOperandDataType(output_data_type),
@@ -2036,11 +2061,11 @@ TEST_F(MLGraphTest, WebNNGraphComputeTest) {
 
   // Build the graph.
   auto* lhs_operand =
-      BuildInput(builder, "lhs", dimensions, V8MLOperandDataType::Enum::kUint8,
-                 scope.GetExceptionState());
+      BuildInput(scope.GetScriptState(), builder, "lhs", dimensions,
+                 V8MLOperandDataType::Enum::kUint8, scope.GetExceptionState());
   auto* rhs_operand =
-      BuildInput(builder, "rhs", dimensions, V8MLOperandDataType::Enum::kUint8,
-                 scope.GetExceptionState());
+      BuildInput(scope.GetScriptState(), builder, "rhs", dimensions,
+                 V8MLOperandDataType::Enum::kUint8, scope.GetExceptionState());
   auto* output_operand = BuildElementWiseBinary(
       scope, builder, webnn::mojom::blink::ElementWiseBinary::Kind::kAdd,
       lhs_operand, rhs_operand);

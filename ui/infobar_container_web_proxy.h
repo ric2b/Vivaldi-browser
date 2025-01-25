@@ -3,7 +3,7 @@
 #ifndef UI_INFOBAR_CONTAINER_WEB_PROXY_H_
 #define UI_INFOBAR_CONTAINER_WEB_PROXY_H_
 
-#include "chrome/browser/ui/views/infobars/infobar_view.h"
+#include "components/infobars/core/infobar.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar_container.h"
 
@@ -18,19 +18,17 @@ namespace vivaldi {
 This would normally represent the UI of the InfoBar, but in our case, it
 will proxy itself to the web ui side.
 */
-class ConfirmInfoBarWebProxy : public InfoBarView {
+class ConfirmInfoBarWebProxy : public infobars::InfoBar {
  public:
   ConfirmInfoBarWebProxy(std::unique_ptr<infobars::InfoBarDelegate> delegate);
   ~ConfirmInfoBarWebProxy() override;
 
   ConfirmInfoBarDelegate* GetDelegate();
 
-  Profile* profile() { return profile_; }
-  int tab_id() { return tab_id_; }
-
  protected:
   // infobars::InfoBar:
   void PlatformSpecificShow(bool animate) override;
+  void PlatformSpecificHide(bool animate) override;
 
  private:
   raw_ptr<Profile> profile_ = nullptr;
@@ -52,9 +50,10 @@ class InfoBarContainerWebProxy : public infobars::InfoBarContainer {
   void PlatformSpecificAddInfoBar(infobars::InfoBar* infobar,
                                   size_t position) override;
   void PlatformSpecificReplaceInfoBar(infobars::InfoBar* old_infobar,
-                                      infobars::InfoBar* new_infobar) override {
-  }
+                                      infobars::InfoBar* new_infobar) override;
   void PlatformSpecificRemoveInfoBar(infobars::InfoBar* infobar) override;
+
+
 };
 
 }  // namespace vivaldi

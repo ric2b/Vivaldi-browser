@@ -52,7 +52,7 @@ scoped_refptr<base::RefCountedMemory> ConvertToPNGOnWorkerThread(
       std::move(bitmap), ::vivaldi::skia_utils::ImageFormat::kPNG, 100);
   if (data.empty())
     return nullptr;
-  return base::RefCountedBytes::TakeVector(&data);
+  return base::MakeRefCounted<base::RefCountedBytes>(std::move(data));
 }
 
 }  // namespace

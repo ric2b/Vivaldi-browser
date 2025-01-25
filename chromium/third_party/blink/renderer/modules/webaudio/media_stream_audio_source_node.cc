@@ -136,7 +136,7 @@ bool MediaStreamAudioSourceNode::HasPendingActivity() const {
   // The node stays alive as long as the context is running. It also will not
   // be collected until the context is suspended or stopped.
   // (See https://crbug.com/937231)
-  return context()->ContextState() == BaseAudioContext::kRunning;
+  return context()->ContextState() == V8AudioContextState::Enum::kRunning;
 }
 
 void MediaStreamAudioSourceNode::Trace(Visitor* visitor) const {
@@ -151,10 +151,11 @@ MediaStreamAudioSourceNode::GetMediaStreamAudioSourceHandler() const {
   return static_cast<MediaStreamAudioSourceHandler&>(Handler());
 }
 
-void MediaStreamAudioSourceNode::SendLogMessage(const char* const func,
+void MediaStreamAudioSourceNode::SendLogMessage(const char* const function_name,
                                                 const String& message) {
   WebRtcLogMessage(
-      String::Format("[WA]MSASN::%s %s", func, message.Utf8().c_str()).Utf8());
+      String::Format("[WA]MSASN::%s %s", function_name, message.Utf8().c_str())
+          .Utf8());
 }
 
 }  // namespace blink

@@ -58,7 +58,7 @@ const char kBlockedReportingStartKey[] = "blocked-reporting-start";
 
 const char kPresetIdKey[] = "preset-id";
 
-const int kCurrentStorageVersion = 8;
+const int kCurrentStorageVersion = 10;
 
 const base::FilePath::CharType kSourcesFileName[] =
     FILE_PATH_LITERAL("AdBlockState");
@@ -379,6 +379,8 @@ base::Value::Dict SerializeRuleCore(const RuleSourceCore& core) {
   core_dict.Set(kAllowAbpSnippets, core.settings().allow_abp_snippets);
   core_dict.Set(kNakedHostnameIsPureHost,
                 core.settings().naked_hostname_is_pure_host);
+  core_dict.Set(kUseWholeDocumentAllow,
+                core.settings().use_whole_document_allow);
   core_dict.Set(kAllowAttributionTrackerRules,
                 core.settings().allow_attribution_tracker_rules);
 
@@ -472,17 +474,18 @@ base::Value::Dict SerializeRuleGroup(RuleService* service, RuleGroup group) {
           service->GetKnownSourcesHandler()->GetDeletedPresets(group)));
   rule_group.Set(kIndexChecksum, service->GetRulesIndexChecksum(group));
 
-  if (service->GetTabHandler()) {
-    rule_group.Set(kBlockedDomainsCountersKey,
-                   SerializeCounters(
-                       service->GetTabHandler()
-                           ->GetBlockedDomains()[static_cast<size_t>(group)]));
+  if (service->GetStateAndLogs()) {
+    rule_group.Set(
+        kBlockedDomainsCountersKey,
+        SerializeCounters(
+            service->GetStateAndLogs()
+                ->GetBlockedDomainCounters()[static_cast<size_t>(group)]));
 
     rule_group.Set(
         kBlockedForOriginCountersKey,
         SerializeCounters(
-            service->GetTabHandler()
-                ->GetBlockedForOrigin()[static_cast<size_t>(group)]));
+            service->GetStateAndLogs()
+                ->GetBlockedForOriginCounters()[static_cast<size_t>(group)]));
   }
 
   return rule_group;
@@ -544,10 +547,10 @@ std::optional<std::string> RuleServiceStorage::SerializeData() {
            SerializeRuleGroup(rule_service_, RuleGroup::kTrackingRules));
   root.Set(kAdBlockingRulesKey,
            SerializeRuleGroup(rule_service_, RuleGroup::kAdBlockingRules));
-  if (rule_service_->GetTabHandler()) {
-    root.Set(
-        kBlockedReportingStartKey,
-        base::TimeToValue(rule_service_->GetTabHandler()->GetReportingStart()));
+  if (rule_service_->GetStateAndLogs()) {
+    root.Set(kBlockedReportingStartKey,
+             base::TimeToValue(
+                 rule_service_->GetStateAndLogs()->GetBlockedCountersStart()));
   }
   root.Set(kVersionKey, kCurrentStorageVersion);
 

@@ -46,7 +46,7 @@ from dashboard.services import workflow_service
 
 
 # We want this to be fast to minimize overhead while waiting for tasks to
-# finish, but don't want to consume too many resources.
+# finish but don't want to consume too many resources.
 _TASK_INTERVAL = 60
 
 _CRYING_CAT_FACE = u'\U0001f63f'
@@ -76,7 +76,7 @@ page for details.""")
 def JobFromId(job_id):
   """Get a Job object from its ID.
 
-  Its ID is just its key as a hex string.
+  The ID is just its key as a hex string.
 
   Users of Job should not have to import ndb. This function maintains an
   abstraction layer that separates users from the Datastore details.

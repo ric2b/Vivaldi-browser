@@ -115,7 +115,7 @@ int Receiver::AdvanceToNextFrame() {
       }
       if (encrypted_frame.dependency != EncodedFrame::Dependency::kDependent) {
         // Found a frame after skipping past some frames. Drop the ones being
-        // skipped, advancing |last_frame_consumed_| before returning.
+        // skipped, advancing `last_frame_consumed_` before returning.
         DropAllFramesBefore(f);
         return FrameCrypto::GetPlaintextSize(encrypted_frame);
       }
@@ -124,7 +124,7 @@ int Receiver::AdvanceToNextFrame() {
     }
 
     // Do not consider skipping past this frame if its estimated capture time is
-    // unknown. The implication here is that, if |estimated_capture_time| is
+    // unknown. The implication here is that, if `estimated_capture_time` is
     // set, the Receiver also knows whether any target playout delay changes
     // were communicated from the Sender in the frame's first RTP packet.
     if (!entry.estimated_capture_time) {
@@ -149,11 +149,11 @@ int Receiver::AdvanceToNextFrame() {
 EncodedFrame Receiver::ConsumeNextFrame(ByteBuffer buffer) {
   TRACE_DEFAULT_SCOPED(TraceCategory::kReceiver);
   // Assumption: The required call to AdvanceToNextFrame() ensures that
-  // |last_frame_consumed_| is set to one before the frame to be consumed here.
+  // `last_frame_consumed_` is set to one before the frame to be consumed here.
   const FrameId frame_id = last_frame_consumed_ + 1;
   OSP_CHECK_LE(frame_id, checkpoint_frame());
 
-  // Decrypt the frame, populating the given output |frame|.
+  // Decrypt the frame, populating the given output `frame`.
   PendingFrame& entry = GetQueueEntry(frame_id);
   OSP_CHECK(entry.collector.is_complete());
   OSP_CHECK(entry.estimated_capture_time);
@@ -237,7 +237,7 @@ void Receiver::OnReceivedRtpPacket(Clock::time_point arrival_time,
   PendingFrame& pending_frame = GetQueueEntry(part->frame_id);
   FrameCollector& collector = pending_frame.collector;
   if (collector.is_complete()) {
-    // An extra, redundant |packet| was received. Do nothing since the frame was
+    // An extra, redundant `packet` was received. Do nothing since the frame was
     // already complete.
     return;
   }
@@ -316,7 +316,7 @@ void Receiver::OnReceivedRtcpPacket(Clock::time_point arrival_time,
   // Note: Due to design limitations in the Cast Streaming spec, the Receiver
   // has no way to compute how long it took the Sender Report to travel over the
   // network. The calculation here just ignores that, and so the
-  // |measured_offset| below will be larger than the true value by that amount.
+  // `measured_offset` below will be larger than the true value by that amount.
   // This will have the effect of a later-than-configured playout delay.
   const Clock::duration measured_offset =
       arrival_time - last_sender_report_->reference_time;
@@ -375,7 +375,7 @@ void Receiver::RecordNewTargetPlayoutDelay(FrameId as_of_frame,
                                            milliseconds delay) {
   OSP_CHECK_GT(as_of_frame, checkpoint_frame());
 
-  // Prune-out entries from |playout_delay_changes_| that are no longer needed.
+  // Prune-out entries from `playout_delay_changes_` that are no longer needed.
   // At least one entry must always be kept (i.e., there must always be a
   // "current" setting).
   const FrameId next_frame = last_frame_consumed_ + 1;
@@ -401,7 +401,7 @@ milliseconds Receiver::ResolveTargetPlayoutDelay(FrameId frame_id) const {
 #if OSP_DCHECK_IS_ON()
   // Extra precaution: Ensure all possible playout delay changes are known. In
   // other words, every unconsumed frame in the queue, up to (and including)
-  // |frame_id|, must have an assigned estimated_capture_time.
+  // `frame_id`, must have an assigned estimated_capture_time.
   for (FrameId f = last_frame_consumed_ + 1; f <= frame_id; ++f) {
     OSP_CHECK(GetQueueEntry(f).estimated_capture_time)
         << " don't know whether there was a playout delay change for frame "

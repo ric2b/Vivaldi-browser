@@ -4,7 +4,6 @@
 
 #include "quiche/quic/moqt/moqt_framer.h"
 
-#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -15,11 +14,11 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "quiche/quic/moqt/moqt_messages.h"
+#include "quiche/quic/moqt/moqt_priority.h"
 #include "quiche/quic/moqt/test_tools/moqt_test_message.h"
 #include "quiche/quic/platform/api/quic_expect_bug.h"
 #include "quiche/quic/platform/api/quic_test.h"
 #include "quiche/common/quiche_buffer_allocator.h"
-#include "quiche/common/quiche_text_utils.h"
 #include "quiche/common/simple_buffer_allocator.h"
 #include "quiche/common/test_tools/quiche_test_utils.h"
 
@@ -35,24 +34,35 @@ struct MoqtFramerTestParams {
 std::vector<MoqtFramerTestParams> GetMoqtFramerTestParams() {
   std::vector<MoqtFramerTestParams> params;
   std::vector<MoqtMessageType> message_types = {
-      MoqtMessageType::kObjectStream,      MoqtMessageType::kSubscribe,
-      MoqtMessageType::kSubscribeOk,       MoqtMessageType::kSubscribeError,
-      MoqtMessageType::kUnsubscribe,       MoqtMessageType::kSubscribeDone,
-      MoqtMessageType::kAnnounceCancel,    MoqtMessageType::kTrackStatusRequest,
-      MoqtMessageType::kTrackStatus,       MoqtMessageType::kAnnounce,
-      MoqtMessageType::kAnnounceOk,        MoqtMessageType::kAnnounceError,
-      MoqtMessageType::kUnannounce,        MoqtMessageType::kGoAway,
-      MoqtMessageType::kObjectAck,         MoqtMessageType::kClientSetup,
-      MoqtMessageType::kServerSetup,       MoqtMessageType::kStreamHeaderTrack,
-      MoqtMessageType::kStreamHeaderGroup,
-  };
-  std::vector<bool> uses_web_transport_bool = {
-      false,
-      true,
+      MoqtMessageType::kSubscribe,
+      MoqtMessageType::kSubscribeOk,
+      MoqtMessageType::kSubscribeError,
+      MoqtMessageType::kUnsubscribe,
+      MoqtMessageType::kSubscribeDone,
+      MoqtMessageType::kAnnounceCancel,
+      MoqtMessageType::kTrackStatusRequest,
+      MoqtMessageType::kTrackStatus,
+      MoqtMessageType::kAnnounce,
+      MoqtMessageType::kAnnounceOk,
+      MoqtMessageType::kAnnounceError,
+      MoqtMessageType::kUnannounce,
+      MoqtMessageType::kGoAway,
+      MoqtMessageType::kSubscribeAnnounces,
+      MoqtMessageType::kSubscribeAnnouncesOk,
+      MoqtMessageType::kSubscribeAnnouncesError,
+      MoqtMessageType::kUnsubscribeAnnounces,
+      MoqtMessageType::kMaxSubscribeId,
+      MoqtMessageType::kFetch,
+      MoqtMessageType::kFetchCancel,
+      MoqtMessageType::kFetchOk,
+      MoqtMessageType::kFetchError,
+      MoqtMessageType::kObjectAck,
+      MoqtMessageType::kClientSetup,
+      MoqtMessageType::kServerSetup,
   };
   for (const MoqtMessageType message_type : message_types) {
     if (message_type == MoqtMessageType::kClientSetup) {
-      for (const bool uses_web_transport : uses_web_transport_bool) {
+      for (const bool uses_web_transport : {false, true}) {
         params.push_back(
             MoqtFramerTestParams(message_type, uses_web_transport));
       }
@@ -74,11 +84,15 @@ std::string ParamNameFormatter(
 quiche::QuicheBuffer SerializeObject(MoqtFramer& framer,
                                      const MoqtObject& message,
                                      absl::string_view payload,
+                                     MoqtDataStreamType stream_type,
                                      bool is_first_in_stream) {
   MoqtObject adjusted_message = message;
   adjusted_message.payload_length = payload.size();
   quiche::QuicheBuffer header =
-      framer.SerializeObjectHeader(adjusted_message, is_first_in_stream);
+      (message.forwarding_preference == MoqtForwardingPreference::kDatagram)
+          ? framer.SerializeObjectDatagram(adjusted_message, payload)
+          : framer.SerializeObjectHeader(adjusted_message, stream_type,
+                                         is_first_in_stream);
   if (header.empty()) {
     return quiche::QuicheBuffer();
   }
@@ -103,12 +117,6 @@ class MoqtFramerTest
   quiche::QuicheBuffer SerializeMessage(
       TestMessageBase::MessageStructuredData& structured_data) {
     switch (message_type_) {
-      case MoqtMessageType::kObjectStream:
-      case MoqtMessageType::kStreamHeaderTrack:
-      case MoqtMessageType::kStreamHeaderGroup: {
-        MoqtObject data = std::get<MoqtObject>(structured_data);
-        return SerializeObject(framer_, data, "foo", true);
-      }
       case MoqtMessageType::kSubscribe: {
         auto data = std::get<MoqtSubscribe>(structured_data);
         return framer_.SerializeSubscribe(data);
@@ -160,6 +168,42 @@ class MoqtFramerTest
       case moqt::MoqtMessageType::kGoAway: {
         auto data = std::get<MoqtGoAway>(structured_data);
         return framer_.SerializeGoAway(data);
+      }
+      case moqt::MoqtMessageType::kSubscribeAnnounces: {
+        auto data = std::get<MoqtSubscribeAnnounces>(structured_data);
+        return framer_.SerializeSubscribeAnnounces(data);
+      }
+      case moqt::MoqtMessageType::kSubscribeAnnouncesOk: {
+        auto data = std::get<MoqtSubscribeAnnouncesOk>(structured_data);
+        return framer_.SerializeSubscribeAnnouncesOk(data);
+      }
+      case moqt::MoqtMessageType::kSubscribeAnnouncesError: {
+        auto data = std::get<MoqtSubscribeAnnouncesError>(structured_data);
+        return framer_.SerializeSubscribeAnnouncesError(data);
+      }
+      case moqt::MoqtMessageType::kUnsubscribeAnnounces: {
+        auto data = std::get<MoqtUnsubscribeAnnounces>(structured_data);
+        return framer_.SerializeUnsubscribeAnnounces(data);
+      }
+      case moqt::MoqtMessageType::kMaxSubscribeId: {
+        auto data = std::get<MoqtMaxSubscribeId>(structured_data);
+        return framer_.SerializeMaxSubscribeId(data);
+      }
+      case moqt::MoqtMessageType::kFetch: {
+        auto data = std::get<MoqtFetch>(structured_data);
+        return framer_.SerializeFetch(data);
+      }
+      case moqt::MoqtMessageType::kFetchCancel: {
+        auto data = std::get<MoqtFetchCancel>(structured_data);
+        return framer_.SerializeFetchCancel(data);
+      }
+      case moqt::MoqtMessageType::kFetchOk: {
+        auto data = std::get<MoqtFetchOk>(structured_data);
+        return framer_.SerializeFetchOk(data);
+      }
+      case moqt::MoqtMessageType::kFetchError: {
+        auto data = std::get<MoqtFetchError>(structured_data);
+        return framer_.SerializeFetchError(data);
       }
       case moqt::MoqtMessageType::kObjectAck: {
         auto data = std::get<MoqtObjectAck>(structured_data);
@@ -216,71 +260,148 @@ class MoqtFramerSimpleTest : public quic::test::QuicTest {
 };
 
 TEST_F(MoqtFramerSimpleTest, GroupMiddler) {
-  auto header = std::make_unique<StreamHeaderGroupMessage>();
-  auto buffer1 = SerializeObject(
-      framer_, std::get<MoqtObject>(header->structured_data()), "foo", true);
+  auto header = std::make_unique<StreamHeaderSubgroupMessage>();
+  auto buffer1 =
+      SerializeObject(framer_, std::get<MoqtObject>(header->structured_data()),
+                      "foo", MoqtDataStreamType::kStreamHeaderSubgroup, true);
   EXPECT_EQ(buffer1.size(), header->total_message_size());
   EXPECT_EQ(buffer1.AsStringView(), header->PacketSample());
 
-  auto middler = std::make_unique<StreamMiddlerGroupMessage>();
-  auto buffer2 = SerializeObject(
-      framer_, std::get<MoqtObject>(middler->structured_data()), "bar", false);
+  auto middler = std::make_unique<StreamMiddlerSubgroupMessage>();
+  auto buffer2 =
+      SerializeObject(framer_, std::get<MoqtObject>(middler->structured_data()),
+                      "bar", MoqtDataStreamType::kStreamHeaderSubgroup, false);
   EXPECT_EQ(buffer2.size(), middler->total_message_size());
   EXPECT_EQ(buffer2.AsStringView(), middler->PacketSample());
 }
 
 TEST_F(MoqtFramerSimpleTest, TrackMiddler) {
   auto header = std::make_unique<StreamHeaderTrackMessage>();
-  auto buffer1 = SerializeObject(
-      framer_, std::get<MoqtObject>(header->structured_data()), "foo", true);
+  auto buffer1 =
+      SerializeObject(framer_, std::get<MoqtObject>(header->structured_data()),
+                      "foo", MoqtDataStreamType::kStreamHeaderTrack, true);
   EXPECT_EQ(buffer1.size(), header->total_message_size());
   EXPECT_EQ(buffer1.AsStringView(), header->PacketSample());
 
   auto middler = std::make_unique<StreamMiddlerTrackMessage>();
-  auto buffer2 = SerializeObject(
-      framer_, std::get<MoqtObject>(middler->structured_data()), "bar", false);
+  auto buffer2 =
+      SerializeObject(framer_, std::get<MoqtObject>(middler->structured_data()),
+                      "bar", MoqtDataStreamType::kStreamHeaderTrack, false);
+  EXPECT_EQ(buffer2.size(), middler->total_message_size());
+  EXPECT_EQ(buffer2.AsStringView(), middler->PacketSample());
+}
+
+TEST_F(MoqtFramerSimpleTest, FetchMiddler) {
+  auto header = std::make_unique<StreamHeaderFetchMessage>();
+  auto buffer1 =
+      SerializeObject(framer_, std::get<MoqtObject>(header->structured_data()),
+                      "foo", MoqtDataStreamType::kStreamHeaderFetch, true);
+  EXPECT_EQ(buffer1.size(), header->total_message_size());
+  EXPECT_EQ(buffer1.AsStringView(), header->PacketSample());
+
+  auto middler = std::make_unique<StreamMiddlerFetchMessage>();
+  auto buffer2 =
+      SerializeObject(framer_, std::get<MoqtObject>(middler->structured_data()),
+                      "bar", MoqtDataStreamType::kStreamHeaderFetch, false);
   EXPECT_EQ(buffer2.size(), middler->total_message_size());
   EXPECT_EQ(buffer2.AsStringView(), middler->PacketSample());
 }
 
 TEST_F(MoqtFramerSimpleTest, BadObjectInput) {
   MoqtObject object = {
-      /*subscribe_id=*/3,
+      // This is a valid object.
       /*track_alias=*/4,
       /*group_id=*/5,
       /*object_id=*/6,
       /*publisher_priority=*/7,
       /*object_status=*/MoqtObjectStatus::kNormal,
-      /*forwarding_preference=*/MoqtForwardingPreference::kObject,
-      /*payload_length=*/std::nullopt,
+      /*forwarding_preference=*/MoqtForwardingPreference::kSubgroup,
+      /*subgroup_id=*/8,
+      /*payload_length=*/3,
   };
   quiche::QuicheBuffer buffer;
-  object.forwarding_preference = MoqtForwardingPreference::kDatagram;
-  EXPECT_QUIC_BUG(buffer = framer_.SerializeObjectHeader(object, false),
-                  "must be first");
+
+  // kSubgroup must have a subgroup_id.
+  object.subgroup_id = std::nullopt;
+  EXPECT_QUIC_BUG(buffer = framer_.SerializeObjectHeader(
+                      object, MoqtDataStreamType::kStreamHeaderSubgroup, false),
+                  "Object metadata is invalid");
   EXPECT_TRUE(buffer.empty());
-  object.forwarding_preference = MoqtForwardingPreference::kGroup;
-  EXPECT_QUIC_BUG(buffer = framer_.SerializeObjectHeader(object, false),
-                  "requires knowing the object length");
+  object.subgroup_id = 8;
+
+  // kFetch must have a subgroup_id.
+  object.subgroup_id = std::nullopt;
+  EXPECT_QUIC_BUG(buffer = framer_.SerializeObjectHeader(
+                      object, MoqtDataStreamType::kStreamHeaderFetch, false),
+                  "Object metadata is invalid");
   EXPECT_TRUE(buffer.empty());
-  object.payload_length = 5;
+  object.subgroup_id = 8;
+
+  // kTrack must not have a subgroup_id.
+  object.forwarding_preference = MoqtForwardingPreference::kTrack;
+  EXPECT_QUIC_BUG(buffer = framer_.SerializeObjectHeader(
+                      object, MoqtDataStreamType::kStreamHeaderTrack, false),
+                  "Object metadata is invalid");
+  EXPECT_TRUE(buffer.empty());
+  object.forwarding_preference = MoqtForwardingPreference::kSubgroup;
+
+  // Non-normal status must have no payload.
   object.object_status = MoqtObjectStatus::kEndOfGroup;
-  EXPECT_QUIC_BUG(buffer = framer_.SerializeObjectHeader(object, false),
-                  "Object status must be kNormal if payload is non-empty");
+  EXPECT_QUIC_BUG(buffer = framer_.SerializeObjectHeader(
+                      object, MoqtDataStreamType::kStreamHeaderSubgroup, false),
+                  "Object metadata is invalid");
+  EXPECT_TRUE(buffer.empty());
+  // object.object_status = MoqtObjectStatus::kNormal;
+}
+
+TEST_F(MoqtFramerSimpleTest, BadDatagramInput) {
+  MoqtObject object = {
+      // This is a valid datagram.
+      /*track_alias=*/4,
+      /*group_id=*/5,
+      /*object_id=*/6,
+      /*publisher_priority=*/7,
+      /*object_status=*/MoqtObjectStatus::kNormal,
+      /*forwarding_preference=*/MoqtForwardingPreference::kDatagram,
+      /*subgroup_id=*/std::nullopt,
+      /*payload_length=*/3,
+  };
+  quiche::QuicheBuffer buffer;
+
+  // No datagrams to SerializeObjectHeader().
+  EXPECT_QUIC_BUG(buffer = framer_.SerializeObjectHeader(
+                      object, MoqtDataStreamType::kObjectDatagram, false),
+                  "Datagrams use SerializeObjectDatagram()")
+  EXPECT_TRUE(buffer.empty());
+
+  object.object_status = MoqtObjectStatus::kEndOfGroup;
+  EXPECT_QUIC_BUG(buffer = framer_.SerializeObjectDatagram(object, "foo"),
+                  "Object metadata is invalid");
+  EXPECT_TRUE(buffer.empty());
+  object.object_status = MoqtObjectStatus::kNormal;
+
+  object.subgroup_id = 8;
+  EXPECT_QUIC_BUG(buffer = framer_.SerializeObjectDatagram(object, "foo"),
+                  "Object metadata is invalid");
+  EXPECT_TRUE(buffer.empty());
+  object.subgroup_id = std::nullopt;
+
+  EXPECT_QUIC_BUG(buffer = framer_.SerializeObjectDatagram(object, "foobar"),
+                  "Payload length does not match payload");
   EXPECT_TRUE(buffer.empty());
 }
 
 TEST_F(MoqtFramerSimpleTest, Datagram) {
   auto datagram = std::make_unique<ObjectDatagramMessage>();
   MoqtObject object = {
-      /*subscribe_id=*/3,
       /*track_alias=*/4,
       /*group_id=*/5,
       /*object_id=*/6,
       /*publisher_priority=*/7,
       /*object_status=*/MoqtObjectStatus::kNormal,
-      /*forwarding_preference=*/MoqtForwardingPreference::kObject,
-      /*payload_length=*/std::nullopt,
+      /*forwarding_preference=*/MoqtForwardingPreference::kDatagram,
+      /*subgroup_id=*/std::nullopt,
+      /*payload_length=*/3,
   };
   std::string payload = "foo";
   quiche::QuicheBuffer buffer;
@@ -301,15 +422,15 @@ TEST_F(MoqtFramerSimpleTest, AllSubscribeInputs) {
           MoqtSubscribe subscribe = {
               /*subscribe_id=*/3,
               /*track_alias=*/4,
-              /*track_namespace=*/"foo",
-              /*track_name=*/"abcd",
+              /*full_track_name=*/FullTrackName({"foo", "abcd"}),
               /*subscriber_priority=*/0x20,
               /*group_order=*/std::nullopt,
               start_group,
               start_object,
               end_group,
               end_object,
-              MoqtSubscribeParameters{"bar"},
+              MoqtSubscribeParameters{"bar", std::nullopt, std::nullopt,
+                                      std::nullopt},
           };
           quiche::QuicheBuffer buffer;
           MoqtFilterType expected_filter_type = MoqtFilterType::kNone;
@@ -335,7 +456,7 @@ TEST_F(MoqtFramerSimpleTest, AllSubscribeInputs) {
           }
           buffer = framer_.SerializeSubscribe(subscribe);
           // Go to the filter type.
-          const uint8_t* read = BufferAtOffset(buffer, 14);
+          const uint8_t* read = BufferAtOffset(buffer, 16);
           EXPECT_EQ(static_cast<MoqtFilterType>(*read), expected_filter_type);
           EXPECT_GT(buffer.size(), 0);
           if (expected_filter_type == MoqtFilterType::kAbsoluteRange &&
@@ -353,15 +474,14 @@ TEST_F(MoqtFramerSimpleTest, SubscribeEndBeforeStart) {
   MoqtSubscribe subscribe = {
       /*subscribe_id=*/3,
       /*track_alias=*/4,
-      /*track_namespace=*/"foo",
-      /*track_name=*/"abcd",
+      /*full_track_name=*/FullTrackName({"foo", "abcd"}),
       /*subscriber_priority=*/0x20,
       /*group_order=*/std::nullopt,
       /*start_group=*/std::optional<uint64_t>(4),
       /*start_object=*/std::optional<uint64_t>(3),
       /*end_group=*/std::optional<uint64_t>(3),
       /*end_object=*/std::nullopt,
-      MoqtSubscribeParameters{"bar"},
+      MoqtSubscribeParameters{"bar", std::nullopt, std::nullopt, std::nullopt},
   };
   quiche::QuicheBuffer buffer;
   EXPECT_QUIC_BUG(buffer = framer_.SerializeSubscribe(subscribe),
@@ -374,19 +494,41 @@ TEST_F(MoqtFramerSimpleTest, SubscribeEndBeforeStart) {
   EXPECT_EQ(buffer.size(), 0);
 }
 
+TEST_F(MoqtFramerSimpleTest, FetchEndBeforeStart) {
+  MoqtFetch fetch = {
+      /*subscribe_id =*/1,
+      /*full_track_name=*/FullTrackName{"foo", "bar"},
+      /*subscriber_priority=*/2,
+      /*group_order=*/MoqtDeliveryOrder::kAscending,
+      /*start_object=*/FullSequence{1, 2},
+      /*end_group=*/1,
+      /*end_object=*/1,
+      /*parameters=*/
+      MoqtSubscribeParameters{"baz", std::nullopt, std::nullopt, std::nullopt},
+  };
+  quiche::QuicheBuffer buffer;
+  EXPECT_QUIC_BUG(buffer = framer_.SerializeFetch(fetch),
+                  "Invalid FETCH object range");
+  EXPECT_EQ(buffer.size(), 0);
+  fetch.end_group = 0;
+  fetch.end_object = std::nullopt;
+  EXPECT_QUIC_BUG(buffer = framer_.SerializeFetch(fetch),
+                  "Invalid FETCH object range");
+  EXPECT_EQ(buffer.size(), 0);
+}
+
 TEST_F(MoqtFramerSimpleTest, SubscribeLatestGroupNonzeroObject) {
   MoqtSubscribe subscribe = {
       /*subscribe_id=*/3,
       /*track_alias=*/4,
-      /*track_namespace=*/"foo",
-      /*track_name=*/"abcd",
+      /*full_track_name=*/FullTrackName({"foo", "abcd"}),
       /*subscriber_priority=*/0x20,
       /*group_order=*/std::nullopt,
       /*start_group=*/std::nullopt,
       /*start_object=*/std::optional<uint64_t>(3),
       /*end_group=*/std::nullopt,
       /*end_object=*/std::nullopt,
-      MoqtSubscribeParameters{"bar"},
+      MoqtSubscribeParameters{"bar", std::nullopt, std::nullopt, std::nullopt},
   };
   quiche::QuicheBuffer buffer;
   EXPECT_QUIC_BUG(buffer = framer_.SerializeSubscribe(subscribe),
@@ -402,12 +544,13 @@ TEST_F(MoqtFramerSimpleTest, SubscribeUpdateEndGroupOnly) {
       /*end_group=*/4,
       /*end_object=*/std::nullopt,
       /*subscriber_priority=*/0xaa,
-      /*authorization_info=*/"bar",
+      MoqtSubscribeParameters{std::nullopt, std::nullopt, std::nullopt,
+                              std::nullopt},
   };
   quiche::QuicheBuffer buffer;
   buffer = framer_.SerializeSubscribeUpdate(subscribe_update);
   EXPECT_GT(buffer.size(), 0);
-  const uint8_t* end_group = BufferAtOffset(buffer, 4);
+  const uint8_t* end_group = BufferAtOffset(buffer, 5);
   EXPECT_EQ(*end_group, 5);
   const uint8_t* end_object = end_group + 1;
   EXPECT_EQ(*end_object, 0);
@@ -421,12 +564,13 @@ TEST_F(MoqtFramerSimpleTest, SubscribeUpdateIncrementsEnd) {
       /*end_group=*/4,
       /*end_object=*/6,
       /*subscriber_priority=*/0xaa,
-      /*authorization_info=*/"bar",
+      MoqtSubscribeParameters{std::nullopt, std::nullopt, std::nullopt,
+                              std::nullopt},
   };
   quiche::QuicheBuffer buffer;
   buffer = framer_.SerializeSubscribeUpdate(subscribe_update);
   EXPECT_GT(buffer.size(), 0);
-  const uint8_t* end_group = BufferAtOffset(buffer, 4);
+  const uint8_t* end_group = BufferAtOffset(buffer, 5);
   EXPECT_EQ(*end_group, 5);
   const uint8_t* end_object = end_group + 1;
   EXPECT_EQ(*end_object, 7);
@@ -440,7 +584,8 @@ TEST_F(MoqtFramerSimpleTest, SubscribeUpdateInvalidRange) {
       /*end_group=*/std::nullopt,
       /*end_object=*/6,
       /*subscriber_priority=*/0xaa,
-      /*authorization_info=*/"bar",
+      MoqtSubscribeParameters{std::nullopt, std::nullopt, std::nullopt,
+                              std::nullopt},
   };
   quiche::QuicheBuffer buffer;
   EXPECT_QUIC_BUG(buffer = framer_.SerializeSubscribeUpdate(subscribe_update),

@@ -10,6 +10,7 @@
 <translation id="132390688737681464">Adressen bewarje en ynfolje</translation>
 <translation id="1375198122581997741">Oer dizze ferzje</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> hat gjin gegevens stjoerd.</translation>
+<translation id="1555191101192706055">Oanfallers op de webstee dyst besocht hast te besykjen, kinne dy misliede ta it ynstallearjen fan skeadlike software dy ynfloed ha op de manier fan sneupen, bygelyks troch in startside te feroarjen of ekstra advertinsjes te litten sjen op siden wêrst komst.</translation>
 <translation id="1559528461873125649">Triem of triemtafel bestiet net</translation>
 <translation id="1640244768702815859">Besykje <ph name="BEGIN_LINK" />de thússide fan de webstee te besykjen<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Net stipe protokol</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrolearje de proksy en de brânmuorre<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Ferlient oan: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">De webstee kin gjin feilige ferbining ferskaffe</translation>
+<translation id="2178904466768126352">Oanfallers op de webstee dyst besocht te besykjen, kinne skeadlike software ynstallearje wêrmei spul lykas wachtwurden, foto's berjochten of kredytkaart gegevens stellen of wiske kinne wurde.</translation>
 <translation id="2187317261103489799">Detektearje (standert)</translation>
 <translation id="2224337661447660594">Gjin ynternet</translation>
 <translation id="2283340219607151381">Adressen bewarje en ynfolje</translation>
@@ -91,6 +93,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Kontrolearje brânmuorre en anty-firus ynstellings<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Besykje it útfieren fan netwurk diagnoaze<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Jildich</translation>
+<translation id="4241830393007970744">Oanfallers op de webstee dyst besocht hast te besykjen, kinne dy misliede ta it ynstallearjen fan software of it iepenbier meitsjen fan gegevens lykas wachtwurd, tillefoan of kredytkaart gegevens.</translation>
 <translation id="4250431568374086873">Jo ferbining mei dizze webstee is net folslein feilich</translation>
 <translation id="4265872034478892965">Tastean troch jo behearder</translation>
 <translation id="4305666528087210886">De wie gjin tagong ta de triem</translation>
@@ -101,6 +104,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="4522570452068850558">Details</translation>
 <translation id="4558551763791394412">Besykje it útskeakeljen fan jo tafoegings.</translation>
 <translation id="4592951414987517459">Jo ferbining mei <ph name="DOMAIN" /> is fersifere mei in moderne fersifering.</translation>
+<translation id="4598641255230617220">Plakke en gean</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /><ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Jo ferbining wie ûnderbrutsen</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows netwurk diagnoaze útfiere<ph name="END_LINK" /></translation>
@@ -110,6 +114,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="4764776831041365478">De webstee op <ph name="URL" /> is mooglik tydlik út de loft of permanint ferpleatst nei in oar webadres.</translation>
 <translation id="483241715238664915">Warskôgingen ynskeakelje</translation>
 <translation id="4943872375798546930">Gjin resultaten</translation>
+<translation id="5017554619425969104">Tekst dyst kopiearre hast</translation>
 <translation id="5023310440958281426">Kontrolearje it belied fan jo behearder</translation>
 <translation id="5039804452771397117">Tastean</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 in brûkme)} other {(# in brûkme)}}</translation>
@@ -164,11 +169,11 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="7108819624672055576">Tastean troch in tafoeging</translation>
 <translation id="7111012039238467737">(Jildich)</translation>
 <translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> tastean op <ph name="DOMAIN" /></translation>
+<translation id="7126644664682723998">Plakke en sykje</translation>
 <translation id="7179323680825933600">Metoaden fan beteljen bewarje en ynfolje</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> foldocht net oan de feiligens standerts.</translation>
 <translation id="7219179957768738017">De ferbining makket brûkme fan <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Notifikaasjes sjen litte</translation>
-<translation id="7227747683324411744">Oanfallers op de webstee dyst besykje wolst, kinne dy misliede ta it ynstallearjen fan skeadlike software dy ynfloed ha op de manier fan sneupen, bygelyks troch in startside te feroarjen of ekstra advertinsjes te litten sjen op siden wêrst komst.</translation>
 <translation id="7353601530677266744">Opdracht rigel</translation>
 <translation id="7364115444476960850">De side dy't jo besykje wolle is tsjinkeard troch Vivaldi's <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profyl paad</translation>
@@ -176,7 +181,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="7518003948725431193">Der is gjin webstee fûn foar it webadres: <ph name="URL" /></translation>
 <translation id="7549584377607005141">De webstee fereasket gegevens dy't jo earder ynfierd ha, om goed wurkje te kinnen. Jo kinne de gegevens op 'e nij stjoere, mar hjirtroch sille de aksje werhelle wurde dy earder op dizze side dien binne.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> is op it stuit net yn steat om dit fersyk te ferwurkjen.</translation>
-<translation id="7605377493722372900">Oanfallers op de webstee dyst besykje wolst, kinne skeadlike software ynstallearje wêrmei spul lykas wachtwurd, foto's berjochten of kredytkaart gegevens stellen of wiske kinne wurde.</translation>
 <translation id="7662298039739062396">Ynstelling beheard troch in tafoeging</translation>
 <translation id="7663736086183791259">Sertifikaat <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">Sertifikaat</translation>
@@ -202,7 +206,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="8288807391153049143">Sertifikaat sjen litte</translation>
 <translation id="8289355894181816810">Nim kontakt op mei jo netwurkbehearder as jo net wis binne wat dit ynhâld.</translation>
 <translation id="8332188693563227489">Tagong ta <ph name="HOST_NAME" /> is wegere</translation>
-<translation id="8422228580902424274">Oanfallers op de webstee dyst besykje wolst, kinne dy misliede ta it ynstallearjen fan software of it iepenbier meitsjen fan gegevens lykas wachtwurd, tillefoan of kredytkaart gegevens.</translation>
 <translation id="8473863474539038330">Adressen en mear</translation>
 <translation id="8498891568109133222">It reagearjen fan <ph name="HOST_NAME" /> naam tefolle tiid.</translation>
 <translation id="8503813439785031346">Brûkersnamme</translation>

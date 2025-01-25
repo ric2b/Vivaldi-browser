@@ -51,7 +51,7 @@ std::pair<ByteBuffer, StatusReportId> SenderReportBuilder::BuildPacket(
 Clock::time_point SenderReportBuilder::GetRecentReportTime(
     StatusReportId report_id,
     Clock::time_point on_or_before) const {
-  // Assumption: The |report_id| is the middle 32 bits of a 64-bit NtpTimestamp.
+  // Assumption: The `report_id` is the middle 32 bits of a 64-bit NtpTimestamp.
   static_assert(ToStatusReportId(NtpTimestamp{0x0192a3b4c5d6e7f8}) ==
                     StatusReportId{0xa3b4c5d6},
                 "FIXME: ToStatusReportId() implementation changed.");

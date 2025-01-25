@@ -26,6 +26,7 @@
 #include "chrome/browser/ui/views/page_info/page_info_navigation_handler.h"
 #include "chrome/browser/ui/views/page_info/page_info_permission_content_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_security_content_view.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/page_info/core/features.h"
 #include "components/page_info/core/proto/about_this_site_metadata.pb.h"
 #include "components/page_info/page_info.h"
@@ -163,7 +164,9 @@ PageInfoViewFactory::CreateAdPersonalizationPageView() {
 
 std::unique_ptr<views::View> PageInfoViewFactory::CreateCookiesPageView() {
   const std::u16string title_label =
-      ui_delegate_->IsTrackingProtection3pcdEnabled()
+      base::FeatureList::IsEnabled(
+          privacy_sandbox::kTrackingProtection3pcdUx) &&
+              ui_delegate_->IsTrackingProtection3pcdEnabled()
           ? l10n_util::GetStringUTF16(
                 IDS_PAGE_INFO_SUB_PAGE_VIEW_TRACKING_PROTECTION_HEADER)
           : l10n_util::GetStringUTF16(IDS_PAGE_INFO_COOKIES_HEADER);
@@ -179,8 +182,8 @@ std::unique_ptr<views::View> PageInfoViewFactory::CreateSubpageHeader(
   label_wrapper.AddChild(views::Builder<views::Label>(
                              std::make_unique<views::Label>(
                                  title, views::style::CONTEXT_DIALOG_TITLE,
-                                 views::style::STYLE_SECONDARY))
-                             .SetTextStyle(views::style::STYLE_HEADLINE_4)
+                                 views::style::STYLE_HEADLINE_4))
+                             .SetEnabledColorId(kColorPageInfoForeground)
                              .SetHorizontalAlignment(gfx::ALIGN_LEFT)
                              .SetID(VIEW_ID_PAGE_INFO_SUBPAGE_TITLE));
 
@@ -189,8 +192,9 @@ std::unique_ptr<views::View> PageInfoViewFactory::CreateSubpageHeader(
         views::Builder<views::Label>(
             std::make_unique<views::Label>(
                 subtitle, views::style::CONTEXT_LABEL,
-                views::style::STYLE_SECONDARY,
+                views::style::STYLE_BODY_4,
                 gfx::DirectionalityMode::DIRECTIONALITY_AS_URL))
+            .SetEnabledColorId(kColorPageInfoSubtitleForeground)
             .SetHorizontalAlignment(gfx::ALIGN_LEFT)
             .SetAllowCharacterBreak(true)
             .SetMultiLine(true));
@@ -553,6 +557,9 @@ const ui::ImageModel PageInfoViewFactory::GetPermissionIcon(
       break;
     case ContentSettingsType::POINTER_LOCK:
       icon = &vector_icons::kPointerLockIcon;
+      break;
+    case ContentSettingsType::WEB_PRINTING:
+      icon = &vector_icons::kPrinterIcon;
       break;
 
 #if defined(VIVALDI_BUILD)

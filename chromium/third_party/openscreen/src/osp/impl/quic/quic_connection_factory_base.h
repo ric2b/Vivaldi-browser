@@ -26,16 +26,26 @@ class QuicConnectionFactoryBase : public UdpSocket::Client {
  public:
   struct OpenConnection {
     QuicConnection* connection = nullptr;
-    UdpSocket* socket = nullptr;  // References one of the owned |sockets_|.
+    UdpSocket* socket = nullptr;  // References one of the owned `sockets_`.
   };
 
   explicit QuicConnectionFactoryBase(TaskRunner& task_runner);
+  QuicConnectionFactoryBase(const QuicConnectionFactoryBase&) = delete;
+  QuicConnectionFactoryBase& operator=(const QuicConnectionFactoryBase&) =
+      delete;
+  QuicConnectionFactoryBase(QuicConnectionFactoryBase&&) noexcept = delete;
+  QuicConnectionFactoryBase& operator=(QuicConnectionFactoryBase&&) noexcept =
+      delete;
   virtual ~QuicConnectionFactoryBase();
 
   // UdpSocket::Client overrides.
   void OnError(UdpSocket* socket, const Error& error) override;
   void OnSendError(UdpSocket* socket, const Error& error) override;
 
+  // This is called when the `connection` is totally closed (The underlying
+  // QUIC implementation should have completed the connection close process
+  // after waiting for an event loop). We can delete related socket at this time
+  // if needed.
   virtual void OnConnectionClosed(QuicConnection* connection) = 0;
 
   std::map<IPEndpoint, OpenConnection>& connection() { return connections_; }

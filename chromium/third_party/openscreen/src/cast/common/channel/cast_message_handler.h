@@ -16,7 +16,7 @@ class CastMessageHandler {
  public:
   virtual ~CastMessageHandler() = default;
 
-  // |socket| is null if the source of the message is a local peer.
+  // `socket` is null if the source of the message is a local peer.
   virtual void OnMessage(VirtualConnectionRouter* router,
                          CastSocket* socket,
                          proto::CastMessage message) = 0;

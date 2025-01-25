@@ -25,7 +25,7 @@ namespace openscreen::cast {
 
 namespace internal {
 
-// Convenience allocator for a new AVFormatContext, given a file |path|. Returns
+// Convenience allocator for a new AVFormatContext, given a file `path`. Returns
 // nullptr on error. Note: MakeUniqueAVFormatContext() is the public API.
 AVFormatContext* CreateAVFormatContextForFile(const char* path);
 

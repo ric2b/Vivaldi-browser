@@ -27,13 +27,8 @@ below.**
 *   [Contribution Guide](./contributing/README.md)
 *   [UX Style Guide](./styleguide/ux/README.md)
 *   [Testing Guide](../test/README.md)
-*   [Release Management](release_management.md)
-*   [Dependencies](dependencies.md)
-*   [Localization](l10n.md)
-*   [Visual logging in DevTools](visual_logging.md)
-*   [UMA metrics in DevTools](uma_metrics.md)
-    *   [How to add UMA metrics in DevTools frontend](add_uma_metrics.md)
-*   [How to add experiments in DevTools frontend](add_experiments.md)
+*   [Cookbook](./cookbook/README.md)
+*   [Visual logging in DevTools](../front_end/ui/visual_logging/README.md)
 *   [Style Guides](./styleguide/README.md)
 
 ### Architectural Documentation

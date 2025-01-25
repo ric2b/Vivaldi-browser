@@ -41,7 +41,6 @@ import org.chromium.components.bookmarks.BookmarkType;
  */
 public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         implements OnMenuItemClickListener, OnClickListener {
-    private BookmarkOpener mBookmarkOpener;
     private SelectionDelegate<BookmarkId> mSelectionDelegate;
 
     private boolean mEditButtonVisible;
@@ -62,6 +61,8 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
 
     // Vivaldi
     private ChromeTabbedActivity mChromeTabbedActivity;
+    private boolean mSortButtonVisible;
+    private boolean mAddToReadingListButtonVisible;
 
     public BookmarkToolbar(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -85,9 +86,7 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         setOnMenuItemClickListener(this);
     }
 
-    void setBookmarkOpener(BookmarkOpener bookmarkOpener) {
-        mBookmarkOpener = bookmarkOpener;
-    }
+    void setBookmarkOpener(BookmarkOpener bookmarkOpener) {}
 
     void setSelectionDelegate(SelectionDelegate selectionDelegate) {
         mSelectionDelegate = selectionDelegate;
@@ -245,6 +244,9 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
         setNewFolderButtonVisible(mNewFolderButtonVisible);
         setNewFolderButtonEnabled(mNewFolderButtonEnabled);
         setSortMenuIdsEnabled(mSortMenuIdsEnabled);
+        // Vivaldi
+        setAddToReadingListButtonVisible(mAddToReadingListButtonVisible);
+        setSortButtonVisible(mSortButtonVisible);
     }
 
     @Override
@@ -277,6 +279,7 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
     }
 
     void setSortButtonVisible(boolean visible) {
+        mSortButtonVisible = visible;
         getMenu().findItem(R.id.sort_bookmarks_id).setVisible(visible);
     }
 
@@ -285,6 +288,7 @@ public class BookmarkToolbar extends SelectableListToolbar<BookmarkId>
     }
 
     void setAddToReadingListButtonVisible(boolean visible) {
+        mAddToReadingListButtonVisible = visible;
         MenuItem addPageMenuItem = getMenu().findItem(R.id.add_page_to_reading_list_menu_id);
         if (addPageMenuItem == null) return;
         addPageMenuItem.setVisible(visible);

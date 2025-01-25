@@ -37,6 +37,7 @@ import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
+import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.ScrollDirection;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
 import org.chromium.content_public.browser.SelectionPopupController;
@@ -215,6 +216,7 @@ public class OverlayPanel extends OverlayPanelAnimation
      * @param compositorViewHolder The {@link CompositorViewHolder}
      * @param toolbarHeightDp The height of the toolbar in dp.
      * @param currentTabSupplier Supplies the current {@link Tab}.
+     * @param desktopWindowStateManager Manager to get desktop window and app header state.
      */
     public OverlayPanel(
             @NonNull Context context,
@@ -225,8 +227,9 @@ public class OverlayPanel extends OverlayPanelAnimation
             @NonNull Profile profile,
             @NonNull ViewGroup compositorViewHolder,
             float toolbarHeightDp,
-            @NonNull Supplier<Tab> currentTabSupplier) {
-        super(context, layoutManager, toolbarHeightDp);
+            @NonNull Supplier<Tab> currentTabSupplier,
+            DesktopWindowStateManager desktopWindowStateManager) {
+        super(context, layoutManager, toolbarHeightDp, desktopWindowStateManager);
         mLayoutManager = layoutManager;
         mContentFactory = this;
         mBrowserControlsStateProvider = browserControlsStateProvider;
@@ -274,10 +277,12 @@ public class OverlayPanel extends OverlayPanelAnimation
     }
 
     /** Destroy the native components associated with this panel's content. */
+    @Override
     public void destroy() {
         closePanel(StateChangeReason.UNKNOWN, false);
         mLayoutManager.removeSceneChangeObserver(mSceneChangeObserver);
         ApplicationStatus.unregisterActivityStateListener(this);
+        super.destroy();
     }
 
     /**
@@ -636,17 +641,6 @@ public class OverlayPanel extends OverlayPanelAnimation
         //
         // This is necessary to fix the bugs: crbug.com/510205 and crbug.com/510206
         mContent.updateBrowserControlsState(isFullWidthSizePanel());
-    }
-
-    /**
-     * Remove the last entry from history provided it is in a given time frame.
-     * @param historyUrl The URL to remove.
-     * @param urlTimeMs The time that the URL was visited.
-     */
-    public void removeLastHistoryEntry(String historyUrl, long urlTimeMs) {
-        if (mContent == null) return;
-        // Expose OverlayPanelContent method.
-        mContent.removeLastHistoryEntry(historyUrl, urlTimeMs);
     }
 
     /**
@@ -1032,7 +1026,7 @@ public class OverlayPanel extends OverlayPanelAnimation
 
     @Override
     public boolean shouldHideAndroidBrowserControls() {
-        return isPanelOpened() && mCanHideAndroidBrowserControls;
+        return isPanelOpened() && getCanHideAndroidBrowserControls();
     }
 
     @Override

@@ -99,7 +99,6 @@ typedef struct FileContext {
 #if HAVE_DIRENT_H
     DIR *dir;
 #endif
-    int64_t initial_pos;
 } FileContext;
 
 static const AVOption file_options[] = {
@@ -194,6 +193,7 @@ static int file_check(URLContext *h, int mask)
     return ret;
 }
 
+#if CONFIG_FD_PROTOCOL || CONFIG_PIPE_PROTOCOL
 static int fd_dup(URLContext *h, int oldfd)
 {
     int newfd;
@@ -216,16 +216,12 @@ static int fd_dup(URLContext *h, int oldfd)
 #endif
     return newfd;
 }
+#endif
 
 static int file_close(URLContext *h)
 {
     FileContext *c = h->priv_data;
-    int ret;
-
-    if (c->initial_pos >= 0 && !h->is_streamed)
-        lseek(c->fd, c->initial_pos, SEEK_SET);
-
-    ret = close(c->fd);
+    int ret = close(c->fd);
     return (ret == -1) ? AVERROR(errno) : 0;
 }
 
@@ -293,7 +289,6 @@ static int file_open(URLContext *h, const char *filename, int flags)
 
     av_strstart(filename, "file:", &filename);
 
-    c->initial_pos = -1;
     if (flags & AVIO_FLAG_WRITE && flags & AVIO_FLAG_READ) {
         access = O_CREAT | O_RDWR;
         if (c->trunc)
@@ -504,11 +499,6 @@ static int fd_open(URLContext *h, const char *filename, int flags)
     c->fd = fd_dup(h, c->fd);
     if (c->fd == -1)
         return AVERROR(errno);
-
-    if (h->is_streamed)
-        c->initial_pos = -1;
-    else
-        c->initial_pos = lseek(c->fd, 0, SEEK_CUR);
 
     return 0;
 }

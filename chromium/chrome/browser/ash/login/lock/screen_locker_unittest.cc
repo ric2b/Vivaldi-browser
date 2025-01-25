@@ -6,13 +6,13 @@
 
 #include <memory>
 
+#include "ash/login/test_login_screen.h"
 #include "ash/public/cpp/login_screen_model.h"
 #include "ash/public/cpp/login_types.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
-#include "chrome/browser/ash/lock_screen_apps/state_controller.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/device_settings_test_helper.h"
@@ -22,7 +22,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/assistant/assistant_browser_delegate_impl.h"
 #include "chrome/browser/ui/ash/login/login_screen_client_impl.h"
-#include "chrome/browser/ui/ash/login/test_login_screen.h"
 #include "chrome/browser/ui/ash/session/session_controller_client_impl.h"
 #include "chrome/browser/ui/ash/session/test_session_controller.h"
 #include "chrome/common/chrome_constants.h"
@@ -157,8 +156,6 @@ class ScreenLockerUnitTest : public testing::Test {
   // Needed for main loop and posting async tasks.
   content::BrowserTaskEnvironment task_environment_;
 
-  // ViewsScreenLocker dependencies:
-  lock_screen_apps::StateController state_controller_;
   // * MojoSystemInfoDispatcher dependencies:
   ScopedTestingCrosSettings scoped_testing_cros_settings_;
   system::ScopedFakeStatisticsProvider fake_statictics_provider_;

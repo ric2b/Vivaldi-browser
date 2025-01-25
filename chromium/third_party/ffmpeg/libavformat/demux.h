@@ -34,6 +34,11 @@ struct AVDeviceInfoList;
  */
 #define FF_INFMT_FLAG_INIT_CLEANUP                             (1 << 0)
 
+/*
+ * Prefer the codec framerate for avg_frame_rate computation.
+ */
+#define FF_INFMT_FLAG_PREFER_CODEC_FRAMERATE                   (1 << 1)
+
 typedef struct FFInputFormat {
     /**
      * The public AVInputFormat. See avformat.h for it.
@@ -169,22 +174,6 @@ typedef struct FFStreamInfo {
  * (ignored streams or junk data). The framework will re-call the demuxer.
  */
 #define FFERROR_REDO FFERRTAG('R','E','D','O')
-
-#define RELATIVE_TS_BASE (INT64_MAX - (1LL << 48))
-
-static av_always_inline int is_relative(int64_t ts)
-{
-    return ts > (RELATIVE_TS_BASE - (1LL << 48));
-}
-
-/**
- * Wrap a given time stamp, if there is an indication for an overflow
- *
- * @param st stream
- * @param timestamp the time stamp to wrap
- * @return resulting time stamp
- */
-int64_t ff_wrap_timestamp(const AVStream *st, int64_t timestamp);
 
 /**
  * Read a transport packet from a media file.

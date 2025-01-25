@@ -37,10 +37,10 @@
 #include "components/no_state_prefetch/browser/no_state_prefetch_contents.h"
 #include "components/no_state_prefetch/browser/no_state_prefetch_field_trial.h"
 #include "components/no_state_prefetch/browser/no_state_prefetch_handle.h"
+#include "components/no_state_prefetch/browser/no_state_prefetch_histograms.h"
 #include "components/no_state_prefetch/browser/no_state_prefetch_history.h"
 #include "components/no_state_prefetch/browser/no_state_prefetch_manager_delegate.h"
 #include "components/no_state_prefetch/browser/no_state_prefetch_utils.h"
-#include "components/no_state_prefetch/browser/prerender_histograms.h"
 #include "components/no_state_prefetch/common/no_state_prefetch_final_status.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
@@ -169,7 +169,7 @@ NoStatePrefetchManager::NoStatePrefetchManager(
           NoStatePrefetchContents::CreateFactory()),
       prefetch_history_(
           std::make_unique<NoStatePrefetchHistory>(kHistoryLength)),
-      histograms_(std::make_unique<PrerenderHistograms>()),
+      histograms_(std::make_unique<NoStatePrefetchHistograms>()),
       tick_clock_(base::DefaultTickClock::GetInstance()) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -646,15 +646,14 @@ NoStatePrefetchManager::StartPrefetchingWithPreconnectFallback(
   // to use an existing one.  We do not want prefetching to happen in a shared
   // process, so that we can always reliably lower the CPU priority for
   // prefetching.
-  // In single-process mode, ShouldTryToUseExistingProcessHost() always returns
-  // true, so that case needs to be explicitly checked for.
+  // In single-process mode, IsProcessLimitReached() always returns true, so
+  // that case needs to be explicitly checked for.
   // TODO(tburkard): Figure out how to cancel prefetching in the opposite case,
   // when a new tab is added to a process used for prefetching.
   // TODO(ppi): Check whether there are usually enough render processes
   // available on Android. If not, kill an existing renderers so that we can
   // create a new one.
-  if (content::RenderProcessHost::ShouldTryToUseExistingProcessHost(
-          browser_context_, url) &&
+  if (content::RenderProcessHost::IsProcessLimitReached() &&
       !content::RenderProcessHost::run_renderer_in_process()) {
     SkipNoStatePrefetchContentsAndMaybePreconnect(
         url, origin, FINAL_STATUS_TOO_MANY_PROCESSES);

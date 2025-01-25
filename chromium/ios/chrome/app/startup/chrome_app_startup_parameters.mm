@@ -546,10 +546,6 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
 
   [sharedDefaults removeObjectForKey:commandDictionaryPreference];
 
-  // `sharedDefaults` is used for communication between apps. Synchronize to
-  // avoid synchronization issues (like removing the next order).
-  [sharedDefaults synchronize];
-
   if (!commandDictionary) {
     return nil;
   }
@@ -797,8 +793,7 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
         break;
 
       default:
-        NOTREACHED_IN_MIGRATION();
-        break;
+        NOTREACHED();
     }
   }
   if ([secureAppID isEqualToString:kWidgetKitHostLockscreenLauncherWidget]) {
@@ -819,8 +814,7 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
         break;
 
       default:
-        NOTREACHED_IN_MIGRATION();
-        break;
+        NOTREACHED();
     }
   }
   if ([secureAppID isEqualToString:kWidgetKitHostShortcutsWidget]) {
@@ -832,8 +826,7 @@ TabOpeningPostOpeningAction XCallbackPoaToPostOpeningAction(
         LogWidgetKitAction(WidgetKitExtensionAction::ACTION_SHORTCUTS_OPEN);
         break;
       default:
-        NOTREACHED_IN_MIGRATION();
-        break;
+        NOTREACHED();
     }
   }
   if ([secureAppID isEqualToString:kWidgetKitHostSearchPasswordsWidget]) {

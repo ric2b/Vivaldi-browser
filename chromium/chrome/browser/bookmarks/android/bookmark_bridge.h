@@ -127,8 +127,14 @@ class BookmarkBridge : public ProfileObserver,
   std::string GetBookmarkGuidByIdForTesting(JNIEnv* env, jlong id, jint type);
 
   /* Vivaldi */
-  base::android::ScopedJavaLocalRef<jobject> GetTrashFolderId(
-        JNIEnv* env);
+  base::android::ScopedJavaLocalRef<jobject> GetTrashFolderId(JNIEnv* env);
+  base::android::ScopedJavaLocalRef<jobject>
+  GetMostRecentlyAddedUserNormalBookmarkIdForUrl(JNIEnv* env, const GURL& url);
+  const bookmarks::BookmarkNode*
+  GetMostRecentlyAddedUserNormalBookmarkIdForUrlImpl(const GURL& url);
+  base::android::ScopedJavaLocalRef<jobject> GetReadingListItemForUrl(
+      JNIEnv* env,
+      const GURL& url);
   // End Vivaldi
 
 
@@ -328,6 +334,24 @@ class BookmarkBridge : public ProfileObserver,
   base::android::ScopedJavaLocalRef<jobject> GetTrashFolderId(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
+
+
+
+  base::android::ScopedJavaLocalRef<jobject> GetStartPageNode(
+                   JNIEnv* env,
+                   const base::android::JavaParamRef<jobject>& obj,
+                   const base::android::JavaParamRef<jstring>& title);
+
+  bool IsURLAddedToStartPage(
+                     JNIEnv* env,
+                     const base::android::JavaParamRef<jobject>& obj,
+                     const GURL& url);
+
+  bool IsURLAddedToFolder(
+                      JNIEnv* env,
+                      const base::android::JavaParamRef<jobject>& obj,
+                      const jlong id,
+                      const GURL& url);
 
   // Vivaldi --->
 

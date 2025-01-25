@@ -4,8 +4,6 @@
 
 #include "platform/impl/task_runner.h"
 
-#include <unistd.h>
-
 #include <atomic>
 #include <chrono>
 #include <optional>
@@ -41,7 +39,7 @@ class FakeTaskWaiter final : public TaskRunnerImpl::TaskWaiter {
     Clock::time_point start = now_function_();
     waiting_.store(true);
     while (!has_event_.load() && (now_function_() - start) < timeout) {
-      EXPECT_EQ(usleep(100 /* microseconds */), 0);
+      std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
     waiting_.store(false);
     has_event_.store(false);

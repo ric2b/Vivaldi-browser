@@ -158,16 +158,16 @@ TEST_F(NinjaBuildWriterTest, TwoTargets) {
       "  depth = 42\n";
   const char expected_toolchain[] = "subninja toolchain.ninja\n";
   const char expected_targets[] =
-      "build bar: phony obj/bar/bar.stamp\n"
-      "build baz: phony obj/baz/baz.stamp\n"
-      "build foo$:bar: phony obj/foo/bar.stamp\n"
-      "build bar$:bar: phony obj/bar/bar.stamp\n"
-      "build baz$:baz: phony obj/baz/baz.stamp\n";
+      "build bar: phony phony/bar/bar\n"
+      "build baz: phony phony/baz/baz\n"
+      "build foo$:bar: phony phony/foo/bar\n"
+      "build bar$:bar: phony phony/bar/bar\n"
+      "build baz$:baz: phony phony/baz/baz\n";
   const char expected_root_target[] =
       "build all: phony $\n"
-      "    obj/foo/bar.stamp $\n"
-      "    obj/bar/bar.stamp $\n"
-      "    obj/baz/baz.stamp\n";
+      "    phony/foo/bar $\n"
+      "    phony/bar/bar $\n"
+      "    phony/baz/baz\n";
   const char expected_default[] = "default all\n";
   std::string out_str = ninja_out.str();
 #define EXPECT_SNIPPET(expected)                       \

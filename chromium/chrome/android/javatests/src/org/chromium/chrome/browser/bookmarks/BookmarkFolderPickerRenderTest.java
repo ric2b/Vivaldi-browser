@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.bookmarks;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doReturn;
 
 import static org.chromium.base.ThreadUtils.runOnUiThreadBlocking;
@@ -42,11 +43,9 @@ import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.DisableFeatures;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.bookmarks.BookmarkId;
@@ -65,7 +64,6 @@ import java.util.List;
 @RunWith(ParameterizedRunner.class)
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @Batch(Batch.PER_CLASS)
-@EnableFeatures(ChromeFeatureList.ANDROID_IMPROVED_BOOKMARKS)
 @DisableFeatures(SyncFeatureMap.SYNC_ENABLE_BOOKMARKS_IN_TRANSPORT_MODE)
 public class BookmarkFolderPickerRenderTest {
     @ClassParameter
@@ -134,14 +132,14 @@ public class BookmarkFolderPickerRenderTest {
                 Bitmap.createBitmap(bitmapSize, bitmapSize, Bitmap.Config.ARGB_8888);
         secondaryBitmap.eraseColor(Color.RED);
         doCallback(
-                        /* index= */ 1,
+                        /* index= */ 2,
                         (Callback<Pair<Drawable, Drawable>> callback) ->
                                 callback.onResult(
                                         new Pair<>(
                                                 new BitmapDrawable(resources, primaryBitmap),
                                                 new BitmapDrawable(resources, secondaryBitmap))))
                 .when(mBookmarkImageFetcher)
-                .fetchFirstTwoImagesForFolder(any(), any());
+                .fetchFirstTwoImagesForFolder(any(), anyInt(), any());
 
         // Setup BookmarkUiPrefs.
         doReturn(

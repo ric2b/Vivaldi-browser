@@ -4,19 +4,26 @@
 
 #import "base/apple/foundation_util.h"
 #import "components/sync/base/user_selectable_type.h"
+#import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_button_item.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/ui/common/vivaldi_url_constants.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.h"
+#import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_user_info_item.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
 #import "ios/ui/table_view/cells/vivaldi_table_view_segmented_control_item.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "url/gurl.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+@interface VivaldiSyncSettingsViewController()
+    <VivaldiTableViewSyncUserInfoViewDelegate> {}
+@end
 
 @implementation VivaldiSyncSettingsViewController
 
@@ -73,6 +80,7 @@
     case ItemTypeHeaderItem:
     case ItemTypeSyncUserInfo:
     case ItemTypeSyncStatus:
+    case ItemTypeSyncStatusFooter:
     case ItemTypeSyncAllInfoTextbox: {
       cell.selectionStyle = UITableViewCellSelectionStyleNone;
       break;
@@ -236,6 +244,36 @@
   return cell;
 }
 
+- (UIView*)tableView:(UITableView*)tableView
+    viewForHeaderInSection:(NSInteger)section {
+  UIView* view = [super tableView:tableView viewForHeaderInSection:section];
+  NSInteger sectionIdentifier =
+      [self.tableViewModel sectionIdentifierForSectionIndex:section];
+  switch (sectionIdentifier) {
+    case SectionIdentifierSyncUserInfo: {
+      VivaldiTableViewSyncUserInfoView* userInfoView =
+          base::apple::ObjCCast<VivaldiTableViewSyncUserInfoView>(view);
+      userInfoView.delegate = self;
+    } break;
+  }
+  return view;
+}
+
+- (UIView*)tableView:(UITableView*)tableView
+    viewForFooterInSection:(NSInteger)section {
+  UIView* view = [super tableView:tableView viewForFooterInSection:section];
+  NSInteger sectionIdentifier =
+      [self.tableViewModel sectionIdentifierForSectionIndex:section];
+  switch (sectionIdentifier) {
+    case SectionIdentifierSyncStatus: {
+      TableViewLinkHeaderFooterView* linkView =
+          base::apple::ObjCCast<TableViewLinkHeaderFooterView>(view);
+      linkView.delegate = self;
+    } break;
+  }
+  return view;
+}
+
 #pragma mark - VivaldiSyncSettingsConsumer
 
 - (void)reloadItem:(TableViewItem*)item {
@@ -262,6 +300,54 @@
       sectionForSectionIdentifier:sectionIdentifier];
   [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:index]
                 withRowAnimation:UITableViewRowAnimationNone];
+}
+
+#pragma mark - TableViewLinkHeaderFooterItemDelegate
+
+- (void)view:(TableViewLinkHeaderFooterView*)view didTapLinkURL:(CrURL*)URL {
+  DCHECK(URL.gurl == GURL(vVivaldiSyncStatusUrl));
+  OpenNewTabCommand* command =
+      [OpenNewTabCommand commandWithURLFromChrome:GURL(vVivaldiSyncStatusUrl)];
+  [self.applicationCommandsHandler closePresentedViewsAndOpenURL:command];
+}
+
+#pragma mark - VivaldiTableViewSyncUserInfoViewDelegate
+
+- (void)didTapSessionEditButtonWithCurrentSession:(NSString*)sessionName {
+  UIAlertController* dialog = [UIAlertController
+      alertControllerWithTitle:l10n_util::GetNSString(
+                                   IDS_VIVALDI_SYNC_DEVICE_NAME)
+                       message:nil
+                preferredStyle:UIAlertControllerStyleAlert];
+
+  [dialog addTextFieldWithConfigurationHandler:^(UITextField* textField) {
+    textField.placeholder =
+        l10n_util::GetNSString(IDS_VIVALDI_SYNC_DEVICE_NAME);
+    textField.text = sessionName;
+    textField.keyboardType = UIKeyboardTypeDefault;
+  }];
+
+  UIAlertAction* confirmAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+                          IDS_VIVALDI_SYNC_DEVICE_NAME_EDIT_CONFIRM_TITLE)
+                style:UIAlertActionStyleDefault
+              handler:^(UIAlertAction* _Nonnull action) {
+                  NSString* newName = dialog.textFields[0].text;
+                  if ([newName length] > 0) {
+                    [self.delegate updateDeviceName:newName];
+                  }
+              }];
+
+  UIAlertAction* cancelAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+                          IDS_VIVALDI_SYNC_DEVICE_NAME_EDIT_CANCEL_TITLE)
+                style:UIAlertActionStyleCancel
+              handler:nil];
+
+  [dialog addAction:confirmAction];
+  [dialog addAction:cancelAction];
+
+  [self presentViewController:dialog animated:YES completion:nil];
 }
 
 #pragma mark - Private Methods
@@ -308,7 +394,7 @@
 - (void)encryptionInfoButtonPressed {
   OpenNewTabCommand* command = [OpenNewTabCommand commandWithURLFromChrome:
       GURL(l10n_util::GetStringUTF8(IDS_VIVALDI_IOS_ENCRYPTION_INFO_URL))];
-  [self.applicationCommandsHandler closeSettingsUIAndOpenURL:command];
+  [self.applicationCommandsHandler closePresentedViewsAndOpenURL:command];
 }
 
 - (void)logOutButtonPressed:(UIButton*)sender {

@@ -180,7 +180,7 @@ public class BookmarkItem {
 
         /** @return (Vivaldi) Whether this is a default (pre-installed) bookmark. */
         public boolean isDefaultBookmark() {
-            return (mThumbnailPath != null) && (mThumbnailPath.startsWith("/resources"));
+            return mThumbnailPath != null && mThumbnailPath.startsWith("/resources");
         }
 
         /** Vivaldi **/

@@ -25,6 +25,7 @@ const char kTaskStartedAt[] = "started-at";
 const char kFlashTaskForceFlash[] = "force-flash";
 const char kFlashTaskCarrierOverride[] = "carrier-override";
 const char kFlashTaskDeviceId[] = "device-id";
+const char kFlashTaskFlashOngoing[] = "flash-ongoing";
 
 // error result codes.
 const char kErrorResultFailure[] = "org.chromium.Modemfwd.Error.Failure";

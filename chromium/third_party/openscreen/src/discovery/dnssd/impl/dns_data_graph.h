@@ -95,8 +95,8 @@ class DnsDataGraph {
   virtual void StopTracking(const DomainName& domain,
                             DomainChangeCallback on_stop_tracking) = 0;
 
-  // Attempts to create all DnsSdInstanceEndpoint objects with |name| associated
-  // with the provided |domain_group|. If all required data for one such
+  // Attempts to create all DnsSdInstanceEndpoint objects with `name` associated
+  // with the provided `domain_group`. If all required data for one such
   // endpoint has been received, and an error occurs while parsing this data,
   // then an error is returned in place of that endpoint.
   virtual std::vector<ErrorOr<DnsSdInstanceEndpoint>> CreateEndpoints(

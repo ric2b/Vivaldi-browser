@@ -8,8 +8,6 @@
 #pragma allow_unsafe_buffers
 #endif
 
-#include "components/search_engines/template_url_service.h"
-
 #include <algorithm>
 #include <iterator>
 #include <memory>
@@ -48,7 +46,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/choice_made_location.h"
-#include "components/search_engines/enterprise/enterprise_site_search_manager.h"
+#include "components/search_engines/enterprise/enterprise_search_manager.h"
 #include "components/search_engines/keyword_web_data_service.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
@@ -58,6 +56,7 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
+#include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_client.h"
 #include "components/search_engines/template_url_service_observer.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
@@ -69,6 +68,7 @@
 #include "components/url_formatter/url_fixer.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "components/search_engines/android/template_url_service_android.h"
@@ -159,28 +159,6 @@ void PruneSyncChanges(const SyncDataMap* sync_data,
 // |initial_sync_data| parameter.
 bool IsFromSync(const TemplateURL* turl, const SyncDataMap& sync_data) {
   return base::Contains(sync_data, turl->sync_guid());
-}
-
-// Log the number of instances of a keyword that exist, with zero or more
-// underscores, which could occur as the result of conflict resolution.
-void LogDuplicatesHistogram(
-    const TemplateURLService::TemplateURLVector& template_urls) {
-  std::map<std::u16string, int> duplicates;
-  for (auto it = template_urls.begin(); it != template_urls.end(); ++it) {
-    std::u16string keyword = (*it)->keyword();
-    base::TrimString(keyword, u"_", &keyword);
-    duplicates[keyword]++;
-  }
-
-  // Count the keywords with duplicates.
-  int num_dupes = 0;
-  for (std::map<std::u16string, int>::const_iterator it = duplicates.begin();
-       it != duplicates.end(); ++it) {
-    if (it->second > 1)
-      num_dupes++;
-  }
-
-  UMA_HISTOGRAM_COUNTS_100("Search.SearchEngineDuplicateCounts", num_dupes);
 }
 
 bool Contains(TemplateURLService::OwnedTemplateURLVector* template_urls,
@@ -413,7 +391,7 @@ TemplateURLService::TemplateURLService(
       default_search_manager_(
           VivaldiGetDefaultSearchManagers(&prefs, &search_engine_choice_service)
           ),
-      enterprise_site_search_manager_(GetEnterpriseSiteSearchManager(&prefs)) {
+      enterprise_site_search_manager_(GetEnterpriseSearchManager(&prefs)) {
   DCHECK(search_terms_data_);
   Init();
 }
@@ -544,7 +522,8 @@ bool TemplateURLService::HiddenFromLists(const TemplateURL* t_url) const {
     case TemplateURLData::CreatedByPolicy::kDefaultSearchProvider:
       return false;
 
-    case TemplateURLData::CreatedByPolicy::kSiteSearch: {
+    case TemplateURLData::CreatedByPolicy::kSiteSearch:
+    case TemplateURLData::CreatedByPolicy::kSearchAggregator: {
       // Always show featured Enterprise site search engines.
       if (t_url->featured_by_policy()) {
         return false;
@@ -566,8 +545,10 @@ bool TemplateURLService::HiddenFromLists(const TemplateURL* t_url) const {
       const TemplateURL* t_url_with_at =
           GetTemplateURLForKeyword(u"@" + t_url->keyword());
       return t_url_with_at &&
-             t_url_with_at->created_by_policy() ==
-                 TemplateURLData::CreatedByPolicy::kSiteSearch &&
+             (t_url_with_at->created_by_policy() ==
+                  TemplateURLData::CreatedByPolicy::kSiteSearch ||
+              t_url_with_at->created_by_policy() ==
+                  TemplateURLData::CreatedByPolicy::kSearchAggregator) &&
              t_url_with_at->featured_by_policy();
     }
   }
@@ -1202,6 +1183,15 @@ const TemplateURL* TemplateURLService::GetDefaultSearchProvider(DefaultSearchTyp
                  : pre_loading_providers_->default_search_provider(type);
 }
 
+url::Origin TemplateURLService::GetDefaultSearchProviderOrigin() const {
+  const TemplateURL* template_url = GetDefaultSearchProvider();
+  if (template_url) {
+    GURL search_url = template_url->GenerateSearchURL(search_terms_data());
+    return url::Origin::Create(search_url);
+  }
+  return url::Origin();
+}
+
 const TemplateURL*
 TemplateURLService::GetDefaultSearchProviderIgnoringExtensions() const {
   std::unique_ptr<TemplateURLData> next_search =
@@ -1543,6 +1533,21 @@ void TemplateURLService::OnWebDataServiceRequestDone(
       base::UmaHistogramEnumeration(
           "Search.DefaultSearchProviderType2.SetByEnterprisePolicy",
           engine_type, SEARCH_ENGINE_MAX);
+    } else if (default_search_provider_source_[kDefaultSearchMain] ==
+               DefaultSearchManager::FROM_EXTENSION) {
+      base::UmaHistogramEnumeration(
+          "Search.DefaultSearchProviderType2.SetByExtension", engine_type,
+          SEARCH_ENGINE_MAX);
+    } else if (default_search_provider_source_[kDefaultSearchMain] ==
+               DefaultSearchManager::FROM_USER) {
+      base::UmaHistogramEnumeration(
+          "Search.DefaultSearchProviderType2.SetByUser", engine_type,
+          SEARCH_ENGINE_MAX);
+    } else if (default_search_provider_source_[kDefaultSearchMain] ==
+               DefaultSearchManager::FROM_FALLBACK) {
+      base::UmaHistogramEnumeration(
+          "Search.DefaultSearchProviderType2.Fallback", engine_type,
+          SEARCH_ENGINE_MAX);
     }
   }
 }
@@ -1843,7 +1848,6 @@ std::optional<syncer::ModelError> TemplateURLService::MergeDataAndStartSyncing(
   // valid changes to sync_processor_.
   PruneSyncChanges(&sync_data_map, &new_changes);
 
-  LogDuplicatesHistogram(GetTemplateURLs());
   std::optional<syncer::ModelError> error =
       sync_processor_->ProcessSyncChanges(FROM_HERE, new_changes);
   if (!error.has_value()) {
@@ -2284,11 +2288,7 @@ void TemplateURLService::ChangeToLoadedState() {
           ? &pre_loading_providers_->default_search_provider(DefaultSearchType(i))->data()
           : nullptr,
       default_search_provider_source_[i]);
-  }
-  if (base::FeatureList::IsEnabled(omnibox::kSiteSearchSettingsPolicy)) {
-    ApplyEnterpriseSiteSearchChanges(
-        pre_loading_providers_->TakeSiteSearchEngines());
-  }
+  } // End Vivaldi
   pre_loading_providers_.reset();
 
   if (on_loaded_callback_for_sync_)
@@ -3242,16 +3242,14 @@ bool TemplateURLService::MatchesDefaultSearchProvider(TemplateURL* turl) const {
   return false;
 }
 
-std::unique_ptr<EnterpriseSiteSearchManager>
-TemplateURLService::GetEnterpriseSiteSearchManager(PrefService* prefs) {
+std::unique_ptr<EnterpriseSearchManager>
+TemplateURLService::GetEnterpriseSearchManager(PrefService* prefs) {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS)
-  return base::FeatureList::IsEnabled(omnibox::kSiteSearchSettingsPolicy)
-             ? std::make_unique<EnterpriseSiteSearchManager>(
-                   prefs, base::BindRepeating(
-                              &TemplateURLService::EnterpriseSiteSearchChanged,
-                              base::Unretained(this)))
-             : nullptr;
+  return std::make_unique<EnterpriseSearchManager>(
+      prefs,
+      base::BindRepeating(&TemplateURLService::EnterpriseSiteSearchChanged,
+                          base::Unretained(this)));
 #else
   return nullptr;
 #endif

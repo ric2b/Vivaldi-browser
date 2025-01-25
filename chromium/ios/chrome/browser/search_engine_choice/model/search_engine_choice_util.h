@@ -5,7 +5,7 @@
 #ifndef IOS_CHROME_BROWSER_SEARCH_ENGINE_CHOICE_MODEL_SEARCH_ENGINE_CHOICE_UTIL_H_
 #define IOS_CHROME_BROWSER_SEARCH_ENGINE_CHOICE_MODEL_SEARCH_ENGINE_CHOICE_UTIL_H_
 
-#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
+class ProfileIOS;
 
 // Utilities for the search engine choice screen.
 
@@ -13,7 +13,7 @@
 // The parameter `app_started_via_external_intent` is used only if
 // `is_first_run_entrypoint` is set to `false . The value is ignored otherwise.
 bool ShouldDisplaySearchEngineChoiceScreen(
-    ChromeBrowserState& browser_state,
+    ProfileIOS& profile,
     bool is_first_run_entrypoint,
     bool app_started_via_external_intent);
 

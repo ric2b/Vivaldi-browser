@@ -6,6 +6,7 @@ PYTHON_VERSION_COMPATIBILITY = 'PY3'
 
 DEPS = [
     'gerrit',
+    'recipe_engine/json',
     'recipe_engine/step',
 ]
 
@@ -86,6 +87,8 @@ def RunSteps(api):
 
   api.gerrit.set_change_label(host, 123, 'code-review', -1)
   api.gerrit.set_change_label(host, 123, 'commit-queue', 1)
+
+  api.gerrit.add_message(host, 123, 'This is a comment message')
 
   api.gerrit.abandon_change(host, 123, 'bad roll')
   api.gerrit.restore_change(host, 123, 'nevermind')

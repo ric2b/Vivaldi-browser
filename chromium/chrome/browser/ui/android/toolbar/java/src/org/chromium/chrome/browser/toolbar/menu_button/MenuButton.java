@@ -36,9 +36,6 @@ import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.components.browser_ui.widget.highlight.PulseDrawable;
 import org.chromium.ui.interpolators.Interpolators;
 
-// Vivaldi
-import org.vivaldi.browser.preferences.VivaldiPreferences;
-
 /** The overflow menu button. */
 public class MenuButton extends FrameLayout implements TintObserver {
     /** The {@link ImageButton} for the menu button. */
@@ -117,11 +114,9 @@ public class MenuButton extends FrameLayout implements TintObserver {
         }
 
         // Vivaldi
-        mAttentionBadge =findViewById(R.id.menu_badge1);
+        mAttentionBadge = findViewById(R.id.menu_badge1);
         if (mAttentionBadge != null) {
-            if (shouldShowAttentionBadge(getContext()))
-                mAttentionBadge.setVisibility(VISIBLE);
-            else mAttentionBadge.setVisibility(GONE);
+            mAttentionBadge.setVisibility(shouldShowAttentionBadge() ? VISIBLE : GONE);
         }
     }
 
@@ -446,9 +441,10 @@ public class MenuButton extends FrameLayout implements TintObserver {
     }
 
     // Vivaldi
-    public static boolean shouldShowAttentionBadge(Context context) {
+    public static boolean shouldShowAttentionBadge() {
+        return false; /* Currently no need to show the blue dot, ref. VAB-10564.
         return VivaldiPreferences.getSharedPreferencesManager().readBoolean(
-                VivaldiPreferences.SET_AS_DEFAULT_MENU_HIGHLIGHT, true);
+                VivaldiPreferences.SET_AS_DEFAULT_MENU_HIGHLIGHT, true); */
     }
 
     void removeVivaldiAttentionBadge() {
@@ -456,5 +452,4 @@ public class MenuButton extends FrameLayout implements TintObserver {
         if (mAttentionBadge.getVisibility() != VISIBLE) return;
         mAttentionBadge.setVisibility(GONE);
     }
-
 }

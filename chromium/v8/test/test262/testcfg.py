@@ -42,7 +42,6 @@ from testrunner.outproc import test262
 #
 # Multiple flags are allowed, separated by space.
 FEATURE_FLAGS = {
-    'Intl.DurationFormat': '--harmony-intl-duration-format',
     'Intl.Locale-info': '--harmony-intl-locale-info-func',
     'FinalizationRegistry': '--harmony-weak-refs-with-cleanup-some',
     'WeakRef': '--harmony-weak-refs-with-cleanup-some',
@@ -58,12 +57,11 @@ FEATURE_FLAGS = {
     'json-parse-with-source': '--harmony-json-parse-with-source',
     'iterator-helpers': '--harmony-iterator-helpers',
     'set-methods': '--harmony-set-methods',
-    'promise-with-resolvers': '--js-promise-withresolvers',
     'import-attributes': '--harmony-import-attributes',
     'regexp-duplicate-named-groups': '--js-regexp-duplicate-named-groups',
     'regexp-modifiers': '--js-regexp-modifiers',
     'Float16Array': '--js-float16array',
-    'explicit-resource-management': '--js_explicit_resource_management',
+    'explicit-resource-management': '--js-explicit-resource-management',
     'decorators': '--js-decorators',
     'promise-try': '--js-promise-try',
     'Atomics.pause': '--js-atomics-pause',

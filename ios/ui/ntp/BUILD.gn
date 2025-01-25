@@ -24,8 +24,6 @@ source_set("vivaldi_ntp") {
     "vivaldi_speed_dial_view_controller.mm",
     "vivaldi_speed_dial_view_controller_delegate.h",
     "vivaldi_speed_dial_container_delegate.h",
-    "vivaldi_speed_dial_shared_state.h",
-    "vivaldi_speed_dial_shared_state.mm",
     "vivaldi_speed_dial_home_mediator.h",
     "vivaldi_speed_dial_home_mediator.mm",
     "vivaldi_speed_dial_home_coordinator.h",
@@ -51,6 +49,7 @@ source_set("vivaldi_ntp") {
     "//vivaldi/ios/ui/ntp/cells",
     "//vivaldi/ios/ui/ntp/top_toolbar:top_toolbar_swift",
     "//vivaldi/ios/ui/ntp/top_toolbar",
+    "//vivaldi/ios/ui/ntp/nsd",
     "//vivaldi/ios/ui/thumbnail:service",
     "resources:assets"
   ]

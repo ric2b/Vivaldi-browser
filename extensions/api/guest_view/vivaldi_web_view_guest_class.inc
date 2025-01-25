@@ -121,15 +121,15 @@
 
   void VivaldiCreateWebContents(std::unique_ptr<GuestViewBase> owned_this,
                                 const base::Value::Dict& create_params,
-                                WebContentsCreatedCallback callback);
+                                GuestPageCreatedCallback callback);
 
   // vivaldi addition:
   bool IsMouseGesturesEnabled() const;
 
   void VivaldiSetLoadProgressEventExtraArgs(base::Value::Dict& dictionary);
 
-  bool is_fullscreen_;
-  ui::WindowShowState window_state_prior_to_fullscreen_ = ui::SHOW_STATE_NORMAL;
+  bool is_fullscreen_ = false;
+  //ui::mojom::WindowShowState window_state_prior_to_fullscreen_ = ui::mojom::WindowShowState::kNormal;
 
   // Used to reset webkitprefs that is overridden in
   // extension_webkit_preferences::SetPreferences when navigating away from

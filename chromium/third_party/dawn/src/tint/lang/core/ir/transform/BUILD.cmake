@@ -34,8 +34,6 @@
 #                       Do not modify this file directly
 ################################################################################
 
-include(lang/core/ir/transform/common/BUILD.cmake)
-
 ################################################################################
 # Target:    tint_lang_core_ir_transform
 # Kind:      lib
@@ -65,6 +63,8 @@ tint_add_target(tint_lang_core_ir_transform lib
   lang/core/ir/transform/direct_variable_access.h
   lang/core/ir/transform/multiplanar_external_texture.cc
   lang/core/ir/transform/multiplanar_external_texture.h
+  lang/core/ir/transform/prepare_push_constants.cc
+  lang/core/ir/transform/prepare_push_constants.h
   lang/core/ir/transform/preserve_padding.cc
   lang/core/ir/transform/preserve_padding.h
   lang/core/ir/transform/remove_continue_in_switch.cc
@@ -77,6 +77,8 @@ tint_add_target(tint_lang_core_ir_transform lib
   lang/core/ir/transform/robustness.h
   lang/core/ir/transform/shader_io.cc
   lang/core/ir/transform/shader_io.h
+  lang/core/ir/transform/single_entry_point.cc
+  lang/core/ir/transform/single_entry_point.h
   lang/core/ir/transform/std140.cc
   lang/core/ir/transform/std140.h
   lang/core/ir/transform/value_to_let.cc
@@ -94,7 +96,6 @@ tint_target_add_dependencies(tint_lang_core_ir_transform lib
   tint_lang_core_constant
   tint_lang_core_intrinsic
   tint_lang_core_ir
-  tint_lang_core_ir_transform_common
   tint_lang_core_type
   tint_utils_containers
   tint_utils_diagnostic
@@ -133,11 +134,13 @@ tint_add_target(tint_lang_core_ir_transform_test test
   lang/core/ir/transform/direct_variable_access_test.cc
   lang/core/ir/transform/helper_test.h
   lang/core/ir/transform/multiplanar_external_texture_test.cc
+  lang/core/ir/transform/prepare_push_constants_test.cc
   lang/core/ir/transform/preserve_padding_test.cc
   lang/core/ir/transform/remove_continue_in_switch_test.cc
   lang/core/ir/transform/remove_terminator_args_test.cc
   lang/core/ir/transform/rename_conflicts_test.cc
   lang/core/ir/transform/robustness_test.cc
+  lang/core/ir/transform/single_entry_point_test.cc
   lang/core/ir/transform/std140_test.cc
   lang/core/ir/transform/value_to_let_test.cc
   lang/core/ir/transform/vectorize_scalar_matrix_constructors_test.cc

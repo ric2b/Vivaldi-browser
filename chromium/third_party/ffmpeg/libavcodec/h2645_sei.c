@@ -99,6 +99,20 @@ static int decode_registered_user_data_dynamic_hdr_vivid(HEVCSEIDynamicHDRVivid 
 }
 #endif
 
+static int decode_registered_user_data_lcevc(HEVCSEILCEVC *s,
+                                             GetByteContext *gb)
+{
+    int size = bytestream2_get_bytes_left(gb);
+
+    av_buffer_unref(&s->info);
+    s->info = av_buffer_alloc(size);
+    if (!s->info)
+        return AVERROR(ENOMEM);
+
+    bytestream2_get_bufferu(gb, s->info->data, size);
+    return 0;
+}
+
 static int decode_registered_user_data_afd(H2645SEIAFD *h, GetByteContext *gb)
 {
     int flag;
@@ -142,6 +156,7 @@ static int decode_registered_user_data(H2645SEI *h, GetByteContext *gb,
     }
 
     if (country_code != ITU_T_T35_COUNTRY_CODE_US &&
+        country_code != ITU_T_T35_COUNTRY_CODE_UK &&
         country_code != ITU_T_T35_COUNTRY_CODE_CN) {
         av_log(logctx, AV_LOG_VERBOSE,
                "Unsupported User Data Registered ITU-T T35 SEI message (country_code = %d)\n",
@@ -172,6 +187,13 @@ static int decode_registered_user_data(H2645SEI *h, GetByteContext *gb,
             break;
         }
         break;
+    }
+    case ITU_T_T35_PROVIDER_CODE_LCEVC: {
+        if (bytestream2_get_bytes_left(gb) < 2)
+            return AVERROR_INVALIDDATA;
+
+        bytestream2_skipu(gb, 1); // user_data_type_code
+        return decode_registered_user_data_lcevc(&h->lcevc, gb);
     }
 #if CONFIG_HEVC_SEI
     case ITU_T_T35_PROVIDER_CODE_CUVA: {
@@ -511,6 +533,10 @@ int ff_h2645_sei_ctx_replace(H2645SEI *dst, const H2645SEI *src)
         av_buffer_unref(&dst->unregistered.buf_ref[i]);
     dst->unregistered.nb_buf_ref = 0;
 
+    ret = av_buffer_replace(&dst->lcevc.info, src->lcevc.info);
+    if (ret < 0)
+        return ret;
+
     if (src->unregistered.nb_buf_ref) {
         ret = av_reallocp_array(&dst->unregistered.buf_ref,
                                 src->unregistered.nb_buf_ref,
@@ -629,10 +655,14 @@ static int h2645_sei_to_side_data(AVCodecContext *avctx, H2645SEI *sei,
 
             metadata->min_luminance.num = sei->mastering_display.min_luminance;
             metadata->min_luminance.den = luma_den;
-            metadata->has_luminance &= sei->mastering_display.min_luminance >= 1 &&
-                                       sei->mastering_display.min_luminance <= 50000 &&
+            metadata->has_luminance &= sei->mastering_display.min_luminance <= 50000 &&
                                        sei->mastering_display.min_luminance <
                                        sei->mastering_display.max_luminance;
+
+            /* Real (blu-ray) releases in the wild come with minimum luminance
+             * values of 0.000 cd/m2, so permit this edge case */
+            if (avctx->strict_std_compliance >= FF_COMPLIANCE_STRICT)
+                metadata->has_luminance &= sei->mastering_display.min_luminance >= 1;
 
             if (metadata->has_luminance || metadata->has_primaries)
                 av_log(avctx, AV_LOG_DEBUG, "Mastering Display Metadata:\n");
@@ -784,6 +814,13 @@ int ff_h2645_sei_to_frame(AVFrame *frame, H2645SEI *sei,
         }
     }
 
+    if (sei->lcevc.info) {
+        HEVCSEILCEVC *lcevc = &sei->lcevc;
+        ret = ff_frame_new_side_data_from_buf(avctx, frame, AV_FRAME_DATA_LCEVC, &lcevc->info);
+        if (ret < 0)
+            return ret;
+    }
+
     if (sei->film_grain_characteristics && sei->film_grain_characteristics->present) {
         H2645SEIFilmGrainCharacteristics *fgc = sei->film_grain_characteristics;
         AVFilmGrainParams *fgp = av_film_grain_params_create_side_data(frame);
@@ -883,6 +920,7 @@ void ff_h2645_sei_reset(H2645SEI *s)
     av_freep(&s->unregistered.buf_ref);
     av_buffer_unref(&s->dynamic_hdr_plus.info);
     av_buffer_unref(&s->dynamic_hdr_vivid.info);
+    av_buffer_unref(&s->lcevc.info);
 
     s->ambient_viewing_environment.present = 0;
     s->mastering_display.present = 0;

@@ -147,8 +147,9 @@ class CONTENT_EXPORT Connection : public blink::mojom::IDBDatabase {
               int64_t object_store_id,
               int64_t index_id,
               const blink::IndexedDBKeyRange& key_range,
-              bool key_only,
+              blink::mojom::IDBGetAllResultType result_type,
               int64_t max_count,
+              blink::mojom::IDBCursorDirection direction,
               blink::mojom::IDBDatabase::GetAllCallback callback) override;
   void SetIndexKeys(
       int64_t transaction_id,
@@ -220,10 +221,9 @@ class CONTENT_EXPORT Connection : public blink::mojom::IDBDatabase {
       CloseErrorHandling error_handling);
 
   // Returns the last error that occurred, if there is any.
-  leveldb::Status AbortAllTransactionsAndIgnoreErrors(
-      const DatabaseError& error);
+  Status AbortAllTransactionsAndIgnoreErrors(const DatabaseError& error);
 
-  leveldb::Status AbortAllTransactions(const DatabaseError& error);
+  Status AbortAllTransactions(const DatabaseError& error);
 
   BucketContext* bucket_context() {
     return bucket_context_handle_.bucket_context();

@@ -6,24 +6,36 @@ package org.chromium.chrome.browser.contextualsearch;
 
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE;
 
+import android.os.Build.VERSION_CODES;
+
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.MatcherAssert;
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.ui.test.util.UiRestriction;
+import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.test.util.DeviceRestriction;
 
 /** Tests the Contextual Search Manager using instrumentation tests. */
 // NOTE: Disable online detection so we we'll default to online on test bots with no network.
@@ -33,10 +45,22 @@ import org.chromium.ui.test.util.UiRestriction;
 @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
 @Batch(Batch.PER_CLASS)
 public class ContextualSearchCriticalTest extends ContextualSearchInstrumentationBase {
+    @Rule public JniMocker mocker = new JniMocker();
+
+    // Needed to avoid issues on Release builds where Natives is made final and can not be Spy'd
+    // below.
+    @Mock ContextualSearchManagerJni mUnusedContextualSearchManagerJni;
+
+    private ContextualSearchManager.Natives mContextualSearchManagerNatives;
+
     @Override
     @Before
     public void setUp() throws Exception {
+        MockitoAnnotations.initMocks(this);
+
         mTestPage = "/chrome/test/data/android/contextualsearch/tap_test.html";
+        mContextualSearchManagerNatives = Mockito.spy(new ContextualSearchManagerJni());
+        mocker.mock(ContextualSearchManagerJni.TEST_HOOKS, mContextualSearchManagerNatives);
         super.setUp();
     }
 
@@ -121,6 +145,7 @@ public class ContextualSearchCriticalTest extends ContextualSearchInstrumentatio
     @SmallTest
     @Feature({"ContextualSearch"})
     // Previously disabled: crbug.com/765403
+    @DisableIf.Build(sdk_is_greater_than = VERSION_CODES.P, message = "crbug.com/377363763")
     public void testSearchTermResolutionError() throws Exception {
         simulateSlowResolveSearch("states");
         assertSearchTermRequested();
@@ -138,7 +163,7 @@ public class ContextualSearchCriticalTest extends ContextualSearchInstrumentatio
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @Restriction(DeviceFormFactor.PHONE)
     public void testResolveContentVisibility() throws Exception {
         // Simulate a resolving search and make sure Content is not visible.
         simulateResolveSearch();
@@ -160,7 +185,7 @@ public class ContextualSearchCriticalTest extends ContextualSearchInstrumentatio
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @Restriction(DeviceFormFactor.PHONE)
     @DisabledTest(message = "Flaky, see crbug.com/40821849")
     public void testNonResolveContentVisibility() throws Exception {
         // Simulate a non-resolve search and make sure no Content is created.
@@ -184,7 +209,7 @@ public class ContextualSearchCriticalTest extends ContextualSearchInstrumentatio
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @Restriction(DeviceFormFactor.PHONE)
     public void testResolveMultipleSwipeOnlyLoadsContentOnce() throws Exception {
         // Simulate a resolving search and make sure Content is not visible.
         simulateResolveSearch("search");
@@ -219,7 +244,7 @@ public class ContextualSearchCriticalTest extends ContextualSearchInstrumentatio
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @Restriction(DeviceFormFactor.PHONE)
     public void testNonResolveMultipleSwipeOnlyLoadsContentOnce() throws Exception {
         // Simulate a non-resolve search and make sure no Content is created.
         simulateNonResolveSearch("search");
@@ -297,7 +322,7 @@ public class ContextualSearchCriticalTest extends ContextualSearchInstrumentatio
     @DisabledTest(message = "crbug.com/549805")
     @SmallTest
     @Feature({"ContextualSearch"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @Restriction(DeviceFormFactor.PHONE)
     public void testChainedSearchLoadsCorrectSearchTerm() throws Exception {
         // Simulate a resolving search and make sure Content is not visible.
         simulateResolveSearch("search");
@@ -423,7 +448,11 @@ public class ContextualSearchCriticalTest extends ContextualSearchInstrumentatio
         closePanel();
 
         // Now check that the URL has been removed from history.
-        Assert.assertTrue(mFakeServer.hasRemovedUrl(url));
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        Mockito.verify(mContextualSearchManagerNatives)
+                .removeLastHistoryEntry(
+                        Mockito.anyLong(), Mockito.any(), urlCaptor.capture(), Mockito.anyLong());
+        Assert.assertEquals(url, urlCaptor.getValue());
     }
 
     /**
@@ -432,12 +461,12 @@ public class ContextualSearchCriticalTest extends ContextualSearchInstrumentatio
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @Restriction(DeviceFormFactor.PHONE)
     public void testTapExpandNotRemovedFromHistory() throws Exception {
         // Simulate a resolving search and make sure a URL was loaded.
         simulateResolveSearch();
         Assert.assertEquals(1, mFakeServer.getLoadedUrlCount());
-        String url = mFakeServer.getLoadedUrl();
+        mFakeServer.getLoadedUrl();
 
         // Expand Panel so that the Content becomes visible.
         expandPanelAndAssert();
@@ -446,7 +475,9 @@ public class ContextualSearchCriticalTest extends ContextualSearchInstrumentatio
         tapBasePageToClosePanel();
 
         // Now check that the URL has not been removed from history, since the Content was seen.
-        Assert.assertFalse(mFakeServer.hasRemovedUrl(url));
+        Mockito.verify(mContextualSearchManagerNatives, Mockito.never())
+                .removeLastHistoryEntry(
+                        Mockito.anyLong(), Mockito.any(), Mockito.any(), Mockito.anyLong());
     }
 
     /**
@@ -455,6 +486,8 @@ public class ContextualSearchCriticalTest extends ContextualSearchInstrumentatio
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
+    // TODO(crbug.com/369556626): Flaky on automotive.
+    @Restriction(DeviceRestriction.RESTRICTION_TYPE_NON_AUTO)
     public void testChainedTapsRemovedFromHistory() throws Exception {
         // Make sure we use tap for the simulateResolveSearch since only tap chains.
         // Simulate a resolving search and make sure a URL was loaded.
@@ -481,8 +514,12 @@ public class ContextualSearchCriticalTest extends ContextualSearchInstrumentatio
 
         // Now check that all three URLs have been removed from history.
         Assert.assertEquals(3, mFakeServer.getLoadedUrlCount());
-        Assert.assertTrue(mFakeServer.hasRemovedUrl(url1));
-        Assert.assertTrue(mFakeServer.hasRemovedUrl(url2));
-        Assert.assertTrue(mFakeServer.hasRemovedUrl(url3));
+
+        ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
+        Mockito.verify(mContextualSearchManagerNatives, Mockito.times(3))
+                .removeLastHistoryEntry(
+                        Mockito.anyLong(), Mockito.any(), urlCaptor.capture(), Mockito.anyLong());
+        MatcherAssert.assertThat(
+                urlCaptor.getAllValues(), Matchers.containsInAnyOrder(url1, url2, url3));
     }
 }

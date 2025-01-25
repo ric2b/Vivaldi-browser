@@ -202,8 +202,9 @@ bool TouchToFillDelegateAndroidImpl::TryToShowTouchToFill(
              .GetPaymentsAutofillClient()
              ->ShowTouchToFillCreditCard(
                  GetWeakPtr(), *cards_to_suggest,
-                 GetCreditCardSuggestionsForTouchToFill(*cards_to_suggest,
-                                                        manager_->client()))) {
+                 GetCreditCardSuggestionsForTouchToFill(
+                     *cards_to_suggest, manager_->client(),
+                     manager_->GetCreditCardFormEventLogger()))) {
       dry_run.outcome = TriggerOutcome::kFailedToDisplayBottomSheet;
     } else if (std::vector<Iban>* ibans_to_suggest =
                    absl::get_if<std::vector<Iban>>(&dry_run.items_to_suggest);
@@ -243,9 +244,10 @@ bool TouchToFillDelegateAndroidImpl::TryToShowTouchToFill(
       SuggestionHidingReason::kOverlappingWithTouchToFillSurface);
   if (absl::get_if<std::vector<CreditCard>>(&dry_run.items_to_suggest)) {
     manager_->DidShowSuggestions({SuggestionType::kCreditCardEntry}, form,
-                                 field);
+                                 field.global_id());
   } else {
-    manager_->DidShowSuggestions({SuggestionType::kIbanEntry}, form, field);
+    manager_->DidShowSuggestions({SuggestionType::kIbanEntry}, form,
+                                 field.global_id());
   }
   return true;
 }
@@ -291,9 +293,8 @@ void TouchToFillDelegateAndroidImpl::OnCreditCardScanned(
     const CreditCard& card) {
   HideTouchToFill();
   manager_->FillOrPreviewCreditCardForm(
-      mojom::ActionPersistence::kFill, query_form_, query_field_, card,
-      std::u16string(),
-      {.trigger_source = AutofillTriggerSource::kTouchToFillCreditCard});
+      mojom::ActionPersistence::kFill, query_form_, query_field_.global_id(),
+      card, {.trigger_source = AutofillTriggerSource::kTouchToFillCreditCard});
 }
 
 void TouchToFillDelegateAndroidImpl::ShowPaymentMethodSettings() {
@@ -307,7 +308,7 @@ void TouchToFillDelegateAndroidImpl::CreditCardSuggestionSelected(
 
   PersonalDataManager* pdm = manager_->client().GetPersonalDataManager();
   CHECK(pdm);
-  CreditCard* card =
+  const CreditCard* card =
       pdm->payments_data_manager().GetCreditCardByGUID(unique_id);
   // TODO(crbug.com/40071928): Figure out why `card` is sometimes nullptr.
   if (!card) {
@@ -317,11 +318,12 @@ void TouchToFillDelegateAndroidImpl::CreditCardSuggestionSelected(
     // Virtual credit cards are not persisted in Chrome, modify record type
     // locally.
     manager_->AuthenticateThenFillCreditCardForm(
-        query_form_, query_field_, CreditCard::CreateVirtualCard(*card),
+        query_form_, query_field_.global_id(),
+        CreditCard::CreateVirtualCard(*card),
         {.trigger_source = AutofillTriggerSource::kTouchToFillCreditCard});
   } else {
     manager_->AuthenticateThenFillCreditCardForm(
-        query_form_, query_field_, *card,
+        query_form_, query_field_.global_id(), *card,
         {.trigger_source = AutofillTriggerSource::kTouchToFillCreditCard});
   }
 }
@@ -335,9 +337,9 @@ void TouchToFillDelegateAndroidImpl::IbanSuggestionSelected(
       ->GetIbanAccessManager()
       ->FetchValue(
           absl::holds_alternative<Iban::Guid>(backend_id)
-              ? Suggestion::BackendId(
+              ? Suggestion::Payload(
                     Suggestion::Guid(absl::get<Iban::Guid>(backend_id).value()))
-              : Suggestion::BackendId(Suggestion::InstrumentId(
+              : Suggestion::Payload(Suggestion::InstrumentId(
                     absl::get<Iban::InstrumentId>(backend_id).value())),
           base::BindOnce(
               [](base::WeakPtr<TouchToFillDelegateAndroidImpl> delegate,

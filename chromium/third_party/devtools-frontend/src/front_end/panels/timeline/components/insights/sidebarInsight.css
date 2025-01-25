@@ -4,37 +4,53 @@
  * found in the LICENSE file.
  */
 
+:host {
+  --markdown-link-text-decoration-style: underline;
+}
+
 .insight {
   display: block;
   position: relative;
   width: auto;
   height: auto;
-  margin: 10px 0;
+  margin: var(--sys-size-6) 0;
   border-radius: var(--sys-shape-corner-extra-small);
   overflow: hidden;
-  border: 1px solid var(--sys-color-divider);
+  border: var(--sys-size-1) solid var(--sys-color-divider);
   background-color: var(--sys-color-base);
 
   &.closed {
     background-color: var(--sys-color-surface3);
     border: none;
+
+    &:focus-within {
+      /* Ensure that if the user tabs to a closed insight, we outline it so they know it's focused. */
+      outline: var(--sys-size-1) solid var(--sys-color-primary);
+    }
   }
 
   header {
-    padding: 10px;
+    padding: var(--sys-size-5) var(--sys-size-6);
 
     h3 {
       font: var(--sys-typescale-body4-medium);
+    }
+  }
+
+  &:not(.closed) {
+    header {
+      padding-bottom: var(--sys-size-2);
     }
   }
 }
 
 .insight-hover-icon {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: var(--sys-size-5);
+  right: var(--sys-size-5);
   border: none;
   width: var(--sys-size-9);
+  user-select: none;
   height: var(--sys-size-9);
   box-shadow: var(--sys-elevation-level1);
   border-radius: var(--sys-shape-corner-full);
@@ -42,7 +58,9 @@
   opacity: 0%;
   transition: opacity 0.2s ease;
 
-  .insight:hover & {
+  /* Ensure that the icon appears when the user hovers, or focuses the header */
+  .insight:hover &,
+  header:focus-within & {
     opacity: 100%;
   }
 
@@ -55,18 +73,31 @@
   }
 }
 
+.insight-description,
+.insight-body,
+.insight-title {
+  user-select: text;
+}
+
 .insight-body {
-  padding: 0 10px;
+  padding: 0 var(--sys-size-6) var(--sys-size-5) var(--sys-size-6);
+}
+
+.insight-section {
+  padding-top: var(--sys-size-5);
+}
+
+.insight-description:not(:empty) {
+  padding-bottom: var(--sys-size-5);
+}
+
+.insight-section:not(:empty) {
+  border-top: var(--sys-size-1) solid var(--sys-color-divider);
 }
 
 .insight-title {
   color: var(--sys-color-on-base);
   margin-block: 3px;
-}
-
-.insight-description {
-  border-bottom: 1px solid var(--sys-color-divider);
-  padding-bottom: 10px;
 }
 
 .link {
@@ -95,24 +126,25 @@ dd.dl-title {
 
 .insight-entry {
   font: var(--sys-typescale-body4-medium);
-  padding-block: 2px;
+  padding-block: var(--sys-size-3);
   display: flex;
   align-items: center;
 }
 
-.insight-content {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: center;
-  padding-block: 10px;
-}
-
 .element-img {
-  max-width: 90%;
+  width: var(--sys-size-13);
+  height: var(--sys-size-13);
+  object-fit: cover;
+  border: var(--sys-size-1) solid var(--sys-color-divider);
+  background: var(--sys-color-divider) -0.054px -12px / 100.239% 148.936% no-repeat;
+  margin-right: var(--sys-size-5);
 }
 
 .element-img-details {
   font: var(--sys-typescale-body4-regular);
+  display: flex;
+  flex-direction: column;
+  word-break: break-all;
 
   .element-img-details-size {
     color: var(--color-text-secondary);
@@ -124,7 +156,8 @@ dd.dl-title {
 }
 
 .insight-savings {
-  font-weight: var(--ref-typeface-weight-bold);
+  font: var(--sys-typescale-body4-medium);
+  color: var(--sys-color-green);
 }
 
 ul.insight-icon-results {
@@ -136,11 +169,41 @@ ul.insight-icon-results {
     display: flex;
     align-items: flex-start;
     justify-content: flex-start;
-    gap: 4px;
+    gap: var(--sys-size-3);
 
     span {
       /* push the text down to align slightly better with the icons */
       padding-top: 2px;
     }
   }
+}
+
+.timeline-link {
+  cursor: pointer;
+  text-decoration: underline;
+  color: var(--sys-color-primary);
+  /* for a11y reasons this is a button, so we have to remove some default
+   * styling */
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+
+.timeline-link.invalid-link {
+  color: var(--sys-color-state-disabled);
+}
+
+.lcp-element {
+  display: inline-flex;
+  align-items: center;
+}
+
+.insight-results:not(:last-child) {
+  border-bottom: var(--sys-size-1) solid var(--sys-color-divider);
+  padding-bottom: var(--sys-size-5);
+}
+
+.lcp-element:not(:empty) {
+  padding: inherit;
 }

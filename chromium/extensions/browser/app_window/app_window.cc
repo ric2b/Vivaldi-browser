@@ -338,8 +338,8 @@ void AppWindow::Init(const GURL& url,
   // NOTE(andre@vivaldi.com): override restore to fullscreen. Open as maximized
   // instead. See VB-928.
   if (vivaldi::IsVivaldiRunning() &&
-      new_params.state == ui::SHOW_STATE_FULLSCREEN)
-    new_params.state = ui::SHOW_STATE_DEFAULT;
+      new_params.state == ui::mojom::WindowShowState::kFullscreen)
+    new_params.state = ui::mojom::WindowShowState::kDefault;
 #endif
   if (vivaldi::IsVivaldiRunning() && new_params.avoid_cached_positions) {
     // NOTE(pettern@vivaldi.com): If we are using un-cached bounds, we need to
@@ -529,11 +529,11 @@ void AppWindow::ExitPictureInPicture() {
 }
 
 bool AppWindow::ShouldShowStaleContentOnEviction(content::WebContents* source) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   return true;
 #else
   return false;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 void AppWindow::RenderFrameCreated(content::RenderFrameHost* frame_host) {
@@ -784,11 +784,11 @@ void AppWindow::Show(ShowType show_type) {
   bool was_hidden = is_hidden_ || !has_been_shown_;
   is_hidden_ = false;
 
-  if (initial_state_ == ui::SHOW_STATE_FULLSCREEN)
+  if (initial_state_ == ui::mojom::WindowShowState::kFullscreen)
     Fullscreen();
-  else if (initial_state_ == ui::SHOW_STATE_MAXIMIZED)
+  else if (initial_state_ == ui::mojom::WindowShowState::kMaximized)
     Maximize();
-  else if (initial_state_ == ui::SHOW_STATE_MINIMIZED)
+  else if (initial_state_ == ui::mojom::WindowShowState::kMinimized)
     Minimize();
 
   switch (show_type) {

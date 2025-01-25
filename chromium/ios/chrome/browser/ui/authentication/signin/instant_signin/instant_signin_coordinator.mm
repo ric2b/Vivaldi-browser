@@ -73,9 +73,9 @@
 - (void)start {
   [super start];
   signin_metrics::LogSignInStarted(self.accessPoint);
-  ChromeBrowserState* chromeState = self.browser->GetBrowserState();
+  ProfileIOS* profile = self.browser->GetProfile();
   syncer::SyncService* syncService =
-      SyncServiceFactory::GetForBrowserState(chromeState);
+      SyncServiceFactory::GetForProfile(profile);
   _mediator =
       [[InstantSigninMediator alloc] initWithSyncService:syncService
                                              accessPoint:self.accessPoint];
@@ -96,7 +96,7 @@
   }
 
   ChromeAccountManagerService* accountManagerService =
-      ChromeAccountManagerServiceFactory::GetForBrowserState(chromeState);
+      ChromeAccountManagerServiceFactory::GetForProfile(profile);
   if (!accountManagerService->HasIdentities()) {
     signin_metrics::RecordConsistencyPromoUserAction(
         signin_metrics::AccountConsistencyPromoAction::
@@ -145,9 +145,8 @@
     CHECK(!_activityOverlayCoordinator);
     [_identityChooserCoordinator stop];
     _identityChooserCoordinator = nil;
-    [self
-        runCompletionCallbackWithSigninResult:SigninCoordinatorResultInterrupted
-                               completionInfo:nil];
+    [self runCompletionWithSigninResult:SigninCoordinatorResultInterrupted
+                         completionInfo:nil];
     if (completion) {
       completion();
     }
@@ -161,9 +160,8 @@
     // Drop the activity overlay if it exists.
     [_activityOverlayCoordinator stop];
     _activityOverlayCoordinator = nil;
-    [self
-        runCompletionCallbackWithSigninResult:SigninCoordinatorResultInterrupted
-                               completionInfo:nil];
+    [self runCompletionWithSigninResult:SigninCoordinatorResultInterrupted
+                         completionInfo:nil];
     if (completion) {
       completion();
     }
@@ -189,7 +187,7 @@
   // `_identityChooserCoordinator.delegate` was set to nil before calling this
   // method since `identityChooserCoordinatorDidTapOnAddAccount:` or
   // `identityChooserCoordinator:didSelectIdentity:` have been called before.
-  NOTREACHED_IN_MIGRATION() << base::SysNSStringToUTF8([self description]);
+  NOTREACHED() << base::SysNSStringToUTF8([self description]);
 }
 
 - (void)identityChooserCoordinatorDidTapOnAddAccount:
@@ -211,9 +209,8 @@
   _identityChooserCoordinator = nil;
   if (!identity) {
     // If no identity was selected, the coordinator can be closed.
-    [self runCompletionCallbackWithSigninResult:
-              SigninCoordinatorResultCanceledByUser
-                                 completionInfo:nil];
+    [self runCompletionWithSigninResult:SigninCoordinatorResultCanceledByUser
+                         completionInfo:nil];
     return;
   }
   _identity = identity;
@@ -234,15 +231,17 @@
                                                        self.accessPoint);
       SigninCompletionInfo* info =
           [SigninCompletionInfo signinCompletionInfoWithIdentity:_identity];
-      [self runCompletionCallbackWithSigninResult:SigninCoordinatorResultSuccess
-                                   completionInfo:info];
+      [self runCompletionWithSigninResult:SigninCoordinatorResultSuccess
+                           completionInfo:info];
       break;
     }
     case SigninCoordinatorResultDisabled:
     case SigninCoordinatorResultInterrupted:
     case SigninCoordinatorResultCanceledByUser:
-      [self runCompletionCallbackWithSigninResult:result completionInfo:nil];
+      [self runCompletionWithSigninResult:result completionInfo:nil];
       break;
+    case SigninCoordinatorUINotAvailable:
+      NOTREACHED();
   }
 }
 
@@ -306,8 +305,12 @@
     case SigninCoordinatorResultDisabled:
     case SigninCoordinatorResultInterrupted:
     case SigninCoordinatorResultCanceledByUser:
-      [self runCompletionCallbackWithSigninResult:result completionInfo:nil];
+      [self runCompletionWithSigninResult:result completionInfo:nil];
       break;
+    case SigninCoordinatorUINotAvailable:
+      // InstantSigninCoordinator presents its child coordinators directly and
+      // does not use `ShowSigninCommand`.
+      NOTREACHED();
   }
 }
 

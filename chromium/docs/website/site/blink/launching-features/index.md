@@ -205,8 +205,9 @@ proceeding to prototyping.
 
 #### Step 2: Prototyping {:#prototyping}
 
-Proceed to the “Start Prototyping” stage in ChromeStatus - this will generate an
-“Intent to Prototype” mail for you. Send that email to
+Proceed to the “Start Prototyping” stage in ChromeStatus. Click the “API Owners”
+button in that section and then click “Draft Intent to Prototype email” - this
+will generate an email for you. Send that email to
 [blink-dev](mailto:blink-dev@chromium.org) and start checking in prototype code
 to Chromium under a runtime flag. You should do your detailed API design in the
 open, in your public repository, and response to feedback filed there. You
@@ -429,8 +430,9 @@ Update ChromeStatus with:
   change) and
 * any changes in vendor signals.
 
-Proceed to the “Prepare to Ship” stage in ChromeStatus; this will generate an
-"Intent to Ship"
+Proceed to the “Prepare to Ship” stage in ChromeStatus. Use the buttons at the
+top of this section to request reviews for gates such as privacy and security.
+The “API Owners” button will give you the option to generate an “Intent to Ship”
 mail that you should send to [blink-dev](mailto:blink-dev@chromium.org). If your
 specification isn't a modification of an existing specification, include a
 one-line [spec maturity

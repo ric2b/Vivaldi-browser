@@ -63,7 +63,7 @@ struct ReceiverInfo {
 
   // Addresses for the service. Present if an address of this address type
   // exists and empty otherwise. When publishing a service instance, these
-  // values will be overridden based on |network_config| values provided in the
+  // values will be overridden based on `network_config` values provided in the
   // discovery::Config object used to initialize discovery.
   IPAddress v4_address;
   IPAddress v6_address;

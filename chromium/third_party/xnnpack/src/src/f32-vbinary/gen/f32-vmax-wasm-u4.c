@@ -19,14 +19,13 @@ void xnn_f32_vmax_ukernel__wasm_u4(
     const float* input_a,
     const float* input_b,
     float* output,
-    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
   assert(input_a != NULL);
   assert(input_b != NULL);
   assert(output != NULL);
-
 
   for (; batch >= 4 * sizeof(float); batch -= 4 * sizeof(float)) {
     const float va0 = input_a[0];
@@ -45,7 +44,6 @@ void xnn_f32_vmax_ukernel__wasm_u4(
     float vacc1 = __builtin_wasm_max_f32(va1, vb1);
     float vacc2 = __builtin_wasm_max_f32(va2, vb2);
     float vacc3 = __builtin_wasm_max_f32(va3, vb3);
-
 
 
     output[0] = vacc0;

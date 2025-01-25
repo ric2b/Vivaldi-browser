@@ -4,12 +4,14 @@
 
 package org.chromium.chrome.browser.hub;
 
+import android.app.Activity;
 import android.view.View;
 
 import androidx.annotation.NonNull;
 
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButton;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
+import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityClient;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
@@ -20,6 +22,7 @@ import org.chromium.build.BuildConfig;
 /** Sets up the component that handles the toolbar of the Hub. */
 public class HubToolbarCoordinator {
     private final HubToolbarMediator mMediator;
+    private final HubToolbarView mHubToolbarView;
 
     /**
      * Eagerly creates the component, but will not be rooted in the view tree yet.
@@ -28,21 +31,26 @@ public class HubToolbarCoordinator {
      * @param paneManager Interact with the current and all {@link Pane}s.
      * @param menuButtonCoordinator Root component for the app menu.
      * @param tracker Used to record user engagement events.
+     * @param searchActivityClient A client for the search activity, used to launch search.
      */
     public HubToolbarCoordinator(
+            @NonNull Activity activity,
             @NonNull HubToolbarView hubToolbarView,
             @NonNull PaneManager paneManager,
             @NonNull MenuButtonCoordinator menuButtonCoordinator,
-            @NonNull Tracker tracker) {
+            @NonNull Tracker tracker,
+            @NonNull SearchActivityClient searchActivityClient) {
         PropertyModel model = new PropertyModel.Builder(HubToolbarProperties.ALL_KEYS).build();
         PropertyModelChangeProcessor.create(model, hubToolbarView, HubToolbarViewBinder::bind);
-        mMediator = new HubToolbarMediator(model, paneManager, tracker);
+        mMediator =
+                new HubToolbarMediator(activity, model, paneManager, tracker, searchActivityClient);
+        mHubToolbarView = hubToolbarView;
 
         MenuButton menuButton = hubToolbarView.findViewById(R.id.menu_button_wrapper);
         // Note(david@vivaldi.com): The menu button is part of the top toolbar view.
         if (BuildConfig.IS_VIVALDI) {
-            View topToolbarView =
-                    ((View) hubToolbarView.getParent()).findViewById(R.id.hub_top_toolbar);
+            View topToolbarView = ((View) hubToolbarView.getParent().getParent())
+                                          .findViewById(R.id.hub_top_toolbar);
             menuButton = topToolbarView.findViewById(R.id.menu_button_wrapper);
         }
         menuButtonCoordinator.setMenuButton(menuButton);
@@ -56,5 +64,9 @@ public class HubToolbarCoordinator {
     /** Cleans up observers and resources. */
     public void destroy() {
         mMediator.destroy();
+    }
+
+    public boolean isSearchBoxVisible() {
+        return mHubToolbarView.findViewById(R.id.search_box).getVisibility() == View.VISIBLE;
     }
 }

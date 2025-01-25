@@ -12,8 +12,10 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
+#include "components/device_event_log/device_event_log.h"
 #include "services/device/geolocation/network_location_provider.h"
 #include "services/device/geolocation/wifi_polling_policy.h"
 #include "services/device/public/cpp/device_features.h"
@@ -23,11 +25,45 @@
 
 namespace device {
 
+namespace {
+
+std::string_view LocationProviderManagerModeAsString(
+    mojom::LocationProviderManagerMode mode) {
+  switch (mode) {
+    case mojom::LocationProviderManagerMode::kNetworkOnly:
+      return "kNetworkOnly";
+    case mojom::LocationProviderManagerMode::kPlatformOnly:
+      return "kPlatformOnly";
+    case mojom::LocationProviderManagerMode::kCustomOnly:
+      return "kCustomOnly";
+    case mojom::LocationProviderManagerMode::kHybridPlatform:
+      return "kHybridPlatform";
+    case mojom::LocationProviderManagerMode::kHybridFallbackNetwork:
+      return "kHybridFallbackNetwork";
+  }
+  NOTREACHED() << "LocationProviderManagerModeAsString: Unexpected mode: ";
+}
+
+}  // namespace
+
 using ::device::mojom::LocationProviderManagerMode::kCustomOnly;
 using ::device::mojom::LocationProviderManagerMode::kHybridFallbackNetwork;
 using ::device::mojom::LocationProviderManagerMode::kHybridPlatform;
 using ::device::mojom::LocationProviderManagerMode::kNetworkOnly;
 using ::device::mojom::LocationProviderManagerMode::kPlatformOnly;
+
+enum class LocationProviderManagerSource {
+  // NOTE: Do not renumber these as that would confuse interpretation of
+  // previously logged data. When making changes, also update the enum list
+  // in tools/metrics/histograms/metadata/geolocation/enums.xml to keep it in
+  // sync.
+  kNetworkProvider = 0,
+  kPlatformProvider = 1,
+  kCustomProvider = 2,
+
+  // NOTE: Add entries only immediately above this line.
+  kMaxValue = kCustomProvider,
+};
 
 LocationProviderManager::LocationProviderManager(
     CustomLocationProviderCallback custom_location_provider_getter,
@@ -58,6 +94,10 @@ LocationProviderManager::LocationProviderManager(
   // On macOS / Windows platforms, use the mode specified by the feature flag.
   provider_manager_mode_ = features::kLocationProviderManagerParam.Get();
 #endif
+  GEOLOCATION_LOG(DEBUG) << "LocationProviderManager::LocationProviderManager: "
+                            "provider_manager_mode_ is initialized to "
+                         << LocationProviderManagerModeAsString(
+                                provider_manager_mode_);
 }
 
 LocationProviderManager::~LocationProviderManager() {
@@ -130,6 +170,10 @@ void LocationProviderManager::StopProvider() {
   // fallback.
 #if BUILDFLAG(IS_MAC)
   provider_manager_mode_ = features::kLocationProviderManagerParam.Get();
+  GEOLOCATION_LOG(DEBUG) << "LocationProviderManager::StopProvider: Resetting "
+                            "provider_manager_mode_ to "
+                         << LocationProviderManagerModeAsString(
+                                provider_manager_mode_);
 #endif  // BUILDFLAG(IS_MAC)
 }
 
@@ -206,6 +250,10 @@ void LocationProviderManager::OnLocationUpdate(
             NewNetworkLocationProvider(url_loader_factory_, api_key_);
         RegisterProvider(*network_location_provider_.get());
         network_location_provider_->StartProvider(enable_high_accuracy_);
+        GEOLOCATION_LOG(DEBUG)
+            << "LocationProviderManager::OnLocationUpdate: kWifiDisabled error "
+               "code received, switch provider_manager_mode_ to "
+            << LocationProviderManagerModeAsString(provider_manager_mode_);
         // Skip location update and wait for the network location provider to
         // provide an update.
         return;
@@ -221,6 +269,24 @@ void LocationProviderManager::OnLocationUpdate(
     case kCustomOnly:
       custom_location_provider_result_ = new_result.Clone();
       break;
+  }
+
+  if (new_result->is_position()) {
+    base::UmaHistogramEnumeration("Geolocation.LocationProviderManager.Mode",
+                                  provider_manager_mode_);
+
+    LocationProviderManagerSource source;
+    if (provider == network_location_provider_.get()) {
+      source = LocationProviderManagerSource::kNetworkProvider;
+    } else if (provider == platform_location_provider_.get()) {
+      source = LocationProviderManagerSource::kPlatformProvider;
+    } else if (provider == custom_location_provider_.get()) {
+      source = LocationProviderManagerSource::kCustomProvider;
+    } else {
+      NOTREACHED();
+    }
+    base::UmaHistogramEnumeration("Geolocation.LocationProviderManager.Source",
+                                  source);
   }
 
   location_update_callback_.Run(this, std::move(new_result));

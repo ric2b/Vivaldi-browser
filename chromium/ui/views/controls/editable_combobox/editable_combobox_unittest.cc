@@ -18,6 +18,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/models/combobox_model.h"
 #include "ui/base/models/simple_combobox_model.h"
+#include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
@@ -63,9 +64,10 @@ class TestContextMenuController : public ContextMenuController {
   ~TestContextMenuController() override = default;
 
   // ContextMenuController:
-  void ShowContextMenuForViewImpl(View* source,
-                                  const gfx::Point& point,
-                                  ui::MenuSourceType source_type) override {
+  void ShowContextMenuForViewImpl(
+      View* source,
+      const gfx::Point& point,
+      ui::mojom::MenuSourceType source_type) override {
     opened_menu_ = true;
   }
 
@@ -928,9 +930,9 @@ TEST_F(EditableComboboxTest, AccessibleValue) {
 
   data = ui::AXNodeData();
   combobox_->GetViewAccessibility().GetAccessibleNodeData(&data);
-  std::u16string val;
-  ASSERT_TRUE(
-      data.GetString16Attribute(ax::mojom::StringAttribute::kValue, &val));
+  ASSERT_TRUE(data.HasStringAttribute(ax::mojom::StringAttribute::kValue));
+  std::u16string val =
+      data.GetString16Attribute(ax::mojom::StringAttribute::kValue);
   EXPECT_EQ(u"item[0]", val);
 }
 

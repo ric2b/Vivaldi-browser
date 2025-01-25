@@ -1,4 +1,98 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="es-419">
+<translation id="1116694919640316211">Sobre</translation>
+<translation id="1123707809902612118">Bloquear anuncios y rastreadores</translation>
+<translation id="1254117744268754948">Elegir Carpeta</translation>
+<translation id="1401336397986481078">Agregado a</translation>
+<translation id="1410197035576869800">Ícono de Aplicación</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> notas</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />Términos de Uso ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Política de Privacidad ➔<ph name="END_LINK2" /></translation>
+<translation id="1751280147639351837">Bloqueador de anuncios y rastreadores</translation>
+<translation id="1771413903824396513">Por Apodo</translation>
+<translation id="1804522390855853698">Chino (<ph name="ORIGIN" />)</translation>
+<translation id="2048247880942380698">Árabe (<ph name="ORIGIN" />)</translation>
+<translation id="2129408066358825297">Edad</translation>
+<translation id="2272338747456392228">La cuenta ha sido bloqueada</translation>
+<translation id="2324160330092901720">Hemos enviado un código de verificación a <ph name="EMAIL_ID" /></translation>
+<translation id="2386793615875593361">1 nota seleccionada</translation>
+<translation id="2392369802118427583">Activar</translation>
+<translation id="2558801801411970131">Bloqueando rastreadores</translation>
+<translation id="2677862276555105603">Anuncio
+bloqueado</translation>
+<translation id="2709516037105925701">Llenado automático</translation>
+<translation id="294138200684170250">Bloqueador de anuncios y rastreadores, y Configuración de Sitio</translation>
+<translation id="3087734570205094154">Inferior</translation>
+<translation id="3159285901314605198">Imagen de Fondo</translation>
+<translation id="3229182533910980085">Crea tu primer marcador haciendo click en el signo + a continuación</translation>
+<translation id="3530991200302302959">Búlgaro (<ph name="ORIGIN" />)</translation>
+<translation id="3601414719864711130">Por Fecha</translation>
+<translation id="3817539520771282781">Por Tipo</translation>
+<translation id="383723620494271391">¿Algo más que agregar?</translation>
+<translation id="3845564230651302310">Aplicando Nuevos Ajustes de Bloqueadores...</translation>
+<translation id="3920366244737784074">Agregar <ph name="ITEM_TYPE" /></translation>
+<translation id="3921585859122905677">Posición de la Barra de direcciones</translation>
+<translation id="4032606071208172574">(Predeterminado)</translation>
+<translation id="4084682180776658562">Marcador</translation>
+<translation id="4276839458685471670">Por Creación</translation>
+<translation id="4316955624679873896">Marcado en</translation>
+<translation id="4488900295693536220">Aplicable cuando la barra de direcciones está abajo, lo hace más fácil al ver las sugerencias superiores.</translation>
+<translation id="4654578955713250802">Bloquear anuncios y rastreadores</translation>
+<translation id="4818836520802586445">Color de énfasis</translation>
+<translation id="484462545196658690">Automático</translation>
+<translation id="4852383705713307704">Anuncio bloqueado</translation>
+<translation id="497942794017668482">Bloqueando anuncios y rastreadores</translation>
+<translation id="504986598654589766">Navegar en una Pestaña Privada significa que las búsquedas, sitios visitados, cookies y archivos temporales no se almacenarán en Vivaldi. No encripta ni modifica tu conexión.</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Reenviar Código<ph name="END_LINK" /></translation>
+<translation id="5349678548463426691">Por Descripción</translation>
+<translation id="5350737901534958404">Permitir anuncios de nuestros socios (esto apoya a Vivaldi)</translation>
+<translation id="5398772614898833570">Anuncios bloqueados</translation>
+<translation id="5486261815000869482">Confirmar contraseña</translation>
+<translation id="5710478562694930157">Ascendente</translation>
+<translation id="5822336771053074270">Agregar nota</translation>
+<translation id="5871497086027727873">1 nota movida</translation>
+<translation id="591684450784861763">Agregar página a...</translation>
+<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> notas movidas</translation>
+<translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> seleccionadas</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Importar<ph name="END_LINK" /></translation>
+<translation id="6517411226162529295">Copia de seguridad de la clave de cifrado</translation>
+<translation id="659351303388691480">Borrando Datos de Navegador...</translation>
+<translation id="6602272356389933803">Apariencia y Tema</translation>
+<translation id="6614744450826097546">Detalles de anuncios</translation>
+<translation id="6631760746795162665">Colombiano (<ph name="ORIGIN" />)</translation>
+<translation id="6724024423419410528">Colores</translation>
+<translation id="6830986331692390764">Borrando Datos de Sincronización. Por favor, espera.</translation>
+<translation id="6875510405870945573">Elegir tu preferido nivel de bloqueo.</translation>
+<translation id="691132463664340655">Tema del Navegador</translation>
+<translation id="7158507293261405349">Agregar Nuevo grupo</translation>
+<translation id="7182884564543065232">Algunos sitios no abren</translation>
+<translation id="7215420652436283416">Por Dirección</translation>
+<translation id="7311118006561484338">Por Título</translation>
+<translation id="7362952245780030555">Elegir entre pestañas de escritorio completas o el conmutador de pestañas simplificado.</translation>
+<translation id="7388525939184421699">Agregar Nueva fuente</translation>
+<translation id="750493650310597496">0 seleccionados</translation>
+<translation id="755410338177348055">El audio o video se bloquea o congela</translation>
+<translation id="7562758693157424472">¿Te tomarías un momento para compartir tu opinión con nosotros?</translation>
+<translation id="7574321014880720413">Agregar Nuevo dominio</translation>
+<translation id="7658239707568436148">Cancelar</translation>
+<translation id="7801204999757211519">¿Ya tienes una cuenta? <ph name="BEGIN_LINK" />Inicia sesión ➔<ph name="END_LINK" /></translation>
+<translation id="7930665886069596866">Una característica no funciona bien</translation>
+<translation id="8008214489230610096">Confirmar correo electrónico de recuperación</translation>
+<translation id="8038592796033755028">Dispositivos de <ph name="USERNAME" /></translation>
+<translation id="8339701072035560935">Página en blanco</translation>
+<translation id="8395378633507873708">Barra de direcciones</translation>
+<translation id="8458397775385147834">1 nota eliminada</translation>
+<translation id="8466547766474747336">Una característica que quiero no está</translation>
+<translation id="8517852590337319813">Activar tu cuenta</translation>
+<translation id="8677007239430848917">Crea tu primera nota haciendo click en el signo + a continuación</translation>
+<translation id="8733945742171960420">Tan pronto como navegues, tus Sitios Más Visitados aparecerán aquí.</translation>
+<translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> notas eliminadas</translation>
+<translation id="8820817407110198400">Marcadores</translation>
+<translation id="89390081013973080">¡Listo! Hora de decidir qué datos sincronizar entre dispositivos.</translation>
+<translation id="9043882097999887291">Anuncios
+bloqueados</translation>
+<translation id="9083392325882095631">1 nota</translation>
+<translation id="9218693288527810093">Bloquear rastreadores</translation>
+<translation id="984650419570014454">El código de activación debe ser de 6 dígitos.</translation>
+<translation id="998988732385109770">Los marcadores son difíciles de usar o gestionar</translation>
 </translationbundle>

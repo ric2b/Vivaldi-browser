@@ -15,6 +15,13 @@ package(
 ############################# Build configurations #############################
 
 config_setting(
+    name = "linux",
+    constraint_values = [
+        "@platforms//os:linux",
+    ],
+)
+
+config_setting(
     name = "linux_arm64",
     values = {"cpu": "aarch64"},
 )
@@ -203,6 +210,13 @@ config_setting(
 )
 
 config_setting(
+    name = "ios",
+    values = {
+        "apple_platform_type": "ios",
+    },
+)
+
+config_setting(
     name = "watchos_arm64_32",
     values = {
         "apple_platform_type": "watchos",
@@ -272,6 +286,14 @@ selects.config_setting_group(
         ":macos_arm64",
         ":tvos_arm64",
         ":watchos_arm64_32",
+    ],
+)
+
+selects.config_setting_group(
+    name = "arm",
+    match_any = [
+        ":aarch32",
+        ":aarch64",
     ],
 )
 

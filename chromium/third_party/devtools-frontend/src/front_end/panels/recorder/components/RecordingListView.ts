@@ -2,16 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../ui/components/icon_button/icon_button.js';
+
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
-import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as Models from '../models/models.js';
 import * as Actions from '../recorder-actions/recorder-actions.js';
 
 import recordingListViewStyles from './recordingListView.css.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -86,7 +89,6 @@ interface Recording {
 }
 
 export class RecordingListView extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-recording-list-view`;
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #props: {recordings: Recording[], replayAllowed: boolean} = {
     recordings: [],
@@ -145,11 +147,11 @@ export class RecordingListView extends HTMLElement {
   #render = (): void => {
     // clang-format off
     LitHtml.render(
-      LitHtml.html`
+      html`
         <div class="wrapper">
           <div class="header">
             <h1>${i18nString(UIStrings.savedRecordings)}</h1>
-            <${Buttons.Button.Button.litTagName}
+            <devtools-button
               .variant=${Buttons.Button.Variant.PRIMARY}
               @click=${this.#onCreateClick}
               title=${Models.Tooltip.getTooltipForActions(
@@ -159,11 +161,11 @@ export class RecordingListView extends HTMLElement {
               .jslogContext=${'create-recording'}
             >
               ${i18nString(UIStrings.createRecording)}
-            </${Buttons.Button.Button.litTagName}>
+            </devtools-button>
           </div>
           <div class="table">
             ${this.#props.recordings.map(recording => {
-              return LitHtml.html`
+              return html`
                   <div
                     role="button"
                     tabindex="0"
@@ -181,15 +183,15 @@ export class RecordingListView extends HTMLElement {
                       .track({ click: true })
                       .context('recording')}>
                     <div class="icon">
-                      <${IconButton.Icon.Icon.litTagName} name="flow">
-                      </${IconButton.Icon.Icon.litTagName}>
+                      <devtools-icon name="flow">
+                      </devtools-icon>
                     </div>
                     <div class="title">${recording.name}</div>
                     <div class="actions">
                       ${
                         this.#props.replayAllowed
-                          ? LitHtml.html`
-                              <${Buttons.Button.Button.litTagName}
+                          ? html`
+                              <devtools-button
                                 title=${i18nString(UIStrings.playRecording)}
                                 .data=${
                                   {
@@ -203,11 +205,11 @@ export class RecordingListView extends HTMLElement {
                                   recording.storageName,
                                 )}
                                 @keydown=${this.#stopPropagation}
-                              ></${Buttons.Button.Button.litTagName}>
+                              ></devtools-button>
                               <div class="divider"></div>`
                           : ''
                       }
-                      <${Buttons.Button.Button.litTagName}
+                      <devtools-button
                         class="delete-recording-button"
                         title=${i18nString(UIStrings.deleteRecording)}
                         .data=${
@@ -222,7 +224,7 @@ export class RecordingListView extends HTMLElement {
                           recording.storageName,
                         )}
                         @keydown=${this.#stopPropagation}
-                      ></${Buttons.Button.Button.litTagName}>
+                      ></devtools-button>
                     </div>
                   </div>
                 `;

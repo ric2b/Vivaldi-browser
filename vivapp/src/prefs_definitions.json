@@ -114,10 +114,6 @@
       "id": 28,
       "merge_method": "none"
     },
-    "vivaldi.address_bar.search.suggest_enabled": {
-      "id": 29,
-      "merge_method": "none"
-    },
     "vivaldi.address_bar.search.typed_history_enabled": {
       "id": 30,
       "merge_method": "none"
@@ -1265,6 +1261,14 @@
     "vivaldi.mail.message_list_jump_to_latest": {
       "id": 321,
       "merge_method": "none"
+    },
+    "vivaldi.download.avoid_target_filenamecollisions_when_saving_as": {
+      "id": 322,
+      "merge_method": "none"
+    },
+    "vivaldi.startup.last_seen_search_engine_prompt_version": {
+      "id": 323,
+      "merge_method": "none"
     }
   },
 
@@ -1528,6 +1532,11 @@
               "e"
             ]
           },
+          "COMMAND_MAIL_LABEL_FLAG": {
+            "shortcuts": [
+              "l"
+            ]
+          },
           "COMMAND_MAIL_ENABLE_THREADED_VIEW": {
             "shortcuts": [
               "t"
@@ -1585,6 +1594,9 @@
             "shortcuts": []
           },
           "COMMAND_MAIL_SHOW_QUICK_REPLY": {
+            "shortcuts": []
+          },
+          "COMMAND_MAIL_SHOW_MAIL_INFO": {
             "shortcuts": []
           },
           "COMMAND_MAIN_TOGGLE_ADDRESS_BAR": {
@@ -2350,6 +2362,11 @@
               "e"
             ]
           },
+          "COMMAND_MAIL_LABEL_FLAG": {
+            "shortcuts": [
+              "l"
+            ]
+          },
           "COMMAND_MAIL_ENABLE_THREADED_VIEW": {
             "shortcuts": [
               "t"
@@ -2407,6 +2424,9 @@
             "shortcuts": []
           },
           "COMMAND_MAIL_SHOW_QUICK_REPLY": {
+            "shortcuts": []
+          },
+          "COMMAND_MAIL_SHOW_MAIL_INFO": {
             "shortcuts": []
           },
           "COMMAND_MAIN_TOGGLE_ADDRESS_BAR": {
@@ -3144,6 +3164,11 @@
               "e"
             ]
           },
+          "COMMAND_MAIL_LABEL_FLAG": {
+            "shortcuts": [
+              "l"
+            ]
+          },
           "COMMAND_MAIL_ENABLE_THREADED_VIEW": {
             "shortcuts": [
               "t"
@@ -3201,6 +3226,9 @@
             "shortcuts": []
           },
           "COMMAND_MAIL_SHOW_QUICK_REPLY": {
+            "shortcuts": []
+          },
+          "COMMAND_MAIL_SHOW_MAIL_INFO": {
             "shortcuts": []
           },
           "COMMAND_MAIN_TOGGLE_ADDRESS_BAR": {
@@ -3867,6 +3895,11 @@
           "type": "boolean",
           "default": true
         },
+        "direct_match_boosted": {
+          "description": "If false, the direct match scoring is lowered by 450",
+          "type": "boolean",
+          "default": true
+        },
         "display": {
           "description": "Search field visibility; 'disabled' option (2) is no longer in use",
           "type": "enum",
@@ -3931,7 +3964,7 @@
           "default": true
         },
         "suggest_enabled": {
-          "description": "Allow search suggestions in Address field",
+          "description": "[DEPRECATED 2024/11] Replaced by kSearchSuggestEnabled, kept for migration",
           "type": "boolean",
           "default": false
         },
@@ -3999,6 +4032,11 @@
         "type": "integer",
         "default": 0,
         "description": "Warning dialog that appears after MINIMUM_SEARCH_TO_SHOW_SUGGESTION_WARNING searches to explain why search suggestions are disabled by default."
+      },
+      "show_blocker_warning": {
+        "description": "Display broken page notice in Content Blocker dialog",
+        "type": "boolean",
+        "default": true
       }
     },
     "bookmarks": {
@@ -4573,6 +4611,11 @@
         "description": "[DEPRECATED 2022/04] VB-70320 Toolbar component",
         "type": "boolean",
         "default": false
+      },
+      "avoid_target_filenamecollisions_when_saving_as": {
+        "description": "If true avoid target filename collisions when choosing download target via 'Save as...'",
+        "type": "boolean",
+        "default": true
       }
     },
     "homepage": {
@@ -4758,6 +4801,18 @@
             "type": "boolean",
             "default": true
           }
+        }
+      },
+      "label_items": {
+        "order": {
+          "description": "Mail label item order",
+          "type": "list",
+          "default": []
+        },
+        "hide": {
+          "description": "Mail label hide items",
+          "type": "list",
+          "default": []
         }
       },
       "counters": {
@@ -5039,6 +5094,11 @@
             "messages": 1,
             "logs": 2
           }
+        },
+        "selected_account": {
+          "type": "string",
+          "default": "",
+          "description": "Mail status popup - Latest messages - Selected account"
         }
       },
       "view_layout": {
@@ -5796,6 +5856,13 @@
           "type": "boolean",
           "default": true
         }
+      },
+      "partners": {
+        "exceptions_dismissed" : {
+          "description": "Timestamp when partner exceptions bubble in tracker popup was dismissed, 0 means we should show it",
+          "type": "double",
+          "default": 0.0
+        }
       }
     },
     "chained_commands": {
@@ -5900,6 +5967,7 @@
           "COMMAND_CHAIN",
           "KEYWORD_SEARCH",
           "WORKSPACES",
+          "SEND_TAB_TO_SELF",
           "OPEN_TABS",
           "BOOKMARK_ITEM_OR_FOLDER",
           "READING_LIST",
@@ -6204,22 +6272,22 @@
         "default": ""
       },
       "last_crash_report_seen": {
-        "description": "UUID of the last crash report that was taken into consideration when showing crash report dialog.",
+        "description": "[DEPRECATED 2024/11] UUID of the last crash report that was taken into consideration when showing crash report dialog.",
         "type": "string",
         "default": ""
       },
       "show_crash_reporting_dialog": {
-        "description": "Show the crash reporting dialog on startup.",
+        "description": "[DEPRECATED 2024/11] Show the crash reporting dialog on startup.",
         "type": "boolean",
         "default": true
       },
       "crash_reporting_last_requested": {
-        "description": "Timestamp when the crash reporting dialog was last shown.",
+        "description": "[DEPRECATED 2024/11] Timestamp when the crash reporting dialog was last shown.",
         "type": "double",
         "default": 0.0
       },
       "crash_reporting_times_shown": {
-        "description": "How many times the crash reporting dialog was shown.",
+        "description": "[DEPRECATED 2024/11] How many times the crash reporting dialog was shown.",
         "type": "integer",
         "default": 0
       },
@@ -6227,6 +6295,11 @@
         "description": "List of timestamps in which the browser was active in last 14 days (used for the D3D7 marketing)",
         "type": "list",
         "default": []
+      },
+      "last_seen_search_engine_prompt_version" : {
+        "description": "Last version of the search engine prompt shown - from search_engine_prompt.json, or 0 if it was never shown.",
+        "type": "integer",
+        "default": 0
       }
     },
     "status_bar": {
@@ -6361,6 +6434,11 @@
           "bury": 2
         },
         "default": "off"
+      },
+      "close_pinned_in_stack": {
+        "description": "Whether tabs in a pinned stack can be closed or buried",
+        "type": "boolean",
+        "default": true
       },
       "close_button_left": {
         "type": "boolean",
@@ -7293,7 +7371,6 @@
           "Forward",
           "Reload",
           "AddressField",
-          "SharedLinks",
           "Spacer",
           "UpdateButton",
           "Extensions",
@@ -7584,12 +7661,12 @@
       "seen_pages": {
         "type": "list",
         "default": [],
-        "description": "Welcome pages marked as seen"
+        "description": "[DEPRECATED 25/01] Welcome pages marked as seen"
       },
       "read_pages": {
         "type": "list",
         "default": [],
-        "description": "Welcome pages marked as consumed"
+        "description": "Welcome pages marked as read"
       }
     },
     "rss": {
@@ -7752,10 +7829,35 @@
         "description": "An ordered list of widgets and their options.",
         "type": "list",
         "default": [
-          { "id": "1", "type": "date", "size": "regular" },
-          { "id": "2", "type": "sticky-note", "size": "regular" },
-          { "id": "3", "type": "shortcuts", "size": "regular", "folderId": null },
-          { "id": "4", "type": "webpage", "size": "double_height", "url": "https://www.wiktionary.org/" }
+          {
+            "id": "1",
+            "type": "date",
+            "size": "regular",
+            "background": "semi-transparent"
+          },
+          {
+            "id": "2",
+            "type": "sticky-note",
+            "size": "regular",
+            "background": "semi-transparent"
+          },
+          {
+            "id": "3",
+            "type": "shortcuts",
+            "size": "regular",
+            "background": "semi-transparent",
+            "folderId": "",
+            "showTitle": false,
+            "showThumbnail": false
+          },
+          {
+            "id": "4",
+            "type": "webpage",
+            "size": "double_height",
+            "background": "solid",
+            "shareTheme": false,
+            "url": "https://www.wiktionary.org/"
+          }
         ]
       },
       "sticky_notes": {
@@ -8103,6 +8205,10 @@
     },
     "kSavingBrowserHistoryDisabled": {
       "path": "history.saving_disabled",
+      "type": "boolean"
+    },
+    "kSearchSuggestEnabled": {
+      "path": "search.suggest_enabled",
       "type": "boolean"
     },
     "kURLsToRestoreOnStartup": {

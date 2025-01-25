@@ -21,6 +21,11 @@
         "enum": [ "backup", "autosave" ]
       },
       {
+        "id": "WorkspaceId",
+        "type": "number",
+        "description": "Unique identifier."
+      },
+      {
         "id": "ContentTarget",
         "type": "object",
         "description": "Settings used when moving an element in a saved session.",
@@ -45,7 +50,7 @@
             "description": "Target window id. Not set when target is within a workspace."
           },
           "workspace": {
-            "type": "number",
+            "$ref": "WorkspaceId",
             "optional": true,
             "description": "Target workspace id. Remove id if negative."
           }
@@ -57,8 +62,7 @@
         "description": "Holds information of a workspace. Not actual tabs, but the workspace itself.",
         "properties": {
           "id": {
-            "type": "number",
-            "description": "Unique identifier."
+            "$ref": "WorkspaceId"
           },
           "name": {
             "type": "string",
@@ -143,8 +147,7 @@
         "description": "Holds information, including tabs of a workspace.",
         "properties": {
           "id": {
-            "type": "number",
-            "description": "Unique identifier."
+            "$ref": "WorkspaceId"
           },
           "quarantine": {
             "type": "boolean",
@@ -287,7 +290,7 @@
             "description": "Used for commands: ['workspace']"
           },
           "workspaceId": {
-            "type": "number",
+            "$ref": "WorkspaceId",
             "optional": true,
             "description": "Used for commands: ['workspace']"
           }
@@ -811,6 +814,22 @@
               "name": "status",
               "type": "integer",
               "description": "0 for success, error code for any error."
+            }
+          ]
+        }
+      },
+      {
+        "name": "restoreLastClosed",
+        "type": "function",
+        "description": "Will restore the last session called from any profile. Returns true if a window was created.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "did_open_window",
+              "type": "boolean",
+              "description": "true if a window was created."
             }
           ]
         }

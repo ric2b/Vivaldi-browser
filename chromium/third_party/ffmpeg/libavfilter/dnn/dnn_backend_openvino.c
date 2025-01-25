@@ -31,7 +31,6 @@
 #include "libavutil/opt.h"
 #include "libavutil/avstring.h"
 #include "libavutil/detection_bbox.h"
-#include "../internal.h"
 #include "safe_queue.h"
 #if HAVE_OPENVINO2
 #include <openvino/c/openvino.h>
@@ -41,8 +40,8 @@
 #include "dnn_backend_common.h"
 
 typedef struct OVModel{
+    DNNModel model;
     DnnContext *ctx;
-    DNNModel *model;
 #if HAVE_OPENVINO2
     ov_core_t *core;
     ov_model_t *ov_model;
@@ -300,11 +299,11 @@ static int fill_model_input_ov(OVModel *ov_model, OVRequestItem *request)
             return ov2_map_error(status, NULL);
         }
 #endif
-        switch (ov_model->model->func_type) {
+        switch (ov_model->model.func_type) {
         case DFT_PROCESS_FRAME:
             if (task->do_ioproc) {
-                if (ov_model->model->frame_pre_proc != NULL) {
-                    ov_model->model->frame_pre_proc(task->in_frame, &input, ov_model->model->filter_ctx);
+                if (ov_model->model.frame_pre_proc != NULL) {
+                    ov_model->model.frame_pre_proc(task->in_frame, &input, ov_model->model.filter_ctx);
                 } else {
                     ff_proc_from_frame_to_dnn(task->in_frame, &input, ctx);
                 }
@@ -442,11 +441,11 @@ static void infer_completion_callback(void *args)
     for (int i = 0; i < request->lltask_count; ++i) {
         task = request->lltasks[i]->task;
 
-        switch (ov_model->model->func_type) {
+        switch (ov_model->model.func_type) {
         case DFT_PROCESS_FRAME:
             if (task->do_ioproc) {
-                if (ov_model->model->frame_post_proc != NULL) {
-                    ov_model->model->frame_post_proc(task->out_frame, outputs, ov_model->model->filter_ctx);
+                if (ov_model->model.frame_post_proc != NULL) {
+                    ov_model->model.frame_post_proc(task->out_frame, outputs, ov_model->model.filter_ctx);
                 } else {
                     ff_proc_from_dnn_to_frame(task->out_frame, outputs, ctx);
                 }
@@ -458,23 +457,23 @@ static void infer_completion_callback(void *args)
             }
             break;
         case DFT_ANALYTICS_DETECT:
-            if (!ov_model->model->detect_post_proc) {
+            if (!ov_model->model.detect_post_proc) {
                 av_log(ctx, AV_LOG_ERROR, "detect filter needs to provide post proc\n");
                 goto end;
             }
-            ov_model->model->detect_post_proc(task->in_frame, outputs,
+            ov_model->model.detect_post_proc(task->in_frame, outputs,
                                               ov_model->nb_outputs,
-                                              ov_model->model->filter_ctx);
+                                              ov_model->model.filter_ctx);
             break;
         case DFT_ANALYTICS_CLASSIFY:
-            if (!ov_model->model->classify_post_proc) {
+            if (!ov_model->model.classify_post_proc) {
                 av_log(ctx, AV_LOG_ERROR, "classify filter needs to provide post proc\n");
                 goto end;
             }
             for (int output_i = 0; output_i < ov_model->nb_outputs; output_i++)
-                ov_model->model->classify_post_proc(task->in_frame, outputs,
+                ov_model->model.classify_post_proc(task->in_frame, outputs,
                                                     request->lltasks[i]->bbox_index,
-                                                    ov_model->model->filter_ctx);
+                                                    ov_model->model.filter_ctx);
             break;
         default:
             av_assert0(!"should not reach here");
@@ -517,7 +516,7 @@ static void dnn_free_model_ov(DNNModel **model)
     if (!model || !*model)
         return;
 
-    ov_model = (*model)->model;
+    ov_model = (OVModel *)(*model);
     while (ff_safe_queue_size(ov_model->request_queue) != 0) {
         OVRequestItem *item = ff_safe_queue_pop_front(ov_model->request_queue);
         if (item && item->infer_request) {
@@ -571,7 +570,7 @@ static void dnn_free_model_ov(DNNModel **model)
     av_free(ov_model->all_input_names);
 #endif
     av_freep(&ov_model);
-    av_freep(model);
+    *model = NULL;
 }
 
 
@@ -598,7 +597,7 @@ static int init_model_ov(OVModel *ov_model, const char *input_name, const char *
 #endif
     // We scale pixel by default when do frame processing.
     if (fabsf(ctx->ov_option.scale) < 1e-6f)
-        ctx->ov_option.scale = ov_model->model->func_type == DFT_PROCESS_FRAME ? 255 : 1;
+        ctx->ov_option.scale = ov_model->model.func_type == DFT_PROCESS_FRAME ? 255 : 1;
     // batch size
     if (ctx->ov_option.batch_size <= 0) {
         ctx->ov_option.batch_size = 1;
@@ -702,7 +701,7 @@ static int init_model_ov(OVModel *ov_model, const char *input_name, const char *
             ret = ov2_map_error(status, NULL);
             goto err;
         }
-        if (ov_model->model->func_type != DFT_PROCESS_FRAME)
+        if (ov_model->model.func_type != DFT_PROCESS_FRAME)
             status |= ov_preprocess_output_set_element_type(output_tensor_info, F32);
         else if (fabsf(ctx->ov_option.scale - 1) > 1e-6f || fabsf(ctx->ov_option.mean) > 1e-6f)
             status |= ov_preprocess_output_set_element_type(output_tensor_info, F32);
@@ -959,7 +958,6 @@ err:
     if (input_model_info)
         ov_preprocess_input_model_info_free(input_model_info);
 #endif
-    dnn_free_model_ov(&ov_model->model);
     return ret;
 }
 
@@ -1060,9 +1058,9 @@ err:
     return ret;
 }
 
-static int get_input_ov(void *model, DNNData *input, const char *input_name)
+static int get_input_ov(DNNModel *model, DNNData *input, const char *input_name)
 {
-    OVModel *ov_model = model;
+    OVModel *ov_model = (OVModel *)model;
     DnnContext *ctx = ov_model->ctx;
     int input_resizable = ctx->ov_option.input_resizable;
 
@@ -1256,7 +1254,7 @@ static int extract_lltask_from_task(DNNFunctionType func_type, TaskItem *task, Q
     }
 }
 
-static int get_output_ov(void *model, const char *input_name, int input_width, int input_height,
+static int get_output_ov(DNNModel *model, const char *input_name, int input_width, int input_height,
                                    const char *output_name, int *output_width, int *output_height)
 {
 #if HAVE_OPENVINO2
@@ -1269,7 +1267,7 @@ static int get_output_ov(void *model, const char *input_name, int input_width, i
     input_shapes_t input_shapes;
 #endif
     int ret;
-    OVModel *ov_model = model;
+    OVModel *ov_model = (OVModel *)model;
     DnnContext *ctx = ov_model->ctx;
     TaskItem task;
     OVRequestItem *request;
@@ -1281,7 +1279,7 @@ static int get_output_ov(void *model, const char *input_name, int input_width, i
         .out_frame      = NULL,
     };
 
-    if (ov_model->model->func_type != DFT_PROCESS_FRAME) {
+    if (ov_model->model.func_type != DFT_PROCESS_FRAME) {
         av_log(ctx, AV_LOG_ERROR, "Get output dim only when processing frame.\n");
         return AVERROR(EINVAL);
     }
@@ -1343,7 +1341,7 @@ static int get_output_ov(void *model, const char *input_name, int input_width, i
         goto err;
     }
 
-    ret = extract_lltask_from_task(ov_model->model->func_type, &task, ov_model->lltask_queue, NULL);
+    ret = extract_lltask_from_task(ov_model->model.func_type, &task, ov_model->lltask_queue, NULL);
     if (ret != 0) {
         av_log(ctx, AV_LOG_ERROR, "unable to extract inference from task.\n");
         goto err;
@@ -1379,19 +1377,11 @@ static DNNModel *dnn_load_model_ov(DnnContext *ctx, DNNFunctionType func_type, A
     IEStatusCode status;
 #endif
 
-    model = av_mallocz(sizeof(DNNModel));
-    if (!model){
-        return NULL;
-    }
-
     ov_model = av_mallocz(sizeof(OVModel));
-    if (!ov_model) {
-        av_freep(&model);
+    if (!ov_model)
         return NULL;
-    }
     ov_model->ctx = ctx;
-    model->model = ov_model;
-    ov_model->model = model;
+    model = &ov_model->model;
 
 #if HAVE_OPENVINO2
     status = ov_core_create(&core);
@@ -1478,7 +1468,7 @@ err:
 
 static int dnn_execute_model_ov(const DNNModel *model, DNNExecBaseParams *exec_params)
 {
-    OVModel *ov_model = model->model;
+    OVModel *ov_model = (OVModel *)model;
     DnnContext *ctx = ov_model->ctx;
     OVRequestItem *request;
     TaskItem *task;
@@ -1566,13 +1556,13 @@ static int dnn_execute_model_ov(const DNNModel *model, DNNExecBaseParams *exec_p
 
 static DNNAsyncStatusType dnn_get_result_ov(const DNNModel *model, AVFrame **in, AVFrame **out)
 {
-    OVModel *ov_model = model->model;
+    OVModel *ov_model = (OVModel *)model;
     return ff_dnn_get_result_common(ov_model->task_queue, in, out);
 }
 
 static int dnn_flush_ov(const DNNModel *model)
 {
-    OVModel *ov_model = model->model;
+    OVModel *ov_model = (OVModel *)model;
     DnnContext *ctx = ov_model->ctx;
     OVRequestItem *request;
 #if HAVE_OPENVINO2
@@ -1622,6 +1612,7 @@ static int dnn_flush_ov(const DNNModel *model)
 
 const DNNModule ff_dnn_backend_openvino = {
     .clazz          = DNN_DEFINE_CLASS(dnn_openvino),
+    .type           = DNN_OV,
     .load_model     = dnn_load_model_ov,
     .execute_model  = dnn_execute_model_ov,
     .get_result     = dnn_get_result_ov,

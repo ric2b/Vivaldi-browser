@@ -50,8 +50,8 @@
 #include "net/test/gtest_util.h"
 #include "net/test/test_data_directory.h"
 #include "net/third_party/quiche/src/quiche/common/http/http_header_block.h"
+#include "net/third_party/quiche/src/quiche/http2/core/spdy_protocol.h"
 #include "net/third_party/quiche/src/quiche/http2/test_tools/spdy_test_utils.h"
-#include "net/third_party/quiche/src/quiche/spdy/core/spdy_protocol.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
@@ -945,8 +945,7 @@ TEST_P(WebSocketStreamCreateExtensionTest, PerMessageDeflateInflates) {
   ASSERT_THAT(rv, IsOk());
   ASSERT_EQ(1U, frames.size());
   ASSERT_EQ(5U, frames[0]->header.payload_length);
-  EXPECT_EQ(std::string("Hello"),
-            std::string(frames[0]->payload, frames[0]->header.payload_length));
+  EXPECT_EQ("Hello", base::as_string_view(frames[0]->payload));
 }
 
 // Unknown extension in the response is rejected
@@ -1873,16 +1872,17 @@ TEST_P(WebSocketStreamCreateTest, HandleConnectionCloseInFirstSegment) {
   WaitUntilConnectDone();
   ASSERT_TRUE(stream_);
 
-  std::vector<std::unique_ptr<WebSocketFrame>> frames;
-  TestCompletionCallback callback1;
-  int rv1 = stream_->ReadFrames(&frames, callback1.callback());
-  rv1 = callback1.GetResult(rv1);
-  ASSERT_THAT(rv1, IsOk());
-  ASSERT_EQ(1U, frames.size());
-  EXPECT_EQ(frames[0]->header.opcode, WebSocketFrameHeader::kOpCodeClose);
-  EXPECT_TRUE(frames[0]->header.final);
-  EXPECT_EQ(close_body,
-            std::string(frames[0]->payload, frames[0]->header.payload_length));
+  {
+    std::vector<std::unique_ptr<WebSocketFrame>> frames;
+    TestCompletionCallback callback1;
+    int rv1 = stream_->ReadFrames(&frames, callback1.callback());
+    rv1 = callback1.GetResult(rv1);
+    ASSERT_THAT(rv1, IsOk());
+    ASSERT_EQ(1U, frames.size());
+    EXPECT_EQ(frames[0]->header.opcode, WebSocketFrameHeader::kOpCodeClose);
+    EXPECT_TRUE(frames[0]->header.final);
+    EXPECT_EQ(close_body, base::as_string_view(frames[0]->payload));
+  }
 
   std::vector<std::unique_ptr<WebSocketFrame>> empty_frames;
   TestCompletionCallback callback2;

@@ -169,7 +169,6 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" />、セキュリティ規格遵守しとらへんわ。</translation>
 <translation id="7219179957768738017">この接続には <ph name="SSL_VERSION" /> を使うてんで。</translation>
 <translation id="7221855153210829124">通知出す</translation>
-<translation id="7227747683324411744">今から行こうとしてるサイトは、あんたのホームページを変えたり訪問サイトに余計な広告増やしたりして、ブラウジングに影響するような有害なソフトウェアをインストールさせようとする人がおるわ。</translation>
 <translation id="7353601530677266744">コマンドライン</translation>
 <translation id="7364115444476960850">Vivaldiの<ph name="BLOCKER_NAME" />が、アクセスしようとしてるページブロックしたわ</translation>
 <translation id="7419106976560586862">プロファイルのパス</translation>
@@ -177,7 +176,6 @@
 <translation id="7518003948725431193">次のウェブページアドレス見つからへんかったわ: <ph name="URL" /></translation>
 <translation id="7549584377607005141">このウェブページちゃんと表示するんやったら、さっき入れたデータが要るで。データ再送信できるけど、このページでさっきやったこと、もっかいやらなあかんで。</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" />、今このリクエスト処理できへんねんて。</translation>
-<translation id="7605377493722372900">今から行こうとしてるサイトは、あんたのパスワード、写真、メッセージ、クレジットカード番号とかを盗んで消すような有害なソフトウェアをインストールする人がおるかもしれへん。</translation>
 <translation id="7662298039739062396">拡張機能に指定される設定</translation>
 <translation id="7663736086183791259">証明書 <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">証明書</translation>
@@ -203,7 +201,6 @@
 <translation id="8288807391153049143">証明書出す</translation>
 <translation id="8289355894181816810">確認方法わからへんかったら、ネットワーク管理者に聞いてみ。</translation>
 <translation id="8332188693563227489"><ph name="HOST_NAME" />へのアクセス断られたわ</translation>
-<translation id="8422228580902424274">今から行こうとしてるサイトは、有害なソフトウェアをインストールさせようとしたり、あんたのパスワード、電話番号、クレジットカード番号とかを聞き出そうとしてくるかもしれへん。</translation>
 <translation id="8473863474539038330">住所、その他</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" />からの応答がタイムアウトしたわ。</translation>
 <translation id="8503813439785031346">ユーザーの芸名</translation>

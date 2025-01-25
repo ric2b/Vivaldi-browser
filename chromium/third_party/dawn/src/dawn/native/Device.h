@@ -226,10 +226,6 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
         const ShaderModuleDescriptor* descriptor,
         const std::vector<tint::wgsl::Extension>& internalExtensions = {},
         std::unique_ptr<OwnedCompilationMessages>* compilationMessages = nullptr);
-    // Deprecated: this was the way to create a SwapChain when it was explicitly manipulated by the
-    // end user.
-    ResultOrError<Ref<SwapChainBase>> CreateSwapChain(Surface* surface,
-                                                      const SwapChainDescriptor* descriptor);
     ResultOrError<Ref<SwapChainBase>> CreateSwapChain(Surface* surface,
                                                       SwapChainBase* previousSwapChain,
                                                       const SurfaceConfiguration* config);
@@ -237,8 +233,6 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
     ResultOrError<Ref<TextureViewBase>> CreateTextureView(
         TextureBase* texture,
         const TextureViewDescriptor* descriptor = nullptr);
-
-    ResultOrError<wgpu::TextureUsage> GetSupportedSurfaceUsage(const Surface* surface) const;
 
     // Implementation of API object creation methods. DO NOT use them in a reentrant manner.
     BindGroupBase* APICreateBindGroup(const BindGroupDescriptor* descriptor);
@@ -277,16 +271,8 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
     SamplerBase* APICreateSampler(const SamplerDescriptor* descriptor);
     ShaderModuleBase* APICreateShaderModule(const ShaderModuleDescriptor* descriptor);
     ShaderModuleBase* APICreateErrorShaderModule(const ShaderModuleDescriptor* descriptor,
-                                                 const char* errorMessage) {
-        return APICreateErrorShaderModule2(descriptor, errorMessage);
-    }
-    ShaderModuleBase* APICreateErrorShaderModule2(const ShaderModuleDescriptor* descriptor,
-                                                  std::string_view errorMessage);
-    // TODO(crbug.com/dawn/2320): Remove after deprecation.
-    SwapChainBase* APICreateSwapChain(Surface* surface, const SwapChainDescriptor* descriptor);
+                                                  StringView errorMessage);
     TextureBase* APICreateTexture(const TextureDescriptor* descriptor);
-
-    wgpu::TextureUsage APIGetSupportedSurfaceUsage(Surface* surface);
 
     InternalPipelineStore* GetInternalPipelineStore();
 
@@ -303,11 +289,9 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
     wgpu::Status APIGetLimits(SupportedLimits* limits) const;
     bool APIHasFeature(wgpu::FeatureName feature) const;
     size_t APIEnumerateFeatures(wgpu::FeatureName* features) const;
-    void APIInjectError(wgpu::ErrorType type, const char* message) {
-        // TODO(crbug.com/42241188): Remove const char* version of the method.
-        APIInjectError2(type, message);
-    }
-    void APIInjectError2(wgpu::ErrorType type, std::string_view message);
+    void APIGetFeatures(wgpu::SupportedFeatures* features) const;
+    void APIGetFeatures(SupportedFeatures* features) const;
+    void APIInjectError(wgpu::ErrorType type, StringView message);
     bool APITick();
     void APIValidateTextureDescriptor(const TextureDescriptor* desc);
 
@@ -373,15 +357,11 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
 
     size_t GetLazyClearCountForTesting();
     void IncrementLazyClearCountForTesting();
-    void EmitWarningOnce(const std::string& message);
-    void EmitLog(const char* message);
-    void EmitLog(WGPULoggingType loggingType, const char* message);
+    void EmitWarningOnce(std::string_view message);
+    void EmitLog(std::string_view message);
+    void EmitLog(WGPULoggingType loggingType, std::string_view message);
     void EmitCompilationLog(const ShaderModuleBase* module);
-    void APIForceLoss(wgpu::DeviceLostReason reason, const char* message) {
-        // TODO(crbug.com/42241188): Remove const char* version of the method.
-        return APIForceLoss2(reason, message);
-    }
-    void APIForceLoss2(wgpu::DeviceLostReason reason, std::string_view message);
+    void APIForceLoss(wgpu::DeviceLostReason reason, StringView message);
     QueueBase* GetQueue() const;
 
     friend class IgnoreLazyClearCountScope;
@@ -431,9 +411,7 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
 
     const CacheKey& GetCacheKey() const;
     const std::string& GetLabel() const;
-    // TODO(crbug.com/42241188): Remove const char* version of the method.
-    void APISetLabel(const char* label);
-    void APISetLabel2(std::optional<std::string_view> label);
+    void APISetLabel(StringView label);
     void APIDestroy();
 
     virtual void AppendDebugLayerMessages(ErrorData* error) {}
@@ -459,6 +437,7 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
     void DumpMemoryStatistics(dawn::native::MemoryDump* dump) const;
     uint64_t ComputeEstimatedMemoryUsage() const;
     void ReduceMemoryUsage();
+    void PerformIdleTasks();
 
     ResultOrError<Ref<BufferBase>> GetOrCreateTemporaryUniformBuffer(size_t size);
 
@@ -526,6 +505,7 @@ class DeviceBase : public ErrorSink, public RefCountedWithExternalCount<RefCount
     virtual ResultOrError<Ref<SharedFenceBase>> ImportSharedFenceImpl(
         const SharedFenceDescriptor* descriptor);
     virtual void SetLabelImpl();
+    virtual void PerformIdleTasksImpl();
 
     virtual MaybeError TickImpl() = 0;
     void FlushCallbackTaskQueue();

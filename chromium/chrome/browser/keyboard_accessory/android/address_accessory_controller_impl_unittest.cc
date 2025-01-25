@@ -33,12 +33,13 @@
 #include "components/autofill/core/common/autofill_test_utils.h"
 #include "components/plus_addresses/fake_plus_address_service.h"
 #include "components/plus_addresses/features.h"
-#include "components/plus_addresses/plus_address_test_environment.h"
+#include "components/plus_addresses/grit/plus_addresses_strings.h"
+#include "components/plus_addresses/plus_address_prefs.h"
 #include "components/plus_addresses/plus_address_test_utils.h"
 #include "components/plus_addresses/plus_address_types.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -49,8 +50,6 @@ namespace {
 using autofill::UserInfo;
 using base::ASCIIToUTF16;
 using plus_addresses::FakePlusAddressService;
-using plus_addresses::PlusAddressSettingService;
-using plus_addresses::test::PlusAddressTestEnvironment;
 using testing::_;
 using testing::ByMove;
 using testing::Mock;
@@ -97,12 +96,8 @@ std::unique_ptr<KeyedService> BuildTestPersonalDataManager(
 }
 
 std::unique_ptr<KeyedService> BuildFakePlusAddressService(
-    PrefService* pref_service,
-    signin::IdentityManager* identity_manager,
-    PlusAddressSettingService* setting_service,
     content::BrowserContext* context) {
-  return std::make_unique<FakePlusAddressService>(
-      pref_service, identity_manager, setting_service);
+  return std::make_unique<FakePlusAddressService>();
 }
 
 class MockAutofillClient : public TestContentAutofillClient {
@@ -134,22 +129,11 @@ class MockAutofillDriver : public TestContentAutofillDriver {
 
 class AddressAccessoryControllerTest : public ChromeRenderViewHostTestHarness {
  public:
-  AddressAccessoryControllerTest() {
-    features_.InitWithFeatures(
-        {plus_addresses::features::kPlusAddressesEnabled,
-         plus_addresses::features::kPlusAddressAndroidManualFallbackEnabled},
-        {});
-  }
-
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
 
     PlusAddressServiceFactory::GetInstance()->SetTestingFactory(
-        GetBrowserContext(),
-        base::BindRepeating(&BuildFakePlusAddressService,
-                            &plus_environment_.pref_service(),
-                            plus_environment_.identity_env().identity_manager(),
-                            &plus_environment_.setting_service()));
+        GetBrowserContext(), base::BindRepeating(&BuildFakePlusAddressService));
 
     NavigateAndCommit(GURL(kExampleSite));
     FocusWebContentsOnMainFrame();
@@ -195,9 +179,9 @@ class AddressAccessoryControllerTest : public ChromeRenderViewHostTestHarness {
             web_contents()->GetBrowserContext()));
   }
 
-  base::test::ScopedFeatureList features_;
+  base::test::ScopedFeatureList features_{
+      plus_addresses::features::kPlusAddressesEnabled};
   test::AutofillUnitTestEnvironment test_environment_;
-  PlusAddressTestEnvironment plus_environment_;
   StrictMock<MockManualFillingController> mock_manual_filling_controller_;
   base::MockCallback<AccessoryController::FillingSourceObserver>
       filling_source_observer_;
@@ -256,18 +240,28 @@ TEST_F(AddressAccessoryControllerTest, RefreshSuggestionsCallsUI) {
       AddressAccessorySheetDataBuilder(/*userInfoTitle=*/std::u16string(),
                                        /*plusAddressTitle=*/std::u16string())
           .AddUserInfo()
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::NAME_FULL))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::COMPANY_NAME))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::ADDRESS_HOME_LINE1))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::ADDRESS_HOME_LINE2))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::ADDRESS_HOME_ZIP))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::ADDRESS_HOME_CITY))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::ADDRESS_HOME_STATE))
+          .AppendSimpleField(AccessorySuggestionType::kNameFull,
+                             canadian.GetRawInfo(FieldType::NAME_FULL))
+          .AppendSimpleField(AccessorySuggestionType::kCompanyName,
+                             canadian.GetRawInfo(FieldType::COMPANY_NAME))
+          .AppendSimpleField(AccessorySuggestionType::kAddressLine1,
+                             canadian.GetRawInfo(FieldType::ADDRESS_HOME_LINE1))
+          .AppendSimpleField(AccessorySuggestionType::kAddressLine2,
+                             canadian.GetRawInfo(FieldType::ADDRESS_HOME_LINE2))
+          .AppendSimpleField(AccessorySuggestionType::kZip,
+                             canadian.GetRawInfo(FieldType::ADDRESS_HOME_ZIP))
+          .AppendSimpleField(AccessorySuggestionType::kCity,
+                             canadian.GetRawInfo(FieldType::ADDRESS_HOME_CITY))
+          .AppendSimpleField(AccessorySuggestionType::kState,
+                             canadian.GetRawInfo(FieldType::ADDRESS_HOME_STATE))
           .AppendSimpleField(
+              AccessorySuggestionType::kCountry,
               canadian.GetRawInfo(FieldType::ADDRESS_HOME_COUNTRY))
           .AppendSimpleField(
+              AccessorySuggestionType::kPhoneNumber,
               canadian.GetRawInfo(FieldType::PHONE_HOME_WHOLE_NUMBER))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::EMAIL_ADDRESS))
+          .AppendSimpleField(AccessorySuggestionType::kEmailAddress,
+                             canadian.GetRawInfo(FieldType::EMAIL_ADDRESS))
           .Build());
 }
 
@@ -293,23 +287,31 @@ TEST_F(AddressAccessoryControllerTest, TriggersRefreshWhenDataChanges) {
                                        /*plusAddressTitle=*/std::u16string())
           .AddUserInfo()
           /*name full:*/
-          .AppendSimpleField(std::u16string())
+          .AppendSimpleField(AccessorySuggestionType::kNameFull,
+                             std::u16string())
           /*company name:*/
-          .AppendSimpleField(std::u16string())
+          .AppendSimpleField(AccessorySuggestionType::kCompanyName,
+                             std::u16string())
           /*address line1:*/
-          .AppendSimpleField(std::u16string())
+          .AppendSimpleField(AccessorySuggestionType::kAddressLine1,
+                             std::u16string())
           /*address line2:*/
-          .AppendSimpleField(std::u16string())
+          .AppendSimpleField(AccessorySuggestionType::kAddressLine2,
+                             std::u16string())
           /*address zip:*/
-          .AppendSimpleField(std::u16string())
+          .AppendSimpleField(AccessorySuggestionType::kZip, std::u16string())
           /*address city:*/
-          .AppendSimpleField(std::u16string())
+          .AppendSimpleField(AccessorySuggestionType::kCity, std::u16string())
           /*address state:*/
-          .AppendSimpleField(std::u16string())
+          .AppendSimpleField(AccessorySuggestionType::kState, std::u16string())
           /*address country:*/
-          .AppendSimpleField(std::u16string())
-          /*phone number:*/.AppendSimpleField(std::u16string())
-          .AppendSimpleField(email.GetRawInfo(FieldType::EMAIL_ADDRESS))
+          .AppendSimpleField(AccessorySuggestionType::kCountry,
+                             std::u16string())
+          /*phone number:*/
+          .AppendSimpleField(AccessorySuggestionType::kPhoneNumber,
+                             std::u16string())
+          .AppendSimpleField(AccessorySuggestionType::kEmailAddress,
+                             email.GetRawInfo(FieldType::EMAIL_ADDRESS))
           .Build());
 }
 
@@ -411,7 +413,7 @@ TEST_F(AddressAccessoryControllerTest,
   // plus address for the current domain. The "Create plus address" action
   // should not be displayed.
   EXPECT_EQ(controller()->GetSheetData(),
-            AddressAccessorySheetDataBuilder(addresses_empty_str(),
+            AddressAccessorySheetDataBuilder(/*userInfoTitle=*/std::u16string(),
                                              plus_addresses_title())
                 .AddPlusAddressInfo("https://foo.com", u"plus+foo@plus.plus")
                 .AppendFooterCommand(
@@ -434,7 +436,7 @@ TEST_F(AddressAccessoryControllerTest, AppendsPlusAddressesSection) {
   controller()->RefreshSuggestions();
 
   EXPECT_EQ(controller()->GetSheetData(),
-            AddressAccessorySheetDataBuilder(addresses_empty_str(),
+            AddressAccessorySheetDataBuilder(/*userInfoTitle=*/std::u16string(),
                                              plus_addresses_title())
                 .AddPlusAddressInfo("https://foo.com", u"plus+foo@plus.plus")
                 .AppendFooterCommand(
@@ -466,18 +468,28 @@ TEST_F(AddressAccessoryControllerTest,
                                        /*plusAddressTitle=*/std::u16string())
           .AddPlusAddressInfo("https://foo.com", u"plus+foo@plus.plus")
           .AddUserInfo()
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::NAME_FULL))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::COMPANY_NAME))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::ADDRESS_HOME_LINE1))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::ADDRESS_HOME_LINE2))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::ADDRESS_HOME_ZIP))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::ADDRESS_HOME_CITY))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::ADDRESS_HOME_STATE))
+          .AppendSimpleField(AccessorySuggestionType::kNameFull,
+                             canadian.GetRawInfo(FieldType::NAME_FULL))
+          .AppendSimpleField(AccessorySuggestionType::kCompanyName,
+                             canadian.GetRawInfo(FieldType::COMPANY_NAME))
+          .AppendSimpleField(AccessorySuggestionType::kAddressLine1,
+                             canadian.GetRawInfo(FieldType::ADDRESS_HOME_LINE1))
+          .AppendSimpleField(AccessorySuggestionType::kAddressLine2,
+                             canadian.GetRawInfo(FieldType::ADDRESS_HOME_LINE2))
+          .AppendSimpleField(AccessorySuggestionType::kZip,
+                             canadian.GetRawInfo(FieldType::ADDRESS_HOME_ZIP))
+          .AppendSimpleField(AccessorySuggestionType::kCity,
+                             canadian.GetRawInfo(FieldType::ADDRESS_HOME_CITY))
+          .AppendSimpleField(AccessorySuggestionType::kState,
+                             canadian.GetRawInfo(FieldType::ADDRESS_HOME_STATE))
           .AppendSimpleField(
+              AccessorySuggestionType::kCountry,
               canadian.GetRawInfo(FieldType::ADDRESS_HOME_COUNTRY))
           .AppendSimpleField(
+              AccessorySuggestionType::kPhoneNumber,
               canadian.GetRawInfo(FieldType::PHONE_HOME_WHOLE_NUMBER))
-          .AppendSimpleField(canadian.GetRawInfo(FieldType::EMAIL_ADDRESS))
+          .AppendSimpleField(AccessorySuggestionType::kEmailAddress,
+                             canadian.GetRawInfo(FieldType::EMAIL_ADDRESS))
           .AppendFooterCommand(
               l10n_util::GetStringUTF16(
                   IDS_PLUS_ADDRESS_MANAGE_PLUS_ADDRESSES_LINK_ANDROID),
@@ -502,6 +514,23 @@ TEST_F(AddressAccessoryControllerTest, TriggersPlusAddressCreationBottomSheet) {
                                base::UTF8ToUTF16(plus_address)));
   controller()->OnOptionSelected(
       AccessoryAction::CREATE_PLUS_ADDRESS_FROM_ADDRESS_SHEET);
+}
+
+TEST_F(AddressAccessoryControllerTest, FillsPlusAddressSuggestion) {
+  FieldGlobalId field_id = test::MakeFieldGlobalId();
+  const std::u16string plus_address = u"example@gmail.com";
+
+  EXPECT_CALL(main_frame_autofill_driver(),
+              ApplyFieldAction(mojom::FieldActionType::kReplaceAll,
+                               mojom::ActionPersistence::kFill, field_id,
+                               plus_address));
+  controller()->OnFillingTriggered(
+      field_id, AccessorySheetField::Builder()
+                    .SetSuggestionType(AccessorySuggestionType::kPlusAddress)
+                    .SetDisplayText(plus_address)
+                    .SetSelectable(true)
+                    .Build());
+  EXPECT_TRUE(plus_address_service().was_plus_address_suggestion_filled());
 }
 
 }  // namespace autofill

@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Domček (Krajina 12)</translation>
 <translation id="1158503667684816647">Nepýtať sa znova</translation>
 <translation id="1222195720020481779">Spúštanie inštalátora...</translation>
+<translation id="1224683873953469764">Získajte Vivaldi pre mobilné zariadenia</translation>
 <translation id="1270785070369717623">Bohužiaľ, nastavenia Opera GX nie sú dostupné, keď je tento prehliadač spustený. Ak chcete tieto nastavenia importovať do prehliadača Vivaldi, uložte svoju prácu a zatvorte všetky okná Opera GX. Potom kliknite na tlačidlo Pokračovať.</translation>
 <translation id="1276145862619442150">Rýchly prístup</translation>
 <translation id="1281950884873973195">Mačka (Zviera 6)</translation>
@@ -12,6 +13,7 @@
 <translation id="1454726940098520109">Nepýtať sa znova</translation>
 <translation id="1462666970065907900">Naozaj chcete zatvoriť toto okno?</translation>
 <translation id="1480046233931937785">Autorské práva</translation>
+<translation id="1521774566618522728">Aktívne dnes</translation>
 <translation id="1526344461589023948">Počas uloženia stiahnutej aktualizácie došlo k chybe. Skontrolujte si prosím, či váš počítač disponuje dostatkom ukladacieho priestoru a skúste to znova neskôr.</translation>
 <translation id="1635542496948266458">Prepnúť profily</translation>
 <translation id="1657174850639146440">Zlostník (Príšerka 9)</translation>
@@ -97,6 +99,7 @@
 <translation id="4430019312045809116">Hlasitosť</translation>
 <translation id="443008484043213881">Nástroje</translation>
 <translation id="4456211719108566931">Nešťastná kôpka... (Príšerka 6)</translation>
+<translation id="4459169140545916303">Aktívne <ph name="DEVICE_LAST_ACTIVATED_TIME" /> pred niekoľkými dňami</translation>
 <translation id="4512900838580567989">Otvoriť odkaz v novom liste na pozadí</translation>
 <translation id="4545097004879999966">Opera pošta</translation>
 <translation id="4548358047305717967">Otvoriť obrázok v novom liste na pozadí</translation>
@@ -148,6 +151,7 @@
 <translation id="7099506190679014195">Zabezpečená aktualizácia úložiska kľúčov</translation>
 <translation id="7111492742514999492">Veterný mlyn (Krajina 9)</translation>
 <translation id="7208252576848052204">Bohužiaľ, nastavenia Arc nie sú dostupné, keď je tento prehliadač spustený. Ak chcete tieto nastavenia importovať do prehliadača Vivaldi, uložte svoju prácu a zatvorte všetky okná Arc. Potom kliknite na tlačidlo Pokračovať.</translation>
+<translation id="7321500017121629018">Aktívne včera</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Chyba pri spustení inštalátora aktualizácie. Skontrolujte si prosím, či váš počítač disponuje dostatočným ukladacím priestorom alebo ukladacou pamäťou a skúste to znova neskôr.</translation>
 <translation id="7658239707568436148">Zrušiť</translation>

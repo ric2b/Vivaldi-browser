@@ -89,9 +89,9 @@ void CosmeticFilter::ShouldAllowWebRTC(const ::GURL& document_url,
       continue;
     }
 
-    const flat::RequestFilterRule* request_filter_rule;
+    std::optional<RulesIndex::RuleAndSource> rule_and_source;
     for (const auto& ice_server : ice_servers) {
-      request_filter_rule =
+      rule_and_source =
           rules_index_manager_->rules_index()->FindMatchingBeforeRequestRule(
               ice_server, document_origin, flat::ResourceType_WEBRTC,
               is_third_party,
@@ -100,12 +100,12 @@ void CosmeticFilter::ShouldAllowWebRTC(const ::GURL& document_url,
                    .value_or(flat::Decision_MODIFY) == flat::Decision_PASS),
               base::BindRepeating(
                   [](std::string_view, std::string_view) { return false; }));
-      if (request_filter_rule)
+      if (rule_and_source)
         break;
     }
 
-    if (!request_filter_rule ||
-        request_filter_rule->decision() == flat::Decision_PASS) {
+    if (!rule_and_source ||
+        rule_and_source->rule->decision() == flat::Decision_PASS) {
       continue;
     }
 

@@ -17,7 +17,7 @@ sort of compile-time check, such as static_assert.
 **Why do we want to assert failure in compilation?**
 
 Most of the time you don't want to do this. However, with template code, you are
-playing with the type system. In particular with callbacks, it's possibly to
+playing with the type system. In particular with callbacks, it's possible to
 accidentally write code that allows unsafe type conversion leading to a code
 execution. Here's a specific example:
 

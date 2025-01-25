@@ -17,10 +17,10 @@
 
 void xnn_f16_vmin_ukernel__avx512fp16_u64(
     size_t batch,
-    const void* restrict input_a,
-    const void* restrict input_b,
-    void* restrict output,
-    const union xnn_f16_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const xnn_float16* restrict input_a,
+    const xnn_float16* restrict input_b,
+    xnn_float16* restrict output,
+    const struct xnn_f16_default_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(uint16_t) == 0);
@@ -35,14 +35,13 @@ void xnn_f16_vmin_ukernel__avx512fp16_u64(
 
 
   for (; batch >= 64 * sizeof(uint16_t); batch -= 64 * sizeof(uint16_t)) {
-    __m512h vacc0 = _mm512_loadu_ph(a);
-    __m512h vacc1 = _mm512_loadu_ph(a + 32);
+    const __m512h va0 = _mm512_loadu_ph(a);
+    const __m512h va1 = _mm512_loadu_ph(a + 32);
     a += 64;
 
-    vacc0 = _mm512_min_ph(vacc0, _mm512_loadu_ph(b));
-    vacc1 = _mm512_min_ph(vacc1, _mm512_loadu_ph(b + 32));
+    __m512h vacc0 = _mm512_min_ph(va0, _mm512_loadu_ph(b));
+    __m512h vacc1 = _mm512_min_ph(va1, _mm512_loadu_ph(b + 32));
     b += 64;
-
 
 
     _mm512_storeu_ph(o, vacc0);
@@ -50,10 +49,10 @@ void xnn_f16_vmin_ukernel__avx512fp16_u64(
     o += 64;
   }
   for (; batch >= 32 * sizeof(uint16_t); batch -= 32 * sizeof(uint16_t)) {
-    __m512h vacc = _mm512_loadu_ph(a);
+    const __m512h va = _mm512_loadu_ph(a);
     a += 32;
 
-    vacc = _mm512_min_ph(vacc, _mm512_loadu_ph(b));
+    __m512h vacc = _mm512_min_ph(va, _mm512_loadu_ph(b));
     b += 32;
 
 
@@ -67,9 +66,10 @@ void xnn_f16_vmin_ukernel__avx512fp16_u64(
     batch >>= XNN_LOG2_SIZEOF_HALF;
     const __mmask32 vmask = _cvtu32_mask32((uint32_t) ((UINT32_C(1) << batch) - UINT32_C(1)));
 
-    __m512h vacc = _mm512_castsi512_ph(_mm512_maskz_loadu_epi16(vmask, a));
+    const __m512h va = _mm512_castsi512_ph(_mm512_maskz_loadu_epi16(vmask, a));
 
-    vacc = _mm512_maskz_min_ph(vmask, vacc, _mm512_castsi512_ph(_mm512_maskz_loadu_epi16(vmask, b)));
+    __m512h vacc = _mm512_maskz_min_ph(vmask, va, _mm512_castsi512_ph(_mm512_maskz_loadu_epi16(vmask, b)));
+
 
     _mm512_mask_storeu_epi16(o, vmask, _mm512_castph_si512(vacc));
   }

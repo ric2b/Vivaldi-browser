@@ -1,4 +1,24 @@
 # Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+import("//ui/webui/resources/tools/bundle_js.gni")
+
+shared_interstitials_path =
+    rebase_path("${root_gen_dir}/components/security_interstitials/core/",
+                root_build_dir)
+
+bundle_js("bundle_js_document_blocked_interstitial") {
+  # Using a placeholder value for `host`. The value is ignored since the bundled
+  # code is not served from any host.
+  host = "_ignored_"
+  input = rebase_path(".", root_build_dir)
+  out_folder = "${target_gen_dir}/document_blocked_interstitial"
+  js_module_in_files = [ "document_blocked_interstitial.js" ]
+
+  external_paths = [ "chrome://interstitials/|$shared_interstitials_path" ]
+  deps = [
+    "//components/security_interstitials/core/common/resources:preprocess",
+    "//ui/webui/resources/js:build_ts",
+  ]
+}
 
 source_set("interstitial") {
   sources= [

@@ -338,17 +338,19 @@ static inline void dealloc_compressor_data(AV1_COMP *cpi) {
     aom_free(cpi->td.mb.tmp_pred_bufs[j]);
   }
 
-#if CONFIG_DENOISE
+#if CONFIG_DENOISE && !CONFIG_REALTIME_ONLY
   if (cpi->denoise_and_model) {
     aom_denoise_and_model_free(cpi->denoise_and_model);
     cpi->denoise_and_model = NULL;
   }
 #endif
+#if !CONFIG_REALTIME_ONLY
   if (cpi->film_grain_table) {
     aom_film_grain_table_free(cpi->film_grain_table);
     aom_free(cpi->film_grain_table);
     cpi->film_grain_table = NULL;
   }
+#endif
 
   if (cpi->ppi->use_svc) av1_free_svc_cyclic_refresh(cpi);
   aom_free(cpi->svc.layer_context);

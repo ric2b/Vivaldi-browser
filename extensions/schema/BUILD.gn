@@ -16,6 +16,8 @@ function_registration("generated_api_registration") {
   impl_dir = "//vivaldi/extensions/api"
   configs = [
     "//build/config:precompiled_headers",
+    "//third_party/tflite:tflite_config",
+    "//third_party/tflite_support:tflite_support_config",
   ]
   bundle_name = "Vivaldi"
   root = "//vivaldi/"
@@ -37,6 +39,8 @@ function_registration("generated_api_registration") {
     "//content/public/browser",
     "//extensions/common",
     "//skia",
+    "//third_party/flatbuffers",
+    "//third_party/tflite_support:tflite_support_proto",
     "//vivaldi/renderer/mojo:frame_service",
   ]
   deps += schema_dependencies

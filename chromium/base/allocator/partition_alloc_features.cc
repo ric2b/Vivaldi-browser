@@ -23,6 +23,21 @@
 namespace base {
 namespace features {
 
+namespace {
+
+static constexpr char kPAFeatureEnabledProcessesStr[] = "enabled-processes";
+static constexpr char kBrowserOnlyStr[] = "browser-only";
+static constexpr char kBrowserAndRendererStr[] = "browser-and-renderer";
+static constexpr char kNonRendererStr[] = "non-renderer";
+static constexpr char kAllProcessesStr[] = "all-processes";
+
+#if PA_CONFIG(ENABLE_SHADOW_METADATA)
+static constexpr char kRendererOnlyStr[] = "renderer-only";
+static constexpr char kAllChildProcessesStr[] = "all-child-processes";
+#endif  // PA_CONFIG(ENABLE_SHADOW_METADATA)
+
+}  // namespace
+
 BASE_FEATURE(kPartitionAllocUnretainedDanglingPtr,
              "PartitionAllocUnretainedDanglingPtr",
              FEATURE_ENABLED_BY_DEFAULT);
@@ -41,6 +56,10 @@ const base::FeatureParam<UnretainedDanglingPtrMode>
         &kUnretainedDanglingPtrModeOption,
 };
 
+// Note: DPD conflicts with no-op `free()` (see
+// `base::allocator::MakeFreeNoOp()`). No-op `free()` stands down in the
+// presence of DPD, but hypothetically fully launching DPD should prompt
+// a rethink of no-op `free()`.
 BASE_FEATURE(kPartitionAllocDanglingPtr,
              "PartitionAllocDanglingPtr",
 #if PA_BUILDFLAG(ENABLE_DANGLING_RAW_PTR_FEATURE_FLAG)
@@ -102,16 +121,16 @@ BASE_FEATURE(kPartitionAllocWithAdvancedChecks,
 constexpr FeatureParam<PartitionAllocWithAdvancedChecksEnabledProcesses>::Option
     kPartitionAllocWithAdvancedChecksEnabledProcessesOptions[] = {
         {PartitionAllocWithAdvancedChecksEnabledProcesses::kBrowserOnly,
-         "browser-only"},
+         kBrowserOnlyStr},
         {PartitionAllocWithAdvancedChecksEnabledProcesses::kBrowserAndRenderer,
-         "browser-and-renderer"},
+         kBrowserAndRendererStr},
         {PartitionAllocWithAdvancedChecksEnabledProcesses::kNonRenderer,
-         "non-renderer"},
+         kNonRendererStr},
         {PartitionAllocWithAdvancedChecksEnabledProcesses::kAllProcesses,
-         "all-processes"}};
+         kAllProcessesStr}};
 const base::FeatureParam<PartitionAllocWithAdvancedChecksEnabledProcesses>
     kPartitionAllocWithAdvancedChecksEnabledProcessesParam{
-        &kPartitionAllocWithAdvancedChecks, "enabled-processes",
+        &kPartitionAllocWithAdvancedChecks, kPAFeatureEnabledProcessesStr,
         PartitionAllocWithAdvancedChecksEnabledProcesses::kBrowserOnly,
         &kPartitionAllocWithAdvancedChecksEnabledProcessesOptions};
 
@@ -127,6 +146,10 @@ const base::FeatureParam<int>
 BASE_FEATURE(kPartitionAllocZappingByFreeFlags,
              "PartitionAllocZappingByFreeFlags",
              FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPartitionAllocEventuallyZeroFreedMemory,
+             "PartitionAllocEventuallyZeroFreedMemory",
+             FEATURE_DISABLED_BY_DEFAULT);
 #endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
 BASE_FEATURE(kPartitionAllocBackupRefPtr,
@@ -140,15 +163,15 @@ BASE_FEATURE(kPartitionAllocBackupRefPtr,
 
 constexpr FeatureParam<BackupRefPtrEnabledProcesses>::Option
     kBackupRefPtrEnabledProcessesOptions[] = {
-        {BackupRefPtrEnabledProcesses::kBrowserOnly, "browser-only"},
+        {BackupRefPtrEnabledProcesses::kBrowserOnly, kBrowserOnlyStr},
         {BackupRefPtrEnabledProcesses::kBrowserAndRenderer,
-         "browser-and-renderer"},
-        {BackupRefPtrEnabledProcesses::kNonRenderer, "non-renderer"},
-        {BackupRefPtrEnabledProcesses::kAllProcesses, "all-processes"}};
+         kBrowserAndRendererStr},
+        {BackupRefPtrEnabledProcesses::kNonRenderer, kNonRendererStr},
+        {BackupRefPtrEnabledProcesses::kAllProcesses, kAllProcessesStr}};
 
 const base::FeatureParam<BackupRefPtrEnabledProcesses>
     kBackupRefPtrEnabledProcessesParam{
-        &kPartitionAllocBackupRefPtr, "enabled-processes",
+        &kPartitionAllocBackupRefPtr, kPAFeatureEnabledProcessesStr,
 #if PA_BUILDFLAG(IS_MAC) && PA_BUILDFLAG(PA_ARCH_CPU_ARM64)
         BackupRefPtrEnabledProcesses::kNonRenderer,
 #else
@@ -167,7 +190,7 @@ const base::FeatureParam<BackupRefPtrMode> kBackupRefPtrModeParam{
 
 BASE_FEATURE(kPartitionAllocMemoryTagging,
              "PartitionAllocMemoryTagging",
-#if PA_BUILDFLAG(USE_FULL_MTE)
+#if PA_BUILDFLAG(USE_FULL_MTE) || BUILDFLAG(IS_ANDROID)
              FEATURE_ENABLED_BY_DEFAULT
 #else
              FEATURE_DISABLED_BY_DEFAULT
@@ -198,17 +221,17 @@ const base::FeatureParam<RetagMode> kRetagModeParam{
 
 constexpr FeatureParam<MemoryTaggingEnabledProcesses>::Option
     kMemoryTaggingEnabledProcessesOptions[] = {
-        {MemoryTaggingEnabledProcesses::kBrowserOnly, "browser-only"},
-        {MemoryTaggingEnabledProcesses::kNonRenderer, "non-renderer"},
-        {MemoryTaggingEnabledProcesses::kAllProcesses, "all-processes"}};
+        {MemoryTaggingEnabledProcesses::kBrowserOnly, kBrowserOnlyStr},
+        {MemoryTaggingEnabledProcesses::kNonRenderer, kNonRendererStr},
+        {MemoryTaggingEnabledProcesses::kAllProcesses, kAllProcessesStr}};
 
 const base::FeatureParam<MemoryTaggingEnabledProcesses>
     kMemoryTaggingEnabledProcessesParam{
-        &kPartitionAllocMemoryTagging, "enabled-processes",
+        &kPartitionAllocMemoryTagging, kPAFeatureEnabledProcessesStr,
 #if PA_BUILDFLAG(USE_FULL_MTE)
         MemoryTaggingEnabledProcesses::kAllProcesses,
 #else
-        MemoryTaggingEnabledProcesses::kBrowserOnly,
+        MemoryTaggingEnabledProcesses::kNonRenderer,
 #endif
         &kMemoryTaggingEnabledProcessesOptions};
 
@@ -419,60 +442,6 @@ BASE_FEATURE(kUsePoolOffsetFreelists,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
-BASE_FEATURE(kPartitionAllocMakeFreeNoOpOnShutdown,
-             "PartitionAllocMakeFreeNoOpOnShutdown",
-#if PA_BUILDFLAG(IS_CHROMEOS)
-             FEATURE_ENABLED_BY_DEFAULT
-#else
-             FEATURE_DISABLED_BY_DEFAULT
-#endif
-);
-
-constexpr FeatureParam<WhenFreeBecomesNoOp>::Option
-    kPartitionAllocMakeFreeNoOpOnShutdownOptions[] = {
-        {WhenFreeBecomesNoOp::kBeforePreShutdown, "before-preshutdown"},
-        {WhenFreeBecomesNoOp::kBeforeHaltingStartupTracingController,
-         "before-halting-startup-tracing-controller"},
-        {
-            WhenFreeBecomesNoOp::kBeforeShutDownThreads,
-            "before-shutdown-threads",
-        },
-        {
-            WhenFreeBecomesNoOp::kInShutDownThreads,
-            "in-shutdown-threads",
-        },
-        {
-            WhenFreeBecomesNoOp::kAfterShutDownThreads,
-            "after-shutdown-threads",
-        },
-};
-
-const base::FeatureParam<WhenFreeBecomesNoOp>
-    kPartitionAllocMakeFreeNoOpOnShutdownParam{
-        &kPartitionAllocMakeFreeNoOpOnShutdown, "callsite",
-        WhenFreeBecomesNoOp::kBeforePreShutdown,
-        &kPartitionAllocMakeFreeNoOpOnShutdownOptions};
-
-void MakeFreeNoOp(WhenFreeBecomesNoOp callsite) {
-  CHECK(base::FeatureList::GetInstance());
-  // Ignoring `free()` during Shutdown would allow developers to introduce new
-  // dangling pointers. So we want to avoid ignoring free when it is enabled.
-  // Note: For now, the DanglingPointerDetector is only enabled on 5 bots, and
-  // on linux non-official configuration.
-  // TODO(b/40802063): Reconsider this decision after the experiment.
-#if PA_BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
-  if (base::FeatureList::IsEnabled(features::kPartitionAllocDanglingPtr)) {
-    return;
-  }
-#endif  // PA_BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS)
-#if PA_BUILDFLAG(USE_ALLOCATOR_SHIM)
-  if (base::FeatureList::IsEnabled(kPartitionAllocMakeFreeNoOpOnShutdown) &&
-      kPartitionAllocMakeFreeNoOpOnShutdownParam.Get() == callsite) {
-    allocator_shim::InsertNoOpOnFreeAllocatorShimOnShutDown();
-  }
-#endif  // PA_BUILDFLAG(USE_ALLOCATOR_SHIM)
-}
-
 BASE_FEATURE(kPartitionAllocAdjustSizeWhenInForeground,
              "PartitionAllocAdjustSizeWhenInForeground",
 #if BUILDFLAG(IS_MAC)
@@ -484,6 +453,24 @@ BASE_FEATURE(kPartitionAllocAdjustSizeWhenInForeground,
 BASE_FEATURE(kPartitionAllocUseSmallSingleSlotSpans,
              "PartitionAllocUseSmallSingleSlotSpans",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+#if PA_CONFIG(ENABLE_SHADOW_METADATA)
+BASE_FEATURE(kPartitionAllocShadowMetadata,
+             "PartitionAllocShadowMetadata",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+constexpr FeatureParam<ShadowMetadataEnabledProcesses>::Option
+    kShadowMetadataEnabledProcessesOptions[] = {
+        {ShadowMetadataEnabledProcesses::kRendererOnly, kRendererOnlyStr},
+        {ShadowMetadataEnabledProcesses::kAllChildProcesses,
+         kAllChildProcessesStr}};
+
+const base::FeatureParam<ShadowMetadataEnabledProcesses>
+    kShadowMetadataEnabledProcessesParam{
+        &kPartitionAllocShadowMetadata, kPAFeatureEnabledProcessesStr,
+        ShadowMetadataEnabledProcesses::kRendererOnly,
+        &kShadowMetadataEnabledProcessesOptions};
+#endif  // PA_CONFIG(ENABLE_SHADOW_METADATA)
 
 }  // namespace features
 }  // namespace base

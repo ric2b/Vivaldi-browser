@@ -7,13 +7,14 @@
 #import <optional>
 
 #import "base/functional/bind.h"
+#import "base/memory/raw_ptr.h"
 #import "base/scoped_observation.h"
 #import "base/test/scoped_feature_list.h"
 #import "base/test/test_file_util.h"
 #import "base/uuid.h"
-#import "components/saved_tab_groups/fake_tab_group_sync_service.h"
-#import "components/saved_tab_groups/saved_tab_group.h"
-#import "components/saved_tab_groups/saved_tab_group_tab.h"
+#import "components/saved_tab_groups/public/saved_tab_group.h"
+#import "components/saved_tab_groups/public/saved_tab_group_tab.h"
+#import "components/saved_tab_groups/test_support/fake_tab_group_sync_service.h"
 #import "components/sessions/core/tab_restore_service.h"
 #import "components/tab_groups/tab_group_color.h"
 #import "components/tab_groups/tab_group_id.h"
@@ -134,11 +135,12 @@ std::unique_ptr<KeyedService> CreateFakeTabGroupSyncService(
 class TabsCloserTest : public PlatformTest {
  public:
   TabsCloserTest() {
-    // Create a TestChromeBrowserState with required services.
-    TestChromeBrowserState::Builder builder;
+    // Create a TestProfileIOS with required services.
+    TestProfileIOS::Builder builder;
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        AuthenticationServiceFactory::GetDefaultFactory());
+        AuthenticationServiceFactory::GetFactoryWithDelegate(
+            std::make_unique<FakeAuthenticationServiceDelegate>()));
     builder.AddTestingFactory(
         SessionRestorationServiceFactory::GetInstance(),
         TestSessionRestorationService::GetTestingFactory());
@@ -147,27 +149,20 @@ class TabsCloserTest : public PlatformTest {
     builder.AddTestingFactory(
         tab_groups::TabGroupSyncServiceFactory::GetInstance(),
         base::BindRepeating(&CreateFakeTabGroupSyncService));
-    browser_state_ = std::move(builder).Build();
+    profile_ = std::move(builder).Build();
 
     fake_tab_group_service_ = static_cast<tab_groups::FakeTabGroupSyncService*>(
-        tab_groups::TabGroupSyncServiceFactory::GetForBrowserState(
-            browser_state_.get()));
-
-    // Initialize the AuthenticationService.
-    AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
-        browser_state_.get(),
-        std::make_unique<FakeAuthenticationServiceDelegate>());
+        tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile_.get()));
 
     scene_state_ = OCMClassMock([SceneState class]);
     OCMStub([scene_state_ sceneSessionID]).andReturn(@(kSceneSessionID));
-    browser_ = Browser::Create(browser_state_.get(), scene_state_);
+    browser_ = Browser::Create(profile_.get(), scene_state_);
   }
 
   Browser* browser() { return browser_.get(); }
 
   sessions::TabRestoreService* restore_service() {
-    return IOSChromeTabRestoreServiceFactory::GetForBrowserState(
-        browser_state_.get());
+    return IOSChromeTabRestoreServiceFactory::GetForProfile(profile_.get());
   }
 
   tab_groups::FakeTabGroupSyncService* tab_group_service() {
@@ -185,7 +180,7 @@ class TabsCloserTest : public PlatformTest {
     auto web_state = std::make_unique<web::FakeWebState>();
     web_state->SetIsRealized(true);
     web_state->SetVisibleURL(url);
-    web_state->SetBrowserState(browser_->GetBrowserState());
+    web_state->SetBrowserState(browser_->GetProfile());
     web_state->SetNavigationManager(std::move(navigation_manager));
     web_state->SetNavigationItemCount(1);
 
@@ -210,10 +205,10 @@ class TabsCloserTest : public PlatformTest {
  private:
   web::WebTaskEnvironment task_environment_;
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
-  std::unique_ptr<ChromeBrowserState> browser_state_;
+  std::unique_ptr<ProfileIOS> profile_;
   __strong SceneState* scene_state_;
   std::unique_ptr<Browser> browser_;
-  tab_groups::FakeTabGroupSyncService* fake_tab_group_service_;
+  raw_ptr<tab_groups::FakeTabGroupSyncService> fake_tab_group_service_;
 };
 
 // Tests how a TabsCloser behaves when presented with a Browser containing
@@ -595,7 +590,7 @@ TEST_F(TabsCloserTest, GroupedTabs_ClosePolicyAllTabs) {
   WebStateList* web_state_list = browser()->GetWebStateList();
   WebStateListBuilderFromDescription builder(web_state_list);
   ASSERT_TRUE(builder.BuildWebStateListFromDescription(
-      "a b | c [ 0 d e ] f [ 1 g h i ] j", browser()->GetBrowserState()));
+      "a b | c [ 0 d e ] f [ 1 g h i ] j", browser()->GetProfile()));
   // Store the initial groups visual data to compare after Undo.
   const tab_groups::TabGroupVisualData visual_data_0 =
       builder.GetTabGroupForIdentifier('0')->visual_data();
@@ -665,7 +660,7 @@ TEST_F(TabsCloserTest, GroupedTabs_ClosePolicyRegularTabs) {
   WebStateList* web_state_list = browser()->GetWebStateList();
   WebStateListBuilderFromDescription builder(web_state_list);
   ASSERT_TRUE(builder.BuildWebStateListFromDescription(
-      "a b | c [ 0 d e ] f [ 1 g h i ] j", browser()->GetBrowserState()));
+      "a b | c [ 0 d e ] f [ 1 g h i ] j", browser()->GetProfile()));
   // Store the initial groups visual data to compare after Undo.
   const tab_groups::TabGroupVisualData visual_data_0 =
       builder.GetTabGroupForIdentifier('0')->visual_data();
@@ -734,7 +729,7 @@ TEST_F(TabsCloserTest, UndoCloseTabs_Reentrancy) {
   WebStateList* web_state_list = browser()->GetWebStateList();
   WebStateListBuilderFromDescription builder(web_state_list);
   ASSERT_TRUE(builder.BuildWebStateListFromDescription(
-      "a b | c d e", browser()->GetBrowserState()));
+      "a b | c d e", browser()->GetProfile()));
 
   TabsCloser tabs_closer(browser(), TabsCloser::ClosePolicy::kAllTabs);
 
@@ -754,12 +749,12 @@ TEST_F(TabsCloserTest, UndoCloseTabs_Reentrancy) {
 TEST_F(TabsCloserTest, UndoCloseTabs_SavedTabs) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+      {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
 
   WebStateList* web_state_list = browser()->GetWebStateList();
   WebStateListBuilderFromDescription builder(web_state_list);
   ASSERT_TRUE(builder.BuildWebStateListFromDescription(
-      "| a [ 0 b ] c d [ 1 e ]", browser()->GetBrowserState()));
+      "| a [ 0 b ] c d [ 1 e ]", browser()->GetProfile()));
 
   // Add the two groups.
   tab_groups::FakeTabGroupSyncService* service = tab_group_service();

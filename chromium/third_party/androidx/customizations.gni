@@ -83,6 +83,16 @@ template("_androidx_prebuilt") {
                "androidx_versionedparcelable_versionedparcelable_java") {
       # Target has AIDL, but we do not support it yet: http://crbug.com/644439
       ignore_aidl = true
+    } else if (target_name == "androidx_window_window_java") {
+      deps += [
+        # This library has a <uses-library> to enable some extra OS APIs, so ensure the
+        # .jar file is made available to R8 via this dep.
+        "//third_party/android_sdk:android_window_extensions_java",
+
+        # Sidecar as a library seems to be gone in Maven, so deps don't exist
+        # onto sidecar.
+        "//third_party/androidx:androidx_window_sidecar_sidecar_java",
+      ]
     } else if (target_name == "androidx_webkit_webkit_java") {
       visibility = [
         "//android_webview/tools/system_webview_shell:*",
@@ -102,30 +112,6 @@ template("_androidx_prebuilt") {
   if (target_name == "androidx_annotation_annotation_jvm_java") {
     java_group("androidx_window_stubs_java") {
       deps = [ "//third_party/androidx/local_modifications/window:androidx_window_shims_java" ]
-    }
-
-    # For M130 cherry-pick (crbug.com/370834499)
-    android_library("custom_pdf_viewer_java") {
-      sources = [ "local_modifications/pdf-viewer/java/src/androidx/pdf/viewer/PaginatedView.java" ]
-      enable_bytecode_checks = false
-      deps = [
-        ":androidx_pdf_pdf_viewer_java",
-        "//third_party/androidx:androidx_annotation_annotation_java",
-        "//third_party/androidx:androidx_core_core_java",
-      ]
-    }
-    android_library("custom_pdf_viewer_fragment_java") {
-      sources = [ "local_modifications/pdf-viewer/java/src/androidx/pdf/viewer/fragment/PdfViewerFragment.kt" ]
-      enable_bytecode_checks = false
-      deps = [
-        ":androidx_core_core_java",
-        ":androidx_fragment_fragment_ktx_java",
-        ":androidx_pdf_pdf_viewer_fragment_java",
-        ":androidx_pdf_pdf_viewer_java",
-        "//third_party/android_deps:material_design_java",
-        "//third_party/kotlin_stdlib:kotlin_stdlib_java",
-      ]
-      resources_package = "androidx.pdf"
     }
   }
 }
@@ -152,9 +138,6 @@ template("androidx_android_aar_prebuilt") {
     if (target_name == "androidx_pdf_pdf_viewer_java") {
       # Target has AIDL, but we do not support it yet: http://crbug.com/644439
       ignore_aidl = true
-      jar_excluded_patterns = [ "**/PaginatedView*" ]
-    } else if (target_name == "androidx_pdf_pdf_viewer_fragment_java") {
-      jar_excluded_patterns = [ "**/PdfViewerFragment*" ]
     }
   }
 }

@@ -1,31 +1,56 @@
 [INTERFACES]
 interface AI
     attribute @@toStringTag
-    getter assistant
+    getter languageDetector
+    getter languageModel
     getter rewriter
     getter summarizer
     getter writer
     method constructor
-interface AIAssistant
+interface AICreateMonitor : EventTarget
+    attribute @@toStringTag
+    getter ondownloadprogress
+    method constructor
+    setter ondownloadprogress
+interface AILanguageDetector
+    attribute @@toStringTag
+    method constructor
+    method destroy
+    method detect
+interface AILanguageDetectorCapabilities
+    attribute @@toStringTag
+    getter available
+    method constructor
+    method languageAvailable
+interface AILanguageDetectorFactory
+    attribute @@toStringTag
+    method capabilities
+    method constructor
+    method create
+interface AILanguageModel : EventTarget
     attribute @@toStringTag
     getter maxTokens
+    getter oncontextoverflow
     getter temperature
     getter tokensLeft
     getter tokensSoFar
     getter topK
     method clone
     method constructor
+    method countPromptTokens
     method destroy
     method prompt
     method promptStreaming
-interface AIAssistantCapabilities
+    setter oncontextoverflow
+interface AILanguageModelCapabilities
     attribute @@toStringTag
     getter available
     getter defaultTemperature
     getter defaultTopK
     getter maxTopK
     method constructor
-interface AIAssistantFactory
+    method languageAvailable
+interface AILanguageModelFactory
     attribute @@toStringTag
     method capabilities
     method constructor
@@ -57,13 +82,22 @@ interface AISummarizerCapabilities
     attribute @@toStringTag
     getter available
     method constructor
+    method languageAvailable
     method supportsFormat
-    method supportsInputLanguage
     method supportsLength
     method supportsType
 interface AISummarizerFactory
     attribute @@toStringTag
     method capabilities
+    method constructor
+    method create
+interface AITranslator
+    attribute @@toStringTag
+    method constructor
+    method destroy
+    method translate
+interface AITranslatorFactory
+    attribute @@toStringTag
     method constructor
     method create
 interface AIWriter
@@ -699,7 +733,6 @@ interface GPUAdapter
     getter isFallbackAdapter
     getter limits
     method constructor
-    method requestAdapterInfo
     method requestDevice
 interface GPUAdapterInfo
     attribute @@toStringTag
@@ -735,6 +768,7 @@ interface GPUCanvasContext
     getter canvas
     method configure
     method constructor
+    method getConfiguration
     method getCurrentTexture
     method unconfigure
 interface GPUCommandBuffer
@@ -795,6 +829,7 @@ interface GPUComputePipeline
     setter label
 interface GPUDevice : EventTarget
     attribute @@toStringTag
+    getter adapterInfo
     getter features
     getter label
     getter limits
@@ -904,6 +939,8 @@ interface GPURenderPassEncoder
     method endOcclusionQuery
     method executeBundles
     method insertDebugMarker
+    method multiDrawIndexedIndirect
+    method multiDrawIndirect
     method popDebugGroup
     method pushDebugGroup
     method setBindGroup
@@ -1121,6 +1158,12 @@ interface IDBOpenDBRequest : IDBRequest
     method constructor
     setter onblocked
     setter onupgradeneeded
+interface IDBRecord
+    attribute @@toStringTag
+    getter key
+    getter primaryKey
+    getter value
+    method constructor
 interface IDBRequest : EventTarget
     attribute @@toStringTag
     getter error
@@ -1180,10 +1223,6 @@ interface InstallEvent : ExtendableEvent
     attribute @@toStringTag
     method addRoutes
     method constructor
-interface LanguageTranslator
-    attribute @@toStringTag
-    method constructor
-    method translate
 interface Lock
     attribute @@toStringTag
     getter mode
@@ -1440,6 +1479,7 @@ interface OffscreenCanvasRenderingContext2D
     method fill
     method fillRect
     method fillText
+    method fillTextCluster
     method getImageData
     method getLineDash
     method getTextureFormat
@@ -1584,6 +1624,7 @@ interface PerformanceResourceTiming : PerformanceEntry
     getter domainLookupStart
     getter encodedBodySize
     getter fetchStart
+    getter finalResponseHeadersStart
     getter firstInterimResponseStart
     getter initiatorType
     getter nextHopProtocol
@@ -1651,6 +1692,7 @@ interface PushMessageData
     attribute @@toStringTag
     method arrayBuffer
     method blob
+    method bytes
     method constructor
     method json
     method text
@@ -1754,6 +1796,7 @@ interface Request
     getter cache
     getter credentials
     getter destination
+    getter duplex
     getter headers
     getter integrity
     getter isHistoryNavigation
@@ -1768,6 +1811,7 @@ interface Request
     getter url
     method arrayBuffer
     method blob
+    method bytes
     method clone
     method constructor
     method formData
@@ -1788,6 +1832,7 @@ interface Response
     getter url
     method arrayBuffer
     method blob
+    method bytes
     method clone
     method constructor
     method formData
@@ -1796,6 +1841,18 @@ interface Response
 interface RestrictionTarget
     attribute @@toStringTag
     method constructor
+interface Sanitizer
+    attribute @@toStringTag
+    method allowAttribute
+    method allowElement
+    method constructor
+    method get
+    method removeAttribute
+    method removeElement
+    method removeUnsafe
+    method replaceWithChildrenElement
+    method setComments
+    method setDataAttributes
 interface Scheduler
     attribute @@toStringTag
     method constructor
@@ -1870,14 +1927,12 @@ interface StorageBucketManager
     method delete
     method keys
     method open
-interface StorageManager : EventTarget
+interface StorageManager
     attribute @@toStringTag
-    getter onquotachange
     method constructor
     method estimate
     method getDirectory
     method persisted
-    setter onquotachange
 interface Subscriber
     attribute @@toStringTag
     getter active
@@ -1926,6 +1981,17 @@ interface TaskSignal : AbortSignal
     getter priority
     method constructor
     setter onprioritychange
+interface TextCluster
+    attribute @@toStringTag
+    getter align
+    getter baseline
+    getter begin
+    getter end
+    getter x
+    getter y
+    method constructor
+    setter x
+    setter y
 interface TextDecoder
     attribute @@toStringTag
     getter encoding
@@ -1975,6 +2041,7 @@ interface TextMetrics
     method constructor
     method getActualBoundingBox
     method getSelectionRects
+    method getTextClusters
 interface TimestampTrigger
     attribute @@toStringTag
     getter timestamp
@@ -1993,9 +2060,7 @@ interface TransformStreamDefaultController
     method terminate
 interface Translation
     attribute @@toStringTag
-    method canTranslate
     method constructor
-    method createTranslator
 interface TrustedHTML
     static method fromLiteral
     attribute @@toStringTag

@@ -44,12 +44,12 @@ bool CanRun(Module& module) {
     return true;
 }
 
-void ValueToLetFuzzer(Module& module) {
+void ValueToLetFuzzer(Module& module, ValueToLetConfig config) {
     if (!CanRun(module)) {
         return;
     }
 
-    if (auto res = ValueToLet(module); res != Success) {
+    if (auto res = ValueToLet(module, config); res != Success) {
         return;
     }
 
@@ -62,4 +62,5 @@ void ValueToLetFuzzer(Module& module) {
 }  // namespace
 }  // namespace tint::core::ir::transform
 
-TINT_IR_MODULE_FUZZER(tint::core::ir::transform::ValueToLetFuzzer);
+TINT_IR_MODULE_FUZZER(tint::core::ir::transform::ValueToLetFuzzer,
+                      tint::core::ir::transform::kValueToLetCapabilities);

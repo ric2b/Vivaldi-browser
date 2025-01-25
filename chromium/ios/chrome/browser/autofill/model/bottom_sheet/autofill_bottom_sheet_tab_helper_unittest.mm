@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
 
+#import "base/memory/raw_ptr.h"
 #import "base/test/scoped_feature_list.h"
 #import "components/autofill/ios/browser/autofill_agent.h"
 #import "components/autofill/ios/browser/autofill_driver_ios_factory.h"
@@ -94,7 +95,7 @@ class AutofillBottomSheetTabHelperTest : public PlatformTest {
   web::ScopedTestingWebClient web_client_;
   std::unique_ptr<TestProfileIOS> profile_;
   std::unique_ptr<web::WebState> web_state_;
-  AutofillBottomSheetTabHelper* helper_;
+  raw_ptr<AutofillBottomSheetTabHelper> helper_;
   std::unique_ptr<autofill::AutofillClient> autofill_client_;
   AutofillAgent* autofill_agent_;
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -138,6 +139,10 @@ TEST_F(AutofillBottomSheetTabHelperTest,
   // Using OnFormMessageReceived to emulate receiving a signal from the
   // proactive password generation listeners. This emulates the trigger (the
   // focus on the listened field), so the bottom sheet should show.
+  helper_->OnFormMessageReceived(form_message);
+
+  // Attempt to trigger a second time but this should be no op this time
+  // because the listeners were detached on the first trigger.
   helper_->OnFormMessageReceived(form_message);
 
   // Verify that the bottom sheet is triggered upon receiving the signal from

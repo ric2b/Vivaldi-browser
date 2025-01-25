@@ -6,19 +6,17 @@
 
 import argparse
 import codecs
-import math
 import os
 import re
 import sys
 import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from primes import next_prime
 import xngen
 import xnncommon
 
 
-parser = argparse.ArgumentParser(description='GAvgPool microkernel test generator')
+parser = argparse.ArgumentParser(description="RDsum microkernel test generator")
 parser.add_argument("-s", "--spec", metavar="FILE", required=True,
                     help="Specification (YAML) file")
 parser.add_argument(
@@ -31,7 +29,7 @@ parser.set_defaults(defines=list())
 
 
 def split_ukernel_name(name):
-  match = re.fullmatch(r"xnn_(f16|f16_f32acc|f32|qs8|u8)_(rminmax|rmax|rmin|rsum|rdsum)(_minmax_(fp32))?_ukernel_(.*)_(u|c)(\d+)(v)?(_acc\d+)?", name)
+  match = re.fullmatch(r"xnn_(f16|f16_f32acc|f32|qs8|qu8|u8)_(rminmax|rmax|rmin|rsum|rdsum)(_minmax_(fp32))?_ukernel_(.*)_(u|c)(\d+)(v)?(_acc\d+)?", name)
   if match is None:
     raise ValueError("Unexpected microkernel name: " + name)
 
@@ -109,12 +107,12 @@ def main(args):
 //   Specification: {specification}
 //   Generator: {generator}
 
-#include "bench/rsum-benchmark.h"
-#include "bench/utils.h"
+#include "rsum-benchmark.h"
+#include "utils.h"
 #include <benchmark/benchmark.h>
 
 #include "xnnpack.h"
-#include "xnnpack/aligned-allocator.h"
+#include "xnnpack/buffer.h"
 #include "xnnpack/common.h"
 #include "xnnpack/reduce.h"
 #include "xnnpack/microfnptr.h"

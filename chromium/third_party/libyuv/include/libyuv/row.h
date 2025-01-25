@@ -15,64 +15,12 @@
 #include <stdlib.h>  // For malloc
 
 #include "libyuv/basic_types.h"
+#include "libyuv/cpu_support.h"
 
 #ifdef __cplusplus
 namespace libyuv {
 extern "C" {
 #endif
-
-#if defined(__pnacl__) || defined(__CLR_VER) ||            \
-    (defined(__native_client__) && defined(__x86_64__)) || \
-    (defined(__i386__) && !defined(__SSE__) && !defined(__clang__))
-#define LIBYUV_DISABLE_X86
-#endif
-#if defined(__native_client__)
-#define LIBYUV_DISABLE_NEON
-#endif
-// MemorySanitizer does not support assembly code yet. http://crbug.com/344505
-#if defined(__has_feature)
-#if __has_feature(memory_sanitizer) && !defined(LIBYUV_DISABLE_NEON)
-#define LIBYUV_DISABLE_NEON
-#endif
-#if __has_feature(memory_sanitizer) && !defined(LIBYUV_DISABLE_X86)
-#define LIBYUV_DISABLE_X86
-#endif
-#endif
-// clang >= 3.5.0 required for Arm64.
-#if defined(__clang__) && defined(__aarch64__) && !defined(LIBYUV_DISABLE_NEON)
-#if (__clang_major__ < 3) || (__clang_major__ == 3 && (__clang_minor__ < 5))
-#define LIBYUV_DISABLE_NEON
-#endif  // clang >= 3.5
-#endif  // __clang__
-
-// GCC >= 4.7.0 required for AVX2.
-#if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
-#if (__GNUC__ > 4) || (__GNUC__ == 4 && (__GNUC_MINOR__ >= 7))
-#define GCC_HAS_AVX2 1
-#endif  // GNUC >= 4.7
-#endif  // __GNUC__
-
-// clang >= 3.4.0 required for AVX2.
-#if defined(__clang__) && (defined(__x86_64__) || defined(__i386__))
-#if (__clang_major__ > 3) || (__clang_major__ == 3 && (__clang_minor__ >= 4))
-#define CLANG_HAS_AVX2 1
-#endif  // clang >= 3.4
-#endif  // __clang__
-
-// clang >= 6.0.0 required for AVX512.
-#if defined(__clang__) && (defined(__x86_64__) || defined(__i386__))
-// clang in xcode follows a different versioning scheme.
-// TODO(fbarchard): fix xcode 9 ios b/789.
-#if (__clang_major__ >= 7) && !defined(__APPLE__)
-#define CLANG_HAS_AVX512 1
-#endif  // clang >= 7
-#endif  // __clang__
-
-// Visual C 2012 required for AVX2.
-#if defined(_M_IX86) && !defined(__clang__) && defined(_MSC_VER) && \
-    _MSC_VER >= 1700
-#define VISUALC_HAS_AVX2 1
-#endif  // VisualStudio >= 2012
 
 // The following are available on all x86 platforms:
 #if !defined(LIBYUV_DISABLE_X86) && \
@@ -158,7 +106,8 @@ extern "C" {
 #define HAS_ARGBGRAYROW_SSSE3
 #define HAS_ARGBLUMACOLORTABLEROW_SSSE3
 #define HAS_ARGBMIRRORROW_SSE2
-#define HAS_ARGBMULTIPLYROW_SSE2
+// TODO: Re-enable once rounding behaviour is fixed.
+// #define HAS_ARGBMULTIPLYROW_SSE2
 #define HAS_ARGBPOLYNOMIALROW_SSE2
 #define HAS_ARGBQUANTIZEROW_SSE2
 #define HAS_ARGBSEPIAROW_SSSE3
@@ -238,7 +187,8 @@ extern "C" {
 
 // Effects:
 #define HAS_ARGBADDROW_AVX2
-#define HAS_ARGBMULTIPLYROW_AVX2
+// TODO: Re-enable once rounding behaviour is fixed.
+// #define HAS_ARGBMULTIPLYROW_AVX2
 #define HAS_ARGBSUBTRACTROW_AVX2
 #define HAS_BLENDPLANEROW_AVX2
 
@@ -577,6 +527,8 @@ extern "C" {
 #define HAS_BGRATOYROW_NEON_DOTPROD
 #define HAS_RGBATOYJROW_NEON_DOTPROD
 #define HAS_RGBATOYROW_NEON_DOTPROD
+#define HAS_ARGBGRAYROW_NEON_DOTPROD
+#define HAS_ARGBSEPIAROW_NEON_DOTPROD
 
 #define HAS_ARGBCOLORMATRIXROW_NEON_I8MM
 #define HAS_ARGBTOUV444ROW_NEON_I8MM
@@ -635,7 +587,8 @@ extern "C" {
 #define HAS_ARGBEXTRACTALPHAROW_MSA
 #define HAS_ARGBGRAYROW_MSA
 #define HAS_ARGBMIRRORROW_MSA
-#define HAS_ARGBMULTIPLYROW_MSA
+// TODO: Re-enable once rounding behaviour is fixed.
+// #define HAS_ARGBMULTIPLYROW_MSA
 #define HAS_ARGBQUANTIZEROW_MSA
 #define HAS_ARGBSEPIAROW_MSA
 #define HAS_ARGBSETROW_MSA
@@ -734,7 +687,8 @@ extern "C" {
 #define HAS_ARGBTOUVROW_LSX
 #define HAS_ARGBTOYJROW_LSX
 #define HAS_ARGBMIRRORROW_LSX
-#define HAS_ARGBMULTIPLYROW_LSX
+// TODO: Re-enable once rounding behaviour is fixed.
+// #define HAS_ARGBMULTIPLYROW_LSX
 #define HAS_BGRATOUVROW_LSX
 #define HAS_BGRATOYROW_LSX
 #define HAS_I400TOARGBROW_LSX
@@ -801,7 +755,8 @@ extern "C" {
 #define HAS_ARGBATTENUATEROW_LASX
 #define HAS_ARGBGRAYROW_LASX
 #define HAS_ARGBMIRRORROW_LASX
-#define HAS_ARGBMULTIPLYROW_LASX
+// TODO: Re-enable once rounding behaviour is fixed.
+// #define HAS_ARGBMULTIPLYROW_LASX
 #define HAS_ARGBSEPIAROW_LASX
 #define HAS_ARGBSHADEROW_LASX
 #define HAS_ARGBSHUFFLEROW_LASX
@@ -6151,6 +6106,9 @@ void ARGBUnattenuateRow_Any_AVX2(const uint8_t* src_ptr,
 void ARGBGrayRow_C(const uint8_t* src_argb, uint8_t* dst_argb, int width);
 void ARGBGrayRow_SSSE3(const uint8_t* src_argb, uint8_t* dst_argb, int width);
 void ARGBGrayRow_NEON(const uint8_t* src_argb, uint8_t* dst_argb, int width);
+void ARGBGrayRow_NEON_DotProd(const uint8_t* src_argb,
+                              uint8_t* dst_argb,
+                              int width);
 void ARGBGrayRow_MSA(const uint8_t* src_argb, uint8_t* dst_argb, int width);
 void ARGBGrayRow_LSX(const uint8_t* src_argb, uint8_t* dst_argb, int width);
 void ARGBGrayRow_LASX(const uint8_t* src_argb, uint8_t* dst_argb, int width);
@@ -6158,6 +6116,7 @@ void ARGBGrayRow_LASX(const uint8_t* src_argb, uint8_t* dst_argb, int width);
 void ARGBSepiaRow_C(uint8_t* dst_argb, int width);
 void ARGBSepiaRow_SSSE3(uint8_t* dst_argb, int width);
 void ARGBSepiaRow_NEON(uint8_t* dst_argb, int width);
+void ARGBSepiaRow_NEON_DotProd(uint8_t* dst_argb, int width);
 void ARGBSepiaRow_MSA(uint8_t* dst_argb, int width);
 void ARGBSepiaRow_LSX(uint8_t* dst_argb, int width);
 void ARGBSepiaRow_LASX(uint8_t* dst_argb, int width);

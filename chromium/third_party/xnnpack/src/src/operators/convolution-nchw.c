@@ -11,7 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <fp16/fp16.h>
 #include "xnnpack.h"
 #include "xnnpack/allocator.h"
 #include "xnnpack/cache.h"
@@ -219,7 +218,6 @@ static enum xnn_status create_dwconv_path(
     const uint32_t log2_filter_element_size,
     const xnn_pack_chw_dwconv_hwg_w_fn pack_chw_dwconv_hwg_w,
     const xnn_pack_chw_dwconv_ghw_w_fn pack_chw_dwconv_ghw_w,
-    const xnn_update_chw_params_fn update_chw_params,
     const size_t output_width_tile,
     const xnn_dwconv2d_chw_ukernel_fn dwconv_ukernel,
     const enum xnn_operator_type operator_type,
@@ -262,7 +260,6 @@ static enum xnn_status create_dwconv_path(
 
   convolution_op->ukernel.dwconv2d = (struct xnn_ukernel_dwconv2d) {
     .chw_fn = dwconv_ukernel,
-    .update_params = (xnn_update_chw_params_fn) update_chw_params,
     .output_width_tile = output_width_tile,
   };
 
@@ -384,10 +381,10 @@ enum xnn_status xnn_create_convolution2d_nchw_f16(
     goto error;
   }
 
-  const uint16_t fp16_output_min = fp16_ieee_from_fp32_value(output_min);
-  const uint16_t fp16_output_max = fp16_ieee_from_fp32_value(output_max);
-  const float rounded_output_min = fp16_ieee_to_fp32_value(fp16_output_min);
-  const float rounded_output_max = fp16_ieee_to_fp32_value(fp16_output_max);
+  const xnn_float16 fp16_output_min = xnn_float16_from_float(output_min);
+  const xnn_float16 fp16_output_max = xnn_float16_from_float(output_max);
+  const float rounded_output_min = xnn_float16_to_float(fp16_output_min);
+  const float rounded_output_max = xnn_float16_to_float(fp16_output_max);
   if (rounded_output_min >= rounded_output_max) {
     xnn_log_error(
       "failed to create %s operator with [%.7g, %.7g] output range: lower bound must be below upper bound",
@@ -561,14 +558,13 @@ enum xnn_status xnn_create_convolution2d_nchw_f16(
         pack_chw_dwconv_ghw_w = (xnn_pack_chw_dwconv_ghw_w_fn) xnn_pack_f32_to_f16_chw_dwconv_ghw_w;
       }
 
-      dwconv2d_parameters->init.f16(&convolution_op->params.f16_chw, 0, fp16_output_min, fp16_output_max);
+      dwconv2d_parameters->init.f16(&convolution_op->params.f16_chw, fp16_output_min, fp16_output_max);
 
       status = create_dwconv_path(
           kernel_height, kernel_width, groups,
           kernel, bias, flags, log2_filter_element_size,
           pack_chw_dwconv_hwg_w,
           pack_chw_dwconv_ghw_w,
-          (xnn_update_chw_params_fn) dwconv2d_parameters->update.f16,
           dwconv2d_parameters->output_width_tile,
           dwconv2d_parameters->ukernel,
           operator_type, convolution_op);
@@ -894,14 +890,13 @@ enum xnn_status xnn_create_convolution2d_nchw_f32(
     }
     case xnn_microkernel_type_dwconv:
     {
-      dwconv2d_parameters->init.f32(&convolution_op->params.f32_chw, 0, output_min, output_max);
+      dwconv2d_parameters->init.f32(&convolution_op->params.f32_chw, output_min, output_max);
 
       status = create_dwconv_path(
           kernel_height, kernel_width, groups,
           kernel, bias, flags, log2_filter_element_size,
           (xnn_pack_chw_dwconv_hwg_w_fn) xnn_pack_f32_chw_dwconv_hwg_w,
           (xnn_pack_chw_dwconv_ghw_w_fn) xnn_pack_f32_chw_dwconv_ghw_w,
-          (xnn_update_chw_params_fn) dwconv2d_parameters->update.f32,
           dwconv2d_parameters->output_width_tile,
           dwconv2d_parameters->ukernel,
           operator_type, convolution_op);
@@ -1133,9 +1128,6 @@ static enum xnn_status reshape_convolution2d_nchw(
         return xnn_status_out_of_memory;
       }
 
-      if (convolution_op->ukernel.dwconv2d.update_params != NULL) {
-        convolution_op->ukernel.dwconv2d.update_params(chw_params, (uint32_t) input_width);
-      }
       convolution_op->context.dwconv2d = (struct dwconv2d_context) {
         .input_height = input_height,
         .input_width = input_width << log2_input_element_size,

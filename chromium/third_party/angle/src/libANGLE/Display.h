@@ -33,10 +33,10 @@
 #include "platform/Feature.h"
 #include "platform/autogen/FrontendFeatures_autogen.h"
 
-// Only DisplayCGL and DisplayEAGL need to be notified about an EGL call about to be made to prepare
+// Only DisplayCGL needs to be notified about an EGL call about to be made to prepare
 // per-thread data. Disable Display::prepareForCall on other platforms for performance.
 #if !defined(ANGLE_USE_DISPLAY_PREPARE_FOR_CALL)
-#    if ANGLE_ENABLE_CGL || ANGLE_ENABLE_EAGL
+#    if ANGLE_ENABLE_CGL
 #        define ANGLE_USE_DISPLAY_PREPARE_FOR_CALL 1
 #    else
 #        define ANGLE_USE_DISPLAY_PREPARE_FOR_CALL 0
@@ -144,7 +144,6 @@ class Display final : public LabeledObject,
     static Display *GetExistingDisplayFromNativeDisplay(EGLNativeDisplayType nativeDisplay);
 
     using EglDisplaySet = angle::HashSet<Display *>;
-    static EglDisplaySet GetEglDisplaySet();
 
     static const ClientExtensions &GetClientExtensions();
     static const std::string &GetClientExtensionString();
@@ -179,7 +178,6 @@ class Display final : public LabeledObject,
 
     Error createContext(const Config *configuration,
                         gl::Context *shareContext,
-                        const EGLenum clientType,
                         const AttributeMap &attribs,
                         gl::Context **outContext);
 

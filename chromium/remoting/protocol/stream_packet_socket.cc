@@ -233,8 +233,7 @@ int StreamPacketSocket::GetOption(rtc::Socket::Option option, int* value) {
 
 int StreamPacketSocket::SetOption(rtc::Socket::Option option, int value) {
   if (!socket_) {
-    NOTREACHED_IN_MIGRATION();
-    return -1;
+    NOTREACHED();
   }
 
   switch (option) {
@@ -254,8 +253,7 @@ int StreamPacketSocket::SetOption(rtc::Socket::Option option, int value) {
 
     case rtc::Socket::OPT_NODELAY:
       // Should call TCPClientSocket::SetNoDelay directly.
-      NOTREACHED_IN_MIGRATION();
-      return -1;
+      NOTREACHED();
 
     case rtc::Socket::OPT_IPV6_V6ONLY:
       NOTIMPLEMENTED();
@@ -274,8 +272,7 @@ int StreamPacketSocket::SetOption(rtc::Socket::Option option, int value) {
       return -1;
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return -1;
+  NOTREACHED();
 }
 
 int StreamPacketSocket::GetError() const {
@@ -338,9 +335,13 @@ bool StreamPacketSocket::HandleWriteResult(int result) {
   PendingPacket& packet = send_queue_.front();
   packet.data->DidConsume(result);
   if (packet.data->BytesRemaining() == 0) {
-    SignalSentPacket(
-        this, rtc::SentPacket(packet.options.packet_id, rtc::TimeMillis()));
+    // Pop the queue before SignalSentPacket just in case SignalSentPacket
+    // ends up reentrant. This is a speculative fix for a hardening crash when
+    // send_queue_.pop_front() was called after SignalSentPacket.
+    const rtc::SentPacket sent_packet(packet.options.packet_id,
+                                      rtc::TimeMillis());
     send_queue_.pop_front();
+    SignalSentPacket(this, sent_packet);
   }
   return true;
 }

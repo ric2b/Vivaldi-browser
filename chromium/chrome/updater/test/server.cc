@@ -38,9 +38,9 @@ std::string SerializeRequest(HttpRequest& request) {
   request_strs.push_back(
       base::StringPrintf("Path: %s", request.relative_url.c_str()));
   request_strs.push_back("Headers: {");
-  for (auto& header : request.headers) {
-    request_strs.push_back(base::StringPrintf(
-        "    %s: %s", header.first.c_str(), header.second.c_str()));
+  for (const auto& [name, value] : request.headers) {
+    request_strs.push_back(
+        base::StringPrintf("    %s: %s", name.c_str(), value.c_str()));
   }
   request_strs.push_back("}");
   request_strs.push_back(
@@ -77,7 +77,8 @@ ScopedServer::~ScopedServer() {
 void ScopedServer::ConfigureTestMode(IntegrationTestCommands* commands) {
   CHECK(commands);
   commands->EnterTestMode(update_url(), crash_upload_url(),
-                          device_management_url(), {}, base::Minutes(5));
+                          device_management_url(), {}, base::Minutes(5),
+                          base::Seconds(2), base::Seconds(10));
 }
 
 void ScopedServer::ExpectOnce(request::MatcherGroup request_matcher_group,

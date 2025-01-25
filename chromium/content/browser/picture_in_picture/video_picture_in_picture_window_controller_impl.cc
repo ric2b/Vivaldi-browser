@@ -217,17 +217,30 @@ bool VideoPictureInPictureWindowControllerImpl::TogglePlayPause() {
   DCHECK(active_session_);
 
   if (IsPlayerActive()) {
-    if (media_session_action_pause_handled_) {
-      MediaSessionImpl::Get(web_contents())
-          ->Suspend(MediaSession::SuspendType::kUI);
-      return true /* still playing */;
-    }
-
-    active_session_->GetMediaPlayerRemote()->RequestPause(
-        /*triggered_by_user=*/false);
-    return false /* paused */;
+    return PauseInternal();
   }
+  return PlayInternal();
+}
 
+void VideoPictureInPictureWindowControllerImpl::Play() {
+  // This comes from the window, rather than the renderer, so we must actually
+  // have a window at this point.
+  DCHECK(window_);
+  DCHECK(active_session_);
+
+  PlayInternal();
+}
+
+void VideoPictureInPictureWindowControllerImpl::Pause() {
+  // This comes from the window, rather than the renderer, so we must actually
+  // have a window at this point.
+  DCHECK(window_);
+  DCHECK(active_session_);
+
+  PauseInternal();
+}
+
+bool VideoPictureInPictureWindowControllerImpl::PlayInternal() {
   if (media_session_action_play_handled_) {
     MediaSessionImpl::Get(web_contents())
         ->Resume(MediaSession::SuspendType::kUI);
@@ -236,6 +249,18 @@ bool VideoPictureInPictureWindowControllerImpl::TogglePlayPause() {
 
   active_session_->GetMediaPlayerRemote()->RequestPlay();
   return true /* playing */;
+}
+
+bool VideoPictureInPictureWindowControllerImpl::PauseInternal() {
+  if (media_session_action_pause_handled_) {
+    MediaSessionImpl::Get(web_contents())
+        ->Suspend(MediaSession::SuspendType::kUI);
+    return true /* still playing */;
+  }
+
+  active_session_->GetMediaPlayerRemote()->RequestPause(
+      /*triggered_by_user=*/false);
+  return false /* paused */;
 }
 
 PictureInPictureResult VideoPictureInPictureWindowControllerImpl::StartSession(
@@ -349,6 +374,12 @@ void VideoPictureInPictureWindowControllerImpl::HangUp() {
     MediaSession::Get(web_contents())->HangUp();
 }
 
+void VideoPictureInPictureWindowControllerImpl::SeekTo(base::TimeDelta time) {
+  if (media_session_action_seek_to_handled_) {
+    MediaSession::Get(web_contents())->SeekTo(time);
+  }
+}
+
 void VideoPictureInPictureWindowControllerImpl::MediaSessionInfoChanged(
     const media_session::mojom::MediaSessionInfoPtr& info) {
   if (!info)
@@ -404,6 +435,9 @@ void VideoPictureInPictureWindowControllerImpl::MediaSessionActionsChanged(
   media_session_action_next_slide_handled_ =
       actions.find(media_session::mojom::MediaSessionAction::kNextSlide) !=
       actions.end();
+  media_session_action_seek_to_handled_ =
+      actions.find(media_session::mojom::MediaSessionAction::kSeekTo) !=
+      actions.end();
 
   if (!window_)
     return;
@@ -429,6 +463,10 @@ void VideoPictureInPictureWindowControllerImpl::MediaSessionPositionChanged(
     const std::optional<media_session::MediaPosition>& media_position) {
   media_position_ = media_position;
   UpdatePlaybackState();
+
+  if (window_ && media_position.has_value()) {
+    window_->SetMediaPosition(*media_position);
+  }
 }
 
 gfx::Size VideoPictureInPictureWindowControllerImpl::GetSize() {

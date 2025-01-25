@@ -100,12 +100,11 @@ uint32_t av1_write_obu_header(AV1LevelParams *const level_params,
                               bool has_nonzero_operating_point_idc,
                               int obu_extension, uint8_t *const dst);
 
-int av1_write_uleb_obu_size(size_t obu_header_size, size_t obu_payload_size,
-                            uint8_t *dest, size_t dest_size);
-
-// Deprecated. Use av1_write_uleb_obu_size() instead.
-int av1_write_uleb_obu_size_unsafe(size_t obu_header_size,
-                                   size_t obu_payload_size, uint8_t *dest);
+// Encodes obu_payload_size as a leb128 integer and writes it to the dest
+// buffer. The output must fill the buffer exactly. Returns AOM_CODEC_OK on
+// success, AOM_CODEC_ERROR on failure.
+int av1_write_uleb_obu_size(size_t obu_payload_size, uint8_t *dest,
+                            size_t dest_size);
 
 // Pack tile data in the bitstream with tile_group, frame
 // and OBU header.

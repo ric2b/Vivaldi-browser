@@ -75,6 +75,10 @@
 #include "sandbox/policy/linux/bpf_hardware_video_decoding_policy_linux.h"
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
 
+#if BUILDFLAG(IS_LINUX)
+#include "sandbox/policy/linux/bpf_on_device_translation_policy_linux.h"
+#endif  // BUILDFLAG(IS_LINUX)
+
 using sandbox::bpf_dsl::Allow;
 using sandbox::bpf_dsl::ResultExpr;
 
@@ -214,13 +218,18 @@ std::unique_ptr<BPFBasePolicy> SandboxSeccompBPF::PolicyForSandboxType(
       return std::make_unique<ServiceProcessPolicy>();
     case sandbox::mojom::Sandbox::kSpeechRecognition:
       return std::make_unique<SpeechRecognitionProcessPolicy>();
+#if BUILDFLAG(IS_LINUX)
+    case sandbox::mojom::Sandbox::kOnDeviceTranslation:
+      return std::make_unique<OnDeviceTranslationProcessPolicy>();
+#endif  // BUILDFLAG(IS_LINUX)
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
     case sandbox::mojom::Sandbox::kScreenAI:
       return std::make_unique<ScreenAIProcessPolicy>();
 #endif
+#if BUILDFLAG(IS_LINUX)
     case sandbox::mojom::Sandbox::kVideoEffects:
-      // TODO(crbug.com/361128453): Implement this.
-      NOTREACHED() << "kVideoEffects sandbox not implemented.";
+      return std::make_unique<ServiceProcessPolicy>();
+#endif  // BUILDFLAG(IS_LINUX)
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
     case sandbox::mojom::Sandbox::kHardwareVideoDecoding:
       return std::make_unique<HardwareVideoDecodingProcessPolicy>(
@@ -246,8 +255,7 @@ std::unique_ptr<BPFBasePolicy> SandboxSeccompBPF::PolicyForSandboxType(
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     case sandbox::mojom::Sandbox::kZygoteIntermediateSandbox:
     case sandbox::mojom::Sandbox::kNoSandbox:
-      NOTREACHED_IN_MIGRATION();
-      return nullptr;
+      NOTREACHED();
   }
 }
 
@@ -290,9 +298,6 @@ void SandboxSeccompBPF::RunSandboxSanityChecks(
       CHECK_EQ(EPERM, errno);
 #endif  // !defined(NDEBUG)
     } break;
-    case sandbox::mojom::Sandbox::kVideoEffects:
-      // TODO(crbug.com/361128453): Implement this.
-      NOTREACHED() << "kVideoEffects sandbox not implemented.";
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
     case sandbox::mojom::Sandbox::kHardwareVideoDecoding:
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)
@@ -309,6 +314,9 @@ void SandboxSeccompBPF::RunSandboxSanityChecks(
     case sandbox::mojom::Sandbox::kScreenAI:
 #endif
     case sandbox::mojom::Sandbox::kAudio:
+#if BUILDFLAG(IS_LINUX)
+    case sandbox::mojom::Sandbox::kVideoEffects:
+#endif  // BUILDFLAG(IS_LINUX)
     case sandbox::mojom::Sandbox::kService:
     case sandbox::mojom::Sandbox::kServiceWithJit:
     case sandbox::mojom::Sandbox::kSpeechRecognition:
@@ -317,6 +325,9 @@ void SandboxSeccompBPF::RunSandboxSanityChecks(
     case sandbox::mojom::Sandbox::kPrintBackend:
 #endif
     case sandbox::mojom::Sandbox::kOnDeviceModelExecution:
+#if BUILDFLAG(IS_LINUX)
+    case sandbox::mojom::Sandbox::kOnDeviceTranslation:
+#endif  // BUILDFLAG(IS_LINUX)
     case sandbox::mojom::Sandbox::kUtility:
     case sandbox::mojom::Sandbox::kNoSandbox:
     case sandbox::mojom::Sandbox::kZygoteIntermediateSandbox:

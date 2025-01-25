@@ -12,7 +12,7 @@ struct vertex_main_outputs {
 RWByteAddressBuffer prevent_dce : register(u0);
 float3 ldexp_593ff3() {
   float3 arg_0 = (1.0f).xxx;
-  float3 res = ldexp(arg_0, (1).xxx);
+  float3 res = ldexp(arg_0, (int(1)).xxx);
   return res;
 }
 
@@ -35,9 +35,7 @@ VertexOutput vertex_main_inner() {
 
 vertex_main_outputs vertex_main() {
   VertexOutput v_1 = vertex_main_inner();
-  VertexOutput v_2 = v_1;
-  VertexOutput v_3 = v_1;
-  vertex_main_outputs v_4 = {v_3.prevent_dce, v_2.pos};
-  return v_4;
+  vertex_main_outputs v_2 = {v_1.prevent_dce, v_1.pos};
+  return v_2;
 }
 

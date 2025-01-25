@@ -7,6 +7,7 @@ from __future__ import division
 from __future__ import absolute_import
 
 from flask import Flask
+import json
 from unittest import mock
 import sys
 import unittest
@@ -19,6 +20,7 @@ from dashboard.models import anomaly
 from dashboard.models import bug_data
 from dashboard.models.subscription import Subscription
 from dashboard.sheriff_config_client import SheriffConfigClient
+from dashboard.sheriff_config_client import InternalServerError
 
 flask_app = Flask(__name__)
 
@@ -31,6 +33,16 @@ def AlertsHandlerGet():
 @flask_app.route('/alerts', methods=['POST'])
 def AlertsHandlerPost():
   return alerts.AlertsHandlerPost()
+
+
+@flask_app.route('/alerts_skia', methods=['GET'])
+def SkiaAlertsHandlerGet():
+  return alerts.SkiaAlertsHandlerGet()
+
+
+@flask_app.route('/sheriff_configs_skia', methods=['GET'])
+def SkiaLoadSheriffConfigsHandlerGet():
+  return alerts.SkiaLoadSheriffConfigsHandlerGet()
 
 
 @mock.patch.object(SheriffConfigClient, '__init__',
@@ -76,18 +88,23 @@ class AlertsTest(testing_common.TestCase):
       test.put()
 
     # Add some (12) non-triaged alerts.
+    # The first (4) of them are internal_only
     for end_rev in range(10000, 10120, 10):
       test_key = first_paint if end_rev % 20 == 0 else mean_frame_time
+      internal = end_rev < 10000 + 40
       ref_test_key = utils.TestKey('%s_ref' % utils.TestPath(test_key))
       anomaly_entity = anomaly.Anomaly(
           start_revision=end_rev - 5,
           end_revision=end_rev,
+          display_start=end_rev - 5 - 1,
+          display_end=end_rev + 1,
           test=test_key,
           median_before_anomaly=100,
           median_after_anomaly=200,
           ref_test=ref_test_key,
           subscriptions=[subscription],
           subscription_names=[subscription.name],
+          internal_only=internal,
       )
       anomaly_entity.SetIsImprovement()
       anomaly_key = anomaly_entity.put()
@@ -272,6 +289,9 @@ class AlertsTest(testing_common.TestCase):
       response = self.testapp.post('/alerts', {'improvements': 'true'})
     anomaly_list = self.GetJsonValue(response, 'anomaly_list')
     self.assertEqual(18, len(anomaly_list))
+    for alert in anomaly_list:
+      if alert['end_revision'] >= 10140:
+        self.assertEqual(alert['improvement'], True)
 
   def testPost_SheriffParameterSet_OtherSheriffAlertsListed(self):
     self._AddAlertsToDataStore()
@@ -313,7 +333,7 @@ class AlertsTest(testing_common.TestCase):
   def testPost_WithBogusSheriff_HasErrorMessage(self):
     with mock.patch.object(SheriffConfigClient, 'List',
                            mock.MagicMock(return_value=([], None))):
-      response = self.testapp.post('/alerts?sheriff=Foo')
+      response = self.testapp.post('/alerts?sheriff=Foo', expect_errors=True)
     error = self.GetJsonValue(response, 'error')
     self.assertIsNotNone(error)
 
@@ -329,7 +349,7 @@ class AlertsTest(testing_common.TestCase):
                     notification_email='internal@chromium.org',
                 )
             ], None))):
-      response = self.testapp.post('/alerts?sheriff=Foo')
+      response = self.testapp.post('/alerts?sheriff=Foo', expect_errors=True)
     error = self.GetJsonValue(response, 'error')
     self.assertIsNotNone(error)
 
@@ -373,6 +393,292 @@ class AlertsTest(testing_common.TestCase):
     for a in anomaly_list:  # Ensure anomaly_lists aren't equal.
       self.assertNotIn(a, anomaly_list2)
 
+  def testPost_NoParametersSet_UntriagedAlertsListed_External_Skia(self):
+    key_map = self._AddAlertsToDataStore()
+    with mock.patch.object(
+        SheriffConfigClient, 'List',
+        mock.MagicMock(
+            return_value=([
+                Subscription(
+                    name='Chromium Perf Sheriff',
+                    notification_email='internal@chromium.org',
+                )
+            ], None))):
+      response = self.testapp.get('/alerts_skia',
+                                  {'host': 'https://perf.luci.app'})
+    anomaly_list = self.GetJsonValue(response, 'anomaly_list')
+    self.assertEqual(8, len(anomaly_list))
+    # The test below depends on the order of the items, but the order is not
+    # guaranteed; it depends on the timestamps, which depend on put order.
+    anomaly_list.sort(key=lambda a: -a['end_revision'])
+    expected_end_rev = 10110
+    for alert in anomaly_list:
+      self.assertEqual(expected_end_rev + 1, alert['end_revision'])
+      self.assertEqual(expected_end_rev - 5 - 1, alert['start_revision'])
+      self.assertEqual(key_map[expected_end_rev].decode(), alert['key'])
+      self.assertEqual('ChromiumGPU', alert['master'])
+      self.assertEqual('linux-release', alert['bot'])
+      self.assertEqual('scrolling-benchmark', alert['testsuite'])
+      if expected_end_rev % 20 == 0:
+        self.assertEqual('first_paint', alert['test'])
+        self.assertEqual(
+            'ChromiumGPU/linux-release/scrolling-benchmark/first_paint_ref',
+            alert['ref_test'])
+      else:
+        self.assertEqual('mean_frame_time', alert['test'])
+        self.assertEqual(
+            'ChromiumGPU/linux-release/scrolling-benchmark/mean_frame_time_ref',
+            alert['ref_test'])
+      self.assertEqual('100.0%', alert['percent_changed'])
+      self.assertIsNone(alert['bug_id'])
+      expected_end_rev -= 10
+    self.assertEqual(expected_end_rev, 10030)
+
+  def testPost_NoParametersSet_UntriagedAlertsListed_Internal_Skia(self):
+    key_map = self._AddAlertsToDataStore()
+    with mock.patch.object(
+        SheriffConfigClient, 'List',
+        mock.MagicMock(
+            return_value=([
+                Subscription(
+                    name='Chromium Perf Sheriff',
+                    notification_email='internal@chromium.org',
+                )
+            ], None))):
+      response = self.testapp.get('/alerts_skia',
+                                  {'host': 'https://chrome-perf.corp.goog'})
+    anomaly_list = self.GetJsonValue(response, 'anomaly_list')
+    self.assertEqual(4, len(anomaly_list))
+    # The test below depends on the order of the items, but the order is not
+    # guaranteed; it depends on the timestamps, which depend on put order.
+    anomaly_list.sort(key=lambda a: -a['end_revision'])
+    expected_end_rev = 10030
+    for alert in anomaly_list:
+      self.assertTrue('test_path' in alert)
+      self.assertEqual(expected_end_rev + 1, alert['end_revision'])
+      self.assertEqual(expected_end_rev - 5 - 1, alert['start_revision'])
+      self.assertEqual(key_map[expected_end_rev].decode(), alert['key'])
+      self.assertEqual('ChromiumGPU', alert['master'])
+      self.assertEqual('linux-release', alert['bot'])
+      self.assertEqual('scrolling-benchmark', alert['testsuite'])
+      if expected_end_rev % 20 == 0:
+        self.assertEqual('first_paint', alert['test'])
+        self.assertEqual(
+            'ChromiumGPU/linux-release/scrolling-benchmark/first_paint_ref',
+            alert['ref_test'])
+      else:
+        self.assertEqual('mean_frame_time', alert['test'])
+        self.assertEqual(
+            'ChromiumGPU/linux-release/scrolling-benchmark/mean_frame_time_ref',
+            alert['ref_test'])
+      self.assertEqual('100.0%', alert['percent_changed'])
+      self.assertIsNone(alert['bug_id'])
+      expected_end_rev -= 10
+    self.assertEqual(expected_end_rev, 9990)
+
+  def testPost_NoParametersSet_UntriagedAlertsListed_NoAnomalyForMaster(self):
+    self._AddAlertsToDataStore()
+    with mock.patch.object(
+        SheriffConfigClient, 'List',
+        mock.MagicMock(
+            return_value=([
+                Subscription(
+                    name='Chromium Perf Sheriff',
+                    notification_email='internal@chromium.org',
+                )
+            ], None))):
+      response = self.testapp.get('/alerts_skia',
+                                  {'host': 'https://webrtc-perf.luci.app'})
+    anomaly_list = self.GetJsonValue(response, 'anomaly_list')
+    self.assertEqual(0, len(anomaly_list))
+
+  @unittest.skipIf(sys.platform.startswith('win'), 'bad mock datastore')
+  def testPost_TriagedParameterSet_TriagedListed_Skia(self):
+    self._AddAlertsToDataStore()
+    with mock.patch.object(
+        SheriffConfigClient, 'List',
+        mock.MagicMock(
+            return_value=([
+                Subscription(
+                    name='Chromium Perf Sheriff',
+                    notification_email='internal@chromium.org',
+                )
+            ], None))):
+      response = self.testapp.get('/alerts_skia', {
+          'host': 'https://perf.luci.app',
+          'triaged': 'true'
+      })
+    anomaly_list = self.GetJsonValue(response, 'anomaly_list')
+    # The alerts listed should contain those added above, including alerts
+    # that have a bug ID that is not None.
+    self.assertEqual(8 + 2, len(anomaly_list))
+    expected_end_rev = 10130
+    # The test below depends on the order of the items, but the order is not
+    # guaranteed; it depends on the timestamps, which depend on put order.
+    anomaly_list.sort(key=lambda a: -a['end_revision'])
+    for alert in anomaly_list:
+      if expected_end_rev == 10130:
+        self.assertEqual(12345, alert['bug_id'])
+      elif expected_end_rev == 10120:
+        self.assertEqual(-1, alert['bug_id'])
+      else:
+        self.assertIsNone(alert['bug_id'])
+      expected_end_rev -= 10
+    self.assertEqual(expected_end_rev, 10030)
+
+  def testPost_ImprovementsParameterSet_ListsImprovements_Skia(self):
+    self._AddAlertsToDataStore()
+    with mock.patch.object(
+        SheriffConfigClient, 'List',
+        mock.MagicMock(
+            return_value=([
+                Subscription(
+                    name='Chromium Perf Sheriff',
+                    notification_email='internal@chromium.org',
+                )
+            ], None))):
+      response = self.testapp.get('/alerts_skia', {
+          'host': 'https://perf.luci.app',
+          'improvements': 'true'
+      })
+    anomaly_list = self.GetJsonValue(response, 'anomaly_list')
+    self.assertEqual(8 + 6, len(anomaly_list))
+    for alert in anomaly_list:
+      if alert['end_revision'] >= 10140:
+        self.assertEqual(alert['is_improvement'], True)
+
+  def testPost_SheriffParameterSet_OtherSheriffAlertsListed_Skia(self):
+    self._AddAlertsToDataStore()
+    subscription = Subscription(
+        name='Chromium Perf Sheriff',
+        notification_email='sullivan@google.com',
+    )
+    mean_frame_time = utils.TestKey(
+        'ChromiumGPU/linux-release/scrolling-benchmark/mean_frame_time')
+    anomalies, _, _ = anomaly.Anomaly.QueryAsync(
+        test=mean_frame_time).get_result()
+    for anomaly_entity in anomalies:
+      anomaly_entity.subscriptions = [subscription]
+      anomaly_entity.subscription_names = [subscription.name]
+      anomaly_entity.put()
+
+    with mock.patch.object(
+        SheriffConfigClient, 'List',
+        mock.MagicMock(
+            return_value=([
+                Subscription(
+                    name='Chromium Perf Sheriff',
+                    notification_email='internal@chromium.org',
+                ),
+                Subscription(
+                    name='Sheriff2',
+                    notification_email='sullivan@google.com',
+                )
+            ], None))):
+      response = self.testapp.get('/alerts_skia', {
+          'host': 'https://perf.luci.app',
+          'sheriff': 'Sheriff2'
+      })
+    anomaly_list = self.GetJsonValue(response, 'anomaly_list')
+    for alert in anomaly_list:
+      self.assertEqual('mean_frame_time', alert['test'])
+
+  def testPost_WithBogusSheriff_HasErrorMessage_Skia(self):
+    with mock.patch.object(SheriffConfigClient, 'List',
+                           mock.MagicMock(return_value=([], None))):
+      response = self.testapp.get(
+          '/alerts_skia', {
+              'host': 'https://perf.luci.app',
+              'sheriff': 'Foo'
+          },
+          expect_errors=True)
+    error = self.GetJsonValue(response, 'error')
+    self.assertIsNotNone(error)
+
+  def testPost_ExternalUserRequestsInternalOnlySheriff_ErrorMessage_Skia(self):
+    self.UnsetCurrentUser()
+    self.assertFalse(utils.IsInternalUser())
+    with mock.patch.object(
+        SheriffConfigClient, 'List',
+        mock.MagicMock(
+            return_value=([
+                Subscription(
+                    name='Chromium Perf Sheriff',
+                    notification_email='internal@chromium.org',
+                )
+            ], None))):
+      response = self.testapp.get(
+          '/alerts_skia', {
+              'host': 'https://perf.luci.app',
+              'sheriff': 'Foo'
+          },
+          expect_errors=True)
+    error = self.GetJsonValue(response, 'error')
+    self.assertIsNotNone(error)
+
+  def testPost_AnomalyCursorSet_ReturnsNextCursorAndShowMore_Skia(self):
+    self._AddAlertsToDataStore()
+    # Need to post to the app once to get the initial cursor.
+    with mock.patch.object(
+        SheriffConfigClient, 'List',
+        mock.MagicMock(
+            return_value=([
+                Subscription(
+                    name='Chromium Perf Sheriff',
+                    notification_email='internal@chromium.org',
+                )
+            ], None))):
+      response = self.testapp.get('/alerts_skia', {
+          'host': 'https://perf.luci.app',
+          'max_anomalies_to_show': 5
+      })
+    anomaly_list = self.GetJsonValue(response, 'anomaly_list')
+    anomaly_cursor = self.GetJsonValue(response, 'anomaly_cursor')
+
+    with mock.patch.object(
+        SheriffConfigClient, 'List',
+        mock.MagicMock(
+            return_value=([
+                Subscription(
+                    name='Chromium Perf Sheriff',
+                    notification_email='internal@chromium.org',
+                )
+            ], None))):
+      response = self.testapp.get(
+          '/alerts_skia', {
+              'host': 'https://perf.luci.app',
+              'anomaly_cursor': anomaly_cursor,
+              'max_anomalies_to_show': 5
+          })
+    anomaly_list2 = self.GetJsonValue(response, 'anomaly_list')
+    anomaly_cursor = self.GetJsonValue(response, 'anomaly_cursor')
+    self.assertEqual(3, len(anomaly_list2))
+    self.assertIsNotNone(anomaly_cursor)  # Don't know what this will be.
+    for a in anomaly_list:  # Ensure anomaly_lists aren't equal.
+      self.assertNotIn(a, anomaly_list2)
+
+  def testSheriffConfigsGet_Success(self):
+    with mock.patch.object(
+        SheriffConfigClient, 'List',
+        mock.MagicMock(
+            return_value=([
+                Subscription(name='Sheriff',),
+                Subscription(name='Sheriff V2',)
+            ], None))):
+      response = self.testapp.get('/sheriff_configs_skia')
+      body_json = json.loads(response.body)
+
+      self.assertEqual(2, len(body_json.get('sheriff_list')))
+      self.assertEqual(['Sheriff', 'Sheriff V2'], body_json.get('sheriff_list'))
+
+  def testSheriffConfigsGet_Failed(self):
+    with mock.patch.object(
+        SheriffConfigClient, 'List',
+        mock.MagicMock(side_effect=InternalServerError('Mock error'))):
+      response = self.testapp.get('/sheriff_configs_skia')
+      body_json = json.loads(response.body)
+
+      self.assertEqual('Mock error', body_json.get('error'))
 
 if __name__ == '__main__':
   unittest.main()

@@ -159,9 +159,11 @@ bool IsAlignedSlice(const HloInstruction* slice) {
 //   param = (s32[], s32[], s32[16]{0}, s32[16]{0}) parameter(0)
 //   // the index in `gte` has to be the loop iteration index
 //   gte = s32[] get-tuple-element(param), index=0
-//   c0 = s32[] constant(0) compare = pred[] compare(gte, c0), direction=LT
+//   c0 = s32[] constant(0)
+//   compare = pred[] compare(gte, c0), direction=LT
 //   c_trip_count = s32[] constant(16)
-//   add = s32[] add(gte, c_trip_count) select = s32[] select(compare, add, gte)
+//   add = s32[] add(gte, c_trip_count)
+//   select = s32[] select(compare, add, gte)
 // clang-format on
 
 bool IsLoopIterationNumber(const HloInstruction& offset) {
@@ -251,8 +253,12 @@ UseDefDataflowPaths GetSlicedOperandPaths(const HloInstruction* instr) {
   // the matched instructions that we have seen so far.
   InstructionSet processed_instrs;
 
-  const auto& aliasing_pairs =
-      Cast<HloCustomCallInstruction>(instr)->output_to_operand_aliasing();
+  std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+      aliasing_pairs;
+  if (instr->opcode() == HloOpcode::kCustomCall) {
+    aliasing_pairs =
+        Cast<HloCustomCallInstruction>(instr)->output_to_operand_aliasing();
+  }
   absl::flat_hash_set<int64_t> aliased_operands;
   for (const auto& pair : aliasing_pairs) {
     aliased_operands.insert(pair.second.first);
@@ -519,14 +525,11 @@ absl::StatusOr<bool> DynamicSliceFusionRewriter::Run(
   for (HloComputation* computation : module->computations()) {
     if (computation->IsFusionComputation()) continue;
     for (HloInstruction* instr : computation->instructions()) {
-      UseDefDataflowPaths sliced_operand_paths = {instr};
-      bool has_sliced_operand_paths = false;
-      if (IsLegacyCublasMatmul(*instr) || IsCustomCall(instr, platform_name_)) {
-        sliced_operand_paths = GetSlicedOperandPaths(instr);
-        has_sliced_operand_paths = sliced_operand_paths.size() > 1;
-      }
-      if (instr->opcode() == HloOpcode::kReduceScatter ||
+      if ((instr->opcode() == HloOpcode::kReduceScatter &&
+           instr->shape().IsArray()) ||
           IsLegacyCublasMatmul(*instr) || IsCustomCall(instr, platform_name_)) {
+        UseDefDataflowPaths sliced_operand_paths = GetSlicedOperandPaths(instr);
+        bool has_sliced_operand_paths = sliced_operand_paths.size() > 1;
         DefUseDataflowPaths sliced_user_paths = GetSlicedUserPaths(instr);
         bool has_sliced_user_paths = absl::c_any_of(
             sliced_user_paths,

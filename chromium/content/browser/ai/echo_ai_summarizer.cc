@@ -12,7 +12,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
-#include "third_party/blink/public/mojom/ai/ai_text_session.mojom.h"
 #include "third_party/blink/public/mojom/ai/model_streaming_responder.mojom.h"
 
 namespace content {
@@ -28,11 +27,8 @@ void EchoAISummarizer::Summarize(
         pending_responder) {
   mojo::Remote<blink::mojom::ModelStreamingResponder> responder(
       std::move(pending_responder));
-  responder->OnResponse(blink::mojom::ModelStreamingResponseStatus::kOngoing,
-                        "Model not available in Chromium\n" + input,
-                        std::nullopt);
-  responder->OnResponse(blink::mojom::ModelStreamingResponseStatus::kComplete,
-                        std::nullopt, std::nullopt);
+  responder->OnStreaming("Model not available in Chromium\n" + input);
+  responder->OnCompletion(/*context_info=*/nullptr);
 }
 
 }  // namespace content

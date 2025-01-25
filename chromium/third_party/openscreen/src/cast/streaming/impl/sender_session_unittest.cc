@@ -613,12 +613,12 @@ TEST_F(SenderSessionTest, SuccessfulRemotingNegotiationYieldsValidObject) {
 
   SenderSession::ConfiguredSenders senders;
   EXPECT_CALL(client_, OnNegotiated(session_.get(), _, _))
-      .WillOnce([&senders](
-          const SenderSession* session,
-          SenderSession::ConfiguredSenders arg0,
-          capture_recommendations::Recommendations recommendations) {
-        senders = std::move(arg0);
-      });
+      .WillOnce(
+          [&senders](const SenderSession* session,
+                     SenderSession::ConfiguredSenders arg0,
+                     capture_recommendations::Recommendations recommendations) {
+            senders = std::move(arg0);
+          });
 
   message_port_->ReceiveMessage(answer);
 
@@ -637,7 +637,7 @@ TEST_F(SenderSessionTest, SuccessfulGetCapabilitiesRequest) {
       .WillOnce(testing::SaveArg<1>(&capabilities));
   message_port_->ReceiveMessage(kCapabilitiesResponse);
 
-  // The capabilities should match the values in |kCapabilitiesResponse|.
+  // The capabilities should match the values in `kCapabilitiesResponse`.
   EXPECT_THAT(capabilities.audio,
               testing::ElementsAre(AudioCapability::kBaselineSet,
                                    AudioCapability::kAac));

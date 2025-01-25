@@ -36,6 +36,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       '--garbage-space': 'this-is-garbage-text',
       '--prop': 'customproperty',
       '--zero': '0',
+      '--empty': '',
     };
 
     mockStylePropertiesSection = sinon.createStubInstance(Elements.StylePropertiesSection.StylePropertiesSection);
@@ -46,7 +47,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
     mockMatchedStyles.computeCSSVariable.callsFake((style, name) => {
       return {
         value: mockVariableMap[name],
-        declaration: sinon.createStubInstance(SDK.CSSProperty.CSSProperty),
+        declaration: new SDK.CSSMatchedStyles.CSSValueSource(sinon.createStubInstance(SDK.CSSProperty.CSSProperty)),
       };
     });
     mockCssStyleDeclaration.leadingProperties.returns([]);
@@ -279,6 +280,96 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
                stylePropertyTreeElement.valueElement?.querySelectorAll('devtools-link-swatch');
            assert.strictEqual(animationNameSwatches?.length, 2);
          });
+
+      describe('jumping to animations panel', () => {
+        let domModel: SDK.DOMModel.DOMModel;
+        beforeEach(() => {
+          const target = createTarget();
+          const domModelBeforeAssertion = target.model(SDK.DOMModel.DOMModel);
+          assert.exists(domModelBeforeAssertion);
+          domModel = domModelBeforeAssertion;
+        });
+
+        afterEach(() => {
+          sinon.reset();
+        });
+
+        it('should render a jump-to icon when the animation with the given name exists for the node', async () => {
+          const stubAnimationGroup = sinon.createStubInstance(SDK.AnimationModel.AnimationGroup);
+          const getAnimationGroupForAnimationStub =
+              sinon.stub(SDK.AnimationModel.AnimationModel.prototype, 'getAnimationGroupForAnimation')
+                  .resolves(stubAnimationGroup);
+          const domNode = SDK.DOMModel.DOMNode.create(domModel, null, false, {
+            nodeId: 1 as Protocol.DOM.NodeId,
+            backendNodeId: 2 as Protocol.DOM.BackendNodeId,
+            nodeType: Node.ELEMENT_NODE,
+            nodeName: 'div',
+            localName: 'div',
+            nodeValue: '',
+          });
+          const stylePropertyTreeElement = getTreeElement('animation-name', 'first-keyframe, second-keyframe');
+          sinon.stub(stylePropertyTreeElement, 'node').returns(domNode);
+
+          stylePropertyTreeElement.updateTitle();
+          await Promise.all(getAnimationGroupForAnimationStub.returnValues);
+
+          const jumpToIcon =
+              stylePropertyTreeElement.valueElement?.querySelector('devtools-icon.open-in-animations-panel');
+          assert.exists(jumpToIcon);
+        });
+
+        it('should clicking on the jump-to icon reveal the resolved animation group', async () => {
+          const stubAnimationGroup = sinon.createStubInstance(SDK.AnimationModel.AnimationGroup);
+          const revealerSpy = sinon.stub(Common.Revealer.RevealerRegistry.instance(), 'reveal');
+          const getAnimationGroupForAnimationStub =
+              sinon.stub(SDK.AnimationModel.AnimationModel.prototype, 'getAnimationGroupForAnimation')
+                  .resolves(stubAnimationGroup);
+          const domNode = SDK.DOMModel.DOMNode.create(domModel, null, false, {
+            nodeId: 1 as Protocol.DOM.NodeId,
+            backendNodeId: 2 as Protocol.DOM.BackendNodeId,
+            nodeType: Node.ELEMENT_NODE,
+            nodeName: 'div',
+            localName: 'div',
+            nodeValue: '',
+          });
+          const stylePropertyTreeElement = getTreeElement('animation-name', 'first-keyframe, second-keyframe');
+          sinon.stub(stylePropertyTreeElement, 'node').returns(domNode);
+
+          stylePropertyTreeElement.updateTitle();
+          await Promise.all(getAnimationGroupForAnimationStub.returnValues);
+
+          const jumpToIcon =
+              stylePropertyTreeElement.valueElement?.querySelector('devtools-icon.open-in-animations-panel');
+          jumpToIcon?.dispatchEvent(new Event('mouseup'));
+          assert.isTrue(
+              revealerSpy.calledWith(stubAnimationGroup),
+              'Common.Revealer.reveal is not called for the animation group');
+        });
+
+        it('should not render a jump-to icon when the animation with the given name does not exist for the node',
+           async () => {
+             const getAnimationGroupForAnimationStub =
+                 sinon.stub(SDK.AnimationModel.AnimationModel.prototype, 'getAnimationGroupForAnimation')
+                     .resolves(null);
+             const domNode = SDK.DOMModel.DOMNode.create(domModel, null, false, {
+               nodeId: 1 as Protocol.DOM.NodeId,
+               backendNodeId: 2 as Protocol.DOM.BackendNodeId,
+               nodeType: Node.ELEMENT_NODE,
+               nodeName: 'div',
+               localName: 'div',
+               nodeValue: '',
+             });
+             const stylePropertyTreeElement = getTreeElement('animation-name', 'first-keyframe, second-keyframe');
+             sinon.stub(stylePropertyTreeElement, 'node').returns(domNode);
+
+             stylePropertyTreeElement.updateTitle();
+             await Promise.all(getAnimationGroupForAnimationStub.returnValues);
+
+             const jumpToIcon =
+                 stylePropertyTreeElement.valueElement?.querySelector('devtools-icon.open-in-animations-panel');
+             assert.notExists(jumpToIcon);
+           });
+      });
     });
   });
 
@@ -295,8 +386,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
     const {valueElement} = stylePropertyTreeElement;
     assert.exists(valueElement);
 
-    const swatch = valueElement.querySelector<InlineEditor.ColorSwatch.ColorSwatch>(
-        `${InlineEditor.ColorSwatch.ColorSwatch.litTagName.value}`);
+    const swatch = valueElement.querySelector<InlineEditor.ColorSwatch.ColorSwatch>('devtools-color-swatch');
 
     assert.exists(swatch);
 
@@ -386,9 +476,12 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       const cssCustomPropertyDef = new SDK.CSSProperty.CSSProperty(
           mockCssStyleDeclaration, 0, '--prop', 'value', true, false, true, false, '', undefined);
       mockMatchedStyles.computeCSSVariable.callsFake(
-          (_, name) => name === '--prop' ?
-              {value: 'computedvalue', declaration: cssCustomPropertyDef, fromFallback: false} :
-              null);
+          (_, name) => name === '--prop' ? {
+            value: 'computedvalue',
+            declaration: new SDK.CSSMatchedStyles.CSSValueSource(cssCustomPropertyDef),
+            fromFallback: false,
+          } :
+                                           null);
       const renderValueSpy = sinon.spy(Elements.PropertyRenderer.Renderer, 'renderValueElement');
 
       const stylePropertyTreeElement = getTreeElement('prop', 'var(--prop)');
@@ -413,8 +506,10 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
 
       const registration = sinon.createStubInstance(SDK.CSSMatchedStyles.CSSRegisteredProperty);
       mockMatchedStyles.getRegisteredProperty.callsFake(name => name === '--prop' ? registration : undefined);
-      mockMatchedStyles.computeCSSVariable.returns(
-          {value: 'computedvalue', declaration: sinon.createStubInstance(SDK.CSSProperty.CSSProperty)});
+      mockMatchedStyles.computeCSSVariable.returns({
+        value: 'computedvalue',
+        declaration: new SDK.CSSMatchedStyles.CSSValueSource(sinon.createStubInstance(SDK.CSSProperty.CSSProperty)),
+      });
       const popoverContents = addElementPopoverHook.args[0][1].contents();
       assert.isTrue(popoverContents instanceof ElementsComponents.CSSVariableValueView.CSSVariableValueView);
       const {details} = popoverContents as ElementsComponents.CSSVariableValueView.CSSVariableValueView;
@@ -429,7 +524,8 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
     it('linkifies var functions to initial-value registrations', async () => {
       mockMatchedStyles.computeCSSVariable.returns({
         value: 'computedvalue',
-        declaration: sinon.createStubInstance(SDK.CSSMatchedStyles.CSSRegisteredProperty, {propertyName: '--prop'}),
+        declaration: new SDK.CSSMatchedStyles.CSSValueSource(
+            sinon.createStubInstance(SDK.CSSMatchedStyles.CSSRegisteredProperty, {propertyName: '--prop'})),
       });
       const renderValueSpy = sinon.spy(Elements.PropertyRenderer.Renderer, 'renderValueElement');
 
@@ -642,6 +738,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       positionTryRules: [],
       propertyRules: [],
       cssPropertyRegistrations: [],
+      activePositionFallbackIndex: -1,
       fontPaletteValuesRule: undefined,
     });
   }
@@ -692,6 +789,7 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       assert.deepStrictEqual(
           await matchProperty('var(--no, var(--no2))'),
           {hasUnresolvedVars: true, computedText: 'color: var(--no, var(--no2))'});
+      assert.deepStrictEqual(await matchProperty(''), {hasUnresolvedVars: false, computedText: 'color:'});
     });
 
     it('layers correctly with the font renderer', () => {
@@ -750,6 +848,26 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
       stylePropertyTreeElement.updateTitle();
       const colorSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-swatch');
       assert.isNull(colorSwatch);
+    });
+
+    it('correctly renders currentcolor', () => {
+      const stylePropertyTreeElement = getTreeElement('background-color', 'currentcolor');
+      stylePropertyTreeElement.setComputedStyles(new Map([['color', 'red']]));
+      stylePropertyTreeElement.updateTitle();
+      const colorSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-swatch');
+      assert.isOk(colorSwatch);
+      assert.isOk(colorSwatch.getColor());
+      assert.strictEqual(colorSwatch?.getColor()?.asString(), 'red');
+    });
+
+    it('renders relative colors using currentcolor', () => {
+      const stylePropertyTreeElement = getTreeElement('color', 'hsl(from currentcolor h calc(s/2) l / alpha)');
+      stylePropertyTreeElement.setComputedStyles(new Map([['color', 'blue']]));
+      stylePropertyTreeElement.updateTitle();
+      const colorSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-swatch');
+      assert.isOk(colorSwatch);
+      assert.isOk(colorSwatch.getColor());
+      assert.strictEqual(colorSwatch?.getColor()?.asString(Common.Color.Format.HSL), 'hsl(240deg 50% 50%)');
     });
   });
 
@@ -1451,11 +1569,89 @@ describeWithMockConnection('StylePropertyTreeElement', () => {
   });
 
   describe('LengthRenderer', () => {
-    it('renders the length too', () => {
+    it('renders the length tool', () => {
       const stylePropertyTreeElement = getTreeElement('width', '100px');
       stylePropertyTreeElement.updateTitle();
       const swatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-css-length');
       assert.exists(swatch);
+    });
+  });
+
+  describe('CSSWideKeywordRenderer', () => {
+    function mockResolvedKeyword(propertyName: string, keyword: SDK.CSSMetadata.CSSWideKeyword, propertyValue = ''):
+        sinon.SinonStubbedInstance<SDK.CSSProperty.CSSProperty> {
+      const originalDeclaration = sinon.createStubInstance(SDK.CSSProperty.CSSProperty);
+      mockMatchedStyles.resolveGlobalKeyword.callsFake(
+          (property, keyword) => property.name === propertyName && property.value === keyword ?
+              new SDK.CSSMatchedStyles.CSSValueSource(originalDeclaration) :
+              null);
+      originalDeclaration.name = propertyName;
+      originalDeclaration.value = propertyValue;
+      originalDeclaration.ownerStyle = sinon.createStubInstance(SDK.CSSStyleDeclaration.CSSStyleDeclaration);
+      return originalDeclaration;
+    }
+
+    it('linkifies keywords to the referenced declarations', () => {
+      const keyword = SDK.CSSMetadata.CSSWideKeywords[0];
+      const originalDeclaration = mockResolvedKeyword('width', keyword);
+      const stylePropertyTreeElement = getTreeElement(originalDeclaration.name, keyword);
+      stylePropertyTreeElement.updateTitle();
+
+      const linkSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-link-swatch');
+      assert.isOk(linkSwatch);
+      const spy = sinon.spy(stylePropertyTreeElement.parentPane(), 'revealProperty');
+      linkSwatch.shadowRoot?.querySelector('devtools-base-link-swatch')?.shadowRoot?.querySelector('button')?.click();
+      assert.isTrue(spy.calledOnceWithExactly(originalDeclaration));
+    });
+
+    it('shows non-existant referenced declarations as unlinked', () => {
+      const stylePropertyTreeElement = getTreeElement('width', SDK.CSSMetadata.CSSWideKeywords[0]);
+      stylePropertyTreeElement.updateTitle();
+      const linkSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-link-swatch');
+      assert.isNotOk(linkSwatch);
+    });
+
+    it('renders colors', () => {
+      const keyword = SDK.CSSMetadata.CSSWideKeywords[0];
+      const originalDeclaration = mockResolvedKeyword('color', keyword, 'red');
+      const stylePropertyTreeElement = getTreeElement(originalDeclaration.name, keyword);
+      stylePropertyTreeElement.updateTitle();
+      const colorSwatch = stylePropertyTreeElement.valueElement?.querySelector('devtools-color-swatch');
+      assert.isOk(colorSwatch);
+      assert.strictEqual(colorSwatch.getColor()?.asString(), 'red');
+    });
+  });
+
+  describe('PositionTryRenderer', () => {
+    it('renders the position-try fallback values with correct styles', () => {
+      mockMatchedStyles.activePositionFallbackIndex.returns(1);
+      mockMatchedStyles.positionTryRules.returns([]);
+      const stylePropertyTreeElement = getTreeElement('position-try-fallbacks', '--top, --left, --bottom');
+      stylePropertyTreeElement.updateTitle();
+      const values =
+          stylePropertyTreeElement.valueElement?.querySelectorAll(':scope > span') as NodeListOf<HTMLElement>|
+          undefined;
+      assert.exists(values);
+      assert.strictEqual(values?.length, 3);
+      assert.strictEqual(values[0].style.textDecoration, 'line-through');
+      assert.strictEqual(values[1].style.textDecoration, '');
+      assert.strictEqual(values[2].style.textDecoration, 'line-through');
+    });
+
+    it('renders the position-try correctly with keyword', () => {
+      mockMatchedStyles.activePositionFallbackIndex.returns(1);
+      mockMatchedStyles.positionTryRules.returns([]);
+      const stylePropertyTreeElement =
+          getTreeElement('position-try', '/* comment */ most-height --top, --left, --bottom');
+      stylePropertyTreeElement.updateTitle();
+      const values =
+          stylePropertyTreeElement.valueElement?.querySelectorAll(':scope > span') as NodeListOf<HTMLElement>|
+          undefined;
+      assert.exists(values);
+      assert.strictEqual(values?.length, 3);
+      assert.strictEqual(values[0].style.textDecoration, 'line-through');
+      assert.strictEqual(values[1].style.textDecoration, '');
+      assert.strictEqual(values[2].style.textDecoration, 'line-through');
     });
   });
 

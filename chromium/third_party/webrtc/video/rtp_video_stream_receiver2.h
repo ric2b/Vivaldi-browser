@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/types/variant.h"
 #include "api/crypto/frame_decryptor_interface.h"
 #include "api/environment/environment.h"
 #include "api/sequence_checker.h"
@@ -26,6 +27,7 @@
 #include "call/rtp_packet_sink_interface.h"
 #include "call/syncable.h"
 #include "call/video_receive_stream.h"
+#include "common_video/frame_instrumentation_data.h"
 #include "modules/rtp_rtcp/include/receive_statistics.h"
 #include "modules/rtp_rtcp/include/recovered_packet_receiver.h"
 #include "modules/rtp_rtcp/include/remote_ntp_time_estimator.h"
@@ -298,7 +300,7 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
   // This function assumes that it's being called from only one thread.
   void ParseAndHandleEncapsulatingHeader(const RtpPacketReceived& packet)
       RTC_RUN_ON(packet_sequence_checker_);
-  void NotifyReceiverOfEmptyPacket(uint16_t seq_num)
+  void NotifyReceiverOfEmptyPacket(uint16_t seq_num, bool is_h26x)
       RTC_RUN_ON(packet_sequence_checker_);
   bool IsRedEnabled() const;
   void InsertSpsPpsIntoTracker(uint8_t payload_type)
@@ -312,6 +314,13 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
       RTC_RUN_ON(packet_sequence_checker_);
   void UpdatePacketReceiveTimestamps(const RtpPacketReceived& packet,
                                      bool is_keyframe)
+      RTC_RUN_ON(packet_sequence_checker_);
+  void SetLastCorruptionDetectionIndex(
+      const absl::variant<FrameInstrumentationSyncData,
+                          FrameInstrumentationData>& frame_instrumentation_data,
+      int spatial_idx);
+
+  bool IsH26xPayloadType(uint8_t payload_type) const
       RTC_RUN_ON(packet_sequence_checker_);
 
   const Environment env_;
@@ -404,6 +413,11 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
   // Maps a payload type to a map of out-of-band supplied codec parameters.
   std::map<uint8_t, webrtc::CodecParameterMap> pt_codec_params_
       RTC_GUARDED_BY(packet_sequence_checker_);
+
+  // Maps payload type to the VideoCodecType.
+  std::map<uint8_t, webrtc::VideoCodecType> pt_codec_
+      RTC_GUARDED_BY(packet_sequence_checker_);
+
   int16_t last_payload_type_ RTC_GUARDED_BY(packet_sequence_checker_) = -1;
 
   bool has_received_frame_ RTC_GUARDED_BY(packet_sequence_checker_);
@@ -445,6 +459,13 @@ class RtpVideoStreamReceiver2 : public LossNotificationSender,
   Timestamp next_keyframe_request_for_missing_video_structure_ =
       Timestamp::MinusInfinity();
   bool sps_pps_idr_is_h264_keyframe_ = false;
+
+  struct CorruptionDetectionLayerState {
+    int sequence_index = 0;
+    std::optional<uint32_t> timestamp;
+  };
+  std::array<CorruptionDetectionLayerState, kMaxSpatialLayers>
+      last_corruption_detection_state_by_layer_;
 };
 
 }  // namespace webrtc

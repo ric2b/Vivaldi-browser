@@ -17,7 +17,6 @@ import static androidx.test.espresso.matcher.ViewMatchers.isChecked;
 import static androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.isDescendantOfA;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static androidx.test.espresso.matcher.ViewMatchers.isNotChecked;
 import static androidx.test.espresso.matcher.ViewMatchers.withChild;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withParent;
@@ -26,6 +25,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.Matchers.allOf;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -133,7 +133,8 @@ public class PrivacyGuideFragmentTest {
         mChromeBrowserTestRule.addTestAccountThenSigninAndEnableSync();
 
         mMocker.mock(PrivacySandboxBridgeJni.TEST_HOOKS, mPrivacySandboxBridgeJni);
-        when(mPrivacySandboxBridgeJni.isConsentCountry()).thenReturn(true);
+        when(mPrivacySandboxBridgeJni.privacySandboxPrivacyGuideShouldShowAdTopicsCard(any()))
+                .thenReturn(true);
 
         mActionTester = new UserActionTester();
     }
@@ -364,6 +365,15 @@ public class PrivacyGuideFragmentTest {
     @Test
     @LargeTest
     @Feature({"RenderTest"})
+    public void testRenderAdTopicsCard() throws IOException {
+        launchPrivacyGuide();
+        goToCard(FragmentType.AD_TOPICS);
+        mRenderTestRule.render(getRootView(), "privacy_guide_ad_topics");
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"RenderTest"})
     public void testRenderCompletionCard() throws IOException {
         launchPrivacyGuide();
         goToCard(FragmentType.DONE);
@@ -454,26 +464,6 @@ public class PrivacyGuideFragmentTest {
 
         pressBack();
         onViewWaiting(withText(R.string.privacy_guide_fragment_title));
-    }
-
-    @Test
-    @LargeTest
-    @Feature({"PrivacyGuide"})
-    public void testAdTopicsCard_adTopicsSwitchUpdatedOnResume() {
-        // Verify that the Ad Topics Switch is updated when the pref is changed when page is
-        // navigated off and returned to
-        launchPrivacyGuide();
-        setAdTopicsState(true);
-        goToCard(FragmentType.AD_TOPICS);
-        onViewWaiting(allOf(withId(R.id.ad_topics_switch), isCompletelyDisplayed()))
-                .check(matches(isChecked()));
-
-        navigateFromCardToNext(FragmentType.AD_TOPICS);
-        setAdTopicsState(false);
-
-        pressBack();
-        onViewWaiting(allOf(withId(R.id.ad_topics_switch), isCompletelyDisplayed()))
-                .check(matches(isNotChecked()));
     }
 
     @Test

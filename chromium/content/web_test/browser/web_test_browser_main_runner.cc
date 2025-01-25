@@ -201,7 +201,7 @@ void WebTestBrowserMainRunner::Initialize() {
   CHECK(ppapi::RegisterBlinkTestPlugin(&command_line));
 #endif
 
-  command_line.AppendSwitch(cc::switches::kEnableGpuBenchmarking);
+  command_line.AppendSwitch(switches::kEnableGpuBenchmarking);
   command_line.AppendSwitch(switches::kEnableLogging);
   command_line.AppendSwitch(switches::kAllowFileAccessFromFiles);
 
@@ -238,7 +238,7 @@ void WebTestBrowserMainRunner::Initialize() {
   // TODO(crbug.com/41420287) Add kRunAllCompositorStagesBeforeDraw back here
   // once you figure out why it causes so much web test flakiness.
   // command_line.AppendSwitch(switches::kRunAllCompositorStagesBeforeDraw);
-  command_line.AppendSwitch(cc::switches::kDisableCheckerImaging);
+  command_line.AppendSwitch(switches::kDisableCheckerImaging);
 
   command_line.AppendSwitch(switches::kMuteAudio);
 
@@ -299,13 +299,6 @@ void WebTestBrowserMainRunner::Initialize() {
 
   // Always run with fake digital identity credential UI.
   command_line.AppendSwitch(switches::kUseFakeUIForDigitalIdentity);
-
-  // Enable the deprecated WebAuthn Mojo Testing API.
-  command_line.AppendSwitch(switches::kEnableWebAuthDeprecatedMojoTestingApi);
-
-  // Always disable the unsandbox GPU process for DX12 Info collection to avoid
-  // interference. This GPU process is launched 120 seconds after chrome starts.
-  command_line.AppendSwitch(switches::kDisableGpuProcessForDX12InfoCollection);
 
   // Disable the backgrounding of renderers to make running tests faster.
   command_line.AppendSwitch(switches::kDisableRendererBackgrounding);

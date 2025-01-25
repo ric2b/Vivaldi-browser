@@ -179,6 +179,7 @@ _PERMISSIONS_DENYLIST_RE = re.compile('|'.join(
         'com.android.browser.permission.WRITE_HISTORY_BOOKMARKS',
         'com.android.launcher.permission.INSTALL_SHORTCUT',
         'com.chrome.permission.DEVICE_EXTRAS',
+        'com.google.android.apps.aicore.service.BIND_SERVICE',
         'com.google.android.apps.now.CURRENT_ACCOUNT_ACCESS',
         'com.google.android.c2dm.permission.RECEIVE',
         'com.google.android.finsky.permission.DSE',
@@ -313,8 +314,9 @@ _WEBVIEW_SYSUPDATE_MIN_VERSION_CODE = re.compile(
 _GOOGLE_FEATURES_RE = re.compile(r'^\s*com\.google\.')
 
 # On Android < 12, "ro.product.device" starts with "generic_"
-# On Android >= 12, "ro.product.device" starts with "emulator64_"
-_EMULATOR_RE = re.compile(r'^(generic_|emulator64_).*$')
+# On Android == 12, "ro.product.device" starts with "emulator64_"
+# On Android >= 13, "ro.product.device" starts with "emu64x"
+_EMULATOR_RE = re.compile(r'^(generic_|emulator64_|emu64x).*$')
 
 # Regular expressions for determining if a package is installed using the
 # output of `dumpsys package`.
@@ -1820,7 +1822,7 @@ class DeviceUtils(object):
       return '%s=%s' % (key, cmd_helper.DoubleQuote(value))
 
     def run(cmd):
-      return self.adb.Shell(cmd)
+      return self.adb.Shell(cmd, timeout=timeout)
 
     def handle_check_return(cmd):
       try:
@@ -2107,8 +2109,11 @@ class DeviceUtils(object):
     package = component.split('/')[0]
     shell_snippet = 'p=%s;%s' % (package,
                                  cmd_helper.ShrinkToSnippet(cmd, 'p', package))
-    return self.RunShellCommand(
-        shell_snippet, shell=True, check_return=True, large_output=True)
+    return self.RunShellCommand(shell_snippet,
+                                shell=True,
+                                check_return=True,
+                                large_output=True,
+                                timeout=timeout)
 
   @decorators.WithTimeoutAndRetriesFromInstance()
   def BroadcastIntent(self, intent_obj, timeout=None, retries=None):
@@ -2474,7 +2479,8 @@ class DeviceUtils(object):
           self.RunShellCommand(['source', script.name],
                                check_return=True,
                                run_as=run_as,
-                               as_root=as_root)
+                               as_root=as_root,
+                               timeout=timeout)
       self._PushFilesImpl(host_device_tuples, changed_files)
     cache_commit_func()
 
@@ -2798,9 +2804,14 @@ class DeviceUtils(object):
               zip_file=device_temp.name,
               dirs=' '.join(cmd_helper.SingleQuote(d) for d in dirs))
           self.WriteFile(script.name, script_contents)
-          self.RunShellCommand(['source', script.name],
-                               check_return=True,
-                               as_root=True)
+          self.RunShellCommand(
+              ['source', script.name],
+              check_return=True,
+              # Increase timeout to 100 secs as gtest can get 2k+ dirs
+              # which can take longer than the default timeout.
+              # See crbug.com/370307339 for an example.
+              timeout=100,
+              as_root=True)
 
     return True
 

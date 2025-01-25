@@ -47,7 +47,8 @@ public abstract class BrowserServicesIntentDataProvider {
         CustomTabsUiType.READER_MODE,
         CustomTabsUiType.MINIMAL_UI_WEBAPP,
         CustomTabsUiType.OFFLINE_PAGE,
-        CustomTabsUiType.AUTH_TAB
+        CustomTabsUiType.AUTH_TAB,
+        CustomTabsUiType.NETWORK_BOUND_TAB
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface CustomTabsUiType {
@@ -59,6 +60,7 @@ public abstract class BrowserServicesIntentDataProvider {
         int OFFLINE_PAGE = 5;
         int READ_LATER = 6;
         int AUTH_TAB = 7;
+        int NETWORK_BOUND_TAB = 8;
     }
 
     // The type of Disclosure for TWAs to use.
@@ -647,11 +649,20 @@ public abstract class BrowserServicesIntentDataProvider {
     }
 
     /**
-     * Return the target network that should be used from this intent, the default value to be used
-     * when a network has not been explicitly set via intent.
+     * Return the target network handle {@link android.net.Network#getNetworkHandle} that loads
+     * associated with this intent must use. Defaults to {@code NetId.INVALID}, in which case we let
+     * the underlying system make this choice.
      */
     public long getTargetNetwork() {
         return NetId.INVALID;
+    }
+
+    /**
+     * Return whether this intent has a target network. Certain optimizations or features are not
+     * support for tabs targeting a network. This helper is useful for handling those scenarios.
+     */
+    public boolean hasTargetNetwork() {
+        return getTargetNetwork() != NetId.INVALID;
     }
 
     /** Return {@code true} if the service was launched for authentication. */
@@ -659,8 +670,18 @@ public abstract class BrowserServicesIntentDataProvider {
         return false;
     }
 
-    /** Return the redirect scheme for AuthTab. */
+    /** Return the custom redirect scheme for AuthTab. */
     public String getAuthRedirectScheme() {
+        return null;
+    }
+
+    /** Return the https redirect URL host (origin) for AuthTab. */
+    public String getAuthRedirectHost() {
+        return null;
+    }
+
+    /** Return the https redirect URL path for AuthTab. */
+    public String getAuthRedirectPath() {
         return null;
     }
 
@@ -671,4 +692,5 @@ public abstract class BrowserServicesIntentDataProvider {
     public boolean isCinemaMode() {
         return false;
     }
+    // End Vivaldi
 }

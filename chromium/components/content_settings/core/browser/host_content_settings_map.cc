@@ -16,6 +16,7 @@
 #include "base/containers/contains.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/containers/flat_map.h"
+#include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
@@ -188,7 +189,6 @@ content_settings::PatternPair GetPatternsFromScopingType(
     case WebsiteSettingsInfo::TOP_ORIGIN_ONLY_SCOPE:
     case WebsiteSettingsInfo::REQUESTING_ORIGIN_ONLY_SCOPE:
     case WebsiteSettingsInfo::GENERIC_SINGLE_ORIGIN_SCOPE:
-    case WebsiteSettingsInfo::TOP_ORIGIN_WITH_RESOURCE_EXCEPTIONS_SCOPE:
       patterns.first = ContentSettingsPattern::FromURLNoWildcard(primary_url);
       patterns.second = ContentSettingsPattern::Wildcard();
       break;
@@ -217,6 +217,8 @@ bool ShouldCollectFineGrainedExceptionHistograms(ContentSettingsType type) {
     case ContentSettingsType::POPUPS:
     case ContentSettingsType::ADS:
     case ContentSettingsType::STORAGE_ACCESS:
+    case ContentSettingsType::JAVASCRIPT_JIT:
+    case ContentSettingsType::JAVASCRIPT_OPTIMIZER:
       return true;
     default:
       return false;
@@ -304,13 +306,10 @@ HostContentSettingsMap::HostContentSettingsMap(PrefService* prefs,
     RecordExceptionMetrics();
   }
 
-  if (base::FeatureList::IsEnabled(
-          content_settings::features::kActiveContentSettingExpiry)) {
-    const auto* registry =
-        content_settings::WebsiteSettingsRegistry::GetInstance();
-    for (const auto* info : *registry) {
-      DeleteNearlyExpiredSettingsAndMaybeScheduleNextRun(info->type());
-    }
+  const auto* registry =
+      content_settings::WebsiteSettingsRegistry::GetInstance();
+  for (const auto* info : *registry) {
+    DeleteNearlyExpiredSettingsAndMaybeScheduleNextRun(info->type());
   }
 }
 
@@ -416,6 +415,8 @@ ContentSetting HostContentSettingsMap::GetContentSetting(
     const GURL& secondary_url,
     ContentSettingsType content_type,
     content_settings::SettingInfo* info) const {
+  SCOPED_CRASH_KEY_NUMBER("content_settings", "content_type",
+                          static_cast<int>(content_type));
   CHECK(content_settings::ContentSettingsRegistry::GetInstance()->Get(
       content_type));
   const base::Value value =
@@ -427,6 +428,8 @@ ContentSetting HostContentSettingsMap::GetUserModifiableContentSetting(
     const GURL& primary_url,
     const GURL& secondary_url,
     ContentSettingsType content_type) const {
+  SCOPED_CRASH_KEY_NUMBER("content_settings", "content_type",
+                          static_cast<int>(content_type));
   CHECK(content_settings::ContentSettingsRegistry::GetInstance()->Get(
       content_type));
   const base::Value value =
@@ -510,8 +513,7 @@ void HostContentSettingsMap::SetWebsiteSettingCustomScope(
     if (provider_pair.second->SetWebsiteSetting(
             primary_pattern, secondary_pattern, content_type, std::move(value),
             constraints, content_settings::PartitionKey::WipGetDefault())) {
-      if (base::FeatureList::IsEnabled(
-              content_settings::features::kActiveContentSettingExpiry)) {
+      if (content_settings::ShouldTypeExpireActively(content_type)) {
         UpdateExpiryEnforcementTimer(content_type, constraints.expiration());
       }
 
@@ -954,8 +956,7 @@ void HostContentSettingsMap::AddSettingsForOneType(
     // grant, but the grant is no longer provided. Also refer to the comment
     // near the definition of `kEagerExpiryBuffer` regarding provisioning and
     // CPU contention.
-    if (!base::FeatureList::IsEnabled(
-            content_settings::features::kActiveContentSettingExpiry)) {
+    if (!content_settings::ShouldTypeExpireActively(content_type)) {
       if ((!rule->metadata.expiration().is_null() &&
            (rule->metadata.expiration() < clock_->Now()))) {
         continue;
@@ -1236,8 +1237,7 @@ void HostContentSettingsMap::UpdateExpiryEnforcementTimer(
 
 void HostContentSettingsMap::DeleteNearlyExpiredSettingsAndMaybeScheduleNextRun(
     ContentSettingsType content_setting_type) {
-  if (!base::FeatureList::IsEnabled(
-          content_settings::features::kActiveContentSettingExpiry)) {
+  if (!content_settings::ShouldTypeExpireActively(content_setting_type)) {
     return;
   }
 

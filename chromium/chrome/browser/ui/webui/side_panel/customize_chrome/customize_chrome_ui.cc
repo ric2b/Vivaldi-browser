@@ -238,6 +238,8 @@ CustomizeChromeUI::CustomizeChromeUI(content::WebUI* web_ui)
       {"chooseToolbarIconsLabel", IDS_NTP_CUSTOMIZE_TOOLBAR_CHOOSE_ICONS_LABEL},
       {"resetToDefaultButtonLabel",
        IDS_NTP_CUSTOMIZE_TOOLBAR_RESET_TO_DEFAULT_BUTTON_LABEL},
+      {"resetToDefaultButtonAnnouncement",
+       IDS_NTP_CUSTOMIZE_TOOLBAR_RESET_TO_DEFAULT_ANNOUNCEMENT},
       {"reorderTipLabel", IDS_NTP_CUSTOMIZE_TOOLBAR_REORDER_TIP_LABEL},
       {"newBadgeLabel", IDS_NEW_BADGE},
   };
@@ -273,6 +275,9 @@ CustomizeChromeUI::CustomizeChromeUI(content::WebUI* web_ui)
               ntp_features::kCustomizeChromeWallpaperSearchButton));
   source->AddBoolean("toolbarCustomizationEnabled",
                      base::FeatureList::IsEnabled(features::kToolbarPinning));
+  source->AddBoolean("imageErrorDetectionEnabled",
+                     base::FeatureList::IsEnabled(
+                         ntp_features::kNtpBackgroundImageErrorDetection));
 
   webui::SetupWebUIDataSource(
       source,

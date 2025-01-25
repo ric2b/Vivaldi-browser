@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
 <translation id="1066101356081285416">Chrome będzie wykrywać numery śledzenia w odwiedzanych przez Ciebie witrynach i wyświetlać aktualne informacje o przesyłkach na stronie Nowa karta. Numery śledzenia przesyłek i nazwy witryn będą wysyłane do Google i używane do obsługi tej funkcji oraz do ogólnego ulepszania funkcji zakupów. Możesz to zmienić w dowolnym momencie w <ph name="BEGIN_LINK" />ustawieniach śledzenia przesyłek<ph name="END_LINK" />.</translation>
+<translation id="1086486568852410168">Szukaj za pomocą Obiektywu Google</translation>
 <translation id="1143896152279775643">Hasło zostanie zapisane w menedżerze haseł Google na koncie <ph name="EMAIL" />.</translation>
 <translation id="1146503048444965320">Otwórz nową kartę w Chrome</translation>
 <translation id="1166460004393506534">Usuń dane przeglądania w Chrome</translation>
@@ -38,7 +39,9 @@ Pamiętaj, że:
 <translation id="1670609221633730681">Wskazówka dotycząca Chrome: wybierz położenie paska adresu</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1790080846677398234">Dodaje wpisane adresy URL do zakładek w Chrome.</translation>
+<translation id="1799920918471566157">Chrome – wskazówki</translation>
 <translation id="1830634592642484976">Ten adres jest obecnie zapisany w Chrome. Aby używać go w różnych usługach Google, zapisz go na swoim koncie Google <ph name="USER_EMAIL" />.</translation>
+<translation id="1891812034154776216">Po zamknięciu Chrome ukrywaj otwarte karty incognito</translation>
 <translation id="1917964099031477364">To konto razem z wszelkimi niezapisanymi danymi zostanie usunięte z Chrome i innych aplikacji Google na tym urządzeniu.</translation>
 <translation id="1919130412786645364">Zezwalaj na logowanie się w Chrome</translation>
 <translation id="1965935827552890526">Dokończ czynności rozpoczęte w innym otwartym oknie Chrome.</translation>
@@ -70,6 +73,7 @@ Pamiętaj, że:
 <translation id="2689064829982324496">Aby wylogować się z konta Google na wszystkich stronach, <ph name="BEGIN_LINK" />wyloguj się z Chrome<ph name="END_LINK" />.</translation>
 <translation id="2695886661449553974">Chrome nie udało się sprawdzić dostępności aktualizacji. Spróbuj ponownie później.</translation>
 <translation id="2703746758996815929">Aby otrzymywać przydatne wskazówki dotyczące Chrome, włącz powiadomienia w ustawieniach iOS.</translation>
+<translation id="2728851697704606655">Przetłumacz za pomocą Obiektywu Google</translation>
 <translation id="2736805085127235148">Powiadomienia Chrome są aktualnie wyłączone w ustawieniach urządzenia.</translation>
 <translation id="2754428955276778271">Niektóre dane z Chrome nie zostały jeszcze zapisane na Twoim koncie Google.
 
@@ -247,6 +251,7 @@ W <ph name="BEGIN_LINK" />usługach Google<ph name="END_LINK" /> znajdziesz wi�
 <translation id="7581063337314642333">Wyświetl siatkę kart w Chrome</translation>
 <translation id="7599894504325210080">Widok rozwinięty autouzupełniania w Chrome</translation>
 <translation id="7642373780953416937">Otrzymuj alerty o problemach związanych z prywatnością i bezpieczeństwem, które automatycznie wykrywa Chrome.</translation>
+<translation id="7660356333829433649">Wróć tutaj, aby zobaczyć więcej przydatnych wskazówek, które pomogą Ci w pełni wykorzystać możliwości Chrome.</translation>
 <translation id="7662994914830945754">Aby widzieć swoje karty zawsze, kiedy korzystasz z Chrome, zaloguj się i włącz synchronizację</translation>
 <translation id="7693590760643069321">Teraz możesz używać Chrome za każdym razem, gdy klikniesz link w wiadomościach, dokumentach i w innych aplikacjach.</translation>
 <translation id="7698568245838009292">Chrome chce mieć dostęp do kamery</translation>
@@ -257,10 +262,12 @@ W <ph name="BEGIN_LINK" />usługach Google<ph name="END_LINK" /> znajdziesz wi�
 <translation id="778855399387580014">Rozpocznij wyszukiwanie na nowej karcie Chrome.</translation>
 <translation id="7792140019572081272">Chrome dba o bezpieczeństwo Twoich danych wrażliwych za pomocą Face ID.</translation>
 <translation id="7855730255114109580">Masz aktualną wersję Google Chrome</translation>
+<translation id="7861998090118873450">Zapisuj hasła w Chrome</translation>
 <translation id="7897703007638178753">Zobacz ostatnie karty w Chrome</translation>
 <translation id="7948283758957877064">Nowości w Chrome</translation>
 <translation id="8000174216052461231">Wskazówka dotycząca Chrome: korzystaj z najlepszych zabezpieczeń Chrome</translation>
 <translation id="8006014511203279255">Używaj Chrome zawsze wtedy, gdy klikasz linki w wiadomościach lub w innych aplikacjach.</translation>
+<translation id="8014670471808569312">Chrome zaproponuje zapisanie hasła.</translation>
 <translation id="8018153653741938705">Dbaj o swoje bezpieczeństwo, używając Google Chrome</translation>
 <translation id="8022947259858476807">Używaj domyślnie Chrome, aby otwierać linki, wyszukiwać z widżetów i korzystać z autouzupełniania haseł w innych aplikacjach</translation>
 <translation id="804638182476029347">Zezwalaj na powiadomienia Chrome, aby otrzymywać alerty o obniżkach cen</translation>
@@ -292,6 +299,7 @@ Dane zostały zaszyfrowane za pomocą hasła wielowyrazowego <ph name="TIME" />.
 <translation id="8558480467877843976">Teraz możesz używać Chrome za każdym razem, gdy przeglądasz lub klikasz linki w wiadomościach, dokumentach i innych aplikacjach.</translation>
 <translation id="8603022514504485810">Menedżerowi haseł Google nie udało się sprawdzić wszystkich haseł. Spróbuj ponownie jutro lub <ph name="BEGIN_LINK" />sprawdź hasła na koncie Google<ph name="END_LINK" />.</translation>
 <translation id="8630122478628016441">Włącz opcję „Po zamknięciu Chrome blokuj karty incognito”.</translation>
+<translation id="8673726683583791503">Kupuj za pomocą Obiektywu Google</translation>
 <translation id="8727043961453758442">W pełni wykorzystuj potencjał Chrome</translation>
 <translation id="8765470054473112089">Gdy piszesz na pasku adresu lub w polu wyszukiwania, Chrome wysyła to, co piszesz, do domyślnej wyszukiwarki, aby podawać Ci lepsze sugestie. Ta funkcja jest wyłączona w trybie incognito.</translation>
 <translation id="8772179140489533211">Pokazuj prośby o zalogowanie się w Chrome.</translation>

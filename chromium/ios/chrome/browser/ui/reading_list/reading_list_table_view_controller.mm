@@ -47,6 +47,7 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/panel/panel_constants.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -250,6 +251,13 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   self.tableView.dragDelegate = self.dragDropHandler;
   self.tableView.dragInteractionEnabled = true;
   self.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
+
+  if (@available(iOS 17, *)) {
+    NSArray<UITrait>* traits = TraitCollectionSetForTraits(
+        @[ UITraitPreferredContentSizeCategory.class ]);
+    [self registerForTraitChanges:traits
+                       withAction:@selector(verifyTableIsEmpty)];
+  }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -269,14 +277,15 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     [self exitEditingModeAnimated:YES];
 }
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-  if (!self.dataSource.hasElements &&
-      self.traitCollection.preferredContentSizeCategory !=
-          previousTraitCollection.preferredContentSizeCategory) {
-    [self tableIsEmpty];
+  if (self.traitCollection.preferredContentSizeCategory !=
+      previousTraitCollection.preferredContentSizeCategory) {
+    [self verifyTableIsEmpty];
   }
 }
+#endif
 
 #pragma mark - UITableViewDataSource
 
@@ -1242,13 +1251,22 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
       sectionIndex++;
     }
   }
-  NOTREACHED_IN_MIGRATION();
-  return 0;
+  NOTREACHED();
 }
 
 - (void)dismissMarkConfirmationSheet {
   [_markConfirmationSheet stop];
   _markConfirmationSheet = nil;
+}
+
+// Invokes the `tableIsEmpty` function when the data source doesn't have any
+// elements.
+- (void)verifyTableIsEmpty {
+  if (self.dataSource.hasElements) {
+    return;
+  }
+
+  [self tableIsEmpty];
 }
 
 #pragma mark Vivaldi
@@ -1257,8 +1275,11 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   UIView* tableHeaderView =
       [[UIView alloc] initWithFrame:
        CGRectMake(0, 0, self.tableView.bounds.size.width,
+                  [VivaldiGlobalHelpers
+                      canShowSidePanelForTrait:self.traitCollection] ? 0 :
                   panel_top_view_height)];
   self.tableView.tableHeaderView = tableHeaderView;
 }
+// End Vivaldi
 
 @end

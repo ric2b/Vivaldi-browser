@@ -298,6 +298,40 @@ class InclusiveLanguageCheckTest(unittest.TestCase):
             input_api, MockOutputApi())
         self.assertEqual([], errors)
 
+    def testDirExemptWithComment(self):
+        input_api = MockInputApi()
+        input_api.change.RepositoryRoot = lambda: ''
+        input_api.presubmit_local_path = ''
+
+        input_api.files = [
+            MockFile(
+                os.path.normpath(
+                    'infra/inclusive_language_presubmit_exempt_dirs.txt'), [
+                        '# this is a comment',
+                        'dir1',
+                        '# dir2',
+                    ]),
+
+            # this should be excluded
+            MockFile(
+                os.path.normpath('dir1/1.py'),
+                [
+                    'TEST(SomeClassTest, SomeInteraction, blacklist) {',  # nocheck
+                    '}'
+                ]),
+
+            # this should not be excluded
+            MockFile(os.path.normpath('dir2/2.py'),
+                     ['- (void)testSth { V(whitelist); }']),  # nocheck
+        ]
+
+        errors = presubmit_canned_checks.CheckInclusiveLanguage(
+            input_api, MockOutputApi())
+        self.assertEqual(1, len(errors))
+        self.assertTrue(os.path.normpath('dir1/1.py') not in errors[0].message)
+        self.assertTrue(os.path.normpath('dir2/2.py') in errors[0].message)
+
+
 
 class DescriptionChecksTest(unittest.TestCase):
     def testCheckDescriptionUsesColonInsteadOfEquals(self):

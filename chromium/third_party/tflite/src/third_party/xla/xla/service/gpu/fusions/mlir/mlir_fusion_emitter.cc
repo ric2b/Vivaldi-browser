@@ -92,11 +92,11 @@ limitations under the License.
 #include "xla/service/gpu/fusions/mlir/elemental_hlo_to_mlir.h"
 #include "xla/service/gpu/fusions/mlir/type_util.h"
 #include "xla/service/gpu/fusions/transforms/passes.h"
+#include "xla/service/gpu/hlo_fusion_analysis.h"
 #include "xla/service/gpu/ir_emitter_context.h"
 #include "xla/service/gpu/kernel_arguments.h"
 #include "xla/service/gpu/kernel_reuse_cache.h"
 #include "xla/service/gpu/launch_dimensions.h"
-#include "xla/service/gpu/model/indexing_map.h"
 #include "xla/service/gpu/runtime/kernel_thunk.h"
 #include "xla/service/gpu/target_util.h"
 #include "xla/service/llvm_ir/llvm_util.h"
@@ -307,7 +307,7 @@ MlirFusionEmitterBase::CreateLLVMModule(
   mlir::PassManager pm(&mlir_context);
   AddXlaGpuOpsOptimizationPasses(pm);
   AddLoopTransformationPasses(pm);
-  AddLoweringPasses(pm, device, hlo_module->config().debug_options());
+  AddLoweringPasses(pm, device);
   auto pipeline_status = RunPassPipeline(module.get(), pm, trace.get());
   if (trace) {
     DumpPerModuleProtobufToFile(
@@ -414,6 +414,50 @@ MlirFusionEmitterBase::CreateMLIRModule(
 
   TF_RETURN_IF_ERROR(EmitMlir(module.get(), entry_func, fusion));
   return module;
+}
+
+mlir_converter::EpilogueSpecification
+MlirFusionEmitterBase::GetEpilogueForOutputIndexing(
+    const HloFusionAnalysis& analysis,
+    const std::vector<const HloInstruction*>& heroes,
+    const std::vector<const HloInstruction*>& roots,
+    mlir::MLIRContext* mlir_context) const {
+  mlir_converter::EpilogueSpecification result;
+
+  absl::flat_hash_map<const HloInstruction*, const HloInstruction*>
+      root_to_hero;
+  for (auto [root, hero] :
+       llvm::zip(analysis.fusion_roots(), analysis.fusion_heroes())) {
+    root_to_hero[&root.instruction()] = &hero.instruction();
+  }
+  absl::flat_hash_map<const HloInstruction*, int> root_to_index;
+  for (auto [index, root] : llvm::enumerate(analysis.fusion_roots())) {
+    root_to_index[&root.instruction()] = root_to_index.size();
+  }
+
+  result.root_indexing.reserve(roots.size());
+  for (auto* root : roots) {
+    auto indexing =
+        ComputeThreadIdToOutputIndexing(root_to_index[root], mlir_context);
+    if (result.index_ranges.empty()) {
+      result.index_ranges.reserve(indexing->GetDimensionCount() +
+                                  indexing->GetSymbolCount());
+      for (const auto& dim : indexing->GetDimensionBounds()) {
+        result.index_ranges.push_back(dim.upper + 1);
+      }
+      for (const auto& sym : indexing->GetSymbolBounds()) {
+        result.index_ranges.push_back(sym.upper + 1);
+      }
+    }
+    auto* hero = root_to_hero[root];
+    auto epilogue_indexing = ComputeEpilogueInputToOutputIndexing(
+        {*hero, &analysis.fusion()}, {*root, &analysis.fusion()}, mlir_context);
+    result.root_indexing.push_back(
+        ComposeIndexingMaps(*indexing, epilogue_indexing));
+  }
+  result.heroes = heroes;
+  result.roots = roots;
+  return result;
 }
 
 absl::Status MlirFusionEmitterBase::EmitMlir(
@@ -542,6 +586,7 @@ void AddXlaGpuOpsOptimizationPasses(mlir::OpPassManager& pm) {
 
 void AddLoopTransformationPasses(mlir::OpPassManager& pm) {
   pm.addNestedPass<FuncOp>(CreateLowerXlaGpuToScfPass());
+  pm.addNestedPass<FuncOp>(CreateFuseLoopsPass());
   pm.addPass(mlir::createInlinerPass({}, [&](mlir::OpPassManager& pm) {
     // CSE after inlining because inlining can introduce duplicates.
     pm.addPass(mlir::createCSEPass());
@@ -566,8 +611,7 @@ void AddLoopTransformationPasses(mlir::OpPassManager& pm) {
 }
 
 void AddLoweringPasses(mlir::OpPassManager& pm,
-                       const se::DeviceDescription& device,
-                       const DebugOptions& debug_options) {
+                       const se::DeviceDescription& device) {
   bool is_amd = std::holds_alternative<se::RocmComputeCapability>(
       device.gpu_compute_capability());
   pm.addNestedPass<FuncOp>(CreateConvertPureCallOpsPass());
@@ -593,8 +637,7 @@ void AddLoweringPasses(mlir::OpPassManager& pm,
   pm.addPass(mlir::createCSEPass());
 
   // This pass has to run before `ExpandFloatOpsPass`.
-  auto maybe_convert_fp8 = MaybeCreateConvertFloatNvidiaPass(
-      device.cuda_compute_capability(), debug_options.xla_gpu_cuda_data_dir());
+  auto maybe_convert_fp8 = MaybeCreateConvertFloatNvidiaPass(device);
   if (maybe_convert_fp8.has_value()) {
     pm.addPass(std::move(*maybe_convert_fp8));
   }

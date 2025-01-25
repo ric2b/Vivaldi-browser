@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
+import * as Protocol from '../../generated/protocol.js';
 import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
-import type * as Protocol from '../../generated/protocol.js';
 
 type AggregationKeyTag = {
   aggregationKeyTag: undefined,
@@ -280,7 +280,16 @@ export class IssueAggregator extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     this.dispatchEventToListeners(Events.FULL_UPDATE_REQUIRED);
   }
 
-  #aggregateIssue(issue: IssuesManager.Issue.Issue): AggregatedIssue {
+  #aggregateIssue(issue: IssuesManager.Issue.Issue): AggregatedIssue|undefined {
+    const excludeFromAggregate = [
+      Protocol.Audits.CookieWarningReason.WarnThirdPartyCookieHeuristic,
+      Protocol.Audits.CookieWarningReason.WarnDeprecationTrialMetadata,
+    ];
+
+    if (excludeFromAggregate.some(exclude => issue.code().includes(exclude))) {
+      return;
+    }
+
     const map = issue.isHidden() ? this.#hiddenAggregatedIssuesByKey : this.#aggregatedIssuesByKey;
     const aggregatedIssue = this.#aggregateIssueByStatus(map, issue);
     this.dispatchEventToListeners(Events.AGGREGATED_ISSUE_UPDATED, aggregatedIssue);

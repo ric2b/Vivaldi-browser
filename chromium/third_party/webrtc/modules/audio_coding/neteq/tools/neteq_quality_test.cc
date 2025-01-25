@@ -17,8 +17,8 @@
 #include "absl/flags/flag.h"
 #include "absl/strings/string_view.h"
 #include "api/environment/environment_factory.h"
+#include "api/neteq/default_neteq_factory.h"
 #include "api/units/timestamp.h"
-#include "modules/audio_coding/neteq/default_neteq_factory.h"
 #include "modules/audio_coding/neteq/tools/neteq_quality_test.h"
 #include "modules/audio_coding/neteq/tools/output_audio_file.h"
 #include "modules/audio_coding/neteq/tools/output_wav_file.h"
@@ -259,13 +259,13 @@ NetEqQualityTest::~NetEqQualityTest() {
   log_file_.close();
 }
 
-bool NoLoss::Lost(int now_ms) {
+bool NoLoss::Lost(int /* now_ms */) {
   return false;
 }
 
 UniformLoss::UniformLoss(double loss_rate) : loss_rate_(loss_rate) {}
 
-bool UniformLoss::Lost(int now_ms) {
+bool UniformLoss::Lost(int /* now_ms */) {
   int drop_this = rand();
   return (drop_this < loss_rate_ * RAND_MAX);
 }

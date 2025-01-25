@@ -42,3 +42,54 @@ std::unique_ptr<SessionCommand> CreateVivCreateThumbnailCommand(int image_format
 uint8_t GetVivCreateThumbnailCommandId() {
   return kCommandCreateThumbnail;
 }
+
+/// This is used by open tab import.
+std::vector<std::unique_ptr<sessions::SessionCommand>>
+VivaldiFilterImportedTabsSessionCommands(
+    std::vector<std::unique_ptr<sessions::SessionCommand>> &cmds,
+    bool vivaldi_source) {
+  static const SessionCommand::id_type kChromeCommandSetTabGroup = 25;
+
+  std::vector<std::unique_ptr<sessions::SessionCommand>> commands;
+  for (auto &item : cmds) {
+    // we use a filter for the commands that we want to pass through - many are
+    // irrelevant/not parseable and would stop the creation operation
+    // prematurely.
+    switch (item->id()) {
+      case kCommandSetTabIndexInWindow:
+      case kCommandUpdateTabNavigation:
+      case kCommandSetSelectedNavigationIndex:
+      case kCommandSetSelectedTabInIndex:
+      case kCommandSetPinnedState:
+      case kCommandSetTabUserAgentOverride:
+      case kCommandSessionStorageAssociated:
+      case kCommandTabClosed:
+        commands.push_back(std::move(item));
+        break;
+      case kChromeCommandSetTabGroup:
+        // Vivaldi has a different command id for SetTabGroup operation than
+        // rest of the chromium browsers.
+        if (!vivaldi_source) {
+          auto adapted_command =
+              std::make_unique<sessions::SessionCommand>(kCommandSetTabGroup, item->size());
+          item->GetPayload(adapted_command->contents(), item->size());
+          commands.push_back(std::move(adapted_command));
+        }
+        break;
+      // Commands below are all vivaldi specific:
+      case kCommandSetExtData:
+      case kCommandSetTabGroup:
+      case kCommandPageActionOverrides:
+      case kCommandCreateThumbnail:
+      case kCommandRemovePageActionOverrides:
+        if (vivaldi_source) {
+          commands.push_back(std::move(item));
+        }
+        break;
+      default:
+        continue;
+    };
+  }
+
+  return commands;
+}

@@ -12,20 +12,16 @@
 
 class ChromePasswordProtectionService;
 class KeyedService;
-
-namespace web {
-class BrowserState;
-}
+class ProfileIOS;
 
 // Singleton that owns ChromePasswordProtectionService objects, one for each
-// active BrowserState.
+// active Profile.
 class ChromePasswordProtectionServiceFactory
     : public BrowserStateKeyedServiceFactory {
  public:
   // Returns the instance of ChromePasswordProtectionService associated with
-  // this browser state, creating one if none exists.
-  static ChromePasswordProtectionService* GetForBrowserState(
-      web::BrowserState* browser_state);
+  // this profile, creating one if none exists.
+  static ChromePasswordProtectionService* GetForProfile(ProfileIOS* profile);
 
   // Returns the singleton instance of ChromePasswordProtectionServiceFactory.
   static ChromePasswordProtectionServiceFactory* GetInstance();

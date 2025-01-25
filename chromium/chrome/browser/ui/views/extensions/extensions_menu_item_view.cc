@@ -30,6 +30,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
@@ -203,6 +204,8 @@ views::Builder<HoverButton> GetSitePermissionsButtonBuilder(
 
 }  // namespace
 
+DEFINE_ELEMENT_IDENTIFIER_VALUE(kExtensionMenuItemViewElementId);
+
 ExtensionMenuItemView::ExtensionMenuItemView(
     Browser* browser,
     std::unique_ptr<ToolbarActionViewController> controller,
@@ -230,6 +233,7 @@ ExtensionMenuItemView::ExtensionMenuItemView(
                   .CopyAddressTo(&primary_action_button_)
                   .SetProperty(views::kFlexBehaviorKey,
                                views::FlexSpecification(
+                                   views::LayoutOrientation::kHorizontal,
                                    views::MinimumFlexSizeRule::kScaleToZero,
                                    views::MaximumFlexSizeRule::kUnbounded)),
               views::Builder<HoverButton>(
@@ -323,6 +327,8 @@ ExtensionMenuItemView::ExtensionMenuItemView(
       .SetCrossAxisAlignment(views::LayoutAlignment::kStretch)
       .SetProperty(views::kBoxLayoutFlexKey,
                    views::BoxLayoutFlexSpecification())
+      .SetProperty(views::kElementIdentifierKey,
+                   kExtensionMenuItemViewElementId)
       .AddChildren(
           // Main row.
           views::Builder<views::FlexLayoutView>()
@@ -339,6 +345,7 @@ ExtensionMenuItemView::ExtensionMenuItemView(
                                          kColorExtensionsMenuText)
                       .SetProperty(views::kFlexBehaviorKey,
                                    views::FlexSpecification(
+                                       views::LayoutOrientation::kHorizontal,
                                        views::MinimumFlexSizeRule::kScaleToZero,
                                        views::MaximumFlexSizeRule::kUnbounded)),
                   // Site access toggle.
@@ -532,7 +539,7 @@ void ExtensionMenuItemView::OnContextMenuPressed() {
   // TODO(crbug.com/41478477): Cleanup the menu source type.
   context_menu_controller_->ShowContextMenuForViewImpl(
       context_menu_button_, context_menu_button_->GetMenuPosition(),
-      ui::MenuSourceType::MENU_SOURCE_MOUSE);
+      ui::mojom::MenuSourceType::kMouse);
 }
 
 void ExtensionMenuItemView::OnPinButtonPressed() {

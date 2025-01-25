@@ -7,6 +7,7 @@ AVCODECOBJS-$(CONFIG_BSWAPDSP)          += bswapdsp.o
 AVCODECOBJS-$(CONFIG_FDCTDSP)           += fdctdsp.o
 AVCODECOBJS-$(CONFIG_FMTCONVERT)        += fmtconvert.o
 AVCODECOBJS-$(CONFIG_G722DSP)           += g722dsp.o
+AVCODECOBJS-$(CONFIG_H263DSP)           += h263dsp.o
 AVCODECOBJS-$(CONFIG_H264CHROMA)        += h264chroma.o
 AVCODECOBJS-$(CONFIG_H264DSP)           += h264dsp.o
 AVCODECOBJS-$(CONFIG_H264PRED)          += h264pred.o
@@ -17,6 +18,7 @@ AVCODECOBJS-$(CONFIG_LLVIDDSP)          += llviddsp.o
 AVCODECOBJS-$(CONFIG_LLVIDENCDSP)       += llviddspenc.o
 AVCODECOBJS-$(CONFIG_LPC)               += lpc.o
 AVCODECOBJS-$(CONFIG_ME_CMP)            += motion.o
+AVCODECOBJS-$(CONFIG_MPEGVIDEOENC)      += mpegvideoencdsp.o
 AVCODECOBJS-$(CONFIG_VC1DSP)            += vc1dsp.o
 AVCODECOBJS-$(CONFIG_VP8DSP)            += vp8dsp.o
 AVCODECOBJS-$(CONFIG_VIDEODSP)          += videodsp.o
@@ -62,7 +64,7 @@ AVFILTEROBJS-$(CONFIG_SOBEL_FILTER)      += vf_convolution.o
 CHECKASMOBJS-$(CONFIG_AVFILTER) += $(AVFILTEROBJS-yes)
 
 # swscale tests
-SWSCALEOBJS                             += sw_gbrp.o sw_rgb.o sw_scale.o
+SWSCALEOBJS                             += sw_gbrp.o sw_range_convert.o sw_rgb.o sw_scale.o sw_yuv2rgb.o sw_yuv2yuv.o
 
 CHECKASMOBJS-$(CONFIG_SWSCALE)  += $(SWSCALEOBJS)
 
@@ -70,6 +72,7 @@ CHECKASMOBJS-$(CONFIG_SWSCALE)  += $(SWSCALEOBJS)
 AVUTILOBJS                              += av_tx.o
 AVUTILOBJS                              += fixed_dsp.o
 AVUTILOBJS                              += float_dsp.o
+AVUTILOBJS                              += lls.o
 
 CHECKASMOBJS-$(CONFIG_AVUTIL)  += $(AVUTILOBJS)
 

@@ -13,6 +13,8 @@
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/tabs/tab_group.h"
+#include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
@@ -27,6 +29,7 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/profiles/profile.h"
+#include "extensions/api/guest_view/parent_tab_user_data.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
 #endif  // (ENABLE_EXTENSIONS)
@@ -130,8 +133,14 @@ bool UnloadController::BeforeUnloadFired(content::WebContents* contents,
     std::optional<tab_groups::TabGroupId> group =
         browser_->tab_strip_model()->GetTabGroupForTab(
             browser_->tab_strip_model()->GetIndexOfWebContents(contents));
-    if (group.has_value())
-      browser_->tab_strip_model()->GroupCloseStopped(group.value());
+    if (group.has_value()) {
+      TabGroup* const tab_group =
+          browser_->tab_strip_model()->group_model()->GetTabGroup(
+              group.value());
+      if (tab_group->IsGroupClosing()) {
+        browser_->tab_strip_model()->GroupCloseStopped(group.value());
+      }
+    }
   }
 
   if (!is_attempting_to_close_browser_) {
@@ -249,6 +258,17 @@ UnloadController::GetTabsNeedingBeforeUnloadFired() const {
   for (int i = 0; i < browser_->tab_strip_model()->count(); ++i) {
     content::WebContents* const contents =
         browser_->tab_strip_model()->GetWebContentsAt(i);
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+    // Panels and web widgets may significantly delay closing the browser window
+    // or shutting down the browser due to waiting for the beforeunload event.
+    // Since there are very few meaningful actions that panels or widgets can
+    // perform in the beforeunload event handler, we prioritize a faster
+    // shutdown by ignoring beforeunload.
+    if (::vivaldi::ParentTabUserData::GetParentTabId(contents))
+      continue;
+#endif
+
     const bool should_fire_beforeunload =
         contents->NeedToFireBeforeUnloadOrUnloadEvents() ||
         DevToolsWindow::NeedsToInterceptBeforeUnload(contents);

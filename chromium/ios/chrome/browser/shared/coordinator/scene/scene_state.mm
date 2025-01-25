@@ -12,6 +12,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/chrome_overlay_window.h"
+#import "ios/chrome/app/profile/profile_state.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_controller.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_util.h"
 
@@ -58,6 +59,7 @@ ContentVisibility ContentVisibilityForIncognito(BOOL isIncognito) {
 @implementation SceneState {
   ContentVisibility _contentVisibility;
   NSString* _sceneSessionID;
+  AppState* _appState;
 }
 
 - (instancetype)initWithAppState:(AppState*)appState {
@@ -98,6 +100,14 @@ ContentVisibility ContentVisibilityForIncognito(BOOL isIncognito) {
   return self.agents;
 }
 
+- (void)setRootViewController:(UIViewController*)rootViewController
+            makeKeyAndVisible:(BOOL)makeKeyAndVisible {
+  self.window.rootViewController = rootViewController;
+  if (makeKeyAndVisible) {
+    [self.window makeKeyAndVisible];
+  }
+}
+
 #pragma mark - Setters & Getters.
 
 - (UIWindow*)window {
@@ -108,6 +118,10 @@ ContentVisibility ContentVisibilityForIncognito(BOOL isIncognito) {
     }
   }
   return mainWindow;
+}
+
+- (UIViewController*)rootViewController {
+  return [self.window rootViewController];
 }
 
 - (void)setScene:(UIWindowScene*)scene {
@@ -227,10 +241,24 @@ ContentVisibility ContentVisibilityForIncognito(BOOL isIncognito) {
   }
 }
 
+- (void)setProfileState:(ProfileState*)profileState {
+  _profileState = profileState;
+  [self.observers sceneState:self profileStateConnected:_profileState];
+}
+
 #pragma mark - UIBlockerTarget
 
-- (id<UIBlockerManager>)uiBlockerManager {
-  return _appState;
+- (BOOL)isUIBlocked {
+  return _presentingModalOverlay;
+}
+
+- (id<UIBlockerManager>)uiBlockerManagerForExtent:(UIBlockerExtent)extent {
+  switch (extent) {
+    case UIBlockerExtent::kProfile:
+      return _profileState;
+    case UIBlockerExtent::kApplication:
+      return _appState;
+  }
 }
 
 - (void)bringBlockerToFront:(UIScene*)requestingScene {
@@ -248,7 +276,7 @@ ContentVisibility ContentVisibilityForIncognito(BOOL isIncognito) {
                        errorHandler:^(NSError* error) {
                          LOG(ERROR) << base::SysNSStringToUTF8(
                              error.localizedDescription);
-                         NOTREACHED_IN_MIGRATION();
+                         NOTREACHED();
                        }];
 }
 

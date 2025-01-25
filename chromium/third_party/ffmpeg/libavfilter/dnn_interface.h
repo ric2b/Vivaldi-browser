@@ -32,7 +32,11 @@
 
 #define DNN_GENERIC_ERROR FFERRTAG('D','N','N','!')
 
-typedef enum {DNN_TF = 1, DNN_OV, DNN_TH} DNNBackendType;
+typedef enum {
+    DNN_TF = 1,
+    DNN_OV = 1 << 1,
+    DNN_TH = 1 << 2
+} DNNBackendType;
 
 typedef enum {DNN_FLOAT = 1, DNN_UINT8 = 4} DNNDataType;
 
@@ -91,17 +95,15 @@ typedef int (*DetectPostProc)(AVFrame *frame, DNNData *output, uint32_t nb, AVFi
 typedef int (*ClassifyPostProc)(AVFrame *frame, DNNData *output, uint32_t bbox_index, AVFilterContext *filter_ctx);
 
 typedef struct DNNModel{
-    // Stores model that can be different for different backends.
-    void *model;
     // Stores FilterContext used for the interaction between AVFrame and DNNData
     AVFilterContext *filter_ctx;
     // Stores function type of the model
     DNNFunctionType func_type;
     // Gets model input information
     // Just reuse struct DNNData here, actually the DNNData.data field is not needed.
-    int (*get_input)(void *model, DNNData *input, const char *input_name);
+    int (*get_input)(struct DNNModel *model, DNNData *input, const char *input_name);
     // Gets model output width/height with given input w/h
-    int (*get_output)(void *model, const char *input_name, int input_width, int input_height,
+    int (*get_output)(struct DNNModel *model, const char *input_name, int input_width, int input_height,
                                 const char *output_name, int *output_width, int *output_height);
     // set the pre process to transfer data from AVFrame to DNNData
     // the default implementation within DNN is used if it is not provided by the filter
@@ -172,6 +174,7 @@ typedef struct DnnContext {
 // Stores pointers to functions for loading, executing, freeing DNN models for one of the backends.
 struct DNNModule {
     const AVClass clazz;
+    DNNBackendType type;
     // Loads model and parameters from given file. Returns NULL if it is not possible.
     DNNModel *(*load_model)(DnnContext *ctx, DNNFunctionType func_type, AVFilterContext *filter_ctx);
     // Executes model with specified input and output. Returns the error code otherwise.
@@ -189,7 +192,7 @@ const DNNModule *ff_get_dnn_module(DNNBackendType backend_type, void *log_ctx);
 
 void ff_dnn_init_child_class(DnnContext *ctx);
 void *ff_dnn_child_next(DnnContext *obj, void *prev);
-const AVClass *ff_dnn_child_class_iterate(void **iter);
+const AVClass *ff_dnn_child_class_iterate_with_mask(void **iter, uint32_t backend_mask);
 
 static inline int dnn_get_width_idx_by_layout(DNNLayout layout)
 {

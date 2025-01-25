@@ -56,7 +56,7 @@ bool IsVisibleTextField(const autofill::AutofillField& field) {
   return field.IsFocusable() && field.IsTextInputElement();
 }
 
-autofill::AutofillField* GetFieldToFill(
+const autofill::AutofillField* GetFieldToFill(
     const std::vector<std::unique_ptr<autofill::AutofillField>>& fields,
     bool is_credit_card_form) {
   for (const std::unique_ptr<autofill::AutofillField>& field : fields) {
@@ -291,7 +291,7 @@ void FastCheckoutClientImpl::InternalStop(bool allow_further_runs) {
   form_signatures_to_fill_.clear();
   selected_autofill_profile_guid_ = std::nullopt;
   selected_credit_card_id_ = std::nullopt;
-  timeout_timer_.AbandonAndStop();
+  timeout_timer_.Stop();
   credit_card_form_global_id_ = std::nullopt;
   run_id_ = 0;
   // Reset UI related state.
@@ -299,7 +299,7 @@ void FastCheckoutClientImpl::InternalStop(bool allow_further_runs) {
   // Reset personal data manager observation.
   personal_data_manager_observation_.Reset();
   // Reset `autofill_manager_` and related objects.
-  form_extraction_timer_.AbandonAndStop();
+  form_extraction_timer_.Stop();
   autofill_manager_observation_.Reset();
   autofill_manager_.reset();
 
@@ -433,7 +433,7 @@ void FastCheckoutClientImpl::TryToFillForms() {
   for (const auto& [form_global_id, form] :
        autofill_manager_->form_structures()) {
     if (ShouldFillForm(*form, autofill::FormType::kAddressForm)) {
-      autofill::AutofillField* field =
+      const autofill::AutofillField* field =
           GetFieldToFill(form->fields(), /*is_credit_card_form=*/false);
       const autofill::AutofillProfile* autofill_profile =
           GetSelectedAutofillProfile();
@@ -446,19 +446,19 @@ void FastCheckoutClientImpl::TryToFillForms() {
         bam->SetFastCheckoutRunId(autofill::FieldTypeGroup::kAddress, run_id_);
         bam->FillOrPreviewProfileForm(
             autofill::mojom::ActionPersistence::kFill, form->ToFormData(),
-            *field, *autofill_profile,
+            field->global_id(), *autofill_profile,
             autofill::AutofillTriggerDetails(
                 autofill::AutofillTriggerSource::kFastCheckout));
       }
     }
 
     if (ShouldFillForm(*form, autofill::FormType::kCreditCardForm)) {
-      autofill::AutofillField* field =
+      const autofill::AutofillField* field =
           GetFieldToFill(form->fields(), /*is_credit_card_form=*/true);
-      autofill::CreditCard* credit_card = GetSelectedCreditCard();
+      const autofill::CreditCard* credit_card = GetSelectedCreditCard();
       if (field && !credit_card_form_global_id_ && credit_card) {
         if (autofill::CreditCard::IsLocalCard(credit_card)) {
-          FillCreditCardForm(*form, *field, *credit_card, u"");
+          FillCreditCardForm(*form, field->global_id(), *credit_card);
         } else {
           autofill::CreditCardCvcAuthenticator& cvc_authenticator =
               autofill_client_->GetPaymentsAutofillClient()
@@ -469,8 +469,7 @@ void FastCheckoutClientImpl::TryToFillForms() {
               autofill::payments::PaymentsAutofillClient::UnmaskCardReason::
                   kAutofill,
               weak_ptr_factory_.GetWeakPtr(),
-              cvc_authenticator.GetAsFullCardRequestUIDelegate(),
-              autofill_client_->GetLastCommittedPrimaryMainFrameOrigin());
+              cvc_authenticator.GetAsFullCardRequestUIDelegate());
         }
       }
     }
@@ -479,9 +478,8 @@ void FastCheckoutClientImpl::TryToFillForms() {
 
 void FastCheckoutClientImpl::FillCreditCardForm(
     const autofill::FormStructure& form,
-    const autofill::FormFieldData& field,
-    const autofill::CreditCard& credit_card,
-    const std::u16string& cvc) {
+    const autofill::FieldGlobalId& field_id,
+    const autofill::CreditCard& credit_card) {
   form_filling_states_[std::make_pair(form.form_signature(),
                                       autofill::FormType::kCreditCardForm)] =
       FillingState::kFilling;
@@ -489,8 +487,8 @@ void FastCheckoutClientImpl::FillCreditCardForm(
       static_cast<autofill::BrowserAutofillManager*>(autofill_manager_.get());
   bam->SetFastCheckoutRunId(autofill::FieldTypeGroup::kCreditCard, run_id_);
   bam->FillOrPreviewCreditCardForm(
-      autofill::mojom::ActionPersistence::kFill, form.ToFormData(), field,
-      credit_card, cvc,
+      autofill::mojom::ActionPersistence::kFill, form.ToFormData(), field_id,
+      credit_card,
       {.trigger_source = autofill::AutofillTriggerSource::kFastCheckout});
 }
 
@@ -506,8 +504,8 @@ FastCheckoutClientImpl::GetSelectedAutofillProfile() {
   return autofill_profile;
 }
 
-autofill::CreditCard* FastCheckoutClientImpl::GetSelectedCreditCard() {
-  autofill::CreditCard* credit_card = nullptr;
+const autofill::CreditCard* FastCheckoutClientImpl::GetSelectedCreditCard() {
+  const autofill::CreditCard* credit_card = nullptr;
   if (selected_credit_card_is_local_) {
     credit_card = personal_data_helper_->GetPersonalDataManager()
                       ->payments_data_manager()
@@ -560,9 +558,11 @@ void FastCheckoutClientImpl::OnFullCardRequestSucceeded(
   const std::unique_ptr<autofill::FormStructure>& form =
       autofill_manager_->form_structures().at(
           credit_card_form_global_id_.value());
-  if (autofill::AutofillField* field =
+  if (const autofill::AutofillField* field =
           GetFieldToFill(form->fields(), /*is_credit_card_form=*/true)) {
-    FillCreditCardForm(*form, *field, card, cvc);
+    autofill::CreditCard card_with_cvc = card;
+    card_with_cvc.set_cvc(cvc);
+    FillCreditCardForm(*form, field->global_id(), card_with_cvc);
   }
   credit_card_form_global_id_ = std::nullopt;
 }
@@ -630,7 +630,7 @@ void FastCheckoutClientImpl::A11yAnnounce(
     autofill::FormSignature form_signature,
     bool is_credit_card_form) {
   if (is_credit_card_form) {
-    if (autofill::CreditCard* credit_card = GetSelectedCreditCard()) {
+    if (const autofill::CreditCard* credit_card = GetSelectedCreditCard()) {
       accessibility_service_->Announce(l10n_util::GetStringFUTF16(
           IDS_FAST_CHECKOUT_A11Y_CREDIT_CARD_FORM_FILLED,
           credit_card->HasNonEmptyValidNickname()

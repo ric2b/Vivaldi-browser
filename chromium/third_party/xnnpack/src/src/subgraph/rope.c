@@ -30,16 +30,17 @@ static enum xnn_status create_rope_operator(
   assert(node->num_outputs == 1);
 
   enum xnn_status status;
-  switch (node->compute_type) {
-    case xnn_compute_type_fp16:
+  const uint32_t input_id = node->inputs[0];
+  assert(input_id < num_values);
+  const struct xnn_value *input_value = &values[input_id];
+  switch (input_value->datatype) {
+    case xnn_datatype_fp16:
       status = xnn_create_rope_nthc_f16(
-        node->params.rope.max_tokens,
         /*flags=*/0,
         &opdata->operator_objects[0]);
       break;
-    case xnn_compute_type_fp32:
+    case xnn_datatype_fp32:
       status = xnn_create_rope_nthc_f32(
-        node->params.rope.max_tokens,
         /*flags=*/0,
         &opdata->operator_objects[0]);
       break;
@@ -167,13 +168,6 @@ enum xnn_status xnn_define_rope(
     return status;
   }
 
-  if (max_tokens == 0) {
-    xnn_log_error(
-      "failed to define %s operator with %zu max tokens: maximum number of tokens must be non-zero",
-      xnn_node_type_to_string(xnn_node_type_rope), max_tokens);
-    return xnn_status_invalid_parameter;
-  }
-
   status = xnn_subgraph_check_input_node_id(xnn_node_type_rope, input_id, subgraph->num_values);
   if (status != xnn_status_success) {
     return status;
@@ -247,7 +241,7 @@ enum xnn_status xnn_define_rope(
       return xnn_status_invalid_parameter;
   }
 
-  status = xnn_subgraph_check_datatype_matches(xnn_node_type_subtract, input_id, input_value, output_id, output_value);
+  status = xnn_subgraph_check_datatype_matches(xnn_node_type_rope, input_id, input_value, output_id, output_value);
   if (status != xnn_status_success) {
     return status;
   }
@@ -259,7 +253,6 @@ enum xnn_status xnn_define_rope(
 
   node->type = xnn_node_type_rope;
   node->compute_type = compute_type;
-  node->params.rope.max_tokens = max_tokens;
   node->num_inputs = 2;
   node->inputs[0] = input_id;
   node->inputs[1] = weights_id;

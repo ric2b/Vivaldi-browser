@@ -17,6 +17,9 @@ class PrefService;
 /// Registers the local preferences.
 + (void)registerLocalStatePrefs:(PrefRegistrySimple*)registry;
 
+/// Call for migrating the prefs.
++ (void)migratePrefsIfNeeded:(PrefService*)prefs;
+
 @end
 
 #endif  // IOS_UI_SETTINGS_SEARCH_ENGINE_VIVALDI_SEARCH_ENGINE_SETTINGS_PREFS_H_

@@ -99,7 +99,7 @@ class SenderSession final {
   // The configuration information required to set up the session.
   struct Configuration {
     // The remote address of the receiver to connect to. NOTE: we do eventually
-    // set the remote endpoint on the |environment| object, but only after
+    // set the remote endpoint on the `environment` object, but only after
     // getting the port information from a successful ANSWER message.
     IPAddress remote_address;
 
@@ -130,9 +130,9 @@ class SenderSession final {
   // one of these classes needs to be reset, a new SenderSession should be
   // created.
   //
-  // |message_source_id| and |message_destination_id| are the local and remote
+  // `message_source_id` and `message_destination_id` are the local and remote
   // ID, respectively, to use when sending or receiving control messages (e.g.,
-  // OFFERs or ANSWERs) over the |message_port|. |message_port|'s SetClient()
+  // OFFERs or ANSWERs) over the `message_port`. `message_port`'s SetClient()
   // method will be called.
   explicit SenderSession(Configuration config);
   SenderSession(const SenderSession&) = delete;
@@ -150,8 +150,8 @@ class SenderSession final {
   // Remoting negotiation is actually very similar to mirroring negotiation--
   // an OFFER/ANSWER exchange still occurs, however only one audio and video
   // codec should be presented based on the encoding of the media element that
-  // should be remoted. Note: the codec fields in |audio_config| and
-  // |video_config| are ignored in favor of |kRemote|.
+  // should be remoted. Note: the codec fields in `audio_config` and
+  // `video_config` are ignored in favor of `kRemote`.
   Error NegotiateRemoting(AudioCaptureConfig audio_config,
                           VideoCaptureConfig video_config);
 
@@ -169,11 +169,11 @@ class SenderSession final {
 
   // The RPC messenger for this session. NOTE: RPC messages may come at
   // any time from the receiver, so subscriptions to RPC remoting messages
-  // should be done before calling |NegotiateRemoting|.
+  // should be done before calling `NegotiateRemoting`.
   RpcMessenger& rpc_messenger() { return rpc_messenger_; }
 
   // TODO(https://crbug.com/1357839): remove this as part of refactoring Chrome
-  // to rely on |rpc_messenger()| instead.
+  // to rely on `rpc_messenger()` instead.
   SenderSessionMessenger& session_messenger() { return messenger_; }
 
  private:
@@ -209,7 +209,7 @@ class SenderSession final {
 
   // Reset the state and tear down the current negotiation/negotiated mirroring
   // or remoting session. After reset, the SenderSession is still connected to
-  // the same |remote_address_|, and the |packet_router_| and sequence number
+  // the same `remote_address_`, and the `packet_router_` and sequence number
   // will be unchanged.
   void ResetState();
 
@@ -275,7 +275,7 @@ class SenderSession final {
   std::unique_ptr<InProcessNegotiation> current_negotiation_;
 
   // The current state of the session. Note that the state is intentionally
-  // limited. |kStreaming| or |kRemoting| means that we are either starting
+  // limited. `kStreaming` or `kRemoting` means that we are either starting
   // a negotiation or actively sending to a receiver.
   State state_ = State::kIdle;
 

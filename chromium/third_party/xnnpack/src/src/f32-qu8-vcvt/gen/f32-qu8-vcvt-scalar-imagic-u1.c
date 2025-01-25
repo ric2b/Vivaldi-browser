@@ -17,7 +17,7 @@ void xnn_f32_qu8_vcvt_ukernel__scalar_imagic_u1(
     size_t batch,
     const float* input,
     uint8_t* output,
-    const union xnn_f32_qu8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_qu8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -25,11 +25,13 @@ void xnn_f32_qu8_vcvt_ukernel__scalar_imagic_u1(
   assert(output != NULL);
 
   const float* i = input;
-  const float vscale = params->scalar_imagic.scale;
-  const float vmagic_bias = params->scalar_imagic.magic_bias;
-  const int32_t vmagic_min = params->scalar_imagic.magic_min;
-  const int32_t vmagic_max = params->scalar_imagic.magic_max;
-  const int32_t vmagic_bias_less_zero_point = params->scalar_imagic.magic_bias_less_zero_point;
+  const float vscale = params->scalar.scale;
+  const float vmagic_bias = 12582912.0f;
+  const float output_min_less_zero_point = (float) ((int32_t) 0 - (int32_t) params->scalar.output_zero_point);
+  const float output_max_less_zero_point = (float) ((int32_t) 255 - (int32_t) params->scalar.output_zero_point);
+  const int32_t vmagic_min = (int32_t) float_as_uint32(vmagic_bias + output_min_less_zero_point);
+  const int32_t vmagic_max = (int32_t) float_as_uint32(vmagic_bias + output_max_less_zero_point);
+  const int32_t vmagic_bias_less_zero_point = INT32_C(0x4B400000) - (int32_t) params->scalar.output_zero_point;
 
   do {
     float vx = *i++;

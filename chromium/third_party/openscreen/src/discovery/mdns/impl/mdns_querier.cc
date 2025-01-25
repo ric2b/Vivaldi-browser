@@ -135,10 +135,10 @@ class DnsTypeBitSet {
   std::bitset<64> elements_;
 };
 
-// Modifies |records| such that no NSEC record signifies the nonexistance of a
+// Modifies `records` such that no NSEC record signifies the nonexistance of a
 // record which is also present in the same message. Order of the input vector
 // is NOT preserved.
-// NOTE: |records| is not of type MdnsRecord::ConstRef because the members must
+// NOTE: `records` is not of type MdnsRecord::ConstRef because the members must
 // be modified.
 // TODO(b/170353378): Break this logic into a separate processing module between
 // the MdnsReader and the MdnsQuerier.
@@ -147,7 +147,7 @@ void RemoveInvalidNsecFlags(std::vector<MdnsRecord>* records) {
   // through all records is needed.
   std::sort(records->begin(), records->end(), CompareRecordByNameAndType);
 
-  // The set of NSEC records that need to be removed from |records|. This can't
+  // The set of NSEC records that need to be removed from `records`. This can't
   // be done as part of the below loop because it would invalidate the iterator
   // that's still being used.
   std::vector<std::vector<MdnsRecord>::iterator> nsecs_to_delete;
@@ -164,7 +164,7 @@ void RemoveInvalidNsecFlags(std::vector<MdnsRecord>* records) {
     // record, removing a DnsType, or any other modification.
     bool has_changed = false;
 
-    // The types for the new record to create, if |has_changed|.
+    // The types for the new record to create, if `has_changed`.
     const NsecRecordRdata& nsec_rdata = absl::get<NsecRecordRdata>(it->rdata());
     DnsTypeBitSet types;
     for (DnsType type : nsec_rdata.types()) {

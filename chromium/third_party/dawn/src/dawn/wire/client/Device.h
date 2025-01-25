@@ -60,16 +60,16 @@ class Device final : public RefCountedWithExternalCount<ObjectWithEventsBase> {
     bool IsAlive() const;
     WGPUFuture GetDeviceLostFuture();
 
-    void HandleError(WGPUErrorType errorType, const char* message);
-    void HandleLogging(WGPULoggingType loggingType, const char* message);
-    void HandleDeviceLost(WGPUDeviceLostReason reason, const char* message);
+    void HandleError(WGPUErrorType errorType, WGPUStringView message);
+    void HandleLogging(WGPULoggingType loggingType, WGPUStringView message);
+    void HandleDeviceLost(WGPUDeviceLostReason reason, WGPUStringView message);
     class DeviceLostEvent;
 
     // WebGPU API
     void SetUncapturedErrorCallback(WGPUErrorCallback errorCallback, void* errorUserdata);
     void SetLoggingCallback(WGPULoggingCallback errorCallback, void* errorUserdata);
     void SetDeviceLostCallback(WGPUDeviceLostCallback errorCallback, void* errorUserdata);
-    void InjectError(WGPUErrorType type, const char* message);
+    void InjectError(WGPUErrorType type, WGPUStringView message);
     void PopErrorScope(WGPUErrorCallback callback, void* userdata);
     WGPUFuture PopErrorScopeF(const WGPUPopErrorScopeCallbackInfo& callbackInfo);
     WGPUFuture PopErrorScope2(const WGPUPopErrorScopeCallbackInfo2& callbackInfo);
@@ -98,6 +98,7 @@ class Device final : public RefCountedWithExternalCount<ObjectWithEventsBase> {
     WGPUStatus GetLimits(WGPUSupportedLimits* limits) const;
     bool HasFeature(WGPUFeatureName feature) const;
     size_t EnumerateFeatures(WGPUFeatureName* features) const;
+    void GetFeatures(WGPUSupportedFeatures* features) const;
     WGPUAdapter GetAdapter() const;
     WGPUQueue GetQueue();
 

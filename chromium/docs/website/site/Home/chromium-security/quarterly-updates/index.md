@@ -15,6 +15,74 @@ It's an open list, so
 if you're interested in updates, discussion, or feisty rants related to Chromium
 security.
 
+
+## Q3 2024
+
+# Chrome Security **2024 Q3** Update
+
+
+Hello everyone,
+
+Here’s our regular update on what Chrome Security has been doing in Q3 of 2024.
+
+In our efforts to address abusive web notifications, we launched the ability for Chrome to auto-disable the notification permission from abusive sites. This is integrated with the Safety Check in Chrome, giving users visibility and control.
+
+As we wrapped up a long series of planned changes in Chrome’s download flow, we [blogged](https://security.googleblog.com/2024/07/building-security-into-redesigned.html) about how the redesign allowed us to improve download protection for users in a number of ways that weren’t practical before, such as for malicious password-protected archives.
+
+We published a draft spec for [Device Bound Session Credentials](https://wicg.github.io/dbsc/) ([explainer](https://wicg.github.io/dbsc/)). The goal of that protocol is to change the game against cookie-theft malware. We are landing code in Chromium to implement the spec while we simultaneously experiment with a prototype on Google properties. 
+
+The Chrome Root Program removed [two](https://groups.google.com/a/ccadb.org/g/public/c/wRs-zec8w7k/m/G_9QprJ2AQAJ) [CAs](https://groups.google.com/a/ccadb.org/g/public/c/29CRLOPM6OM/m/-tvW5l-lAAAJ) from the Chrome Root Store, each with a sustained history of compliance issues that posed risk to Chrome users and the integrity of the Web PKI.
+
+We continue to lead security-forward initiatives within the CA/Browser Forum, with recent efforts focused on strengthening domain control validation (DCV) through [Ballot SC-67](https://cabforum.org/2024/08/05/ballot-sc-67-v3-require-domain-validation-and-caa-checks-to-be-performed-from-multiple-network-perspectives-corroboration/) (“Require Multi-Perspective Issuance Corroboration”) and [Ballot SC-80](https://github.com/cabforum/servercert/pull/551) (“Sunset the use of WHOIS to identify Domain Contacts and relying DCV Methods"). We updated “[Moving Forward, Together](https://www.chromium.org/Home/chromium-security/root-ca-policy/moving-forward-together/)", which serves as a public roadmap for our top priorities. The update highlights many of our recent accomplishments. 
+
+On the engineering side of the Chrome Root Store, we landed a read-only UI on Windows and Mac to show the contents of the Chrome Root Store and any local trust anchors imported from the platform. You can see the new UI at chrome://certificate-manager. We also announced the rough shape of plans to allow for the new Monologue / Static CT API logs to be used in Certificate Transparency. We anticipate this new log format will be considerably cheaper to run.
+
+We launched a version of HTTPS-First Mode that only warns on public sites. It does not warn on plaintext HTTP accesses to sites on private networks, where there is often no good way to be issued a publicly-trusted certificate for HTTPS. You can try it out by selecting “Warns you for insecure public sites” under the “Secure Connections” header on chrome://settings/security.
+
+In the web security space, we completed the initial implementation of [Document-Isolation-Policy](https://github.com/WICG/document-isolation-policy), a mechanism for more easily enabling [cross-origin isolation](https://web.dev/articles/cross-origin-isolation-guide). Document-Isolation-Policy should be available for origin trial in Chrome 132 for desktop. Some of us attended TPAC, the W3C plenary conference, where we presented proposals for improving HTTPS for local network devices.
+
+The transition to post-quantum cryptography continues! NIST standardized ML-KEM, a post-quantum key exchange mechanism, and ML-DSA, a post-quantum signature algorithm. We have implemented both in BoringSSL. We [blogged](https://security.googleblog.com/2024/09/a-new-path-for-kyber-on-web.html) about our plans to cut over from the draft specification for Kyber, to the final specification of ML-KEM. We’re continuing to work on DTLS 1.3 in BoringSSL, which is necessary to provide post-quantum security to connections that use DTLS, such as WebRTC. We anticipate DTLS will be available in BoringSSL in early Q4. We’re also continued our BoringSSL refactor to support new FIPS validation requirements.
+
+At IETF Vancouver we presented two proposals for Trust Anchor Agility—Trust Expressions, and our alternative draft, Trust Anchor Identifiers. We also further discussed the problem space at an  interim meeting of the IETF TLS working group in September. There was broad consensus that the TLS working group should work to solve the problem statement we believe is addressed by Trust Anchor Negotiation.
+
+In Q3, the CSA team started experiments to improve [process reuse behavior](https://crbug.com/40259123) and prepared for an [Origin Isolation](https://crbug.com/40259221) experiment. We also moved closer to enabling [RenderDocument](https://crbug.com/936696) for main frames, [origin computation in the browser process](https://crbug.com/40092527), and using [SiteInstanceGroup](https://crbug.com/1447896) for data URLs. We investigated issues caught in the [isolated sandboxed frames](https://crbug.com/510122) launch, and made progress on simplifying Site Isolation checks in ChildProcessSecurityPolicy. Finally, we started adding process model concepts to our [memory-safe browser kernel model](https://docs.google.com/document/d/1f9OOpmKPV1A7J7i78xBePVmaM2N6IcVI8025qUDLY_A/edit?usp=sharing) in Rust, to explore ideas for improving the equivalent C++ code in Chromium.
+
+The platform security team successfully launched [app-bound encryption for cookies](https://security.googleblog.com/2024/07/improving-security-of-chrome-cookies-on.html), which has led to an extremely marked decrease in detected cookie theft on Windows (we expect attackers to adapt). This is the first step of a longer term effect and we're now extending this protection to other types of sensitive data handled by Chromium and are carefully monitoring our metrics for any adverse effects in the process.
+
+On the macOS front, we're continuing work on adhoc code signatures for progressive web apps, as well as on peer validation for native messaging hosts, which will allow NMHs to be confident they're talking to an authentic Chromium binary. We're also investigating ways to gather field metrics on sandbox violations, which would let us be a lot more ambitious in tightening our macOS sandbox policies. Stay tuned!
+
+We're also continuing work on our project to retarget the ANGLE WebGL translator to use Dawn as a backend. This project is a long-term effort that will allow for moving ANGLE into the renderer where it will be protected by a much stronger sandbox.
+
+The Safe Coding team, working with our partners in Skia, landed a Rust PNG decoder into the Chromium tree and have made significant progress toward plumbing it in. We've also been productively engaged with the upstream owners to improve performance and add new APIs we've found a need for. We are on track to run Finch experiments with the new Rust decoder in the first half of next year, with the ultimate goal of switching all uses to the Rust implementation and removing the C `libpng` library from the Chromium codebase.
+
+Our Rust JSON parser implementation has rolled out to 100% on all platforms except Android Webview. Since the new parser is memory-safe it does not need to be sandboxed and it can run in-process without an IPC hop; similar to previous work (QR code generator) we saw improvements in wallclock end-to-end decoding time of 25-40% at p50 and 42-99.5% at p99.
+
+We were delighted to [review and land](https://chromium-review.googlesource.com/c/chromium/src/+/5895321) work from an external contributor to wire Rust's `log` crate to Chromium's existing `//base` logging implementation, and we have continued to help with the integration of [Fontations](https://github.com/googlefonts/fontations) into Chrome.
+
+Safe Coding also ratcheted up work on Spanification in our C++ codebase. We have expanded the reach of the `-Wunsafe-buffers-usage` warning to 8.5 million lines of shipping C++ code, significantly reducing the likelihood of new out-of-bounds (OOB) access bugs in Chromium. We continue to move more library APIs to use `base::span`.
+
+On the V8 side, we focused Q3 on some of the remaining issues that need to be resolved for the V8 sandbox to become a security boundary. In particular, we worked on [issues around JavaScript signature verification](https://issues.chromium.org/issues/40931165) and designed and implemented “[Leaptiering](https://docs.google.com/document/d/1WkyEynMluvIr0LBmrapyF7MiE8wIHFHnlP5B6FFhQuA/edit?usp=sharing)” to improve performance, reduce code complexity, and guarantee fine-grained control-flow integrity for JavaScript calls, thereby resolving the sandboxing issues. Besides sandbox improvements we also pushed forward with [forward-edge CFI for Wasm](https://crbug.com/363975785) by ensuring that all Wasm function calls go through a function pointer table.
+
+The Infra Security team has been working on a number of initiatives to help Chromies manage the health of their third party dependencies. We continue to work on rolling out our metadata bug filing pipeline to uplift the health of our metadata across the board and are backfilling as much as we can from other sources. Thank you to everyone who’s received and actioned one of these bugs - you’re making a big difference to how meaningful our risk tracking is!
+
+We’ve been working hard on our security review process. Internally, Chrome has had several different security review gates for each feature — web platform review, requirements document review, launch review — and sometimes this has been a bit duplicative. We’ve been moving all of this into one place to ensure feature owners get more consistent answers. We’ve also identified some types of features which are low risk and can proceed with their launch in parallel with security review — in particular, those features using entirely memory safe code.
+
+In Q3 we [launched significant changes to our Chrome VRP reward structure and amounts](https://bughunters.google.com/blog/5302044291629056/chrome-vrp-reward-updates-to-incentivize-deeper-research) to incentivize deeper research of more complex and impactful security bugs. As Chrome browser has become mature and has made significant security investments in more security architecture and mitigations such as MiraclePtr, we understand the bar of difficulty to find the most exploitable and impactful bugs has been raised. Our reward amounts have been raised to signify that, but also to better reward effort put into deeper research of those vulnerabilities. We have also adjusted the amounts and structure across all reward categories to better incentivize more through research and reporting, as well as to help ensure rewards amounts are more deterministic to reflect the impact and exploitability of the bug being reported.
+
+We also prepared for the October 2024 ESCAL8 event in Málaga, Spain. Part of this event is the bugSWAT event for top VRP researchers across all the Google VRP programs, including Chrome VRP.
+
+The Fuzzing team has been busy with a couple different projects, continuing in the themes of a) writing novel and interesting fuzzers and b) maintaining our fuzzing infrastructure.
+
+Our Mojo IPC fuzzer ran for a few weeks, then underwent a couple tweaks to help it explore deeper into Mojo interfaces. Since then, it has been finding stability issues in IPC code. This has led us to explore merging coverage-guided and grammar-based fuzzing in a new way, which we are excited to apply to IPC and WebIDL fuzzing. At the same time, we have worked out a way to harness the whole of Chrome with Fuzzilli, in collaboration with the V8 Security team. We also explored ways to improve our WGSL fuzzing efforts.
+
+As for fuzzing infrastructure, we have been working with the maintainers of ClusterFuzz to introduce automated monitoring and alerting to the system, in an effort to improve its reliability and start measuring SLIs. Implementation work has started and we are beginning to reap the benefits. We also made further progress in integrating ClusterFuzz with Chrome’s test execution platform, Swarming.
+
+Until next time,
+
+Adrian
+
+On behalf of Chrome Security
+
 ## Q2 2024
 
 # Chrome Security **2024 Q2** Update

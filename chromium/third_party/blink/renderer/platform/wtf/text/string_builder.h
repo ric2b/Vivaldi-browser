@@ -54,7 +54,12 @@ class WTF_EXPORT StringBuilder {
 
   bool DoesAppendCauseOverflow(unsigned length) const;
 
+  void Append(base::span<const UChar> chars);
+  void Append(base::span<const LChar> chars);
+
+  // This is deprecated. Use a base::span overload.
   void Append(const UChar*, unsigned length);
+  // This is deprecated. Use a base::span overload.
   void Append(const LChar*, unsigned length);
 
   ALWAYS_INLINE void Append(const char* characters, unsigned length) {
@@ -73,9 +78,9 @@ class WTF_EXPORT StringBuilder {
     }
 
     if (other.Is8Bit())
-      Append(other.Characters8(), other.length_);
+      Append(other.Span8());
     else
-      Append(other.Characters16(), other.length_);
+      Append(other.Span16());
   }
 
   // NOTE: The semantics of this are different than StringView(..., offset,
@@ -113,9 +118,9 @@ class WTF_EXPORT StringBuilder {
     }
 
     if (string.Is8Bit())
-      Append(string.Characters8(), string.length());
+      Append(string.Span8());
     else
-      Append(string.Characters16(), string.length());
+      Append(string.Span16());
   }
 
   void Append(UChar c) {
@@ -152,7 +157,7 @@ class WTF_EXPORT StringBuilder {
   template <typename IntegerType>
   void AppendNumber(IntegerType number) {
     IntegerToStringConverter<IntegerType> converter(number);
-    Append(converter.Characters8(), converter.length());
+    Append(converter.Span());
   }
 
   void AppendNumber(bool);
@@ -178,9 +183,9 @@ class WTF_EXPORT StringBuilder {
 
   operator StringView() const {
     if (Is8Bit()) {
-      return StringView(Characters8(), length());
+      return StringView(Span8());
     } else {
-      return StringView(Characters16(), length());
+      return StringView(Span16());
     }
   }
 
@@ -206,30 +211,33 @@ class WTF_EXPORT StringBuilder {
   void Resize(unsigned new_size);
 
   UChar operator[](unsigned i) const {
-    SECURITY_DCHECK(i < length_);
     if (is_8bit_)
-      return Characters8()[i];
-    return Characters16()[i];
+      return Span8()[i];
+    return Span16()[i];
   }
 
-  const LChar* Characters8() const {
+  base::span<const LChar> Span8() const {
     DCHECK(is_8bit_);
-    if (!length())
-      return nullptr;
-    if (!string_.IsNull())
-      return string_.Characters8();
+    if (!length()) {
+      return {};
+    }
+    if (!string_.IsNull()) {
+      return string_.Span8();
+    }
     DCHECK(has_buffer_);
-    return buffer8_.data();
+    return base::span(buffer8_).first(length());
   }
 
-  const UChar* Characters16() const {
+  base::span<const UChar> Span16() const {
     DCHECK(!is_8bit_);
-    if (!length())
-      return nullptr;
-    if (!string_.IsNull())
-      return string_.Characters16();
+    if (!length()) {
+      return {};
+    }
+    if (!string_.IsNull()) {
+      return string_.Span16();
+    }
     DCHECK(has_buffer_);
-    return buffer16_.data();
+    return base::span(buffer16_).first(length());
   }
 
   bool Is8Bit() const { return is_8bit_; }
@@ -264,9 +272,9 @@ class WTF_EXPORT StringBuilder {
   template <typename StringType>
   void BuildString() {
     if (is_8bit_)
-      string_ = StringType(Characters8(), length_);
+      string_ = StringType(Span8());
     else
-      string_ = StringType(Characters16(), length_);
+      string_ = StringType(Span16());
     ClearBuffer();
   }
 
@@ -287,9 +295,9 @@ bool Equal(const StringBuilder& s, const CharType* buffer, unsigned length) {
     return false;
 
   if (s.Is8Bit())
-    return Equal(s.Characters8(), buffer, length);
+    return Equal(s.Span8().data(), buffer, length);
 
-  return Equal(s.Characters16(), buffer, length);
+  return Equal(s.Span16().data(), buffer, length);
 }
 
 template <typename CharType>
@@ -300,9 +308,9 @@ bool DeprecatedEqualIgnoringCase(const StringBuilder& s,
     return false;
 
   if (s.Is8Bit())
-    return DeprecatedEqualIgnoringCase(s.Characters8(), buffer, length);
+    return DeprecatedEqualIgnoringCase(s.Span8().data(), buffer, length);
 
-  return DeprecatedEqualIgnoringCase(s.Characters16(), buffer, length);
+  return DeprecatedEqualIgnoringCase(s.Span16().data(), buffer, length);
 }
 
 // Unicode aware case insensitive string matching. Non-ASCII characters might
@@ -327,13 +335,13 @@ bool Equal(const StringBuilder& a, const StringType& b) {
 
   if (a.Is8Bit()) {
     if (b.Is8Bit())
-      return Equal(a.Characters8(), b.Characters8(), a.length());
-    return Equal(a.Characters8(), b.Characters16(), a.length());
+      return a.Span8() == b.Span8();
+    return a.Span8() == b.Span16();
   }
 
   if (b.Is8Bit())
-    return Equal(a.Characters16(), b.Characters8(), a.length());
-  return Equal(a.Characters16(), b.Characters16(), a.length());
+    return a.Span16() == b.Span8();
+  return a.Span16() == b.Span16();
 }
 
 inline bool operator==(const StringBuilder& a, const StringBuilder& b) {

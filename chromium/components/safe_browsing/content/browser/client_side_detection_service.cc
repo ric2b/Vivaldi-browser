@@ -21,7 +21,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
-#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -82,8 +81,7 @@ ClientSideDetectionService::CacheState::CacheState(bool phish, base::Time time)
 
 ClientSideDetectionService::ClientSideDetectionService(
     std::unique_ptr<Delegate> delegate,
-    optimization_guide::OptimizationGuideModelProvider* opt_guide,
-    const scoped_refptr<base::SequencedTaskRunner>& background_task_runner)
+    optimization_guide::OptimizationGuideModelProvider* opt_guide)
     : delegate_(std::move(delegate)) {
   // delegate and prefs can be null in unit tests.
   if (!delegate_ || !delegate_->GetPrefs()) {
@@ -91,9 +89,9 @@ ClientSideDetectionService::ClientSideDetectionService(
   }
 
   if (!base::FeatureList::IsEnabled(kClientSideDetectionKillswitch) &&
-      opt_guide && background_task_runner) {
-    client_side_phishing_model_ = std::make_unique<ClientSidePhishingModel>(
-        opt_guide, background_task_runner);
+      opt_guide) {
+    client_side_phishing_model_ =
+        std::make_unique<ClientSidePhishingModel>(opt_guide);
   }
 
   url_loader_factory_ = delegate_->GetSafeBrowsingURLLoaderFactory();
@@ -112,20 +110,9 @@ ClientSideDetectionService::ClientSideDetectionService(
       base::BindRepeating(&ClientSideDetectionService::OnPrefsUpdated,
                           base::Unretained(this)));
 
-  // If we fail to load the report times, we will not know how many pings the
-  // user has sent already. In this case, we will assume the user has sent
-  // enough pings and skip the phishing URL check.
-  // TODO: (andysjlim): clean up the ifs and logs if the uma never logs false.
-  if (LoadPhishingReportTimesFromPrefs()) {
-    skip_phishing_request_check_ = false;
-    base::UmaHistogramBoolean(
-        "SBClientPhishing.LoadReportTimesFromPrefAtServiceCreationSuccessful",
-        true);
-  } else {
-    base::UmaHistogramBoolean(
-        "SBClientPhishing.LoadReportTimesFromPrefAtServiceCreationSuccessful",
-        false);
-  }
+  // Load the report times from preferences.
+  LoadPhishingReportTimesFromPrefs();
+
   //  Do an initial check of the prefs.
   OnPrefsUpdated();
 }
@@ -202,7 +189,6 @@ bool ClientSideDetectionService::IsLocalResource(
 void ClientSideDetectionService::OnURLLoaderComplete(
     network::SimpleURLLoader* url_loader,
     base::Time start_time,
-    bool has_access_token,
     std::unique_ptr<std::string> response_body) {
   base::UmaHistogramTimes("SBClientPhishing.NetworkRequestDuration",
                           base::Time::Now() - start_time);
@@ -222,11 +208,6 @@ void ClientSideDetectionService::OnURLLoaderComplete(
                                   response_code.value());
   }
 
-  if (has_access_token) {
-    MaybeLogCookieReset(
-        *url_loader, SafeBrowsingAuthenticatedEndpoint::kClientSideDetection);
-  }
-
   DCHECK(base::Contains(client_phishing_reports_, url_loader));
   HandlePhishingVerdict(url_loader, url_loader->GetFinalURL(),
                         url_loader->NetError(), response_code, data);
@@ -244,8 +225,15 @@ void ClientSideDetectionService::SendModelToRenderers() {
        !it.IsAtEnd(); it.Advance()) {
     if (delegate_->ShouldSendModelToBrowserContext(
             it.GetCurrentValue()->GetBrowserContext())) {
-      SetPhishingModel(it.GetCurrentValue(),
-                       /*new_renderer_process_host=*/false);
+      auto* rph = it.GetCurrentValue();
+      if (rph->IsReady()) {
+        SetPhishingModel(rph, /*new_renderer_process_host=*/false);
+      } else {
+        if (rph->IsInitializedAndNotDead() &&
+            !observed_render_process_hosts_.IsObservingSource(rph)) {
+          observed_render_process_hosts_.AddObservation(rph);
+        }
+      }
     }
   }
   if (client_side_phishing_model_) {
@@ -324,6 +312,9 @@ void ClientSideDetectionService::StartClientReportPhishingRequest(
           })");
   auto resource_request = std::make_unique<network::ResourceRequest>();
   if (!access_token.empty()) {
+    LogAuthenticatedCookieResets(
+        *resource_request,
+        SafeBrowsingAuthenticatedEndpoint::kClientSideDetection);
     SetAccessTokenAndClearCookieInResourceRequest(resource_request.get(),
                                                   access_token);
   }
@@ -338,8 +329,7 @@ void ClientSideDetectionService::StartClientReportPhishingRequest(
   loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
       url_loader_factory_.get(),
       base::BindOnce(&ClientSideDetectionService::OnURLLoaderComplete,
-                     base::Unretained(this), loader.get(), base::Time::Now(),
-                     !access_token.empty()));
+                     base::Unretained(this), loader.get(), base::Time::Now()));
 
   // Remember which callback and URL correspond to the current fetcher object.
   std::unique_ptr<ClientPhishingReportInfo> info(new ClientPhishingReportInfo);
@@ -444,14 +434,6 @@ void ClientSideDetectionService::UpdateCache() {
 }
 
 bool ClientSideDetectionService::AtPhishingReportLimit() {
-  base::UmaHistogramBoolean("SBClientPhishing.SkipPhishingRequestCheck",
-                            skip_phishing_request_check_);
-  // If |skip_phishing_request_check_| is true, that means we failed to load the
-  // report times from prefs before from class initialization.
-  if (skip_phishing_request_check_) {
-    return true;
-  }
-
   // Clear the expired timestamps
   const auto cutoff = base::Time::Now() - base::Days(kReportsIntervalDays);
   // Erase items older than cutoff because we will never care about them again.
@@ -508,10 +490,10 @@ bool ClientSideDetectionService::AddPhishingReport(base::Time timestamp) {
   return true;
 }
 
-bool ClientSideDetectionService::LoadPhishingReportTimesFromPrefs() {
+void ClientSideDetectionService::LoadPhishingReportTimesFromPrefs() {
   // delegate and prefs can be null in unit tests.
   if (!delegate_ || !delegate_->GetPrefs()) {
-    return false;
+    return;
   }
 
   phishing_report_times_.clear();
@@ -523,8 +505,6 @@ bool ClientSideDetectionService::LoadPhishingReportTimesFromPrefs() {
       phishing_report_times_.push_back(time);
     }
   }
-
-  return true;
 }
 
 // static
@@ -575,7 +555,28 @@ void ClientSideDetectionService::SetURLLoaderFactoryForTesting(
 void ClientSideDetectionService::OnRenderProcessHostCreated(
     content::RenderProcessHost* rph) {
   if (delegate_->ShouldSendModelToBrowserContext(rph->GetBrowserContext())) {
-    SetPhishingModel(rph, /*new_renderer_process_host=*/true);
+    // The |rph| is ready, so the model can immediately be send.
+    if (rph->IsReady()) {
+      SetPhishingModel(rph, /*new_renderer_process_host=*/true);
+    } else if (!observed_render_process_hosts_.IsObservingSource(rph)) {
+      // Postpone sending the model until the |rph| is ready.
+      observed_render_process_hosts_.AddObservation(rph);
+    }
+  }
+}
+
+void ClientSideDetectionService::RenderProcessHostDestroyed(
+    content::RenderProcessHost* rph) {
+  if (observed_render_process_hosts_.IsObservingSource(rph)) {
+    observed_render_process_hosts_.RemoveObservation(rph);
+  }
+}
+
+void ClientSideDetectionService::RenderProcessReady(
+    content::RenderProcessHost* rph) {
+  SetPhishingModel(rph, /*new_renderer_process_host=*/true);
+  if (observed_render_process_hosts_.IsObservingSource(rph)) {
+    observed_render_process_hosts_.RemoveObservation(rph);
   }
 }
 

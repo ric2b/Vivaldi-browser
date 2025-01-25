@@ -102,10 +102,11 @@
     return [UIImage imageNamed:vPasswordSetting]; // End Vivaldi
 
   UIImage* image =
+#if BUILDFLAG(IS_IOS_MACCATALYST)
       CustomSymbolWithPointSize(kPasswordSymbol, kInfobarSymbolPointSize);
-#if !BUILDFLAG(IS_IOS_MACCATALYST)
-  image = MakeSymbolMulticolor(CustomSymbolWithPointSize(
-      kMulticolorPasswordSymbol, kInfobarSymbolPointSize));
+#else
+      MakeSymbolMulticolor(CustomSymbolWithPointSize(kMulticolorPasswordSymbol,
+                                                     kInfobarSymbolPointSize));
 #endif  // BUILDFLAG(IS_IOS_MACCATALYST)
   return image;
 }

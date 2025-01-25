@@ -63,7 +63,7 @@ VivaldiSyncInvalidationsService::VivaldiSyncInvalidationsService(
     : notification_server_url_(notification_server_url),
       account_manager_(account_manager),
       network_context_provider_(network_context_provider),
-      websocket_backoff_(&kBackoffPolicy) {
+      stomp_client_backoff_(&kBackoffPolicy) {
   DCHECK(account_manager_);
   account_manager_->AddObserver(this);
 }
@@ -74,13 +74,13 @@ void VivaldiSyncInvalidationsService::ToggleConnectionIfNeeded() {
   bool connection_allowed = account_manager_ &&
                             !account_manager_->access_token().empty() &&
                             invalidations_requested_;
-  if (websocket_backoff_timer_.IsRunning())
+  if (stomp_client_backoff_timer_.IsRunning())
     return;
-  DCHECK(!websocket_backoff_.ShouldRejectRequest());
-  if (stomp_web_socket_ && !connection_allowed)
-    stomp_web_socket_.reset();
-  else if (!stomp_web_socket_ && connection_allowed)
-    stomp_web_socket_ = std::make_unique<InvalidationServiceStompWebsocket>(
+  DCHECK(!stomp_client_backoff_.ShouldRejectRequest());
+  if (stomp_client_ && !connection_allowed)
+    stomp_client_.reset();
+  else if (!stomp_client_ && connection_allowed)
+    stomp_client_ = std::make_unique<InvalidationServiceStompClient>(
         network_context_provider_.Run(), notification_server_url_, this);
 }
 
@@ -134,10 +134,10 @@ void VivaldiSyncInvalidationsService::RemoveTokenObserver(
 
 std::optional<std::string>
 VivaldiSyncInvalidationsService::GetFCMRegistrationToken() const {
-  if (!stomp_web_socket_) {
+  if (!stomp_client_) {
     return std::nullopt;
   }
-  std::string session_id = stomp_web_socket_->session_id();
+  std::string session_id = stomp_client_->session_id();
   if (session_id.empty()) {
     return std::nullopt;
   }
@@ -173,7 +173,7 @@ std::string VivaldiSyncInvalidationsService::GetChannel() const {
          account_manager_->account_info().account_id;
 }
 void VivaldiSyncInvalidationsService::OnConnected() {
-  websocket_backoff_.InformOfRequest(true);
+  stomp_client_backoff_.InformOfRequest(true);
 
   for (syncer::FCMRegistrationTokenObserver& token_observer :
        token_observers_) {
@@ -182,9 +182,9 @@ void VivaldiSyncInvalidationsService::OnConnected() {
 }
 
 void VivaldiSyncInvalidationsService::OnClosed() {
-  websocket_backoff_.InformOfRequest(false);
+  stomp_client_backoff_.InformOfRequest(false);
 
-  stomp_web_socket_.reset();
+  stomp_client_.reset();
 
   for (syncer::FCMRegistrationTokenObserver& token_observer :
        token_observers_) {
@@ -193,8 +193,8 @@ void VivaldiSyncInvalidationsService::OnClosed() {
 
   // Unretained ok, because the callback is owned by the timer, which is owned
   // by this.
-  websocket_backoff_timer_.Start(
-      FROM_HERE, websocket_backoff_.GetTimeUntilRelease(),
+  stomp_client_backoff_timer_.Start(
+      FROM_HERE, stomp_client_backoff_.GetTimeUntilRelease(),
       base::BindOnce(&VivaldiSyncInvalidationsService::ToggleConnectionIfNeeded,
                      base::Unretained(this)));
 }

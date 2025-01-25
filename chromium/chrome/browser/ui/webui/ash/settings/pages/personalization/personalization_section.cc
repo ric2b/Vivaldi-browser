@@ -4,16 +4,18 @@
 
 #include "chrome/browser/ui/webui/ash/settings/pages/personalization/personalization_section.h"
 
+#include <array>
 #include <optional>
 
 #include "ash/constants/ash_features.h"
-#include "base/no_destructor.h"
+#include "base/containers/span.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/ash/settings/os_settings_features_util.h"
 #include "chrome/browser/ui/webui/ash/settings/pages/multitasking/multitasking_section.h"
 #include "chrome/browser/ui/webui/ash/settings/pages/personalization/personalization_hub_handler.h"
 #include "chrome/browser/ui/webui/ash/settings/search/search_tag_registry.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -28,8 +30,8 @@ using ::chromeos::settings::mojom::Setting;
 
 namespace {
 
-const std::vector<SearchConcept>& GetPersonalizationSearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+base::span<const SearchConcept> GetPersonalizationSearchConcepts() {
+  static constexpr auto tags = std::to_array<SearchConcept>({
       {IDS_OS_SETTINGS_TAG_WALLPAPER_AND_STYLE,
        mojom::kPersonalizationSectionPath,
        mojom::SearchResultIcon::kPersonalization,
@@ -37,7 +39,7 @@ const std::vector<SearchConcept>& GetPersonalizationSearchConcepts() {
        mojom::SearchResultType::kSection,
        {.section = mojom::Section::kPersonalization}},
   });
-  return *tags;
+  return tags;
 }
 
 }  // namespace
@@ -63,7 +65,8 @@ PersonalizationSection::~PersonalizationSection() = default;
 
 void PersonalizationSection::AddLoadTimeData(
     content::WebUIDataSource* html_source) {
-  const bool kIsGuest = IsGuestModeActive();
+  auto* user = BrowserContextHelper::Get()->GetUserByBrowserContext(profile());
+  const bool kIsGuest = IsGuestModeActive(user);
 
   webui::LocalizedString kWallpaperLocalizedStrings[] = {
       {"personalizationPageTitle", isRevampEnabled_

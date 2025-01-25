@@ -28,7 +28,7 @@ class VirtualConnectionRouter;
 // request requires a corresponding response callback.  These requests will also
 // timeout if there is no response after a certain amount of time (currently 5
 // seconds).  The timeout callbacks will be called on the thread managed by
-// |task_runner|.
+// `task_runner`.
 class CastPlatformClient final : public CastMessageHandler {
  public:
   using AppAvailabilityCallback =
@@ -39,8 +39,8 @@ class CastPlatformClient final : public CastMessageHandler {
                      TaskRunner& task_runner);
   ~CastPlatformClient() override;
 
-  // Requests availability information for |app_id| from the receiver identified
-  // by |receiver_id|.  |callback| will be called exactly once with a result.
+  // Requests availability information for `app_id` from the receiver identified
+  // by `receiver_id`.  `callback` will be called exactly once with a result.
   std::optional<int> RequestAppAvailability(const std::string& receiver_id,
                                             const std::string& app_id,
                                             AppAvailabilityCallback callback);

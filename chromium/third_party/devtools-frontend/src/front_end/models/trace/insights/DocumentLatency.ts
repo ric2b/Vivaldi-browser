@@ -2,9 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as i18n from '../../../core/i18n/i18n.js';
+import * as Helpers from '../helpers/helpers.js';
 import * as Types from '../types/types.js';
 
-import {type InsightResult, type NavigationInsightContext, type RequiredData} from './types.js';
+import type {InsightModel, InsightSetContext, RequiredData} from './types.js';
+
+const UIStrings = {
+  /**
+   *@description Title of an insight that provides a breakdown for how long it took to download the main document.
+   */
+  title: 'Document request latency',
+  /**
+   *@description Description of an insight that provides a breakdown for how long it took to download the main document.
+   */
+  description:
+      'Your first network request is the most important.  Reduce its latency by avoiding redirects, ensuring a fast server response, and enabling text compression.',
+};
+
+const str_ = i18n.i18n.registerUIStrings('models/trace/insights/DocumentLatency.ts', UIStrings);
+const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 // Due to the way that DevTools throttling works we cannot see if server response took less than ~570ms.
 // We set our failure threshold to 600ms to avoid those false positives but we want devs to shoot for 100ms.
@@ -14,28 +31,31 @@ const TARGET_MS = 100;
 // Threshold for compression savings.
 const IGNORE_THRESHOLD_IN_BYTES = 1400;
 
-export type DocumentLatencyInsightResult = InsightResult<{
-  serverResponseTime: Types.Timing.MilliSeconds,
-  serverResponseTooSlow: boolean,
-  redirectDuration: Types.Timing.MilliSeconds,
-  uncompressedResponseBytes: number,
-  documentRequest?: Types.TraceEvents.SyntheticNetworkRequest,
+export type DocumentLatencyInsightModel = InsightModel<{
+  data?: {
+    serverResponseTime: Types.Timing.MilliSeconds,
+    serverResponseTooSlow: boolean,
+    redirectDuration: Types.Timing.MilliSeconds,
+    uncompressedResponseBytes: number,
+    documentRequest?: Types.Events.SyntheticNetworkRequest,
+  },
 }>;
 
 export function deps(): ['Meta', 'NetworkRequests'] {
   return ['Meta', 'NetworkRequests'];
 }
 
-function getServerTiming(request: Types.TraceEvents.SyntheticNetworkRequest): Types.Timing.MilliSeconds|null {
+function getServerResponseTime(request: Types.Events.SyntheticNetworkRequest): Types.Timing.MilliSeconds|null {
   const timing = request.args.data.timing;
   if (!timing) {
     return null;
   }
 
-  return Types.Timing.MilliSeconds(Math.round(timing.receiveHeadersStart - timing.sendEnd));
+  const ms = Helpers.Timing.microSecondsToMilliseconds(request.args.data.syntheticData.waiting);
+  return Math.round(ms) as Types.Timing.MilliSeconds;
 }
 
-function getCompressionSavings(request: Types.TraceEvents.SyntheticNetworkRequest): number {
+function getCompressionSavings(request: Types.Events.SyntheticNetworkRequest): number {
   // Check from headers if compression was already applied.
   // Older devtools logs are lower case, while modern logs are Cased-Like-This.
   const patterns = [
@@ -99,15 +119,23 @@ function getCompressionSavings(request: Types.TraceEvents.SyntheticNetworkReques
   return estimatedSavings < IGNORE_THRESHOLD_IN_BYTES ? 0 : estimatedSavings;
 }
 
+function finalize(partialModel: Omit<DocumentLatencyInsightModel, 'title'|'description'>): DocumentLatencyInsightModel {
+  return {title: i18nString(UIStrings.title), description: i18nString(UIStrings.description), ...partialModel};
+}
+
 export function generateInsight(
-    traceParsedData: RequiredData<typeof deps>, context: NavigationInsightContext): DocumentLatencyInsightResult {
+    parsedTrace: RequiredData<typeof deps>, context: InsightSetContext): DocumentLatencyInsightModel {
+  if (!context.navigation) {
+    return finalize({});
+  }
+
   const documentRequest =
-      traceParsedData.NetworkRequests.byTime.find(req => req.args.data.requestId === context.navigationId);
+      parsedTrace.NetworkRequests.byTime.find(req => req.args.data.requestId === context.navigationId);
   if (!documentRequest) {
     throw new Error('missing document request');
   }
 
-  const serverResponseTime = getServerTiming(documentRequest);
+  const serverResponseTime = getServerResponseTime(documentRequest);
   if (serverResponseTime === null) {
     throw new Error('missing document request timing');
   }
@@ -123,16 +151,19 @@ export function generateInsight(
   overallSavingsMs += redirectDuration;
 
   const metricSavings = {
-    FCP: overallSavingsMs,
-    LCP: overallSavingsMs,
+    FCP: overallSavingsMs as Types.Timing.MilliSeconds,
+    LCP: overallSavingsMs as Types.Timing.MilliSeconds,
   };
 
-  return {
-    serverResponseTime,
-    serverResponseTooSlow,
-    redirectDuration: Types.Timing.MilliSeconds(redirectDuration),
-    uncompressedResponseBytes: getCompressionSavings(documentRequest),
-    documentRequest,
+  return finalize({
+    relatedEvents: [documentRequest],
+    data: {
+      serverResponseTime,
+      serverResponseTooSlow,
+      redirectDuration: Types.Timing.MilliSeconds(redirectDuration),
+      uncompressedResponseBytes: getCompressionSavings(documentRequest),
+      documentRequest,
+    },
     metricSavings,
-  };
+  });
 }

@@ -30,25 +30,20 @@ import javax.inject.Inject;
 public class WebApkActivityCoordinator implements DestroyObserver {
     private final BrowserServicesIntentDataProvider mIntentDataProvider;
     private final Lazy<WebApkUpdateManager> mWebApkUpdateManager;
-    private final InstalledWebappRegistrar mInstalledWebappRegistrar;
 
     @Inject
     public WebApkActivityCoordinator(
             WebappDeferredStartupWithStorageHandler deferredStartupWithStorageHandler,
-            WebappDisclosureController disclosureController,
-            DisclosureInfobar disclosureInfobar,
-            WebApkActivityLifecycleUmaTracker webApkActivityLifecycleUmaTracker,
+            WebappDisclosureController unused_disclosureController,
+            DisclosureInfobar unused_disclosureInfobar,
+            WebApkActivityLifecycleUmaTracker unused_webApkActivityLifecycleUmaTracker,
             ActivityLifecycleDispatcher lifecycleDispatcher,
             BrowserServicesIntentDataProvider intendDataProvider,
-            Lazy<WebApkUpdateManager> webApkUpdateManager,
-            InstalledWebappRegistrar installedWebappRegistrar) {
-        // We don't need to do anything with |disclosureController|, |disclosureInfobar| and
-        // |webApkActivityLifecycleUmaTracker|. We just need to resolve
-        // them so that they start working.
+            Lazy<WebApkUpdateManager> webApkUpdateManager) {
+        // The unused_ params are present just to initialize them.
 
         mIntentDataProvider = intendDataProvider;
         mWebApkUpdateManager = webApkUpdateManager;
-        mInstalledWebappRegistrar = installedWebappRegistrar;
 
         deferredStartupWithStorageHandler.addTask(
                 (storage, didCreateStorage) -> {
@@ -78,8 +73,9 @@ public class WebApkActivityCoordinator implements DestroyObserver {
         Origin origin = Origin.create(scope);
         String packageName = storage.getWebApkPackageName();
 
-        mInstalledWebappRegistrar.registerClient(packageName, origin, storage.getUrl());
-        PermissionUpdater.get().onWebApkLaunch(origin, packageName);
+        InstalledWebappRegistrar.getInstance()
+                .registerClient(packageName, origin, storage.getUrl());
+        PermissionUpdater.onWebApkLaunch(origin, packageName);
     }
 
     @Override

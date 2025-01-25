@@ -340,13 +340,11 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
   DestinationRanking availableDestinations =
       [self.destinationProvider baseDestinations];
 
-  if (IsOverflowMenuCustomizationEnabled()) {
-    DestinationRanking badgedRanking =
-        [self customizationRankingAfterBadgingWithAvailableDestinations:
-                  availableDestinations];
-    _destinationOrderData.shownDestinations = badgedRanking;
-    [self flushDestinationsToPrefs];
-  }
+  DestinationRanking badgedRanking =
+      [self customizationRankingAfterBadgingWithAvailableDestinations:
+                availableDestinations];
+  _destinationOrderData.shownDestinations = badgedRanking;
+  [self flushDestinationsToPrefs];
 
   // If customization is enabled, then skip destination usage history if there
   // are current badges, as those have more important positions.
@@ -358,7 +356,6 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
     }
   }
   BOOL skipDestinationUsageHistory =
-      IsOverflowMenuCustomizationEnabled() &&
       (hasBadgeWithImpressions || !_destinationUsageHistoryEnabled.value);
 
   if (!skipDestinationUsageHistory && self.destinationUsageHistory) {
@@ -367,14 +364,6 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
                                                  .shownDestinations
                        availableDestinations:availableDestinations];
 
-    [self flushDestinationsToPrefs];
-  }
-
-  if (!IsOverflowMenuCustomizationEnabled()) {
-    DestinationRanking badgedRanking = [self
-        rankingAfterBadgingWithAvailableDestinations:availableDestinations];
-
-    _destinationOrderData.shownDestinations = badgedRanking;
     [self flushDestinationsToPrefs];
   }
   } // End Vivaldi
@@ -392,35 +381,32 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
 }
 
 - (void)updateForMenuDisappearance {
-  // With Overflow Menu Customization, badge impressions need to be tracked.
-  if (IsOverflowMenuCustomizationEnabled()) {
-    // If spotlight debugging is enabled, an extra destination is auto-inserted
-    // at the beginning.
-    NSUInteger badgeImpressionLastIndex =
-        (experimental_flags::IsSpotlightDebuggingEnabled())
-            ? kNewDestinationsInsertionIndex + 1
-            : kNewDestinationsInsertionIndex;
+  // If spotlight debugging is enabled, an extra destination is auto-inserted
+  // at the beginning.
+  NSUInteger badgeImpressionLastIndex =
+      (experimental_flags::IsSpotlightDebuggingEnabled())
+          ? kNewDestinationsInsertionIndex + 1
+          : kNewDestinationsInsertionIndex;
 
-    NSRange impressedRange = NSMakeRange(
-        0, MIN(badgeImpressionLastIndex + 1, self.model.destinations.count));
-    for (OverflowMenuDestination* menuDestination :
-         [self.model.destinations subarrayWithRange:impressedRange]) {
-      overflow_menu::Destination destination =
-          static_cast<overflow_menu::Destination>(menuDestination.destination);
-      auto it = _destinationBadgeData.find(destination);
-      if (it == _destinationBadgeData.end()) {
-        continue;
-      }
-      // If the badge is feature-driven, just decrease its impression count
-      // until it hits 0. Otherwise, remove it when it hits 0.
-      if (it->second.isFeatureDrivenBadge) {
-        it->second.impressionsRemaining =
-            std::max(0, it->second.impressionsRemaining - 1);
-      } else {
-        it->second.impressionsRemaining = it->second.impressionsRemaining - 1;
-        if (it->second.impressionsRemaining <= 0) {
-          _destinationBadgeData.erase(destination);
-        }
+  NSRange impressedRange = NSMakeRange(
+      0, MIN(badgeImpressionLastIndex + 1, self.model.destinations.count));
+  for (OverflowMenuDestination* menuDestination :
+       [self.model.destinations subarrayWithRange:impressedRange]) {
+    overflow_menu::Destination destination =
+        static_cast<overflow_menu::Destination>(menuDestination.destination);
+    auto it = _destinationBadgeData.find(destination);
+    if (it == _destinationBadgeData.end()) {
+      continue;
+    }
+    // If the badge is feature-driven, just decrease its impression count
+    // until it hits 0. Otherwise, remove it when it hits 0.
+    if (it->second.isFeatureDrivenBadge) {
+      it->second.impressionsRemaining =
+          std::max(0, it->second.impressionsRemaining - 1);
+    } else {
+      it->second.impressionsRemaining = it->second.impressionsRemaining - 1;
+      if (it->second.impressionsRemaining <= 0) {
+        _destinationBadgeData.erase(destination);
       }
     }
   }
@@ -544,9 +530,8 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
 // Loads the stored destinations data from local prefs/disk.
 - (void)loadDestinationsFromPrefs {
 
-  if (IsVivaldiRunning() && ShouldResetOverflowMenuDestinations()) {
-    [self flushDestinationsToPrefs];
-    SetOverflowMenuDestinationsResetComplete();
+  if (IsVivaldiRunning()) {
+    [self updateDestinationsPrefIfNeeded];
   } // End Vivaldi
 
   // Fetch the stored list of newly-added, unclicked destinations, then update
@@ -555,52 +540,32 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
       _localStatePrefs->GetList(prefs::kOverflowMenuNewDestinations),
       _untappedDestinations);
 
-  if (IsOverflowMenuCustomizationEnabled()) {
-    const base::Value::List& storedHiddenDestinations =
-        _localStatePrefs->GetList(prefs::kOverflowMenuHiddenDestinations);
-    AppendDestinationsToVector(storedHiddenDestinations,
-                               _destinationOrderData.hiddenDestinations);
+  const base::Value::List& storedHiddenDestinations =
+      _localStatePrefs->GetList(prefs::kOverflowMenuHiddenDestinations);
+  AppendDestinationsToVector(storedHiddenDestinations,
+                             _destinationOrderData.hiddenDestinations);
 
-    const base::Value::Dict& storedBadgeData =
-        _localStatePrefs->GetDict(prefs::kOverflowMenuDestinationBadgeData);
+  if (!IsVivaldiRunning()) {
+  const base::Value::Dict& storedBadgeData =
+      _localStatePrefs->GetDict(prefs::kOverflowMenuDestinationBadgeData);
 
-    for (const auto&& [key, value] : storedBadgeData) {
-      if (!value.is_dict()) {
-        continue;
-      }
-
-      std::optional<BadgeData> badgeData = BadgeDataFromDict(value.GetDict());
-      if (!badgeData) {
-        continue;
-      }
-
-      overflow_menu::Destination destination =
-          overflow_menu::DestinationForStringName(key);
-      _destinationBadgeData[destination] = badgeData.value();
+  for (const auto&& [key, value] : storedBadgeData) {
+    if (!value.is_dict()) {
+      continue;
     }
+
+    std::optional<BadgeData> badgeData = BadgeDataFromDict(value.GetDict());
+    if (!badgeData) {
+      continue;
+    }
+
+    overflow_menu::Destination destination =
+        overflow_menu::DestinationForStringName(key);
+    _destinationBadgeData[destination] = badgeData.value();
   }
+  } // End Vivaldi
 
   [self loadShownDestinationsPref];
-
-  // If the customization flag was enabled in the past and users hid
-  // destinations make sure to add those back to the shown list, if the flag
-  // becomes disabled.
-  if (!IsOverflowMenuCustomizationEnabled()) {
-    const base::Value::List& storedHiddenDestinations =
-        _localStatePrefs->GetList(prefs::kOverflowMenuHiddenDestinations);
-    AppendDestinationsToVector(storedHiddenDestinations,
-                               _destinationOrderData.shownDestinations);
-    _localStatePrefs->ClearPref(prefs::kOverflowMenuHiddenDestinations);
-
-    // If Destination Usage History needs to be reenabled, then clear any stored
-    // data.
-    if (!_destinationUsageHistoryEnabled.value) {
-      _destinationUsageHistoryEnabled.value = YES;
-      [self.destinationUsageHistory clearStoredClickData];
-    }
-
-    [self flushDestinationsToPrefs];
-  }
 }
 
 // Loads and migrates the shown destinations pref from disk.
@@ -687,29 +652,29 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
                             std::move(ranking));
 
   // Flush list of hidden destinations to Prefs.
-  if (IsOverflowMenuCustomizationEnabled()) {
-    base::Value::List hiddenDestinations;
+  base::Value::List hiddenDestinations;
 
-    for (overflow_menu::Destination destination :
-         _destinationOrderData.hiddenDestinations) {
-      hiddenDestinations.Append(
-          overflow_menu::StringNameForDestination(destination));
-    }
-
-    _localStatePrefs->SetList(prefs::kOverflowMenuHiddenDestinations,
-                              std::move(hiddenDestinations));
-
-    // Flush dict of badge data to Prefs.
-    base::Value::Dict badgeDataPref;
-    for (const auto& [destination, badgeData] : _destinationBadgeData) {
-      std::string destinationKey =
-          overflow_menu::StringNameForDestination(destination);
-      badgeDataPref.Set(destinationKey, DictFromBadgeData(badgeData));
-    }
-
-    _localStatePrefs->SetDict(prefs::kOverflowMenuDestinationBadgeData,
-                              std::move(badgeDataPref));
+  for (overflow_menu::Destination destination :
+       _destinationOrderData.hiddenDestinations) {
+    hiddenDestinations.Append(
+        overflow_menu::StringNameForDestination(destination));
   }
+
+  _localStatePrefs->SetList(prefs::kOverflowMenuHiddenDestinations,
+                            std::move(hiddenDestinations));
+
+  if (!IsVivaldiRunning()) {
+  // Flush dict of badge data to Prefs.
+  base::Value::Dict badgeDataPref;
+  for (const auto& [destination, badgeData] : _destinationBadgeData) {
+    std::string destinationKey =
+        overflow_menu::StringNameForDestination(destination);
+    badgeDataPref.Set(destinationKey, DictFromBadgeData(badgeData));
+  }
+
+  _localStatePrefs->SetDict(prefs::kOverflowMenuDestinationBadgeData,
+                            std::move(badgeDataPref));
+  } // End Vivaldi
 
   // Flush the new untapped destinations to Prefs.
   ScopedListPrefUpdate untappedDestinationsUpdate(
@@ -777,22 +742,6 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
 
 // Returns the current pageActions in order.
 - (NSArray<OverflowMenuAction*>*)pageActions {
-  if (!IsOverflowMenuCustomizationEnabled()) {
-    ActionRanking availableActions = [self.actionProvider basePageActions];
-    // Convert back to Objective-C array for returning. This step also filters
-    // out any actions that are not supported on the current page.
-    NSMutableArray<OverflowMenuAction*>* sortedActions =
-        [[NSMutableArray alloc] init];
-    for (overflow_menu::ActionType action : availableActions) {
-      if (OverflowMenuAction* overflowMenuAction =
-              [self.actionProvider actionForActionType:action]) {
-        [sortedActions addObject:overflowMenuAction];
-      }
-    }
-
-    return sortedActions;
-  }
-
   [self updateActionOrderData];
 
   // Convert back to Objective-C array for returning. This step also filters out
@@ -831,17 +780,15 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
     OverflowMenuDestination* overflowMenuDestination =
         [self.destinationProvider destinationForDestinationType:destination];
     if (overflowMenuDestination) {
-      if (IsOverflowMenuCustomizationEnabled()) {
-        // If the orderer has stored badge data about this destination, the
-        // badge type may need to be upgraded. However, don't replace badges
-        // with less important ones. Specifically, error badges are most
-        // important.
-        auto it = _destinationBadgeData.find(destination);
-        if (it != _destinationBadgeData.end()) {
-          if (it->second.badgeType == BadgeTypeError ||
-              overflowMenuDestination.badge == BadgeTypeNone) {
-            overflowMenuDestination.badge = it->second.badgeType;
-          }
+      // If the orderer has stored badge data about this destination, the
+      // badge type may need to be upgraded. However, don't replace badges
+      // with less important ones. Specifically, error badges are most
+      // important.
+      auto it = _destinationBadgeData.find(destination);
+      if (it != _destinationBadgeData.end()) {
+        if (it->second.badgeType == BadgeTypeError ||
+            overflowMenuDestination.badge == BadgeTypeNone) {
+          overflowMenuDestination.badge = it->second.badgeType;
         }
       }
       [sortedDestinations addObject:overflowMenuDestination];
@@ -1504,6 +1451,103 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
 
 #pragma mark - VIVALDI
 
+/// Function to modify the destinations pref before showing
+/// it to users. We want to hide some chromium destination, and
+/// make sure Share page menu item is visible.
+/// No changes made to list if user did not customize the menu yet
+/// or customized the menu but does not require any change to
+/// the stored list.
+- (void)updateDestinationsPrefIfNeeded {
+
+  // Fetch stored shown destinations
+  const base::Value::List& storedRanking =
+      _localStatePrefs->GetList(prefs::kOverflowMenuDestinationsOrder);
+
+  if (storedRanking.size() <= 0) {
+    return;
+  }
+
+  // Fetch stored hidden destinations
+  const base::Value::List& storedHiddenDestinations =
+      _localStatePrefs->GetList(prefs::kOverflowMenuHiddenDestinations);
+
+  // Convert shown destinations to vector
+  std::vector<overflow_menu::Destination> currentDestinations;
+  for (const auto& value : storedRanking) {
+    if (value.is_string()) {
+      overflow_menu::Destination destination =
+          overflow_menu::DestinationForStringName(value.GetString());
+      currentDestinations.push_back(destination);
+    }
+  }
+
+  // Convert hidden destinations to vector
+  std::vector<overflow_menu::Destination> hiddenDestinations;
+  for (const auto& value : storedHiddenDestinations) {
+    if (value.is_string()) {
+      overflow_menu::Destination destination =
+          overflow_menu::DestinationForStringName(value.GetString());
+      hiddenDestinations.push_back(destination);
+    }
+  }
+
+  // Remove unwanted destinations from hidden list, in our case price tracking
+  // and whats new. These are chromium items we don't want to show.
+  currentDestinations.erase(
+      std::remove(currentDestinations.begin(), currentDestinations.end(),
+                  overflow_menu::Destination::PriceNotifications),
+      currentDestinations.end());
+  currentDestinations.erase(
+      std::remove(currentDestinations.begin(), currentDestinations.end(),
+                  overflow_menu::Destination::WhatsNew),
+      currentDestinations.end());
+
+  // Remove unwanted destinations from hidden list, in our case price tracking
+  // and whats new. These are chromium items we don't want to show.
+  hiddenDestinations.erase(
+      std::remove(hiddenDestinations.begin(), hiddenDestinations.end(),
+                  overflow_menu::Destination::PriceNotifications),
+      hiddenDestinations.end());
+  hiddenDestinations.erase(
+      std::remove(hiddenDestinations.begin(), hiddenDestinations.end(),
+                  overflow_menu::Destination::WhatsNew),
+      hiddenDestinations.end());
+
+  // Add `vShare` to the front of the shown list if not present.
+  // This is for the users that did not have Share menu item on previous
+  // version due to regression, and customised the menu.
+  if (std::find(currentDestinations.begin(), currentDestinations.end(),
+                overflow_menu::Destination::vShare) ==
+      currentDestinations.end()) {
+    currentDestinations.insert(currentDestinations.begin(),
+                               overflow_menu::Destination::vShare);
+  }
+
+  // Convert back to base::Value::List and write updates
+  base::Value::List updatedShownDestinations;
+  for (const auto& destination : currentDestinations) {
+    updatedShownDestinations.Append(
+        overflow_menu::StringNameForDestination(destination));
+  }
+
+  base::Value::List updatedHiddenDestinations;
+  for (const auto& destination : hiddenDestinations) {
+    updatedHiddenDestinations.Append(
+        overflow_menu::StringNameForDestination(destination));
+  }
+
+  // Only update preferences if changes were made
+  if (storedRanking != updatedShownDestinations) {
+    _localStatePrefs->SetList(prefs::kOverflowMenuDestinationsOrder,
+                              std::move(updatedShownDestinations));
+  }
+
+  if (storedHiddenDestinations != updatedHiddenDestinations) {
+    _localStatePrefs->SetList(prefs::kOverflowMenuHiddenDestinations,
+                              std::move(updatedHiddenDestinations));
+  }
+}
+
 // Lazily create vivaldi action customization model.
 - (ActionCustomizationModel*)vivaldiActionCustomizationModel {
   if (_vivaldiActionCustomizationModel) {
@@ -1540,21 +1584,6 @@ base::Value::Dict DictFromBadgeData(const BadgeData badgeData) {
 
 // Returns the current vivaldi actions in order.
 - (NSArray<OverflowMenuAction*>*)vivaldiActions {
-  if (!IsOverflowMenuCustomizationEnabled()) {
-    ActionRanking availableActions = [self.actionProvider vivaldiActions];
-    // Convert back to Objective-C array for returning. This step also filters
-    // out any actions that are not supported on the current page.
-    NSMutableArray<OverflowMenuAction*>* sortedActions =
-        [[NSMutableArray alloc] init];
-    for (overflow_menu::ActionType action : availableActions) {
-      if (OverflowMenuAction* overflowMenuAction =
-              [self.actionProvider actionForActionType:action]) {
-        [sortedActions addObject:overflowMenuAction];
-      }
-    }
-
-    return sortedActions;
-  }
 
   [self updateVivaldiActionOrderData];
 

@@ -21,6 +21,9 @@ class TlsServerHandshakerImpl final : public quic::TlsServerHandshaker {
                           const quic::QuicCryptoServerConfig* crypto_config);
   TlsServerHandshakerImpl(const TlsServerHandshakerImpl&) = delete;
   TlsServerHandshakerImpl& operator=(const TlsServerHandshakerImpl&) = delete;
+  TlsServerHandshakerImpl(TlsServerHandshakerImpl&&) noexcept = delete;
+  TlsServerHandshakerImpl& operator=(TlsServerHandshakerImpl&&) noexcept =
+      delete;
   ~TlsServerHandshakerImpl() override;
 
   // quic::TlsServerHandshaker overrides.
@@ -44,6 +47,9 @@ class OpenScreenServerSession : public OpenScreenSessionBase {
       const quic::ParsedQuicVersionVector& supported_versions);
   OpenScreenServerSession(const OpenScreenServerSession&) = delete;
   OpenScreenServerSession& operator=(const OpenScreenServerSession&) = delete;
+  OpenScreenServerSession(OpenScreenServerSession&&) noexcept = delete;
+  OpenScreenServerSession& operator=(OpenScreenServerSession&&) noexcept =
+      delete;
   ~OpenScreenServerSession() override;
 
   // quic::Session overrides.

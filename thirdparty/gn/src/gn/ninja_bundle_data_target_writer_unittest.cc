@@ -46,7 +46,7 @@ TEST(NinjaBundleDataTargetWriter, Run) {
   writer.Run();
 
   const char expected[] =
-      "build obj/foo/data.stamp: stamp "
+      "build phony/foo/data: phony "
       "../../foo/input1.txt "
       "../../foo/input2.txt "
       "../../foo/Foo.xcassets/Contents.json "

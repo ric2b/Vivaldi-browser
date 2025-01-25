@@ -9,12 +9,15 @@
 #include <memory>
 #include <utility>
 
+#include "base/check_deref.h"
 #include "base/command_line.h"
 #include "base/win/win_util.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/renderer_host/direct_manipulation_helper_win.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
+#include "content/public/browser/content_browser_client.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "ui/accessibility/platform/ax_fragment_root_win.h"
 #include "ui/accessibility/platform/ax_platform.h"
@@ -178,10 +181,6 @@ bool LegacyRenderWidgetHostHWND::InitOrDeleteSelf(HWND parent) {
     return false;
   }
 
-  // Only register a touch window if we are using WM_TOUCH.
-  if (!features::IsUsingWMPointerForTouch())
-    RegisterTouchWindow(hwnd(), TWF_WANTPALM);
-
   // Ignore failure from this call. Some SKUs of Windows such as Hololens do not
   // support MSAA, and this call failing should not stop us from initializing
   // UI Automation support.
@@ -257,16 +256,21 @@ LRESULT LegacyRenderWidgetHostHWND::OnGetObject(UINT message,
   if (!host_)
     return static_cast<LRESULT>(0L);
 
-  bool is_uia_request = static_cast<DWORD>(UiaRootObjectId) == obj_id;
-  bool is_msaa_request = static_cast<DWORD>(OBJID_CLIENT) == obj_id;
+  const bool is_uia_request = static_cast<DWORD>(UiaRootObjectId) == obj_id;
+  const bool is_uia_active =
+      is_uia_request && ::ui::AXPlatform::GetInstance().IsUiaProviderEnabled();
+  const bool is_msaa_request = static_cast<DWORD>(OBJID_CLIENT) == obj_id;
 
-  if ((is_uia_request &&
-       ::ui::AXPlatform::GetInstance().IsUiaProviderEnabled()) ||
-      is_msaa_request) {
+  if (is_uia_request) {
+    CHECK_DEREF(CHECK_DEREF(GetContentClient()).browser())
+        .OnUiaProviderRequested(is_uia_active);
+  }
+
+  if (is_uia_active || is_msaa_request) {
     gfx::NativeViewAccessible root =
         GetOrCreateWindowRootAccessible(is_uia_request);
 
-    if (is_uia_request) {
+    if (is_uia_active) {
       Microsoft::WRL::ComPtr<IRawElementProviderSimple> root_uia;
       root->QueryInterface(IID_PPV_ARGS(&root_uia));
 

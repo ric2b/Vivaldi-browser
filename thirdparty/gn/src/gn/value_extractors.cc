@@ -51,7 +51,7 @@ bool ListValueUniqueExtractor(const Value& value,
       return false;
     if (!dest->push_back(new_one)) {
       // Already in the list, throw error.
-      *err = Err(item, "Duplicate item in list");
+      *err = Err(item, "Duplicate item " + item.ToString(true) + " in list.");
       size_t previous_index = dest->IndexOf(new_one);
       err->AppendSubErr(
           Err(input_list[previous_index], "This was the previous definition."));

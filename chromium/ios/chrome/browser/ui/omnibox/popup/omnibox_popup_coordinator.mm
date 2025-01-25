@@ -123,8 +123,8 @@
 
   // Vivaldi
   self.mediator.reverseSearchResultsProvider = self;
-  self.mediator.originalPrefService = self.browser->GetBrowserState()
-                                          ->GetOriginalChromeBrowserState()
+  self.mediator.originalPrefService = self.browser->GetProfile()
+                                          ->GetOriginalProfile()
                                           ->GetPrefs();
   // End Vivaldi
 

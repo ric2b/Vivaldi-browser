@@ -37,10 +37,11 @@ class VivaldiWindowWidgetDelegate final : public views::WidgetDelegate {
   std::u16string GetWindowTitle() const override;
   bool ShouldShowWindowTitle() const override;
   void SaveWindowPlacement(const gfx::Rect& bounds,
-                           ui::WindowShowState show_state) override;
-  bool GetSavedWindowPlacement(const views::Widget* widget,
-                               gfx::Rect* bounds,
-                               ui::WindowShowState* show_state) const override;
+                           ui::mojom::WindowShowState show_state) override;
+  bool GetSavedWindowPlacement(
+      const views::Widget* widget,
+      gfx::Rect* bounds,
+      ui::mojom::WindowShowState* show_state) const override;
   bool ShouldDescendIntoChildForEventHandling(
       gfx::NativeView child,
       const gfx::Point& location) override;

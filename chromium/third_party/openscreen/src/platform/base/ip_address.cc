@@ -81,8 +81,8 @@ ErrorOr<IPAddress> ParseV4(const std::string& s) {
   return IPAddress(octets[0], octets[1], octets[2], octets[3]);
 }
 
-// Returns the zero-expansion of a double-colon in |s| if |s| is a
-// well-formatted IPv6 address. If |s| is ill-formatted, returns *any* string
+// Returns the zero-expansion of a double-colon in `s` if `s` is a
+// well-formatted IPv6 address. If `s` is ill-formatted, returns *any* string
 // that is ill-formatted.
 std::string ExpandIPv6DoubleColon(const std::string& s) {
   constexpr char kDoubleColon[] = "::";
@@ -162,12 +162,12 @@ IPEndpoint::operator bool() const {
 // static
 ErrorOr<IPEndpoint> IPEndpoint::Parse(const std::string& s) {
   // Look for the colon that separates the IP address from the port number. Note
-  // that this check also guards against the case where |s| is the empty string.
+  // that this check also guards against the case where `s` is the empty string.
   const auto colon_pos = s.rfind(':');
   if (colon_pos == std::string::npos) {
     return Error(Error::Code::kParseError, "missing colon separator");
   }
-  // The colon cannot be the first nor the last character in |s| because that
+  // The colon cannot be the first nor the last character in `s` because that
   // would mean there is no address part or port part.
   if (colon_pos == 0) {
     return Error(Error::Code::kParseError, "missing address before colon");

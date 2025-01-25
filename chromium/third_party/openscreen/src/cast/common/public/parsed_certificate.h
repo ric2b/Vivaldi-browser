@@ -29,11 +29,11 @@ enum class DigestAlgorithm {
 class ParsedCertificate {
  public:
   static ErrorOr<std::unique_ptr<ParsedCertificate>> ParseFromDER(
-      const std::vector<uint8_t>& der_cert);
+      ByteView der_cert);
 
   virtual ~ParsedCertificate() = default;
 
-  // |front_spacing| is the number of bytes to add as padding to the result
+  // `front_spacing` is the number of bytes to add as padding to the result
   // vector.  This is used to place a nonce value in front during Cast
   // authentication.  This will return kErrCertSerialize on failure.
   virtual ErrorOr<std::vector<uint8_t>> SerializeToDER(
@@ -57,9 +57,9 @@ class ParsedCertificate {
   virtual ErrorOr<uint64_t> GetSerialNumber() const = 0;
 
   // Use the public key from the verified certificate to verify a
-  // |digest_algorithm|WithRSAEncryption |signature| over arbitrary |data|.
-  // Both |signature| and |data| hold raw binary data. |data| has no length or
-  // alignment restrictions.  |signature| holds a |digest_algorithm| value (e.g.
+  // `digest_algorithm`WithRSAEncryption `signature` over arbitrary `data`.
+  // Both `signature` and `data` hold raw binary data. `data` has no length or
+  // alignment restrictions.  `signature` holds a `digest_algorithm` value (e.g.
   // SHA256 hash) and should be sized accordingly, but has no alignment
   // restriction.  Returns true if the signature was correct.
   virtual bool VerifySignedData(DigestAlgorithm algorithm,

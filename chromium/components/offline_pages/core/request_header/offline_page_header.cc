@@ -88,7 +88,7 @@ bool ParseOfflineHeaderValue(const std::string& header_value,
       GURL url = GURL(decoded_url);
       if (!url.is_valid())
         return false;
-      *intent_url = url;
+      *intent_url = std::move(url);
     } else {
       return false;
     }
@@ -142,7 +142,7 @@ OfflinePageHeader::OfflinePageHeader(const std::string& header_value)
   }
 }
 
-OfflinePageHeader::~OfflinePageHeader() {}
+OfflinePageHeader::~OfflinePageHeader() = default;
 
 std::string OfflinePageHeader::GetCompleteHeaderString() const {
   std::string key = GetHeaderKeyString();

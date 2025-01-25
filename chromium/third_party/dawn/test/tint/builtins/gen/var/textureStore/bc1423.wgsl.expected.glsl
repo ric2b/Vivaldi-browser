@@ -1,39 +1,11 @@
-#version 310 es
-precision highp float;
-precision highp int;
+SKIP: INVALID
 
-layout(binding = 0, rgba8ui) uniform highp writeonly uimage2DArray arg_0;
-void textureStore_bc1423() {
-  uvec2 arg_1 = uvec2(1u);
-  int arg_2 = 1;
-  uvec4 arg_3 = uvec4(1u);
-  imageStore(arg_0, ivec3(uvec3(arg_1, uint(arg_2))), arg_3);
-}
+<dawn>/src/tint/lang/glsl/writer/printer/printer.cc:733 internal compiler error: TINT_UNREACHABLE invalid texel format for read-write
+********************************************************************
+*  The tint shader compiler has encountered an unexpected error.   *
+*                                                                  *
+*  Please help us fix this issue by submitting a bug report at     *
+*  crbug.com/tint with the source program that triggered the bug.  *
+********************************************************************
 
-void fragment_main() {
-  textureStore_bc1423();
-}
-
-void main() {
-  fragment_main();
-  return;
-}
-#version 310 es
-
-layout(binding = 0, rgba8ui) uniform highp writeonly uimage2DArray arg_0;
-void textureStore_bc1423() {
-  uvec2 arg_1 = uvec2(1u);
-  int arg_2 = 1;
-  uvec4 arg_3 = uvec4(1u);
-  imageStore(arg_0, ivec3(uvec3(arg_1, uint(arg_2))), arg_3);
-}
-
-void compute_main() {
-  textureStore_bc1423();
-}
-
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-void main() {
-  compute_main();
-  return;
-}
+tint executable returned error: signal: trace/BPT trap

@@ -24,7 +24,7 @@
 //* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 //* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 //* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-{% from 'dawn/cpp_macros.tmpl' import wgpu_string_constructors with context %}
+{% from 'dawn/cpp_macros.tmpl' import wgpu_string_members with context %}
 
 {% set namespace_name = Name(metadata.native_namespace) %}
 {% set DIR = namespace_name.concatcase().upper() %}
@@ -32,6 +32,7 @@
 #ifndef {{DIR}}_{{namespace.upper()}}_STRUCTS_H_
 #define {{DIR}}_{{namespace.upper()}}_STRUCTS_H_
 
+#include "absl/strings/string_view.h"
 {% set api = metadata.api.lower() %}
 {% set CAPI = metadata.c_prefix %}
 #include "dawn/{{api}}_cpp.h"
@@ -67,7 +68,34 @@ namespace {{native_namespace}} {
     using {{namespace}}::ChainedStruct;
     using {{namespace}}::ChainedStructOut;
 
-    {% for type in by_category["structure"] %}
+    //* Special structures that are manually written.
+    {% set SpecialStructures = ["string view"] %}
+
+    struct StringView {
+        char const * data = nullptr;
+        size_t length = WGPU_STRLEN;
+
+        {{wgpu_string_members("StringView")}}
+
+        // Equality operators, mostly for testing. Note that this tests
+        // strict pointer-pointer equality if the struct contains member pointers.
+        bool operator==(const StringView& rhs) const;
+
+        #ifndef ABSL_USES_STD_STRING_VIEW
+        // NOLINTNEXTLINE(runtime/explicit) allow implicit conversion
+        operator absl::string_view() const {
+            if (this->length == wgpu::kStrlen) {
+                if (IsUndefined()) {
+                    return {};
+                }
+                return {this->data};
+            }
+            return {this->data, this->length};
+        }
+        #endif
+    };
+
+    {% for type in by_category["structure"] if type.name.get() not in SpecialStructures %}
         {% set CppType = as_cppType(type.name) %}
         {% if type.chained %}
             {% set chainedStructType = "ChainedStructOut" if type.chained == "out" else "ChainedStruct" %}
@@ -103,19 +131,6 @@ namespace {{native_namespace}} {
                     {{member_declaration}};
                 {% endif %}
             {% endfor %}
-
-            //* Custom string constructors / conversion
-            {% if type.name.get() == "string view" %}
-                {{wgpu_string_constructors(CppType, false) | indent(8)}}
-
-                // NOLINTNEXTLINE(runtime/explicit) allow implicit conversion
-                operator std::string_view() const;
-            {% elif type.name.get() == "nullable string view" %}
-                {{wgpu_string_constructors(CppType, true) | indent(8)}}
-
-                // NOLINTNEXTLINE(runtime/explicit) allow implicit conversion
-                operator std::optional<std::string_view>() const;
-            {% endif %}
 
             {% if type.any_member_requires_struct_defaulting %}
                 // This method makes a copy of the struct, then, for any enum members with trivial

@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Touch to Search je funkce, která je dostupná pouze v případě, že je Google nastaven jako výchozí vyhledávač ve Vivaldi. Odešle vybrané slovo a aktuální stránku jako kontext do Vyhledávání Google. Můžete jej vypnout v <ph name="BEGIN_LINK" />Nastavení<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Přepnout normální/soukromé listy</translation>
 <translation id="1644574205037202324">Historie</translation>
-<translation id="17513872634828108">Otevřené listy</translation>
 <translation id="1829244130665387512">Najít na stránce</translation>
 <translation id="1910514478706885609">Otevřít v novém seskupení listů</translation>
 <translation id="1925021887439448749">Zadejte vlastní webovou adresu</translation>
 <translation id="2038563949887743358">Zapnout funkci Stránky pro počítač</translation>
-<translation id="2139186145475833000">Přidat na plochu</translation>
 <translation id="2149973817440762519">Upravit záložku</translation>
 <translation id="2306442503286132111">Záložka uložena do složky <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Vzhled</translation>
@@ -37,6 +35,7 @@
 <translation id="4167670741834902166">Nový soukromý list</translation>
 <translation id="4195643157523330669">Otevřít na nové kartě</translation>
 <translation id="4243710787042215766">Otevřít v soukromém listu</translation>
+<translation id="4304713468139749426">Správce hesel</translation>
 <translation id="451872707440238414">Prohledat záložky</translation>
 <translation id="4526803704855831732">Soukromé listy</translation>
 <translation id="4719086422742491124">Získejte informace o tématech na webových stránkách, aniž byste opustili stránku. Vyberte jedno nebo více slov na stránce a vyhledejte je.

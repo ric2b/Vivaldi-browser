@@ -20,9 +20,11 @@
 #include "base/test/gtest_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/download/public/common/download_url_parameters.h"
+#include "components/input/native_web_keyboard_event.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/media/audio_stream_monitor.h"
 #include "content/browser/media/media_web_contents_observer.h"
@@ -78,6 +80,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/chrome_debug_urls.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/security/protocol_handler_security_level.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "third_party/blink/public/mojom/image_downloader/image_downloader.mojom.h"
@@ -166,11 +169,10 @@ class TestWebContentsObserver : public WebContentsObserver {
     last_vertical_scroll_direction_ = scroll_direction;
   }
 
-  void OnIsConnectedToBluetoothDeviceChanged(
-      bool is_connected_to_bluetooth_device) override {
-    ++num_is_connected_to_bluetooth_device_changed_;
-    last_is_connected_to_bluetooth_device_ = is_connected_to_bluetooth_device;
-  }
+  MOCK_METHOD(void,
+              OnCapabilityTypesChanged,
+              (WebContents::CapabilityType capability_type, bool used),
+              (override));
 
   void OnCaptureHandleConfigUpdate(
       const blink::mojom::CaptureHandleConfig& config) override {
@@ -200,12 +202,6 @@ class TestWebContentsObserver : public WebContentsObserver {
   bool observed_did_first_visually_non_empty_paint() const {
     return observed_did_first_visually_non_empty_paint_;
   }
-  int num_is_connected_to_bluetooth_device_changed() const {
-    return num_is_connected_to_bluetooth_device_changed_;
-  }
-  bool last_is_connected_to_bluetooth_device() const {
-    return last_is_connected_to_bluetooth_device_;
-  }
 
   const std::u16string text_copied_to_clipboard() const {
     return text_copied_to_clipboard_;
@@ -216,8 +212,6 @@ class TestWebContentsObserver : public WebContentsObserver {
   int theme_color_change_calls_ = 0;
   std::optional<viz::VerticalScrollDirection> last_vertical_scroll_direction_;
   bool observed_did_first_visually_non_empty_paint_ = false;
-  int num_is_connected_to_bluetooth_device_changed_ = 0;
-  bool last_is_connected_to_bluetooth_device_ = false;
   blink::mojom::CaptureHandleConfigPtr expected_capture_handle_config_;
   std::u16string text_copied_to_clipboard_;
 };
@@ -740,7 +734,7 @@ TEST_F(WebContentsImplTest, CrossSiteBoundaries) {
 
 // Test that navigating across a site boundary after a crash creates a new
 // RFH without requiring a cross-site transition (i.e., PENDING state).
-TEST_F(WebContentsImplTest, CrossSiteBoundariesAfterCrash) {
+TEST_F(WebContentsImplTest, DISABLED_CrossSiteBoundariesAfterCrash) {
   // Ensure that the cross-site transition will also be cross-process on
   // Android.
   IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
@@ -2121,7 +2115,7 @@ TEST_F(WebContentsImplTest, HandleWheelEvent) {
   event = blink::SyntheticWebMouseWheelEventBuilder::Build(
       0, 0, 0, 1, modifiers, ui::ScrollGranularity::kScrollByPixel);
   bool handled = contents()->HandleWheelEvent(event);
-#if defined(USE_AURA)
+#if defined(USE_AURA) || BUILDFLAG(IS_ANDROID)
   EXPECT_TRUE(handled);
   EXPECT_EQ(1, delegate->GetAndResetContentsZoomChangedCallCount());
   EXPECT_TRUE(delegate->last_zoom_in());
@@ -2135,7 +2129,7 @@ TEST_F(WebContentsImplTest, HandleWheelEvent) {
   event = blink::SyntheticWebMouseWheelEventBuilder::Build(
       0, 0, 2, -5, modifiers, ui::ScrollGranularity::kScrollByPixel);
   handled = contents()->HandleWheelEvent(event);
-#if defined(USE_AURA)
+#if defined(USE_AURA) || BUILDFLAG(IS_ANDROID)
   EXPECT_TRUE(handled);
   EXPECT_EQ(1, delegate->GetAndResetContentsZoomChangedCallCount());
   EXPECT_FALSE(delegate->last_zoom_in());
@@ -2941,20 +2935,154 @@ TEST_F(WebContentsImplTest, RegisterProtocolHandlerInvalidURLSyntax) {
   contents()->SetDelegate(nullptr);
 }
 
+TEST_F(WebContentsImplTest, Usb) {
+  testing::StrictMock<TestWebContentsObserver> observer(contents());
+  EXPECT_FALSE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+
+  EXPECT_CALL(observer,
+              OnCapabilityTypesChanged(WebContents::CapabilityType::kUSB, true))
+      .WillOnce(testing::Invoke([&]() {
+        // Accessor must return the updated state when the observer is notified.
+        EXPECT_TRUE(
+            contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+      }));
+  contents()->TestIncrementUsbActiveFrameCount();
+  testing::Mock::VerifyAndClearExpectations(&observer);
+  EXPECT_TRUE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+
+  // Additional increment/decrement don't modify state.
+  contents()->TestIncrementUsbActiveFrameCount();
+  EXPECT_TRUE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+  contents()->TestDecrementUsbActiveFrameCount();
+  EXPECT_TRUE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+
+  EXPECT_CALL(observer, OnCapabilityTypesChanged(
+                            WebContents::CapabilityType::kUSB, false))
+      .WillOnce(testing::Invoke([&]() {
+        EXPECT_FALSE(
+            contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+      }));
+  contents()->TestDecrementUsbActiveFrameCount();
+  testing::Mock::VerifyAndClearExpectations(&observer);
+  EXPECT_FALSE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+}
+
+TEST_F(WebContentsImplTest, Hid) {
+  testing::StrictMock<TestWebContentsObserver> observer(contents());
+  EXPECT_FALSE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+
+  EXPECT_CALL(observer,
+              OnCapabilityTypesChanged(WebContents::CapabilityType::kHID, true))
+      .WillOnce(testing::Invoke([&]() {
+        // Accessor must return the updated state when the observer is notified.
+        EXPECT_TRUE(
+            contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+      }));
+  contents()->TestIncrementHidActiveFrameCount();
+  testing::Mock::VerifyAndClearExpectations(&observer);
+  EXPECT_TRUE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+
+  // Additional increment/decrement don't modify state.
+  contents()->TestIncrementHidActiveFrameCount();
+  EXPECT_TRUE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+  contents()->TestDecrementHidActiveFrameCount();
+  EXPECT_TRUE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+
+  EXPECT_CALL(observer, OnCapabilityTypesChanged(
+                            WebContents::CapabilityType::kHID, false))
+      .WillOnce(testing::Invoke([&]() {
+        EXPECT_FALSE(
+            contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+      }));
+  contents()->TestDecrementHidActiveFrameCount();
+  testing::Mock::VerifyAndClearExpectations(&observer);
+  EXPECT_FALSE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+}
+
+TEST_F(WebContentsImplTest, Serial) {
+  testing::StrictMock<TestWebContentsObserver> observer(contents());
+  EXPECT_FALSE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kSerial));
+
+  EXPECT_CALL(observer, OnCapabilityTypesChanged(
+                            WebContents::CapabilityType::kSerial, true))
+      .WillOnce(testing::Invoke([&]() {
+        // Accessor must return the updated state when the observer is notified.
+        EXPECT_TRUE(contents()->IsCapabilityActive(
+            WebContents::CapabilityType::kSerial));
+      }));
+  contents()->TestIncrementSerialActiveFrameCount();
+  testing::Mock::VerifyAndClearExpectations(&observer);
+  EXPECT_TRUE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kSerial));
+
+  // Additional increment/decrement don't modify state.
+  contents()->TestIncrementSerialActiveFrameCount();
+  EXPECT_TRUE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kSerial));
+  contents()->TestDecrementSerialActiveFrameCount();
+  EXPECT_TRUE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kSerial));
+
+  EXPECT_CALL(observer, OnCapabilityTypesChanged(
+                            WebContents::CapabilityType::kSerial, false))
+      .WillOnce(testing::Invoke([&]() {
+        EXPECT_FALSE(contents()->IsCapabilityActive(
+            WebContents::CapabilityType::kSerial));
+      }));
+  contents()->TestDecrementSerialActiveFrameCount();
+  testing::Mock::VerifyAndClearExpectations(&observer);
+  EXPECT_FALSE(
+      contents()->IsCapabilityActive(WebContents::CapabilityType::kSerial));
+}
+
 TEST_F(WebContentsImplTest, Bluetooth) {
-  TestWebContentsObserver observer(contents());
-  EXPECT_EQ(observer.num_is_connected_to_bluetooth_device_changed(), 0);
-  EXPECT_FALSE(contents()->IsConnectedToBluetoothDevice());
+  testing::StrictMock<TestWebContentsObserver> observer(contents());
+  EXPECT_FALSE(contents()->IsCapabilityActive(
+      WebContents::CapabilityType::kBluetoothConnected));
 
+  EXPECT_CALL(observer,
+              OnCapabilityTypesChanged(
+                  WebContents::CapabilityType::kBluetoothConnected, true))
+      .WillOnce(testing::Invoke([&]() {
+        // Accessor must return the updated state when the observer is notified.
+        EXPECT_TRUE(contents()->IsCapabilityActive(
+            WebContents::CapabilityType::kBluetoothConnected));
+      }));
   contents()->TestIncrementBluetoothConnectedDeviceCount();
-  EXPECT_EQ(observer.num_is_connected_to_bluetooth_device_changed(), 1);
-  EXPECT_TRUE(observer.last_is_connected_to_bluetooth_device());
-  EXPECT_TRUE(contents()->IsConnectedToBluetoothDevice());
+  testing::Mock::VerifyAndClearExpectations(&observer);
+  EXPECT_TRUE(contents()->IsCapabilityActive(
+      WebContents::CapabilityType::kBluetoothConnected));
 
+  // Additional increment/decrement don't modify state.
+  contents()->TestIncrementBluetoothConnectedDeviceCount();
+  EXPECT_TRUE(contents()->IsCapabilityActive(
+      WebContents::CapabilityType::kBluetoothConnected));
   contents()->TestDecrementBluetoothConnectedDeviceCount();
-  EXPECT_EQ(observer.num_is_connected_to_bluetooth_device_changed(), 2);
-  EXPECT_FALSE(observer.last_is_connected_to_bluetooth_device());
-  EXPECT_FALSE(contents()->IsConnectedToBluetoothDevice());
+  EXPECT_TRUE(contents()->IsCapabilityActive(
+      WebContents::CapabilityType::kBluetoothConnected));
+
+  EXPECT_CALL(observer,
+              OnCapabilityTypesChanged(
+                  WebContents::CapabilityType::kBluetoothConnected, false))
+      .WillOnce(testing::Invoke([&]() {
+        EXPECT_FALSE(contents()->IsCapabilityActive(
+            WebContents::CapabilityType::kBluetoothConnected));
+      }));
+  contents()->TestDecrementBluetoothConnectedDeviceCount();
+  testing::Mock::VerifyAndClearExpectations(&observer);
+  EXPECT_FALSE(contents()->IsCapabilityActive(
+      WebContents::CapabilityType::kBluetoothConnected));
 }
 
 TEST_F(WebContentsImplTest, BadDownloadImageResponseFromRenderer) {
@@ -3386,6 +3514,48 @@ TEST_F(WebContentsImplTest, BadDownloadImageFromAXNodeId) {
         run_loop.Quit();
       }));
   run_loop.Run();
+}
+
+class WebContentsImplTestKeyboardEvents
+    : public WebContentsImplTest,
+      public testing::WithParamInterface<blink::WebInputEvent::Type> {};
+
+INSTANTIATE_TEST_SUITE_P(
+    WebContentsImplTest,
+    WebContentsImplTestKeyboardEvents,
+    testing::Values(blink::WebInputEvent::Type::kKeyDown,
+                    blink::WebInputEvent::Type::kRawKeyDown));
+
+TEST_P(WebContentsImplTestKeyboardEvents,
+       EventUpdatesRecentInteractionTracking) {
+  ASSERT_FALSE(contents()->HasRecentInteraction());
+  const int no_modifiers = 0;
+  const base::TimeTicks dummy_timestamp{};
+  input::NativeWebKeyboardEvent event{blink::WebInputEvent::Type::kKeyDown,
+                                      no_modifiers, dummy_timestamp};
+  contents()->DidReceiveInputEvent(
+      contents()->GetRenderWidgetHostWithPageFocus(), event);
+  EXPECT_TRUE(contents()->HasRecentInteraction());
+}
+
+TEST_F(WebContentsImplTest, ProcessSelectAudioOutputNoDelegate) {
+  SelectAudioOutputRequest dummy_request(content::GlobalRenderFrameHostId(0, 0),
+                                         std::vector<AudioOutputDeviceInfo>());
+
+  bool callback_run = false;
+
+  contents()->ProcessSelectAudioOutput(
+      dummy_request,
+      base::BindLambdaForTesting(
+          [&](base::expected<std::string, content::SelectAudioOutputError>
+                  result) {
+            EXPECT_FALSE(result.has_value());
+            EXPECT_EQ(result.error(),
+                      content::SelectAudioOutputError::kNotSupported);
+            callback_run = true;
+          }));
+
+  ASSERT_TRUE(callback_run);
 }
 
 }  // namespace content

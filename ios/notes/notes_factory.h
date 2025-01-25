@@ -8,7 +8,7 @@
 #import "base/no_destructor.h"
 #import "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 
-class ChromeBrowserState;
+class ProfileIOS;
 
 namespace vivaldi {
 
@@ -16,10 +16,8 @@ class NotesModel;
 
 class NotesModelFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static NotesModel* GetForBrowserState(
-      ChromeBrowserState* browser_state);
-  static NotesModel* GetForBrowserStateIfExists(
-      ChromeBrowserState* browser_state);
+  static NotesModel* GetForProfile(ProfileIOS* profile);
+  static NotesModel* GetForProfileIfExists(ProfileIOS* profile);
   static NotesModelFactory* GetInstance();
 
  private:

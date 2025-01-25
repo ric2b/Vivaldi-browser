@@ -39,14 +39,13 @@ export interface RegisteredPropertyDetails {
 
 function getLinkSection(details: RegisteredPropertyDetails): LitHtml.TemplateResult {
   return html`<div class="registered-property-links">
-            <span role="button" @click=${details?.goToDefinition} class="clickable underlined unbreakable-text"}>
+            <span role="button" @click=${details?.goToDefinition} class="clickable underlined unbreakable-text">
               ${i18nString(UIStrings.registeredPropertyLinkTitle)}
             </span>
           </div>`;
 }
 
 export class CSSVariableParserError extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-css-variable-parser-error`;
   readonly #shadow = this.attachShadow({mode: 'open'});
 
   constructor(details: RegisteredPropertyDetails) {
@@ -70,7 +69,6 @@ export class CSSVariableParserError extends HTMLElement {
 }
 
 export class CSSVariableValueView extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-css-variable-value-view`;
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly variableName: string;
   readonly value: string|undefined;

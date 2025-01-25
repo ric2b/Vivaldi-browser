@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 import type * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
-import * as TraceEngine from '../../models/trace/trace.js';
+import * as Trace from '../../models/trace/trace.js';
 import type * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
 
-import {type VisualLoggingTrackName} from './CompatibilityTracksAppender.js';
+import type {VisualLoggingTrackName} from './CompatibilityTracksAppender.js';
 
 const UIStrings = {
   /**
@@ -62,8 +62,7 @@ export function buildGroupStyle(extra?: Partial<PerfUI.FlameChart.GroupStyle>): 
  */
 export function buildTrackHeader(
     jslogContext: VisualLoggingTrackName|null, startLevel: number, name: string, style: PerfUI.FlameChart.GroupStyle,
-    selectable: boolean, expanded?: boolean, showStackContextMenu?: boolean,
-    legends?: PerfUI.FlameChart.Legend[]): PerfUI.FlameChart.Group {
+    selectable: boolean, expanded?: boolean, showStackContextMenu?: boolean): PerfUI.FlameChart.Group {
   const group: PerfUI.FlameChart.Group = {
     startLevel,
     name: name as Common.UIString.LocalizedString,
@@ -71,7 +70,6 @@ export function buildTrackHeader(
     selectable,
     expanded,
     showStackContextMenu,
-    legends,
   };
   if (jslogContext !== null) {
     group.jslogContext = jslogContext;
@@ -86,15 +84,15 @@ export function buildTrackHeader(
  * @returns the formatted time string for highlightedEntryInfo
  */
 export function getFormattedTime(
-    totalTime?: TraceEngine.Types.Timing.MicroSeconds, selfTime?: TraceEngine.Types.Timing.MicroSeconds): string {
+    totalTime?: Trace.Types.Timing.MicroSeconds, selfTime?: Trace.Types.Timing.MicroSeconds): string {
   const formattedTotalTime =
-      TraceEngine.Helpers.Timing.microSecondsToMilliseconds((totalTime || 0) as TraceEngine.Types.Timing.MicroSeconds);
-  if (formattedTotalTime === TraceEngine.Types.Timing.MilliSeconds(0)) {
+      Trace.Helpers.Timing.microSecondsToMilliseconds((totalTime || 0) as Trace.Types.Timing.MicroSeconds);
+  if (formattedTotalTime === Trace.Types.Timing.MilliSeconds(0)) {
     return '';
   }
 
   const formattedSelfTime =
-      TraceEngine.Helpers.Timing.microSecondsToMilliseconds((selfTime || 0) as TraceEngine.Types.Timing.MicroSeconds);
+      Trace.Helpers.Timing.microSecondsToMilliseconds((selfTime || 0) as Trace.Types.Timing.MicroSeconds);
   const minSelfTimeSignificance = 1e-6;
   const formattedTime = Math.abs(formattedTotalTime - formattedSelfTime) > minSelfTimeSignificance &&
           formattedSelfTime > minSelfTimeSignificance ?
@@ -109,8 +107,7 @@ export function getFormattedTime(
 /**
  * Returns the first level that is available for an event.
  */
-export function getEventLevel(
-    event: TraceEngine.Types.TraceEvents.TraceEventData, lastTimestampByLevel: LastTimestampByLevel): number {
+export function getEventLevel(event: Trace.Types.Events.Event, lastTimestampByLevel: LastTimestampByLevel): number {
   let level = 0;
   const startTime = event.ts;
   const endTime = event.ts + (event.dur || 0);

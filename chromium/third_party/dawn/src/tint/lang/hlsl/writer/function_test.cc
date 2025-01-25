@@ -76,8 +76,7 @@ void unused_entry_point() {
 }
 
 TEST_F(HlslWriterTest, FunctionEntryPoint) {
-    auto* func = b.Function("main", ty.void_(), core::ir::Function::PipelineStage::kCompute);
-    func->SetWorkgroupSize(1, 1, 1);
+    auto* func = b.ComputeFunction("main");
     func->Block()->Append(b.Return(func));
 
     ASSERT_TRUE(Generate()) << err_ << output_.hlsl;
@@ -309,16 +308,13 @@ void frag_main_inner(Interface inputs) {
 
 vert_main_outputs vert_main() {
   Interface v_1 = vert_main_inner();
-  Interface v_2 = v_1;
-  Interface v_3 = v_1;
-  Interface v_4 = v_1;
-  vert_main_outputs v_5 = {v_3.col1, v_4.col2, v_2.pos};
-  return v_5;
+  vert_main_outputs v_2 = {v_1.col1, v_1.col2, v_1.pos};
+  return v_2;
 }
 
 void frag_main(frag_main_inputs inputs) {
-  Interface v_6 = {float4(inputs.Interface_pos.xyz, (1.0f / inputs.Interface_pos[3u])), inputs.Interface_col1, inputs.Interface_col2};
-  frag_main_inner(v_6);
+  Interface v_3 = {float4(inputs.Interface_pos.xyz, (1.0f / inputs.Interface_pos[3u])), inputs.Interface_col1, inputs.Interface_col2};
+  frag_main_inner(v_3);
 }
 
 )");
@@ -412,7 +408,7 @@ vert2_main1_outputs vert2_main1() {
 )");
 }
 
-TEST_F(HlslWriterTest, DISABLED_FunctionEntryPointWithUniform) {
+TEST_F(HlslWriterTest, FunctionEntryPointWithUniform) {
     // struct Uniforms {
     //   coord: vec4f,
     // }
@@ -458,9 +454,8 @@ TEST_F(HlslWriterTest, DISABLED_FunctionEntryPointWithUniform) {
 cbuffer cbuffer_ubo : register(b0, space1) {
   uint4 ubo[1];
 };
-
 float sub_func(float param) {
-  return asfloat(ubo[0].x);
+  return asfloat(ubo[0u].x);
 }
 
 void frag_main() {
@@ -470,7 +465,7 @@ void frag_main() {
 )");
 }
 
-TEST_F(HlslWriterTest, DISABLED_FunctionEntryPointWithUniformStruct) {
+TEST_F(HlslWriterTest, FunctionEntryPointWithUniformStruct) {
     // struct Uniforms {
     //   coord: vec4f,
     // }
@@ -506,8 +501,7 @@ cbuffer cbuffer_ubo : register(b0, space1) {
   uint4 ubo[1];
 };
 void frag_main() {
-  float v = asfloat(ubo[0].x);
-  return;
+  float v = asfloat(ubo[0u].x);
 }
 
 )");
@@ -592,7 +586,7 @@ void frag_main() {
 )");
 }
 
-TEST_F(HlslWriterTest, DISABLED_FunctionEntryPointWithWOStorageBufferStore) {
+TEST_F(HlslWriterTest, FunctionEntryPointWithWOStorageBufferStore) {
     // struct Data {
     //   a: i32,
     //   b: f32,
@@ -625,13 +619,12 @@ TEST_F(HlslWriterTest, DISABLED_FunctionEntryPointWithWOStorageBufferStore) {
 RWByteAddressBuffer coord : register(u0, space1);
 void frag_main() {
   coord.Store(4u, asuint(2.0f));
-  return;
 }
 
 )");
 }
 
-TEST_F(HlslWriterTest, DISABLED_FunctionEntryPointWithStorageBufferStore) {
+TEST_F(HlslWriterTest, FunctionEntryPointWithStorageBufferStore) {
     // struct Data {
     //   a: i32,
     //   b: f32,
@@ -664,13 +657,12 @@ TEST_F(HlslWriterTest, DISABLED_FunctionEntryPointWithStorageBufferStore) {
 RWByteAddressBuffer coord : register(u0, space1);
 void frag_main() {
   coord.Store(4u, asuint(2.0f));
-  return;
 }
 
 )");
 }
 
-TEST_F(HlslWriterTest, DISABLED_FunctionCalledByEntryPointWithUniform) {
+TEST_F(HlslWriterTest, FunctionCalledByEntryPointWithUniform) {
     // Struct S {
     //   x: f32,
     // }
@@ -691,7 +683,10 @@ TEST_F(HlslWriterTest, DISABLED_FunctionCalledByEntryPointWithUniform) {
     coord->SetBindingPoint(1, 0);
     b.ir.root_block->Append(coord);
 
+    auto* param = b.FunctionParam("param", ty.f32());
     auto* sub_func = b.Function("sub_func", ty.f32());
+    sub_func->SetParams({param});
+
     b.Append(sub_func->Block(), [&] {
         auto* a = b.Access(ty.ptr<uniform, f32, core::Access::kRead>(), coord, 0_u);
         b.Return(sub_func, b.Load(a));
@@ -704,17 +699,16 @@ TEST_F(HlslWriterTest, DISABLED_FunctionCalledByEntryPointWithUniform) {
     });
 
     ASSERT_TRUE(Generate()) << err_ << output_.hlsl;
-    EXPECT_EQ(output_.hlsl, R"(cbuffer cbuffer_coord : register(b0, space1) {
+    EXPECT_EQ(output_.hlsl, R"(
+cbuffer cbuffer_coord : register(b0, space1) {
   uint4 coord[1];
 };
-
 float sub_func(float param) {
-  return coord.x;
+  return asfloat(coord[0u].x);
 }
 
 void frag_main() {
   float v = sub_func(1.0f);
-  return;
 }
 
 )");
@@ -771,8 +765,7 @@ void frag_main() {
 TEST_F(HlslWriterTest, FunctionEntryPointCompute) {
     // @compute @workgroup_size(1) fn main() {}
 
-    auto* func = b.Function("main", ty.void_(), core::ir::Function::PipelineStage::kCompute);
-    func->SetWorkgroupSize(1, 1, 1);
+    auto* func = b.ComputeFunction("main");
     func->Block()->Append(b.Return(func));
 
     ASSERT_TRUE(Generate()) << err_ << output_.hlsl;
@@ -787,8 +780,7 @@ void main() {
 TEST_F(HlslWriterTest, FunctionEntryPointComputeWithWorkgroupLiteral) {
     // @compute @workgroup_size(2, 4, 6) fn main() {}
 
-    auto* func = b.Function("main", ty.void_(), core::ir::Function::PipelineStage::kCompute);
-    func->SetWorkgroupSize(2, 4, 6);
+    auto* func = b.ComputeFunction("main", 2_u, 4_u, 6_u);
     func->Block()->Append(b.Return(func));
 
     ASSERT_TRUE(Generate()) << err_ << output_.hlsl;
@@ -867,7 +859,7 @@ TEST_F(HlslWriterTest, FunctionWithDiscardAndVoidReturn) {
     EXPECT_EQ(output_.hlsl, R"(
 static bool continue_execution = true;
 void my_func(int a) {
-  if ((a == 0)) {
+  if ((a == int(0))) {
     continue_execution = false;
   }
 }
@@ -904,10 +896,10 @@ TEST_F(HlslWriterTest, FunctionWithDiscardAndNonVoidReturn) {
     EXPECT_EQ(output_.hlsl, R"(
 static bool continue_execution = true;
 int my_func(int a) {
-  if ((a == 0)) {
+  if ((a == int(0))) {
     continue_execution = false;
   }
-  return 42;
+  return int(42);
 }
 
 [numthreads(1, 1, 1)]
@@ -945,8 +937,7 @@ TEST_F(HlslWriterTest, FunctionMultipleEntryPointWithSameModuleVar) {
     b.ir.root_block->Append(data);
 
     {
-        auto* func = b.Function("a", ty.void_(), core::ir::Function::PipelineStage::kCompute);
-        func->SetWorkgroupSize(1, 1, 1);
+        auto* func = b.ComputeFunction("a");
         b.Append(func->Block(), [&] {  //
             auto* a = b.Access(ty.ptr<storage, f32>(), data, 0_u);
             b.Var("v", b.Load(a));
@@ -955,8 +946,7 @@ TEST_F(HlslWriterTest, FunctionMultipleEntryPointWithSameModuleVar) {
     }
 
     {
-        auto* func = b.Function("b", ty.void_(), core::ir::Function::PipelineStage::kCompute);
-        func->SetWorkgroupSize(1, 1, 1);
+        auto* func = b.ComputeFunction("b");
         b.Append(func->Block(), [&] {  //
             auto* a = b.Access(ty.ptr<storage, f32>(), data, 0_u);
             b.Var("v", b.Load(a));

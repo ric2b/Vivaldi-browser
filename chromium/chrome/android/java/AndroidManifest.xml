@@ -126,7 +126,11 @@ by a child template that "extends" this file.
     {% endif %}
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-
+    {% set is_desktop_android = is_desktop_android|default(0) %}
+    {% if is_desktop_android == "true" %}
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    {% endif %}
     <!-- TODO(crbug.com/40259231): Remove this tools:ignore attribute once it's no longer necessary. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" tools:ignore="SystemPermissionTypo" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" tools:ignore="SystemPermissionTypo" />
@@ -143,8 +147,8 @@ by a child template that "extends" this file.
     <!-- Vivaldi/Automotive -->
     {% if is_oem_automotive_build == 'false' %}
     <uses-permission android:name="android.permission.NFC"/>
-    {% endif %}
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    {% endif %}
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission-sdk-23 android:name="android.permission.READ_MEDIA_AUDIO"/>
@@ -607,7 +611,11 @@ by a child template that "extends" this file.
         </activity>
         <!-- ChromeTabbedActivity related -->
         <activity android:name="org.chromium.chrome.browser.ChromeTabbedActivity"
+            {% if is_oem_automotive_build == 'true' %} {# Vivaldi/Automotive #}
+            android:theme="@style/Theme.Chromium.TabbedMode.Vivaldi.Automotive"
+            {% else %}
             android:theme="@style/Theme.Chromium.TabbedMode"
+            {% endif %} {# Vivaldi/Automotive #}
             android:exported="true"
             android:launchMode="singleTask"
             {% if is_oem_automotive_build == 'false' %} {# Vivaldi/Automotive #}
@@ -620,7 +628,11 @@ by a child template that "extends" this file.
             {% endif %} {# Vivaldi/Automotive #}
             {% block chrome_activity_common %}
             android:windowSoftInputMode="adjustResize"
+            {% if is_oem_gas_build == 'true' %} {# Vivaldi/Automotive GAS #}
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|uiMode|navigation|density"
+            {% else %} {# Vivaldi/Automotive GAS #}
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode|navigation|density"
+            {% endif %} {# Vivaldi/Automotive GAS #}
             android:hardwareAccelerated="false"
             {% endblock %}
         >
@@ -830,6 +842,10 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
         </activity>
+        <activity android:name="org.vivaldi.browser.preferences.StartPageOpenPreferenceFragment"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+         android:exported="false">
+        </activity>
         <activity android:name="org.vivaldi.browser.preferences.ManageTrackerBlockingSourcesPreference"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
@@ -888,15 +904,7 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
         </activity>
-        <activity android:name="org.vivaldi.browser.preferences.VivaldiSearchEngineSettings"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-            android:exported="false">
-        </activity>
         <activity android:name="org.vivaldi.browser.preferences.VivaldiNewSyncPreference"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-            android:exported="false">
-        </activity>
-        <activity android:name="org.vivaldi.browser.preferences.VivaldiAboutPreferences"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
         </activity>
@@ -921,6 +929,10 @@ by a child template that "extends" this file.
             android:exported="false">
         </activity>
         <activity android:name="org.vivaldi.browser.preferences.VivaldiTabsPreferences"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:exported="false">
+        </activity>
+        <activity android:name="org.vivaldi.browser.preferences.VivaldiAddressBarPreferences"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
         </activity>
@@ -1201,40 +1213,6 @@ by a child template that "extends" this file.
             </intent-filter>
         </activity>
 
-        <!-- configChanges is set here to prevent the destruction of the
-             activity after configuration changes. Since the bulk of this
-             activity's logic is in a feature module, restoring the activity
-             via a Bundle doesn't work. -->
-        <activity
-        android:name="org.chromium.chrome.browser.webauth.authenticator.CableAuthenticatorActivity"
-        android:configChanges="density|fontScale|keyboard|keyboardHidden|layoutDirection|locale|mcc|mnc|navigation|orientation|screenLayout|screenSize|smallestScreenSize|touchscreen|uiMode"
-        android:theme="@style/Theme.Chromium.Activity.Fullscreen"
-        android:label="@string/cablev2_activity_title"
-        android:permission="com.google.android.gms.auth.cryptauth.permission.CABLEV2_SERVER_LINK"
-        android:exported="true"
-        android:excludeFromRecents="true"
-        android:launchMode="singleTop">
-        </activity>
-
-        <!-- configChanges is set here to prevent the destruction of the
-             activity after configuration changes. Since the bulk of this
-             activity's logic is in a feature module, restoring the activity
-             via a Bundle doesn't work. -->
-        <activity
-        android:name="org.chromium.chrome.browser.webauth.authenticator.CableAuthenticatorUSBActivity"
-        android:configChanges="density|fontScale|keyboard|keyboardHidden|layoutDirection|locale|mcc|mnc|navigation|orientation|screenLayout|screenSize|smallestScreenSize|touchscreen|uiMode"
-        android:theme="@style/Theme.Chromium.Activity.Fullscreen"
-        android:label="@string/cablev2_activity_title"
-        android:exported="false"
-        android:excludeFromRecents="true"
-        android:launchMode="singleTop">
-            <intent-filter>
-                 <action android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED" />
-            </intent-filter>
-            <meta-data android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"
-                android:resource="@xml/phone_as_a_security_key_accessory_filter" />
-        </activity>
-
         <receiver
             android:name="org.chromium.chrome.browser.browserservices.ui.trustedwebactivity.DisclosureAcceptanceBroadcastReceiver"
             android:exported="false" />
@@ -1449,7 +1427,7 @@ by a child template that "extends" this file.
 
         <activity
             android:name="org.chromium.chrome.browser.notifications.NotificationIntentInterceptor$TrampolineActivity"
-            android:theme="@style/Theme.BrowserUI.NoDisplay"
+            android:theme="@style/Theme.BrowserUI.Translucent.NoTitleBar"
             android:exported="false"
             android:autoRemoveFromRecents="true"
             android:excludeFromRecents="true"
@@ -1474,6 +1452,13 @@ by a child template that "extends" this file.
             android:documentLaunchMode="always"
             android:noHistory="true"/>
 
+        <!-- Activities for task manager. -->
+        <activity
+            android:name="org.chromium.chrome.browser.task_manager.TaskManagerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Chromium.Activity">
+        </activity>
+
         <receiver android:name="org.chromium.chrome.browser.notifications.scheduler.DisplayAgent$Receiver"
             android:exported="false"/>
 
@@ -1494,6 +1479,9 @@ by a child template that "extends" this file.
             android:exported="false"/>
 
         <service android:name="org.chromium.chrome.browser.media.MediaCaptureNotificationService"
+            {% if is_desktop_android == "true" %}
+            android:foregroundServiceType="camera|microphone"
+            {% endif %}
             android:exported="false"/>
         <service android:name="org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerServices$PlaybackListenerService"
             android:foregroundServiceType="mediaPlayback" android:exported="false">
@@ -1555,7 +1543,7 @@ by a child template that "extends" this file.
             android:screenOrientation="landscape"
             android:label="WebXR"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
-            tools:ignore="NonResizeableActivity">
+            tools:ignore="NonResizeableActivity,DiscouragedApi">
             <property android:name="android.window.PROPERTY_ACTIVITY_STARTS_IN_IMMERSIVE_XR"
                 android:value="true" />
             <intent-filter>

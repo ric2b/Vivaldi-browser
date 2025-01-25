@@ -23,7 +23,7 @@ struct Appcast {
     let deltaFromVersionsUsed: Set<UpdateVersion>
 }
 
-func makeAppcasts(archivesSourceDir: URL, outputPathURL: URL?, cacheDirectory cacheDir: URL, keys: PrivateKeys, versions: Set<String>?, maxVersionsPerBranchInFeed: Int, newChannel: String?, majorVersion: String?, maximumDeltas: Int, deltaCompressionModeDescription: String, deltaCompressionLevel: UInt8, disableNestedCodeCheck: Bool, downloadURLPrefix: URL?, releaseNotesURLPrefix: URL?, verbose: Bool) throws -> [FeedName: Appcast] {
+func makeAppcasts(archivesSourceDir: URL, outputPathURL: URL?, cacheDirectory cacheDir: URL, keys: PrivateKeys, versions: Set<String>?, maxVersionsPerBranchInFeed: Int, newChannel: String?, majorVersion: String?, maximumDeltas: Int, deltaCompressionModeDescription: String, deltaCompressionLevel: UInt8, disableNestedCodeCheck: Bool, downloadURLPrefix: URL?, releaseNotesURLPrefix: URL?, verbose: Bool, deltaSuffix: String) throws -> [FeedName: Appcast] {
     let standardComparator = SUStandardVersionComparator()
     let descendingVersionComparator: (String, String) -> Bool = {
         return standardComparator.compareVersion($0, toVersion: $1) == .orderedDescending
@@ -45,7 +45,12 @@ func makeAppcasts(archivesSourceDir: URL, outputPathURL: URL?, cacheDirectory ca
     // Group updates by appcast feed
     var updatesByAppcast: [FeedName: [ArchiveItem]] = [:]
     for update in allUpdates {
-        let appcastFile = update.feedURL?.lastPathComponent ?? "appcast.xml"
+        //let appcastFile = update.feedURL?.lastPathComponent ?? "appcast.xml"
+        // For Vivaldi
+        var appcastFile = update.feedURL?.lastPathComponent ?? "appcast.xml"
+        if (deltaSuffix != "") {
+          appcastFile = "appcast." + deltaSuffix + ".xml"
+        } // End Vivaldi
         updatesByAppcast[appcastFile, default: []].append(update)
     }
     
@@ -244,7 +249,12 @@ func makeAppcasts(archivesSourceDir: URL, outputPathURL: URL?, cacheDirectory ca
                     continue
                 }
 
-                let deltaBaseName = appBaseName + latestItem.version + "-" + item.version
+                //let deltaBaseName = appBaseName + latestItem.version + "-" + item.version
+                // For Vivaldi
+                var deltaBaseName = appBaseName + "-" + latestItem.version + "-" + item.version
+                if (deltaSuffix != "") {
+                  deltaBaseName = appBaseName + "-" + latestItem.version + "-" + item.version + "." + deltaSuffix
+                } // End Vivaldi
                 let deltaPath = archivesSourceDir.appendingPathComponent(deltaBaseName).appendingPathExtension("delta")
                 
                 deltaPathsUsed.insert(deltaPath.path)

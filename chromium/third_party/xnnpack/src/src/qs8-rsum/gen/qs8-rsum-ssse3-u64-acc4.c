@@ -6,10 +6,9 @@
 //
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
-
 #include <assert.h>
 
-#include <immintrin.h>
+#include <tmmintrin.h>
 
 #include "xnnpack/common.h"
 #include "xnnpack/reduce.h"
@@ -18,14 +17,19 @@ void xnn_qs8_rsum_ukernel__ssse3_u64_acc4(
     size_t batch,
     const int8_t* input,
     int32_t* output,
-    const union xnn_qs8_rsum_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_qs8_rsum_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(input != NULL);
   assert(output != NULL);
   assert(params != NULL);
 
-  const __m128i vone = _mm_load_si128((const __m128i*) &params->ssse3.onemask_table[0]);
+  XNN_ALIGN(16) static const int8_t onemask_table[32] = {
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  };
+
+  const __m128i vone = _mm_load_si128((const __m128i*) &onemask_table[0]);
   const __m128i vone_16 = _mm_srli_epi16(vone, 8);
   __m128i vacc0 = _mm_setzero_si128();
   __m128i vacc1 = _mm_setzero_si128();
@@ -33,13 +37,13 @@ void xnn_qs8_rsum_ukernel__ssse3_u64_acc4(
   __m128i vacc3 = _mm_setzero_si128();
 
   // 256 int8s may be summed into an int16 before overflowing.
-  // Each register has 8 lanes and there are 4 accumulators so batch size is 8192
-  for (; batch >= 8192; batch -= 8192) {
+  // Each register has 16 lanes and there are 4 accumulators so batch size is 16384
+  for (; batch >= 16384; batch -= 16384) {
     __m128i vacc16_0 = _mm_setzero_si128();
     __m128i vacc16_1 = _mm_setzero_si128();
     __m128i vacc16_2 = _mm_setzero_si128();
     __m128i vacc16_3 = _mm_setzero_si128();
-    for (size_t current_batch = 8192; current_batch > 0; current_batch -= 64) {
+    for (size_t current_batch = 16384; current_batch > 0; current_batch -= 64) {
       const __m128i vt0 = _mm_maddubs_epi16(vone, _mm_loadu_si128((const __m128i*) input)); input += 16;
       const __m128i vt1 = _mm_maddubs_epi16(vone, _mm_loadu_si128((const __m128i*) input)); input += 16;
       const __m128i vt2 = _mm_maddubs_epi16(vone, _mm_loadu_si128((const __m128i*) input)); input += 16;
@@ -56,7 +60,7 @@ void xnn_qs8_rsum_ukernel__ssse3_u64_acc4(
   }
 
   if (XNN_UNLIKELY(batch != 0)) {
-    assert(batch >= 1 && batch < 8192);
+    assert(batch >= 1 && batch < 16384);
     __m128i vacc16_0 = _mm_setzero_si128();
     __m128i vacc16_1 = _mm_setzero_si128();
     __m128i vacc16_2 = _mm_setzero_si128();
@@ -77,7 +81,7 @@ void xnn_qs8_rsum_ukernel__ssse3_u64_acc4(
     vacc3 = _mm_add_epi32(vacc3, _mm_madd_epi16(vone_16, vacc16_3));
   }
   if (XNN_UNLIKELY(batch != 0)) {
-    assert(batch >= 1 && batch < 2048);
+    assert(batch >= 1 && batch < 4096);
     __m128i vacc16 = _mm_setzero_si128();
     for (; batch >= 16; batch -= 16) {
       const __m128i vt = _mm_maddubs_epi16(vone, _mm_loadu_si128((const __m128i*) input)); input += 16;
@@ -85,7 +89,7 @@ void xnn_qs8_rsum_ukernel__ssse3_u64_acc4(
     }
     if (XNN_UNLIKELY(batch != 0)) {
       assert(batch >= 1 && batch <= 15);
-      const __m128i vonemask = _mm_loadu_si128((const __m128i*) &params->ssse3.onemask_table[16 - batch]);
+      const __m128i vonemask = _mm_loadu_si128((const __m128i*) &onemask_table[16 - batch]);
       const __m128i vt = _mm_maddubs_epi16(vonemask, _mm_loadu_si128((const __m128i*) input));
       vacc16 = _mm_add_epi16(vacc16, vt);
     }

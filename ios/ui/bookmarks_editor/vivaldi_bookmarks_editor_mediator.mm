@@ -50,7 +50,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
 @interface VivaldiBookmarksEditorMediator ()<BooleanObserver,
                                              VivaldiMostVisitedSitesConsumer> {
-  ChromeBrowserState* _browserState;
+  ProfileIOS* _profile;
   // If `_folderNode` is `nullptr`, the user is adding a new folder. Otherwise
   // the user is editing an existing folder.
   const BookmarkNode* _bookmarkNode;
@@ -78,7 +78,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
 - (instancetype)initWithBookmarkModel:(BookmarkModel*)bookmarkModel
                       bookmarkNode:(const bookmarks::BookmarkNode*)bookmarkNode
-                      browserState:(ChromeBrowserState*)browserState {
+                      profile:(ProfileIOS*)profile {
   self = [super init];
   if (self) {
     DCHECK(bookmarkModel);
@@ -87,16 +87,16 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     _bookmarkModel = bookmarkModel;
     _bookmark = bookmarkNode;
     _bookmarkNode = bookmarkNode;
-    _browserState = browserState;
+    _profile = profile;
 
-    _prefs = browserState->GetPrefs();
+    _prefs = profile->GetPrefs();
 
     _faviconLoader =
-        IOSChromeFaviconLoaderFactory::GetForBrowserState(_browserState);
+        IOSChromeFaviconLoaderFactory::GetForProfile(_profile);
 
     VivaldiMostVisitedSitesManager* mostVisitedSiteManager =
         [[VivaldiMostVisitedSitesManager alloc]
-            initWithBrowserState:browserState];
+            initWithProfile:profile];
     mostVisitedSiteManager.consumer = self;
     _mostVisitedSiteManager = mostVisitedSiteManager;
     [_mostVisitedSiteManager start];
@@ -113,7 +113,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
 - (void)disconnect {
   _bookmarkModel = nullptr;
-  _browserState = nullptr;
+  _profile = nullptr;
 
   _faviconLoader = nil;
 
@@ -275,7 +275,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   editedNodes.insert(_bookmarkNode);
   [self.snackbarCommandsHandler
       showSnackbarMessage:bookmark_utils_ios::DeleteBookmarksWithUndoToast(
-            editedNodes, _bookmarkModel, _browserState, FROM_HERE)];
+            editedNodes, _bookmarkModel, _profile, FROM_HERE)];
   [self.consumer bookmarksEditorShouldClose];
 }
 

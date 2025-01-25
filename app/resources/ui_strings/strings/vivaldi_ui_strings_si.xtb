@@ -1,4 +1,46 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="si">
+<translation id="1127811143501539442">{DAYS, plural, =1 {දවස් 1 කට පෙර} other {දවස් # කට පෙර}}</translation>
+<translation id="1156623771253174079">{SECONDS, plural, =1 {විනාඩි 1 කට පෙර} other {විනාඩි # කට පෙර}}</translation>
+<translation id="1368832886055348810">වමේ සිට දකුණට</translation>
+<translation id="1591184457164800433">{MINUTES, plural, =1 {විනාඩි 1 යි } other {විනාඩි # යි }}</translation>
+<translation id="1752946267035950200">{MINUTES, plural, =1 {විනාඩි 1} other {විනාඩි #}}</translation>
+<translation id="1761785978543082658">බ. <ph name="QUANTITY" /></translation>
+<translation id="1801827354178857021">කාලය</translation>
+<translation id="1809410197924942083"><ph name="QUANTITY" /> මෙ.බ./ත.</translation>
+<translation id="1830179671306812954">{HOURS, plural, =1 {පැය 1 යි } other {පැය # යි }}</translation>
+<translation id="1859234291848436338">ලිවීමේ දිශාව</translation>
+<translation id="2297836609126180313"><ph name="QUANTITY" /> ටෙ.බ./ත.</translation>
+<translation id="3049748772180311791">මෙ.බ. <ph name="QUANTITY" /></translation>
+<translation id="3291688615589870984">{DAYS, plural, =1 {දවස් 1} other {දවස් #}}</translation>
+<translation id="3600566671520689681">{DAYS, plural, =1 {දවස් 1 ක් ඉතිරියි} other {දවස් # ක් ඉතිරියි}}</translation>
+<translation id="3618849550573277856">“<ph name="LOOKUP_STRING" />” බලන්න</translation>
+<translation id="3740362395218339114"><ph name="QUANTITY" /> ගි.බ./ත.</translation>
+<translation id="3757388668994797779">ගි.බ. <ph name="QUANTITY" /></translation>
+<translation id="3889424535448813030">දකුණු ඊතලය</translation>
+<translation id="4968171027979920686">{SECONDS, plural, =1 {තත්. 1} other {තත්. #}}</translation>
+<translation id="5076340679995252485">අලවන්න (&amp;P)</translation>
+<translation id="520299402983819650">පෙ.බ. <ph name="QUANTITY" /></translation>
+<translation id="5613020302032141669">වම් ඊතලය</translation>
+<translation id="5754277640426581776">{MINUTES, plural, =1 {විනාඩි 1} other {විනාඩි #}}</translation>
+<translation id="5768079895599174203">{DAYS, plural, =1 {දවස් 1 යි } other {දවස් # යි }}</translation>
+<translation id="5906667377645263094">{SECONDS, plural, =1 {තත්. 1 ක් ඉතිරියි} other {තත්. # ක් ඉතිරියි}}</translation>
+<translation id="5943826764092288734">{HOURS, plural, =1 {පැය 1} other {පැය #}}</translation>
+<translation id="6142413573757616983"><ph name="QUANTITY" /> බ./තත්.</translation>
+<translation id="6404817160109697034">{SECONDS, plural, =1 {තත්. 1 කට පෙර} other {තත්. # කට පෙර}}</translation>
+<translation id="6483402905448010557">{SECONDS, plural, =1 {තත්. 1 කට පෙර} other {තත්. # කට පෙර}}</translation>
+<translation id="6863590663815976734">{HOURS, plural, =1 {පැය 1 ක් ඉතිරියි} other {පැය # ක් ඉතිරියි}}</translation>
+<translation id="6907759265145635167"><ph name="QUANTITY" /> පෙ.බ./ත.</translation>
+<translation id="6974053822202609517">දකුණේ සිට වමට</translation>
+<translation id="7238427729722629793">{MINUTES, plural, =1 {විනාඩි 1 ක් ඉතිරියි} other {විනාඩි # ක් ඉතිරියි}}</translation>
+<translation id="7365057348334984696">{MINUTES, plural, =1 {විනාඩි 1 කට පෙර} other {විනාඩි # කට පෙර}}</translation>
+<translation id="7410957453383678442">{MINUTES, plural, =1 {විනාඩි 1 ක් ඉතිරියි} other {විනාඩි # ක් ඉතිරියි}}</translation>
+<translation id="7460907917090416791">ටෙ.බ. <ph name="QUANTITY" /></translation>
+<translation id="8106081041558092062">{HOURS, plural, =1 {පැය 1 කට පෙර} other {පැය # කට පෙර}}</translation>
+<translation id="8131263257437993507">{SECONDS, plural, =1 {තත්. 1 ක් ඉතිරිය} other {තත්. # ක් ඉතිරිය}}</translation>
+<translation id="8677655579646609597"><ph name="QUANTITY" /> කි.බ./ත.</translation>
+<translation id="8798099450830957504">පෙරනිමිය</translation>
+<translation id="8901569739625249689">කි.බ. <ph name="QUANTITY" /></translation>
+<translation id="9044832324875206639">{SECONDS, plural, =1 {තත්. 1} other {තත්. #}}</translation>
 </translationbundle>

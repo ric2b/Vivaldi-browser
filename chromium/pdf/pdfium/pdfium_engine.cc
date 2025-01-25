@@ -24,6 +24,7 @@
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
+#include "base/dcheck_is_on.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -92,6 +93,17 @@
 
 #if defined(PDF_ENABLE_XFA)
 #include "gin/public/cppgc.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PDF_INK2)
+#include "pdf/pdfium/pdfium_ink_reader.h"
+#include "pdf/pdfium/pdfium_ink_writer.h"
+#include "third_party/ink/src/ink/strokes/stroke.h"
+#endif
+
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+#include "pdf/pdfium/pdfium_on_demand_searchifier.h"
+#include "ui/accessibility/ax_features.mojom-features.h"
 #endif
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -236,7 +248,7 @@ void FormatStringForOS(std::u16string* text) {
 // For triple clicks, look for line breaks.
 // The actual algorithm used in Blink is much more complicated, so do a simple
 // approximation.
-bool FindMultipleClickBoundary(bool is_double_click, char16_t cur) {
+bool FindMultipleClickBoundary(bool is_double_click, uint32_t cur) {
   if (!is_double_click)
     return cur == '\n';
 
@@ -552,6 +564,7 @@ PDFiumEngine::PDFiumEngine(PDFiumEngineClient* client,
       form_filler_(this, script_option),
       mouse_down_state_(PDFiumPage::NONSELECTABLE_AREA,
                         PDFiumPage::LinkTarget()),
+      engine_creation_time_(base::TimeTicks::Now()),
       print_(this) {
 #if defined(PDF_ENABLE_V8)
   if (script_option != PDFiumFormFiller::ScriptOption::kNoJavaScript)
@@ -564,9 +577,27 @@ PDFiumEngine::PDFiumEngine(PDFiumEngineClient* client,
 }
 
 PDFiumEngine::~PDFiumEngine() {
+  if (!client_->IsPrintPreview()) {
+    base::UmaHistogramLongTimes("PDF.EngineLifetime",
+                                base::TimeTicks::Now() - engine_creation_time_);
+  }
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  // `searchifier_` is created when at least one page needs searchify.
+  if (searchifier_) {
+    base::UmaHistogramBoolean("PDF.SearchifySuccessful", has_searchify_text_);
+  }
+
+  // Should be reset before document is unloaded.
+  searchifier_.reset();
+#endif
+
   // Clear all the containers that can prevent unloading.
   find_results_.clear();
   selection_.clear();
+#if BUILDFLAG(ENABLE_PDF_INK2)
+  ink_stroke_objects_map_.clear();
+  stroked_pages_unload_preventers_.clear();
+#endif
 
   for (auto& page : pages_)
     page->Unload();
@@ -654,6 +685,12 @@ void PDFiumEngine::Paint(const gfx::Rect& rect,
   // painting the visible pages.
   base::TimeTicks begin_time = base::TimeTicks::Now();
 
+  if (!first_paint_metric_reported_ && !client_->IsPrintPreview()) {
+    first_paint_metric_reported_ = true;
+    base::UmaHistogramMediumTimes("PDF.FirstPaintTime",
+                                  begin_time - engine_creation_time_);
+  }
+
   for (size_t i = 0; i < visible_pages_.size(); ++i) {
     int index = visible_pages_[i];
     // Convert the current page's rectangle to screen rectangle.  We do this
@@ -685,11 +722,11 @@ void PDFiumEngine::Paint(const gfx::Rect& rect,
     }
 
     if (pages_[index]->available()) {
-      int progressive = GetProgressiveIndex(index);
-      if (progressive != -1) {
-        DCHECK_GE(progressive, 0);
-        DCHECK_LT(static_cast<size_t>(progressive), progressive_paints_.size());
-        if (progressive_paints_[progressive].rect() != dirty_in_screen) {
+      std::optional<size_t> progressive_index = GetProgressiveIndex(index);
+      if (progressive_index.has_value()) {
+        CHECK_LT(progressive_index.value(), progressive_paints_.size());
+        if (progressive_paints_[progressive_index.value()].rect() !=
+            dirty_in_screen) {
           // The PDFium code can only handle one progressive paint at a time, so
           // queue this up. Previously we used to merge the rects when this
           // happened, but it made scrolling up on complex PDFs very slow since
@@ -700,16 +737,16 @@ void PDFiumEngine::Paint(const gfx::Rect& rect,
         }
       }
 
-      if (progressive == -1) {
-        progressive = StartPaint(index, dirty_in_screen);
-        progressive_paint_timeout_ = kMaxInitialProgressivePaintTime;
-      } else {
+      if (progressive_index.has_value()) {
         progressive_paint_timeout_ = kMaxProgressivePaintTime;
+      } else {
+        progressive_index = StartPaint(index, dirty_in_screen);
+        progressive_paint_timeout_ = kMaxInitialProgressivePaintTime;
       }
 
-      progressive_paints_[progressive].set_painted(true);
-      if (ContinuePaint(progressive, image_data)) {
-        FinishPaint(progressive, image_data);
+      progressive_paints_[progressive_index.value()].set_painted(true);
+      if (ContinuePaint(progressive_index.value(), image_data)) {
+        FinishPaint(progressive_index.value(), image_data);
         ready.push_back(dirty_in_screen);
       } else {
         pending.push_back(dirty_in_screen);
@@ -725,18 +762,15 @@ void PDFiumEngine::Paint(const gfx::Rect& rect,
 }
 
 void PDFiumEngine::PostPaint() {
-  for (size_t i = 0; i < progressive_paints_.size(); ++i) {
-    if (progressive_paints_[i].painted())
-      continue;
-
-    // This rectangle must have been merged with another one, that's why we
-    // weren't asked to paint it. Remove it or otherwise we'll never finish
-    // painting.
-    FPDF_RenderPage_Close(
-        pages_[progressive_paints_[i].page_index()]->GetPage());
-    progressive_paints_.erase(progressive_paints_.begin() + i);
-    --i;
+  // Remove all entries that were never painted, as they must have been merged
+  // with other entries. If they are not removed, painting will never finish.
+  for (const ProgressivePaint& entry : progressive_paints_) {
+    if (!entry.painted()) {
+      FPDF_RenderPage_Close(pages_[entry.page_index()]->GetPage());
+    }
   }
+  std::erase_if(progressive_paints_,
+                [](const ProgressivePaint& entry) { return !entry.painted(); });
 }
 
 bool PDFiumEngine::HandleDocumentLoad(std::unique_ptr<UrlLoader> loader,
@@ -783,6 +817,10 @@ void PDFiumEngine::AppendPage(PDFiumEngine* engine, int index) {
 }
 
 std::vector<uint8_t> PDFiumEngine::GetSaveData() {
+#if BUILDFLAG(ENABLE_PDF_INK2)
+  RegenerateContents();
+#endif
+
   PDFiumMemBufferFileWrite output_file_write;
   if (!FPDF_SaveAsCopy(doc(), &output_file_write, 0))
     return std::vector<uint8_t>();
@@ -1030,6 +1068,9 @@ bool PDFiumEngine::HandleInputEvent(const blink::WebInputEvent& event) {
 
 void PDFiumEngine::PrintBegin() {
   FORM_DoDocumentAAction(form(), FPDFDOC_AACTION_WP);
+#if BUILDFLAG(ENABLE_PDF_INK2)
+  RegenerateContents();
+#endif
 }
 
 std::vector<uint8_t> PDFiumEngine::PrintPages(
@@ -1253,7 +1294,7 @@ void PDFiumEngine::OnMultipleClick(int click_count,
   // now it doesn't.
   int start_index = char_index;
   do {
-    char16_t cur = pages_[page_index]->GetCharAtIndex(start_index);
+    uint32_t cur = pages_[page_index]->GetCharUnicode(start_index);
     if (FindMultipleClickBoundary(is_double_click, cur))
       break;
   } while (--start_index >= 0);
@@ -1263,7 +1304,7 @@ void PDFiumEngine::OnMultipleClick(int click_count,
   int end_index = char_index;
   const int total = pages_[page_index]->GetCharCount();
   for (; end_index < total; ++end_index) {
-    char16_t cur = pages_[page_index]->GetCharAtIndex(end_index);
+    uint32_t cur = pages_[page_index]->GetCharUnicode(end_index);
     if (FindMultipleClickBoundary(is_double_click, cur))
       break;
   }
@@ -1693,8 +1734,7 @@ bool PDFiumEngine::ExtendSelection(int page_index, int char_index) {
     // First make sure that there are no gaps in selection, i.e. if mousedown on
     // page one but we only get mousemove over page three, we want page two.
     for (int i = last_page_index + 1; i < page_index; ++i) {
-      selection_.push_back(
-          PDFiumRange(pages_[i].get(), 0, pages_[i]->GetCharCount()));
+      selection_.push_back(PDFiumRange::AllTextOnPage(pages_[i].get()));
     }
 
     int count = pages_[last_page_index]->GetCharCount();
@@ -1710,8 +1750,7 @@ bool PDFiumEngine::ExtendSelection(int page_index, int char_index) {
     // First make sure that there are no gaps in selection, i.e. if mousedown on
     // page three but we only get mousemove over page one, we want page two.
     for (int i = last_page_index - 1; i > page_index; --i) {
-      selection_.push_back(
-          PDFiumRange(pages_[i].get(), 0, pages_[i]->GetCharCount()));
+      selection_.push_back(PDFiumRange::AllTextOnPage(pages_[i].get()));
     }
 
     int count = pages_[page_index]->GetCharCount();
@@ -1808,6 +1847,8 @@ void PDFiumEngine::StartFind(const std::u16string& text, bool case_sensitive) {
   bool first_search = (current_find_text_ != text);
   int character_to_start_searching_from = 0;
   if (first_search) {
+    // Do not move `selection_` here, as StopFind() expects to start with the
+    // existing selection.
     std::vector<PDFiumRange> old_selection = selection_;
     StopFind();
     current_find_text_ = text;
@@ -1909,7 +1950,7 @@ void PDFiumEngine::SearchUsingPDFium(const std::u16string& term,
       break;
     }
 
-    AddFindResult(result);
+    AddFindResult(std::move(result));
   }
 
   FPDFText_FindClose(find);
@@ -2000,8 +2041,7 @@ void PDFiumEngine::SearchUsingICU(const std::u16string& term,
     return;
 
   std::vector<PDFiumEngineClient::SearchStringResult> results =
-      client_->SearchString(adjusted_page_text.c_str(), adjusted_term.c_str(),
-                            case_sensitive);
+      client_->SearchString(adjusted_term, adjusted_page_text, case_sensitive);
   for (const auto& result : results) {
     // Need to convert from adjusted page text start to page text start, by
     // incrementing for all the characters adjusted before it in the string.
@@ -2047,7 +2087,7 @@ void PDFiumEngine::SearchUsingICU(const std::u16string& term,
   }
 }
 
-void PDFiumEngine::AddFindResult(const PDFiumRange& result) {
+void PDFiumEngine::AddFindResult(PDFiumRange result) {
   // Figure out where to insert the new location, since we could have
   // started searching midway and now we wrapped.
   size_t result_index;
@@ -2060,7 +2100,7 @@ void PDFiumEngine::AddFindResult(const PDFiumRange& result) {
       break;
     }
   }
-  find_results_.insert(find_results_.begin() + result_index, result);
+  find_results_.insert(find_results_.begin() + result_index, std::move(result));
   UpdateTickMarks();
   client_->NotifyNumberOfFindResultsChanged(find_results_.size(), false);
 }
@@ -2206,6 +2246,12 @@ void PDFiumEngine::DisplayAnnotations(bool display) {
 
   render_annots_ = display;
   InvalidateAllPages();
+}
+
+std::u16string PDFiumEngine::GetPageText(int page_index) {
+  CHECK(PageIndexInBounds(page_index));
+  auto range = PDFiumRange::AllTextOnPage(pages_[page_index].get());
+  return range.GetText();
 }
 
 void PDFiumEngine::InvalidateAllPages() {
@@ -2359,8 +2405,11 @@ void PDFiumEngine::SelectAll() {
 #endif  // BUILDFLAG(ENABLE_PDF_INK2)
 
   if (focus_field_type_ == FocusFieldType::kText) {
-    if (PageIndexInBounds(last_focused_page_))
-      FORM_SelectAllText(form(), pages_[last_focused_page_]->GetPage());
+    if (PageIndexInBounds(last_focused_page_)) {
+      FPDF_PAGE page = pages_[last_focused_page_]->GetPage();
+      FORM_SelectAllText(form(), page);
+      SetFormSelectedText(form(), page);
+    }
     return;
   }
 
@@ -2368,8 +2417,9 @@ void PDFiumEngine::SelectAll() {
 
   selection_.clear();
   for (const auto& page : pages_) {
-    if (page->available())
-      selection_.push_back(PDFiumRange(page.get(), 0, page->GetCharCount()));
+    if (page->available()) {
+      selection_.push_back(PDFiumRange::AllTextOnPage(page.get()));
+    }
   }
 }
 
@@ -2584,10 +2634,6 @@ int PDFiumEngine::GetMostVisiblePage() {
   return most_visible_page_;
 }
 
-gfx::Rect PDFiumEngine::GetPageBoundsRect(int index) {
-  return pages_[index]->rect();
-}
-
 gfx::Rect PDFiumEngine::GetPageContentsRect(int index) {
   return GetScreenRect(pages_[index]->rect());
 }
@@ -2612,59 +2658,9 @@ void PDFiumEngine::HandleLongPress(const blink::WebTouchEvent& event) {
   OnMouseDown(mouse_event);
 }
 
-int PDFiumEngine::GetCharCount(int page_index) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetCharCount();
-}
-
-gfx::RectF PDFiumEngine::GetCharBounds(int page_index, int char_index) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetCharBounds(char_index);
-}
-
-uint32_t PDFiumEngine::GetCharUnicode(int page_index, int char_index) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetCharUnicode(char_index);
-}
-
-std::optional<AccessibilityTextRunInfo> PDFiumEngine::GetTextRunInfo(
-    int page_index,
-    int start_char_index) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetTextRunInfo(start_char_index);
-}
-
-std::vector<AccessibilityLinkInfo> PDFiumEngine::GetLinkInfo(
-    int page_index,
-    const std::vector<AccessibilityTextRunInfo>& text_runs) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetLinkInfo(text_runs);
-}
-
-std::vector<AccessibilityImageInfo> PDFiumEngine::GetImageInfo(
-    int page_index,
-    uint32_t text_run_count) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetImageInfo(text_run_count);
-}
-
 SkBitmap PDFiumEngine::GetImageForOcr(int page_index, int image_index) {
   DCHECK(PageIndexInBounds(page_index));
   return pages_[page_index]->GetImageForOcr(image_index);
-}
-
-std::vector<AccessibilityHighlightInfo> PDFiumEngine::GetHighlightInfo(
-    int page_index,
-    const std::vector<AccessibilityTextRunInfo>& text_runs) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetHighlightInfo(text_runs);
-}
-
-std::vector<AccessibilityTextFieldInfo> PDFiumEngine::GetTextFieldInfo(
-    int page_index,
-    uint32_t text_run_count) {
-  DCHECK(PageIndexInBounds(page_index));
-  return pages_[page_index]->GetTextFieldInfo(text_run_count);
 }
 
 bool PDFiumEngine::GetPrintScaling() {
@@ -3168,7 +3164,7 @@ std::optional<size_t> PDFiumEngine::GetAdjacentPageIndexForTwoUpView(
   return adjacent_page_index;
 }
 
-int PDFiumEngine::StartPaint(int page_index, const gfx::Rect& dirty) {
+size_t PDFiumEngine::StartPaint(int page_index, const gfx::Rect& dirty) {
   // For the first time we hit paint, do nothing and just record the paint for
   // the next callback.  This keeps the UI responsive in case the user is doing
   // a lot of scrolling.
@@ -3176,59 +3172,59 @@ int PDFiumEngine::StartPaint(int page_index, const gfx::Rect& dirty) {
   return progressive_paints_.size() - 1;
 }
 
-bool PDFiumEngine::ContinuePaint(int progressive_index, SkBitmap& image_data) {
-  DCHECK_GE(progressive_index, 0);
-  DCHECK_LT(static_cast<size_t>(progressive_index), progressive_paints_.size());
+bool PDFiumEngine::ContinuePaint(size_t progressive_index,
+                                 SkBitmap& image_data) {
+  CHECK_LT(progressive_index, progressive_paints_.size());
+  auto& paint = progressive_paints_[progressive_index];
 
   last_progressive_start_time_ = base::Time::Now();
 
-  int page_index = progressive_paints_[progressive_index].page_index();
-  DCHECK(PageIndexInBounds(page_index));
-
-  int rv;
-  FPDF_PAGE page = pages_[page_index]->GetPage();
-  if (progressive_paints_[progressive_index].bitmap()) {
-    rv = FPDF_RenderPage_Continue(page, this);
-  } else {
-    int start_x;
-    int start_y;
-    int size_x;
-    int size_y;
-    gfx::Rect dirty = progressive_paints_[progressive_index].rect();
-    GetPDFiumRect(page_index, dirty, &start_x, &start_y, &size_x, &size_y);
-
-    bool has_alpha = !!FPDFPage_HasTransparency(page);
-    ScopedFPDFBitmap new_bitmap = CreateBitmap(dirty, has_alpha, image_data);
-    FPDFBitmap_FillRect(new_bitmap.get(), start_x, start_y, size_x, size_y,
-                        0xFFFFFFFF);
-    rv = FPDF_RenderPageBitmap_Start(
-        new_bitmap.get(), page, start_x, start_y, size_x, size_y,
-        ToPDFiumRotation(layout_.options().default_page_orientation()),
-        GetRenderingFlags(), this);
-    progressive_paints_[progressive_index].SetBitmapAndImageData(
-        std::move(new_bitmap), image_data);
+  CHECK(PageIndexInBounds(paint.page_index()));
+  FPDF_PAGE page = pages_[paint.page_index()]->GetPage();
+  if (paint.bitmap()) {
+    return FPDF_RenderPage_Continue(page, this) != FPDF_RENDER_TOBECONTINUED;
   }
-  return rv != FPDF_RENDER_TOBECONTINUED;
+
+  const gfx::Rect& dirty = paint.rect();
+  const gfx::Rect pdfium_rect = GetPDFiumRect(paint.page_index(), dirty);
+
+  const bool has_alpha = !!FPDFPage_HasTransparency(page);
+  uint32_t fill_color;
+  if (base::FeatureList::IsEnabled(features::kPdfPaintManagerDrawsBackground)) {
+    // When `has_alpha` is true, use a transparent bitmap to render correctly.
+    // If the bitmap was painted white, then certain blend operations would
+    // blend into the white color and draw incorrectly. Instead, PaintManager
+    // will draw the white page under this bitmap.
+    fill_color = has_alpha ? 0x00000000 : 0xFFFFFFFF;
+  } else {
+    // In the old code, which is here as a fallback, `fill_color` is always
+    // white, as PaintManager does not draw the page's background.
+    fill_color = 0xFFFFFFFF;
+  }
+  ScopedFPDFBitmap new_bitmap = CreateBitmap(dirty, has_alpha, image_data);
+  FPDF_BITMAP new_bitmap_ptr = new_bitmap.get();
+  paint.SetBitmapAndImageData(std::move(new_bitmap), image_data);
+  FPDFBitmap_FillRect(new_bitmap_ptr, pdfium_rect.x(), pdfium_rect.y(),
+                      pdfium_rect.width(), pdfium_rect.height(), fill_color);
+  return FPDF_RenderPageBitmap_Start(
+             new_bitmap_ptr, page, pdfium_rect.x(), pdfium_rect.y(),
+             pdfium_rect.width(), pdfium_rect.height(),
+             ToPDFiumRotation(layout_.options().default_page_orientation()),
+             GetRenderingFlags(), this) != FPDF_RENDER_TOBECONTINUED;
 }
 
-void PDFiumEngine::FinishPaint(int progressive_index, SkBitmap& image_data) {
-  DCHECK_GE(progressive_index, 0);
-  DCHECK_LT(static_cast<size_t>(progressive_index), progressive_paints_.size());
+void PDFiumEngine::FinishPaint(size_t progressive_index, SkBitmap& image_data) {
+  CHECK_LT(progressive_index, progressive_paints_.size());
 
   int page_index = progressive_paints_[progressive_index].page_index();
   gfx::Rect dirty_in_screen = progressive_paints_[progressive_index].rect();
 
-  int start_x;
-  int start_y;
-  int size_x;
-  int size_y;
   FPDF_BITMAP bitmap = progressive_paints_[progressive_index].bitmap();
-  GetPDFiumRect(page_index, dirty_in_screen, &start_x, &start_y, &size_x,
-                &size_y);
+  const gfx::Rect pdfium_rect = GetPDFiumRect(page_index, dirty_in_screen);
 
   // Draw the forms.
-  FPDF_FFLDraw(form(), bitmap, pages_[page_index]->GetPage(), start_x, start_y,
-               size_x, size_y,
+  FPDF_FFLDraw(form(), bitmap, pages_[page_index]->GetPage(), pdfium_rect.x(),
+               pdfium_rect.y(), pdfium_rect.width(), pdfium_rect.height(),
                ToPDFiumRotation(layout_.options().default_page_orientation()),
                GetRenderingFlags());
 
@@ -3315,10 +3311,9 @@ void PDFiumEngine::FillPageSides(int progressive_index) {
                       client_->GetBackgroundColor());
 }
 
-void PDFiumEngine::PaintPageShadow(int progressive_index,
+void PDFiumEngine::PaintPageShadow(size_t progressive_index,
                                    SkBitmap& image_data) {
-  DCHECK_GE(progressive_index, 0);
-  DCHECK_LT(static_cast<size_t>(progressive_index), progressive_paints_.size());
+  CHECK_LT(progressive_index, progressive_paints_.size());
 
   int page_index = progressive_paints_[progressive_index].page_index();
   gfx::Rect dirty_in_screen = progressive_paints_[progressive_index].rect();
@@ -3337,10 +3332,9 @@ void PDFiumEngine::PaintPageShadow(int progressive_index,
   DrawPageShadow(page_rect, shadow_rect, dirty_in_screen, image_data);
 }
 
-void PDFiumEngine::DrawSelections(int progressive_index,
+void PDFiumEngine::DrawSelections(size_t progressive_index,
                                   SkBitmap& image_data) const {
-  DCHECK_GE(progressive_index, 0);
-  DCHECK_LT(static_cast<size_t>(progressive_index), progressive_paints_.size());
+  CHECK_LT(progressive_index, progressive_paints_.size());
 
   int page_index = progressive_paints_[progressive_index].page_index();
   gfx::Rect dirty_in_screen = progressive_paints_[progressive_index].rect();
@@ -3388,13 +3382,10 @@ void PDFiumEngine::DrawSelections(int progressive_index,
 void PDFiumEngine::PaintUnavailablePage(int page_index,
                                         const gfx::Rect& dirty,
                                         SkBitmap& image_data) {
-  int start_x;
-  int start_y;
-  int size_x;
-  int size_y;
-  GetPDFiumRect(page_index, dirty, &start_x, &start_y, &size_x, &size_y);
+  const gfx::Rect pdfium_rect = GetPDFiumRect(page_index, dirty);
   ScopedFPDFBitmap bitmap(CreateBitmap(dirty, /*has_alpha=*/false, image_data));
-  FPDFBitmap_FillRect(bitmap.get(), start_x, start_y, size_x, size_y,
+  FPDFBitmap_FillRect(bitmap.get(), pdfium_rect.x(), pdfium_rect.y(),
+                      pdfium_rect.width(), pdfium_rect.height(),
                       kPendingPageColor);
 
   gfx::Rect loading_text_in_screen(
@@ -3403,12 +3394,12 @@ void PDFiumEngine::PaintUnavailablePage(int page_index,
   loading_text_in_screen = GetScreenRect(loading_text_in_screen);
 }
 
-int PDFiumEngine::GetProgressiveIndex(int page_index) const {
+std::optional<size_t> PDFiumEngine::GetProgressiveIndex(int page_index) const {
   for (size_t i = 0; i < progressive_paints_.size(); ++i) {
     if (progressive_paints_[i].page_index() == page_index)
       return i;
   }
-  return -1;
+  return std::nullopt;
 }
 
 ScopedFPDFBitmap PDFiumEngine::CreateBitmap(const gfx::Rect& rect,
@@ -3424,19 +3415,11 @@ ScopedFPDFBitmap PDFiumEngine::CreateBitmap(const gfx::Rect& rect,
       base::checked_cast<int>(region.value().stride)));
 }
 
-void PDFiumEngine::GetPDFiumRect(int page_index,
-                                 const gfx::Rect& rect,
-                                 int* start_x,
-                                 int* start_y,
-                                 int* size_x,
-                                 int* size_y) const {
+gfx::Rect PDFiumEngine::GetPDFiumRect(int page_index,
+                                      const gfx::Rect& rect) const {
   gfx::Rect page_rect = GetScreenRect(pages_[page_index]->rect());
   page_rect.Offset(-rect.x(), -rect.y());
-
-  *start_x = page_rect.x();
-  *start_y = page_rect.y();
-  *size_x = page_rect.width();
-  *size_y = page_rect.height();
+  return page_rect;
 }
 
 int PDFiumEngine::GetRenderingFlags() const {
@@ -3484,14 +3467,6 @@ gfx::Rect PDFiumEngine::GetPageScreenRect(int page_index) const {
 
 gfx::Rect PDFiumEngine::GetScreenRect(const gfx::Rect& rect) const {
   return draw_utils::GetScreenRect(rect, position_, current_zoom_);
-}
-
-gfx::RectF PDFiumEngine::GetPageBoundingBox(int page_index) {
-  PDFiumPage* page = GetPage(page_index);
-  if (!page) {
-    return gfx::RectF();
-  }
-  return page->GetBoundingBox();
 }
 
 void PDFiumEngine::Highlight(const RegionData& region,
@@ -4273,6 +4248,88 @@ void PDFiumEngine::UpdatePageCount() {
 }
 #endif  // defined(PDF_ENABLE_XFA)
 
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+void PDFiumEngine::StartSearchify(
+    PerformOcrCallbackAsync perform_ocr_callback) {
+  // Searchify requests may be sent to the engine when PDF pages are loaded and
+  // before this function is called. In that case, `searchifier_` is already
+  // created and is waiting for the `Start` command to start processing the
+  // requests.
+  if (!searchifier_) {
+    searchifier_ = std::make_unique<PDFiumOnDemandSearchifier>(this);
+  }
+  searchifier_->Start(std::move(perform_ocr_callback));
+}
+
+base::RepeatingClosure PDFiumEngine::GetOcrDisconnectHandler() {
+  return base::BindRepeating(&PDFiumEngine::OnOcrDisconnected,
+                             weak_factory_.GetWeakPtr());
+}
+
+void PDFiumEngine::OnOcrDisconnected() {
+  if (searchifier_) {
+    searchifier_->OnOcrDisconnected();
+  }
+}
+
+bool PDFiumEngine::PageNeedsSearchify(int page_index) const {
+  CHECK(PageIndexInBounds(page_index));
+  return searchifier_ && searchifier_->IsPageScheduled(page_index);
+}
+
+void PDFiumEngine::ScheduleSearchifyIfNeeded(PDFiumPage* page) {
+  if (!page->available()) {
+    return;
+  }
+  // TODO(crbug.com/40066441): Explore heuristics to run OCR on pages with large
+  // images and a little text.
+  bool page_has_text = page->GetCharCount() != 0;
+
+  // Report metric only once for each page.
+  bool not_reported =
+      page_has_text_metric_reported_.insert(page->index()).second;
+  if (not_reported) {
+    base::UmaHistogramBoolean("PDF.PageHasText", page_has_text);
+  }
+  if (page_has_text) {
+    return;
+  }
+
+  if (!base::FeatureList::IsEnabled(chrome_pdf::features::kPdfSearchify) ||
+      !base::FeatureList::IsEnabled(ax::mojom::features::kScreenAIOCREnabled)) {
+    return;
+  }
+
+  // This function is called during page load, which can be before when the
+  // client calls `StartSearchify`, or after searchifier has failed to call OCR
+  // and is considered as not available.
+  if (!searchifier_) {
+    searchifier_ = std::make_unique<PDFiumOnDemandSearchifier>(this);
+  } else if (searchifier_->HasFailed()) {
+    return;
+  }
+
+  searchifier_->SchedulePage(page->index());
+}
+
+void PDFiumEngine::CancelPendingSearchify(int page_index) {
+  if (searchifier_) {
+    searchifier_->CancelPage(page_index);
+  }
+}
+
+void PDFiumEngine::OnSearchifyStateChange(bool busy) {
+  client_->OnSearchifyStateChange(busy);
+}
+
+void PDFiumEngine::OnHasSearchifyText() {
+  if (!has_searchify_text_) {
+    has_searchify_text_ = true;
+    client_->OnHasSearchifyText();
+  }
+}
+#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+
 void PDFiumEngine::UpdateLinkUnderCursor(const std::string& target_url) {
   client_->SetLinkUnderCursor(target_url);
 }
@@ -4298,8 +4355,7 @@ void PDFiumEngine::RequestThumbnail(int page_index,
   // page. Generate the thumbnail immediately only if the page is not currently
   // being progressively painted. Otherwise, wait for progressive painting to
   // finish.
-  const int progressive_index = GetProgressiveIndex(page_index);
-  if (progressive_index == -1) {
+  if (!GetProgressiveIndex(page_index).has_value()) {
     pages_[page_index]->RequestThumbnail(device_pixel_ratio,
                                          std::move(send_callback));
     return;
@@ -4313,7 +4369,7 @@ void PDFiumEngine::RequestThumbnail(int page_index,
 }
 
 void PDFiumEngine::MaybeRequestPendingThumbnail(int page_index) {
-  DCHECK_EQ(GetProgressiveIndex(page_index), -1);
+  CHECK(!GetProgressiveIndex(page_index).has_value());
 
   auto it = pending_thumbnails_.find(page_index);
   if (it == pending_thumbnails_.end())
@@ -4332,7 +4388,107 @@ gfx::Size PDFiumEngine::GetThumbnailSize(int page_index,
   CHECK(PageIndexInBounds(page_index));
   return pages_[page_index]->GetThumbnailSize(device_pixel_ratio);
 }
-#endif
+
+void PDFiumEngine::ApplyStroke(int page_index,
+                               InkStrokeId id,
+                               const ink::Stroke& stroke) {
+  // Saving a stroke will have the same page bounds limitations as the original
+  // document.
+  PDFiumPage* pdfium_page = GetPage(page_index);
+  CHECK(pdfium_page);
+  FPDF_PAGE page = pdfium_page->GetPage();
+  CHECK(page);
+
+  std::vector<FPDF_PAGEOBJECT> page_objects =
+      WriteStrokeToPage(doc(), page, stroke);
+  CHECK(!page_objects.empty());
+  ink_stroked_pages_needing_regeneration_.insert(page_index);
+
+  bool inserted =
+      ink_stroke_objects_map_.insert({id, std::move(page_objects)}).second;
+  CHECK(inserted);  // Stroke IDs should be unique when added.
+
+  // Since there is now a page reference in `ink_stroke_objects_map_`, ensure
+  // that this page has a ScopedUnloadPreventer so that the reference doesn't
+  // becomes stale if PDFiumPage::Unload() gets called.
+  if (!stroked_pages_unload_preventers_.contains(page_index)) {
+    stroked_pages_unload_preventers_.insert(
+        {page_index, PDFiumPage::ScopedUnloadPreventer(pdfium_page)});
+  }
+}
+
+void PDFiumEngine::UpdateStrokeActive(int page_index,
+                                      InkStrokeId id,
+                                      bool active) {
+  CHECK(PageIndexInBounds(page_index));
+  auto it = ink_stroke_objects_map_.find(id);
+  CHECK(it != ink_stroke_objects_map_.end());
+  for (FPDF_PAGEOBJECT page_object : it->second) {
+    bool result = FPDFPageObj_SetIsActive(page_object, active);
+    CHECK(result);
+  }
+  ink_stroked_pages_needing_regeneration_.insert(page_index);
+}
+
+void PDFiumEngine::DiscardStroke(int page_index, InkStrokeId id) {
+  CHECK(PageIndexInBounds(page_index));
+  auto it = ink_stroke_objects_map_.find(id);
+  CHECK(it != ink_stroke_objects_map_.end());
+  for (FPDF_PAGEOBJECT page_object : it->second) {
+    bool result =
+        FPDFPage_RemoveObject(pages_[page_index]->GetPage(), page_object);
+    CHECK(result);
+
+    // After FPDFPage_RemoveObject(), ownership of `page_object` is transferred
+    // from the page to `this`, so free it.
+    FPDFPageObj_Destroy(page_object);
+  }
+  ink_stroke_objects_map_.erase(it);
+}
+
+std::map<InkModeledShapeId, ink::ModeledShape>
+PDFiumEngine::LoadV2InkPathsForPage(int page_index) {
+  CHECK(PageIndexInBounds(page_index));
+
+#if DCHECK_IS_ON()
+  const bool inserted =
+      pages_with_loaded_v2_ink_paths_.insert(page_index).second;
+  CHECK(inserted);
+#endif  // DCHECK_IS_ON()
+
+  std::map<InkModeledShapeId, ink::ModeledShape> page_shape_map;
+
+  std::vector<ReadV2InkPathResult> read_results =
+      ReadV2InkPathsFromPageAsModeledShapes(pages_[page_index]->GetPage());
+  for (auto& read_result : read_results) {
+    InkModeledShapeId id(next_ink_modeled_shape_id_++);
+    page_shape_map[id] = std::move(read_result.shape);
+    ink_modeled_shape_map_[id] = read_result.page_object;
+  }
+
+  return page_shape_map;
+}
+
+void PDFiumEngine::UpdateShapeActive(int page_index,
+                                     InkModeledShapeId id,
+                                     bool active) {
+  CHECK(PageIndexInBounds(page_index));
+  auto it = ink_modeled_shape_map_.find(id);
+  CHECK(it != ink_modeled_shape_map_.end());
+  bool result = FPDFPageObj_SetIsActive(it->second, active);
+  CHECK(result);
+  ink_stroked_pages_needing_regeneration_.insert(page_index);
+}
+
+void PDFiumEngine::RegenerateContents() {
+  for (int page_index : ink_stroked_pages_needing_regeneration_) {
+    FPDF_PAGE page = GetPage(page_index)->GetPage();
+    bool result = FPDFPage_GenerateContent(page);
+    CHECK(result);
+  }
+  ink_stroked_pages_needing_regeneration_.clear();
+}
+#endif  // BUILDFLAG(ENABLE_PDF_INK2)
 
 PDFiumEngine::ProgressivePaint::ProgressivePaint(int index,
                                                  const gfx::Rect& rect)

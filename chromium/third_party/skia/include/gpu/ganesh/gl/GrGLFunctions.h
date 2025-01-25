@@ -104,7 +104,6 @@ using GrGLGetProgramInfoLogFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLuint program, G
 using GrGLGetProgramivFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLuint program, GrGLenum pname, GrGLint* params);
 using GrGLGetQueryivFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum GLtarget, GrGLenum pname, GrGLint* params);
 using GrGLGetQueryObjecti64vFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLuint id, GrGLenum pname, GrGLint64* params);
-using GrGLGetQueryObjectivFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLuint id, GrGLenum pname, GrGLint* params);
 using GrGLGetQueryObjectui64vFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLuint id, GrGLenum pname, GrGLuint64* params);
 using GrGLGetQueryObjectuivFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLuint id, GrGLenum pname, GrGLuint* params);
 using GrGLGetRenderbufferParameterivFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLenum target, GrGLenum pname, GrGLint* params);
@@ -219,8 +218,13 @@ using GrGLMultiDrawElementsInstancedBaseVertexBaseInstanceFn = GrGLvoid GR_GL_FU
 /* ARB_sync */
 using GrGLFenceSyncFn = GrGLsync GR_GL_FUNCTION_TYPE(GrGLenum condition, GrGLbitfield flags);
 using GrGLIsSyncFn = GrGLboolean GR_GL_FUNCTION_TYPE(GrGLsync sync);
+#if defined(__EMSCRIPTEN__)
+using GrGLClientWaitSyncFn = GrGLenum GR_GL_FUNCTION_TYPE(GrGLsync sync, GrGLbitfield flags, GrGLint timeoutLo, GrGLint timeoutHi);
+using GrGLWaitSyncFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLsync sync, GrGLbitfield flags, GrGLuint timeoutLo, GrGLuint timeoutHi);
+#else
 using GrGLClientWaitSyncFn = GrGLenum GR_GL_FUNCTION_TYPE(GrGLsync sync, GrGLbitfield flags, GrGLuint64 timeout);
 using GrGLWaitSyncFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLsync sync, GrGLbitfield flags, GrGLuint64 timeout);
+#endif
 using GrGLDeleteSyncFn = GrGLvoid GR_GL_FUNCTION_TYPE(GrGLsync sync);
 
 /* ARB_internalformat_query */

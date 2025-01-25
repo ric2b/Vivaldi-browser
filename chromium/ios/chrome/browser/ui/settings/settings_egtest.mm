@@ -71,7 +71,7 @@ id<GREYMatcher> ClearBrowsingDataCell() {
 
 @implementation SettingsTestCase
 
-- (void)tearDown {
+- (void)tearDownHelper {
   // It is possible for a test to fail with a menu visible, which can cause
   // future tests to fail.
 
@@ -99,7 +99,7 @@ id<GREYMatcher> ClearBrowsingDataCell() {
   // clearing browsing history.
   [ChromeEarlGrey killWebKitNetworkProcess];
 
-  [super tearDown];
+  [super tearDownHelper];
 }
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
@@ -115,11 +115,12 @@ id<GREYMatcher> ClearBrowsingDataCell() {
 // scheduled for removal.
 - (void)clearBrowsingData {
   [ChromeEarlGreyUI tapClearBrowsingDataMenuButton:ClearBrowsingDataButton()];
-  [ChromeEarlGreyUI waitForAppToIdle];
 
   // Wait for the browsing data button to disappear.
   [ChromeEarlGrey
       waitForUIElementToDisappearWithMatcher:BrowsingDataButtonMatcher()];
+
+  [ChromeEarlGreyUI waitForAppToIdle];
 }
 
 // From the NTP, clears the cookies and site data via the UI.

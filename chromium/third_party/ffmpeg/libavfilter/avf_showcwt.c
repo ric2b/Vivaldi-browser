@@ -33,7 +33,6 @@
 #include "video.h"
 #include "avfilter.h"
 #include "filters.h"
-#include "internal.h"
 
 enum FrequencyScale {
     FSCALE_LINEAR,
@@ -223,30 +222,21 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->fdsp);
 }
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
     AVFilterFormats *formats = NULL;
-    AVFilterChannelLayouts *layouts = NULL;
-    AVFilterLink *inlink = ctx->inputs[0];
-    AVFilterLink *outlink = ctx->outputs[0];
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVA444P, AV_PIX_FMT_NONE };
     int ret;
 
     formats = ff_make_format_list(sample_fmts);
-    if ((ret = ff_formats_ref(formats, &inlink->outcfg.formats)) < 0)
-        return ret;
-
-    layouts = ff_all_channel_counts();
-    if ((ret = ff_channel_layouts_ref(layouts, &inlink->outcfg.channel_layouts)) < 0)
-        return ret;
-
-    formats = ff_all_samplerates();
-    if ((ret = ff_formats_ref(formats, &inlink->outcfg.samplerates)) < 0)
+    if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
     formats = ff_make_format_list(pix_fmts);
-    if ((ret = ff_formats_ref(formats, &outlink->incfg.formats)) < 0)
+    if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
     return 0;
@@ -810,6 +800,7 @@ static int compute_kernel(AVFilterContext *ctx)
 
 static int config_output(AVFilterLink *outlink)
 {
+    FilterLink *l = ff_filter_link(outlink);
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
     ShowCWTContext *s = ctx->priv;
@@ -1028,11 +1019,13 @@ static int config_output(AVFilterLink *outlink)
     s->auto_frame_rate = av_make_q(inlink->sample_rate, s->hop_size);
     if (strcmp(s->rate_str, "auto")) {
         ret = av_parse_video_rate(&s->frame_rate, s->rate_str);
+        if (ret < 0)
+            return ret;
     } else {
         s->frame_rate = s->auto_frame_rate;
     }
-    outlink->frame_rate = s->frame_rate;
-    outlink->time_base = av_inv_q(outlink->frame_rate);
+    l->frame_rate = s->frame_rate;
+    outlink->time_base = av_inv_q(l->frame_rate);
 
     ret = compute_kernel(ctx);
     if (ret < 0)
@@ -1332,7 +1325,7 @@ const AVFilter ff_avf_showcwt = {
     .priv_size     = sizeof(ShowCWTContext),
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(showcwt_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .activate      = activate,
     .priv_class    = &showcwt_class,
     .flags         = AVFILTER_FLAG_SLICE_THREADS,

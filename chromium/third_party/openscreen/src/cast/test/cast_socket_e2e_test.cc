@@ -21,6 +21,7 @@
 #include "cast/sender/public/sender_socket_factory.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "platform/api/task_runner_deleter.h"
 #include "platform/api/tls_connection_factory.h"
 #include "platform/base/tls_connect_options.h"
 #include "platform/base/tls_credentials.h"
@@ -31,7 +32,6 @@
 #include "testing/util/task_util.h"
 #include "util/crypto/certificate_utils.h"
 #include "util/osp_logging.h"
-#include "util/serial_delete_ptr.h"
 
 namespace openscreen::cast {
 namespace {
@@ -142,30 +142,31 @@ class CastSocketE2ETest : public ::testing::Test {
     credentials_ =
         std::move(GenerateCredentialsForTesting("Device ID").value());
 
-    sender_router_ = MakeSerialDelete<VirtualConnectionRouter>(task_runner_);
+    sender_router_ =
+        TaskRunnerDeleter::MakeUnique<VirtualConnectionRouter>(*task_runner_);
     sender_client_ =
         std::make_unique<StrictMock<SenderSocketsClient>>(*sender_router_);
-    sender_factory_ = MakeSerialDelete<SenderSocketFactory>(
-        task_runner_, *sender_client_, *task_runner_,
+    sender_factory_ = TaskRunnerDeleter::MakeUnique<SenderSocketFactory>(
+        *task_runner_, *sender_client_, *task_runner_,
         TrustStore::CreateInstanceForTest(credentials_.root_cert_der),
         CastCRLTrustStore::Create());
-    sender_tls_factory_ = SerialDeletePtr<TlsConnectionFactory>(
+    sender_tls_factory_ = TaskRunnerDeleter::WrapUnique(
         *task_runner_,
         TlsConnectionFactory::CreateFactory(*sender_factory_, *task_runner_)
             .release());
     sender_factory_->set_factory(sender_tls_factory_.get());
 
-    auth_handler_ = MakeSerialDelete<DeviceAuthNamespaceHandler>(
-        task_runner_, *credentials_.provider);
-    receiver_router_ = MakeSerialDelete<VirtualConnectionRouter>(task_runner_);
+    auth_handler_ = TaskRunnerDeleter::MakeUnique<DeviceAuthNamespaceHandler>(
+        *task_runner_, *credentials_.provider);
+    receiver_router_ =
+        TaskRunnerDeleter::MakeUnique<VirtualConnectionRouter>(*task_runner_);
     receiver_router_->AddHandlerForLocalId(kPlatformReceiverId,
                                            auth_handler_.get());
     receiver_client_ = std::make_unique<StrictMock<ReceiverSocketsClient>>(
         receiver_router_.get());
-    receiver_factory_ = MakeSerialDelete<ReceiverSocketFactory>(
-        task_runner_, *receiver_client_, *receiver_router_);
-
-    receiver_tls_factory_ = SerialDeletePtr<TlsConnectionFactory>(
+    receiver_factory_ = TaskRunnerDeleter::MakeUnique<ReceiverSocketFactory>(
+        *task_runner_, *receiver_client_, *receiver_router_);
+    receiver_tls_factory_ = TaskRunnerDeleter::WrapUnique(
         *task_runner_,
         TlsConnectionFactory::CreateFactory(*receiver_factory_, *task_runner_)
             .release());
@@ -252,18 +253,19 @@ class CastSocketE2ETest : public ::testing::Test {
   TaskRunner* task_runner_;
 
   // NOTE: Sender components.
-  SerialDeletePtr<VirtualConnectionRouter> sender_router_;
+  std::unique_ptr<VirtualConnectionRouter, TaskRunnerDeleter> sender_router_;
   std::unique_ptr<StrictMock<SenderSocketsClient>> sender_client_;
-  SerialDeletePtr<SenderSocketFactory> sender_factory_;
-  SerialDeletePtr<TlsConnectionFactory> sender_tls_factory_;
+  std::unique_ptr<SenderSocketFactory, TaskRunnerDeleter> sender_factory_;
+  std::unique_ptr<TlsConnectionFactory, TaskRunnerDeleter> sender_tls_factory_;
 
   // NOTE: Receiver components.
-  SerialDeletePtr<VirtualConnectionRouter> receiver_router_;
+  std::unique_ptr<VirtualConnectionRouter, TaskRunnerDeleter> receiver_router_;
   GeneratedCredentials credentials_;
-  SerialDeletePtr<DeviceAuthNamespaceHandler> auth_handler_;
+  std::unique_ptr<DeviceAuthNamespaceHandler, TaskRunnerDeleter> auth_handler_;
   std::unique_ptr<StrictMock<ReceiverSocketsClient>> receiver_client_;
-  SerialDeletePtr<ReceiverSocketFactory> receiver_factory_;
-  SerialDeletePtr<TlsConnectionFactory> receiver_tls_factory_;
+  std::unique_ptr<ReceiverSocketFactory, TaskRunnerDeleter> receiver_factory_;
+  std::unique_ptr<TlsConnectionFactory, TaskRunnerDeleter>
+      receiver_tls_factory_;
 };
 
 // These test the most basic setup of a complete CastSocket.  This means

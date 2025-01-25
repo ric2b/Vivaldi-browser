@@ -363,10 +363,6 @@ template("generate_icuuc") {
     defines = [ "U_COMMON_IMPLEMENTATION" ]
     deps = [ ":icudata" ]
 
-    if (is_chromeos) {
-      deps += [ ":icudata_hash" ]
-    }
-
     if (icu_use_data_file && icu_use_stub_data) {
       sources += [ "source/stubdata/stubdata.cpp" ]
     }
@@ -488,16 +484,6 @@ if (icu_use_data_file) {
         # also happen to generate the output file by the same name.
         # See README.fuchsia for details.
         public_deps = [ ":copy_icudata" ]
-      }
-    }
-  }
-
-  if (is_chromeos) {
-    copy("icudata_hash") {
-      sources = [ "chromeos/icudtl.dat.hash" ]
-      outputs = [ "$root_out_dir/icudtl.dat.hash" ]
-      if (icu_copy_icudata_to_root_build_dir) {
-        data = [ "$root_out_dir/icudtl.dat.hash" ]
       }
     }
   }

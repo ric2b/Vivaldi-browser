@@ -201,7 +201,14 @@ def ShouldUseSSO(host: str, email: str) -> bool:
         LOGGER.debug("SSO=False: not chromium.org")
         return False
     authenticator = SSOAuthenticator()
-    records = GetAccountEmails(host, 'self', authenticator=authenticator)
+    try:
+        records = GetAccountEmails(host, 'self', authenticator=authenticator)
+    except GerritError as e:
+        if e.http_status == 400:
+            # This is likely because the user doesn't have an account on the Gerrit host.
+            LOGGER.debug("SSO=False: get account emails returned 400")
+            return False
+        raise
     if any(email == r['email'] for r in records):
         LOGGER.debug("SSO=True: email is linked to google.com")
         return True
@@ -280,6 +287,7 @@ class _Authenticator(object):
                         # GCE detection can't distinguish cloud workstations.
                         GceAuthenticator(),
                         LuciAuthAuthenticator(),
+                        NoAuthenticator(),
                     ]
                     if skip_sso:
                         LOGGER.debug(
@@ -344,6 +352,11 @@ class SSOAuthenticator(_Authenticator):
     # Overridden in tests.
     _timeout_secs = 5
 
+    # The required fields for the sso config, expected from the sso helper's
+    # output.
+    _required_fields = frozenset(
+        ['http.cookiefile', 'http.proxy', 'include.path'])
+
     @dataclass
     class SSOInfo:
         proxy: httplib2.ProxyInfo
@@ -379,24 +392,27 @@ class SSOAuthenticator(_Authenticator):
         return email.endswith('@google.com')
 
     @classmethod
-    def _parse_config(cls, config: str) -> SSOInfo:
-        parsed: Dict[str, str] = dict(line.strip().split('=', 1)
-                                      for line in config.splitlines())
+    def _parse_config(cls, config: Dict[str, str]) -> SSOInfo:
+        """Parses the sso info from the given config.
 
+        Note: update cls._required_fields appropriately when making
+        changes to this method, to ensure the field values are captured
+        from the sso helper.
+        """
         fullAuthHeader = cast(
             str,
             scm.GIT.Capture([
                 'config',
                 '-f',
-                parsed['include.path'],
+                config['include.path'],
                 'http.extraHeader',
             ]))
         headerKey, headerValue = fullAuthHeader.split(':', 1)
         headers = {headerKey.strip(): headerValue.strip()}
 
-        proxy_host, proxy_port = parsed['http.proxy'].split(':', 1)
+        proxy_host, proxy_port = config['http.proxy'].split(':', 1)
 
-        cfpath = parsed['http.cookiefile']
+        cfpath = config['http.cookiefile']
         cj = http.cookiejar.MozillaCookieJar(cfpath)
         # NOTE: python3.8 doesn't support httponly cookie lines, so we parse
         # this manually. Once we move to python3.10+, this hack can be removed.
@@ -434,8 +450,9 @@ class SSOAuthenticator(_Authenticator):
                 #
                 # 1. writes files to disk.
                 # 2. writes config to stdout, referencing those files.
-                # 3. closes stdout (thus sending EOF to us, allowing
-                #    sys.stdout.read() to complete).
+                # 3. closes stdout (sending EOF to us, ending the stdout data).
+                #    - Note: on Windows, stdout.read() times out anyway, so
+                #      instead we process stdout line by line.
                 # 4. waits for stdin to close.
                 # 5. deletes files on disk (which is why we make sys.stdin a PIPE
                 #    instead of closing it outright).
@@ -458,24 +475,39 @@ class SSOAuthenticator(_Authenticator):
                     timer = threading.Timer(cls._timeout_secs, _fire_timeout)
                     timer.start()
                     try:
-                        stdout_data = proc.stdout.read()
+                        config = {}
+                        for line in proc.stdout:
+                            if not line:
+                                break
+                            field, value = line.strip().split('=', 1)
+                            config[field] = value
+                            # Stop reading if we have all the required fields.
+                            if cls._required_fields.issubset(config.keys()):
+                                break
                     finally:
                         timer.cancel()
 
+                    missing_fields = cls._required_fields - config.keys()
                     if timedout:
+                        # Within the time limit, at least one required field was
+                        # still missing. Killing the process has been triggered,
+                        # even if we now have all fields.
+                        details = ''
+                        if missing_fields:
+                            details = ': missing fields [{names}]'.format(
+                                names=', '.join(missing_fields))
                         LOGGER.error(
-                            'SSOAuthenticator: Timeout: %r: reading config.',
-                            cmd)
+                            'SSOAuthenticator: Timeout: %r: reading config%s.',
+                            cmd, details)
                         raise subprocess.TimeoutExpired(
                             cmd=cmd, timeout=cls._timeout_secs)
-
                     # if the process already ended, then something is wrong.
                     retcode = proc.poll()
-                    # if stdout was closed without any data, we need to wait for
-                    # end-of-process here and hope for an error message - the
-                    # poll above is racy in this case (we could see stdout EOF
-                    # but the process may not have quit yet).
-                    if not retcode and not stdout_data:
+                    # if stdout was closed without all required data, we need to
+                    # wait for end-of-process here and hope for an error message
+                    # - the poll above is racy in this case (we could see stdout
+                    # EOF but the process may not have quit yet).
+                    if not retcode and missing_fields:
                         retcode = proc.wait(timeout=cls._timeout_secs)
                         # We timed out while doing `wait` - we can't safely open
                         # stderr on windows, so just emit a generic timeout
@@ -497,7 +529,7 @@ class SSOAuthenticator(_Authenticator):
                                 f'SSOAuthenticator: exit {retcode}: {stderr.read().strip()}'
                             )
 
-                    return cls._parse_config(stdout_data)
+                    return cls._parse_config(config)
 
     @classmethod
     def _get_sso_info(cls) -> SSOInfo:
@@ -805,6 +837,10 @@ class LuciContextAuthenticator(_Authenticator):
         self._authenticator = auth.Authenticator(' '.join(
             [auth.OAUTH_SCOPE_EMAIL, auth.OAUTH_SCOPE_GERRIT]))
 
+    @property
+    def luci_auth(self) -> auth.Authenticator:
+        return self._authenticator
+
     def authenticate(self, conn: HttpConn):
         conn.req_headers[
             'Authorization'] = f'Bearer {self._authenticator.get_access_token().token}'
@@ -821,9 +857,64 @@ class LuciAuthAuthenticator(LuciContextAuthenticator):
     non-google.com developer credentials.
     """
 
+    @classmethod
+    def gerrit_account_exists(cls, host: str) -> bool:
+        """Return True if the Gerrit account exists.
+
+        This checks the user currently logged in with luci-auth.
+        If the user is not logged in with luci-auth, returns False.
+
+        This method caches positive results in the user's Git config.
+        """
+        cwd = os.getcwd()
+        LOGGER.debug("Checking Gerrit account existence for %r", host)
+        hosts = scm.GIT.GetConfigList(cwd, 'depot-tools.hosthasaccount')
+        if host in hosts:
+            # If a user deletes their Gerrit account, then this cache
+            # might be stale.  This should be a rare case and a user can
+            # just delete this from their Git config.
+            LOGGER.debug("Using cached account existence for Gerrit host %r",
+                         host)
+            return True
+        try:
+            info = GetAccountDetails(host, authenticator=cls())
+        except auth.LoginRequiredError:
+            LOGGER.debug(
+                "Cannot check Gerrit account existence; missing luci-auth login"
+            )
+            return False
+        except GerritError as e:
+            if e.http_status == 400:
+                # This is likely because the user doesn't have an
+                # account on the Gerrit host.
+                LOGGER.debug(
+                    "Gerrit account check returned 400; likely account missing")
+                return False
+            raise
+        if 'email' not in info:
+            LOGGER.debug("Gerrit account does not exist on %r", host)
+            return False
+        LOGGER.debug("Gerrit account exists on %r", host)
+        scm.GIT.SetConfig(cwd, 'depot-tools.hostHasAccount', host, append=True)
+        return True
+
+    def is_applicable(self, *, conn: Optional[HttpConn] = None):
+        return self.gerrit_account_exists(conn.host)
+
+
+class NoAuthenticator(_Authenticator):
+    """_Authenticator implementation that does no auth.
+    """
+
     @staticmethod
     def is_applicable(*, conn: Optional[HttpConn] = None):
         return True
+
+    def authenticate(self, conn: HttpConn):
+        pass
+
+    def debug_summary_state(self) -> str:
+        return ''
 
 
 class ChainedAuthenticator(_Authenticator):
@@ -1050,7 +1141,7 @@ def ReadHttpResponse(conn: HttpConn,
         www_authenticate = response.get('www-authenticate')
         if not www_authenticate:
             print('Your Gerrit credentials might be misconfigured.')
-        else:
+        elif not newauth.Enabled():
             auth_match = re.search('realm="([^"]+)"', www_authenticate, re.I)
             host = auth_match.group(1) if auth_match else conn.req_host
             new_password_url = CookiesAuthenticator.get_new_password_url(host)
@@ -1580,11 +1671,17 @@ def AddReviewers(host,
                      accept_statuses=[200])
 
 
-def SetReview(host, change, msg=None, labels=None, notify=None, ready=None):
+def SetReview(host,
+              change,
+              revision='current',
+              msg=None,
+              labels=None,
+              notify=None,
+              ready=None):
     """Sets labels and/or adds a message to a code review."""
     if not msg and not labels:
         return
-    path = 'changes/%s/revisions/current/review' % change
+    path = f'changes/{change}/revisions/{revision}/review'
     body: Dict[str, Any] = {'drafts': 'KEEP'}
     if msg:
         body['message'] = msg
@@ -1771,7 +1868,10 @@ def GetProjectHead(host, project):
     return ReadHttpJsonResponse(conn, accept_statuses=[200])
 
 
-def GetAccountDetails(host, account_id='self'):
+def GetAccountDetails(host,
+                      account_id='self',
+                      *,
+                      authenticator: Optional[_Authenticator] = None):
     """Returns details of the account.
 
     If account_id is not given, uses magic value 'self' which corresponds to
@@ -1782,7 +1882,9 @@ def GetAccountDetails(host, account_id='self'):
 
     Returns None if account is not found (i.e., Gerrit returned 404).
     """
-    conn = CreateHttpConn(host, '/accounts/%s' % account_id)
+    conn = CreateHttpConn(host,
+                          '/accounts/%s' % account_id,
+                          authenticator=authenticator)
     return ReadHttpJsonResponse(conn, accept_statuses=[200, 404])
 
 

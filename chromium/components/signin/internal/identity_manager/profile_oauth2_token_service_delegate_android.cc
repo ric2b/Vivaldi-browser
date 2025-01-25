@@ -89,7 +89,7 @@ AndroidAccessTokenFetcher::AndroidAccessTokenFetcher(
       request_was_cancelled_(false),
       weak_factory_(this) {}
 
-AndroidAccessTokenFetcher::~AndroidAccessTokenFetcher() {}
+AndroidAccessTokenFetcher::~AndroidAccessTokenFetcher() = default;
 
 void AndroidAccessTokenFetcher::Start(const std::string& client_id,
                                       const std::string& client_secret,
@@ -166,7 +166,7 @@ ProfileOAuth2TokenServiceDelegateAndroid::
 }
 
 ProfileOAuth2TokenServiceDelegateAndroid::
-    ~ProfileOAuth2TokenServiceDelegateAndroid() {}
+    ~ProfileOAuth2TokenServiceDelegateAndroid() = default;
 
 ScopedJavaLocalRef<jobject>
 ProfileOAuth2TokenServiceDelegateAndroid::GetJavaObject() {
@@ -271,29 +271,6 @@ void ProfileOAuth2TokenServiceDelegateAndroid::
   account_tracker_service_->SeedAccountsInfo(
       core_account_infos, primary_account_id,
       /*should_remove_stale_accounts=*/true);
-}
-
-void ProfileOAuth2TokenServiceDelegateAndroid::
-    ReloadAllAccountsWithPrimaryAccountAfterSeeding(
-        JNIEnv* env,
-        const base::android::JavaParamRef<jstring>& j_primary_account_id,
-        const base::android::JavaParamRef<jobjectArray>&
-            j_device_account_names) {
-  std::optional<CoreAccountId> primary_account_id;
-  if (j_primary_account_id) {
-    primary_account_id = CoreAccountId::FromString(
-        ConvertJavaStringToUTF8(env, j_primary_account_id));
-  }
-  std::vector<std::string> device_account_names;
-  base::android::AppendJavaStringArrayToStringVector(
-      env, j_device_account_names, &device_account_names);
-  std::vector<CoreAccountId> account_ids;
-  for (const std::string& name : device_account_names) {
-    CoreAccountId id(MapAccountNameToAccountId(name));
-    if (!id.empty())
-      account_ids.push_back(std::move(id));
-  }
-  UpdateAccountList(primary_account_id, GetValidAccounts(), account_ids);
 }
 
 void ProfileOAuth2TokenServiceDelegateAndroid::UpdateAccountList(

@@ -117,7 +117,7 @@ void Environment::OnError(UdpSocket* socket, const Error& error) {
   OSP_CHECK_EQ(socket, socket_.get());
   // Usually OnError() is only called for non-recoverable Errors. However,
   // OnSendError() and OnRead() delegate to this method, to handle their hard
-  // error cases as well. So, return early here if |error| is recoverable.
+  // error cases as well. So, return early here if `error` is recoverable.
   if (error.ok() || error.code() == Error::Code::kAgain) {
     return;
   }

@@ -26,17 +26,17 @@ limitations under the License.
 #include "absl/memory/memory.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
+#include "xla/hlo/analysis/hlo_alias_analysis.h"
+#include "xla/hlo/analysis/while_loop_analysis.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/hlo/utils/hlo_live_range.h"
 #include "xla/service/call_graph.h"
 #include "xla/service/heap_simulator/heap_simulator.h"
-#include "xla/service/hlo_alias_analysis.h"
 #include "xla/service/hlo_buffer.h"
 #include "xla/service/hlo_cost_analysis.h"
 #include "xla/service/hlo_value.h"
-#include "xla/service/while_loop_analysis.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
 #include "xla/util.h"
@@ -76,8 +76,10 @@ float HloCostAnalysisCosts::BytesPerSecond() {
 
 float HloCostAnalysisCosts::ComputeSeconds(const HloInstruction& instruction) {
   return std::max(
-      static_cast<float>(hlo_cost_analysis_.flop_count(instruction)) /
-          hlo_cost_analysis_.per_second_rate(HloCostAnalysis::kFlopsKey),
+      std::max(
+          hlo_cost_analysis_.min_latency_seconds(HloCostAnalysis::kFlopsKey),
+          static_cast<float>(hlo_cost_analysis_.flop_count(instruction)) /
+              hlo_cost_analysis_.per_second_rate(HloCostAnalysis::kFlopsKey)),
       static_cast<float>(hlo_cost_analysis_.transcendental_count(instruction)) /
           hlo_cost_analysis_.per_second_rate(
               HloCostAnalysis::kTranscendentalsKey));

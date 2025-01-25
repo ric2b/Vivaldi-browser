@@ -157,7 +157,7 @@ const CGFloat kGroupColorViewSize = 18;
   }
 
   if (@available(iOS 17, *)) {
-    [self registerForTraitChanges:@[ UITraitPreferredContentSizeCategory.self ]
+    [self registerForTraitChanges:@[ UITraitPreferredContentSizeCategory.class ]
                        withAction:@selector(updateTopBarSize)];
   }
   return self;
@@ -542,7 +542,7 @@ const CGFloat kGroupColorViewSize = 18;
   }
   if (@available(iOS 17, *)) {
     [self.window.windowScene
-        registerForTraitChanges:@[ UITraitUserInterfaceStyle.self ]
+        registerForTraitChanges:@[ UITraitUserInterfaceStyle.class ]
                      withTarget:self
                          action:@selector(interfaceStyleChangedForWindow:
                                                          traitCollection:)];

@@ -68,6 +68,7 @@ const CGFloat numberOfItems = 30;
 
   VivaldiSpeedDialViewContainerViewFlowLayout *layout =
       [VivaldiSpeedDialViewContainerViewFlowLayout new];
+  layout.shouldShowTabletLayout = [self showTabletLayout];
   self.layout = layout;
   UICollectionView* collectionView =
       [[UICollectionView alloc] initWithFrame:CGRectZero
@@ -117,6 +118,7 @@ const CGFloat numberOfItems = 30;
   self.selectedColumn = column;
   self.layout.layoutStyle = style;
   self.layout.layoutState = state;
+  self.layout.shouldShowTabletLayout = [self showTabletLayout];
   self.layout.numberOfColumns = column;
   self.layout.maxNumberOfRows = _numberOfRows;
 
@@ -156,7 +158,7 @@ const CGFloat numberOfItems = 30;
       VivaldiSpeedDialSmallCell *smallCell =
         [collectionView dequeueReusableCellWithReuseIdentifier:cellIdSmall
                                                   forIndexPath:indexPath];
-      [smallCell configurePreviewForDevice: self.isCurrentDeviceTablet];
+      [smallCell configurePreviewForDevice: self.showTabletLayout];
       return smallCell;
     }
     case VivaldiStartPageLayoutStyleList: {
@@ -169,10 +171,9 @@ const CGFloat numberOfItems = 30;
   }
 }
 
-/// Returns whether current device is iPhone or iPad.
-- (BOOL)isCurrentDeviceTablet {
-  return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET &&
-      VivaldiGlobalHelpers.isHorizontalTraitRegular;
+/// Returns whether items should have tablet or phone layout.
+- (BOOL)showTabletLayout {
+  return [VivaldiGlobalHelpers canShowSidePanelForTrait:self.traitCollection];
 }
 
 @end

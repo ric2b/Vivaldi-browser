@@ -41,7 +41,7 @@ consoles.console_view(
     ordering = {
         None: ["release", "debug"],
         "release": consoles.ordering(short_names = ["bld", "tst", "nsl", "gcc"]),
-        "cast": ["arm64", "x64"],
+        "cast": ["arm", "arm64", "x64"],
     },
 )
 
@@ -85,10 +85,7 @@ ci.builder(
             "chromium_linux_cast_receiver",
         ],
     ),
-    # TODO(vigeni): Remove as configuration has been stablized.
-    gardener_rotations = args.ignore_default(None),
-    # TODO(vigeni): Set to True configuration has been stablized.
-    tree_closing = False,
+    tree_closing = True,
     console_view_entry = consoles.console_view_entry(
         category = "cast",
         short_name = "arm32rel",
@@ -133,10 +130,7 @@ ci.builder(
             "chromium_linux_cast_receiver",
         ],
     ),
-    # TODO(vigeni): Remove as configuration has been stablized.
-    gardener_rotations = args.ignore_default(None),
-    # TODO(vigeni): Set to True configuration has been stablized.
-    tree_closing = False,
+    tree_closing = True,
     console_view_entry = consoles.console_view_entry(
         category = "cast",
         short_name = "arm64rel",
@@ -180,10 +174,7 @@ ci.builder(
             "chromium_linux_cast_receiver_gtests",
         ],
     ),
-    # TODO(vigeni): Remove as configuration has been stablized.
-    gardener_rotations = args.ignore_default(None),
-    # TODO(vigeni): Set to True configuration has been stablized.
-    tree_closing = False,
+    tree_closing = True,
     console_view_entry = consoles.console_view_entry(
         category = "cast",
         short_name = "x64dbg",
@@ -227,10 +218,7 @@ ci.builder(
             "chromium_linux_cast_receiver_gtests",
         ],
     ),
-    # TODO(vigeni): Remove as configuration has been stablized.
-    gardener_rotations = args.ignore_default(None),
-    # TODO(vigeni): Set to True configuration has been stablized.
-    tree_closing = False,
+    tree_closing = True,
     console_view_entry = consoles.console_view_entry(
         category = "cast",
         short_name = "x64rel",
@@ -309,6 +297,14 @@ ci.builder(
             "x64",
         ],
     ),
+    targets = targets.bundle(
+        targets = [
+            "leak_detection_isolated_scripts",
+        ],
+        mixins = [
+            "linux-jammy",
+        ],
+    ),
     gardener_rotations = args.ignore_default(None),
     tree_closing = False,
     console_view_entry = consoles.console_view_entry(
@@ -353,6 +349,17 @@ ci.builder(
             "devtools_do_typecheck",
             "linux",
             "x64",
+        ],
+    ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_linux_scripts",
+        ],
+        additional_compile_targets = [
+            "all",
+        ],
+        mixins = [
+            "isolate_profile_data",
         ],
     ),
     console_view_entry = consoles.console_view_entry(
@@ -472,6 +479,69 @@ ci.thin_tester(
             target_platform = builder_config.target_platform.LINUX,
         ),
         build_gs_bucket = "chromium-linux-archive",
+    ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_linux_gtests",
+            "chromium_linux_rel_isolated_scripts_once",
+        ],
+        mixins = [
+            "isolate_profile_data",
+            "linux-jammy",
+        ],
+        per_test_modifications = {
+            "blink_web_tests": targets.mixin(
+                args = [
+                    "--additional-env-var=LLVM_PROFILE_FILE=${ISOLATED_OUTDIR}/profraw/default-%2m.profraw",
+                ],
+                swarming = targets.swarming(
+                    shards = 8,
+                ),
+            ),
+            "blink_wpt_tests": targets.mixin(
+                args = [
+                    "--additional-env-var=LLVM_PROFILE_FILE=${ISOLATED_OUTDIR}/profraw/default-%2m.profraw",
+                ],
+                swarming = targets.swarming(
+                    shards = 10,
+                ),
+            ),
+            "browser_tests": targets.mixin(
+                # Only retry the individual failed tests instead of rerunning
+                # entire shards.
+                # crbug.com/1473501
+                retry_only_failed_tests = True,
+                swarming = targets.swarming(
+                    shards = 20,
+                ),
+            ),
+            "content_browsertests": targets.mixin(
+                # Only retry the individual failed tests instead of rerunning
+                # entire shards.
+                # crbug.com/1473501
+                retry_only_failed_tests = True,
+            ),
+            "not_site_per_process_blink_web_tests": targets.mixin(
+                args = [
+                    "--additional-env-var=LLVM_PROFILE_FILE=${ISOLATED_OUTDIR}/profraw/default-%2m.profraw",
+                ],
+            ),
+            "telemetry_perf_unittests": targets.mixin(
+                args = [
+                    "--xvfb",
+                    "--jobs=1",
+                ],
+            ),
+            "unit_tests": targets.mixin(
+                # Only retry the individual failed tests instead of rerunning
+                # entire shards.
+                # crbug.com/1473501
+                retry_only_failed_tests = True,
+            ),
+            "webdriver_wpt_tests": targets.remove(
+                reason = "https://crbug.com/929689, https://crbug.com/936557",
+            ),
+        },
     ),
     console_view_entry = consoles.console_view_entry(
         category = "release",
@@ -672,6 +742,7 @@ ci.thin_tester(
     contact_team_email = "chrome-linux-engprod@google.com",
 )
 
+# For documentation, see //services/network/README.md.
 ci.builder(
     name = "Network Service Linux",
     builder_spec = builder_config.builder_spec(
@@ -697,6 +768,14 @@ ci.builder(
             "remoteexec",
             "linux",
             "x64",
+        ],
+    ),
+    targets = targets.bundle(
+        targets = [
+            "network_service_extra_gtests",
+        ],
+        mixins = [
+            "linux-jammy",
         ],
     ),
     console_view_entry = consoles.console_view_entry(
@@ -734,6 +813,23 @@ ci.builder(
             "x64",
         ],
     ),
+    targets = targets.bundle(
+        targets = [
+            "bfcache_linux_gtests",
+            "chromium_webkit_isolated_scripts",
+        ],
+        mixins = [
+            "linux-jammy",
+        ],
+        per_test_modifications = {
+            "blink_wpt_tests": targets.mixin(
+                args = [
+                    # TODO(crbug.com/40200069): Re-enable the test.
+                    "--ignore-tests=external/wpt/html/browsers/browsing-the-web/back-forward-cache/events.html",
+                ],
+            ),
+        },
+    ),
     console_view_entry = consoles.console_view_entry(
         category = "bfcache",
         short_name = "bfc",
@@ -768,6 +864,11 @@ ci.builder(
             "extended_tracing",
             "linux",
             "x64",
+        ],
+    ),
+    targets = targets.bundle(
+        additional_compile_targets = [
+            "all",
         ],
     ),
     console_view_entry = consoles.console_view_entry(
@@ -807,6 +908,11 @@ ci.builder(
             "x64",
         ],
     ),
+    targets = targets.bundle(
+        additional_compile_targets = [
+            "empty_main",
+        ],
+    ),
     # Focal is needed for better C++20 support. See crbug.com/1284275.
     os = os.LINUX_FOCAL,
     console_view_entry = consoles.console_view_entry(
@@ -844,6 +950,17 @@ ci.builder(
             "remoteexec",
             "linux",
             "x64",
+        ],
+    ),
+    targets = targets.bundle(
+        additional_compile_targets = [
+            "image_processor_perf_test",
+            "video_decode_accelerator_tests",
+            "video_decode_accelerator_perf_tests",
+            "video_encode_accelerator_tests",
+            "video_encode_accelerator_perf_tests",
+            "v4l2_stateless_decoder",
+            "v4l2_unittest",
         ],
     ),
     tree_closing = False,

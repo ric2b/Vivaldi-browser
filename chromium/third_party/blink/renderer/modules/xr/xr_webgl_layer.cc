@@ -69,6 +69,13 @@ XRWebGLLayer* XRWebGLLayer::Create(XRSession* session,
     return nullptr;
   }
 
+  if (session->GraphicsApi() != XRGraphicsBinding::Api::kWebGL) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "Cannot create an XRWebGLLayer with a "
+                                      "WebGPU-based XRSession.");
+    return nullptr;
+  }
+
   // TODO(crbug.com/941753): In the future this should be communicated by the
   // drawing buffer and indicate whether the depth buffers are being supplied to
   // the XR compositor.
@@ -330,52 +337,58 @@ WebGLTexture* XRWebGLLayer::GetCameraTexture() {
   return camera_image_texture_.Get();
 }
 
-void XRWebGLLayer::OnFrameStart(
-    const std::optional<gpu::MailboxHolder>& buffer_mailbox_holder,
-    const std::optional<gpu::MailboxHolder>& camera_image_mailbox_holder) {
+void XRWebGLLayer::OnFrameStart() {
   if (framebuffer_) {
     framebuffer_->MarkOpaqueBufferComplete(true);
     framebuffer_->SetContentsChanged(false);
-    if (buffer_mailbox_holder) {
-      drawing_buffer_->UseSharedBuffer(buffer_mailbox_holder.value());
-      DVLOG(3) << __func__ << ": buffer_mailbox_holder->mailbox="
-               << buffer_mailbox_holder->mailbox.ToDebugString();
+
+    const XRLayerSharedImages& layer_shared_images = GetSharedImages();
+    const XRSharedImageData& content_image_data =
+        layer_shared_images.content_image_data;
+    const XRSharedImageData& camera_image_data =
+        layer_shared_images.camera_image_data;
+
+    if (content_image_data.shared_image) {
+      drawing_buffer_->UseSharedBuffer(content_image_data.shared_image,
+                                       content_image_data.sync_token);
+      DVLOG(3) << __func__ << ": content_image_data.shared_image->mailbox()="
+               << content_image_data.shared_image->mailbox().ToDebugString();
       is_direct_draw_frame = true;
     } else {
       is_direct_draw_frame = false;
     }
 
-    if (camera_image_mailbox_holder) {
-      DVLOG(3) << __func__ << ":camera_image_mailbox_holder->mailbox="
-               << camera_image_mailbox_holder->mailbox.ToDebugString();
-      camera_image_mailbox_holder_ = camera_image_mailbox_holder;
-      camera_image_texture_id_ =
-          GetBufferTextureId(camera_image_mailbox_holder_);
+    if (camera_image_data.shared_image) {
+      DVLOG(3) << __func__ << ": camera_image_data.shared_image->mailbox()"
+               << camera_image_data.shared_image->mailbox().ToDebugString();
+      camera_image_texture_id_ = GetBufferTextureId(
+          camera_image_data.shared_image, camera_image_data.sync_token);
       DVLOG(3) << __func__
                << ": camera_image_texture_id_=" << camera_image_texture_id_;
-      BindCameraBufferTexture(camera_image_mailbox_holder_);
+      BindCameraBufferTexture(camera_image_data.shared_image);
     }
   }
 }
 
 uint32_t XRWebGLLayer::GetBufferTextureId(
-    const std::optional<gpu::MailboxHolder>& buffer_mailbox_holder) {
+    const scoped_refptr<gpu::ClientSharedImage>& buffer_shared_image,
+    const gpu::SyncToken& buffer_sync_token) {
   gpu::gles2::GLES2Interface* gl = drawing_buffer_->ContextGL();
-  gl->WaitSyncTokenCHROMIUM(buffer_mailbox_holder->sync_token.GetConstData());
-  DVLOG(3) << __func__ << ": buffer_mailbox_holder->sync_token="
-           << buffer_mailbox_holder->sync_token.ToDebugString();
+  gl->WaitSyncTokenCHROMIUM(buffer_sync_token.GetConstData());
+  DVLOG(3) << __func__
+           << ": buffer_sync_token=" << buffer_sync_token.ToDebugString();
   GLuint texture_id = gl->CreateAndTexStorage2DSharedImageCHROMIUM(
-      buffer_mailbox_holder->mailbox.name);
+      buffer_shared_image->mailbox().name);
   DVLOG(3) << __func__ << ": texture_id=" << texture_id;
   return texture_id;
 }
 
 void XRWebGLLayer::BindCameraBufferTexture(
-    const std::optional<gpu::MailboxHolder>& buffer_mailbox_holder) {
+    const scoped_refptr<gpu::ClientSharedImage>& buffer_shared_image) {
   gpu::gles2::GLES2Interface* gl = drawing_buffer_->ContextGL();
 
-  if (buffer_mailbox_holder) {
-    uint32_t texture_target = buffer_mailbox_holder->texture_target;
+  if (buffer_shared_image) {
+    uint32_t texture_target = buffer_shared_image->GetTextureTarget();
     gl->BindTexture(texture_target, camera_image_texture_id_);
     gl->BeginSharedImageAccessDirectCHROMIUM(
         camera_image_texture_id_, GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM);
@@ -419,8 +432,9 @@ void XRWebGLLayer::OnFrameEnd() {
       // `SubmitWebGLLayer` so that we stop using it before the sync token
       // that `SubmitWebGLLayer` will generate.
       if (camera_image_texture_id_) {
+        const XRLayerSharedImages& layer_shared_images = GetSharedImages();
         // We shouldn't ever have a camera texture if the holder wasn't present:
-        DCHECK(camera_image_mailbox_holder_);
+        CHECK(layer_shared_images.camera_image_data.shared_image);
 
         DVLOG(3) << __func__
                  << ": deleting camera image texture, camera_image_texture_id_="
@@ -440,7 +454,6 @@ void XRWebGLLayer::OnFrameEnd() {
         }
 
         camera_image_texture_id_ = 0;
-        camera_image_mailbox_holder_ = std::nullopt;
       }
 
       // Always call submit, but notify if the contents were changed or not.

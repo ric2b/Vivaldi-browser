@@ -2,24 +2,27 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="nl">
 <translation id="1063263220330818888">Privé zoekopdracht</translation>
+<translation id="1097355661841455597">We horen graag jouw mening.</translation>
 <translation id="1137850887415122856">Stel Touch ID, Face ID of een toegangscode in om jouw privé-tabs te vergrendelen.</translation>
 <translation id="1310184829257917508">Vraag om links van andere apps in privémodus te openen</translation>
-<translation id="1512201558627495343">Nieuwe privétab</translation>
 <translation id="207677936531967364">Nieuwe privétabpagina</translation>
+<translation id="2418705169960294134">Nieuw privé-tabblad</translation>
 <translation id="2899836479226240291">Je kunt links automatisch openen in Vivaldi door Vivaldi in te stellen als je standaard browser-app.</translation>
-<translation id="3365529507898144230">Opslaan in Foto's</translation>
+<translation id="3463990832590571933">In privé-tabblad openen</translation>
 <translation id="3473652525653758699">Nieuwe privévenster</translation>
 <translation id="3501504415290398157">Gebruik <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> om je privétabs te ontgrendelen.</translation>
 <translation id="3692650606013198282">Privé openen</translation>
-<translation id="3709782636417497984">In een nieuwe privétab openen</translation>
 <translation id="3981599532037327317">${url} in privémodus openen</translation>
 <translation id="398477389655464998">Link naar markering kopiëren</translation>
-<translation id="4620246317052452550">Pagina's die je hebt gelezen</translation>
+<translation id="4026745073321351206">🙄 Een probleem ontdekt?</translation>
 <translation id="4755216899422789286">URL's in Vivaldi openen</translation>
+<translation id="5431239785743546285">Pagina's die je hebt gelezen</translation>
 <translation id="6233792867654386826">Opent de ingevoerde URL's in Vivaldi.</translation>
 <translation id="6827597288286078054">Privé zoekopdracht</translation>
 <translation id="7307970171564921489">Ontgrendel privétabs met <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Privé openen?</translation>
 <translation id="7549299604720382000">Nieuwe privétab</translation>
+<translation id="7920949005883349320">Privacy en beveiliging</translation>
+<translation id="8031932676440435547">Opslaan in Foto's</translation>
 <translation id="8326104954595890674">Nieuwe privétab</translation>
 </translationbundle>

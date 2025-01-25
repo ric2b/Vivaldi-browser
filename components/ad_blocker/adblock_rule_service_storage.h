@@ -9,10 +9,10 @@
 #include "base/files/file_path.h"
 #include "base/files/important_file_writer.h"
 #include "components/ad_blocker/adblock_known_sources_handler.h"
-#include "components/ad_blocker/adblock_types.h"
 #include "components/ad_blocker/adblock_rule_manager.h"
 #include "components/ad_blocker/adblock_rule_service.h"
-#include "components/request_filter/adblock_filter/adblock_tab_handler.h"
+#include "components/ad_blocker/adblock_types.h"
+#include "components/request_filter/adblock_filter/adblock_state_and_logs.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -41,8 +41,8 @@ class RuleServiceStorage : public base::ImportantFileWriter::DataSerializer {
         exceptions;
     std::array<std::string, kRuleGroupCount> index_checksums;
     base::Time blocked_reporting_start;
-    TabHandler::CounterGroup blocked_domains_counters;
-    TabHandler::CounterGroup blocked_for_origin_counters;
+    StateAndLogs::CounterGroup blocked_domains_counters;
+    StateAndLogs::CounterGroup blocked_for_origin_counters;
 
     int storage_version = 0;
   };

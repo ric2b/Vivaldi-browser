@@ -35,12 +35,6 @@ class SidePanelUtil {
   static SidePanelContentProxy* GetSidePanelContentProxy(
       views::View* content_view);
 
-  // Deregister the entry with the key from the registry and return the view if
-  // exists.
-  static std::unique_ptr<views::View> DeregisterAndReturnView(
-      SidePanelRegistry* registry,
-      SidePanelEntry::Key key);
-
   static void RecordNewTabButtonClicked(SidePanelEntry::Id id);
   static void RecordSidePanelOpen(std::optional<SidePanelOpenTrigger> trigger);
   static void RecordSidePanelShowOrChangeEntryTrigger(
@@ -62,9 +56,5 @@ class SidePanelUtil {
   static void RecordSidePanelAnimationMetrics(
       base::TimeDelta largest_step_time);
 };
-
-extern const ui::ClassProperty<
-    std::underlying_type_t<SidePanelContentState>>* const
-    kSidePanelContentStateKey;
 
 #endif  // CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_SIDE_PANEL_UTIL_H_

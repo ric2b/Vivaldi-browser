@@ -73,7 +73,7 @@
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "avfilter.h"
-#include "internal.h"
+#include "filters.h"
 #include "video.h"
 #include "bbox.h"
 #include "lavfutils.h"

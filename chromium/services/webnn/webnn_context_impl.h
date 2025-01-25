@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "base/component_export.h"
+#include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/dcheck_is_on.h"
 #include "base/functional/callback_forward.h"
@@ -17,7 +18,6 @@
 #include "base/types/expected.h"
 #include "base/types/optional_ref.h"
 #include "base/types/pass_key.h"
-#include "base/unguessable_token.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -29,12 +29,13 @@
 #include "services/webnn/public/mojom/webnn_graph.mojom.h"
 #include "services/webnn/public/mojom/webnn_graph_builder.mojom.h"
 #include "services/webnn/public/mojom/webnn_tensor.mojom.h"
+#include "services/webnn/webnn_context_provider_impl.h"
 #include "services/webnn/webnn_graph_impl.h"
 #include "services/webnn/webnn_object_impl.h"
 
 namespace webnn {
 
-class WebNNContextProviderImpl;
+class WebNNConstantOperand;
 class WebNNGraphBuilderImpl;
 class WebNNTensorImpl;
 
@@ -93,6 +94,8 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNContextImpl
   virtual void CreateGraphImpl(
       mojom::GraphInfoPtr graph_info,
       WebNNGraphImpl::ComputeResourceInfo compute_resource_info,
+      base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>
+          constant_operands,
       CreateGraphImplCallback callback) = 0;
 
   // Pass ownership of a newly-created `graph_impl` to this context.
@@ -113,9 +116,15 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNContextImpl
   const ContextProperties& properties() { return properties_; }
   const mojom::CreateContextOptions& options() const { return *options_; }
 
+  void ResetReceiverWithReason(std::string_view message);
+
   // Closes the `receiver_` pipe with the renderer process, then self destructs
   // by removing itself from the ownership of `context_provider_`.
   void OnLost(std::string_view context_lost_info);
+
+  WebNNContextProviderImpl* context_provider() const {
+    return context_provider_.get();
+  }
 
  protected:
   void OnConnectionError();

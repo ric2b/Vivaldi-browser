@@ -274,7 +274,8 @@ class FileManagerBrowserTestBase
   void StartTest();
 
  private:
-  using IdToWebContents = std::map<std::string, content::WebContents*>;
+  using IdToWebContents =
+      std::map<std::string, raw_ptr<content::WebContents, CtnExperimental>>;
 
   class MockFileTasksObserver;
 
@@ -313,6 +314,12 @@ class FileManagerBrowserTestBase
   virtual bool HandleEnterpriseConnectorCommands(const std::string& name,
                                                  const base::Value::Dict& value,
                                                  std::string* output);
+
+  // Checks if the command is from SkyVault. If so, handles it and returns true,
+  // otherwise it returns false.
+  virtual bool HandleSkyVaultCommands(const std::string& name,
+                                      const base::Value::Dict& value,
+                                      std::string* output);
 
   // Called during setup if needed, to create a drive integration service for
   // the given |profile|. Caller owns the return result.

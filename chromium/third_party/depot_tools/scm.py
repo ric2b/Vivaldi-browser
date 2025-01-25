@@ -52,7 +52,7 @@ def determine_scm(root):
 
 GitConfigScope = Literal['system', 'global', 'local', 'worktree']
 GitScopeOrder: list[GitConfigScope] = ['system', 'global', 'local', 'worktree']
-GitFlatConfigData = Mapping[str, Sequence[str]]
+GitFlatConfigData = Mapping[str, Mapping[str, Sequence[str]]]
 
 
 class GitConfigStateBase(metaclass=abc.ABCMeta):
@@ -387,7 +387,11 @@ class GitConfigStateReal(GitConfigStateBase):
     def load_config(self) -> GitFlatConfigData:
         # NOTE: `git config --list` already canonicalizes keys.
         try:
-            rawConfig = GIT.Capture(['config', '--list', '-z', '--show-scope'],
+            gitConfigCmd = ['config', '--list', '-z', '--show-scope']
+            if git_common.get_git_version() <= (2, 25):
+                gitConfigCmd = ['config', '--list', '-z']
+
+            rawConfig = GIT.Capture(gitConfigCmd,
                                     cwd=self.root,
                                     strip_out=False)
         except subprocess2.CalledProcessError:
@@ -395,7 +399,7 @@ class GitConfigStateReal(GitConfigStateBase):
 
         assert isinstance(rawConfig, str)
         cfg: Dict[str, Dict[str,
-                            List[str]]] = defaultdict(lambda: defaultdict(list))
+                            list[str]]] = defaultdict(lambda: defaultdict(list))
 
         entries = rawConfig.split('\x00')[:-1]
 
@@ -535,8 +539,8 @@ class GitConfigStateTest(GitConfigStateBase):
             raise GitConfigUnknownScope(scope)
 
     def load_config(self) -> GitFlatConfigData:
-        cfg: Dict[str, Dict[str,
-                            List[str]]] = defaultdict(lambda: defaultdict(list))
+        cfg: Mapping[str, Mapping[str, list[str]]] = defaultdict(
+            lambda: defaultdict(list))
 
         for key, values in self.system_state.items():
             cfg['system'][key].extend(values)
@@ -1109,9 +1113,13 @@ class GIT(object):
         """
         if not os.path.exists(os.path.join(repo_root, '.gitmodules')):
             return []
-        config_output = GIT.Capture(
-            ['config', '--file', '.gitmodules', '--get-regexp', 'path'],
-            cwd=repo_root)
+        try:
+            config_output = GIT.Capture(
+                ['config', '--file', '.gitmodules', '--get-regexp', 'path'],
+                cwd=repo_root)
+        except subprocess2.CalledProcessError:
+            # Git exits with 1 if no config matches are found.
+            return []
         assert isinstance(config_output, str)
         return [
             line.split()[-1].replace('/', os.path.sep)

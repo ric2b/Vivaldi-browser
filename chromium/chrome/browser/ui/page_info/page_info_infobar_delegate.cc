@@ -15,11 +15,23 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#include "ui/infobar_container_web_proxy.h"
+
 // static
 void PageInfoInfoBarDelegate::Create(
     infobars::ContentInfoBarManager* infobar_manager) {
   infobar_manager->AddInfoBar(CreateConfirmInfoBar(
       std::unique_ptr<ConfirmInfoBarDelegate>(new PageInfoInfoBarDelegate())));
+}
+
+// static
+void PageInfoInfoBarDelegate::CreateForVivaldi(
+    infobars::ContentInfoBarManager* infobar_manager) {
+  std::unique_ptr<vivaldi::ConfirmInfoBarWebProxy> infobar =
+      std::make_unique<vivaldi::ConfirmInfoBarWebProxy>(
+          std::unique_ptr<ConfirmInfoBarDelegate>(
+              new PageInfoInfoBarDelegate()));
+  infobar_manager->AddInfoBar(std::move(infobar));
 }
 
 PageInfoInfoBarDelegate::PageInfoInfoBarDelegate() = default;

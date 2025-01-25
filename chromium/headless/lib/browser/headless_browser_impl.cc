@@ -140,6 +140,11 @@ Builder& Builder::SetWindowSize(const gfx::Size& size) {
   return *this;
 }
 
+Builder& Builder::SetScreenScaleFactor(float scale_factor) {
+  options_.screen_scale_factor = scale_factor;
+  return *this;
+}
+
 Builder& Builder::SetIncognitoMode(bool incognito) {
   options_.incognito_mode = incognito;
   return *this;
@@ -298,17 +303,6 @@ HeadlessBrowserContext* HeadlessBrowserImpl::GetDefaultBrowserContext() {
 base::WeakPtr<HeadlessBrowserImpl> HeadlessBrowserImpl::GetWeakPtr() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   return weak_ptr_factory_.GetWeakPtr();
-}
-
-HeadlessWebContents* HeadlessBrowserImpl::GetWebContentsForDevToolsAgentHostId(
-    const std::string& devtools_agent_host_id) {
-  for (HeadlessBrowserContext* context : GetAllBrowserContexts()) {
-    HeadlessWebContents* web_contents =
-        context->GetWebContentsForDevToolsAgentHostId(devtools_agent_host_id);
-    if (web_contents)
-      return web_contents;
-  }
-  return nullptr;
 }
 
 HeadlessWebContentsImpl* HeadlessBrowserImpl::GetWebContentsForWindowId(

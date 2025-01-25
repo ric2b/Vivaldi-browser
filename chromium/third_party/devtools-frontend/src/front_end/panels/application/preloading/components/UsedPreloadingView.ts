@@ -2,25 +2,29 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../../ui/components/icon_button/icon_button.js';
+import '../../../../ui/components/report_view/report_view.js';
+import './PreloadingMismatchedHeadersGrid.js';
+import './MismatchedPreloadingGrid.js';
+
 import * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import type * as Platform from '../../../../core/platform/platform.js';
 import {assertNotNullOrUndefined} from '../../../../core/platform/platform.js';
 import * as SDK from '../../../../core/sdk/sdk.js';
 import * as Protocol from '../../../../generated/protocol.js';
-import * as IconButton from '../../../../ui/components/icon_button/icon_button.js';
 import * as LegacyWrapper from '../../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as Coordinator from '../../../../ui/components/render_coordinator/render_coordinator.js';
-import * as ReportView from '../../../../ui/components/report_view/report_view.js';
 import * as UI from '../../../../ui/legacy/legacy.js';
 import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js';
 import * as PreloadingHelper from '../helper/helper.js';
 
-import * as MismatchedPreloadingGrid from './MismatchedPreloadingGrid.js';
-import * as PreloadingMismatchedHeadersGrid from './PreloadingMismatchedHeadersGrid.js';
+import type * as MismatchedPreloadingGrid from './MismatchedPreloadingGrid.js';
 import {prefetchFailureReason, prerenderFailureReason} from './PreloadingString.js';
 import usedPreloadingStyles from './usedPreloadingView.css.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -138,7 +142,6 @@ export const enum UsedKind {
 // TODO(kenoss): Rename this class and file once https://crrev.com/c/4933567 landed.
 // This also shows summary of speculations initiated by this page.
 export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableComponent<UI.Widget.VBox> {
-  static readonly litTagName = LitHtml.literal`devtools-resources-used-preloading-view`;
 
   readonly #shadow = this.attachShadow({mode: 'open'});
   #data: UsedPreloadingViewData = {
@@ -165,22 +168,20 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
   #renderInternal(): LitHtml.LitTemplate {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
-      <${ReportView.ReportView.Report.litTagName}>
+    return html`
+      <devtools-report>
         ${this.#speculativeLoadingStatusForThisPageSections()}
 
-        <${ReportView.ReportView.ReportSectionDivider.litTagName}></${
-          ReportView.ReportView.ReportSectionDivider.litTagName}>
+        <devtools-report-divider></devtools-report-divider>
 
         ${this.#speculationsInitiatedByThisPageSummarySections()}
 
-        <${ReportView.ReportView.ReportSectionDivider.litTagName}></${
-          ReportView.ReportView.ReportSectionDivider.litTagName}>
+        <devtools-report-divider></devtools-report-divider>
 
-        <${ReportView.ReportView.ReportSection.litTagName}>
+        <devtools-report-section>
           ${UI.XLink.XLink.create('https://developer.chrome.com/blog/prerender-pages/', i18nString(UIStrings.learnMore), 'link', undefined, 'learn-more')}
-        </${ReportView.ReportView.ReportSection.litTagName}>
-      </${ReportView.ReportView.Report.litTagName}>
+        </devtools-report-section>
+      </devtools-report>
     `;
     // clang-format on
   }
@@ -219,27 +220,27 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
     switch (kind) {
       case UsedKind.DOWNGRADED_PRERENDER_TO_PREFETCH_AND_USED:
         badge = this.#badgeSuccess();
-        basicMessage = LitHtml.html`${i18nString(UIStrings.downgradedPrefetchUsed)}`;
+        basicMessage = html`${i18nString(UIStrings.downgradedPrefetchUsed)}`;
         break;
       case UsedKind.PREFETCH_USED:
         badge = this.#badgeSuccess();
-        basicMessage = LitHtml.html`${i18nString(UIStrings.prefetchUsed)}`;
+        basicMessage = html`${i18nString(UIStrings.prefetchUsed)}`;
         break;
       case UsedKind.PRERENDER_USED:
         badge = this.#badgeSuccess();
-        basicMessage = LitHtml.html`${i18nString(UIStrings.prerenderUsed)}`;
+        basicMessage = html`${i18nString(UIStrings.prerenderUsed)}`;
         break;
       case UsedKind.PREFETCH_FAILED:
         badge = this.#badgeFailure();
-        basicMessage = LitHtml.html`${i18nString(UIStrings.prefetchFailed)}`;
+        basicMessage = html`${i18nString(UIStrings.prefetchFailed)}`;
         break;
       case UsedKind.PRERENDER_FAILED:
         badge = this.#badgeFailure();
-        basicMessage = LitHtml.html`${i18nString(UIStrings.prerenderFailed)}`;
+        basicMessage = html`${i18nString(UIStrings.prerenderFailed)}`;
         break;
       case UsedKind.NO_PRELOADS:
         badge = this.#badgeNeutral(i18nString(UIStrings.badgeNoSpeculativeLoads));
-        basicMessage = LitHtml.html`${i18nString(UIStrings.noPreloads)}`;
+        basicMessage = html`${i18nString(UIStrings.noPreloads)}`;
         break;
     }
 
@@ -256,22 +257,20 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
     if (maybeFailureReasonMessage !== undefined) {
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
-      maybeFailureReason = LitHtml.html`
-      <${ReportView.ReportView.ReportSectionHeader.litTagName}>${i18nString(UIStrings.detailsFailureReason)}</${
-        ReportView.ReportView.ReportSectionHeader.litTagName}>
-      <${ReportView.ReportView.ReportSection.litTagName}>
+      maybeFailureReason = html`
+      <devtools-report-section-header>${i18nString(UIStrings.detailsFailureReason)}</devtools-report-section-header>
+      <devtools-report-section>
         ${maybeFailureReasonMessage}
-      </${ReportView.ReportView.ReportSection.litTagName}>
+      </devtools-report-section>
       `;
       // clang-format on
     }
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
-      <${ReportView.ReportView.ReportSectionHeader.litTagName}>${i18nString(UIStrings.speculativeLoadingStatusForThisPage)}</${
-        ReportView.ReportView.ReportSectionHeader.litTagName}>
-      <${ReportView.ReportView.ReportSection.litTagName}>
+    return html`
+      <devtools-report-section-header>${i18nString(UIStrings.speculativeLoadingStatusForThisPage)}</devtools-report-section-header>
+      <devtools-report-section>
         <div>
           <div class="status-badge-container">
             ${badge}
@@ -280,7 +279,7 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
             ${basicMessage}
           </div>
         </div>
-      </${ReportView.ReportView.ReportSection.litTagName}>
+      </devtools-report-section>
 
       ${maybeFailureReason}
 
@@ -309,21 +308,18 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
-      <${ReportView.ReportView.ReportSectionHeader.litTagName}>${i18nString(UIStrings.currentURL)}</${
-        ReportView.ReportView.ReportSectionHeader.litTagName}>
-      <${ReportView.ReportView.ReportSection.litTagName}>
+    return html`
+      <devtools-report-section-header>${i18nString(UIStrings.currentURL)}</devtools-report-section-header>
+      <devtools-report-section>
         ${UI.XLink.XLink.create(this.#data.pageURL, undefined, 'link', undefined, 'current-url')}
-      </${ReportView.ReportView.ReportSection.litTagName}>
+      </devtools-report-section>
 
-      <${ReportView.ReportView.ReportSectionHeader.litTagName}>${i18nString(UIStrings.preloadedURLs)}</${
-        ReportView.ReportView.ReportSectionHeader.litTagName}>
-      <${ReportView.ReportView.ReportSection.litTagName}
+      <devtools-report-section-header>${i18nString(UIStrings.preloadedURLs)}</devtools-report-section-header>
+      <devtools-report-section
       jslog=${VisualLogging.section('preloaded-urls')}>
-        <${MismatchedPreloadingGrid.MismatchedPreloadingGrid.litTagName}
-          .data=${data as MismatchedPreloadingGrid.MismatchedPreloadingGridData}></${
-          MismatchedPreloadingGrid.MismatchedPreloadingGrid.litTagName}>
-      </${ReportView.ReportView.ReportSection.litTagName}>
+        <devtools-resources-mismatched-preloading-grid
+          .data=${data as MismatchedPreloadingGrid.MismatchedPreloadingGridData}></devtools-resources-mismatched-preloading-grid>
+      </devtools-report-section>
     `;
     // clang-format on
   }
@@ -345,14 +341,12 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
-      <${ReportView.ReportView.ReportSectionHeader.litTagName}>${i18nString(UIStrings.mismatchedHeadersDetail)}</${
-        ReportView.ReportView.ReportSectionHeader.litTagName}>
-      <${ReportView.ReportView.ReportSection.litTagName}>
-        <${PreloadingMismatchedHeadersGrid.PreloadingMismatchedHeadersGrid.litTagName}
-          .data=${attempt as SDK.PreloadingModel.PrerenderAttempt}></${
-            PreloadingMismatchedHeadersGrid.PreloadingMismatchedHeadersGrid.litTagName}>
-      </${ReportView.ReportView.ReportSection.litTagName}>
+    return html`
+      <devtools-report-section-header>${i18nString(UIStrings.mismatchedHeadersDetail)}</devtools-report-section-header>
+      <devtools-report-section>
+        <devtools-resources-preloading-mismatched-headers-grid
+          .data=${attempt as SDK.PreloadingModel.PrerenderAttempt}></devtools-resources-preloading-mismatched-headers-grid>
+      </devtools-report-section>
     `;
     // clang-format on
   }
@@ -393,10 +387,9 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
-      <${ReportView.ReportView.ReportSectionHeader.litTagName}>${i18nString(UIStrings.speculationsInitiatedByThisPage)}</${
-        ReportView.ReportView.ReportSectionHeader.litTagName}>
-      <${ReportView.ReportView.ReportSection.litTagName}>
+    return html`
+      <devtools-report-section-header>${i18nString(UIStrings.speculationsInitiatedByThisPage)}</devtools-report-section-header>
+      <devtools-report-section>
         <div>
           <div class="status-badge-container">
             ${badges}
@@ -414,7 +407,7 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
             </button>
           </div>
         </div>
-      </${ReportView.ReportView.ReportSection.litTagName}>
+      </devtools-report-section>
     `;
     // clang-format on
   }
@@ -446,9 +439,9 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
   #badge(klass: string, iconName: string, message: string): LitHtml.LitTemplate {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
+    return html`
       <span class=${klass}>
-        <${IconButton.Icon.Icon.litTagName} name=${iconName}></${IconButton.Icon.Icon.litTagName}>
+        <devtools-icon name=${iconName}></devtools-icon>
         <span>
           ${message}
         </span>

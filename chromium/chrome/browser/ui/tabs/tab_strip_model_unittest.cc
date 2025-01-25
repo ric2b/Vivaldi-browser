@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #ifdef UNSAFE_BUFFERS_BUILD
 // TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
 #pragma allow_unsafe_buffers
@@ -20,9 +21,11 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/fixed_flat_map.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
+#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -120,7 +123,7 @@ class MockTabStripModelObserver : public TabStripModelObserver {
         return opt.has_value() ? base::NumberToString(opt.value())
                                : std::string("<none>");
       };
-      oss << "State change: " << kActionNames[int{action}]
+      oss << "State change: " << StringifyActionName(action)
           << "\n  Source index: " << optional_to_string(src_index)
           << "\n  Destination index: " << optional_to_string(dst_index)
           << "\n  Source contents: " << src_contents
@@ -137,9 +140,6 @@ class MockTabStripModelObserver : public TabStripModelObserver {
              change_reason == state.change_reason &&
              foreground == state.foreground && action == state.action;
     }
-
-   private:
-    static const char* const kActionNames[];
   };
 
   int GetStateCount() const { return static_cast<int>(states_.size()); }
@@ -256,6 +256,7 @@ class MockTabStripModelObserver : public TabStripModelObserver {
       TabStripModel* tab_strip_model,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override {
+    latest_selection_change = selection;
     switch (change.type()) {
       case TabStripModelChange::kInserted: {
         for (const auto& contents : change.GetInsert()->contents) {
@@ -334,6 +335,10 @@ class MockTabStripModelObserver : public TabStripModelObserver {
     }
   }
 
+  TabStripSelectionChange GetLatestSelectionChange() {
+    return latest_selection_change;
+  }
+
   void TabChangedAt(WebContents* contents,
                     int index,
                     TabChangeType change_type) override {
@@ -362,25 +367,38 @@ class MockTabStripModelObserver : public TabStripModelObserver {
   void ClearStates() { states_.clear(); }
 
  private:
+  static std::string_view StringifyActionName(
+      TabStripModelObserverAction action) {
+    using enum TabStripModelObserverAction;
+    constexpr auto kObserverActionNames =
+        base::MakeFixedFlatMap<TabStripModelObserverAction, std::string_view>({
+            {INSERT, "INSERT"},
+            {CLOSE, "CLOSE"},
+            {DETACH, "DETACH"},
+            {ACTIVATE, "ACTIVATE"},
+            {DEACTIVATE, "DEACTIVATE"},
+            {SELECT, "SELECT"},
+            {MOVE, "MOVE"},
+            {CHANGE, "CHANGE"},
+            {PINNED, "PINNED"},
+            {REPLACED, "REPLACED"},
+            {CLOSE_ALL, "CLOSE_ALL"},
+            {CLOSE_ALL_CANCELED, "CLOSE_ALL_CANCELED"},
+            {CLOSE_ALL_COMPLETED, "CLOSE_ALL_COMPLETED"},
+            {GROUP_CHANGED, "GROUP_CHANGED"},
+        });
+    const auto iter = kObserverActionNames.find(action);
+    if (iter != kObserverActionNames.end()) {
+      return iter->second;
+    }
+
+    NOTREACHED() << "bogus `TabStripModelObserverAction`: " << action;
+  }
+
   std::vector<State> states_;
+  TabStripSelectionChange latest_selection_change;
   std::map<tab_groups::TabGroupId, TabGroupUpdate> group_updates_;
 };
-
-const char* const MockTabStripModelObserver::State::kActionNames[]{
-    "INSERT",
-    "CLOSE",
-    "DETACH",
-    "ACTIVATE",
-    "DEACTIVATE",
-    "SELECT",
-    "MOVE",
-    "CHANGE",
-    "PINNED",
-    "REPLACED",
-    "CLOSE_ALL",
-    "CLOSE_ALL_CANCELED",
-    "CLOSE_ALL_COMPLETED",
-    "GROUP_CHANGED"};
 
 }  // namespace
 
@@ -1417,6 +1435,26 @@ TEST_P(TabStripModelTest, CloseTabWithOpenerShiftsSelectionToOpener) {
 
   tabstrip.CloseAllTabs();
   ASSERT_TRUE(tabstrip.empty());
+}
+
+TEST_P(TabStripModelTest, IsContextMenuCommandEnabledBadIndex) {
+  constexpr int kTestTabCount = 1;
+
+  TestTabStripModelDelegate delegate;
+  TabStripModel tabstrip(&delegate, profile());
+  ASSERT_NO_FATAL_FAILURE(
+      PrepareTabstripForSelectionTest(&tabstrip, kTestTabCount, 0, "0"));
+  ASSERT_EQ(kTestTabCount, tabstrip.count());
+  ASSERT_FALSE(tabstrip.ContainsIndex(kTestTabCount));
+
+  // kNoTabs should return false for context menu commands being enabled.
+  EXPECT_FALSE(tabstrip.IsContextMenuCommandEnabled(
+      TabStripModel::kNoTab, TabStripModel::CommandCloseTab));
+
+  // Indexes out of bounds should return false for context menu
+  // commands being enabled.
+  EXPECT_FALSE(tabstrip.IsContextMenuCommandEnabled(
+      kTestTabCount, TabStripModel::CommandCloseTab));
 }
 
 // Tests IsContextMenuCommandEnabled and ExecuteContextMenuCommand with
@@ -4733,6 +4771,63 @@ TEST_P(TabStripModelTest, AppendTab) {
   EXPECT_EQ(nullptr, tabstrip->GetTabHandleAt(3).Get()->opener());
   EXPECT_EQ(tab_model_with_foreground_false_ptr->owning_model(),
             tabstrip.get());
+}
+
+TEST_P(TabStripModelTest, SelectionChangedSingleOperationObserverTest) {
+  TestTabStripModelDelegate delegate;
+  MockTabStripModelObserver observer;
+
+  std::unique_ptr<TabStripModel> tabstrip =
+      std::make_unique<TabStripModel>(&delegate, profile());
+  tabstrip->AddObserver(&observer);
+  ASSERT_TRUE(tabstrip->empty());
+
+  // Add 4 tabs to the tabstrip model
+  PrepareTabs(tabstrip.get(), 4);
+  ASSERT_EQ(4, tabstrip->count());
+  tabstrip->ActivateTabAt(0);
+
+  // Check selection change after insertion.
+  tabstrip->InsertWebContentsAt(0, CreateWebContentsWithID(5),
+                                AddTabTypes::ADD_NONE);
+  TabStripSelectionChange change = observer.GetLatestSelectionChange();
+
+  // Active webcontents should not change but selection list changes.
+  EXPECT_EQ(change.old_contents, tabstrip->GetWebContentsAt(1));
+  EXPECT_EQ(change.new_contents, tabstrip->GetWebContentsAt(1));
+
+  EXPECT_EQ(change.old_model.active(), 0u);
+  EXPECT_EQ(change.old_model.size(), 1u);
+
+  EXPECT_EQ(change.new_model.active(), 1u);
+  EXPECT_EQ(change.new_model.size(), 1u);
+
+  // Check selection change after move.
+  tabstrip->MoveWebContentsAt(0, 2, false);
+  change = observer.GetLatestSelectionChange();
+
+  // Active webcontents should not change but selection list changes.
+  EXPECT_EQ(change.old_contents, tabstrip->GetWebContentsAt(0));
+  EXPECT_EQ(change.new_contents, tabstrip->GetWebContentsAt(0));
+
+  EXPECT_EQ(change.old_model.active(), 1u);
+  EXPECT_EQ(change.old_model.size(), 1u);
+
+  EXPECT_EQ(change.new_model.active(), 0u);
+  EXPECT_EQ(change.new_model.size(), 1u);
+
+  // Check selection change after move with select_after_move as true.
+  tabstrip->MoveWebContentsAt(1, 0, true);
+  change = observer.GetLatestSelectionChange();
+
+  EXPECT_EQ(change.old_contents, tabstrip->GetWebContentsAt(1));
+  EXPECT_EQ(change.new_contents, tabstrip->GetWebContentsAt(0));
+
+  EXPECT_EQ(change.old_model.active(), 0u);
+  EXPECT_EQ(change.old_model.size(), 1u);
+
+  EXPECT_EQ(change.new_model.active(), 0u);
+  EXPECT_EQ(change.new_model.size(), 1u);
 }
 
 INSTANTIATE_TEST_SUITE_P(All, TabStripModelTest, ::testing::Bool());

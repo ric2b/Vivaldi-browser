@@ -1296,7 +1296,7 @@ export interface TextureTestMixinType {
    * to the expected TexelView passes without error.
    */
   expectTexelViewComparisonIsOkInTexture(
-    src: GPUImageCopyTexture,
+    src: GPUTexelCopyTextureInfo,
     exp: TexelView,
     size: GPUExtent3D,
     comparisonOptions?: TexelCompareOptions
@@ -1307,7 +1307,7 @@ export interface TextureTestMixinType {
    * their expected colors without error.
    */
   expectSinglePixelComparisonsAreOkInTexture<E extends PixelExpectation>(
-    src: GPUImageCopyTexture,
+    src: GPUTexelCopyTextureInfo,
     exp: PerPixelComparison<E>[],
     comparisonOptions?: TexelCompareOptions
   ): void;
@@ -1383,7 +1383,7 @@ export interface TextureTestMixinType {
    * Gets a byte offset to a texel
    */
   getTexelOffsetInBytes(
-    textureDataLayout: Required<GPUImageDataLayout>,
+    textureDataLayout: Required<GPUTexelCopyBufferLayout>,
     format: ColorTextureFormat,
     texel: Required<GPUOrigin3DDict>,
     origin?: Required<GPUOrigin3DDict>
@@ -1481,7 +1481,7 @@ function getPipelineToRenderTextureToRGB8UnormTexture(
 }
 
 type LinearCopyParameters = {
-  dataLayout: Required<GPUImageDataLayout>;
+  dataLayout: Required<GPUTexelCopyBufferLayout>;
   origin: Required<GPUOrigin3DDict>;
   data: Uint8Array;
 };
@@ -1511,7 +1511,7 @@ export function TextureTestMixin<F extends FixtureClass<GPUTest>>(
     }
 
     expectTexelViewComparisonIsOkInTexture(
-      src: GPUImageCopyTexture,
+      src: GPUTexelCopyTextureInfo,
       exp: TexelView,
       size: GPUExtent3D,
       comparisonOptions = {
@@ -1526,7 +1526,7 @@ export function TextureTestMixin<F extends FixtureClass<GPUTest>>(
     }
 
     expectSinglePixelComparisonsAreOkInTexture<E extends PixelExpectation>(
-      src: GPUImageCopyTexture,
+      src: GPUTexelCopyTextureInfo,
       exp: PerPixelComparison<E>[],
       comparisonOptions = {
         maxIntDiff: 0,
@@ -1836,7 +1836,7 @@ export function TextureTestMixin<F extends FixtureClass<GPUTest>>(
 
     /** Offset for a particular texel in the linear texture data */
     getTexelOffsetInBytes(
-      textureDataLayout: Required<GPUImageDataLayout>,
+      textureDataLayout: Required<GPUTexelCopyBufferLayout>,
       format: ColorTextureFormat,
       texel: Required<GPUOrigin3DDict>,
       origin: Required<GPUOrigin3DDict> = { x: 0, y: 0, z: 0 }

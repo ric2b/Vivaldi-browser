@@ -18,14 +18,14 @@ title: Sync
 
 [Protection against data override by legacy clients](/developers/design-documents/sync/old-sync-clients-data-override-protection)
 
-[Sync diagnostics](/developers/design-documents/sync/diagnostics) (Needs update)
+[Sync diagnostics](/developers/design-documents/sync/diagnostics)
 
 [Sync Data Best
-Practices](/developers/design-documents/sync/sync-data-best-practices) (Needs update)
+Practices](/developers/design-documents/sync/sync-data-best-practices)
 
 [Unified Sync And Storage
 proposal](/developers/design-documents/sync/unified-sync-and-storage-overview)
- (Needs update)
+ (Outdated, kept for historical purposes)
 
 ***What***
 
@@ -45,8 +45,33 @@ The goals for this protocol include:
             the server at a later time.
 *   Resolve data conflicts on the client without prompting the user.
 
-*Where*
+***Where***
 
-TODO(crbug.com/1006699): Nowadays we have directories with reasonable meaning
-and dependencies between them. Describe that here, just like the password
-manager [folks](https://source.chromium.org/chromium/chromium/src/+/91bcc3658d7f81fde685523091ca94755419a708:components/password_manager/README.md).
+Most sync code (except for UI and integration tests) lives in
+`components/sync/`. Some of the more important subfolders are:
+*   `base`: Various "util" stuff; doesn't depend on any other sync folders.
+*   `engine`: The core sync "engine", i.e. the parts that run on the sync
+    sequence, talk to the server, and propagate changes to and from the various
+    data types.
+*   `invalidations`: The subsystem responsible for handling invalidations, i.e.
+    messages from the server informing the client that new data is available.
+    Implemented as a layer on top of FCM.
+*   `model`: Contains the APIs that each data type needs to implement, and sync
+    classes that live on the model sequence.
+*   `protocol`: Contains the `.proto` definitions and some related utils.
+*   `service`: Contains the central `SyncService`, and most other sync stuff
+    that runs on the UI thread.
+*   `test`: Various test doubles and utils.
+
+Dependencies / layering:
+*   `service` is the highest layer; it depends on everything below, and most
+    external code depends on this, e.g. to query the sync status.
+*   `model` is the layer below; all data type implementations depend on this.
+*   `engine` is even lower and mostly internal - external code should generally
+    not (directly) depend on this.
+*   `protocol` is depended on by most other sync code, and by all data type
+    implementations.
+*   `base` is the lowest layer; everything else may depend on this.
+
+Additionally, there is `components/browser_sync/`, which pulls together dependencies from most data types in other `components/` subfolders, and
+injects them into core sync in the form of `DataTypeController`s.

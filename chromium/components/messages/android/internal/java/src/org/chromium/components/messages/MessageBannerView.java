@@ -42,6 +42,9 @@ import org.chromium.ui.listmenu.ListMenuButtonDelegate;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.PropertyModel;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** View representing the message banner. */
 public class MessageBannerView extends BoundedLinearLayout {
     private ImageView mIconView;
@@ -314,6 +317,9 @@ public class MessageBannerView extends BoundedLinearLayout {
 
     void setMarginTop(int val) {
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) getLayoutParams();
+        if (BuildConfig.IS_VIVALDI) { // Vivaldi VAB-10260
+            params.bottomMargin = val;
+        } else
         params.topMargin = val;
         setLayoutParams(params);
     }
@@ -427,7 +433,7 @@ public class MessageBannerView extends BoundedLinearLayout {
         return super.onTouchEvent(event);
     }
 
-    private class MessageSwipeGestureListener extends SwipeGestureListener {
+    private static class MessageSwipeGestureListener extends SwipeGestureListener {
         public MessageSwipeGestureListener(Context context, SwipeHandler handler) {
             super(context, handler);
         }

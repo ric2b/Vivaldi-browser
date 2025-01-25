@@ -1089,6 +1089,9 @@ CXFA_Node* CopyContainer_SubformSet(CXFA_Document* pDocument,
     bool bFound = false;
     for (CXFA_Node* pTemplateChild = pTemplateNode->GetFirstChild();
          pTemplateChild; pTemplateChild = pTemplateChild->GetNextSibling()) {
+      if (pTemplateChild->GetPacketType() != XFA_PacketType::Template) {
+        continue;
+      }
       if (XFA_DataMerge_NeedGenerateForm(pTemplateChild, bUseInstanceManager)) {
         XFA_NodeMerge_CloneOrMergeContainer(pDocument, pSubformSetNode,
                                             pTemplateChild, true, nullptr);
@@ -1626,7 +1629,7 @@ CXFA_Node* CXFA_Document::DataMerge_CopyContainer(CXFA_Node* pTemplateNode,
                                                   bool bOneInstance,
                                                   bool bDataMerge,
                                                   bool bUpLevel) {
-  DCHECK(pTemplateNode->IsContainerNode());
+  CHECK(pTemplateNode->IsContainerNode());
   switch (pTemplateNode->GetElementType()) {
     case XFA_Element::Area:
     case XFA_Element::PageArea:

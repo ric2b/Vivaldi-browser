@@ -28,13 +28,13 @@ title: Training
     <tr>
       <td>Callbacks in Chromium</td>
       <td>
-        <a href="https://drive.google.com/file/d/17ztTURbVqIzY1gZRjLoN0wGbIsatGvCd/view?usp=sharing&resourcekey=0-UvcDKR7iYwYvc8WdA63w_g"
+        <a href="http://goto.google.com/callbacks-in-chromium-video"
            target="_blank">
           Video
         </a>
       </td>
       <td>
-        <a href="https://docs.google.com/presentation/d/1gHkGKnIXz_RdOf7_TBs-m9uGDFqChMCul7jaBGcBZm8/edit?resourcekey=0-m-LjlVSEiaxYkFqbSN0S4Q"
+        <a href="http://goto.google.com/callbacks-in-chromium-slides"
            target="_blank">
           Slides
         </a>

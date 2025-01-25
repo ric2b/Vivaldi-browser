@@ -39,17 +39,17 @@ class ReceiverChooser final : public discovery::ReportingClient {
   void OnFatalError(const Error& error) final;
   void OnRecoverableError(const Error& error) final;
 
-  // Called from the DnsWatcher with |all| ReceiverInfos any time there is a
+  // Called from the DnsWatcher with `all` ReceiverInfos any time there is a
   // change in the set of discovered devices.
   void OnDnsWatcherUpdate(
       std::vector<std::reference_wrapper<const ReceiverInfo>> all);
 
-  // Called from |menu_alarm_| when it is a good time for the user to choose
+  // Called from `menu_alarm_` when it is a good time for the user to choose
   // from the discovered-so-far set of Cast Receivers.
   void PrintMenuAndHandleChoice();
 
   ResultCallback result_callback_;
-  std::unique_ptr<discovery::DnsSdService, TaskRunnerDeleter> service_;
+  discovery::DnsSdServicePtr service_;
   std::unique_ptr<discovery::DnsSdServiceWatcher<ReceiverInfo>> watcher_;
   std::vector<ReceiverInfo> discovered_receivers_;
   Alarm menu_alarm_;

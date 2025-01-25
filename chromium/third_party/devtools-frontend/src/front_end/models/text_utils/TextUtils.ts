@@ -32,7 +32,7 @@ import * as Platform from '../../core/platform/platform.js';
 
 import {ContentData, type ContentDataOrError} from './ContentData.js';
 import {SearchMatch} from './ContentProvider.js';
-import {type Text} from './Text.js';
+import type {Text} from './Text.js';
 
 const KEY_VALUE_FILTER_REGEXP = /(?:^|\s)(\-)?([\w\-]+):([^\s]+)/;
 const REGEXP_FILTER_REGEXP = /(?:^|\s)(\-)?\/([^\/\\]+(\\.[^\/]*)*)\//;
@@ -151,7 +151,7 @@ export class FilterParser {
         try {
           parsedFilters.push({
             key: undefined,
-            regex: new RegExp((parsedRegex as string), 'i'),
+            regex: new RegExp((parsedRegex as string), 'im'),
             text: undefined,
             negative: Boolean(startsWithMinus),
           });

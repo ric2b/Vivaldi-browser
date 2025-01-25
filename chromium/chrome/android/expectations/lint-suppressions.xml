@@ -77,7 +77,9 @@ https://chromium.googlesource.com/chromium/src/+/main/build/android/docs/lint.md
     <ignore regexp="Field requires API level .*`android.app.TaskInfo"/>
     <!-- Endnote: Please specify number of suppressions when adding more -->
   </issue>
-  <!-- This warning just adds a lot of false positives. -->
+  <!-- This check doesn't tend to catch new violations except when we increase
+  our minSdkVersion. We prefer to clean up these obsolete checks
+  incrementally after increasing minSdkVersion. -->
   <issue id="ObsoleteSdkInt" severity="ignore"/>
   <issue id="OldTargetApi" severity="ignore"/>
   <issue id="OnClick">
@@ -207,6 +209,8 @@ https://chromium.googlesource.com/chromium/src/+/main/build/android/docs/lint.md
     <ignore regexp="The resource `R.string.accessibility_omnibox_most_visited_tile` appears to be unused"/>
     <!-- 1: Some strings in components_strings_grd are not used in other targets. -->
     <ignore regexp="webview_.*__lint.*components_strings_grd"/>
+    <!-- TODO(crbug.com/371923550): Remove this suppression once plus address strings are migrated to the public repository. -->
+    <ignore regexp="components/plus_addresses/resources/strings/strings_grd"/>
     <!-- 2: resource is used in C++ components/error_page. -->
     <ignore regexp="The resource `R.string.show_content` appears to be unused"/>
     <ignore regexp="The resource `R.string.hide_content` appears to be unused"/>
@@ -285,6 +289,8 @@ https://chromium.googlesource.com/chromium/src/+/main/build/android/docs/lint.md
 
     <!-- TODO(b/362360807): Remove the following 2 lines after the bug is resolved. -->
     <ignore regexp="The resource `R.string.discount_code_copied_button_text` appears to be unused"/>
+    <ignore regexp="The resource `R.string.discount_code_copy_button_text` appears to be unused"/>
+    <ignore regexp="The resource `R.string.discount_container_title` appears to be unused"/>
     <ignore regexp="The resource `R.string.discount_expiration_date_android` appears to be unused"/>
 
     <!-- Endnote: Please specify number of suppressions when adding more -->

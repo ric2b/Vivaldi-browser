@@ -55,14 +55,34 @@ TEST(PayloadTypePicker, ModifyingPtIsIgnored) {
   PayloadTypePicker picker;
   PayloadTypeRecorder recorder(picker);
   const PayloadType a_payload_type(123);
-  cricket::Codec a_codec = cricket::CreateVideoCodec(0, "vp8");
-  cricket::Codec b_codec = cricket::CreateVideoCodec(0, "vp9");
+  cricket::Codec a_codec =
+      cricket::CreateVideoCodec(cricket::Codec::kIdNotSet, "vp8");
+  cricket::Codec b_codec =
+      cricket::CreateVideoCodec(cricket::Codec::kIdNotSet, "vp9");
   recorder.AddMapping(a_payload_type, a_codec);
   auto error = recorder.AddMapping(a_payload_type, b_codec);
   EXPECT_TRUE(error.ok());
   auto result = recorder.LookupCodec(a_payload_type);
   // Redefinition should be accepted.
   EXPECT_EQ(result.value(), b_codec);
+}
+
+TEST(PayloadTypePicker, ModifyingPtIsAnErrorIfDisallowed) {
+  PayloadTypePicker picker;
+  PayloadTypeRecorder recorder(picker);
+  const PayloadType a_payload_type(123);
+  cricket::Codec a_codec =
+      cricket::CreateVideoCodec(cricket::Codec::kIdNotSet, "vp8");
+  cricket::Codec b_codec =
+      cricket::CreateVideoCodec(cricket::Codec::kIdNotSet, "vp9");
+  recorder.DisallowRedefinition();
+  recorder.AddMapping(a_payload_type, a_codec);
+  auto error = recorder.AddMapping(a_payload_type, b_codec);
+  EXPECT_FALSE(error.ok());
+  auto result = recorder.LookupCodec(a_payload_type);
+  // Attempted redefinition should be ignored.
+  EXPECT_EQ(result.value(), a_codec);
+  recorder.ReallowRedefinition();
 }
 
 TEST(PayloadTypePicker, RollbackAndCommit) {

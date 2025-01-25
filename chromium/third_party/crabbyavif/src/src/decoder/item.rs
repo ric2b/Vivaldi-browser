@@ -199,20 +199,19 @@ impl Item {
         Ok(())
     }
 
-    #[allow(non_snake_case)]
     pub fn validate_properties(&self, items: &Items, pixi_required: bool) -> AvifResult<()> {
-        let av1C = self
-            .av1C()
+        let codec_config = self
+            .codec_config()
             .ok_or(AvifError::BmffParseFailed("missing av1C property".into()))?;
         if self.item_type == "grid" {
             for grid_item_id in &self.grid_item_ids {
                 let grid_item = items.get(grid_item_id).unwrap();
-                let grid_av1C = grid_item
-                    .av1C()
-                    .ok_or(AvifError::BmffParseFailed("missing av1C property".into()))?;
-                if av1C != grid_av1C {
+                let grid_codec_config = grid_item.codec_config().ok_or(
+                    AvifError::BmffParseFailed("missing codec config property".into()),
+                )?;
+                if codec_config != grid_codec_config {
                     return Err(AvifError::BmffParseFailed(
-                        "av1c of grid items do not match".into(),
+                        "codec config of grid items do not match".into(),
                     ));
                 }
             }
@@ -220,9 +219,9 @@ impl Item {
         match self.pixi() {
             Some(pixi) => {
                 for depth in &pixi.plane_depths {
-                    if *depth != av1C.depth() {
+                    if *depth != codec_config.depth() {
                         return Err(AvifError::BmffParseFailed(
-                            "pixi depth does not match av1C depth".into(),
+                            "pixi depth does not match codec config depth".into(),
                         ));
                     }
                 }
@@ -236,8 +235,7 @@ impl Item {
         Ok(())
     }
 
-    #[allow(non_snake_case)]
-    pub fn av1C(&self) -> Option<&CodecConfiguration> {
+    pub fn codec_config(&self) -> Option<&CodecConfiguration> {
         find_property!(self.properties, CodecConfiguration)
     }
 
@@ -263,6 +261,16 @@ impl Item {
                                    aux_type == "urn:mpeg:hevc:2015:auxid:1")
     }
 
+    pub fn is_image_item(&self) -> bool {
+        [
+            "av01",
+            "grid",
+            #[cfg(feature = "heic")]
+            "hvc1",
+        ]
+        .contains(&self.item_type.as_str())
+    }
+
     pub fn should_skip(&self) -> bool {
         // The item has no payload in idat or mdat. It cannot be a coded image item, a
         // non-identity derived image item, or Exif/XMP metadata.
@@ -270,7 +278,7 @@ impl Item {
             // An essential property isn't supported by libavif. Ignore the whole item.
             || self.has_unsupported_essential_property
             // Probably Exif/XMP or some other data.
-            || (self.item_type != "av01" && self.item_type != "grid")
+            || !self.is_image_item()
             // libavif does not support thumbnails.
             || self.thumbnail_for_id != 0
     }

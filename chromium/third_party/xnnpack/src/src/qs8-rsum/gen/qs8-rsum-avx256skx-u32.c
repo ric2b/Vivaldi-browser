@@ -18,22 +18,27 @@ void xnn_qs8_rsum_ukernel__avx256skx_u32(
     size_t batch,
     const int8_t* input,
     int32_t* output,
-    const union xnn_qs8_rsum_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_qs8_rsum_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(input != NULL);
   assert(output != NULL);
   assert(params != NULL);
 
-  const __m256i vone = _mm256_load_si256((const __m256i*) &params->avx2.onemask_table[0]);
+  XNN_ALIGN(32) static const int8_t onemask_table[64] = {
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  };
+
+  const __m256i vone = _mm256_load_si256((const __m256i*) &onemask_table[0]);
   const __m256i vone_16 = _mm256_srli_epi16(vone, 8);
   __m256i vacc0 = _mm256_setzero_si256();
 
   // 256 int8s may be summed into an int16 before overflowing.
-  // Each register has 16 lanes and there are 1 accumulators so batch size is 4096
-  for (; batch >= 4096; batch -= 4096) {
+  // Each register has 32 lanes and there are 1 accumulators so batch size is 8192
+  for (; batch >= 8192; batch -= 8192) {
     __m256i vacc16_0 = _mm256_setzero_si256();
-    for (size_t current_batch = 4096; current_batch > 0; current_batch -= 32) {
+    for (size_t current_batch = 8192; current_batch > 0; current_batch -= 32) {
       const __m256i vt0 = _mm256_maddubs_epi16(vone, _mm256_loadu_si256((const __m256i*) input)); input += 32;
       vacc16_0 = _mm256_add_epi16(vacc16_0, vt0);
     }
@@ -41,7 +46,7 @@ void xnn_qs8_rsum_ukernel__avx256skx_u32(
   }
 
   if (XNN_UNLIKELY(batch != 0)) {
-    assert(batch >= 1 && batch < 4096);
+    assert(batch >= 1 && batch < 8192);
     __m256i vacc16 = _mm256_setzero_si256();
     for (; batch >= 32; batch -= 32) {
       const __m256i vt = _mm256_maddubs_epi16(vone, _mm256_loadu_si256((const __m256i*) input)); input += 32;

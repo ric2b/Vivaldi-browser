@@ -106,6 +106,7 @@
 #include "src/tint/lang/hlsl/ir/ternary.h"
 #include "src/tint/lang/hlsl/type/byte_address_buffer.h"
 #include "src/tint/lang/hlsl/type/int8_t4_packed.h"
+#include "src/tint/lang/hlsl/type/rasterizer_ordered_texture_2d.h"
 #include "src/tint/lang/hlsl/type/uint8_t4_packed.h"
 #include "src/tint/utils/containers/hashmap.h"
 #include "src/tint/utils/containers/map.h"
@@ -157,8 +158,9 @@ class Printer : public tint::TextGenerator {
         core::ir::Capabilities capabilities{
             core::ir::Capability::kAllowModuleScopeLets,
             core::ir::Capability::kAllowVectorElementPointer,
+            core::ir::Capability::kAllowClipDistancesOnF32,
         };
-        auto valid = core::ir::ValidateAndDumpIfNeeded(ir_, "HLSL writer", capabilities);
+        auto valid = core::ir::ValidateAndDumpIfNeeded(ir_, "hlsl.Printer", capabilities);
         if (valid != Success) {
             return std::move(valid.Failure());
         }
@@ -224,7 +226,7 @@ class Printer : public tint::TextGenerator {
 
         {
             if (func->Stage() == core::ir::Function::PipelineStage::kCompute) {
-                auto wg_opt = func->WorkgroupSize();
+                auto wg_opt = func->WorkgroupSizeAsConst();
                 TINT_ASSERT(wg_opt.has_value());
 
                 auto& wg = wg_opt.value();
@@ -566,6 +568,8 @@ class Printer : public tint::TextGenerator {
             auto* st = ptr->StoreType()->As<core::type::StorageTexture>();
             if (st && st->Access() != core::Access::kRead) {
                 register_space = 'u';
+            } else if (ptr->StoreType()->Is<hlsl::type::RasterizerOrderedTexture2D>()) {
+                register_space = 'u';
             }
         } else if (ptr->StoreType()->Is<core::type::Sampler>()) {
             register_space = 's';
@@ -575,7 +579,6 @@ class Printer : public tint::TextGenerator {
         auto bp = var->BindingPoint();
         TINT_ASSERT(bp.has_value());
 
-        // TODO(dsinclair): Handle PixelLocal::RasterizerOrderedView attribute
         auto out = Line();
         EmitTypeAndName(out, var->Result(0)->Type(), NameOf(var->Result(0)));
         out << RegisterAndSpace(register_space, bp.value()) << ";";
@@ -608,6 +611,8 @@ class Printer : public tint::TextGenerator {
     }
 
     void EmitLet(const core::ir::Let* l, LetType type) {
+        TINT_ASSERT(!l->Result(0)->Type()->Is<core::type::Pointer>());
+
         auto out = Line();
 
         if (type == LetType::kModuleScope) {
@@ -772,18 +777,9 @@ class Printer : public tint::TextGenerator {
         Switch(
             c->Result(0)->Type(),
             [&](const core::type::Array*) {
-                // The PromoteInitializers transform will inject splat arrays as composites of one
-                // element. These need to convert to `(type)0` in HLSL otherwise DXC will complain
-                // about missing values.
-                if (c->Args().Length() == 1) {
-                    out << "(";
-                    EmitType(out, c->Result(0)->Type());
-                    out << ")0";
-                } else {
-                    out << "{";
-                    emit_args();
-                    out << "}";
-                }
+                out << "{";
+                emit_args();
+                out << "}";
             },
             [&](const core::type::Struct*) {
                 out << "{";
@@ -1057,6 +1053,9 @@ class Printer : public tint::TextGenerator {
             case core::BuiltinFn::kQuadSwapDiagonal:
                 out << "QuadReadAcrossDiagonal";
                 break;
+            case core::BuiltinFn::kInputAttachmentLoad:
+                // WGSL extension: chromium_internal_input_attachments
+                TINT_ICE() << "HLSL does not support inputAttachmentLoad";
             default:
                 TINT_UNREACHABLE() << "unhandled: " << func;
         }
@@ -1080,9 +1079,6 @@ class Printer : public tint::TextGenerator {
     /// Emit a binary instruction
     /// @param b the binary instruction
     void EmitBinary(StringStream& out, const core::ir::CoreBinary* b) {
-        // TODO(dsinclair): Short circuring transform
-        // TODO(dsinclair): Transform matrix multiplication into a `mul` instruction
-
         auto kind = [&] {
             switch (b->Op()) {
                 case core::BinaryOp::kAdd:
@@ -1157,7 +1153,7 @@ class Printer : public tint::TextGenerator {
             [&](const core::type::Bool*) { out << (c->ValueAs<AInt>() ? "true" : "false"); },
             [&](const core::type::F16*) { EmitConstantF16(out, c); },
             [&](const core::type::F32*) { PrintF32(out, c->ValueAs<f32>()); },
-            [&](const core::type::I32*) { out << c->ValueAs<i32>(); },
+            [&](const core::type::I32*) { PrintI32(out, c->ValueAs<i32>()); },
             [&](const core::type::U32*) { out << c->ValueAs<AInt>() << "u"; },
             [&](const core::type::Array* a) { EmitConstantArray(out, c, a); },
             [&](const core::type::Vector* v) { EmitConstantVector(out, c, v); },
@@ -1282,6 +1278,10 @@ class Printer : public tint::TextGenerator {
                     out << "RW";
                 }
                 out << "ByteAddressBuffer";
+            },
+            [&](const hlsl::type::RasterizerOrderedTexture2D* rov) {
+                auto* component = ImageFormatToRWtextureType(rov->TexelFormat());
+                out << "RasterizerOrderedTexture2D<" << component << ">";
             },
             [&](const hlsl::type::Int8T4Packed*) { out << "int8_t4_packed"; },
             [&](const hlsl::type::Uint8T4Packed*) { out << "uint8_t4_packed"; },
@@ -1460,6 +1460,7 @@ class Printer : public tint::TextGenerator {
         TextBuffer str_buf;
         Line(&str_buf) << "struct " << StructName(str) << " {";
         {
+            int which_clip_distance = 0;
             const ScopedIndent si(&str_buf);
             for (auto* mem : str->Members()) {
                 auto mem_name = mem->Name().Name();
@@ -1498,7 +1499,13 @@ class Printer : public tint::TextGenerator {
                     }
                 }
                 if (auto builtin = attributes.builtin) {
-                    auto name = builtin_to_attribute(builtin.value());
+                    std::string name;
+                    if (builtin.value() == core::BuiltinValue::kClipDistances) {
+                        name = "SV_ClipDistance" + std::to_string(which_clip_distance);
+                        ++which_clip_distance;
+                    } else {
+                        name = builtin_to_attribute(builtin.value());
+                    }
                     TINT_ASSERT(!name.empty());
 
                     post += " : " + name;
@@ -1515,6 +1522,10 @@ class Printer : public tint::TextGenerator {
                     // stricter and therefore provides the necessary guarantees.
                     // See discussion here: https://github.com/gpuweb/gpuweb/issues/893
                     pre += "precise ";
+                }
+                if (attributes.color) {
+                    // WGSL extension: chromium_experimental_framebuffer_fetch
+                    TINT_ICE() << "HLSL does not support @color attribute";
                 }
 
                 out << pre;
@@ -1556,7 +1567,7 @@ class Printer : public tint::TextGenerator {
             default:
                 break;
         }
-        return "";
+        TINT_ICE() << "Unhandled BuiltinValue: " << ToString(builtin);
     }
 
     std::string interpolation_to_modifiers(core::InterpolationType type,
@@ -1614,6 +1625,14 @@ class Printer : public tint::TextGenerator {
                 builtin_struct_names_.GetOrAdd(s, [&] { return UniqueIdentifier(name.substr(2)); });
         }
         return name;
+    }
+
+    void PrintI32(StringStream& out, int32_t value) {
+        // TODO(crbug.com/368092875): DXC workaround: unless we compile with '-HV 202x', constant
+        // signed integral values are interpreted 64-bit ints. Apart from this not matching our
+        // intent, there are bugs in DXC when handling 64-bit integer splats. Always emit as a
+        // 32-bit signed int.
+        out << "int(" << value << ")";
     }
 
     void PrintF32(StringStream& out, float value) {

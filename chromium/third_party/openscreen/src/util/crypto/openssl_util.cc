@@ -21,11 +21,11 @@ namespace openscreen {
 
 namespace {
 
-// Callback routine for OpenSSL to print error messages. |str| is a
-// nullptr-terminated string of length |len| containing diagnostic information
+// Callback routine for OpenSSL to print error messages. `str` is a
+// nullptr-terminated string of length `len` containing diagnostic information
 // such as the library, function and reason for the error, the file and line
 // where the error originated, plus potentially any context-specific
-// information about the error. |context| contains a pointer to user-supplied
+// information about the error. `context` contains a pointer to user-supplied
 // data, which is currently unused.
 // If this callback returns a value <= 0, OpenSSL will stop processing the
 // error queue and return, otherwise it will continue calling this function

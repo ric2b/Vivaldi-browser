@@ -306,14 +306,14 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
     }
 
     if (zip_to_blob) {
-      int64_t archive_size64 = 0;
-      if (!base::GetFileSize(theme_archive_, &archive_size64) ||
-          archive_size64 <= 0 || archive_size64 > kMaxArchiveSize) {
+      auto archive_size64 = base::GetFileSize(theme_archive_);
+      if (!archive_size64.has_value() || archive_size64.value() <= 0 ||
+          archive_size64.value() > kMaxArchiveSize) {
         error_ = "Invalid archive size for " +
                  theme_archive_.BaseName().AsUTF8Unsafe();
         return;
       }
-      int archive_size = static_cast<int>(archive_size64);
+      int archive_size = static_cast<int>(archive_size64.value());
       std::vector<uint8_t> data;
       data.resize(static_cast<size_t>(archive_size));
       int nread = base::ReadFile(

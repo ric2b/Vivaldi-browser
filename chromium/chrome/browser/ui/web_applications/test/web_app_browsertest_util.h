@@ -33,6 +33,10 @@ namespace webapps {
 enum class InstallResultCode;
 }
 
+namespace content {
+class WebContents;
+}  // namespace content
+
 namespace web_app {
 
 struct ExternalInstallOptions;
@@ -176,6 +180,27 @@ base::FilePath CreateTestFileWithExtension(std::string_view extension);
 // Wait for an IPH bubble to show up inside the browser, and return true or
 // false based on whether the bubble showed up.
 bool WaitForIPHToShowIfAny(Browser* browser);
+
+namespace test {
+
+// Denote ways to simulate click on an element.
+enum class ClickMethod {
+  kLeftClick,
+  kMiddleClick,
+  kShiftClick,
+  kRightClickLaunchApp
+};
+
+// This function simulates a click on the middle of an element matching
+// `element_id` based on the type of click passed to it.
+void SimulateClickOnElement(content::WebContents* contents,
+                            std::string element_id,
+                            ClickMethod click);
+
+// Wait for all available `WebContents` when this is called to finish loading.
+void CompletePageLoadForAllWebContents();
+
+}  // namespace test
 
 }  // namespace web_app
 

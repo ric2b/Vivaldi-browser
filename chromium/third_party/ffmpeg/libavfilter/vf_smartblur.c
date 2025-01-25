@@ -30,7 +30,7 @@
 #include "libswscale/swscale.h"
 
 #include "avfilter.h"
-#include "internal.h"
+#include "filters.h"
 #include "video.h"
 
 #define RADIUS_MIN 0.1

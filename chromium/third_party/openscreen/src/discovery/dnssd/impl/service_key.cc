@@ -4,11 +4,10 @@
 
 #include "discovery/dnssd/impl/service_key.h"
 
-#include "absl/strings/str_join.h"
-#include "absl/strings/str_split.h"
 #include "discovery/dnssd/impl/conversion_layer.h"
 #include "discovery/mdns/public/mdns_constants.h"
 #include "discovery/mdns/public/mdns_records.h"
+#include "util/string_util.h"
 
 namespace openscreen::discovery {
 
@@ -69,7 +68,8 @@ ErrorOr<ServiceKey> ServiceKey::TryCreate(const DomainName& names) {
     return Error::Code::kParameterInvalid;
   }
 
-  const std::string domain_id = absl::StrJoin(it, names.labels().end(), ".");
+  const std::string domain_id =
+      string_util::Join(it, names.labels().end(), ".");
   if (!IsDomainValid(domain_id)) {
     return Error::Code::kParameterInvalid;
   }

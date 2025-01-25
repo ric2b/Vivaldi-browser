@@ -215,7 +215,7 @@ String WebFrameSerializerImpl::PostActionAfterSerializeOpenTag(
     // See http://bugs.webkit.org/show_bug.cgi?id=16621.
     // First we generate new content for writing correct META element.
     result.Append(WebFrameSerializer::GenerateMetaCharsetDeclaration(
-        String(param->text_encoding.GetName())));
+        param->text_encoding.GetName()));
 
     param->have_added_contents_before_end = true;
     // Will search each META which has charset declaration, and skip them all
@@ -475,8 +475,7 @@ void WebFrameSerializerImpl::BuildContentForNode(Node* node,
     case Node::kDocumentNode:
     case Node::kDocumentFragmentNode:
       // Should not exist.
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
     // Document type node can be in DOM?
     case Node::kDocumentTypeNode:
       param->have_seen_doc_type = true;

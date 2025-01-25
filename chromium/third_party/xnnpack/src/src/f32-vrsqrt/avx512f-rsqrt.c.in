@@ -35,7 +35,7 @@ void xnn_f32_vrsqrt_ukernel__avx512f_rsqrt_u${BATCH_TILE}(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_rsqrt_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -43,8 +43,8 @@ void xnn_f32_vrsqrt_ukernel__avx512f_rsqrt_u${BATCH_TILE}(
   assert(output != NULL);
 
   // Constants for the Newton-Raphson iteration.
-  const __m512 vthree = _mm512_set1_ps(params->avx512.three);
-  const __m512 vneg_half = _mm512_set1_ps(params->avx512.neg_half);
+  const __m512 vthree = _mm512_set1_ps(3.0f);
+  const __m512 vneg_half = _mm512_set1_ps(-0.5f);
 
   $if BATCH_TILE > 16:
     for (; batch >= ${BATCH_TILE} * sizeof(float); batch -= ${BATCH_TILE} * sizeof(float)) {

@@ -23,10 +23,6 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 using vivaldi::NotesModel;
 using vivaldi::NoteNode;
 
@@ -36,27 +32,26 @@ const int64_t kLastUsedFolderNone = -1;
 
 @interface NoteMediator ()
 
-// BrowserState for this mediator.
-@property(nonatomic, assign) ChromeBrowserState* browserState;
+// Profile for this mediator.
+@property(nonatomic, assign) ProfileIOS* profile;
 
 @end
 
 @implementation NoteMediator
 
-@synthesize browserState = _browserState;
+@synthesize profile = _profile;
 
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiNoteFolderDefault,
                               kLastUsedFolderNone);
 }
 
-+ (const NoteNode*)folderForNewNotesInBrowserState:
-    (ChromeBrowserState*)browserState {
++ (const NoteNode*)folderForNewNotesInProfile:(ProfileIOS*)profile {
   vivaldi::NotesModel* notes =
-      vivaldi::NotesModelFactory::GetForBrowserState(browserState);
+      vivaldi::NotesModelFactory::GetForProfile(profile);
   const NoteNode* defaultFolder = notes->main_node();
 
-  PrefService* prefs = browserState->GetPrefs();
+  PrefService* prefs = profile->GetPrefs();
   int64_t node_id = prefs->GetInt64(vivaldiprefs::kVivaldiNoteFolderDefault);
   if (node_id == kLastUsedFolderNone)
     node_id = defaultFolder->id();
@@ -69,16 +64,16 @@ const int64_t kLastUsedFolderNone = -1;
 }
 
 + (void)setFolderForNewNotes:(const NoteNode*)folder
-                  inBrowserState:(ChromeBrowserState*)browserState {
+                   inProfile:(ProfileIOS*)profile {
   DCHECK(folder && folder->is_folder());
-  browserState->GetPrefs()->SetInt64(vivaldiprefs::kVivaldiNoteFolderDefault,
-                                     folder->id());
+  profile->GetPrefs()->SetInt64(vivaldiprefs::kVivaldiNoteFolderDefault,
+                                folder->id());
 }
 
-- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState {
+- (instancetype)initWithProfile:(ProfileIOS*)profile {
   self = [super init];
   if (self) {
-    _browserState = browserState;
+    _profile = profile;
   }
   return self;
 }

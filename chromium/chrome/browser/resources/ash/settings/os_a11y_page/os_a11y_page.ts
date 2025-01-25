@@ -22,14 +22,16 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
 import {isRevampWayfindingEnabled} from '../common/load_time_booleans.js';
 import {RouteOriginMixin} from '../common/route_origin_mixin.js';
-import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
+import type {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
 import {Section} from '../mojom-webui/routes.mojom-webui.js';
 import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 import type {LanguageHelper, LanguagesModel} from '../os_languages_page/languages_types.js';
-import {Route, Router, routes} from '../router.js';
+import type {Route} from '../router.js';
+import {Router, routes} from '../router.js';
 
 import {getTemplate} from './os_a11y_page.html.js';
-import {OsA11yPageBrowserProxy, OsA11yPageBrowserProxyImpl} from './os_a11y_page_browser_proxy.js';
+import type {OsA11yPageBrowserProxy} from './os_a11y_page_browser_proxy.js';
+import {OsA11yPageBrowserProxyImpl} from './os_a11y_page_browser_proxy.js';
 
 export interface OsSettingsA11yPageElement {
   $: {
@@ -73,13 +75,11 @@ export class OsSettingsA11yPageElement extends OsSettingsA11yPageElementBase {
         value: false,
       },
 
-      /**
-       * Whether the user is in kiosk mode.
-       */
-      isKioskModeActive_: {
+      isKioskOldA11ySettingsRedirectionEnabled_: {
         type: Boolean,
         value() {
-          return loadTimeData.getBoolean('isKioskModeActive');
+          return loadTimeData.getBoolean(
+              'isKioskOldA11ySettingsRedirectionEnabled');
         },
       },
 
@@ -153,7 +153,7 @@ export class OsSettingsA11yPageElement extends OsSettingsA11yPageElementBase {
   private browserProxy_: OsA11yPageBrowserProxy;
   private hasScreenReader_: boolean;
   private isGuest_: boolean;
-  private isKioskModeActive_: boolean;
+  private isKioskOldA11ySettingsRedirectionEnabled_: boolean;
   private rowIcons_: Record<string, string>;
   private section_: Section;
 
@@ -165,7 +165,7 @@ export class OsSettingsA11yPageElement extends OsSettingsA11yPageElementBase {
 
     this.browserProxy_ = OsA11yPageBrowserProxyImpl.getInstance();
 
-    if (this.isKioskModeActive_) {
+    if (this.isKioskOldA11ySettingsRedirectionEnabled_) {
       this.redirectToOldA11ySettings();
     }
   }

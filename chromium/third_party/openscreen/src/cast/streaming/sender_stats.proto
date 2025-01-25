@@ -33,7 +33,7 @@ message SimpleHistogram {
 
 message SenderStatistic {
   enum MediaType {
-    MEDIA_TYPE_UNSPECIFIED = 0; // Google internal use only
+    MEDIA_TYPE_UNSPECIFIED = 0;  // Google internal use only
     AUDIO = 1;
     VIDEO = 2;
   }
@@ -106,7 +106,7 @@ message SenderStatistic {
 
 message SenderHistogram {
   enum MediaType {
-    MEDIA_TYPE_UNSPECIFIED = 0; // Google internal use only.
+    MEDIA_TYPE_UNSPECIFIED = 0;  // Google internal use only.
     AUDIO = 1;
     VIDEO = 2;
   }

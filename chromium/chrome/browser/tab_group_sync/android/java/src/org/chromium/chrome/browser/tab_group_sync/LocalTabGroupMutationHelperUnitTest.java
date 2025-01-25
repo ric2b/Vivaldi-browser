@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.tab_group_sync;
 
-import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -36,13 +35,14 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.Token;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncController.TabCreationDelegate;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
 import org.chromium.components.tab_group_sync.ClosingSource;
 import org.chromium.components.tab_group_sync.EventDetails;
@@ -50,7 +50,6 @@ import org.chromium.components.tab_group_sync.LocalTabGroupId;
 import org.chromium.components.tab_group_sync.OpeningSource;
 import org.chromium.components.tab_group_sync.SavedTabGroup;
 import org.chromium.components.tab_group_sync.SavedTabGroupTab;
-import org.chromium.components.tab_group_sync.TabGroupEvent;
 import org.chromium.components.tab_group_sync.TabGroupSyncService;
 import org.chromium.url.GURL;
 
@@ -75,11 +74,12 @@ public class LocalTabGroupMutationHelperUnitTest {
     private static final GURL UNSYNCABLE_URL_1 = new GURL("chrome://flags");
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
+    @Rule public JniMocker mJniMocker = new JniMocker();
     @Mock private Profile mProfile;
     private MockTabModel mTabModel;
     @Mock private TabGroupModelFilter mTabGroupModelFilter;
     @Mock private TabGroupSyncService mTabGroupSyncService;
-    private NavigationTracker mNavigationTracker;
+    @Mock private TabGroupSyncUtilsJni mTabGroupSyncUtilsJni;
     private LocalTabGroupMutationHelper mLocalMutationHelper;
     private TestTabCreationDelegate mTabCreationDelegate;
 
@@ -89,16 +89,13 @@ public class LocalTabGroupMutationHelperUnitTest {
 
     @Before
     public void setUp() {
+        mJniMocker.mock(TabGroupSyncUtilsJni.TEST_HOOKS, mTabGroupSyncUtilsJni);
         mTabModel = spy(new MockTabModel(mProfile, null));
         when(mTabGroupModelFilter.getTabModel()).thenReturn(mTabModel);
-        mNavigationTracker = new NavigationTracker();
         mTabCreationDelegate = spy(new TestTabCreationDelegate());
         mLocalMutationHelper =
                 new LocalTabGroupMutationHelper(
-                        mTabGroupModelFilter,
-                        mTabGroupSyncService,
-                        mTabCreationDelegate,
-                        mNavigationTracker);
+                        mTabGroupModelFilter, mTabGroupSyncService, mTabCreationDelegate);
 
         when(mTabGroupModelFilter.getRootIdFromStableId(any())).thenReturn(Tab.INVALID_TAB_ID);
         when(mTabGroupModelFilter.getRootIdFromStableId(eq(TOKEN_1))).thenReturn(ROOT_ID_1);
@@ -157,14 +154,9 @@ public class LocalTabGroupMutationHelperUnitTest {
         verify(mTabGroupModelFilter).setTabGroupColor(anyInt(), anyInt());
         verify(mTabGroupModelFilter).setTabGroupTitle(anyInt(), any());
         verify(mTabGroupModelFilter).setTabGroupCollapsed(anyInt(), eq(true));
-        verify(mTabGroupSyncService).updateLocalTabGroupMapping(any(), any());
+        verify(mTabGroupSyncService)
+                .updateLocalTabGroupMapping(any(), any(), eq(OpeningSource.AUTO_OPENED_FROM_SYNC));
         verify(mTabGroupSyncService, times(2)).updateLocalTabId(any(), any(), anyInt());
-
-        // Verify metrics.
-        EventDetails eventDetails = mEventDetailsCaptor.getValue();
-        assertEquals(TabGroupEvent.TAB_GROUP_OPENED, eventDetails.eventType);
-        assertEquals(LOCAL_TAB_GROUP_ID_1, eventDetails.localGroupId);
-        assertEquals(OpeningSource.AUTO_OPENED_FROM_SYNC, eventDetails.openingSource);
     }
 
     @Test
@@ -176,7 +168,8 @@ public class LocalTabGroupMutationHelperUnitTest {
         verify(mTabGroupModelFilter).createSingleTabGroup(any(), eq(false));
         verify(mTabGroupModelFilter).setTabGroupColor(anyInt(), anyInt());
         verify(mTabGroupModelFilter).setTabGroupTitle(anyInt(), any());
-        verify(mTabGroupSyncService).updateLocalTabGroupMapping(any(), any());
+        verify(mTabGroupSyncService)
+                .updateLocalTabGroupMapping(any(), any(), eq(OpeningSource.OPENED_FROM_REVISIT_UI));
         verify(mTabGroupSyncService, times(1)).updateLocalTabId(any(), any(), anyInt());
     }
 
@@ -241,6 +234,9 @@ public class LocalTabGroupMutationHelperUnitTest {
         savedTab.url = TAB_URL_2;
         savedTab.title = TAB_TITLE_1;
 
+        when(mTabGroupSyncUtilsJni.isUrlInTabRedirectChain(
+                        any(), eq(LOCAL_TAB_GROUP_ID_1), eq(TAB_ID_1), eq(TAB_URL_2)))
+                .thenReturn(false);
         mLocalMutationHelper.updateTabGroup(savedTabGroup);
 
         verify(mTabCreationDelegate, never())
@@ -268,6 +264,34 @@ public class LocalTabGroupMutationHelperUnitTest {
 
         verify(mTabCreationDelegate, never())
                 .createBackgroundTab(any(), anyString(), any(), anyInt());
+        verify(mTabCreationDelegate, never())
+                .navigateToUrl(any(), any(), anyString(), anyBoolean());
+    }
+
+    @Test
+    public void testUpdateTabGroup_UpdateExistingTab_SkipNavigateUrlInTabRedirectChain() {
+        // One local group with one tab syncing.
+        addOneTab();
+
+        // One saved group with one tabs mapped to the local tab. The URL is in the current
+        // tab's redirect chain.
+        SavedTabGroup savedTabGroup =
+                createOneSavedTabGroup(LOCAL_TAB_GROUP_ID_1, new Integer[] {TAB_ID_1});
+        SavedTabGroupTab savedTab = savedTabGroup.savedTabs.get(0);
+        savedTab.url = TAB_URL_2;
+        savedTab.title = TAB_TITLE_1;
+
+        when(mTabGroupSyncUtilsJni.isUrlInTabRedirectChain(
+                        any(), eq(LOCAL_TAB_GROUP_ID_1), eq(TAB_ID_1), eq(TAB_URL_2)))
+                .thenReturn(true);
+        mLocalMutationHelper.updateTabGroup(savedTabGroup);
+
+        verify(mTabCreationDelegate, never())
+                .createBackgroundTab(any(), anyString(), any(), anyInt());
+        verify(mTabGroupModelFilter, never())
+                .mergeListOfTabsToGroup(anyList(), any(), anyBoolean());
+        verify(mTabGroupSyncService, never()).updateLocalTabId(any(), any(), anyInt());
+        verify(mTabModel, never()).closeTabs(any());
         verify(mTabCreationDelegate, never())
                 .navigateToUrl(any(), any(), anyString(), anyBoolean());
     }
@@ -330,12 +354,9 @@ public class LocalTabGroupMutationHelperUnitTest {
         mTabModel.addTab(TAB_ID_1);
         mLocalMutationHelper.closeTabGroup(LOCAL_TAB_GROUP_ID_1, ClosingSource.CLOSED_BY_USER);
         verify(mTabModel).closeTabs(any());
-        verify(mTabGroupSyncService).removeLocalTabGroupMapping(eq(LOCAL_TAB_GROUP_ID_1));
-
-        EventDetails eventDetails = mEventDetailsCaptor.getValue();
-        assertEquals(TabGroupEvent.TAB_GROUP_CLOSED, eventDetails.eventType);
-        assertEquals(LOCAL_TAB_GROUP_ID_1, eventDetails.localGroupId);
-        assertEquals(ClosingSource.CLOSED_BY_USER, eventDetails.closingSource);
+        verify(mTabGroupSyncService)
+                .removeLocalTabGroupMapping(
+                        eq(LOCAL_TAB_GROUP_ID_1), eq(ClosingSource.CLOSED_BY_USER));
     }
 
     private class TestTabCreationDelegate implements TabCreationDelegate {

@@ -59,7 +59,7 @@ using vivaldi::IsVivaldiRunning;
     self.viewController.shouldHideOmniboxOnNTP = NO;
   } else {
   self.viewController.shouldHideOmniboxOnNTP =
-      !self.browser->GetBrowserState()->IsOffTheRecord();
+      !self.browser->GetProfile()->IsOffTheRecord();
   } // End Vivaldi
 
   self.viewController.omniboxCommandsHandler =

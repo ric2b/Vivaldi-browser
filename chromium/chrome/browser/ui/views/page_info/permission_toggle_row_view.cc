@@ -82,7 +82,7 @@ PermissionToggleRowView::PermissionToggleRowView(
                 url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC);
         break;
       default:
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
     }
     row_view_->AddSecondaryLabel(requesting_origin_string);
     toggle_accessible_name = l10n_util::GetStringFUTF16(
@@ -128,9 +128,11 @@ PermissionToggleRowView::PermissionToggleRowView(
     std::u16string reason =
         delegate->GetAutomaticallyBlockedReason(permission_.type);
     if (!reason.empty()) {
-      row_view_->AddControl(std::make_unique<views::Label>(
-          delegate->GetAutomaticallyBlockedReason(permission_.type),
-          views::style::CONTEXT_LABEL, views::style::STYLE_SECONDARY));
+      views::Label* label =
+          row_view_->AddControl(std::make_unique<views::Label>(
+              delegate->GetAutomaticallyBlockedReason(permission_.type),
+              views::style::CONTEXT_LABEL, views::style::STYLE_BODY_4));
+      label->SetEnabledColorId(kColorPageInfoSubtitleForeground);
     } else {
       InitForUserSource(should_show_spacer_view, toggle_accessible_name);
     }
@@ -156,9 +158,8 @@ void PermissionToggleRowView::AddObserver(
 void PermissionToggleRowView::PermissionChanged() {
   UpdateUiOnPermissionChanged();
 
-  for (PermissionToggleRowViewObserver& observer : observer_list_) {
-    observer.OnPermissionChanged(permission_);
-  }
+  observer_list_.Notify(&PermissionToggleRowViewObserver::OnPermissionChanged,
+                        permission_);
 }
 
 void PermissionToggleRowView::UpdatePermission(
@@ -172,11 +173,14 @@ void PermissionToggleRowView::OnToggleButtonPressed() {
   PermissionChanged();
 }
 
-void PermissionToggleRowView::InitForUserSource(
-    bool should_show_spacer_view,
-    const std::u16string& toggle_accessible_name) {
-  const int icon_label_spacing = ChromeLayoutProvider::Get()->GetDistanceMetric(
-      views::DISTANCE_RELATED_LABEL_HORIZONTAL);
+void PermissionToggleRowView::AddToggleButton(
+    const std::u16string& toggle_accessible_name,
+    int icon_label_spacing) {
+  // This skips adding a toggle for 'CAPTURED_SURFACE_CONTROL' pemrission type.
+  // We want to use the toggle inside the submenu and not here.
+  if (permission_.type == ContentSettingsType::CAPTURED_SURFACE_CONTROL) {
+    return;
+  }
 
   auto toggle_button = std::make_unique<views::ToggleButton>(
       base::BindRepeating(&PermissionToggleRowView::OnToggleButtonPressed,
@@ -193,6 +197,14 @@ void PermissionToggleRowView::InitForUserSource(
   toggle_button->GetViewAccessibility().SetName(toggle_accessible_name);
 
   toggle_button_ = row_view_->AddControl(std::move(toggle_button));
+}
+
+void PermissionToggleRowView::InitForUserSource(
+    bool should_show_spacer_view,
+    const std::u16string& toggle_accessible_name) {
+  const int icon_label_spacing = ChromeLayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_RELATED_LABEL_HORIZONTAL);
+  AddToggleButton(toggle_accessible_name, icon_label_spacing);
 
   const int icon_size = GetLayoutConstant(PAGE_INFO_ICON_SIZE);
 
@@ -239,8 +251,8 @@ void PermissionToggleRowView::InitForManagedSource(
       views::DISTANCE_RELATED_LABEL_HORIZONTAL);
   auto state_label = std::make_unique<views::Label>(
       PageInfoUI::PermissionStateToUIString(delegate, permission_),
-      views::style::CONTEXT_LABEL, views::style::STYLE_BODY_5);
-  state_label->SetEnabledColorId(ui::kColorLabelForegroundSecondary);
+      views::style::CONTEXT_LABEL, views::style::STYLE_BODY_4);
+  state_label->SetEnabledColorId(kColorPageInfoSubtitleForeground);
   state_label->SetProperty(views::kMarginsKey,
                            gfx::Insets::VH(0, icon_label_spacing));
   row_view_->AddControl(std::move(state_label));

@@ -22,7 +22,7 @@ import java.util.List;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
-import org.chromium.chrome.browser.browser_controls.BrowserControlsVisibilityManager;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 
@@ -55,7 +55,7 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
     private ViewResourceFrameLayout mBottomView;
 
     /** Vivaldi */
-    private BrowserControlsVisibilityManager mBrowserControlsManager;
+    private BrowserControlsSizer mBrowserControlsManager;
 
     /**
      * Build a composited bottom view layer.
@@ -192,7 +192,7 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
     public void getVirtualViews(List<VirtualView> views) {}
 
     /* Vivaldi: Set the |BrowserControlsVisibilityManager| */
-    public void setBrowserControlsManager(BrowserControlsVisibilityManager browserControlsManager) {
+    public void setBrowserControlsManager(BrowserControlsSizer browserControlsManager) {
         mBrowserControlsManager = browserControlsManager;
     }
 

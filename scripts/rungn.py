@@ -25,6 +25,11 @@ try:
     check_python.CheckPythonInstall()
 except:
   pass
+
+GN_env = dict(os.environ)
+
+GN_env["PATH"] = os.pathsep.join([p for p in GN_env["PATH"].split(os.pathsep) if "depot_tools" not in p])
+
 if is_linux:
   # Add path for downloaded clang
   os.environ["PATH"] = os.pathsep.join([
@@ -304,6 +309,7 @@ if args.refresh or not args.args:
         ] +ide_args + target_args,
         cwd = sourcedir,
         shell = is_windows,
+        env = GN_env,
         **extra_subprocess_flags
       ) != 0:
         sys.exit(1)

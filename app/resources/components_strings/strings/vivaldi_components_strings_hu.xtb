@@ -10,6 +10,7 @@
 <translation id="132390688737681464">Címek mentése és kitöltése</translation>
 <translation id="1375198122581997741">A verzióról</translation>
 <translation id="139305205187523129">A(z) <ph name="HOST_NAME" /> nem küldött adatokat.</translation>
+<translation id="1555191101192706055">A felkeresni kívánt webhelyen tartózkodó támadók megpróbálhatnak rávenni olyan kártékony szoftver telepítésére, amely befolyásolja a böngészés módját – például módosítja a kezdőlapot, vagy további hirdetéseket jelenít meg a felkeresett webhelyeken.</translation>
 <translation id="1559528461873125649">Nincs ilyen fájl vagy könyvtár</translation>
 <translation id="1640244768702815859">Próbáld meg <ph name="BEGIN_LINK" />megnyitni a webhely főoldalát<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Nem támogatott protokoll</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />A proxy és a tűzfal ellenőrzése<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Tulajdonos: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">A webhely nem képes biztonságos kapcsolatot nyújtani</translation>
+<translation id="2178904466768126352">Előfordulhat, hogy az általad felkeresni próbált webhelyen a támadók olyan kártékony szoftvereket telepítenek, amelyek ellopják vagy törlik például a jelszavakat, fotókat, üzeneteket vagy hitelkártyaszámokat.</translation>
 <translation id="2187317261103489799">Észlelés (alapértelmezett)</translation>
 <translation id="2224337661447660594">Nincs internet</translation>
 <translation id="2283340219607151381">Címek mentése és kitöltése</translation>
@@ -92,6 +94,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />A tűzfal és a vírusirtó konfigurációjának ellenőrzése<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Próbálkozz a Hálózati diagnosztika futtatásával<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Érvényes</translation>
+<translation id="4241830393007970744">A felkeresni kívánt webhelyen tartózkodó támadók szoftver telepítésére vagy olyan adatok megadására vehetnek rá, mint a jelszavak, telefonszámok vagy hitelkártyaszámok kiadása.</translation>
 <translation id="4250431568374086873">Kapcsolatod a webhellyel nem teljesen biztonságos</translation>
 <translation id="4265872034478892965">A rendszergazda engedélyezte</translation>
 <translation id="4305666528087210886">A fájlhoz nem sikerült hozzáférni</translation>
@@ -102,6 +105,7 @@
 <translation id="4522570452068850558">Részletek</translation>
 <translation id="4558551763791394412">Próbálkozz a bővítmények letiltásával.</translation>
 <translation id="4592951414987517459">A(z) <ph name="DOMAIN" /> domainnel való kapcsolatod modern kriptográfiával van titkosítva.</translation>
+<translation id="4598641255230617220">Beillesztés és felkeresés</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Kapcsolata megszakadt</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />A Windows hálózati diagnosztika futtatása<ph name="END_LINK" /></translation>
@@ -111,6 +115,7 @@
 <translation id="4764776831041365478">A <ph name="URL" /> weboldal lehet, hogy ideiglenesen nem érhető el, vagy véglegesen új címre költözött.</translation>
 <translation id="483241715238664915">Figyelmeztetések bekapcsolása</translation>
 <translation id="4943872375798546930">Nincs találat</translation>
+<translation id="5017554619425969104">Vágólapra másolt szöveg</translation>
 <translation id="5023310440958281426">Ellenőrizze rendszergazdai házirendjeit</translation>
 <translation id="5039804452771397117">Engedélyezés</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 van használatban)} other {(# van használatban)}}</translation>
@@ -165,11 +170,11 @@
 <translation id="7108819624672055576">Bővítmény által engedélyezve</translation>
 <translation id="7111012039238467737">(Érvényes)</translation>
 <translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> engedélyezése innen: <ph name="DOMAIN" /></translation>
+<translation id="7126644664682723998">Beillesztés és keresés</translation>
 <translation id="7179323680825933600">Fizetési módok mentése és kitöltése</translation>
 <translation id="7210863904660874423">A(z) <ph name="HOST_NAME" /> nem felel meg a biztonsági szabványoknak.</translation>
 <translation id="7219179957768738017">A kapcsolat a következőt használja: <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Értesítéseket megjelenítése</translation>
-<translation id="7227747683324411744">A felkeresni kívánt webhelyen tartózkodó támadók megpróbálhatnak rávenni olyan kártékony szoftver telepítésére, amely befolyásolja a böngészés módját – például módosítja a kezdőlapot, vagy további hirdetéseket jelenít meg a felkeresett webhelyeken.</translation>
 <translation id="7353601530677266744">Parancssor</translation>
 <translation id="7364115444476960850">A meglátogatni kívánt oldalt blokkolta a Vivaldi <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profil elérési útja</translation>
@@ -177,7 +182,6 @@
 <translation id="7518003948725431193">Nem található weboldal az internetcímen:<ph name="URL" /></translation>
 <translation id="7549584377607005141">Ez a weboldal korábban megadott adatokat kér ahhoz, hogy megfelelően jelenjen meg. Az adatokat újra elküldheti, de ezzel meg fog ismételni minden olyan műveletet, amelyet ez az oldal korábban végrehajtott.</translation>
 <translation id="759889825892636187">A(z) <ph name="HOST_NAME" /> jelenleg nem tudja kezelni ezt a kérést.</translation>
-<translation id="7605377493722372900">Előfordulhat, hogy az általad felkeresni próbált webhelyen a támadók olyan kártékony szoftvereket telepítenek, amelyek ellopják vagy törlik például a jelszavakat, fotókat, üzeneteket vagy hitelkártyaszámokat.</translation>
 <translation id="7662298039739062396">A beállítást bővítmény vezérli</translation>
 <translation id="7663736086183791259"><ph name="CERTIFICATE_VALIDITY" /> tanúsítvány</translation>
 <translation id="7714464543167945231">Tanúsítvány</translation>
@@ -203,7 +207,6 @@
 <translation id="8288807391153049143">Tanúsítvány megjelenítése</translation>
 <translation id="8289355894181816810">Forduljon a hálózati rendszergazdához, ha nem tudja, hogy ez mit jelent.</translation>
 <translation id="8332188693563227489">A hozzáférés megtagadva a következőhöz: <ph name="HOST_NAME" /></translation>
-<translation id="8422228580902424274">A felkeresni kívánt webhelyen tartózkodó támadók szoftver telepítésére vagy olyan adatok megadására vehetnek rá, mint a jelszavak, telefonszámok vagy hitelkártyaszámok kiadása.</translation>
 <translation id="8473863474539038330">Címek és egyebek</translation>
 <translation id="8498891568109133222">Túl hosszú ideje nem válaszol: <ph name="HOST_NAME" />.</translation>
 <translation id="8503813439785031346">Felhasználónév</translation>

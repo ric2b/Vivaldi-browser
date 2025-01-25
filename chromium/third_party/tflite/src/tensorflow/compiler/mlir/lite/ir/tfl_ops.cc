@@ -52,12 +52,13 @@ limitations under the License.
 #include "llvm/Support/Threading.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"  // from @llvm-project
 #include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
-#include "mlir/Dialect/Quant/QuantTypes.h"  // from @llvm-project
+#include "mlir/Dialect/Quant/IR/QuantTypes.h"  // from @llvm-project
 #include "mlir/Dialect/Traits.h"  // from @llvm-project
 #include "mlir/IR/Attributes.h"  // from @llvm-project
 #include "mlir/IR/Builders.h"  // from @llvm-project
 #include "mlir/IR/BuiltinAttributeInterfaces.h"  // from @llvm-project
 #include "mlir/IR/BuiltinAttributes.h"  // from @llvm-project
+#include "mlir/IR/BuiltinTypeInterfaces.h"  // from @llvm-project
 #include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
 #include "mlir/IR/Diagnostics.h"  // from @llvm-project
 #include "mlir/IR/DialectImplementation.h"  // from @llvm-project
@@ -486,6 +487,48 @@ bool VerifyMulOpShapeConstraints(MulOp op) {
   }
   return false;
 }
+
+class FlatIndHelper {
+ public:
+  explicit FlatIndHelper(mlir::ShapedType type) : type_(type) {}
+
+  llvm::SmallVector<int64_t> GetShapedInd(int64_t flat_ind) const {
+    llvm::SmallVector<int64_t> result;
+    result.reserve(type_.getRank());
+
+    auto num_els = type_.getNumElements();
+
+    for (auto d : type_.getShape()) {
+      num_els /= d;
+      result.push_back(flat_ind / num_els);
+      flat_ind %= num_els;
+    }
+
+    return result;
+  }
+
+  int64_t GetFlatInd(llvm::ArrayRef<int64_t> shaped_ind) const {
+    int64_t result = 0;
+
+    auto num_els = type_.getNumElements();
+    for (auto [max_dim, ind_dim] : llvm::zip(type_.getShape(), shaped_ind)) {
+      num_els /= max_dim;
+      result += num_els * ind_dim;
+    }
+
+    return result;
+  }
+
+  static void AddOffset(llvm::SmallVector<int64_t>& target,
+                        const llvm::SmallVector<int64_t>& offset) {
+    for (auto [ind, val] : llvm::enumerate(offset)) {
+      target[ind] += val;
+    }
+  }
+
+ private:
+  mlir::ShapedType type_;
+};
 
 //===----------------------------------------------------------------------===//
 // TensorFlowLiteDialect
@@ -1515,10 +1558,16 @@ LogicalResult FullyConnectedOp::fold(FoldAdaptor adaptor,
     return failure();
   }
 
+  auto is_foldable = [](llvm::ArrayRef<int64_t> shape) {
+    return shape.size() == 1 || (shape.size() == 2 && shape.front() == 1);
+  };
+
+  const bool weights_foldable = weights_type.getShape().size() == 2;
+  const bool bias_foldable = !has_bias || is_foldable(bias_type.getShape());
+
   // Folding only implemented for 1D input, 2D weights and 1D bias
-  if (input_type.getShape().size() != 1 ||
-      weights_type.getShape().size() != 2 ||
-      (has_bias && bias_type.getShape().size() != 1)) {
+  if (!is_foldable(input_type.getShape()) || !bias_foldable ||
+      !weights_foldable) {
     return failure();
   }
 
@@ -2496,6 +2545,33 @@ void PackOp::getCanonicalizationPatterns(RewritePatternSet& results,
 // SliceOp
 //===----------------------------------------------------------------------===//
 
+llvm::SmallVector<int64_t> UnpackIndexOperand(Attribute operand) {
+  auto data = cast<DenseIntElementsAttr>(operand);
+
+  const bool is_i32 = data.getElementType().isSignlessInteger(32);
+
+  if (data.isSplat()) {
+    int64_t splat_val;
+
+    if (is_i32) {
+      splat_val = data.getSplatValue<int32_t>();
+    } else {
+      splat_val = data.getSplatValue<int64_t>();
+    }
+
+    return llvm::SmallVector<int64_t>(data.getShapedType().getNumElements(),
+                                      splat_val);
+  }
+
+  if (!is_i32) {
+    return llvm::to_vector(data.getValues<int64_t>());
+  }
+
+  return llvm::to_vector(llvm::map_range(data.getValues<int32_t>(), [](auto v) {
+    return static_cast<int64_t>(v);
+  }));
+}
+
 OpFoldResult SliceOp::fold(FoldAdaptor adaptor) {
   if (!getType().hasStaticShape()) {
     return {};
@@ -2531,40 +2607,44 @@ OpFoldResult SliceOp::fold(FoldAdaptor adaptor) {
     return {};
   }
 
-  auto begin_data = dyn_cast_or_null<DenseIntElementsAttr>(begin);
-  if (!begin_data || !begin_data.isSplat() ||
-      !begin_data.getElementType().isSignlessInteger(32)) {
-    return {};
-  }
-  if (begin_data.getSplatValue<int32_t>() != 0) {
+  auto begin_vals = UnpackIndexOperand(begin);
+  auto size_vals = UnpackIndexOperand(size);
+
+  if (size_vals != getType().getShape()) {
     return {};
   }
 
-  auto size_data = dyn_cast_or_null<DenseIntElementsAttr>(size);
-  if (!size_data.getElementType().isSignlessInteger(32)) {
-    return {};
-  }
-
-  auto size_vals = size_data.getValues<int32_t>();
-  for (int i = 1; i < input_type.getRank(); ++i) {
-    if (size_vals[i] != input_type.getShape()[i]) {
+  for (auto [begin, size, dim] :
+       llvm::zip(begin_vals, size_vals, input_type.getShape())) {
+    if (size < 0) {
+      // TODO: b/351437662 - Add support for this case.
+      return {};
+    }
+    if (begin + size > dim) {
       return {};
     }
   }
-  if (size_vals[0] == input_type.getShape()[0]) {
-    return adaptor.getInput();
+
+  auto input_dense = cast<DenseElementsAttr>(input);
+  std::vector<Attribute> input_data(input_dense.value_begin<Attribute>(),
+                                    input_dense.value_end<Attribute>());
+
+  const FlatIndHelper write_inds(getType());
+  const FlatIndHelper read_inds(input_type);
+
+  std::vector<Attribute> result_data(getType().getNumElements());
+
+  for (int w_flat_ind = 0; w_flat_ind < getType().getNumElements();
+       ++w_flat_ind) {
+    auto write_shaped_ind = write_inds.GetShapedInd(w_flat_ind);
+
+    FlatIndHelper::AddOffset(write_shaped_ind, begin_vals);
+    const auto read_flat_ind = read_inds.GetFlatInd(write_shaped_ind);
+
+    result_data[w_flat_ind] = input_data[read_flat_ind];
   }
 
-  auto input_data = dyn_cast_or_null<DenseElementsAttr>(input);
-  if (!input_data) {
-    return {};
-  }
-
-  auto input_begin = input_data.value_begin<Attribute>();
-  std::vector<Attribute> new_data(input_begin,
-                                  input_begin + getType().getNumElements());
-
-  return DenseElementsAttr::get(getType(), new_data);
+  return DenseElementsAttr::get(getType(), result_data);
 }
 
 mlir::LogicalResult SliceOp::verify() {
@@ -3760,16 +3840,13 @@ OpFoldResult SelectOp::fold(FoldAdaptor adaptor) {
 // SumOp
 //===----------------------------------------------------------------------===//
 
-// TODO: b/351437662 - Expand for all reductions.
+// TODO: b/351437662 - Expand for all reductions. Currently this folds
+// the case where the reduction dims are all but the last.
 OpFoldResult SumOp::fold(FoldAdaptor adaptor) {
   auto input = adaptor.getInput();
   auto axes = adaptor.getAxes();
 
   if (!input || !axes) {
-    return {};
-  }
-
-  if (adaptor.getKeepDims()) {
     return {};
   }
 
@@ -3790,16 +3867,25 @@ OpFoldResult SumOp::fold(FoldAdaptor adaptor) {
     return {};
   }
 
-  llvm::SmallVector<int64_t> out_shape = {input_type.getShape().back()};
-  std::vector<float> out_data(out_shape[0], 0.0);
+  const int64_t slice_size = input_type.getShape().back();
+
+  std::vector<float> out_data(slice_size, 0.0);
 
   auto in_data = llvm::cast<DenseFPElementsAttr>(input);
 
   size_t flat_ind = 0;
   for (auto it = in_data.value_begin<float>(); it < in_data.value_end<float>();
        ++it) {
-    out_data[flat_ind % out_shape[0]] += *it;
+    out_data[flat_ind % slice_size] += *it;
     flat_ind++;
+  }
+
+  llvm::SmallVector<int64_t> out_shape;
+  if (adaptor.getKeepDims()) {
+    out_shape = llvm::SmallVector<int64_t>(getType().getRank(), 1);
+    out_shape.back() = slice_size;
+  } else {
+    out_shape = {slice_size};
   }
 
   return DenseFPElementsAttr::get(
@@ -4886,35 +4972,13 @@ OpFoldResult ReverseV2Op::fold(FoldAdaptor adaptor) {
                                     axis_val.value_end<int32_t>());
 
   auto input_type = getInput().getType();
-
-  auto get_shaped_ind = [&](int64_t flat_ind) -> llvm::SmallVector<int64_t> {
-    llvm::SmallVector<int64_t> result;
-    result.reserve(input_type.getRank());
-    auto num_els = input_type.getNumElements();
-    for (auto d : input_type.getShape()) {
-      num_els /= d;
-      result.push_back(flat_ind / num_els);
-      flat_ind %= num_els;
-    }
-    return result;
-  };
-
-  auto get_flat_ind = [&](llvm::ArrayRef<int64_t> shaped_ind) -> int64_t {
-    auto num_els = input_type.getNumElements();
-    int64_t result = 0;
-    for (auto [max_dim, ind_dim] :
-         llvm::zip(input_type.getShape(), shaped_ind)) {
-      num_els /= max_dim;
-      result += num_els * ind_dim;
-    }
-    return result;
-  };
+  const FlatIndHelper helper(input_type);
 
   std::vector<Attribute> new_data(input_type.getNumElements());
   auto input_data = llvm::cast<DenseElementsAttr>(input);
 
   for (auto [i, val] : llvm::enumerate(input_data.getValues<Attribute>())) {
-    auto shaped_ind = get_shaped_ind(i);
+    auto shaped_ind = helper.GetShapedInd(i);
 
     for (int d = 0; d < shaped_ind.size(); ++d) {
       if (!axis_set.contains(d)) {
@@ -4924,9 +4988,7 @@ OpFoldResult ReverseV2Op::fold(FoldAdaptor adaptor) {
       shaped_ind[d] = input_type.getDimSize(d) - 1 - shaped_ind[d];
     }
 
-    auto new_flat_ind = get_flat_ind(shaped_ind);
-
-    new_data[new_flat_ind] = val;
+    new_data[helper.GetFlatInd(shaped_ind)] = val;
   }
 
   return DenseElementsAttr::get(getType(), new_data);
@@ -5193,13 +5255,12 @@ Attribute ConstBytesAttr::parse(AsmParser& parser, Type type) {
   if (parser.parseString(&data)) {
     return nullptr;
   }
-  if (data.size() < 2 || data.substr(0, 2) != "0x") {
-    parser.emitError(parser.getNameLoc(), "Hex string doesn't start with `0x`");
-    return nullptr;
+  if (data.size() >= 2 && data.substr(0, 2) == "0x") {
+    std::string bytes_data = absl::HexStringToBytes(data.substr(2));
+    return ConstBytesAttr::get(parser.getBuilder().getContext(), bytes_data);
   }
 
-  std::string bytes_data = absl::HexStringToBytes(data.substr(2));
-  return ConstBytesAttr::get(parser.getBuilder().getContext(), bytes_data);
+  return ConstBytesAttr::get(parser.getBuilder().getContext(), data);
 }
 
 void ConstBytesAttr::print(mlir::AsmPrinter& printer) const {

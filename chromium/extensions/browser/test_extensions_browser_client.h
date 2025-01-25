@@ -81,25 +81,17 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
       content::BrowserContext* context) override;
   content::BrowserContext* GetOriginalContext(
       content::BrowserContext* context) override;
-
   content::BrowserContext* GetContextRedirectedToOriginal(
-      content::BrowserContext* context,
-      bool force_guest_profile) override;
+      content::BrowserContext* context) override;
   content::BrowserContext* GetContextOwnInstance(
-      content::BrowserContext* context,
-      bool force_guest_profile) override;
+      content::BrowserContext* context) override;
   content::BrowserContext* GetContextForOriginalOnly(
-      content::BrowserContext* context,
-      bool force_guest_profile) override;
+      content::BrowserContext* context) override;
   bool AreExtensionsDisabledForContext(
       content::BrowserContext* context) override;
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   std::string GetUserIdHashFromContext(
       content::BrowserContext* context) override;
-#endif
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  bool IsFromMainProfile(content::BrowserContext* context) override;
 #endif
   bool IsGuestSession(content::BrowserContext* context) const override;
   bool IsExtensionIncognitoEnabled(
@@ -119,7 +111,6 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
       int resource_id,
       scoped_refptr<net::HttpResponseHeaders> headers,
       mojo::PendingRemote<network::mojom::URLLoaderClient> client) override;
-
   bool AllowCrossRendererResourceLoad(
       const network::ResourceRequest& request,
       network::mojom::RequestDestination destination,

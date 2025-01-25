@@ -235,8 +235,9 @@ void VivaldiDesktopWindowTreeHostWin::Init(
   }
 }
 
-void VivaldiDesktopWindowTreeHostWin::Show(ui::WindowShowState show_state,
-                                           const gfx::Rect& restore_bounds) {
+void VivaldiDesktopWindowTreeHostWin::Show(
+    ui::mojom::WindowShowState show_state,
+    const gfx::Rect& restore_bounds) {
   // This will make BrowserWindowState remember the initial workspace.
   // It has to be called after DesktopNativeWidgetAura is observing the host
   // and the session service is tracking the window.
@@ -343,7 +344,7 @@ void VivaldiDesktopWindowTreeHostWin::Maximize() {
   // TODO(jackhou): Make this behavior the same as other platforms, i.e. calling
   // Maximize() does not also show the window.
   if (IsVisible()) {
-    Show(ui::SHOW_STATE_NORMAL, gfx::Rect());
+    Show(ui::mojom::WindowShowState::kNormal, gfx::Rect());
   }
 
   // Disable shadow and rounding to prevent bleeding cross screens.
@@ -357,7 +358,7 @@ void VivaldiDesktopWindowTreeHostWin::Minimize() {
   // TODO(jackhou): Make this behavior the same as other platforms, i.e. calling
   // Minimize() does not also show the window.
   if (!IsVisible()) {
-    Show(ui::SHOW_STATE_NORMAL, gfx::Rect());
+    Show(ui::mojom::WindowShowState::kNormal, gfx::Rect());
   }
   views::DesktopWindowTreeHostWin::Minimize();
 }

@@ -68,10 +68,6 @@ CompositorKeyframeValue* CompositorKeyframeValueFactory::Create(
       return CreateFromTransformProperties(style.Scale(), style.EffectiveZoom(),
                                            nullptr);
     }
-    case CSSPropertyID::kBackgroundColor:
-    case CSSPropertyID::kClipPath: {
-      return MakeGarbageCollected<CompositorKeyframeDouble>(offset);
-    }
     case CSSPropertyID::kVariable: {
       if (!RuntimeEnabledFeatures::OffMainThreadCSSPaintEnabled()) {
         return nullptr;
@@ -96,8 +92,7 @@ CompositorKeyframeValue* CompositorKeyframeValueFactory::Create(
       return nullptr;
     }
     default:
-      NOTREACHED_IN_MIGRATION();
-      return nullptr;
+      NOTREACHED();
   }
 }
 

@@ -72,6 +72,15 @@ class FontSizeTabHelper : public web::WebFramesManager::Observer,
   static void RegisterBrowserStatePrefs(
       user_prefs::PrefRegistrySyncable* registry);
 
+  // Vivaldi
+  // This method is a copy private method GetFontSize()
+  // Returns the true font size in scaling percentage (e.g. 150 for
+  // 150%) taking all sources into account (system level and user zoom).
+  int GetFontZoomSize() const;
+  // Sets font size in web page by scaling percentage.Copy of SetPageFontSize()
+  void SetPageZoomSize(int size);
+  // End Vivaldi
+
  private:
   friend class web::WebStateUserData<FontSizeTabHelper>;
 

@@ -50,7 +50,7 @@ public final class AutofillSaveIbanBottomSheetBridgeTest {
                     .withAcceptText("Save")
                     .withCancelText("No thanks")
                     .withDescriptionText("")
-                    .withIbanLabel("FR **0189")
+                    .withIbanValue("CH5604835012345678009")
                     .withTitleText("Save IBAN?")
                     .withLegalMessageLines(Collections.EMPTY_LIST)
                     .withLogoIcon(0)
@@ -96,6 +96,18 @@ public final class AutofillSaveIbanBottomSheetBridgeTest {
         verify(mBottomSheetController)
                 .requestShowContent(
                         any(AutofillSaveIbanBottomSheetContent.class), /* animate= */ eq(true));
+    }
+
+    @Test
+    public void testHide() {
+        mAutofillSaveIbanBottomSheetBridge.requestShowContent(TEST_IBAN_UI_INFO);
+        mAutofillSaveIbanBottomSheetBridge.hide();
+
+        verify(mBottomSheetController)
+                .hideContent(
+                        any(AutofillSaveIbanBottomSheetContent.class),
+                        /* animate= */ eq(true),
+                        eq(StateChangeReason.INTERACTION_COMPLETE));
     }
 
     @Test

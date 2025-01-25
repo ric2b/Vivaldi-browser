@@ -108,6 +108,10 @@
             "type": "boolean",
             "description": "Does profile support extensions import."
           },
+          "tabs": {
+            "type": "boolean",
+            "description": "Does profile support open tab import."
+          },
           "hasDefaultInstall": {
             "type": "boolean",
             "description": "Is a default installation detected."
@@ -203,6 +207,9 @@
                 "type": "boolean"
               },
               "extensions": {
+                "type": "boolean"
+              },
+              "tabs": {
                 "type": "boolean"
               }
             }

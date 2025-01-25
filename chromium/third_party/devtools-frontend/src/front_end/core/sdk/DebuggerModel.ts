@@ -40,7 +40,7 @@ import * as i18n from '../i18n/i18n.js';
 import * as Platform from '../platform/platform.js';
 import * as Root from '../root/root.js';
 
-import {type PageResourceLoadInitiator} from './PageResourceLoader.js';
+import type {PageResourceLoadInitiator} from './PageResourceLoader.js';
 import {type GetPropertiesResult, type RemoteObject, RemoteObjectProperty, ScopeRef} from './RemoteObject.js';
 import {Events as ResourceTreeModelEvents, ResourceTreeModel} from './ResourceTreeModel.js';
 import {type EvaluationOptions, type EvaluationResult, type ExecutionContext, RuntimeModel} from './RuntimeModel.js';
@@ -156,6 +156,12 @@ export const enum StepMode {
   STEP_OVER = 'StepOver',
 }
 
+export const WASM_SYMBOLS_PRIORITY = [
+  Protocol.Debugger.DebugSymbolsType.ExternalDWARF,
+  Protocol.Debugger.DebugSymbolsType.EmbeddedDWARF,
+  Protocol.Debugger.DebugSymbolsType.SourceMap,
+];
+
 export class DebuggerModel extends SDKModel<EventTypes> {
   readonly agent: ProtocolProxyApi.DebuggerApi;
   runtimeModelInternal: RuntimeModel;
@@ -243,6 +249,39 @@ export class DebuggerModel extends SDKModel<EventTypes> {
     if (resourceTreeModel) {
       resourceTreeModel.addEventListener(ResourceTreeModelEvents.FrameNavigated, this.onFrameNavigated, this);
     }
+  }
+
+  static selectSymbolSource(debugSymbols: Protocol.Debugger.DebugSymbols[]|null): Protocol.Debugger.DebugSymbols|null {
+    if (!debugSymbols || debugSymbols.length === 0) {
+      return null;
+    }
+
+    // Provides backwards compatibility to previous CDP version on Protocol.Debugger.DebugSymbols.
+    // TODO(crbug.com/369515221): Remove extra code as soon as old v8 versions used in Node are no longer supported.
+    if ('type' in debugSymbols) {
+      if (debugSymbols.type === 'None') {
+        return null;
+      }
+      return debugSymbols as Protocol.Debugger.DebugSymbols;
+    }
+
+    let debugSymbolsSource = null;
+    const symbolTypes = new Map(debugSymbols.map(symbol => [symbol.type, symbol]));
+    for (const symbol of WASM_SYMBOLS_PRIORITY) {
+      if (symbolTypes.has(symbol)) {
+        debugSymbolsSource = symbolTypes.get(symbol) || null;
+        break;
+      }
+    }
+
+    console.assert(
+        debugSymbolsSource !== null,
+        'Unknown symbol types. Front-end and back-end should be kept in sync regarding Protocol.Debugger.DebugSymbolTypes');
+    if (debugSymbolsSource && debugSymbols.length > 1) {
+      Common.Console.Console.instance().warn(
+          `Multiple debug symbols for script were found. Using ${debugSymbolsSource.type}`);
+    }
+    return debugSymbolsSource;
   }
 
   sourceMapManager(): SourceMapManager<Script> {
@@ -708,7 +747,7 @@ export class DebuggerModel extends SDKModel<EventTypes> {
       executionContextId: number, hash: string, executionContextAuxData: any, isLiveEdit: boolean,
       sourceMapURL: string|undefined, hasSourceURLComment: boolean, hasSyntaxError: boolean, length: number,
       isModule: boolean|null, originStackTrace: Protocol.Runtime.StackTrace|null, codeOffset: number|null,
-      scriptLanguage: string|null, debugSymbols: Protocol.Debugger.DebugSymbols|null,
+      scriptLanguage: string|null, debugSymbols: Protocol.Debugger.DebugSymbols[]|null,
       embedderName: Platform.DevToolsPath.UrlString|null): Script {
     const knownScript = this.#scriptsInternal.get(scriptId);
     if (knownScript) {
@@ -718,10 +757,12 @@ export class DebuggerModel extends SDKModel<EventTypes> {
     if (executionContextAuxData && ('isDefault' in executionContextAuxData)) {
       isContentScript = !executionContextAuxData['isDefault'];
     }
+
+    const selectedDebugSymbol = DebuggerModel.selectSymbolSource(debugSymbols);
     const script = new Script(
         this, scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, hash,
         isContentScript, isLiveEdit, sourceMapURL, hasSourceURLComment, length, isModule, originStackTrace, codeOffset,
-        scriptLanguage, debugSymbols, embedderName);
+        scriptLanguage, selectedDebugSymbol, embedderName);
     this.registerScript(script);
     this.dispatchEventToListeners(Events.ParsedScriptSource, script);
 
@@ -910,8 +951,14 @@ export class DebuggerModel extends SDKModel<EventTypes> {
     this.#breakpointResolvedEventTarget.removeEventListener(breakpointId, listener, thisObject);
   }
 
-  async setBlackboxPatterns(patterns: string[]): Promise<boolean> {
-    const response = await this.agent.invoke_setBlackboxPatterns({patterns});
+  async setBlackboxPatterns(patterns: string[], skipAnonymous: boolean): Promise<boolean> {
+    const response = await this.agent.invoke_setBlackboxPatterns({patterns, skipAnonymous});
+    const error = response.getError();
+    return !error;
+  }
+
+  async setBlackboxExecutionContexts(uniqueIds: string[]): Promise<boolean> {
+    const response = await this.agent.invoke_setBlackboxExecutionContexts({uniqueIds});
     const error = response.getError();
     return !error;
   }
@@ -1201,7 +1248,7 @@ export class CallFrame {
     this.#scopeChainInternal = [];
     this.#localScopeInternal = null;
     this.inlineFrameIndex = inlineFrameIndex || 0;
-    this.functionName = functionName || payload.functionName;
+    this.functionName = functionName ?? payload.functionName;
     this.missingDebugInfoDetails = null;
     this.canBeRestarted = Boolean(payload.canBeRestarted);
     this.exception = exception;
@@ -1235,7 +1282,7 @@ export class CallFrame {
   }
 
   createVirtualCallFrame(inlineFrameIndex: number, name: string): CallFrame {
-    return new CallFrame(this.debuggerModel, this.script, this.payload, inlineFrameIndex, name);
+    return new CallFrame(this.debuggerModel, this.script, this.payload, inlineFrameIndex, name, this.exception);
   }
 
   get id(): Protocol.Debugger.CallFrameId {

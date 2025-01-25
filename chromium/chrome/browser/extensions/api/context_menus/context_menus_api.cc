@@ -82,12 +82,13 @@ ExtensionFunction::ResponseAction ContextMenusUpdateFunction::Run() {
       api::context_menus::Update::Params::Create(args());
 
   EXTENSION_FUNCTION_VALIDATE(params);
-  if (params->id.as_string)
+  if (params->id.as_string) {
     item_id.string_uid = *params->id.as_string;
-  else if (params->id.as_integer)
+  } else if (params->id.as_integer) {
     item_id.uid = *params->id.as_integer;
-  else
-    NOTREACHED_IN_MIGRATION();
+  } else {
+    NOTREACHED();
+  }
 
   std::string error;
   if (!context_menu_helpers::UpdateMenuItem(params->update_properties,
@@ -109,12 +110,14 @@ ExtensionFunction::ResponseAction ContextMenusRemoveFunction::Run() {
                   MenuItem::ExtensionKey(extension_id()));
   if (id.incognito && vivaldi::IsVivaldiApp(extension_id()))
     id.incognito = false;
-  if (params->menu_item_id.as_string)
+
+  if (params->menu_item_id.as_string) {
     id.string_uid = *params->menu_item_id.as_string;
-  else if (params->menu_item_id.as_integer)
+  } else if (params->menu_item_id.as_integer) {
     id.uid = *params->menu_item_id.as_integer;
-  else
-    NOTREACHED_IN_MIGRATION();
+  } else {
+    NOTREACHED();
+  }
 
   MenuItem* item = manager->GetItemById(id);
   // Ensure one extension can't remove another's menu items.

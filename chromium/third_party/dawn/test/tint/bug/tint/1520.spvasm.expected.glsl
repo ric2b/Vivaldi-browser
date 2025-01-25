@@ -2,58 +2,67 @@
 precision highp float;
 precision highp int;
 
-ivec4 tint_select(ivec4 param_0, ivec4 param_1, bvec4 param_2) {
-    return ivec4(param_2[0] ? param_1[0] : param_0[0], param_2[1] ? param_1[1] : param_0[1], param_2[2] ? param_1[2] : param_0[2], param_2[3] ? param_1[3] : param_0[3]);
-}
 
-
-int tint_ftoi(float v) {
-  return ((v <= 2147483520.0f) ? ((v < -2147483648.0f) ? (-2147483647 - 1) : int(v)) : 2147483647);
-}
-
-layout(location = 0) in vec4 vcolor_S0_param_1;
-layout(location = 0) out vec4 sk_FragColor_1_1;
-struct UniformBuffer {
-  uint pad;
-  uint pad_1;
-  uint pad_2;
-  uint pad_3;
+struct UniformBuffer_std140 {
+  uint tint_pad_0;
+  uint tint_pad_1;
+  uint tint_pad_2;
+  uint tint_pad_3;
   float unknownInput_S1_c0;
-  uint pad_4;
-  uint pad_5;
-  uint pad_6;
+  uint tint_pad_4;
+  uint tint_pad_5;
+  uint tint_pad_6;
   vec4 ucolorRed_S1_c0;
   vec4 ucolorGreen_S1_c0;
-  mat3 umatrix_S1;
+  vec3 umatrix_S1_col0;
+  uint tint_pad_7;
+  vec3 umatrix_S1_col1;
+  uint tint_pad_8;
+  vec3 umatrix_S1_col2;
+  uint tint_pad_9;
 };
 
-layout(binding = 0, std140) uniform x_4_block_ubo {
-  UniformBuffer inner;
-} x_4;
+struct main_out {
+  vec4 sk_FragColor_1;
+};
 
-vec4 sk_FragColor = vec4(0.0f, 0.0f, 0.0f, 0.0f);
+layout(binding = 0, std140)
+uniform x_4_block_std140_1_ubo {
+  UniformBuffer_std140 inner;
+} v;
+vec4 sk_FragColor = vec4(0.0f);
 bool sk_Clockwise = false;
-vec4 vcolor_S0 = vec4(0.0f, 0.0f, 0.0f, 0.0f);
-ivec4 tint_div(ivec4 lhs, ivec4 rhs) {
-  return (lhs / tint_select(rhs, ivec4(1), bvec4(uvec4(equal(rhs, ivec4(0))) | uvec4(bvec4(uvec4(equal(lhs, ivec4((-2147483647 - 1)))) & uvec4(equal(rhs, ivec4(-1))))))));
+vec4 vcolor_S0 = vec4(0.0f);
+layout(location = 0) in vec4 tint_symbol_loc0_Input;
+layout(location = 0) out vec4 tint_symbol_loc0_Output;
+ivec4 tint_div_v4i32(ivec4 lhs, ivec4 rhs) {
+  bvec4 v_1 = equal(rhs, ivec4(0));
+  bvec4 v_2 = equal(lhs, ivec4((-2147483647 - 1)));
+  bvec4 v_3 = equal(rhs, ivec4(-1));
+  uvec4 v_4 = uvec4(v_2);
+  bvec4 v_5 = bvec4((v_4 & uvec4(v_3)));
+  uvec4 v_6 = uvec4(v_1);
+  return (lhs / mix(rhs, ivec4(1), bvec4((v_6 | uvec4(v_5)))));
 }
-
+int tint_f32_to_i32(float value) {
+  return mix(2147483647, mix((-2147483647 - 1), int(value), (value >= -2147483648.0f)), (value <= 2147483520.0f));
+}
 bool test_int_S1_c0_b() {
   int unknown = 0;
   bool ok = false;
-  ivec4 val = ivec4(0, 0, 0, 0);
+  ivec4 val = ivec4(0);
   bool x_40 = false;
   bool x_41 = false;
   bool x_54 = false;
   bool x_55 = false;
   bool x_65 = false;
   bool x_66 = false;
-  int x_27 = tint_ftoi(x_4.inner.unknownInput_S1_c0);
+  int x_27 = tint_f32_to_i32(v.inner.unknownInput_S1_c0);
   unknown = x_27;
   ok = true;
   x_41 = false;
   if (true) {
-    x_40 = all(equal(tint_div(ivec4(0), ivec4(x_27)), ivec4(0)));
+    x_40 = all(equal(tint_div_v4i32(ivec4(0), ivec4(x_27)), ivec4(0)));
     x_41 = x_40;
   }
   ok = x_41;
@@ -75,11 +84,11 @@ bool test_int_S1_c0_b() {
   ok = x_55;
   ivec4 x_58 = (x_50 * ivec4(2));
   val = x_58;
-  ivec4 x_59 = tint_div(x_58, ivec4(2));
+  ivec4 x_59 = tint_div_v4i32(x_58, ivec4(2));
   val = x_59;
   ivec4 x_60 = (x_59 * ivec4(2));
   val = x_60;
-  ivec4 x_61 = tint_div(x_60, ivec4(2));
+  ivec4 x_61 = tint_div_v4i32(x_60, ivec4(2));
   val = x_61;
   x_66 = false;
   if (x_55) {
@@ -89,14 +98,13 @@ bool test_int_S1_c0_b() {
   ok = x_66;
   return x_66;
 }
-
 void main_1() {
-  vec4 outputColor_S0 = vec4(0.0f, 0.0f, 0.0f, 0.0f);
-  vec4 output_S1 = vec4(0.0f, 0.0f, 0.0f, 0.0f);
+  vec4 outputColor_S0 = vec4(0.0f);
+  vec4 output_S1 = vec4(0.0f);
   float x_8_unknown = 0.0f;
   bool x_9_ok = false;
-  vec4 x_10_val = vec4(0.0f, 0.0f, 0.0f, 0.0f);
-  vec4 x_116 = vec4(0.0f, 0.0f, 0.0f, 0.0f);
+  vec4 x_10_val = vec4(0.0f);
+  vec4 x_116 = vec4(0.0f);
   bool x_86 = false;
   bool x_87 = false;
   bool x_99 = false;
@@ -106,7 +114,7 @@ void main_1() {
   bool x_114 = false;
   bool x_115 = false;
   outputColor_S0 = vcolor_S0;
-  float x_77 = x_4.inner.unknownInput_S1_c0;
+  float x_77 = v.inner.unknownInput_S1_c0;
   x_8_unknown = x_77;
   x_9_ok = true;
   x_87 = false;
@@ -151,30 +159,20 @@ void main_1() {
     x_115 = x_114;
   }
   if (x_115) {
-    x_116 = x_4.inner.ucolorGreen_S1_c0;
+    x_116 = v.inner.ucolorGreen_S1_c0;
   } else {
-    x_116 = x_4.inner.ucolorRed_S1_c0;
+    x_116 = v.inner.ucolorRed_S1_c0;
   }
   vec4 x_125 = x_116;
   output_S1 = x_116;
   sk_FragColor = x_125;
-  return;
 }
-
-struct main_out {
-  vec4 sk_FragColor_1;
-};
-
-main_out tint_symbol(bool sk_Clockwise_param, vec4 vcolor_S0_param) {
+main_out tint_symbol_inner(bool sk_Clockwise_param, vec4 vcolor_S0_param) {
   sk_Clockwise = sk_Clockwise_param;
   vcolor_S0 = vcolor_S0_param;
   main_1();
-  main_out tint_symbol_1 = main_out(sk_FragColor);
-  return tint_symbol_1;
+  return main_out(sk_FragColor);
 }
-
 void main() {
-  main_out inner_result = tint_symbol(gl_FrontFacing, vcolor_S0_param_1);
-  sk_FragColor_1_1 = inner_result.sk_FragColor_1;
-  return;
+  tint_symbol_loc0_Output = tint_symbol_inner(gl_FrontFacing, tint_symbol_loc0_Input).sk_FragColor_1;
 }

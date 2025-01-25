@@ -54,7 +54,14 @@ namespace {{native_namespace}} {
     static_assert(offsetof(ChainedStruct, sType) == offsetof({{c_prefix}}ChainedStruct, sType),
             "offsetof mismatch for ChainedStruct::sType");
 
-    {% for type in by_category["structure"] %}
+    //* Special structures that are manually written.
+    {% set SpecialStructures = ["string view"] %}
+
+    bool StringView::operator==(const StringView& rhs) const {
+        return data == rhs.data && length == rhs.length;
+    }
+
+    {% for type in by_category["structure"] if type.name.get() not in SpecialStructures %}
         {% set CppType = as_cppType(type.name) %}
         {% set CType = as_cType(type.name) %}
 
@@ -157,36 +164,18 @@ namespace {{native_namespace}} {
         }
 
         void {{as_cppType(type.name)}}::FreeMembers() {
-            if (
-                {%- for member in type.members if member.annotation != 'value' %}
-                    {% if not loop.first %} || {% endif -%}
-                    this->{{member.name.camelCase()}} != nullptr
-                {%- endfor -%}
-            ) {
+            bool needsFreeing = false;
+            {%- for member in type.members if member.annotation != 'value' %}
+                if (this->{{member.name.camelCase()}} != nullptr) { needsFreeing = true; }
+            {%- endfor -%}
+            {%- for member in type.members if member.type.name.canonical_case() == 'string view' %}
+                if (this->{{member.name.camelCase()}}.data != nullptr) { needsFreeing = true; }
+            {%- endfor -%}
+            if (needsFreeing) {
                 API{{as_MethodSuffix(type.name, Name("free members"))}}(*reinterpret_cast<{{as_cType(type.name)}}*>(this));
             }
         }
 
     {% endfor %}
-
-    StringView::operator std::string_view() const {
-        const bool isNull = this->data == nullptr;
-        const bool useStrlen = this->length == SIZE_MAX;
-        DAWN_ASSERT(!(isNull && useStrlen));
-        return std::string_view(this->data, isNull      ? 0
-                                            : useStrlen ? std::strlen(this->data)
-                                                        : this->length);
-    }
-
-    NullableStringView::operator std::optional<std::string_view>() const {
-        const bool isNull = this->data == nullptr;
-        const bool useStrlen = this->length == SIZE_MAX;
-        if (isNull && useStrlen) {
-            return std::nullopt;
-        }
-        return std::string_view(this->data, isNull      ? 0
-                                            : useStrlen ? std::strlen(this->data)
-                                                        : this->length);
-    }
 
 } // namespace {{native_namespace}}

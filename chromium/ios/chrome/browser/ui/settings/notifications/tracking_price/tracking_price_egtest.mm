@@ -26,22 +26,18 @@ using chrome_test_util::SettingsTrackingPriceTableView;
   AppLaunchConfiguration config;
   // Feature parameters follow a key/value format to enable or disable
   // parameters.
-  std::string params =
-      ":enable_price_tracking/true/enable_price_notification/true";
-  std::string priceNotificationsFlag =
-      std::string(commerce::kCommercePriceTracking.name) + params;
   std::string shoppingListFlag = std::string("ShoppingList");
   std::string settingsMenuItem = std::string("NotificationSettingsMenuItem");
 
-  config.additional_args.push_back(
-      "--enable-features=" + priceNotificationsFlag + "," + shoppingListFlag +
-      "," + settingsMenuItem);
+  config.additional_args.push_back("--enable-features=" + shoppingListFlag +
+                                   "," + settingsMenuItem);
 
   return config;
 }
 
 // Tests that the settings page is dismissed by swiping down from the top.
-- (void)testTrackingPriceSwipeDown_FromUpdatedSettingsView {
+// TODO(crbug.com/378039633): Reenable the test.
+- (void)DISABLED_testTrackingPriceSwipeDown_FromUpdatedSettingsView {
   [self openTrackingPriceSettingsFromUpdatedSettingsView];
 
   // Check that Tracking Price TableView is presented.

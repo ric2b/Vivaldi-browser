@@ -15,21 +15,20 @@
   padding-bottom: 5px;
   background: linear-gradient(180deg, rgb(255 125 210 / 0%) 0%, rgb(255 125 210 / 15%) 85%); /* stylelint-disable-line plugin/use_theme_colors */
   border-color: var(--ref-palette-pink55);
-  border-width: 1px;
+  border-width: 0 1px 5px;
   border-style: solid;
   pointer-events: none;
-  border-bottom-width: 5px;
 }
 
 .range-container {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
   text-align: center;
   box-sizing: border-box;
-  width: max-content;
-  max-width: 250px;
-  padding: 0 3px;
   pointer-events: all;
   user-select: none;
-  color: var(--ref-palette-pink55);
+  color: var(--sys-color-pink);
 
   &.labelHidden {
     /* Have to use this not display: none so it maintains its width */
@@ -39,19 +38,30 @@
   }
 
   &.offScreenLeft {
+    align-items: flex-start;
     text-align: left;
   }
 
   &.offScreenRight {
+    align-items: flex-end;
     text-align: right;
   }
 }
 
 .label-text {
+  /*
+  * The width priority is min-width > max-width > width
+  * When the range itself is smaller that 70px, expand 100% to fill the whole width.
+  * When the range is wider, only expand the textfield to over 70px
+  * if it's needed to fit the label text.
+  */
+  width: 100%;
+  max-width: 70px;
+  min-width: fit-content;
   text-overflow: ellipsis;
-  max-height: 40px;
   overflow: hidden;
-  color: var(--ref-palette-pink55);
+  overflow-wrap: break-word;
+  word-break: break-word;
   margin-bottom: 3px;
   display: -webkit-box;
   white-space: break-spaces;
@@ -62,13 +72,4 @@
 .label-text[contenteditable="true"] {
   outline: none;
   box-shadow: 0 0 0 1px var(--ref-palette-pink55);
-}
-
-.user-created-icon {
-  position: absolute;
-  left: 4px;
-  bottom: 5px;
-  color: var(--ref-palette-pink55);
-  width: 16px;
-  height: 17px;
 }

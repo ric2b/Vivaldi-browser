@@ -154,13 +154,20 @@ class WaylandConnection {
       const {
     return linux_explicit_synchronization_.get();
   }
+  wp_linux_drm_syncobj_manager_v1* linux_drm_syncobj_manager_v1() const {
+    return linux_drm_syncobj_manager_.get();
+  }
+  bool SupportsExplicitSync() const {
+    return !!linux_explicit_synchronization_v1() ||
+           !!linux_drm_syncobj_manager_v1();
+  }
   zxdg_decoration_manager_v1* xdg_decoration_manager_v1() const {
     return xdg_decoration_manager_.get();
   }
   zcr_extended_drag_v1* extended_drag_v1() const {
     return extended_drag_v1_.get();
   }
-  xdg_toplevel_drag_manager_v1* xdg_toplevel_drag_manager_v1() const {
+  xdg_toplevel_drag_manager_v1* toplevel_drag_manager_v1() const {
     return xdg_toplevel_drag_manager_v1_.get();
   }
 
@@ -313,14 +320,6 @@ class WaylandConnection {
     return available_globals_;
   }
 
-  bool surface_submission_in_pixel_coordinates() const {
-    return surface_submission_in_pixel_coordinates_;
-  }
-
-  void set_surface_submission_in_pixel_coordinates(bool enabled) {
-    surface_submission_in_pixel_coordinates_ = enabled;
-  }
-
   bool supports_viewporter_surface_scaling() const {
     return supports_viewporter_surface_scaling_;
   }
@@ -329,14 +328,14 @@ class WaylandConnection {
     supports_viewporter_surface_scaling_ = enabled;
   }
 
-  bool UseViewporterSurfaceScaling() const {
-    return supports_viewporter_surface_scaling_ &&
-           !surface_submission_in_pixel_coordinates_;
-  }
-
   bool UsePerSurfaceScaling() const {
     return base::FeatureList::IsEnabled(features::kWaylandPerSurfaceScale) &&
-           UseViewporterSurfaceScaling();
+           supports_viewporter_surface_scaling();
+  }
+
+  bool IsUiScaleEnabled() const {
+    return base::FeatureList::IsEnabled(features::kWaylandUiScale) &&
+           UsePerSurfaceScaling();
   }
 
   bool ShouldUseOverlayDelegation() const;
@@ -357,13 +356,10 @@ class WaylandConnection {
   }
   display::TabletState GetTabletState() { return tablet_layout_state_; }
 
-  const gfx::PointF MaybeConvertLocation(const gfx::PointF& location,
-                                         const WaylandWindow* window) const;
-
   void DumpState(std::ostream& out) const;
 
   bool UseImplicitSyncInterop() const {
-    return !linux_explicit_synchronization_v1() &&
+    return !SupportsExplicitSync() &&
            WaylandBufferManagerHost::SupportsImplicitSyncInterop();
   }
 
@@ -501,6 +497,8 @@ class WaylandConnection {
   wl::Object<zcr_text_input_extension_v1> text_input_extension_v1_;
   wl::Object<zwp_linux_explicit_synchronization_v1>
       linux_explicit_synchronization_;
+  bool enable_linux_drm_syncobj_for_testing_ = false;
+  wl::Object<wp_linux_drm_syncobj_manager_v1> linux_drm_syncobj_manager_;
   wl::Object<zxdg_decoration_manager_v1> xdg_decoration_manager_;
   wl::Object<zcr_extended_drag_v1> extended_drag_v1_;
   wl::Object<::xdg_toplevel_drag_manager_v1> xdg_toplevel_drag_manager_v1_;
@@ -572,12 +570,6 @@ class WaylandConnection {
   // The current window table mode layout state.
   display::TabletState tablet_layout_state_ =
       display::TabletState::kInClamshellMode;
-
-  // Surfaces are submitted in pixel coordinates. Their buffer scales are always
-  // advertised to server as 1, and the scale via vp_viewporter won't be
-  // applied. The server will be responsible to scale the buffers to the right
-  // sizes.
-  bool surface_submission_in_pixel_coordinates_ = false;
 
   // This is set if wp_viewporter may be used to instruct the compositor to
   // properly scale fractional scaled surfaces.

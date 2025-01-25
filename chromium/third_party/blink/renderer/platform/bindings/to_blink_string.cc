@@ -15,14 +15,16 @@ namespace {
 
 template <class StringClass>
 struct StringTraits {
-  static const StringClass& FromStringResource(StringResourceBase*);
+  static const StringClass& FromStringResource(v8::Isolate* isolate,
+                                               StringResourceBase*);
   template <typename V8StringTrait>
   static StringClass FromV8String(v8::Isolate*, v8::Local<v8::String>, int);
 };
 
 template <>
 struct StringTraits<String> {
-  static const String FromStringResource(StringResourceBase* resource) {
+  static const String FromStringResource(v8::Isolate* isolate,
+                                         StringResourceBase* resource) {
     return resource->GetWTFString();
   }
   template <typename V8StringTrait>
@@ -31,8 +33,9 @@ struct StringTraits<String> {
 
 template <>
 struct StringTraits<AtomicString> {
-  static const AtomicString FromStringResource(StringResourceBase* resource) {
-    return resource->GetAtomicString();
+  static const AtomicString FromStringResource(v8::Isolate* isolate,
+                                               StringResourceBase* resource) {
+    return resource->GetAtomicString(isolate);
   }
   template <typename V8StringTrait>
   static AtomicString FromV8String(v8::Isolate*, v8::Local<v8::String>, int);
@@ -42,9 +45,9 @@ struct V8StringTwoBytesTrait {
   typedef UChar CharType;
   ALWAYS_INLINE static void Write(v8::Isolate* isolate,
                                   v8::Local<v8::String> v8_string,
-                                  CharType* buffer,
-                                  int length) {
-    v8_string->Write(isolate, reinterpret_cast<uint16_t*>(buffer), 0, length);
+                                  base::span<CharType> buffer) {
+    v8_string->Write(isolate, reinterpret_cast<uint16_t*>(buffer.data()), 0,
+                     static_cast<int>(buffer.size()));
   }
 };
 
@@ -52,9 +55,9 @@ struct V8StringOneByteTrait {
   typedef LChar CharType;
   ALWAYS_INLINE static void Write(v8::Isolate* isolate,
                                   v8::Local<v8::String> v8_string,
-                                  CharType* buffer,
-                                  int length) {
-    v8_string->WriteOneByte(isolate, buffer, 0, length);
+                                  base::span<CharType> buffer) {
+    v8_string->WriteOneByte(isolate, buffer.data(), 0,
+                            static_cast<int>(buffer.size()));
   }
 };
 
@@ -63,9 +66,9 @@ String StringTraits<String>::FromV8String(v8::Isolate* isolate,
                                           v8::Local<v8::String> v8_string,
                                           int length) {
   DCHECK(v8_string->Length() == length);
-  typename V8StringTrait::CharType* buffer;
+  base::span<typename V8StringTrait::CharType> buffer;
   String result = String::CreateUninitialized(length, buffer);
-  V8StringTrait::Write(isolate, v8_string, buffer, length);
+  V8StringTrait::Write(isolate, v8_string, buffer);
   return result;
 }
 
@@ -79,12 +82,13 @@ AtomicString StringTraits<AtomicString>::FromV8String(
       32 / sizeof(typename V8StringTrait::CharType);
   if (length <= kInlineBufferSize) {
     typename V8StringTrait::CharType inline_buffer[kInlineBufferSize];
-    V8StringTrait::Write(isolate, v8_string, inline_buffer, length);
-    return AtomicString(inline_buffer, static_cast<unsigned>(length));
+    base::span<typename V8StringTrait::CharType> buffer_span(inline_buffer);
+    V8StringTrait::Write(isolate, v8_string, buffer_span);
+    return AtomicString(buffer_span.first(static_cast<size_t>(length)));
   }
-  typename V8StringTrait::CharType* buffer;
+  base::span<typename V8StringTrait::CharType> buffer;
   String string = String::CreateUninitialized(length, buffer);
-  V8StringTrait::Write(isolate, v8_string, buffer, length);
+  V8StringTrait::Write(isolate, v8_string, buffer);
   return AtomicString(string);
 }
 
@@ -159,15 +163,17 @@ ConvertAndExternalizeString(v8::Isolate* isolate,
   *was_externalized = false;
   if (can_externalize) [[likely]] {
     if (result.Is8Bit()) {
-      StringResource8* string_resource = new StringResource8(result);
+      StringResource8* string_resource = new StringResource8(isolate, result);
       if (!v8_string->MakeExternal(string_resource)) [[unlikely]] {
+        string_resource->Unaccount(isolate);
         delete string_resource;
       } else {
         *was_externalized = true;
       }
     } else {
-      StringResource16* string_resource = new StringResource16(result);
+      StringResource16* string_resource = new StringResource16(isolate, result);
       if (!v8_string->MakeExternal(string_resource)) [[unlikely]] {
+        string_resource->Unaccount(isolate);
         delete string_resource;
       } else {
         *was_externalized = true;
@@ -195,8 +201,10 @@ StringType ToBlinkString(v8::Isolate* isolate,
   // strings on for platforms with v8 pointer compression.
   StringResourceBase* string_resource =
       GetExternalizedString(isolate, v8_string);
-  if (string_resource)
-    return StringTraits<StringType>::FromStringResource(string_resource);
+  if (string_resource) {
+    return StringTraits<StringType>::FromStringResource(isolate,
+                                                        string_resource);
+  }
 
   int length = v8_string->Length();
   if (!length) [[unlikely]] {
@@ -234,7 +242,8 @@ StringView ToBlinkStringView(v8::Isolate* isolate,
   StringResourceBase* string_resource =
       GetExternalizedString(isolate, v8_string);
   if (string_resource) {
-    return StringTraits<AtomicString>::FromStringResource(string_resource)
+    return StringTraits<AtomicString>::FromStringResource(isolate,
+                                                          string_resource)
         .Impl();
   }
 

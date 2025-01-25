@@ -27,23 +27,10 @@ static const int16_t av1_down2_symodd_half_filter[] = { 64, 35, 0, -3 };
 bool av1_resize_plane(const uint8_t *input, int height, int width,
                       int in_stride, uint8_t *output, int height2, int width2,
                       int out_stride);
-// TODO(aomedia:3228): In libaom 4.0.0, remove av1_resize_frame420 from
-// av1/exports_com and delete this function.
-void av1_resize_frame420(const uint8_t *y, int y_stride, const uint8_t *u,
-                         const uint8_t *v, int uv_stride, int height, int width,
-                         uint8_t *oy, int oy_stride, uint8_t *ou, uint8_t *ov,
-                         int ouv_stride, int oheight, int owidth);
-
-void av1_highbd_resize_plane(const uint8_t *input, int height, int width,
-                             int in_stride, uint8_t *output, int height2,
-                             int width2, int out_stride, int bd);
 
 void av1_upscale_normative_rows(const AV1_COMMON *cm, const uint8_t *src,
                                 int src_stride, uint8_t *dst, int dst_stride,
                                 int plane, int rows);
-void av1_upscale_normative_and_extend_frame(const AV1_COMMON *cm,
-                                            const YV12_BUFFER_CONFIG *src,
-                                            YV12_BUFFER_CONFIG *dst);
 
 YV12_BUFFER_CONFIG *av1_realloc_and_scale_if_required(
     AV1_COMMON *cm, YV12_BUFFER_CONFIG *unscaled, YV12_BUFFER_CONFIG *scaled,
@@ -62,11 +49,6 @@ void av1_calculate_scaled_size(int *width, int *height, int resize_denom);
 // given original dimensions and superres scale denominator.
 void av1_calculate_scaled_superres_size(int *width, int *height,
                                         int superres_denom);
-
-// Inverse of av1_calculate_scaled_superres_size() above: calculates the
-// original dimensions from the given scaled dimensions and the scale
-// denominator.
-void av1_calculate_unscaled_superres_size(int *width, int *height, int denom);
 
 void av1_superres_upscale(AV1_COMMON *cm, BufferPool *const pool,
                           bool alloc_pyramid);

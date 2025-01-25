@@ -30,6 +30,7 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
         super(GClientSmokeGIT, self).setUp()
         self.env['PATH'] = (os.path.join(ROOT_DIR, 'testing_support') +
                             os.pathsep + self.env['PATH'])
+        self.env['GCLIENT_SUPPRESS_GIT_VERSION_WARNING'] = '1'
         self.env['GCLIENT_SUPPRESS_SUBMODULE_WARNING'] = '1'
         self.enabled = self.FAKE_REPOS.set_up_git()
         if not self.enabled:
@@ -50,7 +51,7 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
                 '[submodule "some_repo"]', '\tpath = some_repo',
                 '\turl = /repo_2', '\tgclient-condition = not foo_checkout',
                 '[submodule "chicken/dickens"]', '\tpath = chicken/dickens',
-                '\turl = /repo_3'
+                '\turl = /repo_3', '\tgclient-recursedeps = true'
             ], contents)
 
     def testGitmodules_not_relative(self):
@@ -68,7 +69,7 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
                 '[submodule "some_repo"]', '\tpath = some_repo',
                 '\turl = /repo_2', '\tgclient-condition = not foo_checkout',
                 '[submodule "chicken/dickens"]', '\tpath = chicken/dickens',
-                '\turl = /repo_3'
+                '\turl = /repo_3', '\tgclient-recursedeps = true'
             ], contents)
 
     def testGitmodules_migration_no_git_suffix(self):
@@ -96,6 +97,34 @@ class GClientSmokeGIT(gclient_smoketest_base.GClientSmokeBase):
                 '[submodule "bar"]',
                 '\tpath = bar',
                 '\turl = https://example.googlesource.com/repo',
+            ], contents)
+
+    def testGitmodules_migration_recursdeps(self):
+        self.gclient(['config', self.git_base + 'repo_24', '--name', 'foo'],
+                     cwd=self.git_base + 'repo_24')
+        # We are not running gclient sync since dependencies don't exist
+        self.gclient(['gitmodules'], cwd=self.git_base + 'repo_24')
+
+        gitmodules = os.path.join(self.git_base, 'repo_24', '.gitmodules')
+        with open(gitmodules) as f:
+            contents = f.read().splitlines()
+            self.assertEqual([
+                '[submodule "bar"]',
+                '\tpath = bar',
+                '\turl = https://example.googlesource.com/repo',
+            ], contents)
+        # force migration
+        os.remove(gitmodules)
+        self.gclient(['gitmodules'], cwd=self.git_base + 'repo_24')
+
+        gitmodules = os.path.join(self.git_base, 'repo_24', '.gitmodules')
+        with open(gitmodules) as f:
+            contents = f.read().splitlines()
+            self.assertEqual([
+                '[submodule "bar"]',
+                '\tpath = bar',
+                '\turl = https://example.googlesource.com/repo',
+                '\tgclient-recursedeps = true'
             ], contents)
 
     def testGitmodules_not_in_gclient(self):

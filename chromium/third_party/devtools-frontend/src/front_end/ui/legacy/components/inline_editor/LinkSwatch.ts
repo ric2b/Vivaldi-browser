@@ -19,7 +19,7 @@ const UIStrings = {
 };
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/components/inline_editor/LinkSwatch.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
-const {render, html, Directives} = LitHtml;
+const {render, html, Directives: {ifDefined, classMap}} = LitHtml;
 
 interface BaseLinkSwatchRenderData {
   text: string;
@@ -30,7 +30,6 @@ interface BaseLinkSwatchRenderData {
 }
 
 class BaseLinkSwatch extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-base-link-swatch`;
   protected readonly shadow = this.attachShadow({mode: 'open'});
   protected onLinkActivate: (linkText: string, event: MouseEvent|KeyboardEvent) => void = () => undefined;
   #linkElement: HTMLSpanElement|undefined;
@@ -59,7 +58,7 @@ class BaseLinkSwatch extends HTMLElement {
 
   private render(data: BaseLinkSwatchRenderData): void {
     const {isDefined, text, title} = data;
-    const classes = Directives.classMap({
+    const classes = classMap({
       'link-style': true,
       'text-button': true,
       'link-swatch-link': true,
@@ -71,10 +70,10 @@ class BaseLinkSwatch extends HTMLElement {
     // We added var popover, so don't need the title attribute when no need for showing title and
     // only provide the data-title for the popover to get the data.
     const {startNode} = render(
-        html`<button .disabled=${!isDefined} class=${classes} title=${
-            LitHtml.Directives.ifDefined(data.showTitle ? title : null)} data-title=${
-            LitHtml.Directives.ifDefined(
-                !data.showTitle ? title : null)} @click=${onActivate} role="link" tabindex="-1">${text}</button>`,
+        html`<button .disabled=${!isDefined} class=${classes}
+                     title=${ifDefined(data.showTitle ? title : undefined)}
+                     data-title=${ifDefined(!data.showTitle ? title : undefined)}
+                     @click=${onActivate} role="link" tabindex="-1">${text}</button>`,
         this.shadow, {host: this});
     if (startNode?.nextSibling instanceof HTMLButtonElement) {
       this.#linkElement = startNode?.nextSibling;
@@ -91,7 +90,6 @@ interface CSSVarSwatchRenderData {
 }
 
 export class CSSVarSwatch extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-css-var-swatch`;
   protected readonly shadow = this.attachShadow({mode: 'open'});
   #link: BaseLinkSwatch|undefined;
 
@@ -120,7 +118,7 @@ export class CSSVarSwatch extends HTMLElement {
   protected render(data: CSSVarSwatchRenderData): void {
     const {variableName, fromFallback, computedValue, onLinkActivate} = data;
 
-    const isDefined = Boolean(computedValue) && !fromFallback;
+    const isDefined = computedValue !== null && !fromFallback;
     const title = isDefined ? computedValue ?? '' : i18nString(UIStrings.sIsNotDefined, {PH1: variableName});
 
     this.#link = new BaseLinkSwatch();
@@ -150,7 +148,6 @@ export interface LinkSwatchRenderData {
 }
 
 export class LinkSwatch extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-link-swatch`;
   protected readonly shadow = this.attachShadow({mode: 'open'});
 
   set data(data: LinkSwatchRenderData) {
@@ -161,13 +158,13 @@ export class LinkSwatch extends HTMLElement {
     const {text, isDefined, onLinkActivate, jslogContext} = data;
     const title = isDefined ? text : i18nString(UIStrings.sIsNotDefined, {PH1: text});
     render(
-        html`<span title=${data.text} jslog=${VisualLogging.link().track({click: true}).context(jslogContext)}><${
-            BaseLinkSwatch.litTagName} .data=${{
+        html`<span title=${data.text} jslog=${
+            VisualLogging.link().track({click: true}).context(jslogContext)}><devtools-base-link-swatch .data=${{
           text,
           isDefined,
           title,
           onLinkActivate,
-        } as BaseLinkSwatchRenderData}></${BaseLinkSwatch.litTagName}></span>`,
+        } as BaseLinkSwatchRenderData}></devtools-base-link-swatch></span>`,
         this.shadow, {host: this});
   }
 }

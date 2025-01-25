@@ -107,7 +107,7 @@ class VivaldiSessionService {
       std::vector<std::unique_ptr<sessions::SessionWindow>>* window_list);
   Browser* CreateRestoredBrowser(Browser::Type type,
                                  gfx::Rect bounds,
-                                 ui::WindowShowState show_state,
+                                 ui::mojom::WindowShowState show_state,
                                  const std::string& app_name);
   content::WebContents* RestoreTab(const sessions::SessionTab& tab,
                                    const int tab_index,

@@ -36,7 +36,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_ash.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys.h"
-#include "chrome/browser/extensions/api/enterprise_platform_keys/enterprise_platform_keys_api.h"
 #include "chromeos/ash/components/chaps_util/chaps_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "content/public/browser/browser_context.h"
@@ -1443,8 +1442,7 @@ void SignRSAOnWorkerThread(std::unique_ptr<SignState> state) {
       sign_alg_tag = SEC_OID_PKCS1_SHA512_WITH_RSA_ENCRYPTION;
       break;
     case HashAlgorithm::HASH_ALGORITHM_NONE:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
 
   crypto::ScopedSECItem sign_result(SECITEM_AllocItem(nullptr, nullptr, 0));

@@ -23,7 +23,6 @@
 #include "chrome/browser/ui/views/passwords/password_add_username_view.h"
 #include "chrome/browser/ui/views/passwords/password_auto_sign_in_view.h"
 #include "chrome/browser/ui/views/passwords/password_default_store_changed_view.h"
-#include "chrome/browser/ui/views/passwords/password_generation_confirmation_view.h"
 #include "chrome/browser/ui/views/passwords/password_save_unsynced_credentials_locally_view.h"
 #include "chrome/browser/ui/views/passwords/password_save_update_view.h"
 #include "chrome/browser/ui/views/passwords/post_save_compromised_bubble_view.h"
@@ -45,7 +44,7 @@
 #include "chrome/browser/ui/views/passwords/password_relaunch_chrome_view.h"
 #endif
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ui/views/passwords/biometric_authentication_confirmation_bubble_view.h"
 #include "chrome/browser/ui/views/passwords/biometric_authentication_for_filling_bubble_view.h"
 #endif
@@ -168,8 +167,9 @@ PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
     views::View* anchor_view,
     DisplayReason reason) {
   PasswordBubbleViewBase* view = nullptr;
-  password_manager::ui::State model_state =
-      PasswordsModelDelegateFromWebContents(web_contents)->GetState();
+  base::WeakPtr<PasswordsModelDelegate> delegate =
+      PasswordsModelDelegateFromWebContents(web_contents);
+  password_manager::ui::State model_state = delegate->GetState();
   if (model_state == password_manager::ui::MANAGE_STATE) {
     view = new ManagePasswordsView(web_contents, anchor_view);
   } else if (model_state == password_manager::ui::AUTO_SIGNIN_STATE) {
@@ -197,7 +197,7 @@ PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
   } else if (model_state ==
              password_manager::ui::GENERATED_PASSWORD_CONFIRMATION_STATE) {
     view = new PasswordAddUsernameView(web_contents, anchor_view, reason);
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
   } else if (model_state ==
              password_manager::ui::BIOMETRIC_AUTHENTICATION_FOR_FILLING_STATE) {
     view = new BiometricAuthenticationForFillingBubbleView(
@@ -225,17 +225,19 @@ PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
     view = new PasswordDefaultStoreChangedView(web_contents, anchor_view);
   } else if (model_state ==
              password_manager::ui::PASSKEY_SAVED_CONFIRMATION_STATE) {
-    view = new PasskeySavedConfirmationView(web_contents, anchor_view);
+    view = new PasskeySavedConfirmationView(web_contents, anchor_view,
+                                            delegate->PasskeyRpId());
   } else if (model_state ==
              password_manager::ui::PASSKEY_DELETED_CONFIRMATION_STATE) {
     view =
         new PasskeyDeletedConfirmationView(web_contents, anchor_view, reason);
   } else if (model_state ==
              password_manager::ui::PASSKEY_UPDATED_CONFIRMATION_STATE) {
-    view =
-        new PasskeyUpdatedConfirmationView(web_contents, anchor_view, reason);
+    view = new PasskeyUpdatedConfirmationView(web_contents, anchor_view, reason,
+                                              delegate->PasskeyRpId());
   } else if (model_state == password_manager::ui::PASSKEY_NOT_ACCEPTED_STATE) {
-    view = new PasskeyNotAcceptedBubbleView(web_contents, anchor_view, reason);
+    view = new PasskeyNotAcceptedBubbleView(web_contents, anchor_view, reason,
+                                            delegate->PasskeyRpId());
   } else {
     NOTREACHED();
   }

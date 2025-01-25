@@ -33,5 +33,29 @@ bundle_data_xcassets("notes_assets") {
     # markdown_toggle_off
     "NotesAssets.xcassets/markdown_toggle_off.imageset/Contents.json",
     "NotesAssets.xcassets/markdown_toggle_off.imageset/markdown_toggle_off.pdf",
+
+    # markdown_code_button
+    "NotesAssets.xcassets/markdown_code_button.imageset/Contents.json",
+    "NotesAssets.xcassets/markdown_code_button.imageset/markdown_code_button.pdf",
+
+    # markdown_code_block_button
+    "NotesAssets.xcassets/markdown_code_block_button.imageset/Contents.json",
+    "NotesAssets.xcassets/markdown_code_block_button.imageset/markdown_code_block_button.pdf",
+
+    # markdown_h1_button
+    "NotesAssets.xcassets/markdown_h1_button.imageset/Contents.json",
+    "NotesAssets.xcassets/markdown_h1_button.imageset/markdown_h1_button.pdf",
+
+    # markdown_h2_button
+    "NotesAssets.xcassets/markdown_h2_button.imageset/Contents.json",
+    "NotesAssets.xcassets/markdown_h2_button.imageset/markdown_h2_button.pdf",
+
+    # markdown_h3_button
+    "NotesAssets.xcassets/markdown_h3_button.imageset/Contents.json",
+    "NotesAssets.xcassets/markdown_h3_button.imageset/markdown_h3_button.pdf",
+
+    # markdown_h4_button
+    "NotesAssets.xcassets/markdown_h4_button.imageset/Contents.json",
+    "NotesAssets.xcassets/markdown_h4_button.imageset/markdown_h4_button.pdf",
   ]
 }

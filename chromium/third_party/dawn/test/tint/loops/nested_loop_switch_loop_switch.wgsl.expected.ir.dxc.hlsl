@@ -2,53 +2,63 @@
 [numthreads(1, 1, 1)]
 void main() {
   {
-    int i = 0;
+    int i = int(0);
     while(true) {
-      if ((i < 2)) {
+      if ((i < int(2))) {
       } else {
         break;
       }
+      bool tint_continue = false;
       switch(i) {
-        case 0:
+        case int(0):
         {
           {
-            int j = 0;
+            int j = int(0);
             while(true) {
-              if ((j < 2)) {
+              if ((j < int(2))) {
               } else {
                 break;
               }
+              bool tint_continue_1 = false;
               switch(j) {
-                case 0:
+                case int(0):
                 {
-                  {
-                    j = (j + 2);
-                  }
-                  continue;
+                  tint_continue_1 = true;
+                  break;
                 }
                 default:
                 {
                   break;
                 }
               }
+              if (tint_continue_1) {
+                {
+                  j = (j + int(2));
+                }
+                continue;
+              }
               {
-                j = (j + 2);
+                j = (j + int(2));
               }
               continue;
             }
           }
-          {
-            i = (i + 2);
-          }
-          continue;
+          tint_continue = true;
+          break;
         }
         default:
         {
           break;
         }
       }
+      if (tint_continue) {
+        {
+          i = (i + int(2));
+        }
+        continue;
+      }
       {
-        i = (i + 2);
+        i = (i + int(2));
       }
       continue;
     }

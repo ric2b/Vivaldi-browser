@@ -30,25 +30,30 @@ namespace openscreen::osp {
 class UrlAvailabilityRequester {
  public:
   explicit UrlAvailabilityRequester(ClockNowFunctionPtr now_function);
+  UrlAvailabilityRequester(const UrlAvailabilityRequester&) = delete;
+  UrlAvailabilityRequester& operator=(const UrlAvailabilityRequester&) = delete;
+  UrlAvailabilityRequester(UrlAvailabilityRequester&&) noexcept = delete;
+  UrlAvailabilityRequester& operator=(UrlAvailabilityRequester&&) noexcept =
+      delete;
   ~UrlAvailabilityRequester();
 
-  // Adds a persistent availability request for |urls| to all known receivers.
+  // Adds a persistent availability request for `urls` to all known receivers.
   // These URLs will also be queried for any receivers discovered in the future.
-  // |observer| will be called back once for the first known availability (which
+  // `observer` will be called back once for the first known availability (which
   // may be cached from previous requests) and when the availability of any of
   // these URLs changes on any receiver.
   void AddObserver(const std::vector<std::string>& urls,
                    ReceiverObserver* observer);
 
-  // Disassociates |observer| from all the URLs in |urls| so it will no longer
-  // receive availability updates for these URLs.  Additionally, if |urls| is
+  // Disassociates `observer` from all the URLs in `urls` so it will no longer
+  // receive availability updates for these URLs.  Additionally, if `urls` is
   // only a subset of the URL list it was originally added with, it will still
   // be observing the URLs not included here.
   void RemoveObserverUrls(const std::vector<std::string>& urls,
                           ReceiverObserver* observer);
 
-  // Disassociates |observer| from all the URLs it is observing.  This
-  // guarantees that it is safe to delete |observer| after this call.
+  // Disassociates `observer` from all the URLs it is observing.  This
+  // guarantees that it is safe to delete `observer` after this call.
   void RemoveObserver(ReceiverObserver* observer);
 
   // Informs the UrlAvailabilityRequester of changes to the set of known
@@ -78,6 +83,10 @@ class UrlAvailabilityRequester {
    public:
     ReceiverRequester(UrlAvailabilityRequester& listener,
                       const std::string& instance_name);
+    ReceiverRequester(const ReceiverRequester&) = delete;
+    ReceiverRequester& operator=(const ReceiverRequester&) = delete;
+    ReceiverRequester(ReceiverRequester&&) noexcept = delete;
+    ReceiverRequester& operator=(ReceiverRequester&&) noexcept = delete;
     ~ReceiverRequester() override;
 
     void GetOrRequestAvailabilities(

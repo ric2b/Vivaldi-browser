@@ -11,6 +11,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 
 namespace url {
 class Origin;
@@ -89,11 +90,12 @@ COMPONENT_EXPORT(NETWORK_CPP)
 extern uint32_t GetDataPipeDefaultAllocationSize(
     DataPipeAllocationSize = DataPipeAllocationSize::kDefaultSizeOnly);
 
-COMPONENT_EXPORT(NETWORK_CPP)
-extern size_t GetNetAdapterMaxBufSize();
-
-COMPONENT_EXPORT(NETWORK_CPP)
-extern size_t GetLoaderChunkSize();
+// The maximal number of bytes consumed in a loading task. When there are more
+// bytes in the data pipe, they will be consumed in following tasks. Setting too
+// small of a number will generate many tasks but setting a too large of a
+// number will lead to thread janks. This value was optimized via Finch:
+// see crbug.com/1041006.
+inline constexpr size_t kMaxNumConsumedBytesInTask = 1024 * 1024;
 
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kCorsNonWildcardRequestHeadersSupport);
@@ -177,11 +179,20 @@ BASE_DECLARE_FEATURE(kAvoidResourceRequestCopies);
 
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kDocumentIsolationPolicy);
 
+// To actually use the prefetch results, it's also necessary to enable
+// kNetworkContextPrefetchUseCache, below.
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kNetworkContextPrefetch);
 
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::FeatureParam<int> kNetworkContextPrefetchMaxLoaders;
+
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::FeatureParam<base::TimeDelta>
+    kNetworkContextPrefetchEraseGraceTime;
+
+COMPONENT_EXPORT(NETWORK_CPP)
+BASE_DECLARE_FEATURE(kNetworkContextPrefetchUseMatches);
 
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kTreatNullIPAsPublicAddressSpace);
@@ -194,6 +205,11 @@ COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kStorageAccessHeaders);
 
 // Enables the Storage Access Headers Origin Trial.
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kStorageAccessHeadersTrial);
+
+#if BUILDFLAG(IS_WIN)
+COMPONENT_EXPORT(NETWORK_CPP)
+BASE_DECLARE_FEATURE(kEnableLockCookieDatabaseByDefault);
+#endif  // BUILDFLAG(IS_WIN)
 
 }  // namespace network::features
 

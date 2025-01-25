@@ -181,7 +181,16 @@
         "description": "Passed with menu activation.",
         "properties": {
           "id": {"type": "integer", "description": "Command id."},
-          "state": {"$ref": "EventState"}
+          "state": {"$ref": "EventState"},
+          "persistent": {"type": "boolean", "description": "Menu not closing if true, update item."}
+        }
+      },
+      {
+        "id": "Update",
+        "type": "object",
+        "description": "Passed with menu update request.",
+        "properties": {
+          "id": {"type": "integer", "description": "Command id."}
         }
       }
     ],

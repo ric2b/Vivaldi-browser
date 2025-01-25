@@ -197,6 +197,14 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			Rules: []string{
 				"//src/ports:fontmgr_android_freetype",
 			}},
+		{Var: "skia_ports_fontmgr_android_ndk_public",
+			Rules: []string{
+				"//include/ports:android_ndk_fontmgr_hdrs",
+			}},
+		{Var: "skia_ports_fontmgr_android_ndk_sources",
+			Rules: []string{
+				"//src/ports:fontmgr_android_ndk_freetype",
+			}},
 		{Var: "skia_ports_fontmgr_custom_sources",
 			Rules: []string{
 				"//src/ports:fontmgr_custom",
@@ -445,10 +453,8 @@ var gniExportDescs = []exporter.GNIExportDesc{
 	{GNI: "gn/gpu.gni", Vars: []exporter.GNIFileListExportDesc{
 		{Var: "skia_gpu_public",
 			Rules: []string{
-				"//include/gpu/mock:public_hdrs",
 				"//include/gpu/ganesh/mock:public_hdrs",
-				"//include/gpu:ganesh_hdrs",
-				"//include/gpu:shared_public_hdrs",
+				"//include/gpu:shared_gpu_hdrs",
 				"//include/gpu/ganesh:ganesh_hdrs",
 			}},
 		{Var: "skia_ganesh_private",
@@ -491,7 +497,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			}},
 		{Var: "skia_gpu_gl_public",
 			Rules: []string{
-				"//include/gpu/gl:ganesh_gl_hdrs",
 				"//include/gpu/ganesh/gl:public_hdrs",
 			}},
 		{Var: "skia_gpu_gl_private",
@@ -511,7 +516,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			}},
 		{Var: "skia_gpu_vk_public",
 			Rules: []string{
-				"//include/gpu/vk:ganesh_public_hdrs",
 				"//include/gpu/vk:shared_public_hdrs",
 				"//include/gpu/ganesh/vk:public_hdrs",
 			}},
@@ -534,7 +538,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			}},
 		{Var: "skia_direct3d_sources",
 			Rules: []string{
-				"//include/gpu/d3d:public_hdrs",
 				"//include/private/gpu/ganesh:d3d_private_hdrs",
 				"//src/gpu/ganesh/d3d:d3d_hdrs",
 				"//src/gpu/ganesh/d3d:d3d_srcs",
@@ -555,7 +558,7 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			}},
 		{Var: "skia_shared_gpu_sources",
 			Rules: []string{
-				"//include/gpu:shared_public_hdrs",
+				"//include/gpu:shared_gpu_hdrs",
 				"//include/private/base:shared_gpu_private_hdrs",
 				"//include/private/chromium:shared_private_hdrs",
 				"//src/gpu:shared_hdrs",

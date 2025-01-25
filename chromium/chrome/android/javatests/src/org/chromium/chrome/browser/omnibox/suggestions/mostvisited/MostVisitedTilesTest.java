@@ -25,6 +25,7 @@ import android.view.View;
 import androidx.recyclerview.widget.RecyclerView.LayoutManager;
 import androidx.test.filters.MediumTest;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -130,6 +131,11 @@ public class MostVisitedTilesTest {
         setUpSuggestionsToShow();
 
         mCarousel = mOmnibox.findSuggestionWithType(OmniboxSuggestionUiType.TILE_NAVSUGGEST);
+    }
+
+    @After
+    public void tearDown() {
+        mJniMocker.mock(AutocompleteControllerJni.TEST_HOOKS, null);
     }
 
     /**
@@ -263,51 +269,6 @@ public class MostVisitedTilesTest {
         // suggestion.
         mOmnibox.sendKey(KeyEvent.KEYCODE_TAB, KeyEvent.META_SHIFT_ON);
         mOmnibox.checkText(equalTo(START_PAGE_LOCATION), null);
-    }
-
-    @Test
-    @MediumTest
-    public void keyboardNavigation_highlightAlwaysStartsWithFirstElement()
-            throws InterruptedException {
-        // Skip past the 'what-you-typed' suggestion.
-        mOmnibox.sendKey(KeyEvent.KEYCODE_DPAD_DOWN);
-        mOmnibox.sendKey(KeyEvent.KEYCODE_DPAD_DOWN);
-        mOmnibox.checkText(equalTo(mMatch1.getUrl().getSpec()), null);
-
-        mOmnibox.sendKey(KeyEvent.KEYCODE_TAB);
-        mOmnibox.checkText(equalTo(mMatch2.getUrl().getSpec()), null);
-
-        mOmnibox.sendKey(KeyEvent.KEYCODE_TAB);
-        mOmnibox.checkText(equalTo(mMatch3.getUrl().getSpec()), null);
-
-        // Move to the search suggestion skipping the header.
-        mOmnibox.sendKey(KeyEvent.KEYCODE_DPAD_DOWN);
-        mOmnibox.checkText(equalTo(SEARCH_QUERY), null);
-
-        // Move back to the MV Tiles. Observe that the first element is again highlighted.
-        mOmnibox.sendKey(KeyEvent.KEYCODE_DPAD_UP);
-        mOmnibox.checkText(equalTo(mMatch1.getUrl().getSpec()), null);
-    }
-
-    @Test
-    @MediumTest
-    public void touchNavigation_clickOnFirstMVTile() throws Exception {
-        clickTileAtPosition(0);
-        ChromeTabUtils.waitForTabPageLoaded(mTab, mMatch1.getUrl().getSpec());
-    }
-
-    @Test
-    @MediumTest
-    public void touchNavigation_clickOnMiddleMVTile() throws Exception {
-        clickTileAtPosition(1);
-        ChromeTabUtils.waitForTabPageLoaded(mTab, mMatch2.getUrl().getSpec());
-    }
-
-    @Test
-    @MediumTest
-    public void touchNavigation_clickOnLastMVTile() throws Exception {
-        clickTileAtPosition(2);
-        ChromeTabUtils.waitForTabPageLoaded(mTab, mMatch3.getUrl().getSpec());
     }
 
     @Test

@@ -7,13 +7,14 @@ import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import elementsPanelLinkStyles from './elementsPanelLink.css.js';
 
+const {html} = LitHtml;
+
 export interface ElementsPanelLinkData {
   onElementRevealIconClick: (event?: Event) => void;
   onElementRevealIconMouseEnter: (event?: Event) => void;
   onElementRevealIconMouseLeave: (event?: Event) => void;
 }
 export class ElementsPanelLink extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-elements-panel-link`;
   readonly #shadow = this.attachShadow({mode: 'open'});
 
   #onElementRevealIconClick: ((event?: Event) => void) = () => {};
@@ -37,7 +38,7 @@ export class ElementsPanelLink extends HTMLElement {
 
   #render(): void {
     // clang-format off
-      LitHtml.render(LitHtml.html`
+      LitHtml.render(html`
       <span
         class="element-reveal-icon"
         jslog=${VisualLogging.link('elements-panel').track({click: true})}

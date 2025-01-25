@@ -23,12 +23,14 @@ const ADDITIONAL_TEXT_MIME_TYPES = new Set([
   'application/javascript',
   'application/json',
   'application/json+protobuf',
+  'application/vnd.apple.mpegurl',
   'application/vnd.dart',
   'application/xml',
   'application/x-aspx',
   'application/x-javascript',
   'application/x-jsp',
   'application/x-httpd-php',
+  'audio/mpegurl',
 ]);
 
 /**
@@ -38,7 +40,7 @@ const ADDITIONAL_TEXT_MIME_TYPES = new Set([
  *   - if `mimeType` is one of a predefined list textual mime types.
  */
 export function isTextType(mimeType: string): boolean {
-  return mimeType.startsWith('text/') || mimeType.startsWith('multipart/') || mimeType.endsWith('+json') ||
+  return mimeType.startsWith('text/') || mimeType.startsWith('multipart/') || mimeType.includes('+json') ||
       mimeType.endsWith('+xml') || ADDITIONAL_TEXT_MIME_TYPES.has(mimeType);
 }
 

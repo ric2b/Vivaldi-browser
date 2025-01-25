@@ -34,7 +34,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
-import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.components.browser_ui.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.WebContents;
@@ -222,28 +221,20 @@ public class StaticLayout extends Layout {
                             BrowserControlsOffsetTagsInfo oldOffsetTagsInfo,
                             BrowserControlsOffsetTagsInfo offsetTagsInfo,
                             @BrowserControlsState int constraints) {
-                        if (ToolbarFeatures.isBrowserControlsInVizEnabled(
-                                DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext))) {
+                        if (ChromeFeatureList.sBrowserControlsInViz.isEnabled()) {
                             // On tablets, StaticTabSceneLayer is a subtree of TabStripSceneLayer,
                             // and the tag would have been set on the TabStripSceneLayer already.
                             if (mNeedsOffsetTag) {
                                 mModel.set(
                                         LayoutTab.CONTENT_OFFSET_TAG,
-                                        offsetTagsInfo.getTopControlsOffsetTag());
+                                        offsetTagsInfo.getContentOffsetTag());
                             }
 
-                            // With BCIV enabled, scrolling will not update the content offset of
-                            // the browser's compositor frame. If we transition to a HIDDEN state
-                            // while the controls are already scrolled offscreen, then there is no
-                            // need to move the top controls, which means the renderer will not
-                            // notify the browser to move them. We set the content offset here so
-                            // the browser will submit a compositor frame with the correct offset.
-                            int contentOffset = mBrowserControlsStateProvider.getContentOffset();
-                            if (constraints == BrowserControlsState.HIDDEN
-                                    && contentOffset
-                                            == mBrowserControlsStateProvider
-                                                    .getTopControlsMinHeight()) {
-                                mModel.set(LayoutTab.CONTENT_OFFSET, contentOffset);
+                            if (mBrowserControlsStateProvider
+                                    .shouldUpdateOffsetsWhenConstraintsChange()) {
+                                mModel.set(
+                                        LayoutTab.CONTENT_OFFSET,
+                                        mBrowserControlsStateProvider.getContentOffset());
                             }
                         }
                     }
@@ -256,8 +247,7 @@ public class StaticLayout extends Layout {
                             int bottomControlsMinHeightOffset,
                             boolean needsAnimate,
                             boolean isVisibilityForced) {
-                        if (!ToolbarFeatures.isBrowserControlsInVizEnabled(
-                                        DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext))
+                        if (!ChromeFeatureList.sBrowserControlsInViz.isEnabled()
                                 || needsAnimate
                                 || isVisibilityForced) {
                             mModel.set(
@@ -349,10 +339,8 @@ public class StaticLayout extends Layout {
                     }
 
                     @Override
-                    public void didBackForwardTransitionAnimationChange() {
-                        updateStaticTab(
-                                tabModelSelector.getCurrentTab(),
-                                /* skipUpdateVisibleIds= */ false);
+                    public void didBackForwardTransitionAnimationChange(Tab tab) {
+                        updateStaticTab(tab, /* skipUpdateVisibleIds= */ false);
                     }
                 };
     }

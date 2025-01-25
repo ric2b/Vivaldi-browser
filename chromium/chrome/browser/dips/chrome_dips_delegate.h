@@ -5,18 +5,27 @@
 #ifndef CHROME_BROWSER_DIPS_CHROME_DIPS_DELEGATE_H_
 #define CHROME_BROWSER_DIPS_CHROME_DIPS_DELEGATE_H_
 
+#include <stdint.h>
+
 #include <memory>
 
+#include "base/types/pass_key.h"
 #include "content/public/browser/dips_delegate.h"
+
+class DIPSService;
 
 namespace content {
 class BrowserContext;
 }
 
-class ChromeContentBrowserClient;
-
 class ChromeDipsDelegate : public content::DipsDelegate {
  public:
+  using PassKey = base::PassKey<ChromeDipsDelegate>;
+
+  // The constructor takes a PassKey so that the factory method Create() can
+  // call std::make_unique() to create an instance, while other classes cannot.
+  explicit ChromeDipsDelegate(PassKey);
+
   // TODO(rtarpine): remove this and make clients call
   // ContentBrowserClient::CreateDipsDelegate(), falling back on a default
   // implementation if it returned null, once DIPS has moved to //content.
@@ -24,8 +33,12 @@ class ChromeDipsDelegate : public content::DipsDelegate {
 
   bool ShouldEnableDips(content::BrowserContext* browser_context) override;
 
- private:
-  friend class ChromeContentBrowserClient;
+  void OnDipsServiceCreated(content::BrowserContext* browser_context,
+                            DIPSService* dips_service) override;
+
+  uint64_t GetRemoveMask() override;
+
+  bool ShouldDeleteInteractionRecords(uint64_t remove_mask) override;
 };
 
 #endif  // CHROME_BROWSER_DIPS_CHROME_DIPS_DELEGATE_H_

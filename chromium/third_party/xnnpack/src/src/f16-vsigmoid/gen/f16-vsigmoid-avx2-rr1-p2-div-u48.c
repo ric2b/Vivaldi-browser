@@ -18,23 +18,32 @@
 
 void xnn_f16_vsigmoid_ukernel__avx2_rr1_p2_div_u48(
     size_t batch,
-    const void* input,
-    void* output,
-    const union xnn_f16_sigmoid_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const xnn_float16* input,
+    xnn_float16* output,
+    const struct xnn_f16_default_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(uint16_t) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const __m256 vsign_mask = _mm256_load_ps(params->avx2_rr1_p2.sign_mask);
-  const __m256 vmagic_bias = _mm256_load_ps(params->avx2_rr1_p2.magic_bias);
-  const __m256 vlog2e = _mm256_load_ps(params->avx2_rr1_p2.log2e);
-  const __m256 vminus_ln2 = _mm256_load_ps(params->avx2_rr1_p2.minus_ln2);
-  const __m256 vc2 = _mm256_load_ps(params->avx2_rr1_p2.c2);
-  const __m256 vc1 = _mm256_load_ps(params->avx2_rr1_p2.c1);
-  const __m256 vone = _mm256_load_ps(params->avx2_rr1_p2.one);
-  const __m256 vdenorm_cutoff = _mm256_load_ps(params->avx2_rr1_p2.denorm_cutoff);
+  const __m256 vsign_mask = _mm256_set1_ps(-0.0f);
+  const __m256 vmagic_bias = _mm256_set1_ps(0x1.8000FEp23f);
+  const __m256 vlog2e = _mm256_set1_ps(0x1.715476p0f);
+  const __m256 vminus_ln2 = _mm256_set1_ps(-0x1.62E43p-1f);
+  const __m256 vc2 = _mm256_set1_ps(0x1.FF3A32p-2f);
+  const __m256 vc1 = _mm256_set1_ps(0x1.039E10p+0f);
+  const __m256 vone = _mm256_set1_ps(1.0f);
+  const __m256 vdenorm_cutoff = _mm256_set1_ps(-0x1.368000p+3f);
+
+  XNN_FORCE_REALIZATION(vsign_mask);
+  XNN_FORCE_REALIZATION(vmagic_bias);
+  XNN_FORCE_REALIZATION(vlog2e);
+  XNN_FORCE_REALIZATION(vminus_ln2);
+  XNN_FORCE_REALIZATION(vc2);
+  XNN_FORCE_REALIZATION(vc1);
+  XNN_FORCE_REALIZATION(vone);
+  XNN_FORCE_REALIZATION(vdenorm_cutoff);
 
   const uint16_t* i = (const uint16_t*) input;
   uint16_t* o = (uint16_t*) output;

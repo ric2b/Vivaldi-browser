@@ -55,6 +55,7 @@ const char kStopVmWithoutOwnerIdMethod[] = "StopVmWithoutOwnerId";
 const char kSuspendVmMethod[] = "SuspendVm";
 const char kSwapVmMethod[] = "SwapVm";
 const char kSyncVmTimesMethod[] = "SyncVmTimes";
+const char kSetUpVmUserMethod[] = "SetUpVmUser";
 
 const char kDiskImageProgressSignal[] = "DiskImageProgress";
 const char kDnsSettingsChangedSignal[] = "DnsSettingsChanged";

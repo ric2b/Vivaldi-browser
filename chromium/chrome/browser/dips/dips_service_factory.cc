@@ -5,17 +5,21 @@
 #include "chrome/browser/dips/dips_service_factory.h"
 
 #include "base/no_destructor.h"
-#include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/dips/chrome_dips_delegate.h"
-#include "chrome/browser/dips/dips_service.h"
-#include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/dips/dips_service_impl.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+
+using PassKey = base::PassKey<DIPSServiceFactory>;
 
 /* static */
 DIPSServiceImpl* DIPSServiceFactory::GetForBrowserContext(
     content::BrowserContext* context) {
-  return static_cast<DIPSServiceImpl*>(
+  auto* dips_service = static_cast<DIPSServiceImpl*>(
       GetInstance()->GetServiceForBrowserContext(context, /*create=*/true));
+  if (dips_service) {
+    dips_service->MaybeNotifyCreated(PassKey());
+  }
+  return dips_service;
 }
 
 DIPSServiceFactory* DIPSServiceFactory::GetInstance() {
@@ -26,10 +30,7 @@ DIPSServiceFactory* DIPSServiceFactory::GetInstance() {
 DIPSServiceFactory::DIPSServiceFactory()
     : BrowserContextKeyedServiceFactory(
           "DIPSServiceImpl",
-          BrowserContextDependencyManager::GetInstance()) {
-  DependsOn(CookieSettingsFactory::GetInstance());
-  DependsOn(IdentityManagerFactory::GetInstance());
-}
+          BrowserContextDependencyManager::GetInstance()) {}
 
 DIPSServiceFactory::~DIPSServiceFactory() = default;
 
@@ -46,7 +47,8 @@ content::BrowserContext* DIPSServiceFactory::GetBrowserContextToUse(
   return context;
 }
 
-KeyedService* DIPSServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+DIPSServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
-  return new DIPSServiceImpl(context);
+  return std::make_unique<DIPSServiceImpl>(PassKey(), context);
 }

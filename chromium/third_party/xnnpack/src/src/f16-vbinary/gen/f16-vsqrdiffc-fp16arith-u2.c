@@ -19,10 +19,10 @@
 
 void xnn_f16_vsqrdiffc_ukernel__fp16arith_u2(
     size_t batch,
-    const void* restrict input_a,
-    const void* restrict input_b,
-    void* restrict output,
-    const union xnn_f16_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const xnn_float16* restrict input_a,
+    const xnn_float16* restrict input_b,
+    xnn_float16* restrict output,
+    const struct xnn_f16_default_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float16_t) == 0);
@@ -33,7 +33,6 @@ void xnn_f16_vsqrdiffc_ukernel__fp16arith_u2(
   const float16_t* a = (const float16_t*) input_a;
   const float16_t* b = (const float16_t*) input_b;
   float16_t* o = (float16_t*) output;
-
 
   const float16_t vb = *b;
   for (; batch >= 2 * sizeof(float16_t); batch -= 2 * sizeof(float16_t)) {
@@ -46,7 +45,6 @@ void xnn_f16_vsqrdiffc_ukernel__fp16arith_u2(
 
     vacc0 = vmulh_f16(vacc0, vacc0);
     vacc1 = vmulh_f16(vacc1, vacc1);
-
 
     o[0] = vacc0;
     o[1] = vacc1;

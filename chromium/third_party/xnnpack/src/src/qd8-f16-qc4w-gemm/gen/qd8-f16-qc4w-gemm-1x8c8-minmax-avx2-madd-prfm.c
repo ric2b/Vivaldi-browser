@@ -25,10 +25,10 @@ void xnn_qd8_f16_qc4w_gemm_minmax_ukernel_1x8c8__avx2_madd_prfm(
     const int8_t* restrict a,
     size_t a_stride,
     const void* restrict w,
-    void* restrict c,
+    xnn_float16* restrict c,
     size_t cm_stride,
     size_t cn_stride,
-    const union xnn_f16_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)],
+    const struct xnn_f16_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)],
     const struct xnn_qd8_quantization_params quantization_params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(mr != 0);
@@ -44,12 +44,15 @@ void xnn_qd8_f16_qc4w_gemm_minmax_ukernel_1x8c8__avx2_madd_prfm(
   const int8_t* a0 = a;
   uint16_t* c0 = (uint16_t*) c;
 
+  const __m256i vsign_mask = _mm256_set1_epi8(0x80);
+  XNN_FORCE_REALIZATION(vsign_mask);
   const __m256i vinput_zero_point0 = _mm256_set1_epi32((int) quantization_params[0].zero_point + 128);
-  const __m256 voutput_min = _mm256_set1_ps(params->avxvnni.min);
-  const __m256 voutput_max = _mm256_set1_ps(params->avxvnni.max);
-  const __m256i vsign_mask = _mm256_set1_epi8(params->avxvnni.sign_mask);  // 0x80
-  const __m256i vmask = _mm256_set1_epi8(params->avxvnni.mask);  // 0x0F
-  assert(params->avxvnni.mask == (int8_t) 0x0F);
+  const __m256 voutput_min = _mm256_cvtph_ps(_mm_set1_epi16(*(const uint16_t*) &params->scalar.min));
+  const __m256 voutput_max = _mm256_cvtph_ps(_mm_set1_epi16(*(const uint16_t*) &params->scalar.max));
+  // XNN_FORCE_REALIZATION(voutput_min);
+  // XNN_FORCE_REALIZATION(voutput_max);
+  const __m256i vmask = _mm256_set1_epi8(0x0F);
+  XNN_FORCE_REALIZATION(vmask);
   do {
     const __m256i vksum01234567 = _mm256_load_si256(w);
     __m256i vsum0x01234567 = _mm256_mullo_epi32(vksum01234567, vinput_zero_point0);
@@ -107,7 +110,6 @@ void xnn_qd8_f16_qc4w_gemm_minmax_ukernel_1x8c8__avx2_madd_prfm(
     const __m256i vsum0x02134657 = _mm256_hadd_epi32(vacc0x0123, vacc0x4567);
     __m256i vacc0x01234567 = _mm256_permute4x64_epi64(vsum0x02134657, _MM_SHUFFLE(3, 1, 2, 0));
 
-    vacc0x01234567 = _mm256_srai_epi32(vacc0x01234567, 4);
     __m256 vout0x01234567 = _mm256_cvtepi32_ps(vacc0x01234567);
 
     vout0x01234567 = _mm256_mul_ps(vout0x01234567, _mm256_set1_ps(quantization_params[0].inv_scale));

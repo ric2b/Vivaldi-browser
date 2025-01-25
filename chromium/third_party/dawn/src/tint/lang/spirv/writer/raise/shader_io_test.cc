@@ -40,16 +40,14 @@ using namespace tint::core::number_suffixes;  // NOLINT
 using SpirvWriter_ShaderIOTest = core::ir::transform::TransformTest;
 
 TEST_F(SpirvWriter_ShaderIOTest, NoInputsOrOutputs) {
-    auto* ep = b.Function("foo", ty.void_());
-    ep->SetStage(core::ir::Function::PipelineStage::kCompute);
-    ep->SetWorkgroupSize(1, 1, 1);
+    auto* ep = b.ComputeFunction("foo");
 
     b.Append(ep->Block(), [&] {  //
         b.Return(ep);
     });
 
     auto* src = R"(
-%foo = @compute @workgroup_size(1, 1, 1) func():void {
+%foo = @compute @workgroup_size(1u, 1u, 1u) func():void {
   $B1: {
     ret
   }
@@ -662,8 +660,8 @@ TEST_F(SpirvWriter_ShaderIOTest, ReturnValue_DualSourceBlending) {
 
     auto* src = R"(
 Output = struct @align(4) {
-  color1:f32 @offset(0), @location(0)
-  color2:f32 @offset(4), @location(0)
+  color1:f32 @offset(0), @location(0), @blend_src(0)
+  color2:f32 @offset(4), @location(0), @blend_src(1)
 }
 
 %foo = @fragment func():Output {

@@ -10,9 +10,9 @@
 import 'chrome://resources/ash/common/personalization/common.css.js';
 import 'chrome://resources/ash/common/personalization/personalization_shared_icons.html.js';
 import 'chrome://resources/ash/common/personalization/wallpaper.css.js';
-import 'chrome://resources/ash/common/sea_pen/sea_pen.css.js';
-import 'chrome://resources/ash/common/sea_pen/sea_pen_icons.html.js';
-import 'chrome://resources/ash/common/sea_pen/surface_effects/sparkle_placeholder.js';
+import './sea_pen.css.js';
+import './sea_pen_icons.html.js';
+import './surface_effects/sparkle_placeholder.js';
 import 'chrome://resources/ash/common/cr_elements/cr_auto_img/cr_auto_img.js';
 import 'chrome://resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/ash/common/cr_elements/icons.html.js';
@@ -36,6 +36,28 @@ import {isNonEmptyArray, isPersonalizationApp, isSeaPenImageId} from './sea_pen_
 
 const kFreeformLoadingPlaceholderCount = 4;
 const kTemplateLoadingPlaceholderCount = 8;
+
+export class SeaPenHistoryPromptSelectedEvent extends CustomEvent<string> {
+  static readonly EVENT_NAME = 'sea-pen-history-prompt-selected';
+
+  constructor(prompt: string) {
+    super(
+        SeaPenHistoryPromptSelectedEvent.EVENT_NAME,
+        {
+          bubbles: true,
+          composed: true,
+          detail: prompt,
+        },
+    );
+  }
+}
+
+declare global {
+  interface HTMLElementEventMap {
+    [SeaPenHistoryPromptSelectedEvent.EVENT_NAME]:
+        SeaPenHistoryPromptSelectedEvent;
+  }
+}
 
 type Tile = 'loading'|SeaPenThumbnail;
 
@@ -511,6 +533,12 @@ export class SeaPenImagesElement extends WithSeaPenStore {
       textQueryHistory: TextQueryHistoryEntry[]): boolean {
     return !thumbnailsLoading && !!seaPenQuery?.textQuery &&
         isNonEmptyArray(textQueryHistory);
+  }
+
+  private onHistoryPromptClicked_(e: Event&
+                                  {model: {item: TextQueryHistoryEntry}}) {
+    this.dispatchEvent(
+        new SeaPenHistoryPromptSelectedEvent(e.model.item.query));
   }
 }
 

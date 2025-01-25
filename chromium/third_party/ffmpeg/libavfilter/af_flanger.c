@@ -23,7 +23,7 @@
 #include "libavutil/samplefmt.h"
 #include "avfilter.h"
 #include "audio.h"
-#include "internal.h"
+#include "filters.h"
 #include "generate_wave_table.h"
 
 #define INTERPOLATION_LINEAR    0

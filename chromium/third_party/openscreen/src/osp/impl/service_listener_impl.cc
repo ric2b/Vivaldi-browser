@@ -71,13 +71,13 @@ void ServiceListenerImpl::OnReceiverUpdated(
   }
 
   const auto& old_receivers = GetReceivers();
-
   if (new_receivers.size() < old_receivers.size()) {
     // A receiver is removed.
     for (const auto& receiver : old_receivers) {
       if (Contains(new_receivers, receiver)) {
         continue;
       }
+
       OnReceiverRemoved(receiver);
       return;
     }
@@ -87,6 +87,7 @@ void ServiceListenerImpl::OnReceiverUpdated(
       if (Contains(old_receivers, receiver)) {
         continue;
       }
+
       new_receivers.size() > old_receivers.size() ? OnReceiverAdded(receiver)
                                                   : OnReceiverChanged(receiver);
       return;
@@ -141,24 +142,29 @@ void ServiceListenerImpl::OnError(const Error& error) {
 }
 
 bool ServiceListenerImpl::Start() {
-  if (state_ != State::kStopped)
+  if (state_ != State::kStopped) {
     return false;
+  }
+
   state_ = State::kStarting;
   delegate_->StartListener(config_);
   return true;
 }
 
 bool ServiceListenerImpl::StartAndSuspend() {
-  if (state_ != State::kStopped)
+  if (state_ != State::kStopped) {
     return false;
+  }
+
   state_ = State::kStarting;
   delegate_->StartAndSuspendListener(config_);
   return true;
 }
 
 bool ServiceListenerImpl::Stop() {
-  if (state_ == State::kStopped || state_ == State::kStopping)
+  if (state_ == State::kStopped || state_ == State::kStopping) {
     return false;
+  }
 
   state_ = State::kStopping;
   delegate_->StopListener();
@@ -170,21 +176,24 @@ bool ServiceListenerImpl::Suspend() {
       state_ != State::kStarting) {
     return false;
   }
+
   delegate_->SuspendListener();
   return true;
 }
 
 bool ServiceListenerImpl::Resume() {
-  if (state_ != State::kSuspended && state_ != State::kSearching)
+  if (state_ != State::kSuspended && state_ != State::kSearching) {
     return false;
+  }
 
   delegate_->ResumeListener();
   return true;
 }
 
 bool ServiceListenerImpl::SearchNow() {
-  if (state_ != State::kRunning && state_ != State::kSuspended)
+  if (state_ != State::kRunning && state_ != State::kSuspended) {
     return false;
+  }
 
   delegate_->SearchNow(state_);
   return true;
@@ -221,26 +230,34 @@ void ServiceListenerImpl::SetState(State state) {
 
 void ServiceListenerImpl::MaybeNotifyObservers() {
   switch (state_) {
-    case State::kRunning:
+    case State::kRunning: {
       for (auto* observer : observers_) {
         observer->OnStarted();
       }
       break;
-    case State::kStopped:
+    }
+
+    case State::kStopped: {
       for (auto* observer : observers_) {
         observer->OnStopped();
       }
       break;
-    case State::kSuspended:
+    }
+
+    case State::kSuspended: {
       for (auto* observer : observers_) {
         observer->OnSuspended();
       }
       break;
-    case State::kSearching:
+    }
+
+    case State::kSearching: {
       for (auto* observer : observers_) {
         observer->OnSearching();
       }
       break;
+    }
+
     default:
       break;
   }

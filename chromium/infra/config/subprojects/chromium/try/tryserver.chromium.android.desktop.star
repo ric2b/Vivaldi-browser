@@ -31,6 +31,34 @@ consoles.list_view(
 )
 
 try_.builder(
+    name = "android-desktop-arm64-clobber-rel",
+    mirrors = [
+        "ci/android-desktop-arm64-archive-rel",
+    ],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/android-desktop-arm64-archive-rel",
+            "release_try_builder",
+            "chrome_with_codecs",
+        ],
+    ),
+)
+
+try_.builder(
+    name = "android-desktop-x64-clobber-rel",
+    mirrors = [
+        "ci/android-desktop-x64-archive-rel",
+    ],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/android-desktop-x64-archive-rel",
+            "release_try_builder",
+            "chrome_with_codecs",
+        ],
+    ),
+)
+
+try_.builder(
     name = "android-desktop-arm64-compile-rel",
     mirrors = [
         "ci/android-desktop-arm64-compile-rel",
@@ -53,6 +81,12 @@ try_.builder(
             "ci/android-desktop-x64-compile-rel",
             "release_try_builder",
         ],
+    ),
+    builderless = False,
+    tryjob = try_.job(
+        # TODO: b/350582436 - Remove after confirming bot pool can handle load
+        # and checking CQ cycle time impact.
+        experiment_percentage = 50,
     ),
 )
 
@@ -78,6 +112,20 @@ try_.builder(
         configs = [
             "ci/android-desktop-x64-compile-dbg",
             "debug_try_builder",
+        ],
+    ),
+)
+
+try_.builder(
+    name = "android-desktop-14-x64-rel",
+    mirrors = [
+        "ci/android-desktop-x64-compile-rel",
+        "ci/android-desktop-x64-rel-14-tests",
+    ],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/android-desktop-x64-compile-rel",
+            "release_try_builder",
         ],
     ),
 )

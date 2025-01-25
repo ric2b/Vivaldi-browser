@@ -42,6 +42,134 @@ struct make_integer<bfloat16> {
   typedef numext::int16_t type;
 };
 
+/* polevl (modified for Eigen)
+ *
+ *      Evaluate polynomial
+ *
+ *
+ *
+ * SYNOPSIS:
+ *
+ * int N;
+ * Scalar x, y, coef[N+1];
+ *
+ * y = polevl<decltype(x), N>( x, coef);
+ *
+ *
+ *
+ * DESCRIPTION:
+ *
+ * Evaluates polynomial of degree N:
+ *
+ *                     2          N
+ * y  =  C  + C x + C x  +...+ C x
+ *        0    1     2          N
+ *
+ * Coefficients are stored in reverse order:
+ *
+ * coef[0] = C  , ..., coef[N] = C  .
+ *            N                   0
+ *
+ *  The function p1evl() assumes that coef[N] = 1.0 and is
+ * omitted from the array.  Its calling arguments are
+ * otherwise the same as polevl().
+ *
+ *
+ * The Eigen implementation is templatized.  For best speed, store
+ * coef as a const array (constexpr), e.g.
+ *
+ * const double coef[] = {1.0, 2.0, 3.0, ...};
+ *
+ */
+template <typename Packet, int N>
+struct ppolevl {
+  static EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Packet run(const Packet& x,
+                                                          const typename unpacket_traits<Packet>::type coeff[]) {
+    EIGEN_STATIC_ASSERT((N > 0), YOU_MADE_A_PROGRAMMING_MISTAKE);
+    return pmadd(ppolevl<Packet, N - 1>::run(x, coeff), x, pset1<Packet>(coeff[N]));
+  }
+};
+
+template <typename Packet>
+struct ppolevl<Packet, 0> {
+  static EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Packet run(const Packet& x,
+                                                          const typename unpacket_traits<Packet>::type coeff[]) {
+    EIGEN_UNUSED_VARIABLE(x);
+    return pset1<Packet>(coeff[0]);
+  }
+};
+
+/* chbevl (modified for Eigen)
+ *
+ *     Evaluate Chebyshev series
+ *
+ *
+ *
+ * SYNOPSIS:
+ *
+ * int N;
+ * Scalar x, y, coef[N], chebevl();
+ *
+ * y = chbevl( x, coef, N );
+ *
+ *
+ *
+ * DESCRIPTION:
+ *
+ * Evaluates the series
+ *
+ *        N-1
+ *         - '
+ *  y  =   >   coef[i] T (x/2)
+ *         -            i
+ *        i=0
+ *
+ * of Chebyshev polynomials Ti at argument x/2.
+ *
+ * Coefficients are stored in reverse order, i.e. the zero
+ * order term is last in the array.  Note N is the number of
+ * coefficients, not the order.
+ *
+ * If coefficients are for the interval a to b, x must
+ * have been transformed to x -> 2(2x - b - a)/(b-a) before
+ * entering the routine.  This maps x from (a, b) to (-1, 1),
+ * over which the Chebyshev polynomials are defined.
+ *
+ * If the coefficients are for the inverted interval, in
+ * which (a, b) is mapped to (1/b, 1/a), the transformation
+ * required is x -> 2(2ab/x - b - a)/(b-a).  If b is infinity,
+ * this becomes x -> 4a/x - 1.
+ *
+ *
+ *
+ * SPEED:
+ *
+ * Taking advantage of the recurrence properties of the
+ * Chebyshev polynomials, the routine requires one more
+ * addition per loop than evaluating a nested polynomial of
+ * the same degree.
+ *
+ */
+
+template <typename Packet, int N>
+struct pchebevl {
+  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Packet run(Packet x,
+                                                          const typename unpacket_traits<Packet>::type coef[]) {
+    typedef typename unpacket_traits<Packet>::type Scalar;
+    Packet b0 = pset1<Packet>(coef[0]);
+    Packet b1 = pset1<Packet>(static_cast<Scalar>(0.f));
+    Packet b2;
+
+    for (int i = 1; i < N; i++) {
+      b2 = b1;
+      b1 = b0;
+      b0 = psub(pmadd(x, b1, pset1<Packet>(coef[i])), b2);
+    }
+
+    return pmul(pset1<Packet>(static_cast<Scalar>(0.5f)), psub(b0, b2));
+  }
+};
+
 template <typename Packet>
 EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC Packet pfrexp_generic_get_biased_exponent(const Packet& a) {
   typedef typename unpacket_traits<Packet>::type Scalar;
@@ -193,21 +321,14 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet plog_impl_float(const
   e = psub(e, pand(cst_1, mask));
   x = padd(x, tmp);
 
-  // Polynomial coefficients for rational (3,3) r(x) = p(x)/q(x)
+  // Polynomial coefficients for rational r(x) = p(x)/q(x)
   // approximating log(1+x) on [sqrt(0.5)-1;sqrt(2)-1].
-  const Packet cst_p1 = pset1<Packet>(1.0000000190281136f);
-  const Packet cst_p2 = pset1<Packet>(1.0000000190281063f);
-  const Packet cst_p3 = pset1<Packet>(0.18256296349849254f);
-  const Packet cst_q1 = pset1<Packet>(1.4999999999999927f);
-  const Packet cst_q2 = pset1<Packet>(0.59923249590823520f);
-  const Packet cst_q3 = pset1<Packet>(0.049616247954120038f);
+  constexpr float alpha[] = {0.18256296349849254f, 1.0000000190281063f, 1.0000000190281136f};
+  constexpr float beta[] = {0.049616247954120038f, 0.59923249590823520f, 1.4999999999999927f, 1.0f};
 
-  Packet p = pmadd(x, cst_p3, cst_p2);
-  p = pmadd(x, p, cst_p1);
+  Packet p = ppolevl<Packet, 2>::run(x, alpha);
   p = pmul(x, p);
-  Packet q = pmadd(x, cst_q3, cst_q2);
-  q = pmadd(x, q, cst_q1);
-  q = pmadd(x, q, cst_1);
+  Packet q = ppolevl<Packet, 3>::run(x, beta);
   x = pdiv(p, q);
 
   // Add the logarithm of the exponent back to the result of the interpolation.
@@ -919,13 +1040,6 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet pasin_float(const Pac
   const Packet cst_one = pset1<Packet>(1.0f);
   const Packet cst_two = pset1<Packet>(2.0f);
   const Packet cst_pi_over_two = pset1<Packet>(kPiOverTwo);
-  // For |x| < 0.5 approximate asin(x)/x by an 8th order polynomial with
-  // even terms only.
-  const Packet p9 = pset1<Packet>(5.08838854730129241943359375e-2f);
-  const Packet p7 = pset1<Packet>(3.95139865577220916748046875e-2f);
-  const Packet p5 = pset1<Packet>(7.550220191478729248046875e-2f);
-  const Packet p3 = pset1<Packet>(0.16664917767047882080078125f);
-  const Packet p1 = pset1<Packet>(1.00000011920928955078125f);
 
   const Packet abs_x = pabs(x_in);
   const Packet sign_mask = pandnot(x_in, abs_x);
@@ -941,13 +1055,11 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet pasin_float(const Pac
   const Packet x = pselect(large_mask, x_large, abs_x);
   const Packet x2 = pmul(x, x);
 
-  // Compute polynomial.
-  // x * (p1 + x^2*(p3 + x^2*(p5 + x^2*(p7 + x^2*p9))))
-
-  Packet p = pmadd(p9, x2, p7);
-  p = pmadd(p, x2, p5);
-  p = pmadd(p, x2, p3);
-  p = pmadd(p, x2, p1);
+  // For |x| < 0.5 approximate asin(x)/x by an 8th order polynomial with
+  // even terms only.
+  constexpr float alpha[] = {5.08838854730129241943359375e-2f, 3.95139865577220916748046875e-2f,
+                             7.550220191478729248046875e-2f, 0.16664917767047882080078125f, 1.00000011920928955078125f};
+  Packet p = ppolevl<Packet, 4>::run(x2, alpha);
   p = pmul(p, x);
 
   const Packet p_large = pnmadd(cst_two, p, cst_pi_over_two);
@@ -967,34 +1079,17 @@ struct patan_reduced {
 template <>
 template <typename Packet>
 EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet patan_reduced<double>::run(const Packet& x) {
-  const Packet p1 = pset1<Packet>(3.3004361289279920e-01);
-  const Packet p3 = pset1<Packet>(8.2704055405494614e-01);
-  const Packet p5 = pset1<Packet>(7.5365702534987022e-01);
-  const Packet p7 = pset1<Packet>(3.0409318473444424e-01);
-  const Packet p9 = pset1<Packet>(5.2574296781008604e-02);
-  const Packet p11 = pset1<Packet>(3.0917513112462781e-03);
-  const Packet p13 = pset1<Packet>(2.6667153866462208e-05);
-  const Packet q0 = p1;
-  const Packet q2 = pset1<Packet>(9.3705509168587852e-01);
-  const Packet q4 = pset1<Packet>(1.0);
-  const Packet q6 = pset1<Packet>(4.9716458728465573e-01);
-  const Packet q8 = pset1<Packet>(1.1548932646420353e-01);
-  const Packet q10 = pset1<Packet>(1.0899150928962708e-02);
-  const Packet q12 = pset1<Packet>(2.7311202462436667e-04);
+  constexpr double alpha[] = {2.6667153866462208e-05, 3.0917513112462781e-03, 5.2574296781008604e-02,
+                              3.0409318473444424e-01, 7.5365702534987022e-01, 8.2704055405494614e-01,
+                              3.3004361289279920e-01};
+
+  constexpr double beta[] = {
+      2.7311202462436667e-04, 1.0899150928962708e-02, 1.1548932646420353e-01, 4.9716458728465573e-01, 1.0,
+      9.3705509168587852e-01, 3.3004361289279920e-01};
 
   Packet x2 = pmul(x, x);
-  Packet p = pmadd(p13, x2, p11);
-  Packet q = pmadd(q12, x2, q10);
-  p = pmadd(p, x2, p9);
-  q = pmadd(q, x2, q8);
-  p = pmadd(p, x2, p7);
-  q = pmadd(q, x2, q6);
-  p = pmadd(p, x2, p5);
-  q = pmadd(q, x2, q4);
-  p = pmadd(p, x2, p3);
-  q = pmadd(q, x2, q2);
-  p = pmadd(p, x2, p1);
-  q = pmadd(q, x2, q0);
+  Packet p = ppolevl<Packet, 6>::run(x2, alpha);
+  Packet q = ppolevl<Packet, 6>::run(x2, beta);
   return pmul(x, pdiv(p, q));
 }
 
@@ -1002,20 +1097,14 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet patan_reduced<double>
 template <>
 template <typename Packet>
 EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet patan_reduced<float>::run(const Packet& x) {
-  const Packet p1 = pset1<Packet>(8.109951019287109375e-01f);
-  const Packet p3 = pset1<Packet>(7.296695709228515625e-01f);
-  const Packet p5 = pset1<Packet>(1.12026982009410858154296875e-01f);
-  const Packet q0 = p1;
-  const Packet q2 = pset1<Packet>(1.0f);
-  const Packet q4 = pset1<Packet>(2.8318560123443603515625e-01f);
-  const Packet q6 = pset1<Packet>(1.00917108356952667236328125e-02f);
+  constexpr float alpha[] = {1.12026982009410858154296875e-01f, 7.296695709228515625e-01f, 8.109951019287109375e-01f};
+
+  constexpr float beta[] = {1.00917108356952667236328125e-02f, 2.8318560123443603515625e-01f, 1.0f,
+                            8.109951019287109375e-01f};
 
   Packet x2 = pmul(x, x);
-  Packet p = pmadd(p5, x2, p3);
-  Packet q = pmadd(q6, x2, q4);
-  p = pmadd(p, x2, p1);
-  q = pmadd(q, x2, q2);
-  q = pmadd(q, x2, q0);
+  Packet p = ppolevl<Packet, 2>::run(x2, alpha);
+  Packet q = ppolevl<Packet, 3>::run(x2, beta);
   return pmul(x, pdiv(p, q));
 }
 
@@ -1076,34 +1165,20 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS T ptanh_float(const T& a_x) 
   //   --output=tanhf.sollya --dispCoeff="dec"
 
   // The monomial coefficients of the numerator polynomial (odd).
-  const T alpha_3 = pset1<T>(1.340216100e-1f);
-  const T alpha_5 = pset1<T>(3.520756727e-3f);
-  const T alpha_7 = pset1<T>(2.102733560e-5f);
-  const T alpha_9 = pset1<T>(1.394553628e-8f);
+  constexpr float alpha[] = {1.394553628e-8f, 2.102733560e-5f, 3.520756727e-3f, 1.340216100e-1f};
 
   // The monomial coefficients of the denominator polynomial (even).
-  const T beta_0 = pset1<T>(1.0f);
-  const T beta_2 = pset1<T>(4.673548340e-1f);
-  const T beta_4 = pset1<T>(2.597254514e-2f);
-  const T beta_6 = pset1<T>(3.326951409e-4f);
-  const T beta_8 = pset1<T>(8.015776984e-7f);
+  constexpr float beta[] = {8.015776984e-7f, 3.326951409e-4f, 2.597254514e-2f, 4.673548340e-1f, 1.0f};
 
   // Since the polynomials are odd/even, we need x^2.
   const T x2 = pmul(x, x);
   const T x3 = pmul(x2, x);
 
-  // Interleave the evaluation of the numerator polynomial p and
-  // denominator polynomial q.
-  T p = pmadd(x2, alpha_9, alpha_7);
-  T q = pmadd(x2, beta_8, beta_6);
-  p = pmadd(x2, p, alpha_5);
-  q = pmadd(x2, q, beta_4);
-  p = pmadd(x2, p, alpha_3);
-  q = pmadd(x2, q, beta_2);
-  // Take advantage of the fact that alpha_1 = 1 to compute
-  // x*(x^2*p + alpha_1) = x^3 * p + x.
+  T p = ppolevl<T, 3>::run(x2, alpha);
+  T q = ppolevl<T, 4>::run(x2, beta);
+  // Take advantage of the fact that the constant term in p is 1 to compute
+  // x*(x^2*p + 1) = x^3 * p + x.
   p = pmadd(x3, p, x);
-  q = pmadd(x2, q, beta_0);
 
   // Divide the numerator by the denominator.
   return pdiv(p, q);
@@ -1141,27 +1216,16 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS T ptanh_double(const T& a_x)
   //   --denF="[D]" --log --output=tanh.sollya --dispCoeff="dec"
 
   // The monomial coefficients of the numerator polynomial (odd).
-  const T alpha_3 = pset1<T>(1.5184719640284322e-01);
-  const T alpha_5 = pset1<T>(5.9809711724441161e-03);
-  const T alpha_7 = pset1<T>(9.3839087674268880e-05);
-  const T alpha_9 = pset1<T>(6.8644367682497074e-07);
-  const T alpha_11 = pset1<T>(2.4618379131293676e-09);
-  const T alpha_13 = pset1<T>(4.2303918148209176e-12);
-  const T alpha_15 = pset1<T>(3.1309488231386680e-15);
-  const T alpha_17 = pset1<T>(7.6534862268749319e-19);
-  const T alpha_19 = pset1<T>(2.6158007860482230e-23);
+  constexpr double alpha[] = {2.6158007860482230e-23, 7.6534862268749319e-19, 3.1309488231386680e-15,
+                              4.2303918148209176e-12, 2.4618379131293676e-09, 6.8644367682497074e-07,
+                              9.3839087674268880e-05, 5.9809711724441161e-03, 1.5184719640284322e-01};
 
   // The monomial coefficients of the denominator polynomial (even).
-  const T beta_0 = pset1<T>(1.0);
-  const T beta_2 = pset1<T>(4.851805297361760360e-01);
-  const T beta_4 = pset1<T>(3.437448108450402717e-02);
-  const T beta_6 = pset1<T>(8.295161192716231542e-04);
-  const T beta_8 = pset1<T>(8.785185266237658698e-06);
-  const T beta_10 = pset1<T>(4.492975677839633985e-08);
-  const T beta_12 = pset1<T>(1.123643448069621992e-10);
-  const T beta_14 = pset1<T>(1.293019623712687916e-13);
-  const T beta_16 = pset1<T>(5.782506856739003571e-17);
-  const T beta_18 = pset1<T>(6.463747022670968018e-21);
+  constexpr double beta[] = {6.463747022670968018e-21, 5.782506856739003571e-17,
+                             1.293019623712687916e-13, 1.123643448069621992e-10,
+                             4.492975677839633985e-08, 8.785185266237658698e-06,
+                             8.295161192716231542e-04, 3.437448108450402717e-02,
+                             4.851805297361760360e-01, 1.0};
 
   // Since the polynomials are odd/even, we need x^2.
   const T x2 = pmul(x, x);
@@ -1169,26 +1233,11 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS T ptanh_double(const T& a_x)
 
   // Interleave the evaluation of the numerator polynomial p and
   // denominator polynomial q.
-  T p = pmadd(x2, alpha_19, alpha_17);
-  T q = pmadd(x2, beta_18, beta_16);
-  p = pmadd(x2, p, alpha_15);
-  q = pmadd(x2, q, beta_14);
-  p = pmadd(x2, p, alpha_13);
-  q = pmadd(x2, q, beta_12);
-  p = pmadd(x2, p, alpha_11);
-  q = pmadd(x2, q, beta_10);
-  p = pmadd(x2, p, alpha_9);
-  q = pmadd(x2, q, beta_8);
-  p = pmadd(x2, p, alpha_7);
-  q = pmadd(x2, q, beta_6);
-  p = pmadd(x2, p, alpha_5);
-  q = pmadd(x2, q, beta_4);
-  p = pmadd(x2, p, alpha_3);
-  q = pmadd(x2, q, beta_2);
-  // Take advantage of the fact that alpha_1 = 1 to compute
-  // x*(x^2*p + alpha_1) = x^3 * p + x.
+  T p = ppolevl<T, 8>::run(x2, alpha);
+  T q = ppolevl<T, 9>::run(x2, beta);
+  // Take advantage of the fact that the constant term in p is 1 to compute
+  // x*(x^2*p + 1) = x^3 * p + x.
   p = pmadd(x3, p, x);
-  q = pmadd(x2, q, beta_0);
 
   // Divide the numerator by the denominator.
   return pdiv(p, q);
@@ -1200,18 +1249,13 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet patanh_float(const Pa
   static_assert(std::is_same<Scalar, float>::value, "Scalar type must be float");
 
   // For |x| in [0:0.5] we use a polynomial approximation of the form
-  // P(x) = x + x^3*(c3 + x^2 * (c5 + x^2 * (... x^2 * c11) ... )).
-  const Packet C3 = pset1<Packet>(0.3333373963832855224609375f);
-  const Packet C5 = pset1<Packet>(0.1997792422771453857421875f);
-  const Packet C7 = pset1<Packet>(0.14672131836414337158203125f);
-  const Packet C9 = pset1<Packet>(8.2311116158962249755859375e-2f);
-  const Packet C11 = pset1<Packet>(0.1819281280040740966796875f);
+  // P(x) = x + x^3*(alpha[4] + x^2 * (alpha[3] + x^2 * (... x^2 * alpha[0]) ... )).
+  constexpr float alpha[] = {0.1819281280040740966796875f, 8.2311116158962249755859375e-2f,
+                             0.14672131836414337158203125f, 0.1997792422771453857421875f, 0.3333373963832855224609375f};
   const Packet x2 = pmul(x, x);
-  Packet p = pmadd(C11, x2, C9);
-  p = pmadd(x2, p, C7);
-  p = pmadd(x2, p, C5);
-  p = pmadd(x2, p, C3);
-  p = pmadd(pmul(x, x2), p, x);
+  const Packet x3 = pmul(x, x2);
+  Packet p = ppolevl<Packet, 4>::run(x2, alpha);
+  p = pmadd(x3, p, x);
 
   // For |x| in ]0.5:1.0] we use atanh = 0.5*ln((1+x)/(1-x));
   const Packet half = pset1<Packet>(0.5f);
@@ -1234,30 +1278,16 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet patanh_double(const P
   static_assert(std::is_same<Scalar, double>::value, "Scalar type must be double");
   // For x in [-0.5:0.5] we use a rational approximation of the form
   // R(x) = x + x^3*P(x^2)/Q(x^2), where P is or order 4 and Q is of order 5.
-  const Packet p0 = pset1<Packet>(1.2306328729812676e-01);
-  const Packet p2 = pset1<Packet>(-2.5949536095445679e-01);
-  const Packet p4 = pset1<Packet>(1.8185306179826699e-01);
-  const Packet p6 = pset1<Packet>(-4.7129526768798737e-02);
-  const Packet p8 = pset1<Packet>(3.3071338469301391e-03);
+  constexpr double alpha[] = {3.3071338469301391e-03, -4.7129526768798737e-02, 1.8185306179826699e-01,
+                              -2.5949536095445679e-01, 1.2306328729812676e-01};
 
-  const Packet q0 = pset1<Packet>(3.6918986189438030e-01);
-  const Packet q2 = pset1<Packet>(-1.0000000000000000e+00);
-  const Packet q4 = pset1<Packet>(9.8733495886883648e-01);
-  const Packet q6 = pset1<Packet>(-4.2828141436397615e-01);
-  const Packet q8 = pset1<Packet>(7.6391885763341910e-02);
-  const Packet q10 = pset1<Packet>(-3.8679974580640881e-03);
+  constexpr double beta[] = {-3.8679974580640881e-03, 7.6391885763341910e-02,  -4.2828141436397615e-01,
+                             9.8733495886883648e-01,  -1.0000000000000000e+00, 3.6918986189438030e-01};
 
   const Packet x2 = pmul(x, x);
   const Packet x3 = pmul(x, x2);
-  Packet q = pmadd(q10, x2, q8);
-  Packet p = pmadd(p8, x2, p6);
-  q = pmadd(x2, q, q6);
-  p = pmadd(x2, p, p4);
-  q = pmadd(x2, q, q4);
-  p = pmadd(x2, p, p2);
-  q = pmadd(x2, q, q2);
-  p = pmadd(x2, p, p0);
-  q = pmadd(x2, q, q0);
+  Packet p = ppolevl<Packet, 4>::run(x2, alpha);
+  Packet q = ppolevl<Packet, 5>::run(x2, beta);
   Packet y_small = pmadd(x3, pdiv(p, q), x);
 
   // For |x| in ]0.5:1.0] we use atanh = 0.5*ln((1+x)/(1-x));
@@ -2200,134 +2230,6 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet generic_pow(const Pac
                                                          pselect(negate_pow_abs, pnegate(pow_abs), pow_abs)))))));
 }
 
-/* polevl (modified for Eigen)
- *
- *      Evaluate polynomial
- *
- *
- *
- * SYNOPSIS:
- *
- * int N;
- * Scalar x, y, coef[N+1];
- *
- * y = polevl<decltype(x), N>( x, coef);
- *
- *
- *
- * DESCRIPTION:
- *
- * Evaluates polynomial of degree N:
- *
- *                     2          N
- * y  =  C  + C x + C x  +...+ C x
- *        0    1     2          N
- *
- * Coefficients are stored in reverse order:
- *
- * coef[0] = C  , ..., coef[N] = C  .
- *            N                   0
- *
- *  The function p1evl() assumes that coef[N] = 1.0 and is
- * omitted from the array.  Its calling arguments are
- * otherwise the same as polevl().
- *
- *
- * The Eigen implementation is templatized.  For best speed, store
- * coef as a const array (constexpr), e.g.
- *
- * const double coef[] = {1.0, 2.0, 3.0, ...};
- *
- */
-template <typename Packet, int N>
-struct ppolevl {
-  static EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Packet run(const Packet& x,
-                                                          const typename unpacket_traits<Packet>::type coeff[]) {
-    EIGEN_STATIC_ASSERT((N > 0), YOU_MADE_A_PROGRAMMING_MISTAKE);
-    return pmadd(ppolevl<Packet, N - 1>::run(x, coeff), x, pset1<Packet>(coeff[N]));
-  }
-};
-
-template <typename Packet>
-struct ppolevl<Packet, 0> {
-  static EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Packet run(const Packet& x,
-                                                          const typename unpacket_traits<Packet>::type coeff[]) {
-    EIGEN_UNUSED_VARIABLE(x);
-    return pset1<Packet>(coeff[0]);
-  }
-};
-
-/* chbevl (modified for Eigen)
- *
- *     Evaluate Chebyshev series
- *
- *
- *
- * SYNOPSIS:
- *
- * int N;
- * Scalar x, y, coef[N], chebevl();
- *
- * y = chbevl( x, coef, N );
- *
- *
- *
- * DESCRIPTION:
- *
- * Evaluates the series
- *
- *        N-1
- *         - '
- *  y  =   >   coef[i] T (x/2)
- *         -            i
- *        i=0
- *
- * of Chebyshev polynomials Ti at argument x/2.
- *
- * Coefficients are stored in reverse order, i.e. the zero
- * order term is last in the array.  Note N is the number of
- * coefficients, not the order.
- *
- * If coefficients are for the interval a to b, x must
- * have been transformed to x -> 2(2x - b - a)/(b-a) before
- * entering the routine.  This maps x from (a, b) to (-1, 1),
- * over which the Chebyshev polynomials are defined.
- *
- * If the coefficients are for the inverted interval, in
- * which (a, b) is mapped to (1/b, 1/a), the transformation
- * required is x -> 2(2ab/x - b - a)/(b-a).  If b is infinity,
- * this becomes x -> 4a/x - 1.
- *
- *
- *
- * SPEED:
- *
- * Taking advantage of the recurrence properties of the
- * Chebyshev polynomials, the routine requires one more
- * addition per loop than evaluating a nested polynomial of
- * the same degree.
- *
- */
-
-template <typename Packet, int N>
-struct pchebevl {
-  EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Packet run(Packet x,
-                                                          const typename unpacket_traits<Packet>::type coef[]) {
-    typedef typename unpacket_traits<Packet>::type Scalar;
-    Packet b0 = pset1<Packet>(coef[0]);
-    Packet b1 = pset1<Packet>(static_cast<Scalar>(0.f));
-    Packet b2;
-
-    for (int i = 1; i < N; i++) {
-      b2 = b1;
-      b1 = b0;
-      b0 = psub(pmadd(x, b1, pset1<Packet>(coef[i])), b2);
-    }
-
-    return pmul(pset1<Packet>(static_cast<Scalar>(0.5f)), psub(b0, b2));
-  }
-};
-
 namespace unary_pow {
 
 template <typename ScalarExponent, bool IsInteger = NumTraits<ScalarExponent>::IsInteger>
@@ -2598,11 +2500,14 @@ template <typename Packet>
 EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Packet generic_ceil(const Packet& a) {
   using Scalar = typename unpacket_traits<Packet>::type;
   const Packet cst_1 = pset1<Packet>(Scalar(1));
+  const Packet sign_mask = pset1<Packet>(static_cast<Scalar>(-0.0));
   Packet rint_a = generic_rint(a);
   // if rint(a) < a, then rint(a) == floor(a)
   Packet mask = pcmp_lt(rint_a, a);
   Packet offset = pand(cst_1, mask);
   Packet result = padd(rint_a, offset);
+  // Signed zero must remain signed (e.g. ceil(-0.02) == -0).
+  result = por(result, pand(sign_mask, a));
   return result;
 }
 

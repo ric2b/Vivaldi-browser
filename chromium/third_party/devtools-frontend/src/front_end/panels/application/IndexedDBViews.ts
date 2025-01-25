@@ -28,10 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+import '../../ui/components/report_view/report_view.js';
+
 import * as i18n from '../../core/i18n/i18n.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
-import * as ReportView from '../../ui/components/report_view/report_view.js';
 import * as DataGrid from '../../ui/legacy/components/data_grid/data_grid.js';
 import * as ObjectUI from '../../ui/legacy/components/object_ui/object_ui.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -39,16 +40,11 @@ import * as LitHtml from '../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import * as ApplicationComponents from './components/components.js';
-import {
-  type Database,
-  type DatabaseId,
-  type Entry,
-  type Index,
-  type IndexedDBModel,
-  type ObjectStore,
-  type ObjectStoreMetadata,
-} from './IndexedDBModel.js';
+import type {
+  Database, DatabaseId, Entry, Index, IndexedDBModel, ObjectStore, ObjectStoreMetadata} from './IndexedDBModel.js';
 import indexedDBViewsStyles from './indexedDBViews.css.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -170,16 +166,15 @@ export class IDBDatabaseView extends ApplicationComponents.StorageMetadataView.S
     if (!this.database) {
       return LitHtml.nothing;
     }
-    return LitHtml.html`
+    return html`
       ${await super.renderReportContent()}
       ${this.key(i18nString(UIStrings.version))}
       ${this.value(this.database.version.toString())}
       ${this.key(i18nString(UIStrings.objectStores))}
       ${this.value(this.database.objectStores.size.toString())}
-      <${ReportView.ReportView.ReportSectionDivider.litTagName}></${
-        ReportView.ReportView.ReportSectionDivider.litTagName}>
-      <${ReportView.ReportView.ReportSection.litTagName}>
-      <${Buttons.Button.Button.litTagName}
+      <devtools-report-divider></devtools-report-divider>
+      <devtools-report-section>
+      <devtools-button
           aria-label=${i18nString(UIStrings.deleteDatabase)}
           .variant=${Buttons.Button.Variant.OUTLINED}
           @click=${this.deleteDatabase}
@@ -187,8 +182,8 @@ export class IDBDatabaseView extends ApplicationComponents.StorageMetadataView.S
       click: true,
     })}>
         ${i18nString(UIStrings.deleteDatabase)}
-      </${Buttons.Button.Button.litTagName}>&nbsp;
-      <${Buttons.Button.Button.litTagName}
+      </devtools-button>&nbsp;
+      <devtools-button
           aria-label=${i18nString(UIStrings.refreshDatabase)}
           .variant=${Buttons.Button.Variant.OUTLINED}
           @click=${this.refreshDatabaseButtonClicked}
@@ -196,8 +191,8 @@ export class IDBDatabaseView extends ApplicationComponents.StorageMetadataView.S
       click: true,
     })}>
         ${i18nString(UIStrings.refreshDatabase)}
-      </${Buttons.Button.Button.litTagName}>
-      </${ReportView.ReportView.ReportSection.litTagName}>
+      </devtools-button>
+      </devtools-report-section>
       `;
   }
 

@@ -129,13 +129,16 @@ class Converter {
 
     [[nodiscard]] bool Convert(wgpu::TextureAspect& out, const interop::GPUTextureAspect& in);
 
-    [[nodiscard]] bool Convert(wgpu::ImageCopyTexture& out, const interop::GPUImageCopyTexture& in);
+    [[nodiscard]] bool Convert(wgpu::ImageCopyTexture& out,
+                               const interop::GPUTexelCopyTextureInfo& in);
 
-    [[nodiscard]] bool Convert(wgpu::ImageCopyBuffer& out, const interop::GPUImageCopyBuffer& in);
+    [[nodiscard]] bool Convert(wgpu::ImageCopyBuffer& out,
+                               const interop::GPUTexelCopyBufferInfo& in);
 
     [[nodiscard]] bool Convert(BufferSource& out, interop::BufferSource in);
 
-    [[nodiscard]] bool Convert(wgpu::TextureDataLayout& out, const interop::GPUImageDataLayout& in);
+    [[nodiscard]] bool Convert(wgpu::TextureDataLayout& out,
+                               const interop::GPUTexelCopyBufferLayout& in);
 
     [[nodiscard]] bool Convert(wgpu::TextureFormat& out, const interop::GPUTextureFormat& in);
 
@@ -291,9 +294,13 @@ class Converter {
     [[nodiscard]] bool Convert(wgpu::WGSLFeatureName& out, interop::WGSLFeatureName in);
     [[nodiscard]] bool Convert(interop::WGSLFeatureName& out, wgpu::WGSLFeatureName in);
 
-    // std::string to C string
+    // std::string to C string / wgpu::StringView types
     [[nodiscard]] inline bool Convert(const char*& out, const std::string& in) {
         out = in.c_str();
+        return true;
+    }
+    [[nodiscard]] inline bool Convert(wgpu::StringView& out, const std::string& in) {
+        out = {in.data(), in.size()};
         return true;
     }
 
@@ -468,6 +475,8 @@ class Converter {
 
     std::vector<std::function<void()>> free_;
 };
+
+std::string CopyLabel(StringView label);
 
 }  // namespace wgpu::binding
 

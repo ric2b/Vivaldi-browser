@@ -51,8 +51,8 @@
       UINavigationItemLargeTitleDisplayModeNever;
 
   self.mediator = [[VivaldiAddressBarSettingsMediator alloc]
-      initWithOriginalPrefService:self.browser->GetBrowserState()
-                                 ->GetOriginalChromeBrowserState()
+      initWithOriginalPrefService:self.browser->GetProfile()
+                                 ->GetOriginalProfile()
                                  ->GetPrefs()];
   self.mediator.consumer = self.viewProvider;
   self.viewProvider.settingsStateConsumer = self.mediator;
@@ -98,7 +98,7 @@
 - (void)showDirectMatchLearnMorePage {
   GURL learnMoreURL([vVivaldiDirectMatchLearnMoreUrl UTF8String]);
   UrlLoadParams params = UrlLoadParams::InNewTab(learnMoreURL);
-  params.in_incognito = self.browser->GetBrowserState()->IsOffTheRecord();
+  params.in_incognito = self.browser->GetProfile()->IsOffTheRecord();
   UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
   [self handleDoneButtonTap];
 }

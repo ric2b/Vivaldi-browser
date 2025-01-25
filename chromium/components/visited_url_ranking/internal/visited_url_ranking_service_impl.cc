@@ -291,6 +291,17 @@ VisitedURLRankingServiceImpl::VisitedURLRankingServiceImpl(
       recently_visited_minutes_threshold_(base::Minutes(
           features::kVisitedURLRankingDecorationRecentlyVisitedMinutesThreshold
               .Get())),
+      score_thresholds_(
+          {{URLVisitAggregate::URLType::kActiveLocalTab,
+            features::kVisitedURLRankingScoreThresholdActiveLocalTab.Get()},
+           {URLVisitAggregate::URLType::kActiveRemoteTab,
+            features::kVisitedURLRankingScoreThresholdActiveRemoteTab.Get()},
+           {URLVisitAggregate::URLType::kLocalVisit,
+            features::kVisitedURLRankingScoreThresholdLocalVisit.Get()},
+           {URLVisitAggregate::URLType::kRemoteVisit,
+            features::kVisitedURLRankingScoreThresholdRemoteVisit.Get()},
+           {URLVisitAggregate::URLType::kCCTVisit,
+            features::kVisitedURLRankingScoreThresholdCCTVisit.Get()}}),
       deduplication_helper_(std::move(deduplication_helper)) {}
 
 VisitedURLRankingServiceImpl::~VisitedURLRankingServiceImpl() = default;
@@ -359,15 +370,6 @@ void VisitedURLRankingServiceImpl::RankURLVisitAggregates(
   visit_aggregates.clear();
 
   GetNextResult(config.key, std::move(visits_queue), {}, std::move(callback));
-}
-
-void VisitedURLRankingServiceImpl::DecorateURLVisitAggregates(
-    const Config& config,
-    std::vector<URLVisitAggregate> visit_aggregates,
-    DecorateURLVisitAggregatesCallback callback) {
-  URLVisitsMetadata url_visits_metadata;
-  DecorateURLVisitAggregates(config, std::move(url_visits_metadata),
-                             std::move(visit_aggregates), std::move(callback));
 }
 
 void VisitedURLRankingServiceImpl::DecorateURLVisitAggregates(
@@ -553,12 +555,28 @@ void VisitedURLRankingServiceImpl::TransformVisitsAndCallback(
                      aggregates_count, url_visits_metadata, base::Time::Now()));
 }
 
+bool VisitedURLRankingServiceImpl::ShouldDiscardVisit(
+    const URLVisitAggregate& visit) {
+  URLVisitAggregate::URLTypeSet types = visit.GetURLTypes();
+  if (visit.score.has_value()) {
+    for (URLVisitAggregate::URLType current_url_type : types) {
+      if (visit.score.value() < score_thresholds_[current_url_type]) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 void VisitedURLRankingServiceImpl::GetNextResult(
     const std::string& segmentation_key,
     std::deque<URLVisitAggregate> visit_aggregates,
     std::vector<URLVisitAggregate> scored_visits,
     RankURLVisitAggregatesCallback callback) {
   if (visit_aggregates.empty()) {
+    std::erase_if(scored_visits, [&](const auto& url_visit_aggregate) {
+      return ShouldDiscardVisit(url_visit_aggregate);
+    });
     SortScoredAggregatesAndCallback(std::move(scored_visits),
                                     std::move(callback));
     return;

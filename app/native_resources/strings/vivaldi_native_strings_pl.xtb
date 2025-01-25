@@ -9,7 +9,7 @@
 <translation id="1270785070369717623">Niestety, ustawienia Opera GX nie są dostępne podczas działania tej przeglądarki. Aby zaimportować te ustawienia do Vivaldi, zapisz swoją pracę i zamknij wszystkie okna przeglądarki Opera GX. Następnie kliknij przycisk „Kontynuuj”.</translation>
 <translation id="1276145862619442150">Szybkie wybieranie</translation>
 <translation id="1281950884873973195">Zwierzę 6</translation>
-<translation id="1411638389238344450">Wyślij link pocztą e-mail</translation>
+<translation id="1411638389238344450">Wyślij link e-mailem</translation>
 <translation id="1454726940098520109">Nie pytaj ponownie</translation>
 <translation id="1462666970065907900">Czy na pewno chcesz zamknąć to okno?</translation>
 <translation id="1480046233931937785">Prawa autorskie</translation>
@@ -44,7 +44,7 @@
 <translation id="2848085334714181751">Zwierzę 3</translation>
 <translation id="2873951654529031587">Kosz</translation>
 <translation id="292258461174562431">Potwór 4</translation>
-<translation id="2923448633003185837">Wklej i przejdź</translation>
+<translation id="2923448633003185837">Wklej i przejdź</translation>
 <translation id="2953943267837858202">Nie zezwalaj na automatyczne odtwarzanie plików wideo</translation>
 <translation id="2977472760057091832">Otwórz link w oknie prywatnym</translation>
 <translation id="2978824962390592855">Opera</translation>
@@ -104,13 +104,13 @@
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Otwórz obraz w nowej karcie w tle</translation>
 <translation id="4582480609585453144">Otwórz link w karcie w tle</translation>
-<translation id="4636708767492582204">Wyślij pocztą e-mail</translation>
+<translation id="4636708767492582204">Wyślij e-mailem</translation>
 <translation id="4677434526832593569">Zwierzę 8</translation>
 <translation id="474217410105706308">Wycisz kartę</translation>
 <translation id="4861715717329665002">Automatycznie zapisane sesje</translation>
 <translation id="4881695831933465202">Otwórz</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> z <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
-<translation id="5014281392052865061">Zaimportowane szybkie wybieranie</translation>
+<translation id="5014281392052865061">Szybkie wybieranie - zaimportowane</translation>
 <translation id="5092656712000637858">Dodaj stronę jako panel www</translation>
 <translation id="5106275083540628394">Odszyfrowanie nie powiodło się: ryzyko utraty danych</translation>
 <translation id="5177818338935286353">Potwór 7</translation>
@@ -136,7 +136,7 @@
 <translation id="6339818817272922368">Konto lokalne</translation>
 <translation id="6398710281890660037">Zabezpiecz mój profil</translation>
 <translation id="6438786710866753178">Krajobraz 4</translation>
-<translation id="6477028720702061455">Wybierz folder profilu przeglądarki Opera, z którego chcesz zaimportować dane</translation>
+<translation id="6477028720702061455">Wybierz folder profilu przeglądarki Opera, który chcesz zaimportować</translation>
 <translation id="6510706699590490869">Aktualizuj Vivaldi</translation>
 <translation id="6538338088414940408">Otwórz link w karcie w tle</translation>
 <translation id="6551219277044048123">Dodaj jako &amp;wyszukiwarkę...</translation>
@@ -165,7 +165,7 @@
 <translation id="8027581147000338959">Otwórz w nowym oknie</translation>
 <translation id="8044382196220116469">Nie pozwalaj stroną na automatyczne odtwarzanie plików wideo</translation>
 <translation id="8099620695029051217">Kopiuj adres strony</translation>
-<translation id="8197810018650377191">Dodaj zakładkę</translation>
+<translation id="8197810018650377191">Dodaj stronę do zakładek</translation>
 <translation id="8261506727792406068">Usuń</translation>
 <translation id="8263047843452521549">Zbadaj skrypty service-worker działające w tle</translation>
 <translation id="8331671104904436324">Otwórz w nowej karcie w tle</translation>
@@ -190,7 +190,7 @@
 <translation id="8894900864683381599">Dodaj link jako panel www</translation>
 <translation id="8912720443398351457">Czy na pewno chcesz zamknąć przeglądarkę Vivaldi?</translation>
 <translation id="8947109330183116400">Wybierz plik HTML z zakładkami</translation>
-<translation id="9017566390391482291">Wybierz folder profilu przeglądarki Vivaldi, z którego chcesz zaimportować dane</translation>
+<translation id="9017566390391482291">Wybierz folder profilu przeglądarki Vivaldi, który chcesz zaimportować</translation>
 <translation id="9048058608784130603">Oczekująca aktualizacja <ph name="VERSION" /></translation>
 <translation id="9048224371732578627">Zezwalaj na automatyczne odtwarzanie plików wideo</translation>
 <translation id="9065203028668620118">Edytuj</translation>

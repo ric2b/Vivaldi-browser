@@ -27,6 +27,8 @@ namespace {
 
 const char kFakeRegistrationToken[] = "fake_registration_token";
 const char kFakeDMToken[] = "fake_dm_token";
+const char kFakeProjectNumberStr[] = "1234567890";
+const int64_t kFakeProjectNumber = 1234567890;
 const int kExpectedProtocolVersion = 1;
 const base::Time kFakeTokenEndOfLife = base::Time::Now();
 
@@ -45,6 +47,11 @@ class MockInvalidationListener : public invalidation::InvalidationListener {
               (RegistrationTokenUploadStatus status),
               (override));
   MOCK_METHOD(void, Shutdown, (), (override));
+
+  const std::string& project_number() const override { return project_number_; }
+
+ private:
+  const std::string project_number_ = kFakeProjectNumberStr;
 };
 }  // namespace
 
@@ -94,6 +101,7 @@ TEST_F(FmRegistrationTokenUploaderTest,
   request.set_protocol_version(kExpectedProtocolVersion);
   request.set_token_type(
       enterprise_management::FmRegistrationTokenUploadRequest::DEVICE);
+  request.set_project_number(kFakeProjectNumber);
   request.set_expiration_timestamp_ms(
       kFakeTokenEndOfLife.InMillisecondsSinceUnixEpoch());
   EXPECT_CALL(*client_ptr, UploadFmRegistrationToken(EqualsProto(request), _));
@@ -132,6 +140,7 @@ TEST_F(FmRegistrationTokenUploaderTest,
   request.set_protocol_version(kExpectedProtocolVersion);
   request.set_token_type(
       enterprise_management::FmRegistrationTokenUploadRequest::DEVICE);
+  request.set_project_number(kFakeProjectNumber);
   request.set_expiration_timestamp_ms(
       kFakeTokenEndOfLife.InMillisecondsSinceUnixEpoch());
   EXPECT_CALL(*client_ptr, UploadFmRegistrationToken(EqualsProto(request), _));
@@ -176,6 +185,7 @@ TEST_F(FmRegistrationTokenUploaderTest,
   request.set_protocol_version(kExpectedProtocolVersion);
   request.set_token_type(
       enterprise_management::FmRegistrationTokenUploadRequest::DEVICE);
+  request.set_project_number(kFakeProjectNumber);
   request.set_expiration_timestamp_ms(
       kFakeTokenEndOfLife.InMillisecondsSinceUnixEpoch());
   EXPECT_CALL(*client_ptr, UploadFmRegistrationToken(EqualsProto(request), _));
@@ -225,6 +235,7 @@ TEST_F(FmRegistrationTokenUploaderTest,
   request.set_protocol_version(kExpectedProtocolVersion);
   request.set_token_type(
       enterprise_management::FmRegistrationTokenUploadRequest::DEVICE);
+  request.set_project_number(kFakeProjectNumber);
   request.set_expiration_timestamp_ms(
       kFakeTokenEndOfLife.InMillisecondsSinceUnixEpoch());
   EXPECT_CALL(*client_ptr, UploadFmRegistrationToken(EqualsProto(request), _));

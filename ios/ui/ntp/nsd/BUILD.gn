@@ -1,0 +1,62 @@
+# Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/apple/swift_source_set.gni")
+
+source_set("nsd") {
+  sources = [
+    "vivaldi_nsd_consumer.h",
+    "vivaldi_nsd_coordinator.h",
+    "vivaldi_nsd_coordinator.mm",
+    "vivaldi_nsd_mediator.h",
+    "vivaldi_nsd_mediator.mm",
+    "vivaldi_nsd_view_delegate.h",
+  ]
+
+  deps = [
+    ":nsd_swift",
+    "//base:i18n",
+    "//base",
+    "//components/bookmarks/browser:browser",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/common/ui/util",
+    "//ui/base",
+    "//vivaldi/ios/direct_match",
+    "//vivaldi/ios/most_visited_sites",
+    "//vivaldi/ios/ui/helpers",
+    "resources:assets",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+  ]
+}
+
+swift_source_set("nsd_swift") {
+  bridge_header = "vivaldi_nsd_swift_bridge.h"
+  sources = [
+    "vivaldi_nsd_category_details_view.swift",
+    "vivaldi_nsd_constants.swift",
+    "vivaldi_nsd_direct_match_category.swift",
+    "vivaldi_nsd_direct_match_item.swift",
+    "vivaldi_nsd_item_flow_layout.swift",
+    "vivaldi_nsd_item_list_view_provider.swift",
+    "vivaldi_nsd_item_list_view.swift",
+    "vivaldi_nsd_item.swift",
+    "vivaldi_nsd_state.swift",
+    "vivaldi_nsd_top_site_item.swift",
+    "vivaldi_nsd_view_provider.swift",
+    "vivaldi_nsd_view.swift",
+  ]
+
+  deps = [
+    "//vivaldi/ios/ui/helpers:helpers_swift",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+    "SwiftUI.framework",
+  ]
+}

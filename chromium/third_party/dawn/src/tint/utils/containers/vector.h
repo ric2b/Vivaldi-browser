@@ -1161,6 +1161,13 @@ class VectorRef {
         return hash;
     }
 
+    /// @returns true if the predicate function returns true for any of the elements of the vector
+    /// @param pred a function-like with the signature `bool(T)`
+    template <typename PREDICATE>
+    bool Any(PREDICATE&& pred) const {
+        return std::any_of(begin(), end(), std::forward<PREDICATE>(pred));
+    }
+
   private:
     /// Friend class
     template <typename, size_t>
@@ -1192,6 +1199,24 @@ std::vector<T> ToStdVector(const Vector<T, N>& vector) {
         out.emplace_back(el);
     }
     return out;
+}
+
+/// Helper for constructing a Vector from a Slice. Only the size must be supplied as the type is
+/// deduced.
+/// @param slice the input slice
+/// @return the converted vector
+/// @note This helper is useful because Vectors require a size parameter, but because it is the
+/// second template parameter to a Vector, both the type and size parameters must be explicitly
+/// declared. Furthermore, Slices are often of const pointer/reference type, but a Vector cannot be
+/// of const pointer/reference type, again requiring the caller to be explicit. This helper makes it
+/// possible to only specify the size.
+template <size_t N, typename T>
+auto ToVector(const tint::Slice<T>& slice) {
+    // If Slice is of type 'T* const', make it 'T*' (or 'T& const', make it 'T&') as Vectors cannot
+    // be of const pointer/reference type.
+    using U = std::conditional_t<std::is_pointer_v<T> || std::is_reference_v<T>,
+                                 std::remove_const_t<T>, T>;
+    return Vector<U, N>{slice};
 }
 
 /// Helper for converting a std::vector to a Vector.

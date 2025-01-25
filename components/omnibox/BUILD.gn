@@ -1,0 +1,37 @@
+# Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+
+source_set("omnibox") {
+  sources = [
+    "omnibox_service.cc",
+    "omnibox_service.h",
+    "omnibox_service_observer.h",
+  ]
+  deps = [
+    "//third_party/flatbuffers",
+    "//third_party/tflite_support:tflite_support_proto",
+  ]
+
+  if (!is_ios) {
+    deps += [
+      "//content/public/browser",
+    ]
+  }
+    configs += [
+    "//third_party/tflite:tflite_config",
+    "//third_party/tflite_support:tflite_support_config",
+  ]
+}
+
+static_library("browser") {
+  sources = [
+    "omnibox_service_factory.cc",
+    "omnibox_service_factory.h",
+  ]
+  deps = [
+    ":omnibox",
+    "//base:i18n",
+    "//third_party/tflite_support:tflite_support_proto",
+    "//third_party/tflite",
+    "//third_party/tflite_support",
+  ]
+}

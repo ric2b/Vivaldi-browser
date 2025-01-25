@@ -351,7 +351,12 @@ cc_library(
     name = "stats",
     srcs = ["stats.cc"],
     hdrs = ["stats.h"],
-    linkopts = ["-latomic"],  # for std::atomic::load()/store().
+    linkopts = select({
+        "@platforms//os:macos": [],
+        "//conditions:default": [
+            "-latomic",  # for std::atomic::load()/store().
+        ],
+    }),
     deps = [
         ":environment",
         ":workdir",
@@ -420,7 +425,12 @@ cc_library(
     name = "shared_memory_blob_sequence",
     srcs = ["shared_memory_blob_sequence.cc"],
     hdrs = ["shared_memory_blob_sequence.h"],
-    linkopts = ["-lrt"],  # for shm_open.
+    linkopts = select({
+        "@platforms//os:macos": [],
+        "//conditions:default": [
+            "-lrt",  # for shm_open
+        ],
+    }),
     visibility = PUBLIC_API_VISIBILITY,
     deps = ["@com_google_absl//absl/base:nullability"],
     # don't add any dependencies.
@@ -541,6 +551,7 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
+        "@com_google_fuzztest//common:remote_file",
     ],
 )
 
@@ -614,6 +625,7 @@ cc_library(
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
@@ -702,7 +714,12 @@ cc_library(
     name = "early_exit",
     srcs = ["early_exit.cc"],
     hdrs = ["early_exit.h"],
-    linkopts = ["-latomic"],  # for std::atomic::load()/store().
+    linkopts = select({
+        "@platforms//os:macos": [],
+        "//conditions:default": [
+            "-latomic",  # for std::atomic::load()/store().
+        ],
+    }),
     visibility = PUBLIC_API_VISIBILITY,
 )
 
@@ -805,6 +822,7 @@ cc_library(
         ":util",
         ":workdir",
         "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
@@ -1014,9 +1032,13 @@ RUNNER_SANITIZED_COPTS = [
 
 RUNNER_LINKOPTS = [
     "-ldl",  # for dlsym
-    "-lrt",  # for shm_open
     "-lpthread",  # for pthread_once
-]
+] + select({
+    "@platforms//os:macos": [],
+    "//conditions:default": [
+        "-lrt",  # for shm_open
+    ],
+})
 
 # WARNING: be careful with more deps here. Use only the most trivial ones.
 RUNNER_DEPS = [
@@ -1182,8 +1204,6 @@ sh_library(
 sh_library(
     name = "test_util_sh",
     srcs = ["test_util.sh"],
-    data = [
-    ],
 )
 
 ################################################################################
@@ -1195,6 +1215,7 @@ cc_test(
     srcs = ["binary_info_test.cc"],
     deps = [
         ":binary_info",
+        ":control_flow",
         ":pc_info",
         ":symbol_table",
         "@com_google_fuzztest//common:test_util",
@@ -1658,10 +1679,8 @@ cc_test(
         ":feature",
         ":seed_corpus_maker_lib",
         ":workdir",
-        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
         "@com_google_fuzztest//common:logging",
-        "@com_google_fuzztest//common:status_macros",
         "@com_google_fuzztest//common:test_util",
         "@com_google_googletest//:gtest_main",
     ],
@@ -1801,6 +1820,7 @@ cc_test(
         ":feature",
         ":mutation_input",
         ":runner_result",
+        ":util",
         ":workdir",
         "@com_google_absl//absl/base:nullability",
         "@com_google_absl//absl/container:flat_hash_set",

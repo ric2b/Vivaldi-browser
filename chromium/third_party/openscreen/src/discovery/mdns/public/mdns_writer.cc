@@ -30,9 +30,9 @@ std::vector<uint64_t> ComputeDomainNameSubhashes(const DomainName& name) {
   return subhashes;
 }
 
-// This helper method writes the number of bytes between |begin| and |end| minus
-// the size of the uint16_t into the uint16_t length field at |begin|. The
-// method returns true if the number of bytes between |begin| and |end| fits in
+// This helper method writes the number of bytes between `begin` and `end` minus
+// the size of the uint16_t into the uint16_t length field at `begin`. The
+// method returns true if the number of bytes between `begin` and `end` fits in
 // uint16_t type, returns false otherwise.
 bool UpdateRecordLength(const uint8_t* end, uint8_t* begin) {
   OSP_CHECK_LE(begin + sizeof(uint16_t), end);
@@ -121,7 +121,7 @@ bool MdnsWriter::Write(const RawRecordRdata& rdata) {
 
 bool MdnsWriter::Write(const SrvRecordRdata& rdata) {
   Cursor cursor(this);
-  // Leave space at the beginning at |rollback_position| to write the record
+  // Leave space at the beginning at `rollback_position` to write the record
   // length. Cannot write it upfront, since the exact space taken by the target
   // domain name is not known as it might be compressed.
   if (Skip(sizeof(uint16_t)) && Write(rdata.priority()) &&
@@ -155,7 +155,7 @@ bool MdnsWriter::Write(const AAAARecordRdata& rdata) {
 
 bool MdnsWriter::Write(const PtrRecordRdata& rdata) {
   Cursor cursor(this);
-  // Leave space at the beginning at |rollback_position| to write the record
+  // Leave space at the beginning at `rollback_position` to write the record
   // length. Cannot write it upfront, since the exact space taken by the target
   // domain name is not known as it might be compressed.
   if (Skip(sizeof(uint16_t)) && Write(rdata.ptr_domain()) &&
@@ -168,7 +168,7 @@ bool MdnsWriter::Write(const PtrRecordRdata& rdata) {
 
 bool MdnsWriter::Write(const TxtRecordRdata& rdata) {
   Cursor cursor(this);
-  // Leave space at the beginning at |rollback_position| to write the record
+  // Leave space at the beginning at `rollback_position` to write the record
   // length. It's cheaper to update it at the end than precompute the length.
   if (!Skip(sizeof(uint16_t))) {
     return false;

@@ -23,6 +23,7 @@ src/common/framework/data_cache.ts
 src/common/framework/metadata.ts
 src/common/framework/params_builder.ts
 src/common/framework/resources.ts
+src/common/util/collect_garbage.ts
 src/common/internal/websocket_logger.ts
 src/common/internal/test_group.ts
 src/common/framework/test_group.ts
@@ -57,7 +58,6 @@ src/common/tools/merge_listing_times.ts
 src/common/tools/run_wpt_ref_tests.ts
 src/common/tools/validate.ts
 src/common/tools/version.ts
-src/common/util/collect_garbage.ts
 src/common/util/preprocessor.ts
 src/common/util/wpt_reftest_wait.ts
 src/unittests/unit_test.ts
@@ -248,10 +248,11 @@ src/webgpu/api/validation/buffer/create.spec.ts
 src/webgpu/api/validation/buffer/destroy.spec.ts
 src/webgpu/api/validation/buffer/mapping.spec.ts
 src/webgpu/api/validation/buffer/threading.spec.ts
+src/webgpu/api/validation/capability_checks/limits/limit_utils.ts
+src/webgpu/api/validation/capability_checks/features/clip_distances.spec.ts
 src/webgpu/api/validation/capability_checks/features/query_types.spec.ts
 src/webgpu/util/create_elements.ts
 src/webgpu/api/validation/capability_checks/features/texture_formats.spec.ts
-src/webgpu/api/validation/capability_checks/limits/limit_utils.ts
 src/webgpu/api/validation/capability_checks/limits/maxBindGroups.spec.ts
 src/webgpu/api/validation/capability_checks/limits/maxBindGroupsPlusVertexBuffers.spec.ts
 src/webgpu/api/validation/capability_checks/limits/maxBindingsPerBindGroup.spec.ts
@@ -266,7 +267,6 @@ src/webgpu/api/validation/capability_checks/limits/maxComputeWorkgroupStorageSiz
 src/webgpu/api/validation/capability_checks/limits/maxComputeWorkgroupsPerDimension.spec.ts
 src/webgpu/api/validation/capability_checks/limits/maxDynamicStorageBuffersPerPipelineLayout.spec.ts
 src/webgpu/api/validation/capability_checks/limits/maxDynamicUniformBuffersPerPipelineLayout.spec.ts
-src/webgpu/api/validation/capability_checks/limits/maxInterStageShaderComponents.spec.ts
 src/webgpu/api/validation/capability_checks/limits/maxInterStageShaderVariables.spec.ts
 src/webgpu/api/validation/capability_checks/limits/maxSampledTexturesPerShaderStage.spec.ts
 src/webgpu/api/validation/capability_checks/limits/maxSamplersPerShaderStage.spec.ts
@@ -331,6 +331,7 @@ src/webgpu/api/validation/render_pass/render_pass_descriptor.spec.ts
 src/webgpu/api/validation/render_pass/resolve.spec.ts
 src/webgpu/api/validation/render_pipeline/common.ts
 src/webgpu/api/validation/render_pipeline/depth_stencil_state.spec.ts
+src/webgpu/api/validation/render_pipeline/float32_blendable.spec.ts
 src/webgpu/api/validation/render_pipeline/fragment_state.spec.ts
 src/webgpu/api/validation/render_pipeline/inter_stage.spec.ts
 src/webgpu/api/validation/render_pipeline/misc.spec.ts
@@ -577,6 +578,9 @@ src/webgpu/shader/execution/expression/call/builtin/pack4xU8.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/pack4xU8Clamp.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/pow.cache.ts
 src/webgpu/shader/execution/expression/call/builtin/pow.spec.ts
+src/webgpu/shader/execution/expression/call/builtin/subgroup_util.ts
+src/webgpu/shader/execution/expression/call/builtin/quadBroadcast.spec.ts
+src/webgpu/shader/execution/expression/call/builtin/quadSwap.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/quantizeToF16.cache.ts
 src/webgpu/shader/execution/expression/call/builtin/quantizeToF16.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/radians.cache.ts
@@ -604,11 +608,11 @@ src/webgpu/shader/execution/expression/call/builtin/sqrt.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/step.cache.ts
 src/webgpu/shader/execution/expression/call/builtin/step.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/storageBarrier.spec.ts
-src/webgpu/shader/execution/expression/call/builtin/subgroup_util.ts
 src/webgpu/shader/execution/expression/call/builtin/subgroupAdd.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/subgroupAll.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/subgroupAny.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/subgroupBallot.spec.ts
+src/webgpu/shader/execution/expression/call/builtin/subgroupBitwise.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/subgroupBroadcast.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/subgroupMul.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/tan.cache.ts
@@ -616,6 +620,7 @@ src/webgpu/shader/execution/expression/call/builtin/tan.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/tanh.cache.ts
 src/webgpu/shader/execution/expression/call/builtin/tanh.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/textureDimensions.spec.ts
+src/webgpu/shader/validation/decl/util.ts
 src/webgpu/shader/execution/expression/call/builtin/texture_utils.ts
 src/webgpu/shader/execution/expression/call/builtin/textureGather.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/textureGatherCompare.spec.ts
@@ -623,7 +628,6 @@ src/webgpu/shader/execution/expression/call/builtin/textureLoad.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/textureNumLayers.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/textureNumLevels.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/textureNumSamples.spec.ts
-src/webgpu/shader/execution/expression/call/builtin/utils.ts
 src/webgpu/shader/execution/expression/call/builtin/textureSample.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/textureSampleBaseClampToEdge.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/textureSampleBias.spec.ts
@@ -631,6 +635,7 @@ src/webgpu/shader/execution/expression/call/builtin/textureSampleCompare.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/textureSampleCompareLevel.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/textureSampleGrad.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/textureSampleLevel.spec.ts
+src/webgpu/shader/execution/expression/call/builtin/utils.ts
 src/webgpu/shader/execution/expression/call/builtin/textureStore.spec.ts
 src/webgpu/shader/execution/expression/call/builtin/transpose.cache.ts
 src/webgpu/shader/execution/expression/call/builtin/transpose.spec.ts
@@ -717,6 +722,7 @@ src/webgpu/shader/execution/shader_io/compute_builtins.spec.ts
 src/webgpu/shader/execution/shader_io/fragment_builtins.spec.ts
 src/webgpu/shader/execution/shader_io/shared_structs.spec.ts
 src/webgpu/shader/execution/shader_io/user_io.spec.ts
+src/webgpu/shader/execution/shader_io/vertex_builtins.spec.ts
 src/webgpu/shader/execution/shader_io/workgroup_size.spec.ts
 src/webgpu/shader/execution/statement/compound.spec.ts
 src/webgpu/shader/execution/statement/discard.spec.ts
@@ -729,7 +735,6 @@ src/webgpu/shader/validation/decl/const.spec.ts
 src/webgpu/shader/validation/decl/context_dependent_resolution.spec.ts
 src/webgpu/shader/validation/decl/let.spec.ts
 src/webgpu/shader/validation/decl/override.spec.ts
-src/webgpu/shader/validation/decl/util.ts
 src/webgpu/shader/validation/decl/var.spec.ts
 src/webgpu/shader/validation/expression/early_evaluation.spec.ts
 src/webgpu/shader/validation/expression/overload_resolution.spec.ts
@@ -746,6 +751,7 @@ src/webgpu/shader/validation/expression/binary/bitwise_shift.spec.ts
 src/webgpu/shader/validation/expression/binary/comparison.spec.ts
 src/webgpu/shader/validation/expression/binary/div_rem.spec.ts
 src/webgpu/shader/validation/expression/binary/parse.spec.ts
+src/webgpu/shader/validation/expression/binary/short_circuiting_and_or.spec.ts
 src/webgpu/shader/validation/expression/call/builtin/abs.spec.ts
 src/webgpu/shader/validation/expression/call/builtin/acos.spec.ts
 src/webgpu/shader/validation/expression/call/builtin/acosh.spec.ts
@@ -871,6 +877,7 @@ src/webgpu/shader/validation/expression/unary/address_of_and_indirection.spec.ts
 src/webgpu/shader/validation/expression/unary/arithmetic_negation.spec.ts
 src/webgpu/shader/validation/expression/unary/bitwise_complement.spec.ts
 src/webgpu/shader/validation/expression/unary/logical_negation.spec.ts
+src/webgpu/shader/validation/extension/clip_distances.spec.ts
 src/webgpu/shader/validation/extension/dual_source_blending.spec.ts
 src/webgpu/shader/validation/extension/pointer_composite_access.spec.ts
 src/webgpu/shader/validation/extension/readonly_and_readwrite_storage_textures.spec.ts

@@ -6,6 +6,7 @@
 #include "base/time/time.h"
 
 #include <string>
+#include <vector>
 
 namespace translate_history {
 

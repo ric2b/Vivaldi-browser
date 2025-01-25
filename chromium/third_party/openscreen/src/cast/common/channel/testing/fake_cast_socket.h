@@ -51,9 +51,9 @@ struct FakeCastSocket {
 };
 
 // Two FakeCastSockets that are piped together via their MockTlsConnection
-// read/write methods.  Calling SendMessage on |socket| will result in an
-// OnMessage callback on |mock_peer_client| and vice versa for |peer_socket| and
-// |mock_client|.
+// read/write methods.  Calling SendMessage on `socket` will result in an
+// OnMessage callback on `mock_peer_client` and vice versa for `peer_socket` and
+// `mock_client`.
 struct FakeCastSocketPair {
   FakeCastSocketPair()
       : FakeCastSocketPair({{10, 0, 1, 7}, 1234}, {{10, 0, 1, 9}, 4321}) {}

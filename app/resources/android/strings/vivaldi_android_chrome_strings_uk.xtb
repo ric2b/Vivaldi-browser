@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Швидкий пошук доступний тільки якщо Google встановлено типовим пошуком у Vivaldi. Ця функція направляє виділене слово та слова поруч як контекст до пошуку Google. Ви можете вимкнути її у <ph name="BEGIN_LINK" />Налаштуваннях<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Звичайні/приватні вкладки</translation>
 <translation id="1644574205037202324">Історія</translation>
-<translation id="17513872634828108">Відкриті вкладки</translation>
 <translation id="1829244130665387512">Знайти на сторінці</translation>
 <translation id="1910514478706885609">Відкрити у новій групі</translation>
 <translation id="1925021887439448749">Введіть веб-адресу</translation>
 <translation id="2038563949887743358">Увімкнути опцію "Запитувати версію сайту для комп'ютера"</translation>
-<translation id="2139186145475833000">Додати на головний екран</translation>
 <translation id="2149973817440762519">Редагувати закладку</translation>
 <translation id="2306442503286132111">Закладку збережено у теці <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Зовнішній вигляд</translation>
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">Поточна мова пристрою</translation>
 <translation id="4167670741834902166">Нова приватна вкладка</translation>
 <translation id="4195643157523330669">Відкрити в новій вкладці</translation>
+<translation id="4225895483398857530">Кнопка панелі інструментів</translation>
 <translation id="4243710787042215766">Відкрити у приватній вкладці</translation>
 <translation id="4304713468139749426">Менеджер паролів</translation>
 <translation id="451872707440238414">Шукати у закладках</translation>
@@ -74,6 +73,7 @@
 <translation id="8560602726703398413">Знайдіть свій список читання в закладках</translation>
 <translation id="85991616550051997">Перехід на домашню сторінку</translation>
 <translation id="8820817407110198400">Закладки</translation>
+<translation id="9042893549633094279">Конфіденційність і безпека</translation>
 <translation id="9063523880881406963">Вимкнути функцію "Запитувати версію сайту для комп'ютера"</translation>
 <translation id="9080642952018487277">Відкрити приватний режим</translation>
 <translation id="96681097142096641">Переглянути спрощену сторінку?</translation>

@@ -64,6 +64,7 @@ GrGLCaps::GrGLCaps(const GrContextOptions& contextOptions,
     fVertexArrayObjectSupport = false;
     fDebugSupport = false;
     fES2CompatibilitySupport = false;
+    fStrictProtectedness = false;
     fDrawRangeElementsSupport = false;
     fBaseVertexBaseInstanceSupport = false;
     fIsCoreProfile = false;
@@ -401,6 +402,17 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         return SkToBool(contextFlags & GR_GL_CONTEXT_FLAG_PROTECTED_CONTENT_BIT_EXT);
     }();
 
+    /**
+     * When Ganesh is backed by ANGLE mapping to Vulkan, the Protectedness handling has to be
+     * more like the Vulkan case (i.e., all internally allocated objects that will be written to
+     * in a Protected Context must be Protected). ANGLE just forwards any work to the
+     * active Vulkan Context. If that Vulkan Context is Protected that would mean, without
+     * using strict Protectedness, writes to unProtected objects would be submitted to a
+     * Protected Queue - which is not allowed in Vulkan.
+     */
+    fStrictProtectedness = fSupportsProtectedContent &&
+                           ctxInfo.angleBackend() != GrGLANGLEBackend::kUnknown;
+
     /**************************************************************************
     * GrShaderCaps fields
     **************************************************************************/
@@ -502,8 +514,10 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
         }
     } // No client side arrays in WebGL https://www.khronos.org/registry/webgl/specs/1.0/#6.2
 
-    if (!contextOptions.fAvoidStencilBuffers) {
+    if (!contextOptions.fAvoidStencilBuffers && !fSupportsProtectedContent) {
         // To reduce surface area, if we avoid stencil buffers, we also disable MSAA.
+        // We also avoid both for Protected Contexts due to their use of RenderBuffers (which
+        // cannot be correctly created as Protected).
         this->initFSAASupport(contextOptions, ctxInfo, gli);
         this->initStencilSupport(ctxInfo);
     }
@@ -858,6 +872,10 @@ void GrGLCaps::init(const GrContextOptions& contextOptions,
     this->initFormatTable(ctxInfo, gli, formatWorkarounds);
 
     this->finishInitialization(contextOptions);
+
+    // For GL, besides the user-specifiable override, we also want to avoid stencil buffers
+    // in Protected mode (to avoid using RenderBuffers)
+    fAvoidStencilBuffers = contextOptions.fAvoidStencilBuffers || fSupportsProtectedContent;
 
     // For now these two are equivalent but we could have dst read in shader via some other method.
     shaderCaps->fDstReadInShaderSupport = shaderCaps->fFBFetchSupport;
@@ -1294,6 +1312,7 @@ void GrGLCaps::onDumpJSON(SkJSONWriter* writer) const {
     writer->appendBool("Vertex array object support", fVertexArrayObjectSupport);
     writer->appendBool("Debug support", fDebugSupport);
     writer->appendBool("ES2 compatibility support", fES2CompatibilitySupport);
+    writer->appendBool("Strict Protectedness", fStrictProtectedness);
     writer->appendBool("drawRangeElements support", fDrawRangeElementsSupport);
     writer->appendBool("Base (vertex base) instance support", fBaseVertexBaseInstanceSupport);
     writer->appendBool("Bind uniform location support", fBindUniformLocationSupport);
@@ -3539,6 +3558,7 @@ void GrGLCaps::setupSampleCounts(const GrGLContextInfo& ctxInfo, const GrGLInter
         if (FormatInfo::kFBOColorAttachmentWithMSAA_Flag & fFormatTable[i].fFlags) {
             // We assume that MSAA rendering is supported only if we support non-MSAA rendering.
             SkASSERT(FormatInfo::kFBOColorAttachment_Flag & fFormatTable[i].fFlags);
+            SkASSERT(GrGLCaps::kNone_MSFBOType != fMSFBOType);
             if ((GR_IS_GR_GL(standard) &&
                   (version >= GR_GL_VER(4,2) ||
                    ctxInfo.hasExtension("GL_ARB_internalformat_query"))) ||

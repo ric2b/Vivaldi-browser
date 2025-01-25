@@ -34,6 +34,12 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 using ItemArray = NSArray<TableViewItem*>*;
 
 namespace {
@@ -118,8 +124,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       safeBrowsingState = safe_browsing::SafeBrowsingState::NO_SAFE_BROWSING;
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
   safe_browsing::SetSafeBrowsingState(self.userPrefService, safeBrowsingState);
 
@@ -132,8 +137,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
   if (!_safeBrowsingItems) {
     NSMutableArray* items = [NSMutableArray array];
     NSInteger enhancedProtectionSummary;
-    enhancedProtectionSummary =
-        IDS_IOS_PRIVACY_SAFE_BROWSING_ENHANCED_PROTECTION_FRIENDLIER_SUMMARY;
+    if (base::FeatureList::IsEnabled(safe_browsing::kEsbAiStringUpdate)) {
+      enhancedProtectionSummary =
+          IDS_IOS_PRIVACY_SAFE_BROWSING_ENHANCED_PROTECTION_SUMMARY_UPDATED;
+
+    } else {
+      enhancedProtectionSummary =
+          IDS_IOS_PRIVACY_SAFE_BROWSING_ENHANCED_PROTECTION_FRIENDLIER_SUMMARY;
+    }
     NSInteger standardProtectionSummary;
       standardProtectionSummary =
           IDS_IOS_PRIVACY_SAFE_BROWSING_STANDARD_PROTECTION_FRIENDLIER_SUMMARY;
@@ -150,7 +161,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
                             IDS_IOS_PRIVACY_SAFE_BROWSING_ENHANCED_PROTECTION_TITLE
                      detailText:enhancedProtectionSummary
         accessibilityIdentifier:kSettingsSafeBrowsingEnhancedProtectionCellId];
+
+    // Note: @prio@vivaldi.com - Hide enhanced protection settings.
+    if (!IsVivaldiRunning()) {
     [items addObject:safeBrowsingEnhancedProtectionItem];
+    } // End Vivaldi
 
     TableViewInfoButtonItem* safeBrowsingStandardProtectionItem = [self
              infoButtonItemType:ItemTypeSafeBrowsingStandardProtection
@@ -159,6 +174,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
                      detailText:standardProtectionSummary
         accessibilityIdentifier:kSettingsSafeBrowsingStandardProtectionCellId];
     [items addObject:safeBrowsingStandardProtectionItem];
+
+    // Note: @prio@vivaldi.com - Hide the info button which leads to settings
+    // that asks sending data to Google. Those settings are disabled by
+    // default, so hiding the button from UI is sufficient.
+    if (IsVivaldiRunning()) {
+      safeBrowsingStandardProtectionItem.infoButtonIsHidden = YES;
+    } // End Vivaldi
+
     NSInteger noProtectionSummary;
     noProtectionSummary =
         IDS_IOS_PRIVACY_SAFE_BROWSING_NO_PROTECTION_FRIENDLIER_SUMMARY;
@@ -254,8 +277,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       return safeBrowsingState ==
              safe_browsing::SafeBrowsingState::NO_SAFE_BROWSING;
     default:
-      NOTREACHED_IN_MIGRATION();
-      return NO;
+      NOTREACHED();
   }
 }
 
@@ -344,8 +366,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [self.handler showSafeBrowsingStandardProtection];
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
 }
 

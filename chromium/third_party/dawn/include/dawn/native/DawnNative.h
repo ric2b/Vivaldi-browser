@@ -284,12 +284,17 @@ class DAWN_NATIVE_EXPORT MemoryDump {
     static const char kUnitsBytes[];    // Unit name to represent bytes.
     static const char kUnitsObjects[];  // Unit name to represent #objects.
 
+    MemoryDump() = default;
+
     virtual void AddScalar(const char* name,
                            const char* key,
                            const char* units,
                            uint64_t value) = 0;
 
     virtual void AddString(const char* name, const char* key, const std::string& value) = 0;
+
+    MemoryDump(const MemoryDump&) = delete;
+    MemoryDump& operator=(const MemoryDump&) = delete;
 
   protected:
     virtual ~MemoryDump() = default;
@@ -302,6 +307,10 @@ DAWN_NATIVE_EXPORT uint64_t ComputeEstimatedMemoryUsage(WGPUDevice device);
 
 // Free any unused GPU memory like staging buffers, cached resources, etc.
 DAWN_NATIVE_EXPORT void ReduceMemoryUsage(WGPUDevice device);
+
+// Perform tasks that are appropriate to do when idle like serializing pipeline
+// caches, etc.
+DAWN_NATIVE_EXPORT void PerformIdleTasks(const wgpu::Device& device);
 
 }  // namespace dawn::native
 

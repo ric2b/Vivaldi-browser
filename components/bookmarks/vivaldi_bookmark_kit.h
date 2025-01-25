@@ -119,8 +119,19 @@ void RemovePartnerId(BookmarkModel* model, const BookmarkNode* node);
 // Returns nil if no SD folder found on any of the root nodes.
 const BookmarkNode* GetStartPageNode(BookmarkModel* model);
 
+// Returns the Start Page node if exists, if not create a node with provided
+// title under *bookmark_bar_node()*. Check comments for *GetStartPageNode*
+// function to know more about Start Page node.
+const BookmarkNode* GetOrCreateStartPageNode(BookmarkModel* model,
+                                             const std::u16string& node_title);
+
 // Returns if the given URL is added to the Start Page node.
 bool IsURLAddedToStartPage(BookmarkModel* model, const GURL& url);
+
+// Returns if the given URL is added to the given bookmark node.
+bool IsURLAddedToNode(BookmarkModel* model,
+                      const BookmarkNode* node,
+                      const GURL& url);
 
 // Helper method to find if given Node is Start Page node by checking certain
 // conditions.

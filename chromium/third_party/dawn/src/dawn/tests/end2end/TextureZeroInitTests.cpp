@@ -515,9 +515,6 @@ TEST_P(TextureZeroInitTest, CopyTextureToTextureHalf) {
 // This tests the texture with depth attachment and load op load will init depth stencil texture to
 // 0s.
 TEST_P(TextureZeroInitTest, RenderingLoadingDepth) {
-    // TODO(crbug.com/dawn/1423): Investigate why this test fails on Windows Vulkan drivers
-    DAWN_SUPPRESS_TEST_IF(IsWindows() && IsVulkan());
-
     wgpu::TextureDescriptor srcDescriptor =
         CreateTextureDescriptor(1, 1,
                                 wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst |
@@ -560,9 +557,6 @@ TEST_P(TextureZeroInitTest, RenderingLoadingDepth) {
 // This tests the texture with stencil attachment and load op load will init depth stencil texture
 // to 0s.
 TEST_P(TextureZeroInitTest, RenderingLoadingStencil) {
-    // TODO(crbug.com/dawn/1423): Investigate why this test fails on Windows Vulkan drivers
-    DAWN_SUPPRESS_TEST_IF(IsWindows() && IsVulkan());
-
     wgpu::TextureDescriptor srcDescriptor =
         CreateTextureDescriptor(1, 1,
                                 wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst |
@@ -605,9 +599,6 @@ TEST_P(TextureZeroInitTest, RenderingLoadingStencil) {
 // This tests the texture with depth stencil attachment and load op load will init depth stencil
 // texture to 0s.
 TEST_P(TextureZeroInitTest, RenderingLoadingDepthStencil) {
-    // TODO(crbug.com/dawn/1423): Investigate why this test fails on Windows Vulkan drivers
-    DAWN_SUPPRESS_TEST_IF(IsWindows() && IsVulkan());
-
     wgpu::TextureDescriptor srcDescriptor =
         CreateTextureDescriptor(1, 1,
                                 wgpu::TextureUsage::CopySrc | wgpu::TextureUsage::CopyDst |
@@ -718,14 +709,11 @@ TEST_P(TextureZeroInitTest, IndependentDepthStencilLoadAfterDiscard) {
         EXPECT_EQ(true, native::IsTextureSubresourceInitialized(depthStencilTexture.Get(), 0, 1, 0,
                                                                 1, WGPUTextureAspect_StencilOnly));
 
-        // TODO(crbug.com/dawn/439): Implement stencil copies on other platforms
-        if (IsMetal() || IsVulkan() || IsD3D12()) {
-            // Check by copy that the stencil data is 2.
-            std::vector<uint8_t> expected(kSize * kSize, 2);
-            EXPECT_LAZY_CLEAR(
-                0u, EXPECT_TEXTURE_EQ(expected.data(), depthStencilTexture, {0, 0}, {kSize, kSize},
-                                      0, wgpu::TextureAspect::StencilOnly));
-        }
+        // Check by copy that the stencil data is 2.
+        std::vector<uint8_t> expected(kSize * kSize, 2);
+        EXPECT_LAZY_CLEAR(
+            0u, EXPECT_TEXTURE_EQ(expected.data(), depthStencilTexture, {0, 0}, {kSize, kSize}, 0,
+                                  wgpu::TextureAspect::StencilOnly));
     }
 
     // Uninitialize only stencil
@@ -792,8 +780,8 @@ TEST_P(TextureZeroInitTest, IndependentDepthStencilLoadAfterDiscard) {
         EXPECT_EQ(true, native::IsTextureSubresourceInitialized(depthStencilTexture.Get(), 0, 1, 0,
                                                                 1, WGPUTextureAspect_StencilOnly));
 
-        // TODO(crbug.com/dawn/439): Implement stencil copies on other platforms
-        if (IsMetal() || IsVulkan() || IsD3D12()) {
+        // TODO(chromium:42241686): Fail on the Android devices using Mali GPUs (e.g. Pixel 6).
+        if (!(IsAndroid() && IsARM())) {
             // Check by copy that the stencil data is 0.
             std::vector<uint8_t> expected(kSize * kSize, 0);
             EXPECT_LAZY_CLEAR(
@@ -923,9 +911,6 @@ TEST_P(TextureZeroInitTest, StencilCopyThenDiscardAndCopyToTextureThenReadByCopy
 // Test that clear state is tracked independently for depth/stencil textures.
 // Lazy clear of the stencil aspect via copy should not touch depth.
 TEST_P(TextureZeroInitTest, IndependentDepthStencilCopyAfterDiscard) {
-    // TODO(crbug.com/dawn/439): Implement stencil copies on other platforms
-    DAWN_SUPPRESS_TEST_IF(!(IsMetal() || IsVulkan() || IsD3D12()));
-
     // TODO(dawn:1549) Fails on Qualcomm-based Android devices.
     DAWN_SUPPRESS_TEST_IF(IsAndroid() && IsQualcomm());
 

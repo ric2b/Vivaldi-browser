@@ -79,7 +79,7 @@ class ReceiverSession final : public Environment::SocketSubscriber {
 
     // The RPC messenger to be used for subscribing to remoting proto messages.
     // Unlike the SenderSession API, the RPC messenger is negotiation specific.
-    // The messenger is torn down when |OnReceiversDestroying| is called, and
+    // The messenger is torn down when `OnReceiversDestroying` is called, and
     // is owned by the ReceiverSession.
     RpcMessenger* messenger;
   };
@@ -93,20 +93,20 @@ class ReceiverSession final : public Environment::SocketSubscriber {
     enum ReceiversDestroyingReason { kEndOfSession, kRenegotiated };
 
     // Called when a set of streaming receivers has been negotiated. Both this
-    // and |OnRemotingNegotiated| may be called repeatedly as negotiations occur
+    // and `OnRemotingNegotiated` may be called repeatedly as negotiations occur
     // through the life of a session.
     virtual void OnNegotiated(const ReceiverSession* session,
                               ConfiguredReceivers receivers) = 0;
 
     // Called when a set of remoting receivers has been negotiated. This will
-    // only be called if |RemotingConstraints| are provided as part of
+    // only be called if `RemotingConstraints` are provided as part of
     // constructing the ReceiverSession object.
     virtual void OnRemotingNegotiated(const ReceiverSession* session,
                                       RemotingNegotiation negotiation) {}
 
     // Called immediately preceding the destruction of this session's receivers.
-    // If |reason| is |kEndOfSession|, OnNegotiated() will never be called
-    // again; if it is |kRenegotiated|, OnNegotiated() will be called again
+    // If `reason` is `kEndOfSession`, OnNegotiated() will never be called
+    // again; if it is `kRenegotiated`, OnNegotiated() will be called again
     // soon with a new set of Receivers to use.
     //
     // Before returning, the implementation must ensure that all references to

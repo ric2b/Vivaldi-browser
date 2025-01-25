@@ -240,7 +240,7 @@ void ChipController::OnWidgetDestroyed(views::Widget* widget) {
       active_chip_permission_request_manager_.value()->Deny();
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 
@@ -784,9 +784,9 @@ void ChipController::StartDismissTimer() {
 }
 
 void ChipController::ResetTimers() {
-  collapse_timer_.AbandonAndStop();
-  dismiss_timer_.AbandonAndStop();
-  delay_prompt_timer_.AbandonAndStop();
+  collapse_timer_.Stop();
+  dismiss_timer_.Stop();
+  delay_prompt_timer_.Stop();
 }
 
 views::Widget* ChipController::GetBubbleWidget() {

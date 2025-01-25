@@ -215,8 +215,10 @@ class PromiseBase {
     inline operator Napi::Promise() const { return state_->deferred.Promise(); }
 
     // Comparison operator between promises
-    bool operator==(const PromiseBase& other) { return state_ == other.state_; }
-    bool operator!=(const PromiseBase& other) { return !(*this == other); }
+    friend bool operator==(const PromiseBase& lhs, const PromiseBase& rhs) {
+        return lhs.state_ == rhs.state_;
+    }
+    friend bool operator!=(const PromiseBase& lhs, const PromiseBase& rhs) { return !(lhs == rhs); }
 
     // Reject() rejects the promise with the given failure value.
     void Reject(Napi::Value value) const {
@@ -571,6 +573,8 @@ class Converter<UndefinedType> {
     static Result FromJS(Napi::Env, Napi::Value, UndefinedType&);
     static Napi::Value ToJS(Napi::Env, UndefinedType);
 };
+
+std::ostream& operator<<(std::ostream& o, const UndefinedType&);
 
 template <typename T>
 class Converter<Interface<T>> {

@@ -36,7 +36,7 @@
   // Coordinator to show the folder chooser UI.
   BookmarksFolderChooserCoordinator* _folderChooserCoordinator;
   // The parent of current folder when the view was opened.
-  const bookmarks::BookmarkNode* _originalFolder;
+  raw_ptr<const bookmarks::BookmarkNode> _originalFolder;
   // Parent folder to `_folderNode`. Should never be `nullptr`.
   raw_ptr<const bookmarks::BookmarkNode> _parentFolderNode;
   // If `_folderNode` is `nullptr`, the user is adding a new folder. Otherwise
@@ -84,14 +84,12 @@
 - (void)start {
   [super start];
   // TODO(crbug.com/40251259): Create a mediator.
-  ChromeBrowserState* browserState =
-      self.browser->GetBrowserState()->GetOriginalChromeBrowserState();
+  ProfileIOS* profile = self.browser->GetProfile()->GetOriginalProfile();
   bookmarks::BookmarkModel* bookmarkModel =
-      ios::BookmarkModelFactory::GetForBrowserState(browserState);
+      ios::BookmarkModelFactory::GetForProfile(profile);
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForBrowserState(browserState);
-  syncer::SyncService* syncService =
-      SyncServiceFactory::GetForBrowserState(browserState);
+      AuthenticationServiceFactory::GetForProfile(profile);
+  syncer::SyncService* syncService = SyncServiceFactory::GetForProfile(profile);
   _viewController = [[BookmarksFolderEditorViewController alloc]
       initWithBookmarkModel:bookmarkModel
                  folderNode:_folderNode

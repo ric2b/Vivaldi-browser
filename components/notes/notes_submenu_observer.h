@@ -10,7 +10,7 @@
 #include "components/notes/note_node.h"
 #include "components/notes/notes_submenu_observer_helper.h"
 #include "components/renderer_context_menu/render_view_context_menu_observer.h"
-#include "ui/base/models/simple_menu_model.h"
+#include "ui/menus/simple_menu_model.h"
 
 class RenderViewContextMenuProxy;
 

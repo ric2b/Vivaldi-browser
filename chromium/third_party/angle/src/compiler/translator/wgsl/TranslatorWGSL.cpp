@@ -15,19 +15,21 @@
 #include "compiler/translator/Common.h"
 #include "compiler/translator/Diagnostics.h"
 #include "compiler/translator/ImmutableString.h"
+#include "compiler/translator/ImmutableStringBuilder.h"
 #include "compiler/translator/InfoSink.h"
 #include "compiler/translator/IntermNode.h"
 #include "compiler/translator/OutputTree.h"
 #include "compiler/translator/StaticType.h"
 #include "compiler/translator/SymbolUniqueId.h"
 #include "compiler/translator/Types.h"
-#include "compiler/translator/tree_util/BuiltIn_complete_autogen.h"
+#include "compiler/translator/tree_util/BuiltIn_autogen.h"
 #include "compiler/translator/tree_util/FindMain.h"
 #include "compiler/translator/tree_util/IntermNode_util.h"
 #include "compiler/translator/tree_util/IntermTraverse.h"
 #include "compiler/translator/tree_util/RunAtTheEndOfShader.h"
+#include "compiler/translator/wgsl/OutputUniformBlocks.h"
 #include "compiler/translator/wgsl/RewritePipelineVariables.h"
-#include "compiler/translator/wgsl/WriteTypeName.h"
+#include "compiler/translator/wgsl/Utils.h"
 
 namespace sh
 {
@@ -43,6 +45,12 @@ struct VarDecl
     const ImmutableString &symbolName;
     const TType &type;
 };
+
+bool IsDefaultUniform(const TType &type)
+{
+    return type.getQualifier() == EvqUniform && type.getInterfaceBlock() == nullptr &&
+           !IsOpaqueType(type.getBasicType());
+}
 
 // When emitting a list of statements, this determines whether a semicolon follows the statement.
 bool RequiresSemicolonTerminator(TIntermNode &node)
@@ -255,6 +263,11 @@ void OutputWGSLTraverser::visitSymbol(TIntermSymbol *symbolNode)
         else if (mRewritePipelineVarOutput->IsOutputVar(var.uniqueId()))
         {
             mSink << kBuiltinOutputStructName << "." << var.name();
+        }
+        // Accesses of basic uniforms need to be converted to struct accesses.
+        else if (IsDefaultUniform(type))
+        {
+            mSink << kDefaultUniformBlockVarName << "." << var.name();
         }
         else
         {
@@ -862,9 +875,6 @@ const char *GetOperatorString(TOperator op,
         case TOperator::EOpImulExtended:
         case TOperator::EOpEmitVertex:
         case TOperator::EOpEndPrimitive:
-        case TOperator::EOpFtransform:
-        case TOperator::EOpPackDouble2x32:
-        case TOperator::EOpUnpackDouble2x32:
         case TOperator::EOpArrayLength:
             UNIMPLEMENTED();
             return "TOperator_TODO";
@@ -1498,6 +1508,12 @@ void OutputWGSLTraverser::emitVariableDeclaration(const VarDecl &decl,
 {
     const TBasicType basicType = decl.type.getBasicType();
 
+    if (decl.type.getQualifier() == EvqUniform)
+    {
+        // Uniforms are declared in a pre-pass, and don't need to be outputted here.
+        return;
+    }
+
     if (basicType == TBasicType::EbtStruct && decl.type.isStructSpecifier() &&
         !evdConfig.disableStructSpecifier)
     {
@@ -1524,13 +1540,7 @@ void OutputWGSLTraverser::emitVariableDeclaration(const VarDecl &decl,
         // readability, and the GLSL compiler constant folds most (all?) the consts anyway.
         mSink << "var";
         // TODO(anglebug.com/42267100): <workgroup> or <storage>?
-        if (decl.type.getQualifier() == EvqUniform)
-        {
-            // TODO(anglebug.com/42267100): uniform requires complex alignment of structs and
-            // arrays, as well as @group() and @binding() annotations.
-            mSink << "<uniform>";
-        }
-        else if (evdConfig.isGlobalScope)
+        if (evdConfig.isGlobalScope)
         {
             mSink << "<private>";
         }
@@ -1794,6 +1804,11 @@ bool TranslatorWGSL::translate(TIntermBlock *root,
     TInfoSinkBase &sink = getInfoSink().obj;
     // Start writing the output structs that will be referred to by the `traverser`'s output.'
     if (!rewritePipelineVarOutput.OutputStructs(sink))
+    {
+        return false;
+    }
+
+    if (!OutputUniformBlocks(this, root))
     {
         return false;
     }

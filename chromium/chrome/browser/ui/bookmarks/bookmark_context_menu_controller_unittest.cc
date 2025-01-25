@@ -14,6 +14,8 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/bookmarks/bookmark_merged_surface_service.h"
+#include "chrome/browser/bookmarks/bookmark_merged_surface_service_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
@@ -26,7 +28,7 @@
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
-#include "components/saved_tab_groups/features.h"
+#include "components/saved_tab_groups/public/features.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -51,6 +53,9 @@ class BookmarkContextMenuControllerTest : public testing::Test {
     profile_builder.AddTestingFactory(
         BookmarkModelFactory::GetInstance(),
         BookmarkModelFactory::GetDefaultFactory());
+    profile_builder.AddTestingFactory(
+        BookmarkMergedSurfaceServiceFactory::GetInstance(),
+        BookmarkMergedSurfaceServiceFactory::GetDefaultFactory());
     profile_ = profile_builder.Build();
     model_ = BookmarkModelFactory::GetForBrowserContext(profile_.get());
     bookmarks::test::WaitForBookmarkModelToLoad(model_);

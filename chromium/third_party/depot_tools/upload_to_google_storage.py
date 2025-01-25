@@ -94,7 +94,16 @@ def _upload_worker(thread_num, upload_queue, base_url, gsutil, md5_lock, force,
                         'skipped' % (thread_num, filename))
                     continue
         stdout_queue.put('%d> Uploading %s...' % (thread_num, filename))
-        gsutil_args = ['-h', 'Cache-Control:public, max-age=31536000', 'cp']
+        gsutil_args = ['-h', 'Cache-Control:public, max-age=31536000']
+
+        # Mark executable files with the header "x-goog-meta-executable: 1"
+        # which the download script will check for to preserve the executable
+        # bit.
+        if not sys.platform.startswith('win'):
+            if os.stat(filename).st_mode & stat.S_IEXEC:
+                gsutil_args += ['-h', 'x-goog-meta-executable:1']
+
+        gsutil_args += ['cp']
         if gzip:
             gsutil_args.extend(['-z', gzip])
         gsutil_args.extend([filename, file_url])
@@ -104,18 +113,6 @@ def _upload_worker(thread_num, upload_queue, base_url, gsutil, md5_lock, force,
                            (filename, file_url, err)))
             continue
 
-        # Mark executable files with the header "x-goog-meta-executable: 1"
-        # which the download script will check for to preserve the executable
-        # bit.
-        if not sys.platform.startswith('win'):
-            if os.stat(filename).st_mode & stat.S_IEXEC:
-                code, _, err = gsutil.check_call_with_retries(
-                    'setmeta', '-h', 'x-goog-meta-executable:1', file_url)
-                if code != 0:
-                    ret_codes.put(
-                        (code,
-                         'Encountered error on setting metadata on %s\n%s' %
-                         (file_url, err)))
 
 
 def get_targets(args, parser, use_null_terminator):

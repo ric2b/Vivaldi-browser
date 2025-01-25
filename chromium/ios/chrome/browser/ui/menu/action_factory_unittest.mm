@@ -400,8 +400,7 @@ TEST_F(ActionFactoryTest, SelectTabsAction) {
 // Tests that the add to new group action has the right title and image when in
 // a submenu.
 TEST_F(ActionFactoryTest, AddTabsToNewGroupInSubmenuAction) {
-  feature_list_.InitWithFeatures(
-      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip}, {});
+  feature_list_.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
   ActionFactory* factory =
       [[ActionFactory alloc] initWithScenario:kTestMenuScenario];
 
@@ -422,8 +421,7 @@ TEST_F(ActionFactoryTest, AddTabsToNewGroupInSubmenuAction) {
 // Tests that the add to new group action has the right title and image when
 // *not* in a submenu.
 TEST_F(ActionFactoryTest, AddTabsToNewGroupOutOfMenuAction) {
-  feature_list_.InitWithFeatures(
-      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip}, {});
+  feature_list_.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
   ActionFactory* factory =
       [[ActionFactory alloc] initWithScenario:kTestMenuScenario];
 
@@ -444,8 +442,7 @@ TEST_F(ActionFactoryTest, AddTabsToNewGroupOutOfMenuAction) {
 // Tests the different sub elements of the menu when adding to a group with
 // different groups available.
 TEST_F(ActionFactoryTest, AddTabsToGroupSeveralGroups) {
-  feature_list_.InitWithFeatures(
-      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip}, {});
+  feature_list_.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
   ActionFactory* factory =
       [[ActionFactory alloc] initWithScenario:kTestMenuScenario];
 
@@ -497,8 +494,7 @@ TEST_F(ActionFactoryTest, AddTabsToGroupSeveralGroups) {
 // Tests the different sub elements of the menu when adding to a group with no
 // group available.
 TEST_F(ActionFactoryTest, AddTabsToGroupNoGroups) {
-  feature_list_.InitWithFeatures(
-      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip}, {});
+  feature_list_.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
   ActionFactory* factory =
       [[ActionFactory alloc] initWithScenario:kTestMenuScenario];
 
@@ -523,7 +519,7 @@ TEST_F(ActionFactoryTest, AddTabsToGroupNoGroups) {
 // Tests the different sub elements of the menu when moving a tab to a group.
 TEST_F(ActionFactoryTest, MoveTabFromGroup) {
   feature_list_.InitWithFeatures(
-      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+      {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
   ActionFactory* factory =
       [[ActionFactory alloc] initWithScenario:kTestMenuScenario];
 
@@ -575,7 +571,7 @@ TEST_F(ActionFactoryTest, MoveTabFromGroup) {
 // Tests that the ungroup tab group action has the right title and image.
 TEST_F(ActionFactoryTest, UngroupTabGroup) {
   feature_list_.InitWithFeatures(
-      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+      {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
   ActionFactory* factory =
       [[ActionFactory alloc] initWithScenario:kTestMenuScenario];
 
@@ -594,7 +590,7 @@ TEST_F(ActionFactoryTest, UngroupTabGroup) {
 // Tests that the delete tab group action has the right title and image.
 TEST_F(ActionFactoryTest, DeleteTabGroup) {
   feature_list_.InitWithFeatures(
-      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+      {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
   ActionFactory* factory =
       [[ActionFactory alloc] initWithScenario:kTestMenuScenario];
 
@@ -614,7 +610,7 @@ TEST_F(ActionFactoryTest, DeleteTabGroup) {
 // Tests that the close tab group action has the right title and image.
 TEST_F(ActionFactoryTest, CloseTabGroup) {
   feature_list_.InitWithFeatures(
-      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+      {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
   ActionFactory* factory =
       [[ActionFactory alloc] initWithScenario:kTestMenuScenario];
 
@@ -629,4 +625,42 @@ TEST_F(ActionFactoryTest, CloseTabGroup) {
   EXPECT_NSEQ(expectedTitle, action.title);
   EXPECT_EQ(expectedImage, action.image);
   EXPECT_EQ(UIMenuElementAttributesDestructive, action.attributes);
+}
+
+// Tests that the manage tab group action has the right title and image.
+TEST_F(ActionFactoryTest, ManageTabGroup) {
+  feature_list_.InitWithFeatures(
+      {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+  ActionFactory* factory =
+      [[ActionFactory alloc] initWithScenario:kTestMenuScenario];
+
+  UIImage* expectedImage =
+      DefaultSymbolWithPointSize(kPersonPlusSymbol, kSymbolActionPointSize);
+  NSString* expectedTitle =
+      l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_MANAGESHAREDGROUP);
+
+  UIAction* action = [factory actionToManageTabGroupWithBlock:^{
+  }];
+
+  EXPECT_NSEQ(expectedTitle, action.title);
+  EXPECT_EQ(expectedImage, action.image);
+}
+
+// Tests that the share tab group action has the right title and image.
+TEST_F(ActionFactoryTest, ShareTabGroup) {
+  feature_list_.InitWithFeatures(
+      {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+  ActionFactory* factory =
+      [[ActionFactory alloc] initWithScenario:kTestMenuScenario];
+
+  UIImage* expectedImage =
+      DefaultSymbolWithPointSize(kPersonPlusSymbol, kSymbolActionPointSize);
+  NSString* expectedTitle =
+      l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_SHARELOCALGROUP);
+
+  UIAction* action = [factory actionToShareTabGroupWithBlock:^{
+  }];
+
+  EXPECT_NSEQ(expectedTitle, action.title);
+  EXPECT_EQ(expectedImage, action.image);
 }

@@ -9,9 +9,9 @@
 #include <optional>
 #include <vector>
 
-#include "cast/streaming/public/frame_id.h"
 #include "cast/streaming/impl/rtcp_common.h"
 #include "cast/streaming/impl/rtp_defines.h"
+#include "cast/streaming/public/frame_id.h"
 #include "platform/base/span.h"
 
 namespace openscreen::cast {
@@ -54,8 +54,8 @@ class CompoundRtcpParser {
     virtual void OnReceiverIndicatesPictureLoss();
 
     // Called when the Receiver indicates that all of the packets for all frames
-    // up to and including |frame_id| have been successfully received (or
-    // otherwise do not need to be re-transmitted). The |playout_delay| is the
+    // up to and including `frame_id` have been successfully received (or
+    // otherwise do not need to be re-transmitted). The `playout_delay` is the
     // Receiver's current end-to-end target playout delay setting, which should
     // reflect any changes the Sender has made by using the "Cast Adaptive
     // Latency Extension" in RTP packets.
@@ -63,7 +63,7 @@ class CompoundRtcpParser {
                                       std::chrono::milliseconds playout_delay);
 
     // Called to indicate the Receiver has successfully received all of the
-    // packets for each of the given |acks|. The argument's elements are in
+    // packets for each of the given `acks`. The argument's elements are in
     // monotonically increasing order.
     virtual void OnReceiverHasFrames(std::vector<FrameId> acks);
 
@@ -77,18 +77,18 @@ class CompoundRtcpParser {
     virtual ~Client();
   };
 
-  // |session| and |client| must be non-null and must outlive the
+  // `session` and `client` must be non-null and must outlive the
   // CompoundRtcpParser instance.
   CompoundRtcpParser(RtcpSession& session, Client& client);
   ~CompoundRtcpParser();
 
   // Parses the packet, invoking the Client callback methods when appropriate.
-  // Returns true if the |packet| was well-formed, or false if it was corrupt.
+  // Returns true if the `packet` was well-formed, or false if it was corrupt.
   // Note that none of the Client callback methods will be invoked until a
   // packet is known to be well-formed.
   //
-  // |max_feedback_frame_id| is the maximum-valued FrameId that could possibly
-  // be ACKnowledged by the Receiver, if there is Cast Feedback in the |packet|.
+  // `max_feedback_frame_id` is the maximum-valued FrameId that could possibly
+  // be ACKnowledged by the Receiver, if there is Cast Feedback in the `packet`.
   // This is needed for expanding truncated frame IDs correctly.
   bool Parse(ByteView packet, FrameId max_feedback_frame_id);
 

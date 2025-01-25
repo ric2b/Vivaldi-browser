@@ -14,6 +14,7 @@
 #include "cast/common/public/certificate_types.h"
 #include "cast/common/public/parsed_certificate.h"
 #include "platform/base/error.h"
+#include "platform/base/span.h"
 
 namespace openscreen::cast {
 
@@ -29,22 +30,22 @@ class TrustStore {
       std::string_view file_path);
 
   static std::unique_ptr<TrustStore> CreateInstanceForTest(
-      const std::vector<uint8_t>& trust_anchor_der);
+      ByteView trust_anchor_der);
 
   TrustStore() = default;
   virtual ~TrustStore() = default;
 
-  // Checks whether a subset of the certificates in |der_certs| can form a valid
+  // Checks whether a subset of the certificates in `der_certs` can form a valid
   // certificate chain to one of the root certificates in this trust store,
-  // where the time at which all certificates need to be valid is |time|.
+  // where the time at which all certificates need to be valid is `time`.
   // Returns an error if no path is found, otherwise returns the certificate
   // chain that is found.
   //
   // While more error codes could be used by a specific implementation, the
   // likely error codes are:
-  // - kErrCertsMissing: |der_certs| is empty.
+  // - kErrCertsMissing: `der_certs` is empty.
   // - kErrCertsParse: there was an error parsing a certificate from
-  //   |der_certs|.
+  //   `der_certs`.
   // - kErrCertsDateInvalid: a certificate was not valid for the current time.
   // - kErrCertsRestrictions: a certificate restriction, such as key usage, was
   //   invalid.

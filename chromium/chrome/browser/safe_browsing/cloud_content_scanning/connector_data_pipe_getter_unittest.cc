@@ -9,12 +9,40 @@
 #include "base/containers/span.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/read_only_shared_memory_region.h"
+#include "base/rand_util.h"
 #include "base/test/bind.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "net/base/net_errors.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace safe_browsing {
+
+namespace {
+
+constexpr size_t kDataChunkSize = 524288;  // default download buffer size
+
+// Helper function to divide data in obfuscated chunks.
+void ObfuscateContentInChunks(const std::vector<uint8_t>& input,
+                              std::string& output) {
+  enterprise_obfuscation::DownloadObfuscator obfuscator;
+
+  size_t offset = 0;
+
+  while (offset < input.size()) {
+    size_t chunk_size = std::min(kDataChunkSize, input.size() - offset);
+    bool is_last_chunk = (offset + chunk_size == input.size());
+
+    auto result = obfuscator.ObfuscateChunk(
+        base::span(input).subspan(offset, chunk_size), is_last_chunk);
+
+    ASSERT_TRUE(result.has_value());
+
+    output.insert(output.end(), result->begin(), result->end());
+    offset += chunk_size;
+  }
+}
+}  // namespace
 
 class ConnectorDataPipeGetterTest : public testing::Test {
  public:
@@ -95,9 +123,9 @@ class ConnectorDataPipeGetterTest : public testing::Test {
 
 TEST_F(ConnectorDataPipeGetterTest, InvalidFile) {
   ASSERT_EQ(nullptr, ConnectorDataPipeGetter::CreateMultipartPipeGetter(
-                         "boundary", "metadata", base::File()));
-  ASSERT_EQ(nullptr,
-            ConnectorDataPipeGetter::CreateResumablePipeGetter(base::File()));
+                         "boundary", "metadata", base::File(), false));
+  ASSERT_EQ(nullptr, ConnectorDataPipeGetter::CreateResumablePipeGetter(
+                         base::File(), false));
 }
 
 TEST_F(ConnectorDataPipeGetterTest, InvalidPage) {
@@ -123,7 +151,8 @@ class ConnectorDataPipeGetterParametrizedTest
   // files. If there is no space left on the device, return nullptr so the test
   // can end early.
   std::unique_ptr<ConnectorDataPipeGetter> CreateDataPipeGetter(
-      const std::string& content) {
+      const std::string& content,
+      bool is_obfuscated = false) {
     if (is_file_data_pipe()) {
       std::optional<base::File> file = CreateFile(content);
       if (!file)
@@ -131,9 +160,9 @@ class ConnectorDataPipeGetterParametrizedTest
 
       return is_resumable_upload()
                  ? ConnectorDataPipeGetter::CreateResumablePipeGetter(
-                       std::move(*file))
+                       std::move(*file), is_obfuscated)
                  : ConnectorDataPipeGetter::CreateMultipartPipeGetter(
-                       "boundary", metadata_, std::move(*file));
+                       "boundary", metadata_, std::move(*file), is_obfuscated);
     } else {
       base::ReadOnlySharedMemoryRegion page = CreatePage(content);
       if (!page.IsValid())
@@ -336,4 +365,31 @@ TEST_P(ConnectorDataPipeGetterParametrizedTest, ResetsCorrectly) {
   }
 }
 
+TEST_P(ConnectorDataPipeGetterParametrizedTest, DeobfuscationTest) {
+  if (!is_file_data_pipe() || !is_resumable_upload()) {
+    // This test only applies to file-based resumable uploads.
+    return;
+  }
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      enterprise_obfuscation::kEnterpriseFileObfuscation);
+
+  std::vector<uint8_t> original_content =
+      base::RandBytesAsVector(2 * kDataChunkSize + 1024);
+  std::string obfuscated_content;
+  ObfuscateContentInChunks(original_content, obfuscated_content);
+
+  std::unique_ptr<ConnectorDataPipeGetter> data_pipe_getter =
+      CreateDataPipeGetter(obfuscated_content, true);
+  ASSERT_TRUE(data_pipe_getter);
+
+  std::string deobfuscated_string =
+      GetBodyFromPipe(data_pipe_getter.get(), original_content.size());
+
+  std::vector<uint8_t> deobfuscated_content(deobfuscated_string.begin(),
+                                            deobfuscated_string.end());
+
+  ASSERT_EQ(original_content, deobfuscated_content);
+}
 }  // namespace safe_browsing

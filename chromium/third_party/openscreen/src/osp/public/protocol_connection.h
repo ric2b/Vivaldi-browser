@@ -30,7 +30,12 @@ class ProtocolConnection {
  public:
   class Observer {
    public:
-    virtual ~Observer() = default;
+    Observer();
+    Observer(const Observer&) = delete;
+    Observer& operator=(const Observer&) = delete;
+    Observer(Observer&&) noexcept = delete;
+    Observer& operator=(Observer&&) noexcept = delete;
+    virtual ~Observer();
 
     // Called when `connection` is no longer available, either because the
     // underlying transport was terminated, the underying system resource was
@@ -72,7 +77,7 @@ class ProtocolConnection {
   virtual uint64_t GetInstanceID() const = 0;
   virtual uint64_t GetID() const = 0;
   virtual void Write(ByteView bytes) = 0;
-  virtual void CloseWriteEnd() = 0;
+  virtual void Close() = 0;
 
  protected:
   Observer* observer_ = nullptr;

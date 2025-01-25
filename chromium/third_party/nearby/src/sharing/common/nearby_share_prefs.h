@@ -36,16 +36,11 @@ ABSL_CONST_INIT extern const char kNearbySharingDeviceIdName[];
 ABSL_CONST_INIT extern const char kNearbySharingDeviceNameName[];
 ABSL_CONST_INIT extern const char
     kNearbySharingFastInitiationNotificationStateName[];
-ABSL_CONST_INIT extern const char kNearbySharingFullNameName[];
-ABSL_CONST_INIT extern const char kNearbySharingIconUrlName[];
-ABSL_CONST_INIT extern const char kNearbySharingIconTokenName[];
 ABSL_CONST_INIT extern const char kNearbySharingPrivateCertificateListName[];
 ABSL_CONST_INIT extern const char
     kNearbySharingPublicCertificateExpirationDictName[];
 ABSL_CONST_INIT extern const char
     kNearbySharingSchedulerContactDownloadAndUploadName[];
-ABSL_CONST_INIT extern const char
-    kNearbySharingSchedulerDownloadDeviceDataName[];
 ABSL_CONST_INIT extern const char
     kNearbySharingSchedulerDownloadPublicCertificatesName[];
 ABSL_CONST_INIT extern const char
@@ -63,7 +58,8 @@ ABSL_CONST_INIT const proto::DeviceVisibility kDefaultVisibility =
     proto::DeviceVisibility::DEVICE_VISIBILITY_HIDDEN;
 ABSL_CONST_INIT const proto::DeviceVisibility kDefaultFallbackVisibility =
     proto::DeviceVisibility::DEVICE_VISIBILITY_HIDDEN;
-ABSL_CONST_INIT const int kDefaultMaxVisibilityExpirationSeconds = 300;
+ABSL_CONST_INIT const int kDefaultMaxVisibilityExpirationSeconds =
+    600;  // 10 minutes
 
 void RegisterNearbySharingPrefs(
     nearby::sharing::api::PreferenceManager& preference_manager,

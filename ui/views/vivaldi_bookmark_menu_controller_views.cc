@@ -3,6 +3,7 @@
 #include "browser/menus/vivaldi_bookmark_context_menu.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "ui/base/mojom/menu_source_type.mojom-shared.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/textfield/textfield.h"
 
@@ -12,7 +13,7 @@ void BookmarkMenuController::RunMenuAt(const views::View* parent,
   menu_delegate_->GetBookmarkModel()->AddObserver(this);
   menu_runner_->RunMenuAt(menu_delegate_->parent(), nullptr, rect,
                           views::MenuAnchorPosition::kTopLeft,
-                          ui::MENU_SOURCE_NONE);
+                          ui::mojom::MenuSourceType::kNone);
 }
 
 views::MenuItemView* BookmarkMenuController::GetNextSiblingMenu(

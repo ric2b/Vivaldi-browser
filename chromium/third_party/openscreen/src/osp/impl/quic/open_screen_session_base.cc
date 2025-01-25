@@ -17,6 +17,9 @@
 
 namespace openscreen::osp {
 
+OpenScreenSessionBase::Visitor::Visitor() = default;
+OpenScreenSessionBase::Visitor::~Visitor() = default;
+
 OpenScreenSessionBase::OpenScreenSessionBase(
     std::unique_ptr<quic::QuicConnection> connection,
     Visitor& visitor,
@@ -26,7 +29,7 @@ OpenScreenSessionBase::OpenScreenSessionBase(
                   &visitor,
                   config,
                   supported_versions,
-                  /*num_expected_unidirectional_static_streams*/ 0),
+                  /*num_expected_unidirectional_static_streams=*/0),
       connection_(std::move(connection)),
       visitor_(visitor) {
   const uint32_t max_streams = (std::numeric_limits<uint32_t>::max() /
@@ -71,14 +74,6 @@ QuicStream* OpenScreenSessionBase::CreateOutgoingStream(
   QuicStreamImpl* stream_ptr = stream.get();
   ActivateStream(std::move(stream));
   return stream_ptr;
-}
-
-const quic::QuicCryptoStream* OpenScreenSessionBase::GetCryptoStream() const {
-  return crypto_stream_.get();
-}
-
-quic::QuicCryptoStream* OpenScreenSessionBase::GetMutableCryptoStream() {
-  return crypto_stream_.get();
 }
 
 quic::QuicStream* OpenScreenSessionBase::CreateIncomingStream(

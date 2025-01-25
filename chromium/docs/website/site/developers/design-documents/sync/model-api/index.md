@@ -201,7 +201,8 @@ the meantime.
 ### ApplyIncrementalSyncChanges
 
 This method is called whenever new changes have been downloaded from the server.
-These changes must be applied to the local model.
+These changes must be applied to the local model. See also
+[Sync Best Practices][SyncBestPractices] for more details.
 
 Here’s an example implementation of a type using `DataTypeStore`:
 
@@ -230,6 +231,10 @@ std::optional<ModelError> DeviceInfoSyncBridge::ApplyIncrementalSyncChanges(
 }
 ```
 
+Note that it is recommended to apply remote changes to the local model as is
+without custom conflict detection, and merging remote and local data should also
+be avoided.
+
 A conflict can occur when an entity has a pending local commit when an update
 for the same entity comes from another client. In this case, the bridge’s
 [`ResolveConflict`][ResolveConflict] method will have been called prior to the
@@ -239,6 +244,16 @@ unless the remote version is a tombstone, in which case the local version wins.
 
 [EntityChange]: https://cs.chromium.org/chromium/src/components/sync/model/entity_change.h
 [ResolveConflict]: https://cs.chromium.org/search/?q=ResolveConflict+file:/data_type_sync_bridge.h
+[SyncBestPractices]: /developers/design-documents/sync/sync-data-best-practices/
+
+### ApplyDisableSyncChanges
+
+This method is called when sync is being disabled and the sync metadata needs to
+cleared. The data type can choose to delete the data but **the metadata should
+always be deleted** when this method is called. This means that the passed
+`MetadataChangeList` must always be deleted from the storage (for example using
+`ApplyIncrementalSyncChang(metadata_change_list)` as in default implementation),
+if the store is not just fully erased.
 
 ### Local changes
 
@@ -262,6 +277,22 @@ void WriteLocalChange(std::string key, ModelData data) {
   store_->CommitWriteBatch(std::move(batch), base::BindOnce(...));
 }
 ```
+
+### Forward Compatibility
+
+Any new fields in a proto are unrecognized by older clients. Thus, any such
+changes face an inherent risk of leading to data loss for a multi-client Sync
+user. Refer to
+[Protection against data override by old Sync clients](../old-sync-clients-data-override-protection)
+for details on the problem and the solution.
+
+### Unique Positions
+
+Data types which require ordering may use unique positions to sync the order of
+entities across devices. See [Unique Positions][UniquePositions] for the details
+on how to use them in the bridge.
+
+[UniquePositions]: /developers/design-documents/sync/unique-positions
 
 ## Error handling
 

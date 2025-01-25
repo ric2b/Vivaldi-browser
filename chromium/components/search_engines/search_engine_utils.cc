@@ -2,18 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "components/search_engines/search_engine_utils.h"
+
 #include "components/google/core/common/google_util.h"
 #include "components/search_engines/prepopulated_engines.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
-
-#include "components/search_engines/search_engines_manager.h"
 
 namespace SearchEngineUtils {
 
@@ -32,7 +26,6 @@ bool SameDomain(const GURL& given_url, const GURL& prepopulated_url) {
 
 SearchEngineType GetEngineType(const GURL& url) {
   DCHECK(url.is_valid());
-  auto &engines = SearchEnginesManager::GetInstance()->GetAllEngines();
 
   // Check using TLD+1s, in order to more aggressively match search engine types
   // for data imported from other browsers.
@@ -42,21 +35,18 @@ SearchEngineType GetEngineType(const GURL& url) {
   // incoming URL's host is "[*.]google.<TLD>".
   if (google_util::IsGoogleDomainUrl(url, google_util::DISALLOW_SUBDOMAIN,
                                      google_util::ALLOW_NON_STANDARD_PORTS))
-    return SearchEnginesManager::GetInstance()->GetGoogleEngine()->type;
+    return TemplateURLPrepopulateData::google.type;
 
   // Now check the rest of the prepopulate data.
-  for (size_t i = 0; i < engines.size(); ++i) {
-    // First check the main search URL.
-    if (SameDomain(
-            url, GURL(engines[i]->search_url)))
-      return engines[i]->type;
+  for (const auto* engine : TemplateURLPrepopulateData::kAllEngines) {
+    if (SameDomain(url, GURL(engine->search_url))) {
+      return engine->type;
+    }
 
-    // Then check the alternate URLs.
-    for (size_t j = 0;
-         j < engines[i]->alternate_urls_size;
-         ++j) {
-      if (SameDomain(url, GURL(engines[i]->alternate_urls[j])))
-        return engines[i]->type;
+    for (const auto* alt_url : engine->alternate_urls) {
+      if (SameDomain(url, GURL(alt_url))) {
+        return engine->type;
+      }
     }
   }
 

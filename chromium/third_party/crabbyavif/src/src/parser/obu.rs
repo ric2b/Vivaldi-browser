@@ -15,7 +15,7 @@
 use crate::image::YuvRange;
 use crate::internal_utils::stream::*;
 use crate::internal_utils::*;
-use crate::parser::mp4box::CodecConfiguration;
+use crate::parser::mp4box::Av1CodecConfiguration;
 use crate::*;
 
 #[derive(Debug)]
@@ -37,7 +37,7 @@ pub struct Av1SequenceHeader {
     pub transfer_characteristics: TransferCharacteristics,
     pub matrix_coefficients: MatrixCoefficients,
     pub yuv_range: YuvRange,
-    config: CodecConfiguration,
+    config: Av1CodecConfiguration,
 }
 
 impl Av1SequenceHeader {

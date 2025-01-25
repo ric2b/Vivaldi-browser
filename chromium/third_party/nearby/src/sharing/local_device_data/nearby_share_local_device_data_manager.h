@@ -34,11 +34,7 @@ namespace sharing {
 // a std::string, which will not contain a null terminator.
 extern const size_t kNearbyShareDeviceNameMaxLength;
 
-// Manages local device data related to the UpdateDevice RPC such as the device
-// ID, name, and icon URL; provides the user's full name and icon URL returned
-// from the Nearby server; and handles uploading contacts and certificates to
-// the Nearby server. The uploading of contacts and certificates might seem out
-// of place, but this class is the entry point for  all UpdateDevice RPC calls.
+// Handles uploading contacts and certificates to the Nearby server.
 class NearbyShareLocalDeviceDataManager {
  public:
   class Observer {
@@ -71,15 +67,6 @@ class NearbyShareLocalDeviceDataManager {
   // This can be modified by SetDeviceName().
   virtual std::string GetDeviceName() const = 0;
 
-  // Returns the user's full name, for example, "Barack Obama". Returns
-  // absl::nullopt if the name has not yet been set from an UpdateDevice RPC
-  // response.
-  virtual std::optional<std::string> GetFullName() const = 0;
-
-  // Returns the URL of the user's image. Returns absl::nullopt if the URL has
-  // not yet been set from an UpdateDevice RPC response.
-  virtual std::optional<std::string> GetIconUrl() const = 0;
-
   // Validates the provided device name and returns an error if validation
   // fails. This is just a check and the device name is not persisted.
   virtual DeviceNameValidationResult ValidateDeviceName(
@@ -91,12 +78,6 @@ class NearbyShareLocalDeviceDataManager {
   // server; the UpdateDevice proto device_name field in an artifact. Observers
   // are notified via OnLocalDeviceDataChanged() if the device name changes.
   virtual DeviceNameValidationResult SetDeviceName(absl::string_view name) = 0;
-
-  // Makes an UpdateDevice RPC call to the Nearby Share server to retrieve all
-  // available device data, which includes the full name and icon URL for now.
-  // This action is also scheduled periodically. Observers are notified via
-  // OnLocalDeviceDataChanged() if any device data changes.
-  virtual void DownloadDeviceData() = 0;
 
   // Uses the UpdateDevice RPC to send the local device's contact list to the
   // Nearby Share server, including which contacts are allowed for
@@ -116,9 +97,6 @@ class NearbyShareLocalDeviceDataManager {
       UploadCompleteCallback callback) = 0;
 
  protected:
-  virtual void OnStart() = 0;
-  virtual void OnStop() = 0;
-
   void NotifyLocalDeviceDataChanged(bool did_device_name_change,
                                     bool did_full_name_change,
                                     bool did_icon_change);

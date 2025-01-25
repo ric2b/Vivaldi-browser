@@ -62,14 +62,15 @@ class CORE_EXPORT HTMLOptGroupElement final : public HTMLElement {
   InsertionNotificationRequest InsertedInto(ContainerNode&) override;
   void RemovedFrom(ContainerNode&) override;
 
+  String LabelAttributeText() const;
   void UpdateGroupLabel();
 
   Member<HTMLSlotElement> opt_group_slot_;
 
-  // stylable_select_rendering_ is set to true when the StylableSelect flag is
-  // enabled and this element is in the DOM subtree of a <select> which
+  // customizable_select_rendering_ is set to true when the CustomizableSelect
+  // flag is enabled and this element is in the DOM subtree of a <select> which
   // UsesMenuList.
-  bool stylable_select_rendering_;
+  bool customizable_select_rendering_;
 };
 
 }  // namespace blink

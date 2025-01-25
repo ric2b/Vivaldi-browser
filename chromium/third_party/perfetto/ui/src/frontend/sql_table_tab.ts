@@ -16,54 +16,45 @@ import m from 'mithril';
 import {copyToClipboard} from '../base/clipboard';
 import {Icons} from '../base/semantic_icons';
 import {exists} from '../base/utils';
-import {uuidv4} from '../base/uuid';
-import {addBottomTab} from '../common/add_ephemeral_tab';
 import {Button} from '../widgets/button';
 import {DetailsShell} from '../widgets/details_shell';
 import {Popup, PopupPosition} from '../widgets/popup';
-import {BottomTab, NewBottomTabArgs} from './bottom_tab';
-import {AddDebugTrackMenu} from './debug_tracks/add_debug_track_menu';
-import {getEngine} from './get_engine';
+import {AddDebugTrackMenu} from '../public/lib/tracks/add_debug_track_menu';
 import {Filter} from './widgets/sql/table/column';
 import {SqlTableState} from './widgets/sql/table/state';
 import {SqlTable} from './widgets/sql/table/table';
 import {SqlTableDescription} from './widgets/sql/table/table_description';
+import {Trace} from '../public/trace';
+import {MenuItem, PopupMenu2} from '../widgets/menu';
+import {addEphemeralTab} from '../common/add_ephemeral_tab';
+import {Tab} from '../public/tab';
 
-export interface SqlTableTabConfig {
+export interface AddSqlTableTabParams {
   table: SqlTableDescription;
   filters?: Filter[];
   imports?: string[];
 }
 
-export function addSqlTableTabImpl(config: SqlTableTabConfig): void {
-  const queryResultsTab = new SqlTableTab({
-    config,
-    engine: getEngine('QueryResult'),
-    uuid: uuidv4(),
-  });
-
-  addBottomTab(queryResultsTab, 'sqlTable');
+export function addSqlTableTab(
+  trace: Trace,
+  config: AddSqlTableTabParams,
+): void {
+  addSqlTableTabWithState(
+    new SqlTableState(trace, config.table, {
+      filters: config.filters,
+      imports: config.imports,
+    }),
+  );
 }
 
-export class SqlTableTab extends BottomTab<SqlTableTabConfig> {
-  static readonly kind = 'dev.perfetto.SqlTableTab';
+function addSqlTableTabWithState(state: SqlTableState) {
+  addEphemeralTab('sqlTable', new SqlTableTab(state));
+}
 
-  private state: SqlTableState;
+class SqlTableTab implements Tab {
+  constructor(private readonly state: SqlTableState) {}
 
-  constructor(args: NewBottomTabArgs<SqlTableTabConfig>) {
-    super(args);
-
-    this.state = new SqlTableState(this.engine, this.config.table, {
-      filters: this.config.filters,
-      imports: this.config.imports,
-    });
-  }
-
-  static create(args: NewBottomTabArgs<SqlTableTabConfig>): SqlTableTab {
-    return new SqlTableTab(args);
-  }
-
-  viewTab() {
+  render() {
     const range = this.state.getDisplayedRange();
     const rowCount = this.state.getTotalRowCount();
     const navigation = [
@@ -92,11 +83,11 @@ export class SqlTableTab extends BottomTab<SqlTableTabConfig> {
         position: PopupPosition.Top,
       },
       m(AddDebugTrackMenu, {
+        trace: this.state.trace,
         dataSource: {
           sqlSource: `SELECT ${debugTrackColumns.join(', ')} FROM (${selectStatement})`,
           columns: debugTrackColumns,
         },
-        engine: this.engine,
       }),
     );
 
@@ -108,11 +99,25 @@ export class SqlTableTab extends BottomTab<SqlTableTabConfig> {
         buttons: [
           ...navigation,
           addDebugTrack,
-          m(Button, {
-            label: 'Copy SQL query',
-            onclick: () =>
-              copyToClipboard(this.state.getNonPaginatedSQLQuery()),
-          }),
+          m(
+            PopupMenu2,
+            {
+              trigger: m(Button, {
+                icon: Icons.Menu,
+              }),
+            },
+            m(MenuItem, {
+              label: 'Duplicate',
+              icon: 'tab_duplicate',
+              onclick: () => addSqlTableTabWithState(this.state.clone()),
+            }),
+            m(MenuItem, {
+              label: 'Copy SQL query',
+              icon: Icons.Copy,
+              onclick: () =>
+                copyToClipboard(this.state.getNonPaginatedSQLQuery()),
+            }),
+          ),
         ],
       },
       m(SqlTable, {
@@ -128,7 +133,7 @@ export class SqlTableTab extends BottomTab<SqlTableTabConfig> {
   }
 
   private getDisplayName(): string {
-    return this.config.table.displayName ?? this.config.table.name;
+    return this.state.config.displayName ?? this.state.config.name;
   }
 
   isLoading(): boolean {

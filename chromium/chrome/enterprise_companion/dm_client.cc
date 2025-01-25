@@ -27,6 +27,8 @@
 #include "chrome/enterprise_companion/enterprise_companion_version.h"
 #include "chrome/enterprise_companion/event_logger.h"
 #include "chrome/enterprise_companion/global_constants.h"
+#include "chrome/enterprise_companion/proto/enterprise_companion_event.pb.h"
+#include "chrome/enterprise_companion/telemetry_logger/telemetry_logger.h"
 #include "components/policy/core/common/cloud/client_data_delegate.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -41,21 +43,6 @@ namespace enterprise_companion {
 
 namespace {
 
-// Given the void-returning callbacks A and B with the same signature, return a
-// callback that invokes A and B in sequence with the same arguments.
-template <typename... Args>
-base::OnceCallback<void(Args...)> TeeOnceCallback(
-    base::OnceCallback<void(Args...)> a,
-    base::OnceCallback<void(Args...)> b) {
-  return base::BindOnce(
-      [](base::OnceCallback<void(Args...)> a,
-         base::OnceCallback<void(Args...)> b, Args... args) {
-        std::move(a).Run(args...);
-        std::move(b).Run(args...);
-      },
-      std::move(a), std::move(b));
-}
-
 // Convert a CloudPolicyClient::ResponseMap to a DMPolicyMap by dropping the
 // "settings entity ID" from the key and serializing the fetch response.
 device_management_storage::DMPolicyMap ToDMPolicyMap(
@@ -64,9 +51,9 @@ device_management_storage::DMPolicyMap ToDMPolicyMap(
   base::ranges::transform(
       in, std::inserter(out, out.end()),
       [](const std::pair<std::pair<std::string, std::string>,
-                         enterprise_management::PolicyFetchResponse> pair) {
-        return std::make_pair(pair.first.first,
-                              pair.second.SerializeAsString());
+                         enterprise_management::PolicyFetchResponse> response) {
+        return std::make_pair(response.first.first,
+                              response.second.SerializeAsString());
       });
   return out;
 }
@@ -98,10 +85,6 @@ class DMConfiguration : public policy::DeviceManagementService::Configuration {
   }
   std::string GetEncryptedReportingServerUrl() const override {
     return GetGlobalConstants()->DeviceManagementEncryptedReportingURL().spec();
-  }
-  std::string GetReportingConnectorServerUrl(
-      content::BrowserContext* context) const override {
-    return std::string();
   }
 };
 
@@ -177,8 +160,9 @@ class DMClientImpl : public DMClient, policy::CloudPolicyClient::Observer {
   ~DMClientImpl() override { cloud_policy_client_->RemoveObserver(this); }
 
   // Overrides for DMClient.
-  void RegisterPolicyAgent(scoped_refptr<EventLogger> event_logger,
-                           StatusCallback callback) override {
+  void RegisterPolicyAgent(
+      scoped_refptr<EnterpriseCompanionEventLogger> event_logger,
+      StatusCallback callback) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     CHECK(!pending_callback_);
 
@@ -188,21 +172,23 @@ class DMClientImpl : public DMClient, policy::CloudPolicyClient::Observer {
     }
 
     dm_storage_->RemoveAllPolicies();
-    pending_callback_ =
-        TeeOnceCallback(std::move(callback), event_logger->OnEnrollmentStart());
+    pending_callback_ = base::BindPostTaskToCurrentDefault(base::BindOnce(
+        &EnterpriseCompanionEventLogger::LogRegisterPolicyAgentEvent,
+        event_logger, base::Time::Now(), std::move(callback)));
     cloud_policy_client_->RegisterPolicyAgentWithEnrollmentToken(
         dm_storage_->GetEnrollmentToken(), dm_storage_->GetDeviceID(),
         client_data_delegate_);
   }
 
-  void FetchPolicies(scoped_refptr<EventLogger> event_logger,
+  void FetchPolicies(scoped_refptr<EnterpriseCompanionEventLogger> event_logger,
                      StatusCallback callback) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     CHECK(!pending_callback_);
     // Wrap the callback with event logging early to ensure that precondition
     // errors are logged.
-    callback = TeeOnceCallback(std::move(callback),
-                               event_logger->OnPolicyFetchStart());
+    callback = base::BindPostTaskToCurrentDefault(
+        base::BindOnce(&EnterpriseCompanionEventLogger::LogPolicyFetchEvent,
+                       event_logger, base::Time::Now(), std::move(callback)));
 
     if (!cloud_policy_client_->is_registered()) {
       VLOG(1) << "Failed to fetch policies: client is not registered";
@@ -325,8 +311,7 @@ class DMClientImpl : public DMClient, policy::CloudPolicyClient::Observer {
       const policy::CloudPolicyClient::ResponseMap& responses) {
     FetchedPolicyValidator::Status last_result =
         FetchedPolicyValidator::VALIDATION_OK;
-    for (auto const& [key, response] : responses) {
-      const std::string& policy_type = key.first;
+    for (const auto& [key, response] : responses) {
       std::unique_ptr<FetchedPolicyValidator::ValidationResult>
           validation_result = policy_fetch_response_validator_.Run(
               dm_storage_->GetDmToken(), dm_storage_->GetDeviceID(),
@@ -334,7 +319,7 @@ class DMClientImpl : public DMClient, policy::CloudPolicyClient::Observer {
               cached_policy_info_->timestamp(), response);
       CHECK(validation_result) << "Policy validation result cannot be null";
       if (validation_result->status != FetchedPolicyValidator::VALIDATION_OK) {
-        LOG(ERROR) << "Policy validation failed for " << policy_type
+        LOG(ERROR) << "Policy validation failed for " << key.first
                    << " response: "
                    << FetchedPolicyValidator::StatusToString(
                           validation_result->status);

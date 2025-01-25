@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/check_is_test.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/types/expected_macros.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/webnn/buildflags.h"
@@ -34,11 +35,7 @@
 #endif
 
 #if BUILDFLAG(WEBNN_USE_TFLITE)
-#if BUILDFLAG(IS_CHROMEOS)
-#include "services/webnn/tflite/context_impl_cros.h"
-#else
 #include "services/webnn/tflite/context_impl_tflite.h"
-#endif
 #endif
 
 namespace webnn {
@@ -53,6 +50,33 @@ WebNNContextProviderImpl::BackendForTesting* g_backend_for_testing = nullptr;
 
 using webnn::mojom::CreateContextOptionsPtr;
 using webnn::mojom::WebNNContextProvider;
+
+// These values are persisted to logs. Entries should not be renumbered or
+// removed and numeric values should never be reused.
+// Please keep in sync with DeviceTypeUma in
+// //tools/metrics/histograms/metadata/webnn/enums.xml.
+enum class DeviceTypeUma {
+  kCpu = 0,
+  kGpu = 1,
+  kNpu = 2,
+  kMaxValue = kNpu,
+};
+
+void RecordDeviceType(const mojom::CreateContextOptions::Device device) {
+  DeviceTypeUma uma_value;
+  switch (device) {
+    case mojom::CreateContextOptions::Device::kCpu:
+      uma_value = DeviceTypeUma::kCpu;
+      break;
+    case mojom::CreateContextOptions::Device::kGpu:
+      uma_value = DeviceTypeUma::kGpu;
+      break;
+    case mojom::CreateContextOptions::Device::kNpu:
+      uma_value = DeviceTypeUma::kNpu;
+      break;
+  }
+  base::UmaHistogramEnumeration("WebNN.DeviceType", uma_value);
+}
 
 #if BUILDFLAG(IS_WIN)
 base::expected<scoped_refptr<dml::Adapter>, mojom::ErrorPtr> GetDmlGpuAdapter(
@@ -92,9 +116,7 @@ base::expected<scoped_refptr<dml::Adapter>, mojom::ErrorPtr> GetDmlGpuAdapter(
   CHECK_EQ(dxgi_device->GetAdapter(&dxgi_adapter), S_OK);
   return dml::Adapter::GetGpuInstance(std::move(dxgi_adapter));
 }
-#endif
 
-#if BUILDFLAG(IS_WIN)
 bool ShouldCreateDmlContext(const mojom::CreateContextOptions& options) {
   switch (options.device) {
     case mojom::CreateContextOptions::Device::kCpu:
@@ -108,38 +130,27 @@ bool ShouldCreateDmlContext(const mojom::CreateContextOptions& options) {
 
 }  // namespace
 
-#if BUILDFLAG(IS_CHROMEOS)
-WebNNContextProviderImpl::WebNNContextProviderImpl() = default;
-#else
 WebNNContextProviderImpl::WebNNContextProviderImpl(
     scoped_refptr<gpu::SharedContextState> shared_context_state,
     gpu::GpuFeatureInfo gpu_feature_info,
-    gpu::GPUInfo gpu_info)
+    gpu::GPUInfo gpu_info,
+    LoseAllContextsCallback lose_all_contexts_callback)
     : shared_context_state_(std::move(shared_context_state)),
       gpu_feature_info_(std::move(gpu_feature_info)),
-      gpu_info_(std::move(gpu_info)) {}
-#endif  // BUILDFLAG(IS_CHROMEOS)
+      gpu_info_(std::move(gpu_info)),
+      lose_all_contexts_callback_(std::move(lose_all_contexts_callback)) {}
 
 WebNNContextProviderImpl::~WebNNContextProviderImpl() = default;
 
-#if BUILDFLAG(IS_CHROMEOS)
-// static
-void WebNNContextProviderImpl::Create(
-    mojo::PendingReceiver<WebNNContextProvider> receiver
-) {
-  mojo::MakeSelfOwnedReceiver<WebNNContextProvider>(
-      base::WrapUnique(new WebNNContextProviderImpl()), std::move(receiver));
-}
-
-#else
 std::unique_ptr<WebNNContextProviderImpl> WebNNContextProviderImpl::Create(
     scoped_refptr<gpu::SharedContextState> shared_context_state,
     gpu::GpuFeatureInfo gpu_feature_info,
-    gpu::GPUInfo gpu_info) {
+    gpu::GPUInfo gpu_info,
+    LoseAllContextsCallback lose_all_contexts_callback) {
   CHECK_NE(shared_context_state, nullptr);
   return base::WrapUnique(new WebNNContextProviderImpl(
       std::move(shared_context_state), std::move(gpu_feature_info),
-      std::move(gpu_info)));
+      std::move(gpu_info), std::move(lose_all_contexts_callback)));
 }
 
 void WebNNContextProviderImpl::BindWebNNContextProvider(
@@ -147,17 +158,12 @@ void WebNNContextProviderImpl::BindWebNNContextProvider(
   provider_receivers_.Add(this, std::move(receiver));
 }
 
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
 // static
 void WebNNContextProviderImpl::CreateForTesting(
     mojo::PendingReceiver<mojom::WebNNContextProvider> receiver,
     WebNNStatus status) {
   CHECK_IS_TEST();
 
-#if BUILDFLAG(IS_CHROMEOS)
-  WebNNContextProviderImpl::Create(std::move(receiver));
-#else
   gpu::GpuFeatureInfo gpu_feature_info;
   gpu::GPUInfo gpu_info;
 
@@ -177,12 +183,12 @@ void WebNNContextProviderImpl::CreateForTesting(
         DISABLE_WEBNN_FOR_NPU);
   }
 
+  LoseAllContextsCallback lose_all_contexts_callback = base::BindOnce([]() {});
   mojo::MakeSelfOwnedReceiver<WebNNContextProvider>(
       base::WrapUnique(new WebNNContextProviderImpl(
           /*shared_context_state=*/nullptr, std::move(gpu_feature_info),
-          std::move(gpu_info))),
+          std::move(gpu_info), std::move(lose_all_contexts_callback))),
       std::move(receiver));
-#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 void WebNNContextProviderImpl::OnConnectionError(WebNNContextImpl* impl) {
@@ -190,6 +196,18 @@ void WebNNContextProviderImpl::OnConnectionError(WebNNContextImpl* impl) {
   CHECK(it != impls_.end());
   impls_.erase(it);
 }
+
+#if BUILDFLAG(IS_WIN)
+void WebNNContextProviderImpl::DestroyContextsAndKillGpuProcess(
+    std::string_view reason) {
+  // Send the contexts lost reason to the renderer process.
+  for (const auto& impl : impls_) {
+    impl->ResetReceiverWithReason(reason);
+  }
+
+  std::move(lose_all_contexts_callback_).Run();
+}
+#endif  // BUILDFLAG(IS_WIN)
 
 // static
 void WebNNContextProviderImpl::SetBackendForTesting(
@@ -209,6 +227,8 @@ void WebNNContextProviderImpl::CreateWebNNContext(
   WebNNContextImpl* context_impl = nullptr;
   mojo::PendingRemote<mojom::WebNNContext> remote;
   auto receiver = remote.InitWithNewPipeAndPassReceiver();
+
+  RecordDeviceType(options->device);
 
 #if BUILDFLAG(IS_WIN)
   if (ShouldCreateDmlContext(*options)) {
@@ -275,14 +295,8 @@ void WebNNContextProviderImpl::CreateWebNNContext(
 
 #if BUILDFLAG(WEBNN_USE_TFLITE)
   if (!context_impl) {
-#if BUILDFLAG(IS_CHROMEOS)
-    // TODO: crbug.com/41486052 - Create the TFLite context using `options`.
-    context_impl = new tflite::ContextImplCrOS(std::move(receiver), this,
-                                               std::move(options));
-#else
     context_impl = new tflite::ContextImplTflite(std::move(receiver), this,
                                                  std::move(options));
-#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 #endif  // BUILDFLAG(WEBNN_USE_TFLITE)
 

@@ -12,48 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {SimpleSliceTrackConfig} from '../../frontend/simple_slice_track';
-import {addDebugSliceTrack} from '../../public/debug_tracks';
 import {Trace} from '../../public/trace';
-
-/**
- * Adds debug tracks from SimpleSliceTrackConfig
- * Static tracks cannot be added on command
- * TODO: b/349502258 - To be removed later
- *
- * @param {Trace} ctx Context for trace methods and properties
- * @param {SimpleSliceTrackConfig} config Track config to add
- * @param {string} trackName Track name to display
- */
-export function addDebugTrackOnCommand(
-  ctx: Trace,
-  config: SimpleSliceTrackConfig,
-  trackName: string,
-) {
-  addDebugSliceTrack(
-    ctx,
-    config.data,
-    trackName,
-    config.columns,
-    config.argColumns,
-  );
-}
-
-/**
- * Registers and pins tracks on traceload or command
- *
- * @param {Trace} ctx Context for trace methods and properties
- * @param {SimpleSliceTrackConfig} config Track config to add
- * @param {string} trackName Track name to display
- * type 'static' expects caller to pass uri string
- */
-export function addAndPinSliceTrack(
-  ctx: Trace,
-  config: SimpleSliceTrackConfig,
-  trackName: string,
-) {
-  addDebugTrackOnCommand(ctx, config, trackName);
-}
 
 /**
  * Sets focus on a specific slice within the trace data.
@@ -61,25 +20,8 @@ export function addAndPinSliceTrack(
  * Takes and adds desired slice to current selection
  * Retrieves the track key and scrolls to the desired slice
  */
-export function focusOnSlice(
-  ctx: Trace,
-  sqlSliceId: number,
-  sqlTrackId: number,
-) {
-  // TODO(primiano): there should be probably a public API to select slices
-  // given their SQL details. We need to rationalize selection first.
-  const trackUri = ctx.tracks.findTrack((trackDescriptor) => {
-    return trackDescriptor?.tags?.trackIds?.includes(sqlTrackId);
-  })?.uri;
-  ctx.selection.setLegacy(
-    {
-      kind: 'SLICE',
-      id: sqlSliceId,
-      trackUri,
-      table: 'slice',
-    },
-    {
-      pendingScrollId: sqlSliceId,
-    },
-  );
+export function focusOnSlice(ctx: Trace, sqlSliceId: number) {
+  ctx.selection.selectSqlEvent('slice', sqlSliceId, {
+    scrollToSelection: true,
+  });
 }

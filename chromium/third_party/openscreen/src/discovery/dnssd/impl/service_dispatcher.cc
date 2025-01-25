@@ -51,13 +51,11 @@ Error ForAllPublishers(
 }  // namespace
 
 // static
-std::unique_ptr<DnsSdService, TaskRunnerDeleter> CreateDnsSdService(
-    TaskRunner& task_runner,
-    ReportingClient& reporting_client,
-    const Config& config) {
-  return std::unique_ptr<DnsSdService, TaskRunnerDeleter>(
-      new ServiceDispatcher(task_runner, reporting_client, config),
-      TaskRunnerDeleter(task_runner));
+DnsSdServicePtr CreateDnsSdService(TaskRunner& task_runner,
+                                   ReportingClient& reporting_client,
+                                   const Config& config) {
+  return TaskRunnerDeleter::MakeUnique<ServiceDispatcher>(
+      task_runner, task_runner, reporting_client, config);
 }
 
 ServiceDispatcher::ServiceDispatcher(TaskRunner& task_runner,

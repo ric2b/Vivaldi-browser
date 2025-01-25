@@ -312,11 +312,6 @@ export class UserMetrics {
         EnumeratedHistogram.LighthouseCategoryUsed, type, LighthouseCategoryUsed.MAX_VALUE);
   }
 
-  colorPickerOpenedFrom(type: ColorPickerOpenedFrom): void {
-    InspectorFrontendHostInstance.recordEnumeratedHistogram(
-        EnumeratedHistogram.ColorPickerOpenedFrom, type, ColorPickerOpenedFrom.MAX_VALUE);
-  }
-
   cssPropertyDocumentation(type: CSSPropertyDocumentation): void {
     InspectorFrontendHostInstance.recordEnumeratedHistogram(
         EnumeratedHistogram.CSSPropertyDocumentation, type, CSSPropertyDocumentation.MAX_VALUE);
@@ -377,20 +372,13 @@ export class UserMetrics {
         EnumeratedHistogram.ResourceTypeFilterItemSelected, resourceType, ResourceType.MAX_VALUE);
   }
 
-  networkPanelMoreFiltersNumberOfSelectedChanged(itemCount: number): void {
-    const boundItemCount = Math.max(Math.min(itemCount, NetworkPanelMoreFilters.MAX_VALUE), 0);
-    InspectorFrontendHostInstance.recordEnumeratedHistogram(
-        EnumeratedHistogram.NetworkPanelMoreFiltersNumberOfSelectedChanged, boundItemCount,
-        NetworkPanelMoreFilters.MAX_VALUE);
+  freestylerQueryLength(numberOfCharacters: number): void {
+    InspectorFrontendHostInstance.recordCountHistogram(
+        'DevTools.Freestyler.QueryLength', numberOfCharacters, 0, 100_000, 100);
   }
 
-  networkPanelMoreFiltersItemSelected(filterName: string): void {
-    const filter = NetworkPanelMoreFilters[filterName as keyof typeof NetworkPanelMoreFilters];
-    if (filter === undefined) {
-      return;
-    }
-    InspectorFrontendHostInstance.recordEnumeratedHistogram(
-        EnumeratedHistogram.NetworkPanelMoreFiltersItemSelected, filter, NetworkPanelMoreFilters.MAX_VALUE);
+  freestylerEvalResponseSize(bytes: number): void {
+    InspectorFrontendHostInstance.recordCountHistogram('DevTools.Freestyler.EvalResponseSize', bytes, 0, 100_000, 100);
   }
 }
 
@@ -576,7 +564,20 @@ export enum Action {
   InsightsReminderTeaserSettingsLinkClicked = 166,
   InsightsReminderTeaserAbortedInSettings = 167,
   GeneratingInsightWithoutDisclaimer = 168,
-  MAX_VALUE = 169,
+  FreestylerOpenedFromElementsPanelFloatingButton = 169,
+  DrJonesOpenedFromNetworkPanel = 170,
+  DrJonesOpenedFromSourcesPanel = 171,
+  DrJonesOpenedFromSourcesPanelFloatingButton = 172,
+  DrJonesOpenedFromPerformancePanel = 173,
+  DrJonesOpenedFromNetworkPanelFloatingButton = 174,
+  AiAssistancePanelOpened = 175,
+  AiAssistanceQuerySubmitted = 176,
+  AiAssistanceAnswerReceived = 177,
+  AiAssistanceDynamicSuggestionClicked = 178,
+  AiAssistanceSideEffectConfirmed = 179,
+  AiAssistanceSideEffectRejected = 180,
+  AiAssistanceError = 181,
+  MAX_VALUE = 182,
   /* eslint-enable @typescript-eslint/naming-convention */
 }
 
@@ -993,7 +994,6 @@ export const enum IssueOpener {
  */
 export enum DevtoolsExperiments {
   /* eslint-disable @typescript-eslint/naming-convention */
-  'apply-custom-stylesheet' = 0,
   'capture-node-creation-stacks' = 1,
   'live-heap-profile' = 11,
   'protocol-monitor' = 13,
@@ -1023,19 +1023,15 @@ export enum DevtoolsExperiments {
   'perf-panel-annotations' = 94,
   'timeline-rpp-sidebar' = 95,
   'timeline-observations' = 96,
-  'gen-ai-settings-panel' = 97,
   'timeline-server-timings' = 98,
-  'timeline-layout-shift-details' = 99,
+  'floating-entry-points-for-ai-assistance' = 101,
+  'timeline-experimental-insights' = 102,
+  'timeline-dim-unrelated-events' = 103,
+  'timeline-alternative-navigation' = 104,
   /* eslint-enable @typescript-eslint/naming-convention */
 
   // Increment this when new experiments are added.
-  MAX_VALUE = 100,
-}
-
-export const enum ColorPickerOpenedFrom {
-  SOURCES_PANEL = 0,
-  STYLES_TAB = 1,
-  MAX_VALUE = 2,
+  MAX_VALUE = 105,
 }
 
 export const enum CSSPropertyDocumentation {
@@ -1207,17 +1203,6 @@ export enum ResourceType {
   Other = 11,
   /* eslint-enable @typescript-eslint/naming-convention */
   MAX_VALUE = 12,
-}
-
-export enum NetworkPanelMoreFilters {
-  /* eslint-disable @typescript-eslint/naming-convention */
-  'Hide data URLs' = 0,
-  'Hide extension URLs' = 1,
-  'Blocked response cookies' = 2,
-  'Blocked requests' = 3,
-  '3rd-party requests' = 4,
-  /* eslint-enable @typescript-eslint/naming-convention */
-  MAX_VALUE = 5,
 }
 
 export enum Language {

@@ -103,7 +103,7 @@ void UpdateUsage(FileSystemOperationContext* context,
 void TouchDirectory(SandboxDirectoryDatabase* db, FileId dir_id) {
   DCHECK(db);
   if (!db->UpdateModificationTime(dir_id, base::Time::Now()))
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
 }
 
 enum IsolatedOriginStatus {
@@ -203,6 +203,8 @@ class ObfuscatedFileEnumerator final
 
   int64_t Size() override { return current_platform_file_info_.size; }
 
+  base::FilePath GetName() override { return base::FilePath(); }
+
   base::Time LastModifiedTime() override {
     return current_platform_file_info_.last_modified;
   }
@@ -290,8 +292,7 @@ class ObfuscatedStorageKeyEnumerator
     if (current_.path.empty())
       return false;
     if (type_string.empty()) {
-      NOTREACHED_IN_MIGRATION();
-      return false;
+      NOTREACHED();
     }
     base::FilePath path =
         base_file_path_.Append(current_.path).AppendASCII(type_string);
@@ -983,10 +984,12 @@ bool ObfuscatedFileUtil::DeleteDirectoryForBucketAndType(
 
   if (type) {
     // Delete the filesystem type directory.
-    ASSIGN_OR_RETURN(
-        const base::FilePath path_with_type,
-        GetDirectoryForBucketAndType(bucket_locator, type.value(), false),
-        [](auto) { return false; });
+    ASSIGN_OR_RETURN(const base::FilePath path_with_type,
+                     GetDirectoryForBucketAndType(bucket_locator, type.value(),
+                                                  /*create=*/false),
+                     [](base::File::Error error) {
+                       return error == base::File::FILE_ERROR_NOT_FOUND;
+                     });
     if (!path_with_type.empty() && !delegate_->DeleteFileOrDirectory(
                                        path_with_type, true /* recursive */)) {
       return false;

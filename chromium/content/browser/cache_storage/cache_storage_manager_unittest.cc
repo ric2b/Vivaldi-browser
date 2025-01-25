@@ -192,7 +192,7 @@ class MockCacheStorageQuotaManagerProxy
   void RegisterClient(
       mojo::PendingRemote<storage::mojom::QuotaClient> client,
       storage::QuotaClientType client_type,
-      const std::vector<blink::mojom::StorageType>& storage_types) override {
+      const base::flat_set<blink::mojom::StorageType>& storage_types) override {
     registered_clients_.emplace_back(std::move(client));
   }
 
@@ -651,7 +651,7 @@ class CacheStorageManagerTest : public testing::Test {
     auto& str = request->url.spec();
     blob_storage_context_->context()->RegisterFromMemory(
         blob->blob.InitWithNewPipeAndPassReceiver(), blob_uuid,
-        std::vector<uint8_t>(str.begin(), str.end()));
+        base::as_byte_span(str));
 
     base::RunLoop loop;
     CachePutWithStatusCodeAndBlobInternal(cache, std::move(request),

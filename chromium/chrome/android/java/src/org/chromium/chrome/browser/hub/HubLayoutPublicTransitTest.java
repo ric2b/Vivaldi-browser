@@ -21,6 +21,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.transit.Station;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -35,11 +36,13 @@ import org.chromium.chrome.test.transit.ntp.IncognitoNewTabPageStation;
 import org.chromium.chrome.test.transit.ntp.RegularNewTabPageStation;
 import org.chromium.chrome.test.transit.page.WebPageStation;
 import org.chromium.chrome.test.util.ChromeApplicationTestUtils;
+import org.chromium.components.omnibox.OmniboxFeatureList;
 
 /** Public transit instrumentation/integration test of Hub. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @Batch(Batch.PER_CLASS)
+@DisableFeatures(OmniboxFeatureList.ANDROID_HUB_SEARCH)
 public class HubLayoutPublicTransitTest {
     @ClassRule
     public static ChromeTabbedActivityTestRule sActivityTestRule =
@@ -88,8 +91,7 @@ public class HubLayoutPublicTransitTest {
     @LargeTest
     public void testChangeTabSwitcherPanes() {
         WebPageStation firstPage = mInitialStateRule.startOnBlankPage();
-        IncognitoNewTabPageStation incognitoNewTabPage =
-                firstPage.openGenericAppMenu().openNewIncognitoTab();
+        IncognitoNewTabPageStation incognitoNewTabPage = firstPage.openNewIncognitoTabFast();
 
         IncognitoTabSwitcherStation incognitoTabSwitcher =
                 incognitoNewTabPage.openIncognitoTabSwitcher();
@@ -114,7 +116,7 @@ public class HubLayoutPublicTransitTest {
         ReturnToChromeUtil.HOME_SURFACE_RETURN_TIME_SECONDS.setForTesting(0);
 
         WebPageStation blankPage = mInitialStateRule.startOnBlankPage();
-        RegularNewTabPageStation newTabPage = blankPage.openGenericAppMenu().openNewTab();
+        RegularNewTabPageStation newTabPage = blankPage.openNewTabFast();
         RegularTabSwitcherStation tabSwitcher = newTabPage.openRegularTabSwitcher();
         blankPage = tabSwitcher.selectTabAtIndex(0, WebPageStation.newBuilder());
         tabSwitcher = blankPage.openRegularTabSwitcher();

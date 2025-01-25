@@ -7,10 +7,13 @@
 
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
+#include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
 #include "cc/mojom/render_frame_metadata.mojom-shared.h"
 #include "content/browser/android/render_widget_host_connector.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 
 namespace blink {
@@ -27,7 +30,10 @@ namespace content {
 class WebContentsImpl;
 
 // Native class for GestureListenerManagerImpl.
-class CONTENT_EXPORT GestureListenerManager : public RenderWidgetHostConnector {
+class CONTENT_EXPORT GestureListenerManager
+    : public RenderWidgetHostConnector,
+      public RenderWidgetHost::InputEventObserver,
+      public WebContentsObserver {
  public:
   GestureListenerManager(JNIEnv* env,
                          const base::android::JavaParamRef<jobject>& obj,
@@ -73,10 +79,23 @@ class CONTENT_EXPORT GestureListenerManager : public RenderWidgetHostConnector {
   void UpdateOnTouchDown();
   void OnRootScrollOffsetChanged(const gfx::PointF& root_scroll_offset);
 
-  // RendetWidgetHostConnector implementation.
+  // RenderWidgetHostConnector implementation.
   void UpdateRenderProcessConnection(
       RenderWidgetHostViewAndroid* old_rwhva,
       RenderWidgetHostViewAndroid* new_rhwva) override;
+
+  // Start WebContentsObserver overrides
+  void RenderFrameDeleted(RenderFrameHost* render_frame_host) override;
+  void RenderFrameHostChanged(RenderFrameHost* old_host,
+                              RenderFrameHost* new_host) override;
+  // End WebContentsObserver overrides
+
+  // Start RenderWidgetHost::InputEventObserver overrides
+  void OnInputEvent(const blink::WebInputEvent&) override;
+  void OnInputEventAck(blink::mojom::InputEventResultSource source,
+                       blink::mojom::InputEventResultState state,
+                       const blink::WebInputEvent&) override;
+  // End RenderWidgetHost::InputEventObserver overrides
 
   void OnPrimaryPageChanged();
   void OnRenderProcessGone();
@@ -87,10 +106,13 @@ class CONTENT_EXPORT GestureListenerManager : public RenderWidgetHostConnector {
   class ResetScrollObserver;
 
   void ResetPopupsAndInput(bool render_process_gone);
+  void UnobserveRenderFrames();
 
   std::unique_ptr<ResetScrollObserver> reset_scroll_observer_;
   raw_ptr<WebContentsImpl> web_contents_;
   raw_ptr<RenderWidgetHostViewAndroid> rwhva_ = nullptr;
+  int active_pointers_ = 0;
+  bool is_in_a_fling_ = false;
 
   // A weak reference to the Java GestureListenerManager object.
   JavaObjectWeakGlobalRef java_ref_;
@@ -98,6 +120,8 @@ class CONTENT_EXPORT GestureListenerManager : public RenderWidgetHostConnector {
   // Highest update frequency requested by any of the listeners.
   std::optional<cc::mojom::RootScrollOffsetUpdateFrequency>
       root_scroll_offset_update_frequency_;
+
+  base::flat_set<GlobalRenderFrameHostId> observed_render_frames_;
 };
 
 }  // namespace content

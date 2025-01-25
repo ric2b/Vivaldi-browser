@@ -12,12 +12,18 @@
 #include "chrome/browser/download/download_item_warning_data.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager_factory.h"
+#include "components/download/public/common/download_danger_type.h"
+#include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/common/file_type_policies.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/download_item_utils.h"
 #include "net/cert/x509_util.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
+#endif
 
 namespace safe_browsing {
 
@@ -124,6 +130,30 @@ void AddEventUrlToReferrerChain(const download::DownloadItem& item,
     event_url_entry->add_server_redirect_chain()->set_url(url.spec());
   }
 }
+
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+bool IsDownloadReportGatedByExtendedReporting(
+    ClientSafeBrowsingReportRequest::ReportType report_type) {
+  switch (report_type) {
+    case safe_browsing::ClientSafeBrowsingReportRequest::
+        DANGEROUS_DOWNLOAD_RECOVERY:
+    case safe_browsing::ClientSafeBrowsingReportRequest::
+        DANGEROUS_DOWNLOAD_WARNING:
+    case safe_browsing::ClientSafeBrowsingReportRequest::
+        DANGEROUS_DOWNLOAD_BY_API:
+      return false;
+    case safe_browsing::ClientSafeBrowsingReportRequest::
+        DANGEROUS_DOWNLOAD_OPENED:
+    case safe_browsing::ClientSafeBrowsingReportRequest::
+        DANGEROUS_DOWNLOAD_AUTO_DELETED:
+    case safe_browsing::ClientSafeBrowsingReportRequest::
+        DANGEROUS_DOWNLOAD_PROFILE_CLOSED:
+      return true;
+    default:
+      NOTREACHED();
+  }
+}
+#endif
 
 }  // namespace
 
@@ -381,5 +411,58 @@ std::unique_ptr<ReferrerChainData> IdentifyReferrerChain(
                                              referrer_chain_length,
                                              recent_navigations_to_collect);
 }
+
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+bool ShouldSendDangerousDownloadReport(
+    download::DownloadItem* item,
+    ClientSafeBrowsingReportRequest::ReportType report_type) {
+  content::BrowserContext* browser_context =
+      content::DownloadItemUtils::GetBrowserContext(item);
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  if (!profile) {
+    return false;
+  }
+  if (!IsSafeBrowsingEnabled(*profile->GetPrefs())) {
+    return false;
+  }
+  if (IsDownloadReportGatedByExtendedReporting(report_type) &&
+      !IsExtendedReportingEnabled(*profile->GetPrefs())) {
+    return false;
+  }
+  if (browser_context->IsOffTheRecord()) {
+    return false;
+  }
+  if (item->GetURL().is_empty() || !item->GetURL().is_valid()) {
+    return false;
+  }
+
+  download::DownloadDangerType danger_type = item->GetDangerType();
+  std::string token = DownloadProtectionService::GetDownloadPingToken(item);
+  bool has_token = !token.empty();
+
+  ClientDownloadResponse::Verdict download_verdict =
+      safe_browsing::DownloadProtectionService::GetDownloadProtectionVerdict(
+          item);
+  bool has_unsafe_verdict = download_verdict != ClientDownloadResponse::SAFE;
+
+  if (item->IsDangerous() ||
+      danger_type == download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED) {
+    // Report downloads that are known to be dangerous or was dangerous but
+    // was validated by the user.
+    // DANGEROUS_URL doesn't have token or unsafe verdict since this is flagged
+    // by blocklist check.
+    return (has_token && has_unsafe_verdict) ||
+           danger_type == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL;
+  } else if (danger_type ==
+                 download::DOWNLOAD_DANGER_TYPE_ASYNC_LOCAL_PASSWORD_SCANNING ||
+             danger_type == download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING) {
+    // Async scanning may be triggered when the verdict is safe. Still send the
+    // report in this case.
+    return has_token;
+  } else {
+    return false;
+  }
+}
+#endif
 
 }  // namespace safe_browsing

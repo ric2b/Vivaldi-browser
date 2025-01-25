@@ -7,7 +7,6 @@
 namespace openscreen::osp {
 
 ProtocolConnectionEndpoint::ProtocolConnectionEndpoint() = default;
-
 ProtocolConnectionEndpoint::~ProtocolConnectionEndpoint() = default;
 
 std::ostream& operator<<(std::ostream& os,

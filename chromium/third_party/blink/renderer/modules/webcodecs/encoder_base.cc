@@ -137,12 +137,10 @@ void EncoderBase<Traits>::encode(InputType* input,
   DCHECK(active_config_);
 
   // This will fail if |input| is already closed.
-  auto* internal_input = input->clone(exception_state);
+  // Remove exceptions relating to cloning closed input.
+  auto* internal_input = input->clone(IGNORE_EXCEPTION);
 
   if (!internal_input) {
-    // Remove exceptions relating to cloning closed input.
-    exception_state.ClearException();
-
     exception_state.ThrowTypeError("Cannot encode closed input.");
     return;
   }
@@ -309,7 +307,7 @@ void EncoderBase<Traits>::ProcessRequests() {
         ProcessFlush(request);
         break;
       default:
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
     }
   }
 

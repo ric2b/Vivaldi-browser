@@ -32,7 +32,7 @@ import * as Platform from '../platform/platform.js';
 import * as Root from '../root/root.js';
 
 import {Console} from './Console.js';
-import {type EventDescriptor, type EventTargetEvent, type GenericEvents} from './EventTarget.js';
+import type {EventDescriptor, EventTargetEvent, GenericEvents} from './EventTarget.js';
 import {ObjectWrapper} from './Object.js';
 import {
   getLocalizedSettingsCategory,
@@ -58,7 +58,7 @@ export class Settings {
   #eventSupport: ObjectWrapper<GenericEvents>;
   #registry: Map<string, Setting<unknown>>;
   readonly moduleSettings: Map<string, Setting<unknown>>;
-  readonly #config: Root.Runtime.HostConfig;
+  #config: Root.Runtime.HostConfig;
 
   private constructor(
       readonly syncedStorage: SettingsStorage, readonly globalStorage: SettingsStorage,
@@ -128,6 +128,10 @@ export class Settings {
     return this.#config;
   }
 
+  setHostConfig(config: Root.Runtime.HostConfig): void {
+    this.#config = config;
+  }
+
   private registerModuleSetting(setting: Setting<unknown>): void {
     const settingName = setting.name;
     const category = setting.category();
@@ -160,6 +164,14 @@ export class Settings {
     return Platform.StringUtilities.toKebabCase(name);
   }
 
+  /**
+   * Prefer a module setting if this setting is one that you might not want to
+   * surface to the user to control themselves. Examples of these are settings
+   * to store UI state such as how a user choses to position a split widget or
+   * which panel they last opened.
+   * If you are creating a setting that you expect the user to control, and
+   * sync, prefer {@see createSetting}
+   */
   // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   moduleSetting<T = any>(settingName: string): Setting<T> {
@@ -180,6 +192,9 @@ export class Settings {
 
   /**
    * Get setting via key, and create a new setting if the requested setting does not exist.
+   * @param {string} key kebab-case string ID
+   * @param {T} defaultValue
+   * @param {SettingStorageType=} storageType If not specified, SettingStorageType.GLOBAL is used.
    */
   createSetting<T>(key: string, defaultValue: T, storageType?: SettingStorageType): Setting<T> {
     const storage = this.storageFromType(storageType);
@@ -644,7 +659,7 @@ export class VersionController {
   static readonly SYNCED_VERSION_SETTING_NAME = 'syncedInspectorVersion';
   static readonly LOCAL_VERSION_SETTING_NAME = 'localInspectorVersion';
 
-  static readonly CURRENT_VERSION = 37;
+  static readonly CURRENT_VERSION = 38;
 
   readonly #globalVersionSetting: Setting<number>;
   readonly #syncedVersionSetting: Setting<number>;
@@ -1290,6 +1305,26 @@ export class VersionController {
     }
   }
 
+  updateVersionFrom37To38(): void {
+    const getConsoleInsightsEnabledSetting = (): Setting<boolean>|undefined => {
+      try {
+        return moduleSetting('console-insights-enabled') as Setting<boolean>;
+      } catch {
+        return;
+      }
+    };
+
+    const consoleInsightsEnabled = getConsoleInsightsEnabledSetting();
+    const onboardingFinished = Settings.instance().createLocalSetting('console-insights-onboarding-finished', false);
+
+    if (consoleInsightsEnabled && consoleInsightsEnabled.get() === true && onboardingFinished.get() === false) {
+      consoleInsightsEnabled.set(false);
+    }
+    if (consoleInsightsEnabled && consoleInsightsEnabled.get() === false) {
+      onboardingFinished.set(false);
+    }
+  }
+
   /*
    * Any new migration should be added before this comment.
    *
@@ -1338,16 +1373,15 @@ export class VersionController {
 }
 
 export const enum SettingStorageType {
-  /**
-   * Synced storage persists settings with the active Chrome profile but also
-   * syncs the settings across devices via Chrome Sync.
-   */
+  /** Persists with the active Chrome profile but also syncs the settings across devices via Chrome Sync. */
   SYNCED = 'Synced',
-  /** Global storage persists settings with the active Chrome profile */
+  /** Persists with the active Chrome profile, but not synchronized to other devices.
+   * The default SettingStorageType of createSetting(). */
   GLOBAL = 'Global',
-  /** Uses Window.localStorage */
+  /** Uses Window.localStorage. Not recommended, legacy. */
   LOCAL = 'Local',
-  /** Session storage dies when DevTools window closes */
+  /** Session storage dies when DevTools window closes. Useful for atypical conditions that should be reverted when the
+   * user is done with their task. (eg Emulation modes, Debug overlays). These are also not carried into/out of incognito */
   SESSION = 'Session',
 }
 

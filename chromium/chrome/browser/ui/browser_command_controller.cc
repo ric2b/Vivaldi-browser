@@ -46,6 +46,7 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+#include "chrome/browser/ui/bubble_anchor_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/customize_chrome/side_panel_controller.h"
 #include "chrome/browser/ui/lens/lens_overlay_controller.h"
@@ -63,7 +64,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_utils.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/views/side_panel/companion/companion_utils.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry_id.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_enums.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
@@ -120,11 +120,9 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/crosapi/browser_data_migrator.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_context_menu.h"
 #include "chrome/browser/ui/browser_commands_chromeos.h"
-#include "chromeos/ash/components/standalone_browser/migrator_util.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user_manager.h"
 #endif
@@ -246,7 +244,7 @@ BrowserCommandController::BrowserCommandController(Browser* browser)
                           base::Unretained(this)));
 #endif  // BUILDFLAG(ENABLE_PRINTING)
   profile_pref_registrar_.Add(
-      prefs::kDownloadRestrictions,
+      policy::policy_prefs::kDownloadRestrictions,
       base::BindRepeating(&BrowserCommandController::UpdateSaveAsState,
                           base::Unretained(this)));
 #if !BUILDFLAG(IS_MAC)
@@ -691,14 +689,17 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_SHOW_ADDRESSES:
       ShowAddresses(browser_);
       break;
-    case IDC_VIRTUAL_CARD_MANUAL_FALLBACK:
-      ShowVirtualCardManualFallbackBubble(browser_);
+    case IDC_FILLED_CARD_INFORMATION:
+      ShowFilledCardInformationBubble(browser_);
       break;
     case IDC_VIRTUAL_CARD_ENROLL:
       ShowVirtualCardEnrollBubble(browser_);
       break;
     case IDC_ORGANIZE_TABS:
       StartTabOrganizationRequest(browser_);
+      break;
+    case IDC_DECLUTTER_TABS:
+      ShowTabDeclutter(browser_);
       break;
     case IDC_SHOW_TRANSLATE:
       ShowTranslateBubble(browser_);
@@ -850,10 +851,6 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_FEEDBACK:
       OpenFeedbackDialog(browser_, feedback::kFeedbackSourceBrowserCommand);
       break;
-    case IDC_SHOW_SEARCH_COMPANION:
-      browser_->GetFeatures().side_panel_ui()->Show(
-          SidePanelEntryId::kSearchCompanion, SidePanelOpenTrigger::kAppMenu);
-      break;
 #endif
     case IDC_SHOW_CHROME_LABS:
       window()->ShowChromeLabs();
@@ -962,19 +959,19 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_CHROME_TIPS:
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
       ShowChromeTips(browser_);
-#else
-      NOTREACHED_IN_MIGRATION();
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
       break;
+#else
+      NOTREACHED();
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
     case IDC_CHROME_WHATS_NEW:
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING) && \
     (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX))
       ShowChromeWhatsNew(browser_);
+      break;
 #else
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && \
         // (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX))
-      break;
     case IDC_SHOW_BETA_FORUM:
       ShowBetaForum(browser_);
       break;
@@ -1038,7 +1035,7 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
             base::BindOnce(&AppInfoDialogClosedCallback,
                            sessions::SessionTabHelper::IdForWindowContainingTab(
                                web_contents)),
-            bubble_anchor_util::kAppMenuButton);
+            bubble_anchor_util::Anchor::kAppMenuButton);
       }
       break;
     }
@@ -1261,6 +1258,7 @@ void BrowserCommandController::InitCommandState() {
 
   command_updater_.UpdateCommandEnabled(IDC_ORGANIZE_TABS, true);
   command_updater_.UpdateCommandEnabled(IDC_CREATE_NEW_TAB_GROUP, true);
+  command_updater_.UpdateCommandEnabled(IDC_DECLUTTER_TABS, true);
 #if BUILDFLAG(IS_CHROMEOS)
   command_updater_.UpdateCommandEnabled(IDC_TOGGLE_MULTITASK_MENU, true);
 #endif
@@ -1464,9 +1462,6 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_SHOW_BOOKMARK_SIDE_PANEL, true);
 
   if (browser_->is_type_normal()) {
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-    command_updater_.UpdateCommandEnabled(IDC_SHOW_SEARCH_COMPANION, true);
-#endif
     // Reading list commands.
     command_updater_.UpdateCommandEnabled(IDC_READING_LIST_MENU, true);
     command_updater_.UpdateCommandEnabled(IDC_READING_LIST_MENU_ADD_TAB, true);
@@ -1539,6 +1534,16 @@ void BrowserCommandController::UpdateCommandsForIncognitoAvailability() {
     return;
 
   UpdateSharedCommandsForIncognitoAvailability(&command_updater_, profile());
+  // Update the new incognito window ActionItem enabled state. Note, this cannot
+  // be done in UpdateSharedCommandsForIncognitoAvailability as the method is
+  // static to also handle states for NSApplication where no browser window are
+  // open.
+  if (auto* incognito_action = actions::ActionManager::Get().FindAction(
+          kActionNewIncognitoWindow,
+          browser_->GetActions()->root_action_item())) {
+    incognito_action->SetEnabled(
+        IncognitoModePrefs::IsIncognitoAllowed(profile()));
+  }
 
   if (!IsShowingMainUI()) {
     command_updater_.UpdateCommandEnabled(IDC_IMPORT_SETTINGS, false);
@@ -1658,10 +1663,6 @@ void BrowserCommandController::UpdateCommandsForTabState() {
   command_updater_.UpdateCommandEnabled(
       IDC_TOGGLE_REQUEST_TABLET_SITE,
       CanRequestTabletSite(current_web_contents));
-
-  command_updater_.UpdateCommandEnabled(
-      IDC_SHOW_SEARCH_COMPANION,
-      companion::IsCompanionAvailableForCurrentActiveTab(browser_));
 
   UpdateCommandsForContentRestrictionState();
   UpdateCommandsForBookmarkEditing();

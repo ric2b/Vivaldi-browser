@@ -31,6 +31,8 @@
 #import "components/infobars/core/infobar.h"
 #import "components/infobars/core/infobar_manager.h"
 #import "components/keyed_service/core/service_access_type.h"
+#import "components/optimization_guide/machine_learning_tflite_buildflags.h"
+#import "components/password_manager/core/browser/features/password_features.h"
 #import "components/password_manager/core/browser/form_parsing/form_data_parser.h"
 #import "components/password_manager/core/browser/password_form.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
@@ -68,6 +70,14 @@
 #import "services/network/public/cpp/shared_url_loader_factory.h"
 #import "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 
+#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+#import "ios/chrome/browser/passwords/model/ios_password_field_classification_model_handler_factory.h"
+#endif
+
+// Vivaldi
+#import "ios/translate/vivaldi_ios_translate_client.h"
+// End Vivaldi
+
 namespace autofill {
 
 ChromeAutofillClientIOS::ChromeAutofillClientIOS(
@@ -76,7 +86,7 @@ ChromeAutofillClientIOS::ChromeAutofillClientIOS(
     infobars::InfoBarManager* infobar_manager,
     id<AutofillClientIOSBridge> bridge)
     : pref_service_(profile->GetPrefs()),
-      sync_service_(SyncServiceFactory::GetForBrowserState(profile)),
+      sync_service_(SyncServiceFactory::GetForProfile(profile)),
       personal_data_manager_(PersonalDataManagerFactory::GetForProfile(
           profile->GetOriginalProfile())),
       autocomplete_history_manager_(
@@ -102,6 +112,10 @@ ChromeAutofillClientIOS::~ChromeAutofillClientIOS() {
 void ChromeAutofillClientIOS::SetBaseViewController(
     UIViewController* base_view_controller) {
   base_view_controller_ = base_view_controller;
+}
+
+base::WeakPtr<autofill::AutofillClient> ChromeAutofillClientIOS::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 version_info::Channel ChromeAutofillClientIOS::GetChannel() const {
@@ -136,6 +150,18 @@ PersonalDataManager* ChromeAutofillClientIOS::GetPersonalDataManager() {
   return personal_data_manager_;
 }
 
+FieldClassificationModelHandler*
+ChromeAutofillClientIOS::GetPasswordManagerFieldClassificationModelHandler() {
+#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordFormClientsideClassifier)) {
+    return IOSPasswordFieldClassificationModelHandlerFactory::GetForProfile(
+        profile_);
+  }
+#endif
+  return nullptr;
+}
+
 AutocompleteHistoryManager*
 ChromeAutofillClientIOS::GetAutocompleteHistoryManager() {
   return autocomplete_history_manager_;
@@ -154,6 +180,12 @@ syncer::SyncService* ChromeAutofillClientIOS::GetSyncService() {
 }
 
 signin::IdentityManager* ChromeAutofillClientIOS::GetIdentityManager() {
+  return const_cast<signin::IdentityManager*>(
+      std::as_const(*this).GetIdentityManager());
+}
+
+const signin::IdentityManager* ChromeAutofillClientIOS::GetIdentityManager()
+    const {
   return identity_manager_;
 }
 
@@ -161,7 +193,7 @@ FormDataImporter* ChromeAutofillClientIOS::GetFormDataImporter() {
   if (!form_data_importer_) {
     form_data_importer_ = std::make_unique<FormDataImporter>(
         this,
-        ios::HistoryServiceFactory::GetForBrowserState(
+        ios::HistoryServiceFactory::GetForProfile(
             profile_, ServiceAccessType::EXPLICIT_ACCESS),
         GetApplicationContext()->GetApplicationLocale());
   }
@@ -208,7 +240,13 @@ ChromeAutofillClientIOS::GetSecurityLevelForUmaHistograms() {
 const translate::LanguageState* ChromeAutofillClientIOS::GetLanguageState() {
   // TODO(crbug.com/41430413): iOS vs other platforms extracts language from
   // the top level frame vs whatever frame directly holds the form.
+
+#if defined(VIVALDI_BUILD)
+  auto* translate_client = VivaldiIOSTranslateClient::FromWebState(web_state_);
+#else
   auto* translate_client = ChromeIOSTranslateClient::FromWebState(web_state_);
+#endif // End Vivaldi
+
   if (translate_client) {
     auto* translate_manager = translate_client->GetTranslateManager();
     if (translate_manager)
@@ -218,7 +256,13 @@ const translate::LanguageState* ChromeAutofillClientIOS::GetLanguageState() {
 }
 
 translate::TranslateDriver* ChromeAutofillClientIOS::GetTranslateDriver() {
+
+#if defined(VIVALDI_BUILD)
+  auto* translate_client = VivaldiIOSTranslateClient::FromWebState(web_state_);
+#else
   auto* translate_client = ChromeIOSTranslateClient::FromWebState(web_state_);
+#endif // End Vivaldi
+
   if (translate_client) {
     return translate_client->GetTranslateDriver();
   }
@@ -239,7 +283,7 @@ GeoIpCountryCode ChromeAutofillClientIOS::GetVariationConfigCountryCode()
 
 void ChromeAutofillClientIOS::ShowAutofillSettings(
     SuggestionType suggestion_type) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void ChromeAutofillClientIOS::ConfirmSaveAddressProfile(
@@ -301,6 +345,13 @@ ChromeAutofillClientIOS::ShowAutofillSuggestions(
     base::WeakPtr<AutofillSuggestionDelegate> delegate) {
   [bridge_ showAutofillPopup:open_args.suggestions suggestionDelegate:delegate];
   return SuggestionUiSessionId();
+}
+
+void ChromeAutofillClientIOS::ShowPlusAddressEmailOverrideNotification(
+    const std::string& original_email,
+    EmailOverrideUndoCallback email_override_undo_callback) {
+  [bridge_ showPlusAddressEmailOverrideNotification:
+               std::move(email_override_undo_callback)];
 }
 
 AutofillPlusAddressDelegate* ChromeAutofillClientIOS::GetPlusAddressDelegate() {
@@ -438,26 +489,12 @@ PasswordFormClassification ChromeAutofillClientIOS::ClassifyAsPasswordForm(
     return {};
   }
 
-  password_manager::FormDataParser parser;
   // The driver id is irrelevant here because it would only be used by password
   // manager logic that handles the `PasswordForm` returned by the parser.
-  parser.set_predictions(password_manager::ConvertToFormPredictions(
-      /*driver_id=*/0, *renderer_form, form_and_predictions.predictions));
-
-  // The parser can use stored usernames to identify a filled username field by
-  // the value it contains. Here it remains empty.
-  std::unique_ptr<password_manager::PasswordForm> pw_form = parser.Parse(
-      *renderer_form, password_manager::FormDataParser::Mode::kFilling,
-      /*stored_usernames=*/{});
-  if (!pw_form) {
-    return {};
-  }
-  PasswordFormClassification result{.type = pw_form->GetPasswordFormType()};
-  if (!pw_form->username_element_renderer_id.is_null()) {
-    result.username_field = FieldGlobalId(
-        field_id.frame_token, pw_form->username_element_renderer_id);
-  }
-  return result;
+  return password_manager::ClassifyAsPasswordForm(
+      *renderer_form,
+      password_manager::ConvertToFormPredictions(
+          /*driver_id=*/0, *renderer_form, form_and_predictions.predictions));
 }
 
 AutofillSaveCardInfoBarDelegateIOS*

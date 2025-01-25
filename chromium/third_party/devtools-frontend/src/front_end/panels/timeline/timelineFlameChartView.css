@@ -22,6 +22,11 @@
   left: 0;
 }
 
+.overlay-type-ENTRY_LABEL {
+  /* keep these above the selected entry overline, else they can become hard to read */
+  z-index: 2;
+}
+
 .overlay-type-ENTRY_SELECTED,
 .overlay-type-ENTRY_OUTLINE {
   pointer-events: none;
@@ -34,6 +39,14 @@
 
   &.cut-off-bottom {
     border-bottom: none;
+  }
+
+  &.cut-off-right {
+    border-right: none;
+  }
+
+  &.cut-off-left {
+    border-left: none;
   }
 }
 
@@ -51,7 +64,7 @@
 
 .overlay-type-CANDY_STRIPED_TIME_RANGE {
   --red-stripe-width: 2px;
-  --white-stripe-width: 10px;
+  --white-stripe-width: 7px;
 
   background-image:
     repeating-linear-gradient(
@@ -69,6 +82,14 @@
 
   &.cut-off-top {
     border-top: none;
+  }
+
+  &.cut-off-right {
+    border-right: none;
+  }
+
+  &.cut-off-left {
+    border-left: none;
   }
 }
 
@@ -90,7 +111,7 @@
   }
 }
 
-.overlay-type-CURSOR_TIMESTAMP_MARKER {
+.overlay-type-TIMESTAMP_MARKER {
   top: 0;
   bottom: 0;
   width: 2px;
@@ -111,7 +132,8 @@
 }
 
 .overlay-type-TIMESPAN_BREAKDOWN {
-  /* This overlay is shown at the bottom of the UI, not the top */
+  /* This overlay by default is shown at the bottom of the UI, not the top */
   top: unset;
   bottom: 0;
+  height: 100px;
 }

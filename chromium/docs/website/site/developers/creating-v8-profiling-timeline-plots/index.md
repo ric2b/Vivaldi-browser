@@ -45,7 +45,7 @@ file for each process suffixed with the process' pid.
 Since Android has additional security sandboxing, the renderer process will not
 be able to write to a file in the application's working directory (even when
 --no-sandbox is enabled). You must therefore create a directory which can be
-written by any user and instruct V8 to log it's output there.
+written by any user and instruct V8 to log its output there.
 
 For example:
 

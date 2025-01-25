@@ -33,6 +33,17 @@ FedCmRequesterFrameType ComputeRequesterFrameType(const RenderFrameHost& rfh,
              : FedCmRequesterFrameType::kCrossSiteIframe;
 }
 
+FedCmMetrics::NumAccounts ComputeNumMatchingAccounts(
+    size_t accounts_remaining) {
+  if (accounts_remaining == 0u) {
+    return FedCmMetrics::NumAccounts::kZero;
+  }
+  if (accounts_remaining == 1u) {
+    return FedCmMetrics::NumAccounts::kOne;
+  }
+  return FedCmMetrics::NumAccounts::kMultiple;
+}
+
 }  // namespace
 
 FedCmMetrics::FedCmMetrics(ukm::SourceId page_source_id)
@@ -653,14 +664,14 @@ void FedCmMetrics::RecordMultipleRequestsRpMode(
     const std::vector<GURL>& requested_providers) {
   DCHECK_GT(session_id_, 0);
   FedCmMultipleRequestsRpMode status;
-  if (pending_request_rp_mode == blink::mojom::RpMode::kWidget) {
-    status = new_request_rp_mode == blink::mojom::RpMode::kWidget
-                 ? FedCmMultipleRequestsRpMode::kWidgetThenWidget
-                 : FedCmMultipleRequestsRpMode::kWidgetThenButton;
+  if (pending_request_rp_mode == blink::mojom::RpMode::kPassive) {
+    status = new_request_rp_mode == blink::mojom::RpMode::kPassive
+                 ? FedCmMultipleRequestsRpMode::kPassiveThenPassive
+                 : FedCmMultipleRequestsRpMode::kPassiveThenActive;
   } else {
-    status = new_request_rp_mode == blink::mojom::RpMode::kWidget
-                 ? FedCmMultipleRequestsRpMode::kButtonThenWidget
-                 : FedCmMultipleRequestsRpMode::kButtonThenButton;
+    status = new_request_rp_mode == blink::mojom::RpMode::kPassive
+                 ? FedCmMultipleRequestsRpMode::kActiveThenPassive
+                 : FedCmMultipleRequestsRpMode::kActiveThenActive;
   }
   auto RecordUkm = [&](auto& ukm_builder) {
     ukm_builder.SetMultipleRequestsRpMode(static_cast<int>(status));
@@ -679,7 +690,7 @@ void FedCmMetrics::RecordMultipleRequestsRpMode(
   base::UmaHistogramEnumeration("Blink.FedCm.MultipleRequestsRpMode", status);
 }
 
-void FedCmMetrics::RecordTimeBetweenUserInfoAndButtonModeAPI(
+void FedCmMetrics::RecordTimeBetweenUserInfoAndActiveModeAPI(
     base::TimeDelta duration) {
   DCHECK_GT(session_id_, 0);
   auto RecordUkm = [&](auto& ukm_builder) {
@@ -693,6 +704,30 @@ void FedCmMetrics::RecordTimeBetweenUserInfoAndButtonModeAPI(
 
   base::UmaHistogramMediumTimes("Blink.FedCm.Timing.GetUserInfoToButtonMode",
                                 duration);
+}
+
+void FedCmMetrics::RecordNumMatchingAccounts(size_t accounts_remaining,
+                                             const std::string& filter_type) {
+  FedCmMetrics::NumAccounts num_matching =
+      ComputeNumMatchingAccounts(accounts_remaining);
+  base::UmaHistogramEnumeration(
+      "Blink.FedCm." + filter_type + ".NumMatchingAccounts", num_matching);
+
+  ukm::builders::Blink_FedCm fedcm_builder(page_source_id_);
+  if (filter_type == "LoginHint") {
+    fedcm_builder.SetLoginHint_NumMatchingAccounts(
+        static_cast<int>(num_matching));
+  } else if (filter_type == "AccountLabel") {
+    fedcm_builder.SetAccountLabel_NumMatchingAccounts(
+        static_cast<int>(num_matching));
+  } else if (filter_type == "DomainHint") {
+    fedcm_builder.SetDomainHint_NumMatchingAccounts(
+        static_cast<int>(num_matching));
+  } else {
+    NOTREACHED();
+  }
+  fedcm_builder.SetFedCmSessionID(session_id_);
+  fedcm_builder.Record(ukm::UkmRecorder::Get());
 }
 
 ukm::SourceId FedCmMetrics::GetOrCreateProviderSourceId(const GURL& provider) {

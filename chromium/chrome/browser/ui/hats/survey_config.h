@@ -21,17 +21,14 @@ extern const char kHatsSurveyTriggerAutofillCreditCardUserPerception[];
 extern const char kHatsSurveyTriggerAutofillPasswordUserPerception[];
 extern const char kHatsSurveyTriggerAutofillCard[];
 extern const char kHatsSurveyTriggerAutofillPassword[];
-extern const char kHatsSurveyTriggerDevToolsIssuesCOEP[];
-extern const char kHatsSurveyTriggerDevToolsIssuesMixedContent[];
-extern const char kHatsSurveyTriggerDevToolsIssuesCookiesSameSite[];
-extern const char kHatsSurveyTriggerDevToolsIssuesHeavyAd[];
-extern const char kHatsSurveyTriggerDevToolsIssuesCSP[];
 extern const char kHatsSurveyTriggerDownloadWarningBubbleBypass[];
 extern const char kHatsSurveyTriggerDownloadWarningBubbleHeed[];
 extern const char kHatsSurveyTriggerDownloadWarningBubbleIgnore[];
 extern const char kHatsSurveyTriggerDownloadWarningPageBypass[];
 extern const char kHatsSurveyTriggerDownloadWarningPageHeed[];
 extern const char kHatsSurveyTriggerDownloadWarningPageIgnore[];
+extern const char kHatsSurveyTriggerHistoryEmbeddings[];
+extern const char kHatsSurveyTriggerLensOverlayResults[];
 extern const char kHatsSurveyTriggerM1AdPrivacyPage[];
 extern const char kHatsSurveyTriggerM1TopicsSubpage[];
 extern const char kHatsSurveyTriggerM1FledgeSubpage[];
@@ -50,10 +47,6 @@ extern const char kHatsSurveyTriggerSafetyHubOneOffExperimentInteraction[];
 extern const char kHatsSurveyTriggerSettings[];
 extern const char kHatsSurveyTriggerSettingsPrivacy[];
 extern const char kHatsSurveyTriggerSettingsSecurity[];
-extern const char kHatsSurveyTriggerTrustSafetyPrivacySandbox4ConsentAccept[];
-extern const char kHatsSurveyTriggerTrustSafetyPrivacySandbox4ConsentDecline[];
-extern const char kHatsSurveyTriggerTrustSafetyPrivacySandbox4NoticeOk[];
-extern const char kHatsSurveyTriggerTrustSafetyPrivacySandbox4NoticeSettings[];
 extern const char kHatsSurveyTriggerTrustSafetyPrivacySettings[];
 extern const char kHatsSurveyTriggerTrustSafetyTrustedSurface[];
 extern const char kHatsSurveyTriggerTrustSafetyTransactions[];
@@ -67,12 +60,6 @@ extern const char kHatsSurveyTriggerTrustSafetyV2SafetyHubNotification[];
 extern const char kHatsSurveyTriggerTrustSafetyV2SafetyHubInteraction[];
 extern const char kHatsSurveyTriggerTrustSafetyV2TrustedSurface[];
 extern const char kHatsSurveyTriggerTrustSafetyV2PrivacyGuide[];
-extern const char kHatsSurveyTriggerTrustSafetyV2PrivacySandbox4ConsentAccept[];
-extern const char
-    kHatsSurveyTriggerTrustSafetyV2PrivacySandbox4ConsentDecline[];
-extern const char kHatsSurveyTriggerTrustSafetyV2PrivacySandbox4NoticeOk[];
-extern const char
-    kHatsSurveyTriggerTrustSafetyV2PrivacySandbox4NoticeSettings[];
 extern const char kHatsSurveyTriggerTrustSafetyV2SafeBrowsingInterstitial[];
 extern const char kHatsSurveyTriggerWallpaperSearch[];
 #if BUILDFLAG(ENABLE_COMPOSE)
@@ -81,14 +68,17 @@ extern const char kHatsSurveyTriggerComposeClose[];
 extern const char kHatsSurveyTriggerComposeNudgeClose[];
 #endif  // BUILDFLAG(ENABLE_COMPOSE)
 extern const char kHatsSurveyTriggerWhatsNew[];
-extern const char kHatsSurveyTriggerWhatsNewAlternate[];
 #else
 extern const char kHatsSurveyTriggerAndroidStartupSurvey[];
 extern const char kHatsSurveyTriggerQuickDelete[];
 extern const char kHatsSurveyTriggerSafetyHubAndroid[];
+extern const char kHatsSurveyOrganicTriggerSafetyHubAndroid[];
 #endif  // #if !BUILDFLAG(IS_ANDROID)
 
 extern const char kHatsSurveyTriggerPermissionsPrompt[];
+extern const char kHatsSurveyTriggerPlusAddressAcceptedFirstTimeCreate[];
+extern const char kHatsSurveyTriggerPlusAddressCreatedMultiplePlusAddresses[];
+extern const char kHatsSurveyTriggerPlusAddressDeclinedFirstTimeCreate[];
 extern const char kHatsSurveyTriggerPrivacySandboxSentimentSurvey[];
 
 extern const char kHatsSurveyTriggerTesting[];

@@ -18,6 +18,11 @@
 #include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_device.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_texture.h"
+#include "third_party/blink/renderer/modules/xr/xr_gpu_binding.h"
+#include "third_party/blink/renderer/modules/xr/xr_gpu_projection_layer.h"
+#include "third_party/blink/renderer/modules/xr/xr_gpu_swap_chain.h"
 #include "third_party/blink/renderer/modules/xr/xr_session.h"
 #include "third_party/blink/renderer/modules/xr/xr_system.h"
 #include "third_party/blink/renderer/modules/xr/xr_viewport.h"
@@ -501,19 +506,6 @@ void XRFrameProvider::ProcessScheduledFrame(
     }
 #endif
 
-    // TODO(crbug.com/1494911): Use ClientSharedImage to replace all mailbox
-    // holder usage along the call hierarchy starting at XRSession::OnFrame().
-    std::optional<gpu::MailboxHolder> buffer_mailbox_holder;
-    if (buffer_shared_image_) {
-      buffer_mailbox_holder = gpu::MailboxHolder{
-          buffer_shared_image_->mailbox(), buffer_sync_token_, GL_TEXTURE_2D};
-    }
-    std::optional<gpu::MailboxHolder> camera_image_mailbox_holder;
-    if (camera_image_shared_image_) {
-      camera_image_mailbox_holder =
-          gpu::MailboxHolder{camera_image_shared_image_->mailbox(),
-                             camera_image_sync_token_, GL_TEXTURE_2D};
-    }
     // Run immersive_session_->OnFrame() in a posted task to ensure that
     // createAnchor promises get a chance to run - the presentation frame state
     // is already updated.
@@ -521,8 +513,9 @@ void XRFrameProvider::ProcessScheduledFrame(
         ->PostTask(FROM_HERE,
                    WTF::BindOnce(&XRSession::OnFrame,
                                  WrapWeakPersistent(immersive_session_.Get()),
-                                 high_res_now_ms, buffer_mailbox_holder,
-                                 camera_image_mailbox_holder));
+                                 high_res_now_ms, buffer_shared_image_,
+                                 buffer_sync_token_, camera_image_shared_image_,
+                                 camera_image_sync_token_));
   } else {
     // In the process of fulfilling the frame requests for each session they are
     // extremely likely to request another frame. Work off of a separate list
@@ -559,20 +552,17 @@ void XRFrameProvider::ProcessScheduledFrame(
       // a helper method who can determine if the state requirements are still
       // met that would allow the frame to be served.
       window->GetTaskRunner(blink::TaskType::kInternalMedia)
-          ->PostTask(FROM_HERE,
-                     WTF::BindOnce(&XRFrameProvider::OnPreDispatchInlineFrame,
-                                   WrapWeakPersistent(this),
-                                   WrapWeakPersistent(session), high_res_now_ms,
-                                   std::nullopt, std::nullopt));
+          ->PostTask(
+              FROM_HERE,
+              WTF::BindOnce(&XRFrameProvider::OnPreDispatchInlineFrame,
+                            WrapWeakPersistent(this),
+                            WrapWeakPersistent(session), high_res_now_ms));
     }
   }
 }
 
-void XRFrameProvider::OnPreDispatchInlineFrame(
-    XRSession* session,
-    double timestamp,
-    const std::optional<gpu::MailboxHolder>& output_mailbox_holder,
-    const std::optional<gpu::MailboxHolder>& camera_image_mailbox_holder) {
+void XRFrameProvider::OnPreDispatchInlineFrame(XRSession* session,
+                                               double timestamp) {
   // Do nothing if the session was cleaned up or ended before we were schedueld.
   if (!session || session->ended())
     return;
@@ -587,8 +577,8 @@ void XRFrameProvider::OnPreDispatchInlineFrame(
 
   // If we still have the session and don't have an immersive session, then we
   // should serve the frame.
-  session->OnFrame(timestamp, output_mailbox_holder,
-                   camera_image_mailbox_holder);
+  session->OnFrame(timestamp, nullptr, gpu::SyncToken(), nullptr,
+                   gpu::SyncToken());
 }
 
 double XRFrameProvider::UpdateImmersiveFrameTime(
@@ -630,9 +620,10 @@ double XRFrameProvider::UpdateImmersiveFrameTime(
 }
 
 void XRFrameProvider::SubmitWebGLLayer(XRWebGLLayer* layer, bool was_changed) {
-  DCHECK(layer);
-  DCHECK(immersive_session_);
-  DCHECK(layer->session() == immersive_session_);
+  CHECK(layer);
+  CHECK(immersive_session_);
+  CHECK_EQ(layer->session(), immersive_session_);
+  CHECK_EQ(layer->session()->GraphicsApi(), XRGraphicsBinding::Api::kWebGL);
   if (!immersive_presentation_provider_.is_bound())
     return;
 
@@ -688,9 +679,7 @@ void XRFrameProvider::SubmitWebGLLayer(XRWebGLLayer* layer, bool was_changed) {
   // Hardware-accelerated rendering should always be texture backed. Ensure this
   // is the case, don't attempt to render if using an unexpected drawing path.
   if (!image_ref->IsTextureBacked()) {
-    NOTREACHED_IN_MIGRATION()
-        << "WebXR requires hardware-accelerated rendering to texture";
-    return;
+    NOTREACHED() << "WebXR requires hardware-accelerated rendering to texture";
   }
 
   bool succeeded = frame_transport_->FrameSubmit(
@@ -744,6 +733,108 @@ void XRFrameProvider::UpdateWebGLLayerViewports(XRWebGLLayer* layer) {
       frame_id_, left_coords, right_coords, gfx::Size(width, height));
 }
 
+void XRFrameProvider::SubmitWebGPULayer(XRGPUProjectionLayer* layer,
+                                        bool was_queried) {
+  CHECK(layer);
+  CHECK(immersive_session_);
+  CHECK_EQ(layer->session(), immersive_session_);
+  CHECK_EQ(layer->session()->GraphicsApi(), XRGraphicsBinding::Api::kWebGPU);
+  if (!immersive_presentation_provider_.is_bound()) {
+    return;
+  }
+
+  TRACE_EVENT1("gpu", "XRFrameProvider::SubmitWebGPULayer", "frame", frame_id_);
+  DVLOG(3) << __func__ << ": frame=" << frame_id_;
+
+  XRGPUBinding* webgpu_binding = static_cast<XRGPUBinding*>(layer->binding());
+  GPUDevice* device = webgpu_binding->device();
+
+  if (frame_id_ < 0) {
+    // There is no valid frame_id_, and the browser side is not currently
+    // expecting a frame to be submitted. That can happen for the first
+    // immersive frame if the animation loop submits without a preceding
+    // immersive GetFrameData response, in that case frame_id_ is -1 (see
+    // https://crbug.com/855722).
+    return;
+  }
+
+  if (!was_queried) {
+    // Just tell the device side that there was no submitted frame instead of
+    // executing the implicit end-of-frame submit.
+    frame_transport_->FrameSubmitMissingWebGPU(
+        immersive_presentation_provider_.get(), device->GetDawnControlClient(),
+        frame_id_);
+    dropped_frames_++;
+    return;
+  }
+
+  // TODO(crbug.com/359418629): This should be handled somewhere else and only
+  // called when the viewports actually change.
+  UpdateWebGPULayerViewports(layer);
+
+  frame_transport_->FramePreImageWebGPU(device->GetDawnControlClient());
+
+  if (!frame_transport_->DrawingIntoSharedBuffer()) {
+    NOTREACHED()
+        << "WebXR/WebGPU bindings only supports the DRAW_INTO_TEXTURE_MAILBOX "
+        << "XRPresentationTransportMethod at this time.";
+  }
+
+  DVLOG(3) << __func__ << ": FrameSubmitWebGPU for SharedBuffer mode";
+  bool succeeded = frame_transport_->FrameSubmitWebGPU(
+      immersive_presentation_provider_.get(), device->GetDawnControlClient(),
+      device->GetHandle(), frame_id_);
+  succeeded ? num_frames_++ : dropped_frames_++;
+  if (succeeded) {
+    submit_frame_time_.StartTimer();
+  }
+
+  // Reset our frame id, since anything we'd want to do (resizing/etc) can
+  // no-longer happen to this frame.
+  frame_id_ = -1;
+}
+
+// TODO(bajones): This only works because we're restricted to a single layer at
+// the moment. Will need an overhaul when we get more robust layering support.
+void XRFrameProvider::UpdateWebGPULayerViewports(XRGPUProjectionLayer* layer) {
+  DCHECK(layer->session() == immersive_session_);
+  DCHECK(layer->session()->GraphicsApi() == XRGraphicsBinding::Api::kWebGPU);
+  DCHECK(immersive_presentation_provider_.is_bound());
+
+  XRGPUBinding* webgpu_binding = static_cast<XRGPUBinding*>(layer->binding());
+
+  gfx::Rect left = webgpu_binding->GetViewportForEye(
+      layer, device::mojom::blink::XREye::kLeft);
+  gfx::Rect right = webgpu_binding->GetViewportForEye(
+      layer, device::mojom::blink::XREye::kRight);
+
+  // TODO(crbug.com/359418629): Adjust viewport calculations once we start using
+  // texture array-capable mailboxes.
+  float width = layer->textureWidth() * layer->textureArrayLength();
+  float height = layer->textureHeight();
+  right.set_x(right.x() + layer->textureWidth());
+
+  // We may only have one eye view, i.e. in smartphone immersive AR mode.
+  // Use all-zero bounds for unused views.
+  gfx::RectF left_coords = gfx::RectF(
+      static_cast<float>(left.x()) / width,
+      static_cast<float>(height - (left.y() + left.height())) / height,
+      static_cast<float>(left.width()) / width,
+      static_cast<float>(left.height()) / height);
+  gfx::RectF right_coords =
+      layer->textureArrayLength() > 1
+          ? gfx::RectF(
+                (static_cast<float>(right.x()) / width),
+                static_cast<float>(height - (right.y() + right.height())) /
+                    height,
+                (static_cast<float>(right.width()) / width),
+                static_cast<float>(right.height()) / height)
+          : gfx::RectF();
+
+  immersive_presentation_provider_->UpdateLayerBounds(
+      frame_id_, left_coords, right_coords, gfx::Size(width, height));
+}
+
 void XRFrameProvider::Dispose() {
   DVLOG(2) << __func__;
   immersive_presentation_provider_.reset();
@@ -789,6 +880,10 @@ void XRFrameProvider::SendFrameData() {
 
 void XRFrameProvider::OnRenderComplete() {
   submit_frame_time_.StopTimer();
+}
+
+bool XRFrameProvider::DrawingIntoSharedBuffer() const {
+  return frame_transport_->DrawingIntoSharedBuffer();
 }
 
 void XRFrameProvider::Trace(Visitor* visitor) const {

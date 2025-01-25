@@ -17,6 +17,7 @@
 #include <stddef.h>
 
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -33,9 +34,9 @@
 #include "absl/time/time.h"
 #include "internal/platform/device_info.h"
 #include "internal/platform/implementation/account_manager.h"
+#include "internal/platform/implementation/device_info.h"
 #include "sharing/common/nearby_share_enums.h"
 #include "sharing/common/nearby_share_prefs.h"
-#include "sharing/common/nearby_share_profile_info_provider.h"
 #include "sharing/internal/api/preference_manager.h"
 #include "sharing/internal/api/sharing_rpc_client.h"
 #include "sharing/internal/base/utf_string_conversions.h"
@@ -51,6 +52,7 @@
 namespace nearby {
 namespace sharing {
 namespace {
+using ::nearby::api::DeviceInfo;
 using ::nearby::sharing::api::PreferenceManager;
 using ::nearby::sharing::api::SharingRpcClientFactory;
 using ::nearby::sharing::proto::UpdateDeviceRequest;
@@ -73,17 +75,18 @@ constexpr absl::string_view kDeviceIdPrefix = "users/me/devices/";
 constexpr absl::string_view kContactsFieldMaskPath = "contacts";
 constexpr absl::string_view kCertificatesFieldMaskPath = "public_certificates";
 
-constexpr absl::Duration kDeviceDataDownloadPeriod = absl::Hours(12);
-
 constexpr absl::string_view kDefaultDeviceName = "$0\'s $1";
 
-// Returns a truncated version of |name| that is |overflow_length| characters
-// too long. For example, name="Reallylongname" with overflow_length=5 will
-// return "Really...".
-std::string GetTruncatedName(std::string name, size_t overflow_length) {
+// Returns a truncated version of |name| that is |max_length| characters long.
+// For example, name="Reallylongname" with max_length=9 will return "Really...".
+// name="Reallylongname" with max_length=20 will return "Reallylongname".
+std::string GetTruncatedName(std::string name, size_t max_length) {
+  if (name.length() <= max_length) {
+    return name;
+  }
+
   std::string ellipsis("...");
-  size_t max_name_length = name.length() - overflow_length - ellipsis.length();
-  // DCHECK_GT(max_name_length, 0u);
+  size_t max_name_length = max_length - ellipsis.length();
 
   std::string truncated;
   nearby::utils::TruncateUtf8ToByteSize(name, max_name_length, &truncated);
@@ -102,16 +105,14 @@ std::unique_ptr<NearbyShareLocalDeviceDataManager>
 NearbyShareLocalDeviceDataManagerImpl::Factory::Create(
     Context* context, PreferenceManager& preference_manager,
     AccountManager& account_manager, nearby::DeviceInfo& device_info,
-    SharingRpcClientFactory* rpc_client_factory,
-    NearbyShareProfileInfoProvider* profile_info_provider) {
+    SharingRpcClientFactory* rpc_client_factory) {
   if (test_factory_) {
-    return test_factory_->CreateInstance(context, rpc_client_factory,
-                                         profile_info_provider);
+    return test_factory_->CreateInstance(context, rpc_client_factory);
   }
 
   return absl::WrapUnique(new NearbyShareLocalDeviceDataManagerImpl(
       context, preference_manager, account_manager, device_info,
-      rpc_client_factory, profile_info_provider));
+      rpc_client_factory));
 }
 
 // static
@@ -125,21 +126,12 @@ NearbyShareLocalDeviceDataManagerImpl::Factory::~Factory() = default;
 NearbyShareLocalDeviceDataManagerImpl::NearbyShareLocalDeviceDataManagerImpl(
     Context* context, PreferenceManager& preference_manager,
     AccountManager& account_manager, nearby::DeviceInfo& device_info,
-    SharingRpcClientFactory* rpc_client_factory,
-    NearbyShareProfileInfoProvider* profile_info_provider)
+    SharingRpcClientFactory* rpc_client_factory)
     : preference_manager_(preference_manager),
       account_manager_(account_manager),
       device_info_(device_info),
-      profile_info_provider_(profile_info_provider),
       nearby_share_client_(rpc_client_factory->CreateInstance()),
       device_id_(GetId()),
-      download_device_data_scheduler_(
-          NearbyShareSchedulerFactory::CreatePeriodicScheduler(
-              context, preference_manager_, kDeviceDataDownloadPeriod,
-              /*retry_failures=*/true,
-              /*require_connectivity=*/true,
-              prefs::kNearbySharingSchedulerDownloadDeviceDataName,
-              [&]() { DownloadDeviceData(); })),
       executor_(context->CreateSequencedTaskRunner()) {}
 
 NearbyShareLocalDeviceDataManagerImpl::
@@ -164,24 +156,6 @@ std::string NearbyShareLocalDeviceDataManagerImpl::GetDeviceName() const {
   std::string device_name = preference_manager_.GetString(
       prefs::kNearbySharingDeviceNameName, std::string());
   return device_name.empty() ? GetDefaultDeviceName() : device_name;
-}
-
-std::optional<std::string> NearbyShareLocalDeviceDataManagerImpl::GetFullName()
-    const {
-  return preference_manager_.GetString(prefs::kNearbySharingFullNameName,
-                                       std::string());
-}
-
-std::optional<std::string> NearbyShareLocalDeviceDataManagerImpl::GetIconUrl()
-    const {
-  return preference_manager_.GetString(prefs::kNearbySharingIconUrlName,
-                                       std::string());
-}
-
-std::optional<std::string> NearbyShareLocalDeviceDataManagerImpl::GetIconToken()
-    const {
-  return preference_manager_.GetString(prefs::kNearbySharingIconTokenName,
-                                       std::string());
 }
 
 DeviceNameValidationResult
@@ -214,68 +188,23 @@ DeviceNameValidationResult NearbyShareLocalDeviceDataManagerImpl::SetDeviceName(
   return DeviceNameValidationResult::kValid;
 }
 
-void NearbyShareLocalDeviceDataManagerImpl::DownloadDeviceData() {
-  executor_->PostTask([&]() {
-    NL_LOG(INFO) << __func__ << ": started";
-    if (!is_running()) {
-      NL_LOG(WARNING) << "DownloadDeviceData: skip to download device data due "
-                         "to manager is stopped.";
-      return;
-    }
-
-    if (!account_manager_.GetCurrentAccount().has_value()) {
-      NL_LOG(WARNING) << __func__
-                      << ": skip to download device data due "
-                         "to no login account.";
-      download_device_data_scheduler_->HandleResult(/*success=*/true);
-      return;
-    }
-
-    UpdateDeviceRequest request;
-    request.mutable_device()->set_name(
-        absl::StrCat(kDeviceIdPrefix, device_id_));
-    nearby_share_client_->UpdateDevice(
-        request, [this](const absl::StatusOr<UpdateDeviceResponse>& response) {
-          // check whether the manager is running again
-          if (!is_running()) {
-            NL_LOG(WARNING)
-                << "DownloadDeviceData: skip to download device data due "
-                   "to manager is stopped.";
-            return;
-          }
-
-          if (response.ok()) {
-            NL_LOG(WARNING) << "DownloadDeviceData: Got response from backend.";
-            HandleUpdateDeviceResponse(*response);
-          } else {
-            NL_LOG(WARNING)
-                << "DownloadDeviceData: Failed to get response from backend: "
-                << response.status();
-          }
-
-          download_device_data_scheduler_->HandleResult(
-              /*success=*/response.ok());
-        });
-  });
-}
-
 void NearbyShareLocalDeviceDataManagerImpl::UploadContacts(
     std::vector<nearby::sharing::proto::Contact> contacts,
     UploadCompleteCallback callback) {
   executor_->PostTask(
       [&, contacts = std::move(contacts), callback = std::move(callback)]() {
-        NL_LOG(INFO) << __func__ << ": size=" << contacts.size();
+        LOG(INFO) << __func__ << ": size=" << contacts.size();
         if (!is_running()) {
-          NL_LOG(WARNING) << "UploadContacts: skip to upload contacts due "
-                             "to manager is stopped.";
+          LOG(WARNING) << "UploadContacts: skip to upload contacts due "
+                          "to manager is stopped.";
           callback(false);
           return;
         }
 
         if (!account_manager_.GetCurrentAccount().has_value()) {
-          NL_LOG(WARNING) << __func__
-                          << ": skip to upload contacts due "
-                             "to no login account.";
+          LOG(WARNING) << __func__
+                       << ": skip to upload contacts due "
+                          "to no login account.";
           callback(/*success=*/true);
           return;
         }
@@ -291,7 +220,7 @@ void NearbyShareLocalDeviceDataManagerImpl::UploadContacts(
             request, [callback = std::move(callback)](
                          const absl::StatusOr<UpdateDeviceResponse>& response) {
               if (!response.ok()) {
-                NL_LOG(WARNING)
+                LOG(WARNING)
                     << "UploadContacts: Failed to get response from backend: "
                     << response.status();
               }
@@ -305,19 +234,19 @@ void NearbyShareLocalDeviceDataManagerImpl::UploadCertificates(
     UploadCompleteCallback callback) {
   executor_->PostTask([&, certificates = std::move(certificates),
                        callback = std::move(callback)]() {
-    NL_LOG(INFO) << __func__ << ": Upload " << certificates.size()
-                 << " certificates.";
+    LOG(INFO) << __func__ << ": Upload " << certificates.size()
+              << " certificates.";
     if (!is_running()) {
-      NL_LOG(WARNING) << "UploadContacts: skip to upload certificates due "
-                         "to manager is stopped.";
+      LOG(WARNING) << "UploadContacts: skip to upload certificates due "
+                      "to manager is stopped.";
       callback(false);
       return;
     }
 
     if (!account_manager_.GetCurrentAccount().has_value()) {
-      NL_LOG(WARNING) << __func__
-                      << ": skip to upload certificates due "
-                         "to no login account.";
+      LOG(WARNING) << __func__
+                   << ": skip to upload certificates due "
+                      "to no login account.";
       callback(/*success=*/true);
       return;
     }
@@ -331,17 +260,17 @@ void NearbyShareLocalDeviceDataManagerImpl::UploadCertificates(
         std::string(kCertificatesFieldMaskPath));
     nearby_share_client_->UpdateDevice(
         request, [this, callback = std::move(callback)](
-                    const absl::StatusOr<UpdateDeviceResponse>& response) {
+                     const absl::StatusOr<UpdateDeviceResponse>& response) {
           // check whether the manager is running again
           if (!is_running()) {
-            NL_LOG(WARNING)
+            LOG(WARNING)
                 << "DownloadDeviceData: skip to upload certificates due "
                    "to manager is stopped.";
             callback(false);
             return;
           }
           if (!response.ok()) {
-            NL_LOG(WARNING)
+            LOG(WARNING)
                 << "UploadCertificates: Failed to get response from backend: "
                 << response.status();
           }
@@ -350,74 +279,33 @@ void NearbyShareLocalDeviceDataManagerImpl::UploadCertificates(
   });
 }
 
-void NearbyShareLocalDeviceDataManagerImpl::OnStart() {
-  // This schedules an immediate download of the full name and icon URL from the
-  // server if that has never happened before.
-  download_device_data_scheduler_->Start();
-}
-
-void NearbyShareLocalDeviceDataManagerImpl::OnStop() {
-  download_device_data_scheduler_->Stop();
-}
-
 std::string NearbyShareLocalDeviceDataManagerImpl::GetDefaultDeviceName()
     const {
-  std::string device_type_name = device_info_.GetDeviceTypeName();
-  std::string device_name = device_info_.GetOsDeviceName();
-  std::optional<std::string> given_name =
-      profile_info_provider_->GetGivenName();
-  if (!given_name.has_value()) return device_name;
+  std::optional<AccountManager::Account> account =
+      account_manager_.GetCurrentAccount();
+  DeviceInfo::OsType os_type = device_info_.GetOsType();
 
-  std::string default_device_name =
-      absl::Substitute(kDefaultDeviceName, *given_name, device_type_name);
-
-  if (default_device_name.length() <= kNearbyShareDeviceNameMaxLength)
-    return default_device_name;
+  // If not logged in or account has not given name, use machine name instead.
+  // For iOS and macOS, the device name is already localized and generally works
+  // well for Quick Share purposes (i.e. "Niko's MacBook Pro"), so avoid using
+  // the non-localized account name and device type concatenation.
+  if (os_type == DeviceInfo::OsType::kMacOS ||
+      os_type == DeviceInfo::OsType::kIos || !account.has_value() ||
+      account->given_name.empty()) {
+    std::string device_name = device_info_.GetOsDeviceName();
+    return GetTruncatedName(device_name, kNearbyShareDeviceNameMaxLength);
+  }
+  std::string given_name = account->given_name;
+  std::string device_type = device_info_.GetDeviceTypeName();
+  uint64_t untruncated_length =
+      absl::Substitute(kDefaultDeviceName, given_name, device_type).length();
+  uint64_t overflow_length =
+      untruncated_length - kNearbyShareDeviceNameMaxLength;
 
   std::string truncated_name =
-      GetTruncatedName(*given_name, default_device_name.length() -
-                                        kNearbyShareDeviceNameMaxLength);
+      GetTruncatedName(given_name, given_name.length() - overflow_length);
 
-  return absl::Substitute(kDefaultDeviceName, truncated_name, device_type_name);
-}
-
-void NearbyShareLocalDeviceDataManagerImpl::HandleUpdateDeviceResponse(
-    const std::optional<nearby::sharing::proto::UpdateDeviceResponse>&
-        response) {
-  if (!response) return;
-
-  bool did_full_name_change = response->person_name() != GetFullName();
-  if (did_full_name_change) {
-    preference_manager_.SetString(prefs::kNearbySharingFullNameName,
-                                  response->person_name());
-  }
-
-  // NOTE(http://crbug.com/1211189): An icon URL can change without the
-  // underlying image changing. For example, icon URLs for some child accounts
-  // can rotate on every UpdateDevice RPC call; a timestamp is included in the
-  // URL. The icon token is used to detect changes in the underlying image. If a
-  // new URL is sent and the token doesn't change, the old URL may still be
-  // valid for a couple of weeks, for example. So, private certificates do not
-  // necessarily need to update the icon URL whenever it changes. Also, we don't
-  // expect the token to change without the URL changing; regardless, we don't
-  // consider the icon changed unless the URL changes. That way, private
-  // certificates will not be unnecessarily regenerated.
-  bool did_icon_url_change = response->image_url() != GetIconUrl();
-  bool did_icon_token_change = response->image_token() != GetIconToken();
-  bool did_icon_change = did_icon_url_change && did_icon_token_change;
-  if (did_icon_url_change) {
-    preference_manager_.SetString(prefs::kNearbySharingIconUrlName,
-                                  response->image_url());
-  }
-  if (did_icon_token_change) {
-    preference_manager_.SetString(prefs::kNearbySharingIconTokenName,
-                                  response->image_token());
-  }
-
-  if (!did_full_name_change && !did_icon_change) return;
-
-  NotifyLocalDeviceDataChanged(/*did_device_name_change=*/false,
-                               did_full_name_change, did_icon_change);
+  return absl::Substitute(kDefaultDeviceName, truncated_name, device_type);
 }
 
 }  // namespace sharing

@@ -19,6 +19,7 @@
 <translation id="115443833402798225">安馬太韓文</translation>
 <translation id="1155759005174418845">加泰隆尼亞文</translation>
 <translation id="1168100932582989117">Google 名稱伺服器</translation>
+<translation id="1170788066030116158">拍攝日期</translation>
 <translation id="1172970565351728681">大約還剩 <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">重新命名</translation>
 <translation id="1173916544412572294">第 <ph name="NETWORK_INDEX" /> 個網路 (共 <ph name="NETWORK_COUNT" /> 個)，<ph name="PHONE_NAME" />，<ph name="CONNECTION_STATUS" />，訊號強度 <ph name="SIGNAL_STRENGTH" />%，手機電量：<ph name="BATTERY_STATUS" />%，詳細資料</translation>
@@ -421,6 +422,7 @@
 <translation id="4387004326333427325">遠端已拒絕驗證憑證</translation>
 <translation id="4394214039309501350">外部連結</translation>
 <translation id="4394980935660306080">本週稍早</translation>
+<translation id="4397435965699247285">OneDrive 無法離線使用</translation>
 <translation id="4398096759193130964">你可以還原這些項目，或是將這些項目拖曳到垃圾桶以外的新資料夾</translation>
 <translation id="4401287888955153199">解壓縮全部</translation>
 <translation id="4410695710508688828">擷取作業失敗：<ph name="ERROR_MESSAGE" /></translation>
@@ -662,7 +664,7 @@
 <translation id="6096979789310008754">已清除搜尋文字，畫面顯示所有檔案和資料夾。</translation>
 <translation id="610101264611565198">正在將 <ph name="FILE_NAME" /> 移至「<ph name="FOLDER_NAME" />」</translation>
 <translation id="61118516107968648">CSV 文字</translation>
-<translation id="6129953537138746214">空格</translation>
+<translation id="6129953537138746214">空格鍵</translation>
 <translation id="6133173853026656527">正在移動 <ph name="FILE_NAME" />...</translation>
 <translation id="6133877453787250710">管理員會監控：</translation>
 <translation id="613750717151263950">日文搭配美式鍵盤</translation>
@@ -1003,7 +1005,7 @@
 <translation id="854655314928502177">網路 Proxy 自動探索網址：</translation>
 <translation id="8549186985808798022">義大利文</translation>
 <translation id="8551494947769799688">拉脫維亞文</translation>
-<translation id="8560515948038859357">粵文</translation>
+<translation id="8560515948038859357">粵語</translation>
 <translation id="8561206103590473338">大象</translation>
 <translation id="8566466896628108558">第 <ph name="NETWORK_INDEX" /> 個網路 (共 <ph name="NETWORK_COUNT" /> 個)，<ph name="NETWORK_NAME" />，<ph name="SECURITY_STATUS" />，訊號強度 <ph name="SIGNAL_STRENGTH" />%，遭到管理員封鎖，詳細資料</translation>
 <translation id="8568374623837201676">要永久刪除這個檔案嗎？</translation>

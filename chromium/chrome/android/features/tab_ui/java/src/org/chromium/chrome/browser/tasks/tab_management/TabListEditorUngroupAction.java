@@ -11,13 +11,13 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
-import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.ConfirmationResult;
+import org.chromium.chrome.browser.tab.TabUtils;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiMetricsHelper.TabListEditorActionMetricGroups;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 /** Ungroup action for the {@link TabListEditorMenu}. */
 public class TabListEditorUngroupAction extends TabListEditorAction {
@@ -83,12 +83,10 @@ public class TabListEditorUngroupAction extends TabListEditorAction {
         // Only trigger trigger confirmation when all the tabs are being removed, as that is when
         // the group will be deleted as a result.
         if (relatedTabs.size() <= tabsToUngroup.size()) {
-            List<Integer> tabIdList =
-                    tabsToUngroup.stream().map(Tab::getId).collect(Collectors.toList());
-            mActionConfirmationManager.processRemoveTabAttempt(
-                    tabIdList,
-                    (@ConfirmationResult Integer result) -> {
-                        if (result != ConfirmationResult.CONFIRMATION_NEGATIVE) {
+            mActionConfirmationManager.processUngroupTabAttempt(
+                    TabUtils.getTabIds(tabsToUngroup),
+                    (@ActionConfirmationResult Integer result) -> {
+                        if (result != ActionConfirmationResult.CONFIRMATION_NEGATIVE) {
                             doRemoveTabs(tabsToUngroup);
                         }
                     });
@@ -102,7 +100,7 @@ public class TabListEditorUngroupAction extends TabListEditorAction {
     private void doRemoveTabs(List<Tab> tabs) {
         TabGroupModelFilter filter = getTabGroupModelFilter();
         for (Tab tab : tabs) {
-            filter.moveTabOutOfGroup(tab.getId());
+            filter.moveTabOutOfGroupInDirection(tab.getId(), /* trailing= */ true);
         }
         TabUiMetricsHelper.recordSelectionEditorActionMetrics(
                 TabListEditorActionMetricGroups.UNGROUP);

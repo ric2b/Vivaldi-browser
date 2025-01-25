@@ -22,6 +22,7 @@
 #include "third_party/blink/renderer/modules/webcodecs/array_buffer_util.h"
 #include "third_party/blink/renderer/modules/webcodecs/video_frame_handle.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
+#include "third_party/blink/renderer/platform/bindings/v8_external_memory_accounter.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -46,6 +47,7 @@ class VideoFrameBufferInit;
 class VideoFrameCopyToOptions;
 class VideoFrameInit;
 class VideoFrameLayout;
+class VideoFrameMetadata;
 
 class MODULES_EXPORT VideoFrame final : public ScriptWrappable,
                                         public CanvasImageSource,
@@ -89,10 +91,15 @@ class MODULES_EXPORT VideoFrame final : public ScriptWrappable,
   DOMRectReadOnly* codedRect();
   DOMRectReadOnly* visibleRect();
 
+  uint32_t rotation() const;
+  bool flip() const;
+
   uint32_t displayWidth() const;
   uint32_t displayHeight() const;
 
   VideoColorSpace* colorSpace();
+
+  VideoFrameMetadata* metadata(ExceptionState&);
 
   uint32_t allocationSize(VideoFrameCopyToOptions* options, ExceptionState&);
 
@@ -160,11 +167,11 @@ class MODULES_EXPORT VideoFrame final : public ScriptWrappable,
   scoped_refptr<VideoFrameHandle> handle_;
 
   // Caches
-  int64_t external_allocated_memory_;
   Member<DOMRectReadOnly> coded_rect_;
   Member<DOMRectReadOnly> visible_rect_;
   Member<VideoColorSpace> color_space_;
   Member<VideoColorSpace> empty_color_space_;
+  V8ExternalMemoryAccounter external_memory_accounter_;
 };
 
 }  // namespace blink

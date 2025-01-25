@@ -45,8 +45,8 @@ const CGFloat vPopupContainerCornerRadius = 8;
 @interface OmniboxPopupPresenter ()
 /// Constraint for the bottom anchor of the popup when form factor is phone.
 @property(nonatomic, strong) NSLayoutConstraint* bottomConstraintPhone;
-/// Constraint for the bottom anchor of the popup when form factor is tablet.
-@property(nonatomic, strong) NSLayoutConstraint* bottomConstraintTablet;
+/// Constraint for the height anchor of the popup when form factor is tablet.
+@property(nonatomic, strong) NSLayoutConstraint* heightConstraintTablet;
 
 @property(nonatomic, weak) id<OmniboxPopupPresenterDelegate> delegate;
 @property(nonatomic, weak) UIViewController<ContentProviding>* viewController;
@@ -194,12 +194,12 @@ const CGFloat vPopupContainerCornerRadius = 8;
       if (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET) {
         self.bottomSeparator.hidden = NO;
       } else {
-        self.bottomConstraintTablet.active = YES;
+        self.heightConstraintTablet.active = YES;
       }
     } else {
     [self initialLayoutAnimated:enableFocusAnimation];
 
-    [self updateBottomConstraints];
+    [self updatePopupConstraints];
     } // End Vivaldi
 
     self.open = YES;
@@ -227,17 +227,17 @@ const CGFloat vPopupContainerCornerRadius = 8;
   } else {
   // Re-add necessary constraints.
   [self initialLayoutAnimated:NO];
-  [self updateBottomConstraints];
+  [self updatePopupConstraints];
   } // End Vivaldi
 
 }
 
-- (void)updateBottomConstraints {
+- (void)updatePopupConstraints {
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
     BOOL showRegularLayout =
         IsRegularXRegularSizeClass(self.popupContainerView.traitCollection);
     self.bottomConstraintPhone.active = !showRegularLayout;
-    self.bottomConstraintTablet.active = showRegularLayout;
+    self.heightConstraintTablet.active = showRegularLayout;
   } else {
     self.bottomConstraintPhone.active = YES;
     self.bottomSeparator.hidden = NO;
@@ -289,9 +289,9 @@ const CGFloat vPopupContainerCornerRadius = 8;
 
   // On tablet form factor the popup is padded on the bottom to allow the user
   // to defocus the omnibox.
-  self.bottomConstraintTablet = [popup.superview.bottomAnchor
-      constraintGreaterThanOrEqualToAnchor:popup.bottomAnchor
-                                  constant:kPopupBottomPaddingTablet];
+  self.heightConstraintTablet = [popup.heightAnchor
+      constraintLessThanOrEqualToAnchor:popup.superview.heightAnchor
+                             multiplier:0.7];
 
   // Install in the superview the guide tracking the top omnibox.
   if (self.topOmniboxGuide) {
@@ -434,9 +434,10 @@ const CGFloat vPopupContainerCornerRadius = 8;
 
   // On tablet form factor the popup is padded on the bottom to allow the user
   // to defocus the omnibox.
-  self.bottomConstraintTablet = [popup.superview.bottomAnchor
-      constraintGreaterThanOrEqualToAnchor:popup.bottomAnchor
-                                  constant:kPopupBottomPaddingTablet];
+  self.heightConstraintTablet =
+      [popup.heightAnchor
+          constraintLessThanOrEqualToAnchor:popup.superview.heightAnchor
+                                 multiplier:0.7];
 
   // Install in the superview the guide tracking the omnibox.
   if (self.vivaldiOmniboxGuide) {

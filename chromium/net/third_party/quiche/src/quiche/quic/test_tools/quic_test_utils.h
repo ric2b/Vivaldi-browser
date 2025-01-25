@@ -456,6 +456,8 @@ class MockQuicConnectionVisitor : public QuicConnectionVisitorInterface {
   MOCK_METHOD(void, OnBlockedFrame, (const QuicBlockedFrame& frame),
               (override));
   MOCK_METHOD(void, OnRstStream, (const QuicRstStreamFrame& frame), (override));
+  MOCK_METHOD(void, OnResetStreamAt, (const QuicResetStreamAtFrame& frame),
+              (override));
   MOCK_METHOD(void, OnGoAway, (const QuicGoAwayFrame& frame), (override));
   MOCK_METHOD(void, OnMessageReceived, (absl::string_view message), (override));
   MOCK_METHOD(void, OnHandshakeDoneReceived, (), (override));
@@ -471,6 +473,7 @@ class MockQuicConnectionVisitor : public QuicConnectionVisitorInterface {
               (override));
   MOCK_METHOD(void, OnPathDegrading, (), (override));
   MOCK_METHOD(void, OnForwardProgressMadeAfterPathDegrading, (), (override));
+  MOCK_METHOD(void, OnForwardProgressMadeAfterFlowLabelChange, (), (override));
   MOCK_METHOD(bool, WillingAndAbleToWrite, (), (const, override));
   MOCK_METHOD(bool, ShouldKeepConnectionAlive, (), (const, override));
   MOCK_METHOD(std::string, GetStreamsInfoForLogging, (), (const, override));
@@ -566,15 +569,7 @@ class MockAlarmFactory : public QuicAlarmFactory {
 
 class TestAlarmFactory : public QuicAlarmFactory {
  public:
-  class TestAlarm : public QuicAlarm {
-   public:
-    explicit TestAlarm(QuicArenaScopedPtr<QuicAlarm::Delegate> delegate)
-        : QuicAlarm(std::move(delegate)) {}
-
-    void SetImpl() override {}
-    void CancelImpl() override {}
-    using QuicAlarm::Fire;
-  };
+  using TestAlarm = MockAlarmFactory::TestAlarm;
 
   TestAlarmFactory() {}
   TestAlarmFactory(const TestAlarmFactory&) = delete;
@@ -655,6 +650,11 @@ class MockQuicConnection : public QuicConnection {
               (const CachedNetworkParameters&, bool), (override));
   MOCK_METHOD(void, SetMaxPacingRate, (QuicBandwidth), (override));
 
+  MOCK_METHOD(void, SetApplicationDrivenPacingRate, (quic::QuicBandwidth),
+              (override));
+  MOCK_METHOD(quic::QuicBandwidth, ApplicationDrivenPacingRate, (),
+              (const, override));
+
   MOCK_METHOD(void, OnStreamReset, (QuicStreamId, QuicRstStreamErrorCode),
               (override));
   MOCK_METHOD(bool, SendControlFrame, (const QuicFrame& frame), (override));
@@ -665,6 +665,8 @@ class MockQuicConnection : public QuicConnection {
               (const QuicPathFrameBuffer&, const QuicSocketAddress&,
                const QuicSocketAddress&, const QuicSocketAddress&,
                QuicPacketWriter*),
+              (override));
+  MOCK_METHOD(void, OnParsedClientHelloInfo, (const ParsedClientHello&),
               (override));
 
   MOCK_METHOD(void, OnError, (QuicFramer*), (override));
@@ -1216,6 +1218,8 @@ class MockSendAlgorithm : public SendAlgorithmInterface {
               (const QuicTagVector& connection_options), (override));
   MOCK_METHOD(void, SetInitialCongestionWindowInPackets,
               (QuicPacketCount packets), (override));
+  MOCK_METHOD(void, SetApplicationDrivenPacingRate,
+              (QuicBandwidth application_bandwidth_target), (override));
   MOCK_METHOD(void, OnCongestionEvent,
               (bool rtt_updated, QuicByteCount bytes_in_flight,
                QuicTime event_time, const AckedPacketVector& acked_packets,
@@ -1384,6 +1388,8 @@ class MockQuicConnectionDebugVisitor : public QuicConnectionDebugVisitor {
 
   MOCK_METHOD(void, OnZeroRttRejected, (int), (override));
   MOCK_METHOD(void, OnZeroRttPacketAcked, (), (override));
+  MOCK_METHOD(void, OnParsedClientHelloInfo, (const ParsedClientHello&),
+              (override));
 };
 
 class MockReceivedPacketManager : public QuicReceivedPacketManager {

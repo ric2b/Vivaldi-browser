@@ -133,8 +133,8 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::IndirectFirstInstance);
     EnableFeature(Feature::RG11B10UfloatRenderable);
     EnableFeature(Feature::DepthClipControl);
-    EnableFeature(Feature::SurfaceCapabilities);
     EnableFeature(Feature::Float32Filterable);
+    EnableFeature(Feature::Float32Blendable);
     EnableFeature(Feature::DualSourceBlending);
     EnableFeature(Feature::Unorm16TextureFormats);
     EnableFeature(Feature::Snorm16TextureFormats);
@@ -354,19 +354,9 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
     // Max number of "constants" where each constant is a 16-byte float4
     limits->v1.maxUniformBufferBindingSize = D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16;
 
-    if (gpu_info::IsQualcomm_ACPI(GetVendorId())) {
-        // limit of number of texels in a buffer == (1 << 27)
-        // D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP
-        // This limit doesn't apply to a raw buffer, but only applies to
-        // typed, or structured buffer. so this could be a QC driver bug.
-        limits->v1.maxStorageBufferBindingSize = uint64_t(1)
-                                                 << D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP;
-    } else {
-        limits->v1.maxStorageBufferBindingSize = kAssumedMaxBufferSize;
-    }
-
     // D3D12 has no documented limit on the buffer size.
     limits->v1.maxBufferSize = kAssumedMaxBufferSize;
+    limits->v1.maxStorageBufferBindingSize = kAssumedMaxBufferSize;
 
     // 1 for SV_Position and 1 for (SV_IsFrontFace OR SV_SampleIndex).
     // See the discussions in https://github.com/gpuweb/gpuweb/issues/1962 for more details.
@@ -384,6 +374,14 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
     // unclear. Use 128 instead, which is the largest possible size. Reference:
     // https://github.com/Microsoft/DirectXShaderCompiler/wiki/Wave-Intrinsics#:~:text=UINT%20WaveLaneCountMax
     limits->experimentalSubgroupLimits.maxSubgroupSize = 128u;
+
+    if (gpu_info::IsQualcomm_ACPI(GetVendorId())) {
+        // Due to a driver and hardware limitation, Raw Buffers can only address 2^27 WORDS instead
+        // of the guaranteeed 2^31 bytes. Probably because it uses some form of texel buffer of
+        // 32bit values to implement [RW]ByteAddressBuffer.
+        limits->v1.maxStorageBufferBindingSize = sizeof(uint32_t)
+                                                 << D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP;
+    }
 
     return {};
 }
@@ -572,15 +570,21 @@ void PhysicalDevice::SetupBackendAdapterToggles(dawn::platform::Platform* platfo
     }
 
     // Workaround for textureDimensions() produces incorrect results with shader model 6.6 on Intel
-    // D3D driver > 27.20.100.8935 and < 27.20.100.9684 on Intel Gen9, Gen9.5 and Gen11 GPUs.
+    // D3D driver > 27.20.100.8935 and < 27.20.100.9684 on Intel Gen9 and Gen9.5 GPUs.
     // See https://crbug.com/dawn/2448 for more information.
-    if (gpu_info::IsIntelGen9(vendorId, deviceId) || gpu_info::IsIntelGen11(vendorId, deviceId)) {
+    if (gpu_info::IsIntelGen9(vendorId, deviceId)) {
         if (gpu_info::CompareWindowsDriverVersion(vendorId, GetDriverVersion(),
                                                   {27, 20, 100, 8935}) == 1 &&
             gpu_info::CompareWindowsDriverVersion(vendorId, GetDriverVersion(),
                                                   {27, 20, 100, 9684}) == -1) {
             adapterToggles->ForceSet(Toggle::D3D12DontUseShaderModel66OrHigher, true);
         }
+    }
+
+    // On Intel Gen11 D3D12 GPUs using shader model 6.6 causes many unexpected issues.
+    // See https://crbug.com/374606634 for more information.
+    if (gpu_info::IsIntelGen11(vendorId, deviceId)) {
+        adapterToggles->ForceSet(Toggle::D3D12DontUseShaderModel66OrHigher, true);
     }
 }
 
@@ -726,6 +730,12 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
         }
     }
 
+    // B2T copy failed with stencil8 format on Intel ACM/MTL/ARL GPUs. See
+    // https://issues.chromium.org/issues/368085621 for more information.
+    if (gpu_info::IsAlchemist(deviceId) || gpu_info::IsMeteorlakeOrArrowlake(deviceId)) {
+        deviceToggles->Default(Toggle::UseBlitForBufferToStencilTextureCopy, true);
+    }
+
     // Currently these workarounds are needed on Intel Gen9.5 and Gen11 GPUs, as well as
     // AMD GPUS.
     // See http://crbug.com/1237175, http://crbug.com/dawn/1628, and http://crbug.com/dawn/2032
@@ -792,6 +802,10 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
         deviceToggles->Default(Toggle::D3D12ForceStencilComponentReplicateSwizzle, true);
         deviceToggles->Default(Toggle::D3D12ExpandShaderResourceStateTransitionsToCopySource, true);
     }
+
+    // Use the Tint IR backend by default if the corresponding platform feature is enabled.
+    deviceToggles->Default(Toggle::UseTintIR,
+                           platform->IsFeatureEnabled(platform::Features::kWebGPUUseTintIR));
 }
 
 ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(

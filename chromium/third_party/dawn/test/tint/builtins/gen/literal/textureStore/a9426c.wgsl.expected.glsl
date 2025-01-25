@@ -4,30 +4,20 @@ precision highp int;
 
 layout(binding = 0, rgba32ui) uniform highp writeonly uimage2DArray arg_0;
 void textureStore_a9426c() {
-  imageStore(arg_0, ivec3(uvec3(uvec2(1u), 1u)), uvec4(1u));
+  ivec2 v = ivec2(uvec2(1u));
+  imageStore(arg_0, ivec3(v, int(1u)), uvec4(1u));
 }
-
-void fragment_main() {
-  textureStore_a9426c();
-}
-
 void main() {
-  fragment_main();
-  return;
+  textureStore_a9426c();
 }
 #version 310 es
 
 layout(binding = 0, rgba32ui) uniform highp writeonly uimage2DArray arg_0;
 void textureStore_a9426c() {
-  imageStore(arg_0, ivec3(uvec3(uvec2(1u), 1u)), uvec4(1u));
+  ivec2 v = ivec2(uvec2(1u));
+  imageStore(arg_0, ivec3(v, int(1u)), uvec4(1u));
 }
-
-void compute_main() {
-  textureStore_a9426c();
-}
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  compute_main();
-  return;
+  textureStore_a9426c();
 }

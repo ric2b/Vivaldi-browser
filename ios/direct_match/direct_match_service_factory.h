@@ -6,7 +6,7 @@
 #import "base/no_destructor.h"
 #import "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 
-class ChromeBrowserState;
+class ProfileIOS;
 
 namespace direct_match {
 
@@ -14,9 +14,9 @@ class DirectMatchService;
 
 class DirectMatchServiceFactory : public BrowserStateKeyedServiceFactory {
 public:
-  static DirectMatchService* GetForBrowserState(ChromeBrowserState* browser_state);
-  static DirectMatchService* GetForBrowserStateIfExists(
-         ChromeBrowserState* browser_state);
+  static DirectMatchService* GetForProfile(ProfileIOS* profile);
+  static DirectMatchService* GetForProfileIfExists(
+      ProfileIOS* profile);
   static DirectMatchServiceFactory* GetInstance();
 
 private:

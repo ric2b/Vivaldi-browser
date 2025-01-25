@@ -41,7 +41,9 @@ cast_core_proto_library("runtime_metadata_proto") {
     sources = [
         "runtime_metadata.proto",
     ]
-    deps = [":duration_proto"]
+    deps = [
+        ":duration_proto",
+    ]
     proto_in_dir = "//third_party/cast_core/public/src"
 }
 

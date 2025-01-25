@@ -65,8 +65,8 @@ class NoteModelBridge;
 // Shared state between Note home classes.
 @property(nonatomic, strong) NoteHomeSharedState* sharedState;
 
-// The browser state for this mediator.
-@property(nonatomic, assign) ChromeBrowserState* browserState;
+// The profile for this mediator.
+@property(nonatomic, assign) ProfileIOS* profile;
 
 // Sync service.
 @property(nonatomic, assign) syncer::SyncService* syncService;
@@ -74,15 +74,15 @@ class NoteModelBridge;
 @end
 
 @implementation NoteHomeMediator
-@synthesize browserState = _browserState;
+@synthesize profile = _profile;
 @synthesize consumer = _consumer;
 @synthesize sharedState = _sharedState;
 
 - (instancetype)initWithSharedState:(NoteHomeSharedState*)sharedState
-                       browserState:(ChromeBrowserState*)browserState {
+                            profile:(ProfileIOS*)profile {
   if ((self = [super init])) {
     _sharedState = sharedState;
-    _browserState = browserState;
+    _profile = profile;
   }
   return self;
 }
@@ -99,13 +99,13 @@ class NoteModelBridge;
           self, self.browserState);*/
 
   _prefChangeRegistrar = std::make_unique<PrefChangeRegistrar>();
-  _prefChangeRegistrar->Init(self.browserState->GetPrefs());
+  _prefChangeRegistrar->Init(self.profile->GetPrefs());
   _prefObserverBridge.reset(new PrefObserverBridge(self));
 
   // TODO_prefObserverBridge->ObserveChangesForPreference(
   //    prefs::kEditNotesEnabled, _prefChangeRegistrar.get());
 
-  _syncService = SyncServiceFactory::GetForBrowserState(self.browserState);
+  _syncService = SyncServiceFactory::GetForProfile(self.profile);
 
   [self computeNoteTableViewData];
 }
@@ -113,7 +113,7 @@ class NoteModelBridge;
 - (void)disconnect {
   _modelBridge = nullptr;
   //_syncedNotesObserver = nullptr;
-  self.browserState = nullptr;
+  self.profile = nullptr;
   self.consumer = nil;
   self.sharedState = nil;
   _prefChangeRegistrar.reset();

@@ -47,7 +47,8 @@ std::unique_ptr<MtlCommandBuffer> MtlCommandBuffer::Make(id<MTLCommandQueue> que
 MtlCommandBuffer::MtlCommandBuffer(id<MTLCommandQueue> queue,
                                    const MtlSharedContext* sharedContext,
                                    MtlResourceProvider* resourceProvider)
-        : fQueue(queue)
+        : CommandBuffer(Protected::kNo)  // Metal doesn't support protected memory
+        , fQueue(queue)
         , fSharedContext(sharedContext)
         , fResourceProvider(resourceProvider) {}
 
@@ -587,7 +588,8 @@ void MtlCommandBuffer::setScissor(unsigned int left, unsigned int top,
     SkASSERT(fActiveRenderCommandEncoder);
     SkIRect scissor = SkIRect::MakeXYWH(
             left + fReplayTranslation.x(), top + fReplayTranslation.y(), width, height);
-    fDrawIsOffscreen = !scissor.intersect(SkIRect::MakeSize(fColorAttachmentSize));
+    fDrawIsOffscreen = !scissor.intersect(SkIRect::MakeSize(fColorAttachmentSize)) ||
+                       (!fReplayClip.isEmpty() && !scissor.intersect(fReplayClip));
     if (fDrawIsOffscreen) {
         scissor.setEmpty();
     }
@@ -614,11 +616,12 @@ void MtlCommandBuffer::setViewport(float x, float y, float width, float height,
 
 void MtlCommandBuffer::updateIntrinsicUniforms(SkIRect viewport) {
     UniformManager intrinsicValues{Layout::kMetal};
-    CollectIntrinsicUniforms(fSharedContext->caps(), viewport, fReplayTranslation, fDstCopyOffset,
-                             &intrinsicValues);
+    CollectIntrinsicUniforms(fSharedContext->caps(), viewport, fDstCopyBounds, &intrinsicValues);
     SkSpan<const char> bytes = intrinsicValues.finish();
-    fActiveRenderCommandEncoder->setVertexBytes(bytes.data(), bytes.size_bytes(),
-                                                MtlGraphicsPipeline::kIntrinsicUniformBufferIndex);
+    fActiveRenderCommandEncoder->setVertexBytes(
+            bytes.data(), bytes.size_bytes(), MtlGraphicsPipeline::kIntrinsicUniformBufferIndex);
+    fActiveRenderCommandEncoder->setFragmentBytes(
+            bytes.data(), bytes.size_bytes(), MtlGraphicsPipeline::kIntrinsicUniformBufferIndex);
 }
 
 void MtlCommandBuffer::setBlendConstants(float* blendConstants) {

@@ -61,7 +61,7 @@ void NotesModelFactory::RegisterProfilePrefs(
 
 content::BrowserContext* NotesModelFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
+  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 bool NotesModelFactory::ServiceIsNULLWhileTesting() const {

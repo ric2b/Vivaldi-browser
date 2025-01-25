@@ -18,8 +18,11 @@
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service_factory.h"
 #include "chrome/browser/preloading/prerender/prerender_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/page_load_metrics/browser/navigation_handle_user_data.h"
+#include "components/search_engines/template_url.h"
+#include "components/search_engines/template_url_service.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/preloading.h"
@@ -63,6 +66,15 @@ void AttachBookmarkBarNavigationHandleUserData(
   page_load_metrics::NavigationHandleUserData::CreateForNavigationHandle(
       navigation_handle, page_load_metrics::NavigationHandleUserData::
                              InitiatorLocation::kBookmarkBar);
+}
+
+bool IsSearchUrl(content::WebContents& web_contents, const GURL& url) {
+  auto* profile = Profile::FromBrowserContext(web_contents.GetBrowserContext());
+  TemplateURLService* template_url_service =
+      TemplateURLServiceFactory::GetForProfile(profile);
+  return template_url_service &&
+         template_url_service->IsSearchResultsPageFromDefaultSearchProvider(
+             url);
 }
 
 }  // namespace
@@ -180,6 +192,10 @@ PrerenderManager::StartPrerenderBookmark(const GURL& prerendering_url) {
   content::PreloadingURLMatchCallback same_url_matcher =
       content::PreloadingData::GetSameURLMatcher(prerendering_url);
 
+  if (IsSearchUrl(*web_contents(), prerendering_url)) {
+    return nullptr;
+  }
+
   // Create new PreloadingAttempt and pass all the values corresponding to
   // this prerendering attempt for Prerender.
   content::PreloadingAttempt* preloading_attempt =
@@ -224,6 +240,7 @@ PrerenderManager::StartPrerenderBookmark(const GURL& prerendering_url) {
       // trigger to activation), warm-up is not enabled for now on this trigger.
       // Please see crbug and its doc for more details.
       /*should_warm_up_compositor=*/false,
+      /*should_prepare_paint_tree=*/false,
       content::PreloadingHoldbackStatus::kUnspecified, preloading_attempt,
       /*url_match_predicate=*/{},
       std::move(prerender_navigation_handle_callback));
@@ -236,6 +253,10 @@ base::WeakPtr<content::PrerenderHandle>
 PrerenderManager::StartPrerenderNewTabPage(
     const GURL& prerendering_url,
     content::PreloadingPredictor predictor) {
+  if (IsSearchUrl(*web_contents(), prerendering_url)) {
+    return nullptr;
+  }
+
   // Helpers to create content::PreloadingAttempt.
   auto* preloading_data =
       content::PreloadingData::GetOrCreateForWebContents(web_contents());
@@ -283,6 +304,7 @@ PrerenderManager::StartPrerenderNewTabPage(
       // trigger to activation), warm-up is not enabled for now on this trigger.
       // Please see crbug and its doc for more details.
       /*should_warm_up_compositor=*/false,
+      /*should_prepare_paint_tree=*/false,
       content::PreloadingHoldbackStatus::kUnspecified, preloading_attempt,
       /*url_match_predicate=*/{},
       std::move(prerender_navigation_handle_callback));
@@ -344,6 +366,7 @@ PrerenderManager::StartPrerenderDirectUrlInput(
       ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
                                 ui::PAGE_TRANSITION_FROM_ADDRESS_BAR),
       /*should_warm_up_compositor=*/true,
+      /*should_prepare_paint_tree=*/false,
       content::PreloadingHoldbackStatus::kUnspecified, &preloading_attempt,
       /*url_match_predicate=*/{}, /*prerender_navigation_handle_callback=*/{});
 
@@ -384,7 +407,8 @@ void PrerenderManager::StartPrerenderSearchResult(
           prerender_utils::kDefaultSearchEngineMetricSuffix,
           ui::PageTransitionFromInt(ui::PAGE_TRANSITION_GENERATED |
                                     ui::PAGE_TRANSITION_FROM_ADDRESS_BAR),
-          /*should_warm_up_compositor=*/true, holdback_status_override,
+          /*should_warm_up_compositor=*/true,
+          /*should_prepare_paint_tree=*/true, holdback_status_override,
           preloading_attempt.get(), std::move(url_match_predicate),
           /*prerender_navigation_handle_callback=*/{});
 

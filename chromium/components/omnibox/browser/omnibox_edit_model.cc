@@ -735,9 +735,9 @@ void OmniboxEditModel::StartAutocomplete(bool has_selected_text,
   input_.set_allow_exact_keyword_match(is_keyword_selected() ||
                                        allow_exact_keyword_match_);
   input_.set_keyword_mode_entry_method(keyword_mode_entry_method_);
-  if (std::optional<lens::proto::LensOverlayInteractionResponse> response =
-          controller_->client()->GetLensOverlayInteractionResponse()) {
-    input_.set_lens_overlay_interaction_response(*response);
+  if (std::optional<lens::proto::LensOverlaySuggestInputs> suggest_inputs =
+          controller_->client()->GetLensOverlaySuggestInputs()) {
+    input_.set_lens_overlay_suggest_inputs(*suggest_inputs);
   }
 
   controller_->StartAutocomplete(input_);
@@ -858,6 +858,8 @@ void OmniboxEditModel::OpenSelection(OmniboxPopupSelection selection,
   } else if (selection.state ==
              OmniboxPopupSelection::FOCUSED_BUTTON_REMOVE_SUGGESTION) {
     TryDeletingPopupLine(selection.line);
+  } else if (selection.state == OmniboxPopupSelection::FOCUSED_IPH_LINK) {
+    controller_->client()->OpenIphLink(match.iph_link_url);
   } else {
     // Open the match.
     GURL alternate_nav_url = AutocompleteResult::ComputeAlternateNavUrl(
@@ -1107,9 +1109,12 @@ void OmniboxEditModel::StartZeroSuggestRequest(
       controller_->client()->IsUsingFakeHttpsForHttpsUpgradeTesting());
   input_.set_current_url(controller_->client()->GetURL());
   input_.set_current_title(controller_->client()->GetTitle());
-  input_.set_focus_type(user_clobbered_permanent_text
-                            ? metrics::OmniboxFocusType::INTERACTION_CLOBBER
-                            : metrics::OmniboxFocusType::INTERACTION_FOCUS);
+  input_.set_focus_type(metrics::OmniboxFocusType::INTERACTION_FOCUS);
+  // Set the lens overlay suggest inputs, if available.
+  if (std::optional<lens::proto::LensOverlaySuggestInputs> suggest_inputs =
+          controller_->client()->GetLensOverlaySuggestInputs()) {
+    input_.set_lens_overlay_suggest_inputs(*suggest_inputs);
+  }
   controller_->StartAutocomplete(input_);
 }
 
@@ -1437,9 +1442,9 @@ void OmniboxEditModel::OnPopupDataChanged(
       selections.emplace_back(0, prefix_autocompletion_.length());
     }
     if (view_) {
-      view_->OnInlineAutocompleteTextMaybeChanged(display_text, selections,
-                                                  prefix_autocompletion_,
-                                                  inline_autocompletion_);
+      view_->OnInlineAutocompleteTextMaybeChanged(
+          display_text, std::move(selections), prefix_autocompletion_,
+          inline_autocompletion_);
       view_->SetAdditionalText(additional_text);
     }
   }
@@ -1733,6 +1738,7 @@ gfx::Image OmniboxEditModel::GetMatchIcon(const AutocompleteMatch& match,
   if (!AutocompleteMatch::IsSearchType(match.type) &&
       match.type != AutocompleteMatchType::DOCUMENT_SUGGESTION &&
       match.type != AutocompleteMatchType::HISTORY_CLUSTER &&
+      match.type != AutocompleteMatchType::HISTORY_EMBEDDINGS_ANSWER &&
       !AutocompleteMatch::IsStarterPackType(match.type)) {
     // Because the Views UI code calls GetMatchIcon in both the layout and
     // painting code, we may generate multiple `OnFaviconFetched` callbacks,
@@ -1943,10 +1949,28 @@ std::u16string OmniboxEditModel::GetPopupAccessibilityLabelForCurrentSelection(
   const AutocompleteMatch& match =
       autocomplete_controller()->result().match_at(line);
 
+  if (match.type == AutocompleteMatchType::HISTORY_EMBEDDINGS_ANSWER) {
+    // This match type is a special case that puts its primary meaningful
+    // content (the answer) into the `description` and repurposes other fields.
+    // So using `fill_into_edit` or `inline_autocompletion` or even just match
+    // `contents` doesn't make sense in this case. Instead, we provide the
+    // screen reader with the header ("Summary") and then the answer in
+    // `description`, and finally the URL details in `contents` (includes date).
+    return AutocompleteMatchType::ToAccessibilityLabel(
+        match,
+        base::StrCat({
+            match.history_embeddings_answer_header_text,
+            match.description,
+            match.contents,
+        }),
+        line, autocomplete_controller()->result().size(), u"",
+        label_prefix_length);
+  }
+
   int additional_message_id = 0;
   std::u16string additional_message;
   // This switch statement should be updated when new selection types are added.
-  static_assert(OmniboxPopupSelection::LINE_STATE_MAX_VALUE == 7);
+  static_assert(OmniboxPopupSelection::LINE_STATE_MAX_VALUE == 8);
   switch (popup_selection_.state) {
     case OmniboxPopupSelection::FOCUSED_BUTTON_HEADER: {
       bool group_hidden = controller_->IsSuggestionGroupHidden(
@@ -2031,6 +2055,11 @@ std::u16string OmniboxEditModel::GetPopupAccessibilityLabelForCurrentSelection(
                                   ? IDS_ACC_DISMISS_CHROME_TIP_FOCUSED_PREFIX
                                   : IDS_ACC_REMOVE_SUGGESTION_FOCUSED_PREFIX;
       break;
+    case OmniboxPopupSelection::FOCUSED_IPH_LINK:
+      return AutocompleteMatchType::ToAccessibilityLabel(
+          match, match.iph_link_text, line, 0,
+          l10n_util::GetStringUTF16(IDS_ACC_OMNIBOX_IPH_LINK_SELECTED),
+          label_prefix_length);
     default:
       break;
   }
@@ -2143,7 +2172,11 @@ void OmniboxEditModel::SetPopupSuggestionGroupVisibility(
   }
 }
 
-PrefService* OmniboxEditModel::GetPrefService() const {
+PrefService* OmniboxEditModel::GetPrefService() {
+  return controller_->client()->GetPrefs();
+}
+
+const PrefService* OmniboxEditModel::GetPrefService() const {
   return controller_->client()->GetPrefs();
 }
 
@@ -2486,7 +2519,7 @@ void OmniboxEditModel::OpenMatch(OmniboxPopupSelection selection,
   AutocompleteResult fake_single_entry_result;
   fake_single_entry_result.AppendMatches(fake_single_entry_matches);
 
-  const std::u16string& user_text =
+  std::u16string user_text =
       input_.IsZeroSuggest() ? std::u16string() : input_text;
   size_t completed_length = match.allowed_to_be_default_match
                                 ? match.inline_autocompletion.length()
@@ -2546,8 +2579,8 @@ void OmniboxEditModel::OpenMatch(OmniboxPopupSelection selection,
   if (!last_omnibox_focus_.is_null()) {
     // Only record focus to open time when a focus actually happened (as
     // opposed to, say, dragging a link onto the omnibox).
-    UMA_HISTOGRAM_MEDIUM_TIMES(kFocusToOpenTimeHistogram,
-                               now - last_omnibox_focus_);
+    DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES(kFocusToOpenTimeHistogram,
+                                          now - last_omnibox_focus_);
   }
 
   IDNA2008DeviationCharacter deviation_char_in_hostname =
@@ -2832,7 +2865,6 @@ std::u16string OmniboxEditModel::GetText() const {
   if (view_) {
     return view_->GetText();
   } else {
-    NOTREACHED_IN_MIGRATION();
-    return u"";
+    NOTREACHED();
   }
 }

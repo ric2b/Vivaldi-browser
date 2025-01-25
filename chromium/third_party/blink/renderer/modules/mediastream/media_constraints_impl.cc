@@ -98,8 +98,6 @@ const char kMediaStreamRenderToAssociatedSink[] =
 // RenderToAssociatedSink will be going away some time.
 const char kEchoCancellation[] = "echoCancellation";
 const char kDisableLocalEcho[] = "disableLocalEcho";
-const char kGoogEchoCancellation[] = "googEchoCancellation";
-const char kGoogExperimentalEchoCancellation[] = "googEchoCancellation2";
 const char kGoogAutoGainControl[] = "googAutoGainControl";
 const char kGoogNoiseSuppression[] = "googNoiseSuppression";
 const char kGoogExperimentalNoiseSuppression[] = "googNoiseSuppression2";
@@ -214,11 +212,6 @@ static void ParseOldStyleNames(
       // Should give TypeError when it's not parseable.
       // https://crbug.com/576582
       result.render_to_associated_sink.SetExact(ToBoolean(constraint.value_));
-    } else if (constraint.name_ == kGoogEchoCancellation) {
-      result.goog_echo_cancellation.SetExact(ToBoolean(constraint.value_));
-    } else if (constraint.name_ == kGoogExperimentalEchoCancellation) {
-      result.goog_experimental_echo_cancellation.SetExact(
-          ToBoolean(constraint.value_));
     } else if (constraint.name_ == kGoogAutoGainControl) {
       result.goog_auto_gain_control.SetExact(ToBoolean(constraint.value_));
     } else if (constraint.name_ == kGoogNoiseSuppression) {
@@ -379,8 +372,7 @@ bool ValidateStringConstraint(
                                error_message);
     }
   }
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 bool ValidateStringConstraint(const V8ConstrainDOMString* blink_union_form,
@@ -405,8 +397,7 @@ bool ValidateStringConstraint(const V8ConstrainDOMString* blink_union_form,
       return ValidateStringSeq(blink_union_form->GetAsStringSequence(),
                                error_message);
   }
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 [[nodiscard]] bool ValidateAndCopyStringConstraint(
@@ -711,8 +702,7 @@ bool UseNakedNumeric(const T& input, NakedValueDisposition which) {
              !(input.HasIdeal() || input.HasMin() || input.HasMax());
       break;
   }
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 template <class T>
@@ -725,8 +715,7 @@ bool UseNakedNonNumeric(const T& input, NakedValueDisposition which) {
       return input.HasExact() && !input.HasIdeal();
       break;
   }
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 template <typename U, class T>
@@ -739,8 +728,7 @@ U GetNakedValue(const T& input, NakedValueDisposition which) {
       return input.Exact();
       break;
   }
-  NOTREACHED_IN_MIGRATION();
-  return input.Exact();
+  NOTREACHED();
 }
 
 V8ConstrainLong* ConvertLong(const LongConstraint& input,

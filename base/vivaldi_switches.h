@@ -40,6 +40,11 @@ SWITCHES_EXPORT extern const char kTranslateServerUrl[];
 SWITCHES_EXPORT extern const char kVivaldiSilentUpdate[];
 SWITCHES_EXPORT extern const char kVivaldiUpdateURL[];
 
+#if BUILDFLAG(IS_WIN)
+// Only used from the Windows installer to do a clean shutdown.
+SWITCHES_EXPORT extern const char kCleanShutdown[];
+#endif //IS_WIN
+
 }  // namespace switches
 
 #endif  // BASE_VIVALDI_SWITCHES_H_

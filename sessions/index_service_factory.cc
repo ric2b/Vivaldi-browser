@@ -52,7 +52,7 @@ void IndexServiceFactory::ShutdownForProfile(Profile* profile) {
 
 content::BrowserContext* IndexServiceFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
+  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 KeyedService* IndexServiceFactory::BuildServiceInstanceFor(

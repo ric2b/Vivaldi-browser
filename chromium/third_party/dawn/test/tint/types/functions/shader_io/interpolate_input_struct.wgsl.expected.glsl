@@ -2,16 +2,7 @@
 precision highp float;
 precision highp int;
 
-layout(location = 0) in float none_1;
-layout(location = 1) flat in float tint_symbol_3;
-layout(location = 2) in float perspective_center_1;
-layout(location = 3) centroid in float perspective_centroid_1;
-layout(location = 4) in float perspective_sample_1;
-layout(location = 5) in float linear_center_1;
-layout(location = 6) centroid in float linear_centroid_1;
-layout(location = 7) in float linear_sample_1;
-layout(location = 8) in float perspective_default_1;
-layout(location = 9) in float linear_default_1;
+
 struct In {
   float none;
   float tint_symbol;
@@ -25,11 +16,18 @@ struct In {
   float linear_default;
 };
 
-void tint_symbol_1(In tint_symbol_2) {
+layout(location = 0) in float tint_symbol_1_loc0_Input;
+layout(location = 1) flat in float tint_symbol_1_loc1_Input;
+layout(location = 2) in float tint_symbol_1_loc2_Input;
+layout(location = 3) centroid in float tint_symbol_1_loc3_Input;
+layout(location = 4) in float tint_symbol_1_loc4_Input;
+layout(location = 5) in float tint_symbol_1_loc5_Input;
+layout(location = 6) centroid in float tint_symbol_1_loc6_Input;
+layout(location = 7) in float tint_symbol_1_loc7_Input;
+layout(location = 8) in float tint_symbol_1_loc8_Input;
+layout(location = 9) in float tint_symbol_1_loc9_Input;
+void tint_symbol_1_inner(In tint_symbol_2) {
 }
-
 void main() {
-  In tint_symbol_4 = In(none_1, tint_symbol_3, perspective_center_1, perspective_centroid_1, perspective_sample_1, linear_center_1, linear_centroid_1, linear_sample_1, perspective_default_1, linear_default_1);
-  tint_symbol_1(tint_symbol_4);
-  return;
+  tint_symbol_1_inner(In(tint_symbol_1_loc0_Input, tint_symbol_1_loc1_Input, tint_symbol_1_loc2_Input, tint_symbol_1_loc3_Input, tint_symbol_1_loc4_Input, tint_symbol_1_loc5_Input, tint_symbol_1_loc6_Input, tint_symbol_1_loc7_Input, tint_symbol_1_loc8_Input, tint_symbol_1_loc9_Input));
 }

@@ -46,15 +46,15 @@ void ClockDriftSmoother::Update(Clock::time_point now,
   if (last_update_time_ == kNullTime) {
     Reset(now, measured_offset);
   } else if (now < last_update_time_) {
-    // |now| is not monotonically non-decreasing.
+    // `now` is not monotonically non-decreasing.
     OSP_NOTREACHED();
   } else {
     const double elapsed_ticks =
         static_cast<double>((now - last_update_time_).count());
     last_update_time_ = now;
     // Compute a weighted-average between the last estimate and
-    // |measured_offset|. The more time that has elasped since the last call to
-    // Update(), the more-heavily |measured_offset| will be weighed.
+    // `measured_offset`. The more time that has elasped since the last call to
+    // Update(), the more-heavily `measured_offset` will be weighed.
     const double weight =
         elapsed_ticks / (elapsed_ticks + time_constant_.count());
     estimated_tick_offset_ =
@@ -69,8 +69,7 @@ void ClockDriftSmoother::Update(Clock::time_point now,
     }
 
     OSP_VLOG << "Local clock is ahead of the remote clock by: measured = "
-             << measured_offset << ", "
-             << "filtered = " << Current() << ".";
+             << measured_offset << ", " << "filtered = " << Current() << ".";
   }
 }
 

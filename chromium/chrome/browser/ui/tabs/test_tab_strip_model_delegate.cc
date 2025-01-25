@@ -125,12 +125,13 @@ bool TestTabStripModelDelegate::IsNormalWindow() {
 }
 
 BrowserWindowInterface* TestTabStripModelDelegate::GetBrowserWindowInterface() {
-  return nullptr;
+  return browser_window_interface_;
 }
 
 void TestTabStripModelDelegate::OnGroupsDestruction(
     const std::vector<tab_groups::TabGroupId>& group_ids,
-    base::OnceCallback<void()> callback) {
+    base::OnceCallback<void()> callback,
+    bool is_bulk_operation) {
   std::move(callback).Run();
 }
 

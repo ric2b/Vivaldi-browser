@@ -45,6 +45,16 @@ function getEnvironmentRecs(view: Element): string[] {
   return recs.map(rec => rec.textContent!);
 }
 
+function getPhaseTable(view: Element): string[][]|null {
+  const phaseTable = view.shadowRoot!.querySelector('.phase-table');
+  if (!phaseTable) {
+    return null;
+  }
+
+  const rowEls = Array.from(phaseTable.querySelectorAll('.phase-table-row:not(.phase-table-header-row)'));
+  return rowEls.map(rowEl => Array.from(rowEl.querySelectorAll('[role="cell"]')).map(cellEl => cellEl.textContent!));
+}
+
 function createMockHistogram() {
   // start/end values aren't actually used but they are filled out just in case
   // the histogram is therefore usable by all metrics
@@ -83,7 +93,7 @@ describeWithMockConnection('MetricCard', () => {
 
     const localValueEl = getLocalMetricValue(view);
     assert.strictEqual(localValueEl.className, 'metric-value good');
-    assert.strictEqual(localValueEl.innerText, '100 ms');
+    assert.strictEqual(localValueEl.innerText, '0.10 s');
 
     const fieldValueEl = getFieldMetricValue(view);
     assert.strictEqual(fieldValueEl!.className, 'metric-value poor');
@@ -135,7 +145,7 @@ describeWithMockConnection('MetricCard', () => {
 
     const localValueEl = getLocalMetricValue(view);
     assert.strictEqual(localValueEl.className, 'metric-value poor');
-    assert.strictEqual(localValueEl.innerText, '2.00 s');
+    assert.strictEqual(localValueEl.innerText, '2,000 ms');
 
     const fieldValueEl = getFieldMetricValue(view);
     assert.strictEqual(fieldValueEl!.className, 'metric-value good');
@@ -165,6 +175,49 @@ describeWithMockConnection('MetricCard', () => {
     assert.match(histogramLabels[0], /Good\s+\(≤2.50 s\)/);
     assert.match(histogramLabels[1], /Needs improvement\s+\(2.50 s-4.00 s\)/);
     assert.match(histogramLabels[2], /Poor\s+\(>4.00 s\)/);
+  });
+
+  describe('phase table', () => {
+    it('should not show if there is no phase data', async () => {
+      const view = new Components.MetricCard.MetricCard();
+      view.data = {
+        metric: 'LCP',
+        localValue: 100,
+        fieldValue: 200,
+        histogram: createMockHistogram(),
+      };
+      renderElementIntoDOM(view);
+
+      await coordinator.done();
+
+      const phaseTable = getPhaseTable(view);
+      assert.isNull(phaseTable);
+    });
+
+    it('should display phases in a table format', async () => {
+      const view = new Components.MetricCard.MetricCard();
+      view.data = {
+        metric: 'LCP',
+        localValue: 100,
+        fieldValue: 200,
+        histogram: createMockHistogram(),
+        phases: [
+          ['TTFB', 500],
+          ['Phase 1', 0],
+          ['Phase 2', 123.783458345],
+        ],
+      };
+      renderElementIntoDOM(view);
+
+      await coordinator.done();
+
+      const phaseTable = getPhaseTable(view);
+      assert.deepStrictEqual(phaseTable, [
+        ['TTFB', '500'],
+        ['Phase 1', '0'],
+        ['Phase 2', '124'],
+      ]);
+    });
   });
 
   describe('field data', () => {
@@ -215,7 +268,7 @@ describeWithMockConnection('MetricCard', () => {
       assert.deepStrictEqual(histogramPercents, ['50%', '30%', '20%']);
 
       const fieldValueEl = getFieldMetricValue(view);
-      assert.strictEqual(fieldValueEl!.textContent, '200 ms');
+      assert.strictEqual(fieldValueEl!.textContent, '0.20 s');
     });
 
     it('should show empty values when crux is enabled but there is no field data', async () => {
@@ -256,7 +309,7 @@ describeWithMockConnection('MetricCard', () => {
 
       const compareText = getCompareText(view);
       assert.strictEqual(
-          compareText!.innerText, 'Your local LCP value of 100 ms is good, and is similar to your users’ experience.');
+          compareText!.innerText, 'Your local LCP value of 0.10 s is good, and is similar to your users’ experience.');
     });
 
     it('should show message when local is better', async () => {
@@ -274,7 +327,7 @@ describeWithMockConnection('MetricCard', () => {
       const compareText = getCompareText(view);
       assert.strictEqual(
           compareText!.innerText,
-          'Your local LCP value of 100 ms is good, but is significantly better than your users’ experience.');
+          'Your local LCP value of 0.10 s is good, but is significantly better than your users’ experience.');
     });
 
     it('should show message when local is worse', async () => {
@@ -309,7 +362,7 @@ describeWithMockConnection('MetricCard', () => {
 
       const compareText = getCompareText(view);
       assert.strictEqual(
-          compareText!.innerText, 'Your local LCP value of 10 ms is good, and is similar to your users’ experience.');
+          compareText!.innerText, 'Your local LCP value of 0.01 s is good, and is similar to your users’ experience.');
     });
 
     it('should show generic summary if field is missing', async () => {
@@ -356,7 +409,7 @@ describeWithMockConnection('MetricCard', () => {
       const compareText = getDetailedCompareText(view);
       assert.strictEqual(
           compareText!.textContent,
-          'Your local LCP value of 100 ms is good and is rated the same as 50% of real-user LCP experiences. Additionally, the field data 75th percentile LCP value of 1.00 s is good.',
+          'Your local LCP value of 0.10 s is good and is rated the same as 50% of real-user LCP experiences. Additionally, the field data 75th percentile LCP value of 1.00 s is good.',
       );
     });
 
@@ -375,7 +428,7 @@ describeWithMockConnection('MetricCard', () => {
       const compareText = getDetailedCompareText(view);
       assert.strictEqual(
           compareText!.textContent,
-          'Your local LCP value of 100 ms is good and is rated the same as 50% of real-user LCP experiences. However, the field data 75th percentile LCP value of 5.00 s is poor.',
+          'Your local LCP value of 0.10 s is good and is rated the same as 50% of real-user LCP experiences. However, the field data 75th percentile LCP value of 5.00 s is poor.',
       );
     });
 

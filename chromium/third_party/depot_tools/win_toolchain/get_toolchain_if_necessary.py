@@ -236,15 +236,24 @@ def HaveSrcInternalAccess():
         # Credential Manager for Windows 1.12. See https://crbug.com/755694 and
         # https://github.com/Microsoft/Git-Credential-Manager-for-Windows/issues/482.
         child_env = dict(os.environ, GCM_INTERACTIVE='NEVER')
-        return subprocess.call([
-            'git', '-c', 'core.askpass=true', 'remote', 'show',
-            'https://chrome-internal.googlesource.com/chrome/src-internal/'
-        ],
-                               shell=True,
-                               stdin=nul,
-                               stdout=nul,
-                               stderr=nul,
-                               env=child_env) == 0
+        # If this script is run from an embedded terminal in VSCode, VSCode may
+        # intercept the git call and show an easily-missable username/passsword
+        # prompt. To ensure we can run without user input, just return false if
+        # we don't get a response quickly. See crbug.com/376067358.
+        try:
+            return subprocess.call(
+                [
+                    'git', '-c', 'core.askpass=true', 'remote', 'show',
+                    'https://chrome-internal.googlesource.com/chrome/src-internal/'
+                ],
+                shell=True,
+                stdin=nul,
+                stdout=nul,
+                stderr=nul,
+                timeout=10,  # seconds
+                env=child_env) == 0
+        except subprocess.TimeoutExpired:
+            return False
 
 
 def LooksLikeGoogler():

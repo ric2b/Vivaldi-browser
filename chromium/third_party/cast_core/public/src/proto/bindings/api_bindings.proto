@@ -23,6 +23,8 @@ option optimize_for = LITE_RUNTIME;
 message ApiBinding {
   // Script to execute before the load of a web document.
   string before_load_script = 1;
+  // Name of script
+  string script_name = 2;
 }
 
 message GetAllRequest {}

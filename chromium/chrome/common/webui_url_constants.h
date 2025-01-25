@@ -142,9 +142,6 @@ inline constexpr char kChromeUIHistoryHost[] = "history";
 inline constexpr char kChromeUIHistorySyncedTabs[] = "/syncedTabs";
 inline constexpr char kChromeUIHistoryURL[] = "chrome://history/";
 inline constexpr char16_t kChromeUIHistoryURL16[] = u"chrome://history/";
-inline constexpr char kChromeUIHumanPresenceInternalsHost[] = "hps-internals";
-inline constexpr char kChromeUIHumanPresenceInternalsURL[] =
-    "chrome://hps-internals/";
 inline constexpr char kChromeUIIdentityInternalsHost[] = "identity-internals";
 inline constexpr char kChromeUIImageHost[] = "image";
 inline constexpr char kChromeUIImageURL[] = "chrome://image/";
@@ -189,6 +186,8 @@ inline constexpr char kChromeUIOmniboxPopupHost[] = "omnibox-popup.top-chrome";
 inline constexpr char kChromeUIOmniboxPopupURL[] =
     "chrome://omnibox-popup.top-chrome/";
 inline constexpr char kChromeUIOmniboxURL[] = "chrome://omnibox/";
+inline constexpr char kChromeUIOnDeviceTranslationInternalsHost[] =
+    "on-device-translation-internals";
 inline constexpr char kChromeUIPasswordManagerCheckupURL[] =
     "chrome://password-manager/checkup?start=true";
 inline constexpr char kChromeUIPasswordManagerInternalsHost[] =
@@ -265,8 +264,6 @@ inline constexpr char kChromeUISyncConfirmationHost[] = "sync-confirmation";
 inline constexpr char kChromeUISyncConfirmationLoadingPath[] = "loading";
 inline constexpr char kChromeUISyncConfirmationURL[] =
     "chrome://sync-confirmation/";
-inline constexpr char kChromeUISyncFileSystemInternalsHost[] =
-    "syncfs-internals";
 inline constexpr char kChromeUISyncHost[] = "sync";
 inline constexpr char kChromeUISyncInternalsHost[] = "sync-internals";
 inline constexpr char kChromeUISyncInternalsUrl[] = "chrome://sync-internals";
@@ -671,6 +668,8 @@ inline constexpr char kAdPrivacySubPage[] = "adPrivacy";
 inline constexpr char kAllSitesSettingsSubpage[] = "content/all";
 inline constexpr char kAppearanceSubPage[] = "appearance";
 inline constexpr char kAutofillSubPage[] = "autofill";
+inline constexpr char kAutofillPredictionImprovementsSubPage[] =
+    "autofillPredictionImprovements";
 inline constexpr char kClearBrowserDataSubPage[] = "clearBrowserData";
 inline constexpr char kContentSettingsSubPage[] = "content";
 inline constexpr char kCookieSettingsSubPage[] = "cookies";
@@ -687,6 +686,7 @@ inline constexpr char kLanguageOptionsSubPage[] = "languages";
 inline constexpr char kLanguagesSubPage[] = "languages/details";
 inline constexpr char kManageProfileSubPage[] = "manageProfile";
 inline constexpr char kOfferWritingHelpSubpage[] = "content/offerWritingHelp";
+inline constexpr char kAiHelpMeWriteSubpage[] = "ai/helpMeWrite";
 inline constexpr char kOnDeviceSiteDataSubpage[] = "content/siteData";
 inline constexpr char kOnStartupSubPage[] = "onStartup";
 inline constexpr char kPasskeysSubPage[] = "passkeys";

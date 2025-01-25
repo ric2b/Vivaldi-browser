@@ -40,6 +40,7 @@ source_set("in_process") {
       "//base",
       "//components/metrics",
       "//components/metrics:child_call_stack_profile_builder",
+      "//components/sampling_profiler:profile_params",
       "//components/services/heap_profiling/public/cpp:cpp",
       "//components/variations",
       "//components/version_info",
@@ -66,9 +67,11 @@ source_set("unit_tests") {
       "//components/metrics",
       "//components/metrics:child_call_stack_profile_builder",
       "//components/metrics/public/mojom:call_stack_mojo_bindings",
+      "//components/sampling_profiler:profile_params",
       "//components/variations",
       "//components/version_info",
       "//mojo/core/test:test_support",
+      "//mojo/public/cpp/base:protobuf_support",
       "//mojo/public/cpp/bindings",
     ]
   }

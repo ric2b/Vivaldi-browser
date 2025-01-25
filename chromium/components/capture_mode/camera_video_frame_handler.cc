@@ -17,7 +17,9 @@
 #include "components/viz/common/gpu/context_provider.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
+#include "gpu/command_buffer/common/shared_image_capabilities.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
+#include "gpu/config/gpu_finch_features.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_types.h"
@@ -44,14 +46,6 @@ namespace {
 // device. This allows force-requesting them when testing in which case
 // SharedMemory GMBs are used.
 bool g_force_use_gpu_memory_buffer_for_test = false;
-
-// A constant flag that describes which APIs the shared images created
-// for the video frames will be used with. They will be read via the raster
-// interface (which will be going over GLES2 if OOP-R is not enabled), sent
-// to the display compositor, and may be used as overlays.
-constexpr gpu::SharedImageUsageSet kSharedImageUsage =
-    gpu::SHARED_IMAGE_USAGE_GLES2_READ | gpu::SHARED_IMAGE_USAGE_RASTER_READ |
-    gpu::SHARED_IMAGE_USAGE_DISPLAY_READ | gpu::SHARED_IMAGE_USAGE_SCANOUT;
 
 viz::SharedImageFormat GetSharedImageFormat() {
   return g_force_use_gpu_memory_buffer_for_test
@@ -306,13 +300,39 @@ class GpuMemoryBufferHandleHolder : public BufferHandleHolder,
       format.SetPrefersExternalSampler();
     }
 #endif
+
+    // A flag that describes which APIs the shared images created
+    // for the video frames will be used with. They will be read via the raster
+    // interface (which will be going over GLES2 if OOP-R is not enabled), sent
+    // to the display compositor, and may be used as overlays.
+    gpu::SharedImageUsageSet shared_image_usage =
+        gpu::SHARED_IMAGE_USAGE_GLES2_READ |
+        gpu::SHARED_IMAGE_USAGE_RASTER_READ |
+        gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
+
+    bool add_scanout_usage = true;
+
+    // Scanout usage should be added only if scanout of SharedImages is
+    // supported. However, historically this was not checked.
+    // TODO(crbug.com/330865436): Remove killswitch post-safe rollout.
+    if (base::FeatureList::IsEnabled(
+            features::
+                kCameraVideoFrameHandlerAddScanoutUsageOnlyIfSupportedBySharedImage)) {
+      add_scanout_usage &= shared_image_interface->GetCapabilities()
+                               .supports_scanout_shared_images;
+    }
+
+    if (add_scanout_usage) {
+      shared_image_usage |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
+    }
+
     // We clone our handle `gpu_memory_buffer_handle_` and use the cloned handle
     // to create the shared image. This way, the lifetime of our
     // `gpu_memory_buffer_handle_` remains tied to the lifetime of this object
     // (i.e. until `OnBufferRetired()` is called).
     shared_image_ = shared_image_interface->CreateSharedImage(
         {format, frame_info->coded_size, frame_info->color_space,
-         kSharedImageUsage, "CameraVideoFrame"},
+         shared_image_usage, "CameraVideoFrame"},
         gpu_memory_buffer_handle_.Clone());
     CHECK(shared_image_);
 
@@ -345,11 +365,8 @@ class GpuMemoryBufferHandleHolder : public BufferHandleHolder,
 #endif
 
     CHECK(shared_image_);
-    auto buffer_texture_target = shared_image_->GetTextureTarget();
-
     auto frame = media::VideoFrame::WrapSharedImage(
         frame_info->pixel_format, shared_image_, mailbox_holder_sync_token_,
-        buffer_texture_target,
         base::BindOnce(&GpuMemoryBufferHandleHolder::OnMailboxReleased,
                        weak_ptr_factory_.GetWeakPtr()),
         frame_info->coded_size, frame_info->visible_rect,
@@ -364,10 +381,6 @@ class GpuMemoryBufferHandleHolder : public BufferHandleHolder,
     auto format = shared_image_->format();
     // If format is not multiplanar it must be used for testing.
     CHECK(format.is_multi_plane() || g_force_use_gpu_memory_buffer_for_test);
-    frame->set_shared_image_format_type(
-        format.PrefersExternalSampler()
-            ? media::SharedImageFormatType::kSharedImageFormatExternalSampler
-            : media::SharedImageFormatType::kSharedImageFormat);
 
     if (frame_info->color_space.IsValid()) {
       frame->set_color_space(frame_info->color_space);

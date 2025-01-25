@@ -63,8 +63,9 @@ SimplifiedLayoutAlgorithm::SimplifiedLayoutAlgorithm(
     if (result.BfcBlockOffset())
       container_builder_.SetBfcBlockOffset(*result.BfcBlockOffset());
 
-    if (result.LinesUntilClamp())
+    if (result.LinesUntilClamp()) {
       container_builder_.SetLinesUntilClamp(result.LinesUntilClamp());
+    }
 
     container_builder_.SetExclusionSpace(result.GetExclusionSpace());
 

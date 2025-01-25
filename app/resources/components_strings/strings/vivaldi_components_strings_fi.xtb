@@ -10,6 +10,7 @@
 <translation id="132390688737681464">Tallenna ja täytä osoitteet</translation>
 <translation id="1375198122581997741">Tietoja versiosta</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> ei lähettänyt tietoa.</translation>
+<translation id="1555191101192706055">Hyökkääjät sivustolla, jolle yritit siirtyä, saattavat yrittää huijata asentamaan selaamiseen vaikuttavia haittaohjelmia – esimerkiksi vaihtaa aloitussivusi tai näyttää avaamillasi sivuilla lisää mainoksia.</translation>
 <translation id="1559528461873125649">Tiedostoa tai hakemistoa ei ole olemassa</translation>
 <translation id="1640244768702815859">Yritä <ph name="BEGIN_LINK" />avata sivuston etusivu<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Yhteysprotokollaa ei tueta</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Tarkista välityspalvelin ja palomuuri<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Myönnetty: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Tämä sivusto ei voi tarjota suojattua yhteyttä</translation>
+<translation id="2178904466768126352">Hyökkääjät sivustolla, jolle yritit siirtyä, saattavat asentaa haittaohjelmia, jotka varastavat tai poistavat esimerkiksi salasanoja, kuvia, viestejä tai luottokorttinumeroita.</translation>
 <translation id="2187317261103489799">Tunnista (oletus)</translation>
 <translation id="2224337661447660594">Ei internetyhteyttä</translation>
 <translation id="2283340219607151381">Tallenna ja täytä osoitteet</translation>
@@ -92,6 +94,7 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Tarkista palomuurin ja virustorjunnan asetukset<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Kokeile auttaako verkko-ongelmien vianselvitys<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Voimassa</translation>
+<translation id="4241830393007970744">Hyökkääjät sivustolla, jolle yritit siirtyä, saattavat yrittää huijata asentamaan ohjelmia tai paljastamaan esimerkiksi salasanoja, puhelinnumeroita tai luottokorttinumeroita.</translation>
 <translation id="4250431568374086873">Sivuston yhteys ei ole täysin suojattu</translation>
 <translation id="4265872034478892965">Ylläpidon sallima</translation>
 <translation id="4305666528087210886">Tiedostoa ei voi käyttää</translation>
@@ -102,6 +105,7 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="4522570452068850558">Tiedot</translation>
 <translation id="4558551763791394412">Kokeile auttaako laajennusten käytöstäpoisto.</translation>
 <translation id="4592951414987517459">Yhteytesi sivustoon <ph name="DOMAIN" /> on suojattu nykyaikaisella salaustekniikalla.</translation>
+<translation id="4598641255230617220">Liitä ja siirry</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Yhteys keskeytyi</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Suorita Windowsin verkon ja Internetin vianselvitys<ph name="END_LINK" /></translation>
@@ -111,6 +115,7 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="4764776831041365478">Osoitteessa <ph name="URL" /> oleva sivu saattaa olla väliaikaisesti pois käytöstä tai se on voitu siirtää pysyvästi uuteen osoitteeseen.</translation>
 <translation id="483241715238664915">Ota varoitukset käyttöön</translation>
 <translation id="4943872375798546930">Ei tuloksia</translation>
+<translation id="5017554619425969104">Kopioimasi teksti</translation>
 <translation id="5023310440958281426">Tarkista ylläpidon asettamat käytännöt</translation>
 <translation id="5039804452771397117">Salli</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 käytössä)}other{(# käytössä)}}</translation>
@@ -165,11 +170,11 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="7108819624672055576">Laajennuksen sallima</translation>
 <translation id="7111012039238467737">(voimassa)</translation>
 <translation id="7113310725918019676">Salli <ph name="BLOCKED_TYPE" /> verkkotunnukselta <ph name="DOMAIN" /></translation>
+<translation id="7126644664682723998">Liitä ja etsi</translation>
 <translation id="7179323680825933600">Tallenna ja täytä maksutavat</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ei noudata suojausstandardeja.</translation>
 <translation id="7219179957768738017">Yhteys käyttää salauksen versiota <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Näytä ilmoitukset</translation>
-<translation id="7227747683324411744">Hyökkääjät sivustolla, jolle yrität siirtyä, voivat yrittää huijata sinua asentamaan haittaohjelmia, jotka vaikuttavat selauskokemukseen. Ne voivat esimerkiksi vaihtaa aloitussivusi tai näyttää ylimääräisiä mainoksia avaamillasi sivustoilla.</translation>
 <translation id="7353601530677266744">Komentorivi</translation>
 <translation id="7364115444476960850">Vivaldin <ph name="BLOCKER_NAME" /> on estänyt sivun, jolle yrität päästä</translation>
 <translation id="7419106976560586862">Profiilin polku</translation>
@@ -177,7 +182,6 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="7518003948725431193">Verkkosivua ei löytynyt osoitteelle: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Tämän sivun näyttäminen oikein edellyttää aiemmin lähetettyjä tietoja. Voit lähettää tiedot uudelleen, mutta tällöin sivulla mahdollisesti suoritettu toiminto toistetaan.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> ei voi tällä hetkellä käsitellä tätä pyyntöä.</translation>
-<translation id="7605377493722372900">Hyökkääjät sivustolla, jolle yrität siirtyä, voivat asentaa haittaohjelmia, jotka varastavat tai poistavat esimerkiksi salasanojasi, kuviasi, viestejäsi tai luottokorttinumerosi.</translation>
 <translation id="7662298039739062396">Laajennuksen hallinnoima asetus</translation>
 <translation id="7663736086183791259">Varmenne <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">Varmenne</translation>
@@ -203,7 +207,6 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="8288807391153049143">Näytä varmenne</translation>
 <translation id="8289355894181816810">Jos et ole varma tämän tarkoituksesta, ole yhteydessä verkkosi ylläpitoon.</translation>
 <translation id="8332188693563227489">Osoitteen <ph name="HOST_NAME" /> käyttö estettiin</translation>
-<translation id="8422228580902424274">Hyökkääjät sivustolla, jolle yrität siirtyä, voivat yrittää huijata sinua asentamaan ohjelmistoja tai paljastamaan esimerkiksi salasanasi, puhelinnumerosi tai luottokorttinumerosi.</translation>
 <translation id="8473863474539038330">Osoitteet ja muuta</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ei vastannut riittävän nopeasti.</translation>
 <translation id="8503813439785031346">Käyttäjätunnus</translation>

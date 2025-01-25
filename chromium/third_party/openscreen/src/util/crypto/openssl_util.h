@@ -27,7 +27,7 @@ void EnsureOpenSSLCleanup();
 
 // Drains the OpenSSL ERR_get_error stack. On a debug build the error codes
 // are send to VLOG(1), on a release build they are disregarded. In most
-// cases you should pass CURRENT_LOCATION as the |location|.
+// cases you should pass CURRENT_LOCATION as the `location`.
 void ClearOpenSSLERRStack(const Location& location);
 
 Error GetSSLError(const SSL* ssl, int return_code);
@@ -36,7 +36,7 @@ Error GetSSLError(const SSL* ssl, int return_code);
 // the OpenSSL error stack on function exit.
 class OpenSSLErrStackTracer {
  public:
-  // Pass CURRENT_LOCATION as |location|, to help track the source of OpenSSL
+  // Pass CURRENT_LOCATION as `location`, to help track the source of OpenSSL
   // error messages. Note any diagnostic emitted will be tagged with the
   // location of the constructor call as it's not possible to trace a
   // destructor's callsite.

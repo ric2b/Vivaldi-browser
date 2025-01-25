@@ -1,5 +1,6 @@
 #version 310 es
 
+
 struct Uniforms {
   uint i;
 };
@@ -12,22 +13,27 @@ struct OuterS {
   InnerS a1[8];
 };
 
-layout(binding = 4, std140) uniform uniforms_block_ubo {
+layout(binding = 4, std140)
+uniform uniforms_block_1_ubo {
   Uniforms inner;
-} uniforms;
-
-void tint_symbol() {
+} v_1;
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+void main() {
   InnerS v = InnerS(0);
   OuterS s1 = OuterS(InnerS[8](InnerS(0), InnerS(0), InnerS(0), InnerS(0), InnerS(0), InnerS(0), InnerS(0), InnerS(0)));
   {
-    for(int i = 0; (i < 4); s1.a1[uniforms.inner.i] = v) {
+    int i = 0;
+    while(true) {
+      if ((i < 4)) {
+      } else {
+        break;
+      }
       i = (i + 1);
+      {
+        uint v_2 = v_1.inner.i;
+        s1.a1[v_2] = v;
+      }
+      continue;
     }
   }
-}
-
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-void main() {
-  tint_symbol();
-  return;
 }

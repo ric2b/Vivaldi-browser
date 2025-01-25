@@ -20,6 +20,7 @@
 #include "absl/types/span.h"
 #include "quiche/quic/core/crypto/tls_connection.h"
 #include "quiche/quic/core/frames/quic_ack_frequency_frame.h"
+#include "quiche/quic/core/frames/quic_reset_stream_at_frame.h"
 #include "quiche/quic/core/frames/quic_stop_sending_frame.h"
 #include "quiche/quic/core/frames/quic_window_update_frame.h"
 #include "quiche/quic/core/handshaker_delegate_interface.h"
@@ -136,6 +137,7 @@ class QUICHE_EXPORT QuicSession
   void OnStreamFrame(const QuicStreamFrame& frame) override;
   void OnCryptoFrame(const QuicCryptoFrame& frame) override;
   void OnRstStream(const QuicRstStreamFrame& frame) override;
+  void OnResetStreamAt(const QuicResetStreamAtFrame& frame) override;
   void OnGoAway(const QuicGoAwayFrame& frame) override;
   void OnMessageReceived(absl::string_view message) override;
   void OnHandshakeDoneReceived() override;
@@ -171,6 +173,7 @@ class QUICHE_EXPORT QuicSession
   std::string GetStreamsInfoForLogging() const override;
   void OnPathDegrading() override;
   void OnForwardProgressMadeAfterPathDegrading() override;
+  void OnForwardProgressMadeAfterFlowLabelChange() override;
   bool AllowSelfAddressChange() const override;
   HandshakeState GetHandshakeState() const override;
   bool OnMaxStreamsFrame(const QuicMaxStreamsFrame& frame) override;
@@ -690,6 +693,10 @@ class QUICHE_EXPORT QuicSession
   // Returns the priority type used by the streams in the session.
   QuicPriorityType priority_type() const { return priority_type_; }
 
+  bool enable_stop_sending_for_zombie_streams() const {
+    return enable_stop_sending_for_zombie_streams_;
+  }
+
  protected:
   using StreamMap =
       absl::flat_hash_map<QuicStreamId, std::unique_ptr<QuicStream>>;
@@ -953,6 +960,7 @@ class QUICHE_EXPORT QuicSession
   // Creates or gets pending strea, feed it with |frame|, and closes the pending
   // stream.
   void PendingStreamOnRstStream(const QuicRstStreamFrame& frame);
+  void PendingStreamOnResetStreamAt(const QuicResetStreamAtFrame& frame);
 
   // Creates or gets pending stream, feeds it with |frame|, and records the
   // max_data in the pending stream.
@@ -1094,6 +1102,9 @@ class QUICHE_EXPORT QuicSession
   std::unique_ptr<QuicAlarm> stream_count_reset_alarm_;
 
   QuicPriorityType priority_type_;
+
+  const bool enable_stop_sending_for_zombie_streams_ =
+      GetQuicReloadableFlag(quic_deliver_stop_sending_to_zombie_streams);
 };
 
 }  // namespace quic

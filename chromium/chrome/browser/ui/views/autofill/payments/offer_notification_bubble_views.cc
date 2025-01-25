@@ -23,6 +23,7 @@
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/insets.h"
@@ -64,7 +65,7 @@ void OfferNotificationBubbleViews::Hide() {
   CloseBubble();
   if (controller_) {
     controller_->OnBubbleClosed(
-        GetPaymentsBubbleClosedReasonFromWidget(GetWidget()));
+        GetPaymentsUiClosedReasonFromWidget(GetWidget()));
   }
   controller_ = nullptr;
 }
@@ -87,8 +88,9 @@ void OfferNotificationBubbleViews::AddedToWidget() {
   const AutofillOfferData* offer = controller_->GetOffer();
   CHECK(offer);
 
-    GetBubbleFrameView()->SetTitleView(CreateTitleView(
-        GetWindowTitle(), TitleWithIconAndSeparatorView::Icon::GOOGLE_G));
+  GetBubbleFrameView()->SetTitleView(
+      std::make_unique<TitleWithIconAfterLabelView>(
+          GetWindowTitle(), TitleWithIconAfterLabelView::Icon::GOOGLE_G));
 }
 
 std::u16string OfferNotificationBubbleViews::GetWindowTitle() const {
@@ -98,7 +100,7 @@ std::u16string OfferNotificationBubbleViews::GetWindowTitle() const {
 void OfferNotificationBubbleViews::WindowClosing() {
   if (controller_) {
     controller_->OnBubbleClosed(
-        GetPaymentsBubbleClosedReasonFromWidget(GetWidget()));
+        GetPaymentsUiClosedReasonFromWidget(GetWidget()));
     controller_ = nullptr;
   }
 }
@@ -191,4 +193,8 @@ void OfferNotificationBubbleViews::OnPromoCodeSeeDetailsClicked() {
           /*is_renderer_initiated=*/false),
       /*navigation_handle_callback=*/{});
 }
+
+BEGIN_METADATA(OfferNotificationBubbleViews)
+END_METADATA
+
 }  // namespace autofill

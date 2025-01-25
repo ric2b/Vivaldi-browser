@@ -36,22 +36,31 @@
 #define HWD
 #endif
 
-        .macro func sym, ext1=, ext2=
-            .text
-            .align 2
+        .macro  archadd ext=, more:vararg
+            .ifnb   \ext
+                .ifc    \ext, b
+                # B was defined later, is known to fewer assemblers.
+                archadd zba, zbb, zbs
+                .else
+                    .option arch, +\ext
+                .endif
+                archadd \more
+            .endif
+        .endm
 
+        .macro func sym, exts:vararg
+            .text
             .option push
-            .ifnb \ext1
-            .option arch, +\ext1
-            .ifnb \ext2
-            .option arch, +\ext2
-            .endif
-            .endif
+            archadd \exts
 
             .global \sym
             .hidden \sym
             .type   \sym, %function
+            .option push
+            .option norvc
+            .align  2
             \sym:
+            .option pop
 
             .macro endfunc
                 .size   \sym, . - \sym
@@ -77,22 +86,9 @@
             .endm
         .endm
 
-#if !defined (__riscv_zba)
-        /* SH{1,2,3}ADD definitions for pre-Zba assemblers */
-        .macro  shnadd n, rd, rs1, rs2
-        .insn r OP, 2 * \n, 16, \rd, \rs1, \rs2
-        .endm
-
-        .macro  sh1add rd, rs1, rs2
-        shnadd  1, \rd, \rs1, \rs2
-        .endm
-
-        .macro  sh2add rd, rs1, rs2
-        shnadd  2, \rd, \rs1, \rs2
-        .endm
-
-        .macro  sh3add rd, rs1, rs2
-        shnadd  3, \rd, \rs1, \rs2
+#if !defined (__riscv_zicfilp)
+        .macro  lpad    lpl
+        auipc   zero, \lpl
         .endm
 #endif
 
@@ -196,18 +192,21 @@
          * @param ew element width: e8, e16, e32 or e64
          * @param tp tail policy: tu or ta
          * @param mp mask policty: mu or ma
+         * @param addend optional addend for the vector length register
          */
-        .macro  vtype_vli rd, rs, tmp, ew, tp=tu, mp=mu
+        .macro  vtype_vli rd, rs, tmp, ew, tp=tu, mp=mu, addend=0
         parse_vtype \ew, \tp, \mp
         /*
          * The difference between the CLZ's notionally equals the VLMUL value
          * for 4-bit elements. But we want the value for SEW_MAX-bit elements.
          */
         slli    \tmp, \rs, 1 + VSEW_MAX
+        .if \addend - 1
+        addi    \tmp, \tmp, \addend - 1
+        .endif
         csrr    \rd, vlenb
-        addi    \tmp, \tmp, -1
-        clz     \rd, \rd
         clz     \tmp, \tmp
+        clz     \rd, \rd
         sub     \rd, \rd, \tmp
         max     \rd, \rd, zero // VLMUL must be >= VSEW - VSEW_MAX
         .if     vsew < VSEW_MAX

@@ -26,17 +26,21 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <utility>
+#include <vector>
 
 #include "dawn/native/Device.h"
 #include "dawn/native/dawn_platform.h"
 #include "dawn/tests/MockCallback.h"
+#include "dawn/tests/StringViewMatchers.h"
 #include "dawn/tests/unittests/validation/ValidationTest.h"
 
 namespace dawn {
 namespace {
 
+using testing::EmptySizedString;
 using testing::IsNull;
 using testing::MockCppCallback;
+using testing::NonEmptySizedString;
 using testing::NotNull;
 using testing::WithArgs;
 
@@ -47,7 +51,7 @@ class RequestDeviceValidationTest : public ValidationTest {
         DAWN_SKIP_TEST_IF(UsesWire());
     }
 
-    MockCppCallback<void (*)(wgpu::RequestDeviceStatus, wgpu::Device, const char*)>
+    MockCppCallback<void (*)(wgpu::RequestDeviceStatus, wgpu::Device, wgpu::StringView)>
         mRequestDeviceCallback;
 };
 
@@ -56,7 +60,7 @@ TEST_F(RequestDeviceValidationTest, NoRequiredLimits) {
     wgpu::DeviceDescriptor descriptor;
 
     EXPECT_CALL(mRequestDeviceCallback,
-                Call(wgpu::RequestDeviceStatus::Success, NotNull(), IsNull()))
+                Call(wgpu::RequestDeviceStatus::Success, NotNull(), EmptySizedString()))
         .WillOnce(WithArgs<1>([](wgpu::Device device) {
             // Check one of the default limits.
             wgpu::SupportedLimits limits;
@@ -74,7 +78,7 @@ TEST_F(RequestDeviceValidationTest, DefaultLimits) {
     descriptor.requiredLimits = &limits;
 
     EXPECT_CALL(mRequestDeviceCallback,
-                Call(wgpu::RequestDeviceStatus::Success, NotNull(), IsNull()))
+                Call(wgpu::RequestDeviceStatus::Success, NotNull(), EmptySizedString()))
         .WillOnce(WithArgs<1>([](wgpu::Device device) {
             // Check one of the default limits.
             wgpu::SupportedLimits limits;
@@ -98,7 +102,7 @@ TEST_F(RequestDeviceValidationTest, HigherIsBetter) {
     if (supportedLimits.limits.maxBindGroups > 4u) {
         limits.limits.maxBindGroups = supportedLimits.limits.maxBindGroups - 1;
         EXPECT_CALL(mRequestDeviceCallback,
-                    Call(wgpu::RequestDeviceStatus::Success, NotNull(), IsNull()))
+                    Call(wgpu::RequestDeviceStatus::Success, NotNull(), EmptySizedString()))
             .WillOnce(WithArgs<1>([&](wgpu::Device device) {
                 wgpu::SupportedLimits limits;
                 device.GetLimits(&limits);
@@ -115,7 +119,7 @@ TEST_F(RequestDeviceValidationTest, HigherIsBetter) {
     // Test the max.
     limits.limits.maxBindGroups = supportedLimits.limits.maxBindGroups;
     EXPECT_CALL(mRequestDeviceCallback,
-                Call(wgpu::RequestDeviceStatus::Success, NotNull(), IsNull()))
+                Call(wgpu::RequestDeviceStatus::Success, NotNull(), EmptySizedString()))
         .WillOnce(WithArgs<1>([&](wgpu::Device device) {
             wgpu::SupportedLimits limits;
             device.GetLimits(&limits);
@@ -130,7 +134,8 @@ TEST_F(RequestDeviceValidationTest, HigherIsBetter) {
 
     // Test above the max.
     limits.limits.maxBindGroups = supportedLimits.limits.maxBindGroups + 1;
-    EXPECT_CALL(mRequestDeviceCallback, Call(wgpu::RequestDeviceStatus::Error, IsNull(), NotNull()))
+    EXPECT_CALL(mRequestDeviceCallback,
+                Call(wgpu::RequestDeviceStatus::Error, IsNull(), NonEmptySizedString()))
         .Times(1);
     adapter.RequestDevice(&descriptor, wgpu::CallbackMode::AllowSpontaneous,
                           mRequestDeviceCallback.Callback());
@@ -138,7 +143,7 @@ TEST_F(RequestDeviceValidationTest, HigherIsBetter) {
     // Test worse than the default
     limits.limits.maxBindGroups = 3u;
     EXPECT_CALL(mRequestDeviceCallback,
-                Call(wgpu::RequestDeviceStatus::Success, NotNull(), IsNull()))
+                Call(wgpu::RequestDeviceStatus::Success, NotNull(), EmptySizedString()))
         .WillOnce(WithArgs<1>([&](wgpu::Device device) {
             wgpu::SupportedLimits limits;
             device.GetLimits(&limits);
@@ -162,7 +167,8 @@ TEST_F(RequestDeviceValidationTest, LowerIsBetter) {
     // Test below the min.
     limits.limits.minUniformBufferOffsetAlignment =
         supportedLimits.limits.minUniformBufferOffsetAlignment / 2;
-    EXPECT_CALL(mRequestDeviceCallback, Call(wgpu::RequestDeviceStatus::Error, IsNull(), NotNull()))
+    EXPECT_CALL(mRequestDeviceCallback,
+                Call(wgpu::RequestDeviceStatus::Error, IsNull(), NonEmptySizedString()))
         .Times(1);
     adapter.RequestDevice(&descriptor, wgpu::CallbackMode::AllowSpontaneous,
                           mRequestDeviceCallback.Callback());
@@ -171,7 +177,7 @@ TEST_F(RequestDeviceValidationTest, LowerIsBetter) {
     limits.limits.minUniformBufferOffsetAlignment =
         supportedLimits.limits.minUniformBufferOffsetAlignment;
     EXPECT_CALL(mRequestDeviceCallback,
-                Call(wgpu::RequestDeviceStatus::Success, NotNull(), IsNull()))
+                Call(wgpu::RequestDeviceStatus::Success, NotNull(), EmptySizedString()))
         .WillOnce(WithArgs<1>([&](wgpu::Device device) {
             wgpu::SupportedLimits limits;
             device.GetLimits(&limits);
@@ -190,7 +196,7 @@ TEST_F(RequestDeviceValidationTest, LowerIsBetter) {
         limits.limits.minUniformBufferOffsetAlignment =
             supportedLimits.limits.minUniformBufferOffsetAlignment * 2;
         EXPECT_CALL(mRequestDeviceCallback,
-                    Call(wgpu::RequestDeviceStatus::Success, NotNull(), IsNull()))
+                    Call(wgpu::RequestDeviceStatus::Success, NotNull(), EmptySizedString()))
             .WillOnce(WithArgs<1>([&](wgpu::Device device) {
                 wgpu::SupportedLimits limits;
                 device.GetLimits(&limits);
@@ -208,7 +214,7 @@ TEST_F(RequestDeviceValidationTest, LowerIsBetter) {
     // Test worse than the default
     limits.limits.minUniformBufferOffsetAlignment = 2u * 256u;
     EXPECT_CALL(mRequestDeviceCallback,
-                Call(wgpu::RequestDeviceStatus::Success, NotNull(), IsNull()))
+                Call(wgpu::RequestDeviceStatus::Success, NotNull(), EmptySizedString()))
         .WillOnce(WithArgs<1>([&](wgpu::Device device) {
             wgpu::SupportedLimits limits;
             device.GetLimits(&limits);
@@ -228,10 +234,59 @@ TEST_F(RequestDeviceValidationTest, InvalidChainedStruct) {
 
     wgpu::DeviceDescriptor descriptor;
     descriptor.requiredLimits = &limits;
-    EXPECT_CALL(mRequestDeviceCallback, Call(wgpu::RequestDeviceStatus::Error, IsNull(), NotNull()))
+    EXPECT_CALL(mRequestDeviceCallback,
+                Call(wgpu::RequestDeviceStatus::Error, IsNull(), NonEmptySizedString()))
         .Times(1);
     adapter.RequestDevice(&descriptor, wgpu::CallbackMode::AllowSpontaneous,
                           mRequestDeviceCallback.Callback());
+}
+
+// Test that requiring subroups-f16 feature requires subgroups and shader-f16 features as well
+// TODO(349125474): Decide if this validation is needed, see
+// https://github.com/gpuweb/gpuweb/issues/4734 for detail.
+TEST_F(RequestDeviceValidationTest, SubgroupsF16FeatureDependency) {
+    for (bool requireShaderF16 : {false, true}) {
+        for (bool requireSubgroups : {false, true}) {
+            // TODO(349125474): Remove deprecated ChromiumExperimentalSubgroups.
+            for (bool requireChromiumExperimentalSubgroups : {false, true}) {
+                std::vector<wgpu::FeatureName> features;
+                if (requireShaderF16) {
+                    features.push_back(wgpu::FeatureName::ShaderF16);
+                }
+                if (requireSubgroups) {
+                    features.push_back(wgpu::FeatureName::Subgroups);
+                }
+                if (requireChromiumExperimentalSubgroups) {
+                    features.push_back(wgpu::FeatureName::ChromiumExperimentalSubgroups);
+                }
+                features.push_back(wgpu::FeatureName::SubgroupsF16);
+
+                wgpu::DeviceDescriptor descriptor;
+                descriptor.requiredFeatureCount = features.size();
+                descriptor.requiredFeatures = features.data();
+
+                // Device request with subgroups-f16 feature can only success if shader-f16 feature
+                // and subgroups or chromium-experimental-subgroups features are required as well.
+                const bool isSuccess =
+                    (requireSubgroups || requireChromiumExperimentalSubgroups) && requireShaderF16;
+
+                if (isSuccess) {
+                    EXPECT_CALL(mRequestDeviceCallback, Call(wgpu::RequestDeviceStatus::Success,
+                                                             NotNull(), EmptySizedString()))
+                        .Times(1);
+                } else {
+                    EXPECT_CALL(mRequestDeviceCallback, Call(wgpu::RequestDeviceStatus::Error,
+                                                             IsNull(), NonEmptySizedString()))
+                        .Times(1);
+                }
+
+                EXPECT_DEPRECATION_WARNINGS(
+                    adapter.RequestDevice(&descriptor, wgpu::CallbackMode::AllowSpontaneous,
+                                          mRequestDeviceCallback.Callback()),
+                    GetDeviceCreationDeprecationWarningExpectation(descriptor));
+            }
+        }
+    }
 }
 
 class DeviceTickValidationTest : public ValidationTest {};

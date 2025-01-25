@@ -1,6 +1,8 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
+ * Copyright (C) 2002-2017 Németh László
+ *
  * The contents of this file are subject to the Mozilla Public License Version
  * 1.1 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -11,12 +13,7 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is Hunspell, based on MySpell.
- *
- * The Initial Developers of the Original Code are
- * Kevin Hendricks (MySpell) and Németh László (Hunspell).
- * Portions created by the Initial Developers are Copyright (C) 2002-2005
- * the Initial Developers. All Rights Reserved.
+ * Hunspell is based on MySpell which is Copyright (C) 2002 Kevin Hendricks.
  *
  * Contributor(s): David Einstein, Davide Prina, Giuseppe Modugno,
  * Gianluca Turconi, Simon Brouwer, Noll János, Bíró Árpád,
@@ -49,6 +46,9 @@
 #ifndef W32
 using namespace std;
 #endif
+
+#define UTF8_APOS "\xe2\x80\x99"
+#define APOSTROPHE "'"
 
 static struct {
   const char* pat[2];
@@ -206,7 +206,20 @@ bool LaTeXParser::next_token(std::string& t) {
         break;
       case 1:  // wordchar
         apostrophe = 0;
-        if (!is_wordchar(line[actual].c_str() + head) ||
+        if ((is_wordchar((char*)APOSTROPHE) ||
+             (is_utf8() && is_wordchar((char*)UTF8_APOS))) &&
+            !line[actual].empty() && line[actual][head] == '\'' &&
+            is_wordchar(line[actual].c_str() + head + 1)) {
+          head++;
+        } else if (is_utf8() &&
+                   is_wordchar((char*)APOSTROPHE) &&  // add Unicode apostrophe
+                                                      // to the WORDCHARS, if
+                                                      // needed
+                   strncmp(line[actual].c_str() + head, UTF8_APOS, strlen(UTF8_APOS)) ==
+                   0 &&
+                   is_wordchar(line[actual].c_str() + head + strlen(UTF8_APOS))) {
+          head += strlen(UTF8_APOS) - 1;
+        } else if (!is_wordchar(line[actual].c_str() + head) ||
             (line[actual][head] == '\'' && line[actual][head + 1] == '\'' &&
              ++apostrophe)) {
           state = 0;

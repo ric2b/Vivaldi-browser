@@ -23,9 +23,6 @@ describe('The Console Tab', () => {
         `
         promiseTest1 @ console-uncaught-promise.html:3
         (anonymous) @ VM26:1
-        Promise.then
-        promiseTest1 @ console-uncaught-promise.html:6
-        (anonymous) @ VM26:1
       `,
         2,
     );
@@ -34,15 +31,6 @@ describe('The Console Tab', () => {
         'await promiseTest2();',
         `
         promiseTest2 @ console-uncaught-promise.html:23
-        (anonymous) @ VM44:1
-        Promise.then
-        (anonymous) @ console-uncaught-promise.html:19
-        Promise.catch
-        (anonymous) @ console-uncaught-promise.html:18
-        Promise.catch
-        (anonymous) @ console-uncaught-promise.html:17
-        Promise.catch
-        promiseTest2 @ console-uncaught-promise.html:16
         (anonymous) @ VM44:1
       `,
         2,

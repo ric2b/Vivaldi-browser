@@ -3902,6 +3902,51 @@ such as the auto update until date, first release, and more.
    <td>Yes</td>
    </tr>
    <tr>
+    <td>2024-01-24</td>
+    <td>HP</td>
+    <td><a href="https://www.hp.com/us-en/shop/pdp/hp-fortis-11-inch-g10-chromebook-customizable-8c8n0av-mb">HP Fortis 11 inch G10 Chromebook</a></td>
+    <td>Yavilla</td>
+    <td>Nissa</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.1</td>
+    <td>x86_64</td>
+    <td>Alderlake-N</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+   </tr>
+   <tr>
+    <td>2024-01-24</td>
+    <td>HP</td>
+    <td><a href="https://www.hp.com/us-en/shop/pdp/hp-fortis-x360-11-inch-g5-chromebook-customizable-8c8b0av-mb">HP Fortis x360 11 inch G5 Chromebook</a></td>
+    <td>Yavilly</td>
+    <td>Nissa</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.1</td>
+    <td>x86_64</td>
+    <td>Alderlake-N</td>
+    <td>Convertible</td>
+    <td>Yes</td>
+    <td>Yes</td>
+   </tr>
+  <tr>
+    <td>2024-01-24</td>
+    <td>HP</td>
+    <td><a href="https://www.hp.com/us-en/shop/pdp/hp-fortis-14-inch-g11-chromebook-customizable-8c7y0av-mb">HP Fortis 14 inch G11 Chromebook</a></td>
+    <td>Yavijo</td>
+    <td>Nissa</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.1</td>
+    <td>x86_64</td>
+    <td>Alderlake-N</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+   </tr>
+   <tr>
     <td>2024-02-02</td>
     <td>Lenovo</td>
     <td><a href="https://www.lenovo.com/il/en/laptops/lenovo/student-chromebooks/Lenovo-100e-Chromebook-Gen-4-11-6-inch-Intel/p/LEN101L0043">Lenovo 100e Chromebook Gen 4 (ADL-N)</a></td>

@@ -15,7 +15,7 @@ import org.chromium.chrome.browser.download.home.DownloadManagerCoordinator;
 import org.chromium.chrome.browser.download.home.DownloadManagerUiConfig;
 import org.chromium.chrome.browser.download.home.DownloadManagerUiConfigHelper;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorNotificationBridgeUiFactory;
-import org.chromium.chrome.browser.profiles.OTRProfileID;
+import org.chromium.chrome.browser.profiles.OtrProfileId;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -43,14 +43,17 @@ public class DownloadActivity extends SnackbarActivity implements ModalDialogMan
                     mCurrentUrl = url;
                 }
             };
-    private OTRProfileID mOtrProfileID;
+    private OtrProfileId mOtrProfileId;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         // If the profile doesn't exist, then do not perform any action.
-        if (!DownloadUtils.doesProfileExistFromIntent(getIntent())) finish();
+        if (!DownloadUtils.doesProfileExistFromIntent(getIntent())) {
+            finish();
+            return;
+        }
 
         mCurrentUrl =
                 savedInstanceState == null
@@ -63,11 +66,11 @@ public class DownloadActivity extends SnackbarActivity implements ModalDialogMan
                 DownloadActivityLauncher.shouldShowPrefetchContent(getIntent());
         mPermissionDelegate =
                 new ActivityAndroidPermissionDelegate(new WeakReference<Activity>(this));
-        mOtrProfileID = DownloadUtils.getOTRProfileIDFromIntent(getIntent());
+        mOtrProfileId = DownloadUtils.getOtrProfileIdFromIntent(getIntent());
 
         DownloadManagerUiConfig config =
                 DownloadManagerUiConfigHelper.fromFlags()
-                        .setOTRProfileID(mOtrProfileID)
+                        .setOtrProfileId(mOtrProfileId)
                         .setIsSeparateActivity(true)
                         .setShowPaginationHeaders(DownloadUtils.shouldShowPaginationHeaders())
                         .setStartWithPrefetchedContent(showPrefetchContent)

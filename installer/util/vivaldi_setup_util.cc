@@ -287,7 +287,29 @@ bool TryToCloseAllRunningBrowsers(
       GetRunningProcessesForPath(vivaldi_exe_path));
   if (vivaldi_processes.empty())
     return true;
-  KillProcesses(std::move(vivaldi_processes));
+
+  // NOTE(andre@vivaldi.com) : 20/12-2024.
+  // Start using a clean shutdown instead of process kill if we update a version
+  // that has support for switches::kCleanShutdown. This assume that we do not
+  // backport this snippet ofcourse.
+  base::Version old_running_version = GetInstallVersion(installer_state.target_path());
+
+  LOG(ERROR) << "Running " << installer::kChromeExe
+             << " has version : " << old_running_version;
+
+  // Todays(10.01.25) main branch is on 7.1.3572
+  if (old_running_version >= base::Version("7.1.3572.1")) {
+    LOG(ERROR)<< "Using kCleanShutdown";
+    base::CommandLine cmdline =
+        base::CommandLine::FromString(::GetCommandLineW());
+    cmdline.SetProgram(vivaldi_exe_path);
+    cmdline.AppendSwitch(switches::kCleanShutdown);
+    base::LaunchProcess(cmdline, base::LaunchOptions());
+  } else {
+    LOG(ERROR)<< "Using KillProcesses";
+    // This will cause kSessionExitType profile.exit_type to be set to "Crashed".
+    KillProcesses(std::move(vivaldi_processes));
+  }
 
   const int MAX_WAIT_SECS = 10;
   for (int wait = MAX_WAIT_SECS * 10; wait > 0; --wait) {

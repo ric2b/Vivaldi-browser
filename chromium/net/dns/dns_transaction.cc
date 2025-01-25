@@ -288,8 +288,7 @@ class DnsUDPAttempt : public DnsAttempt {
           rv = DoReadResponseComplete(rv);
           break;
         default:
-          NOTREACHED_IN_MIGRATION();
-          break;
+          NOTREACHED();
       }
     } while (rv != ERR_IO_PENDING && next_state_ != STATE_NONE);
 
@@ -474,7 +473,7 @@ class DnsHTTPAttempt : public DnsAttempt, public URLRequest::Delegate {
           std::make_unique<UploadBytesElementReader>(
               query_->io_buffer()->span());
       request_->set_upload(
-          ElementsUploadDataStream::CreateWithReader(std::move(reader), 0));
+          ElementsUploadDataStream::CreateWithReader(std::move(reader)));
       extra_request_headers.SetHeader(HttpRequestHeaders::kContentType,
                                       kDnsOverHttpResponseContentType);
     }
@@ -794,8 +793,7 @@ class DnsTCPAttempt : public DnsAttempt {
           rv = DoReadResponseComplete(rv);
           break;
         default:
-          NOTREACHED_IN_MIGRATION();
-          break;
+          NOTREACHED();
       }
     } while (rv != ERR_IO_PENDING && next_state_ != STATE_NONE);
 

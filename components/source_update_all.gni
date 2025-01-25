@@ -63,8 +63,8 @@ update_target("//components/sync_sessions:sync_sessions") {
   ]
   if (!is_ios) {
     sources += [
-      "//vivaldi/components/sync_sessions/vivaldi_specific_observer.cc",
-      "//vivaldi/components/sync_sessions/vivaldi_specific_observer.h",
+      "//vivaldi/components/sync_sessions/vivaldi_local_session_observer.cc",
+      "//vivaldi/components/sync_sessions/vivaldi_local_session_observer.h",
     ]
   }
 }
@@ -104,11 +104,24 @@ if (is_linux && use_dbus) {
   }
 }
 
-update_target("//components/search_engines:search_engines") {
-  public_deps -= [
-    ":prepopulated_engines"
-  ]
+update_template_instance("//components/search_engines:prepopulated_engines") {
+  namespace = "TemplateURLPrepopulateDataOriginal"
+}
 
+update_target("//components/search_engines:prepopulated_engines_action") {
+  # change the actual output folder from gen/vivaldi/components/search_engines
+  # to gen/components/search_engines
+  args += ["-b", rebase_path("$root_gen_dir/components/search_engines/original/")]
+  # updates the path of the resulting files to be compiled to match the new
+  # output folder
+  outputs = []
+  outputs = [
+    "$root_gen_dir/components/search_engines/original/prepopulated_engines.cc",
+    "$root_gen_dir/components/search_engines/original/prepopulated_engines.h",
+  ]
+}
+
+update_target("//components/search_engines:search_engines") {
   if (!is_android) {
     sources -= [
       "search_engine_choice/generated_marketing_snippets.cc",
@@ -125,18 +138,21 @@ update_target("//components/search_engines:search_engines") {
     "//vivaldi/components/search_engines/vivaldi_template_url_service.h"
   ]
 }
-
 update_target("//components/search_engines:search_engine_utils") {
-  public_deps -= [
-    ":prepopulated_engines"
-  ]
-
   sources += [
+    "//vivaldi/components/search_engines/parsed_search_engines.h",
+    "//vivaldi/components/search_engines/parsed_search_engines.cc",
     "//vivaldi/components/search_engines/search_engines_manager.h",
     "//vivaldi/components/search_engines/search_engines_manager.cc",
+    "//vivaldi/components/search_engines/search_engines_managers_factory.h",
+    "//vivaldi/components/search_engines/search_engines_managers_factory.cc",
     "//vivaldi/components/search_engines/search_engines_helper.h",
     "//vivaldi/components/search_engines/search_engines_helper.cc",
-    "//vivaldi/components/search_engines/prepopulated_engines.h"
+    "//vivaldi/components/search_engines/prepopulated_engines.h",
+    "//vivaldi/components/search_engines/parsed_search_engines_prompt.h",
+    "//vivaldi/components/search_engines/parsed_search_engines_prompt.cc",
+    "//vivaldi/components/search_engines/search_engines_prompt_manager.h",
+    "//vivaldi/components/search_engines/search_engines_prompt_manager.cc"
   ]
 
   if (is_ios) {
@@ -148,7 +164,13 @@ update_target("//components/search_engines:search_engine_utils") {
 
   public_deps += [
   "//vivaldi/components:search_engines_inc",
+  "//vivaldi/components:search_engines_prompt_inc",
   "//vivaldi/components/signature:signature"
+  ]
+
+  deps += [
+    "//vivaldi/prefs:prefs_files_generated",
+    "//vivaldi/components/ad_blocker"
   ]
 }
 

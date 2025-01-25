@@ -217,7 +217,7 @@ public class IncognitoReauthCoordinatorFactory {
             @NonNull OnBackPressedCallback backPressedCallback) {
         assert areDependenciesReadyFor(showFullScreen)
                 : "Dependencies for the IncognitoReauthCoordinator were not ready.";
-        return (showFullScreen)
+        return showFullScreen
                 ? new FullScreenIncognitoReauthCoordinator(
                         mContext,
                         mIncognitoReauthManager,

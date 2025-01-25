@@ -23,8 +23,9 @@ public class TabBuilder {
     private Tab mParent;
     private TabResolver mTabResolver;
     private WindowAndroid mWindow;
-    private Integer mLaunchType;
-    private Integer mCreationType;
+    // Should not be null when build() is called.
+    private @Nullable @TabLaunchType Integer mLaunchType;
+    private @TabCreationState Integer mCreationType;
     private boolean mFromFrozenState;
     private LoadUrlParams mLoadUrlParams;
     private String mTitle;
@@ -93,8 +94,6 @@ public class TabBuilder {
     /**
      * Sets a flag indicating to initialize renderer during WebContents creation.
      *
-     * @param boolean initializeRenderer to initialize renderer or not.
-     *
      * @return {@link TabBuilder} creating the Tab.
      */
     public TabBuilder setInitializeRenderer(boolean initializeRenderer) {
@@ -155,6 +154,8 @@ public class TabBuilder {
     }
 
     public Tab build() {
+        assert mLaunchType != null : "TabBuilder#setLaunchType() must be called.";
+
         // Pre-condition check
         if (mCreationType != null) {
             if (!mFromFrozenState) {

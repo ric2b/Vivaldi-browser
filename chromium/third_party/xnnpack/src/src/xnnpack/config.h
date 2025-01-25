@@ -25,11 +25,14 @@ XNN_INTERNAL const struct xnn_transpose_config* xnn_init_transpose_config();
 XNN_INTERNAL const struct xnn_cmul_config* xnn_init_f16_cmul_config();
 XNN_INTERNAL const struct xnn_cmul_config* xnn_init_f32_cmul_config();
 
+XNN_INTERNAL const struct xnn_pack_lh_config* xnn_init_x32_pack_lh_config();
+
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f16_vadd_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f16_vdiv_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f16_vmax_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f16_vmin_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f16_vmul_config();
+XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f16_vprelu_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f16_vsub_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f16_vsqrdiff_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f32_vadd_config();
@@ -39,6 +42,7 @@ XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f32_vdiv_confi
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f32_vmax_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f32_vmin_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f32_vmul_config();
+XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f32_vprelu_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f32_vsub_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f32_vsqrdiff_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_qs8_vadd_config();
@@ -88,14 +92,14 @@ XNN_INTERNAL const struct xnn_unary_elementwise_config*
 xnn_init_f32_to_qp8_cvt_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f32_to_qs8_cvt_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f32_to_qu8_cvt_config();
+XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_s32_to_f32_cvt_config();
+XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_u32_to_f32_cvt_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_qs8_cvt_config();
-XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_qs8_hswish_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_qs8_lrelu_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_qs8_to_f16_cvt_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_qs8_to_f32_cvt_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_qs16_to_qs8_cvt_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_qu8_cvt_config();
-XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_qu8_hswish_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_qu8_lrelu_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_qu8_to_f32_cvt_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_s8_clamp_config();
@@ -108,6 +112,10 @@ XNN_INTERNAL const struct xnn_reduce_config* xnn_init_f16_rminmax_config();
 XNN_INTERNAL const struct xnn_reduce_config* xnn_init_f32_rminmax_config();
 XNN_INTERNAL const struct xnn_reduce_config* xnn_init_f32_rsum_config();
 XNN_INTERNAL const struct xnn_reduce_config* xnn_init_f32_rdsum_config();
+XNN_INTERNAL const struct xnn_reduce_config* xnn_init_qs8_rsum_config();
+XNN_INTERNAL const struct xnn_reduce_config* xnn_init_qs8_rdsum_config();
+XNN_INTERNAL const struct xnn_reduce_config* xnn_init_qu8_rsum_config();
+XNN_INTERNAL const struct xnn_reduce_config* xnn_init_qu8_rdsum_config();
 
 XNN_INTERNAL const struct xnn_xx_fill_config* xnn_init_xx_fill_config();
 
@@ -120,25 +128,17 @@ XNN_INTERNAL const struct xnn_avgpool_config* xnn_init_qu8_avgpool_config();
 XNN_INTERNAL const struct xnn_pavgpool_config* xnn_init_f16_pavgpool_config();
 XNN_INTERNAL const struct xnn_pavgpool_config* xnn_init_f32_pavgpool_config();
 
-XNN_INTERNAL const struct xnn_gavgpool_config* xnn_init_f16_gavgpool_config();
-XNN_INTERNAL const struct xnn_gavgpool_config* xnn_init_f32_gavgpool_config();
-XNN_INTERNAL const struct xnn_gavgpool_config* xnn_init_qs8_gavgpool_config();
-XNN_INTERNAL const struct xnn_gavgpool_config* xnn_init_qu8_gavgpool_config();
-
-XNN_INTERNAL const struct xnn_gavgpool_cw_config* xnn_init_f16_gavgpool_cw_config();
-XNN_INTERNAL const struct xnn_gavgpool_cw_config* xnn_init_f32_gavgpool_cw_config();
-
 #define XNN_MAX_F16_DWCONV_UKERNELS 4
 #define XNN_MAX_F32_DWCONV_UKERNELS 4
 #define XNN_MAX_QC8_DWCONV_UKERNELS 3
 #define XNN_MAX_QS8_DWCONV_UKERNELS 2
 #define XNN_MAX_QU8_DWCONV_UKERNELS 2
 
-XNN_INTERNAL struct xnn_dwconv_config* xnn_init_f16_dwconv_config();
-XNN_INTERNAL struct xnn_dwconv_config* xnn_init_f32_dwconv_config();
-XNN_INTERNAL struct xnn_dwconv_config* xnn_init_qs8_qc8w_dwconv_config();
-XNN_INTERNAL struct xnn_dwconv_config* xnn_init_qs8_dwconv_config();
-XNN_INTERNAL struct xnn_dwconv_config* xnn_init_qu8_dwconv_config();
+XNN_INTERNAL const struct xnn_dwconv_config* xnn_init_f16_dwconv_config();
+XNN_INTERNAL const struct xnn_dwconv_config* xnn_init_f32_dwconv_config();
+XNN_INTERNAL const struct xnn_dwconv_config* xnn_init_qs8_qc8w_dwconv_config();
+XNN_INTERNAL const struct xnn_dwconv_config* xnn_init_qs8_dwconv_config();
+XNN_INTERNAL const struct xnn_dwconv_config* xnn_init_qu8_dwconv_config();
 
 // Bilinear interpolation (2D).
 XNN_INTERNAL const struct xnn_ibilinear_config* xnn_init_f16_ibilinear_config();
@@ -150,22 +150,11 @@ XNN_INTERNAL const struct xnn_ibilinear_config* xnn_init_u8_ibilinear_config();
 XNN_INTERNAL const struct xnn_ibilinear_chw_config* xnn_init_f16_ibilinear_chw_config();
 XNN_INTERNAL const struct xnn_ibilinear_chw_config* xnn_init_f32_ibilinear_chw_config();
 
-XNN_INTERNAL const struct xnn_prelu_config* xnn_init_f16_prelu_config();
-XNN_INTERNAL const struct xnn_prelu_config* xnn_init_f32_prelu_config();
-
 static inline struct xnn_hmp_dqgemm_ukernel xnn_init_hmp_dqgemm_ukernel(
     xnn_dqgemm_ukernel_fn function) {
   struct xnn_hmp_dqgemm_ukernel ukernel = {{ function }};
-#if XNN_PLATFORM_JIT
-  ukernel.generated_code_chunk[0].offset = SIZE_MAX;
-  ukernel.generated_code_chunk[0].offset_end = SIZE_MAX;
-#endif  // XNN_PLATFORM_JIT
   for (size_t i = 1; i < XNN_MAX_UARCH_TYPES; i++) {
     ukernel.function[i] = function;
-#if XNN_PLATFORM_JIT
-    ukernel.generated_code_chunk[i].offset = SIZE_MAX;
-    ukernel.generated_code_chunk[i].offset_end = SIZE_MAX;
-#endif  // XNN_PLATFORM_JIT
   }
   return ukernel;
 }
@@ -175,10 +164,6 @@ static inline struct xnn_hmp_dqgemm_bl_ukernel xnn_init_hmp_dqgemm_bl_ukernel(
   struct xnn_hmp_dqgemm_bl_ukernel ukernel;// = {{ function }};
   for (size_t i = 0; i < XNN_MAX_UARCH_TYPES; i++) {
     ukernel.function[i] = function;
-#if XNN_PLATFORM_JIT
-    ukernel.generated_code_chunk[i].offset = SIZE_MAX;
-    ukernel.generated_code_chunk[i].offset_end = SIZE_MAX;
-#endif  // XNN_PLATFORM_JIT
   }
   return ukernel;
 }
@@ -186,16 +171,8 @@ static inline struct xnn_hmp_dqgemm_bl_ukernel xnn_init_hmp_dqgemm_bl_ukernel(
 static inline struct xnn_hmp_dqigemm_ukernel xnn_init_hmp_dqigemm_ukernel(
     xnn_dqigemm_ukernel_fn function) {
   struct xnn_hmp_dqigemm_ukernel ukernel = {{function}};
-#if XNN_PLATFORM_JIT
-  ukernel.generated_code_chunk[0].offset = SIZE_MAX;
-  ukernel.generated_code_chunk[0].offset_end = SIZE_MAX;
-#endif  // XNN_PLATFORM_JIT
   for (size_t i = 1; i < XNN_MAX_UARCH_TYPES; i++) {
     ukernel.function[i] = function;
-#if XNN_PLATFORM_JIT
-    ukernel.generated_code_chunk[i].offset = SIZE_MAX;
-    ukernel.generated_code_chunk[i].offset_end = SIZE_MAX;
-#endif  // XNN_PLATFORM_JIT
   }
   return ukernel;
 }
@@ -203,32 +180,25 @@ static inline struct xnn_hmp_dqigemm_ukernel xnn_init_hmp_dqigemm_ukernel(
 static inline struct xnn_hmp_qp8gemm_ukernel xnn_init_hmp_qp8gemm_ukernel(
     xnn_qp8_f32_qc4w_gemm_minmax_ukernel_fn function) {
   struct xnn_hmp_qp8gemm_ukernel ukernel = {{function}};
-#if XNN_PLATFORM_JIT
-  ukernel.generated_code_chunk[0].offset = SIZE_MAX;
-  ukernel.generated_code_chunk[0].offset_end = SIZE_MAX;
-#endif  // XNN_PLATFORM_JIT
   for (size_t i = 1; i < XNN_MAX_UARCH_TYPES; i++) {
     ukernel.function[i] = function;
-#if XNN_PLATFORM_JIT
-    ukernel.generated_code_chunk[i].offset = SIZE_MAX;
-    ukernel.generated_code_chunk[i].offset_end = SIZE_MAX;
-#endif  // XNN_PLATFORM_JIT
+  }
+  return ukernel;
+}
+
+static inline struct xnn_hmp_qp8gemm_bl_ukernel xnn_init_hmp_qp8gemm_bl_ukernel(
+    xnn_qp8_f32_qb4w_gemm_minmax_ukernel_fn function) {
+  struct xnn_hmp_qp8gemm_bl_ukernel ukernel = {{function}};
+  for (size_t i = 1; i < XNN_MAX_UARCH_TYPES; i++) {
+    ukernel.function[i] = function;
   }
   return ukernel;
 }
 
 static inline struct xnn_hmp_gemm_ukernel xnn_init_hmp_gemm_ukernel(xnn_gemm_ukernel_fn function) {
   struct xnn_hmp_gemm_ukernel ukernel = {{ function }};
-#if XNN_PLATFORM_JIT
-  ukernel.generated_code_chunk[0].offset = SIZE_MAX;
-  ukernel.generated_code_chunk[0].offset_end = SIZE_MAX;
-#endif  // XNN_PLATFORM_JIT
   for (size_t i = 1; i < XNN_MAX_UARCH_TYPES; i++) {
     ukernel.function[i] = function;
-#if XNN_PLATFORM_JIT
-    ukernel.generated_code_chunk[i].offset = SIZE_MAX;
-    ukernel.generated_code_chunk[i].offset_end = SIZE_MAX;
-#endif  // XNN_PLATFORM_JIT
   }
   return ukernel;
 }
@@ -248,16 +218,8 @@ static inline bool xnn_is_hmp_gemm_ukernel(struct xnn_hmp_gemm_ukernel ukernel) 
 
 static inline struct xnn_hmp_igemm_ukernel xnn_init_hmp_igemm_ukernel(xnn_igemm_ukernel_fn function) {
   struct xnn_hmp_igemm_ukernel ukernel = {{ function }};
-#if XNN_PLATFORM_JIT
-  ukernel.generated_code_chunk[0].offset = SIZE_MAX;
-  ukernel.generated_code_chunk[0].offset_end = SIZE_MAX;
-#endif  // XNN_PLATFORM_JIT
   for (size_t i = 1; i < XNN_MAX_UARCH_TYPES; i++) {
     ukernel.function[i] = function;
-#if XNN_PLATFORM_JIT
-    ukernel.generated_code_chunk[i].offset = SIZE_MAX;
-    ukernel.generated_code_chunk[i].offset_end = SIZE_MAX;
-#endif  // XNN_PLATFORM_JIT
   }
   return ukernel;
 }
@@ -275,64 +237,22 @@ static inline bool xnn_is_hmp_igemm_ukernel(struct xnn_hmp_igemm_ukernel ukernel
 #endif
 }
 
-#if XNN_PLATFORM_JIT
-static inline struct xnn_hmp_gemm_codegen xnn_init_hmp_gemm_codegen(xnn_jit_gemm_code_generator_fn function) {
-  struct xnn_hmp_gemm_codegen ukernel = {{ function }};
-  for (size_t i = 1; i < XNN_MAX_UARCH_TYPES; i++) {
-    ukernel.function[i] = function;
-  }
-  return ukernel;
-}
-
-static inline bool xnn_is_hmp_gemm_codegen(struct xnn_hmp_gemm_codegen ukernel) {
-#if XNN_MAX_UARCH_TYPES == 1
-  return false;
-#else
-  uintptr_t default_fn = (uintptr_t) ukernel.function[XNN_UARCH_DEFAULT];
-  uintptr_t difference = 0;
-  for (size_t i = 1; i < XNN_MAX_UARCH_TYPES; i++) {
-    difference |= (default_fn ^ (uintptr_t) ukernel.function[i]);
-  }
-  return difference != 0;
-#endif
-}
-
-static inline struct xnn_hmp_igemm_codegen xnn_init_hmp_igemm_codegen(xnn_jit_igemm_code_generator_fn function) {
-  struct xnn_hmp_igemm_codegen ukernel = {{ function }};
-  for (size_t i = 1; i < XNN_MAX_UARCH_TYPES; i++) {
-    ukernel.function[i] = function;
-  }
-  return ukernel;
-}
-
-static inline bool xnn_is_hmp_igemm_codegen(struct xnn_hmp_igemm_codegen ukernel) {
-#if XNN_MAX_UARCH_TYPES == 1
-  return false;
-#else
-  uintptr_t default_fn = (uintptr_t) ukernel.function[XNN_UARCH_DEFAULT];
-  uintptr_t difference = 0;
-  for (size_t i = 1; i < XNN_MAX_UARCH_TYPES; i++) {
-    difference |= (default_fn ^ (uintptr_t) ukernel.function[i]);
-  }
-  return difference != 0;
-#endif
-}
-#endif  // XNN_PLATFORM_JIT
-
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_f16_gemm_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_f32_gemm_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_f32_gemm_nr2_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_f32_qc8w_gemm_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_f32_qc4w_gemm_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_qd8_f16_qb4w_gemm_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_qd8_f16_qc4w_gemm_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_qd8_f16_qc8w_gemm_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_qd8_f32_qb4w_gemm_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_qd8_f32_qc4w_gemm_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_qd8_f32_qc8w_gemm_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_qp8_f32_qc4w_gemm_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_qs8_qc8w_gemm_config();
-XNN_INTERNAL struct xnn_gemm_config* xnn_init_qu8_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_f16_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_f32_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_f32_gemm_nr2_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_f32_qc8w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_f32_qc4w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_pf32_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qd8_f16_qb4w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qd8_f16_qc4w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qd8_f16_qc8w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qd8_f32_qb4w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qd8_f32_qc4w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qd8_f32_qc8w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qp8_f32_qc4w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qp8_f32_qb4w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qs8_qc8w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qu8_gemm_config();
 
 XNN_INTERNAL const struct xnn_maxpool_config* xnn_init_f16_maxpool_config();
 XNN_INTERNAL const struct xnn_maxpool_config* xnn_init_f32_maxpool_config();

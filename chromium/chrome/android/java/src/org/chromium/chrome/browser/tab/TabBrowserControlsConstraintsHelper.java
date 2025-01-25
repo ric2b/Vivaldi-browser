@@ -15,11 +15,10 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.cc.input.BrowserControlsOffsetTagsInfo;
 import org.chromium.cc.input.BrowserControlsState;
 import org.chromium.cc.input.OffsetTag;
-import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
 
 /** Manages the state of tab browser controls. */
@@ -39,7 +38,7 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
     //   - Browser, to tag the layers that move with top controls to be moved by viz.
     //   - Renderer, to tag the corresponding scroll offset in the compositor frame's metadata.
     // When visibility of the browser controls are forced by the browser, this token will be null.
-    private OffsetTag mTopControlsOffsetTag;
+    private BrowserControlsOffsetTagsInfo mOffsetTags;
 
     public static void createForTab(Tab tab) {
         tab.getUserDataHost()
@@ -105,6 +104,7 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
 
     /** Constructor */
     private TabBrowserControlsConstraintsHelper(Tab tab) {
+        mOffsetTags = new BrowserControlsOffsetTagsInfo(null, null);
         mTab = (TabImpl) tab;
         mConstraintsChangedCallback =
                 (constraints) -> {
@@ -156,18 +156,14 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
 
                     @Override
                     public void onHidden(Tab tab, @TabHidingType int type) {
-                        if (ToolbarFeatures.isBrowserControlsInVizEnabled(
-                                DeviceFormFactor.isNonMultiDisplayContextOnTablet(
-                                        mTab.getContext()))) {
+                        if (ChromeFeatureList.sBrowserControlsInViz.isEnabled()) {
                             unregisterOffsetTags();
                         }
                     }
 
                     @Override
                     public void onShown(Tab tab, @TabHidingType int type) {
-                        if (ToolbarFeatures.isBrowserControlsInVizEnabled(
-                                DeviceFormFactor.isNonMultiDisplayContextOnTablet(
-                                        mTab.getContext()))) {
+                        if (ChromeFeatureList.sBrowserControlsInViz.isEnabled()) {
                             updateEnabledState();
                         }
                     }
@@ -217,40 +213,47 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
 
     /** Unregister all OffsetTags (for now, only the top controls have an OffsetTag.) */
     private void unregisterOffsetTags() {
-        updateOffsetTags(null, getConstraints());
+        updateOffsetTags(new BrowserControlsOffsetTagsInfo(null, null), getConstraints());
     }
 
     private void updateOffsetTags(
-            OffsetTag newTopControlsOffsetTag, @BrowserControlsState int constraints) {
-        if (newTopControlsOffsetTag == mTopControlsOffsetTag) {
+            BrowserControlsOffsetTagsInfo newOffsetTags, @BrowserControlsState int constraints) {
+        if (newOffsetTags == mOffsetTags) {
             return;
         }
 
+        // Relies on BrowserControlsManager to set the toolbar hairline height in
+        // newOffsetTags.
         RewindableIterator<TabObserver> observers = mTab.getTabObservers();
         while (observers.hasNext()) {
             observers
                     .next()
                     .onBrowserControlsConstraintsChanged(
-                            mTab,
-                            new BrowserControlsOffsetTagsInfo(mTopControlsOffsetTag),
-                            new BrowserControlsOffsetTagsInfo(newTopControlsOffsetTag),
-                            constraints);
+                            mTab, mOffsetTags, newOffsetTags, constraints);
         }
 
-        mTopControlsOffsetTag = newTopControlsOffsetTag;
+        mOffsetTags = newOffsetTags;
     }
 
-    private void generateOffsetTags(
-            @BrowserControlsState int current, @BrowserControlsState int constraints) {
+    private void generateOffsetTags(@BrowserControlsState int constraints) {
         if (mTab.isHidden()) {
             return;
         }
 
         boolean isNewStateForced = isStateForced(constraints);
-        if (mTopControlsOffsetTag == null && !isNewStateForced) {
-            updateOffsetTags(OffsetTag.createRandom(), constraints);
-        } else if (mTopControlsOffsetTag != null && isNewStateForced) {
-            updateOffsetTags(null, constraints);
+        if (!mOffsetTags.hasTags() && !isNewStateForced) {
+            if (ChromeFeatureList.sBcivZeroBrowserFrames.isEnabled()) {
+                // Create 2 tags so the top controls can move separately from other views so that
+                // renderer+viz can correctly control the visibility of the toolbar hairline without
+                // additional browser frames.
+                updateOffsetTags(new BrowserControlsOffsetTagsInfo(), constraints);
+            } else {
+                updateOffsetTags(
+                        new BrowserControlsOffsetTagsInfo(OffsetTag.createRandom(), null),
+                        constraints);
+            }
+        } else if (mOffsetTags.hasTags() && isNewStateForced) {
+            updateOffsetTags(new BrowserControlsOffsetTagsInfo(null, null), constraints);
         }
     }
 
@@ -275,9 +278,8 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
             return;
         }
 
-        if (ToolbarFeatures.isBrowserControlsInVizEnabled(
-                DeviceFormFactor.isNonMultiDisplayContextOnTablet(mTab.getContext()))) {
-            generateOffsetTags(current, constraints);
+        if (ChromeFeatureList.sBrowserControlsInViz.isEnabled()) {
+            generateOffsetTags(constraints);
         }
 
         if (current == BrowserControlsState.SHOWN || constraints == BrowserControlsState.SHOWN) {
@@ -298,7 +300,7 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
                         constraints,
                         current,
                         animate,
-                        new BrowserControlsOffsetTagsInfo(mTopControlsOffsetTag));
+                        mOffsetTags);
     }
 
     private @BrowserControlsState int getConstraints() {

@@ -25,7 +25,7 @@ namespace {
 
 constexpr RtpPayloadType kPayloadType = RtpPayloadType::kAudioOpus;
 
-// Returns true if |needle| is fully within |haystack|.
+// Returns true if `needle` is fully within `haystack`.
 bool IsSubspan(ByteView needle, ByteView haystack) {
   return (needle.data() >= haystack.data()) &&
          ((needle.data() + needle.size()) <=
@@ -104,7 +104,7 @@ class RtpPacketizerTest : public testing::Test {
     }
     last_sequence_number_ = result->sequence_number;
 
-    // If there is a playout delay change starting with this |frame|, it must
+    // If there is a playout delay change starting with this `frame`, it must
     // only be mentioned in the first packet.
     if (packet_id == FramePacketId{0}) {
       EXPECT_EQ(frame.new_playout_delay, result->new_playout_delay);

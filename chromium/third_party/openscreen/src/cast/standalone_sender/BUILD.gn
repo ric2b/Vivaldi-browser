@@ -32,6 +32,7 @@ if (!build_with_chromium) {
       "../../discovery:public",
       "../../platform",
       "../../platform:standalone_impl",
+      "../../third_party/getopt",
       "../../third_party/jsoncpp",
       "../../util",
       "../common:certificate_boringssl",

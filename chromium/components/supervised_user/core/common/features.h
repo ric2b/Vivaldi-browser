@@ -51,11 +51,7 @@ bool IsSupervisedUserSkipParentApprovalToInstallExtensionsEnabled();
 //    Profile
 //
 // Only affects Linux/Mac/Windows platforms.
-BASE_DECLARE_FEATURE(kCustomWebSignInInterceptForSupervisedUsersUi);
-
-// Displays the supervised user signin-in IPH when the child signs
-// in to a new or existing local profile.
-BASE_DECLARE_FEATURE(kSupervisedUserProfileSigninIPH);
+BASE_DECLARE_FEATURE(kCustomProfileStringsForSupervisedUsers);
 
 // Displays a Family Link kite badge on the supervised user avatar in various
 // surfaces.
@@ -92,6 +88,10 @@ BASE_DECLARE_FEATURE(kCloseSignTabsFromReauthenticationInterstitial);
 // supervised users when they try to access:
 // * Embedded YouTube videos if re-auth is forced for YouTube.
 // * Blocked sites in subframes if re-auth is forced for blocked sites.
+//
+// This flag is only effective if the flag
+// `kForceSupervisedUserReauthenticationForYouTube` or
+// `kForceSupervisedUserReauthenticationForBlockedSites` is enabled.
 BASE_DECLARE_FEATURE(kAllowSupervisedUserReauthenticationForSubframes);
 #endif
 

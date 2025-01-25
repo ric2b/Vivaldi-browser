@@ -717,10 +717,11 @@ void PendingLayer::UpdateCompositedLayer(PendingLayer* old_pending_layer,
       break;
   }
 
-  UpdateLayerProperties(layer_selection, /*selection_only=*/false);
-
   cc::Layer& layer = CcLayer();
   layer.SetLayerTreeHost(layer_tree_host);
+
+  UpdateLayerProperties(layer_selection, /*selection_only=*/false);
+
   if (!layer.subtree_property_changed() &&
       PropertyTreeStateChanged(old_pending_layer)) {
     layer.SetSubtreePropertyChanged();
@@ -779,6 +780,14 @@ void PendingLayer::UpdateCompositedLayerForRepaint(
   }
 
   UpdateLayerProperties(layer_selection, chunks_unchanged);
+}
+
+void PendingLayer::UpdateForRasterInducingScroll() {
+  if (content_layer_client_ &&
+      content_layer_client_->HasRasterInducingScroll()) {
+    content_layer_client_->GetRasterInvalidator().UpdateForRasterInducingScroll(
+        Chunks());
+  }
 }
 
 void PendingLayer::UpdateLayerProperties(cc::LayerSelection& layer_selection,

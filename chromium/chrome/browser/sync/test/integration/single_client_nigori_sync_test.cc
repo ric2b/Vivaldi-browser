@@ -269,8 +269,6 @@ class FakeSecurityDomainsServerMemberStatusChecker
   const raw_ptr<trusted_vault::FakeSecurityDomainsServer> server_;
 };
 
-}  // namespace
-
 class SingleClientNigoriSyncTest : public SyncTest {
  public:
   SingleClientNigoriSyncTest() : SyncTest(SINGLE_CLIENT) {}
@@ -287,17 +285,10 @@ class SingleClientNigoriSyncTest : public SyncTest {
   }
 
   std::vector<variations::ActiveGroupId> GetSyntheticFieldTrials() {
-    std::vector<variations::ActiveGroupId> synthetic_trials;
-    g_browser_process->metrics_service()
+    return g_browser_process->metrics_service()
         ->GetSyntheticTrialRegistry()
-        ->GetSyntheticFieldTrialsOlderThan(base::TimeTicks::Now(),
-                                           &synthetic_trials);
-    return synthetic_trials;
+        ->GetCurrentSyntheticFieldTrialsForTest();
   }
-
- private:
-  base::test::ScopedFeatureList feature_list_{
-      syncer::kTrustedVaultAutoUpgradeSyntheticFieldTrial};
 };
 
 class SingleClientNigoriSyncTestWithNotAwaitQuiescence
@@ -1315,25 +1306,16 @@ IN_PROC_BROWSER_TEST_F(
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 class SingleClientNigoriWithWebApiAndDialogUIParamTest
-    : public testing::WithParamInterface<bool>,
-      public SingleClientNigoriWithWebApiTest {
+    : public SingleClientNigoriWithWebApiTest {
  public:
-  SingleClientNigoriWithWebApiAndDialogUIParamTest() {
-      feature_list_.InitAndDisableFeature(
-          trusted_vault::kChromeOSTrustedVaultUseWebUIDialog);
-  }
-
+  SingleClientNigoriWithWebApiAndDialogUIParamTest() = default;
   ~SingleClientNigoriWithWebApiAndDialogUIParamTest() override = default;
-
 
   bool WaitForTrustedVaultReauthCompletion() {
       return TabClosedChecker(
                  GetBrowser(0)->tab_strip_model()->GetActiveWebContents())
           .Wait();
   }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiAndDialogUIParamTest,
@@ -2414,3 +2396,5 @@ INSTANTIATE_TEST_SUITE_P(
       return info.param ? "Explicit" : "Implicit";
     });
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+
+}  // namespace

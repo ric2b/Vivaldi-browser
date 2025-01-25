@@ -13,40 +13,53 @@
 // limitations under the License.
 
 import m from 'mithril';
-import {LegacySelection, Selection} from './selection';
-
-export interface LegacyDetailsPanel {
-  render(selection: LegacySelection): m.Children;
-  isLoading?(): boolean;
-}
+import {Selection, TrackEventSelection} from './selection';
+import {z} from 'zod';
 
 export interface DetailsPanel {
   render(selection: Selection): m.Children;
   isLoading?(): boolean;
 }
 
-export interface TrackSelectionDetailsPanel {
-  render(id: number): m.Children;
-  isLoading?(): boolean;
+export interface TrackEventDetailsPanelSerializeArgs<T> {
+  // The Zod schema which will be used the parse the state in a serialized
+  // permalink JSON object.
+  readonly schema: z.ZodType<T>;
+
+  // The serializable state of the details panel. The usage of this field is
+  // as follows
+  //  1) default initialize this field in the constructor.
+  //  2) if the trace is being restored from a permalink, the UI will use
+  //     `schema` to parse the serialized state and will write the result into
+  //     `state`. If parsing failed or the trace is not being restored,
+  //     `state` will not be touched.
+  //  3) if a permalink is requested, the UI will read the value of `state`
+  //     and stash it in the permalink serialzed state.
+  //
+  // This flow has the following consequences:
+  //  1) Details panels *must* respect changes to this object between their
+  //     constructor and the first call to `load()`. This is the point where
+  //     the core will "inject" the permalink deserialized object
+  //     if available.
+  //  2) The `state` object *must* be serializable: that is, it should be a
+  //     pure Javascript object.
+  state: T;
 }
 
-// TODO(primiano): rationalize this GenericSliceDetailsTabConfig. it should be
-// probably moved to a public/lib/ next.
-export interface ColumnConfig {
-  readonly displayName?: string;
+export interface TrackEventDetailsPanel {
+  // Optional: Do any loading required to render the details panel in here and
+  // the core will:
+  // - Ensure that no more than one concurrent loads are enqueued at any given
+  //   time in order to keep the UI snappy.
+  // - Hold off switching to this tab for up to around 50ms while this loading
+  //   is going, to avoid flickering when loading is fast.
+  load?(id: TrackEventSelection): Promise<void>;
+
+  // Called every render cycle to render the details panel. Note: This function
+  // is called regardless of whether |load| has completed yet.
+  render(): m.Children;
+
+  // Optional interface to implement by details panels which want to support
+  // saving/restoring state from a permalink.
+  readonly serialization?: TrackEventDetailsPanelSerializeArgs<unknown>;
 }
-
-export type Columns = {
-  readonly [columnName: string]: ColumnConfig;
-};
-
-export interface GenericSliceDetailsTabConfigBase {
-  readonly sqlTableName: string;
-  readonly title: string;
-  // All columns are rendered if |columns| is undefined.
-  readonly columns?: Columns;
-}
-
-export type GenericSliceDetailsTabConfig = GenericSliceDetailsTabConfigBase & {
-  readonly id: number;
-};

@@ -38,10 +38,6 @@
 #include "ui/events/ash/keyboard_capability.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#include "chromeos/ash/resources/internal/strings/grit/ash_internal_strings.h"
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
-
 namespace app_list {
 
 namespace {
@@ -79,6 +75,8 @@ std::optional<int> GetStringIdForIconCode(IconCode icon_code) {
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_BROWSER_REFRESH;
     case ash::SearchResultTextItem::kKeyboardShortcutBrowserSearch:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_BROWSER_SEARCH;
+    case ash::SearchResultTextItem::kKeyboardShortcutContextMenu:
+      return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_CONTEXT_MENU;
     case ash::SearchResultTextItem::kKeyboardShortcutCalculator:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_LAUNCH_APPLICATION2;
     case ash::SearchResultTextItem::kKeyboardShortcutDictationToggle:
@@ -143,11 +141,7 @@ std::optional<int> GetStringIdForIconCode(IconCode icon_code) {
     case ash::SearchResultTextItem::kKeyboardShortcutAccessibility:
       return IDS_SHORTCUT_CUSTOMIZATION_ICON_LABEL_ACCESSIBILITY;
     case ash::SearchResultTextItem::kKeyboardShortcutKeyboardRightAlt:
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-      return IDS_KEYBOARD_RIGHT_ALT_LABEL;
-#else
-      return IDS_SHORTCUT_CUSTOMIZATION_INPUT_KEY_PLACEHOLDER;
-#endif
+      return IDS_KEYBOARD_QUICK_INSERT_LABEL;
   }
 }
 
@@ -184,6 +178,8 @@ bool IsModifierKey(ui::KeyboardCode keycode) {
 std::optional<IconCode> KeyboardShortcutResult::GetIconCodeFromKeyboardCode(
     KeyboardCode keyboard_code) {
   switch (keyboard_code) {
+    case (KeyboardCode::VKEY_APPS):
+      return IconCode::kKeyboardShortcutContextMenu;
     case (KeyboardCode::VKEY_BROWSER_BACK):
       return IconCode::kKeyboardShortcutBrowserBack;
     case (KeyboardCode::VKEY_BROWSER_FORWARD):
@@ -326,6 +322,7 @@ KeyboardShortcutResult::GetIconCodeByKeyString(std::u16string_view key_string) {
        {u"MediaPlayPause", IconCode::kKeyboardShortcutMediaPlayPause},
        {u"MediaTrackNext", IconCode::kKeyboardShortcutMediaTrackNext},
        {u"MediaTrackPrevious", IconCode::kKeyboardShortcutMediaTrackPrevious},
+       {u"Menu", IconCode::kKeyboardShortcutContextMenu},
        {u"MicrophoneMuteToggle", IconCode::kKeyboardShortcutMicrophone},
        {u"ModeChange", IconCode::kKeyboardShortcutInputModeChange},
        {u"Power", IconCode::kKeyboardShortcutPower},

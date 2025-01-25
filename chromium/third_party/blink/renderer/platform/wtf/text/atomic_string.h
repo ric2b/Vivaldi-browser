@@ -25,8 +25,8 @@
 #include <iosfwd>
 #include <type_traits>
 
+#include "base/compiler_specific.h"
 #include "build/build_config.h"
-#include "third_party/abseil-cpp/absl/base/attributes.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/hash_table_deleted_value_type.h"
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
@@ -56,24 +56,18 @@ class WTF_EXPORT AtomicString {
 
   AtomicString() = default;
   explicit AtomicString(const LChar* chars)
-      : AtomicString(chars,
-                     chars ? strlen(reinterpret_cast<const char*>(chars)) : 0) {
-  }
-
-#if defined(ARCH_CPU_64_BITS)
-  // Only define a size_t constructor if size_t is 64 bit otherwise
-  // we'd have a duplicate define.
-  AtomicString(const LChar* chars, size_t length);
-#endif  // defined(ARCH_CPU_64_BITS)
+      : AtomicString(base::span<const LChar>{
+            chars, chars ? strlen(reinterpret_cast<const char*>(chars)) : 0}) {}
 
   explicit AtomicString(const char* chars)
       : AtomicString(reinterpret_cast<const LChar*>(chars)) {}
-  AtomicString(const LChar* chars, unsigned length);
-  AtomicString(
-      const UChar* chars,
-      unsigned length,
+  explicit AtomicString(base::span<const LChar> chars);
+  explicit AtomicString(
+      base::span<const UChar> chars,
       AtomicStringUCharEncoding encoding = AtomicStringUCharEncoding::kUnknown);
   explicit AtomicString(const UChar* chars);
+
+  explicit AtomicString(const StringView& view);
 
   // Constructing an AtomicString from a String / StringImpl can be expensive if
   // the StringImpl is not already atomic.
@@ -184,7 +178,7 @@ class WTF_EXPORT AtomicString {
   template <typename IntegerType>
   static AtomicString Number(IntegerType number) {
     IntegerToStringConverter<IntegerType> converter(number);
-    return AtomicString(converter.Characters8(), converter.length());
+    return AtomicString(converter.Span());
   }
 
   static AtomicString Number(double, unsigned precision = 6);
@@ -299,17 +293,14 @@ struct HashTraits<AtomicString>;
 // double-quotes, and escapes characters other than ASCII printables.
 WTF_EXPORT std::ostream& operator<<(std::ostream&, const AtomicString&);
 
-inline StringView::StringView(const AtomicString& string
-                                  ABSL_ATTRIBUTE_LIFETIME_BOUND,
+inline StringView::StringView(const AtomicString& string LIFETIME_BOUND,
                               unsigned offset,
                               unsigned length)
     : StringView(string.Impl(), offset, length) {}
-inline StringView::StringView(const AtomicString& string
-                                  ABSL_ATTRIBUTE_LIFETIME_BOUND,
+inline StringView::StringView(const AtomicString& string LIFETIME_BOUND,
                               unsigned offset)
     : StringView(string.Impl(), offset) {}
-inline StringView::StringView(
-    const AtomicString& string ABSL_ATTRIBUTE_LIFETIME_BOUND)
+inline StringView::StringView(const AtomicString& string LIFETIME_BOUND)
     : StringView(string.Impl()) {}
 
 }  // namespace WTF

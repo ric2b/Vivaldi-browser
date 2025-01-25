@@ -4,27 +4,38 @@
 
 #include "ash/wm/overview/birch/birch_chip_button.h"
 
+#include "ash/birch/birch_coral_provider.h"
 #include "ash/birch/birch_item.h"
+#include "ash/public/cpp/coral_delegate.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
-#include "ash/shell_delegate.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/icon_button.h"
 #include "ash/style/typography.h"
+#include "ash/wm/overview/birch/birch_animation_utils.h"
 #include "ash/wm/overview/birch/birch_bar_constants.h"
 #include "ash/wm/overview/birch/birch_bar_controller.h"
 #include "ash/wm/overview/birch/birch_bar_util.h"
 #include "ash/wm/overview/birch/birch_chip_context_menu_model.h"
+#include "ash/wm/overview/birch/resources/grit/coral_resources.h"
+#include "ash/wm/overview/birch/tab_app_selection_host.h"
+#include "base/notreached.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/types/cxx23_to_underlying.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
+#include "ui/compositor/layer.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/context_menu_controller.h"
+#include "ui/views/controls/animated_image_view.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_item_view.h"
@@ -37,6 +48,7 @@
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/vector_icons.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/view_utils.h"
 
 namespace ash {
 
@@ -48,17 +60,17 @@ constexpr gfx::Insets kInteriorMarginsWithAddon = gfx::Insets::VH(12, 0);
 
 // The layout parameters of icon.
 constexpr gfx::Insets kIconMargins = gfx::Insets::TLBR(0, 12, 0, 8);
-constexpr int kMainIconViewSize = 40;
 constexpr int kParentIconViewSize = 44;
+constexpr int kPrimaryIconViewSize = 40;
 constexpr int kSecondaryIconViewSize = 20;
 constexpr int kSecondaryIconImageSize = 12;
-constexpr int kFaviconSize = 32;
-constexpr int kFaviconCornerRadius = 8;
-constexpr int kAppIconSize = 16;
-constexpr int kAppCornerRadius = 20;
+constexpr gfx::Point kSecondaryIconOffset(24, 24);
+constexpr int kIconSize = 16;
+constexpr int kIconCornerRadius = 20;
 constexpr int kIllustrationSize = 40;
-constexpr int kCoralGroupedImageSize = 40;
 constexpr int kIllustrationCornerRadius = 8;
+constexpr int kCoralGroupedImageSize = 40;
+constexpr int kCoralIconBackgroundCornerRadius = 20;
 constexpr int kWeatherImageSize = 32;
 
 // The colors of icons.
@@ -74,6 +86,8 @@ constexpr TypographyToken kTitleFont = TypographyToken::kCrosButton1;
 constexpr ui::ColorId kTitleColorId = cros_tokens::kCrosSysOnSurface;
 constexpr TypographyToken kSubtitleFont = TypographyToken::kCrosAnnotation1;
 constexpr ui::ColorId kSubtitleColorId = cros_tokens::kCrosSysOnSurfaceVariant;
+
+constexpr gfx::Size kLoadingAnimationSize = gfx::Size(100, 20);
 
 BirchSuggestionType GetSuggestionTypeFromItemType(BirchItemType item_type) {
   switch (item_type) {
@@ -102,6 +116,96 @@ BirchSuggestionType GetSuggestionTypeFromItemType(BirchItemType item_type) {
   }
 }
 
+std::unique_ptr<views::ImageView> CreatePrimaryImageView(
+    const ui::ImageModel& icon,
+    PrimaryIconType type) {
+  int icon_size;
+  std::optional<int> rounded_corners;
+  switch (type) {
+    case PrimaryIconType::kIcon:
+      icon_size = kIconSize;
+      rounded_corners = kIconCornerRadius;
+      break;
+    case PrimaryIconType::kIllustration:
+      icon_size = kIllustrationSize;
+      rounded_corners = kIllustrationCornerRadius;
+      break;
+    case PrimaryIconType::kWeatherImage:
+      icon_size = kWeatherImageSize;
+      break;
+    case PrimaryIconType::kCoralGroupIcon:
+      icon_size = kCoralGroupedImageSize;
+      rounded_corners = kCoralIconBackgroundCornerRadius;
+      break;
+  }
+
+  return views::Builder<views::ImageView>()
+      .SetImage(icon)
+      .SetImageSize(gfx::Size(icon_size, icon_size))
+      .SetSize(gfx::Size(kPrimaryIconViewSize, kPrimaryIconViewSize))
+      .SetBorder(views::CreateEmptyBorder(
+          gfx::Insets((kPrimaryIconViewSize - icon_size) / 2)))
+      .SetBackground(rounded_corners
+                         ? views::CreateThemedRoundedRectBackground(
+                               kIconBackgroundColorId, rounded_corners.value())
+                         : nullptr)
+      .Build();
+}
+
+std::unique_ptr<views::ImageView> CreateSecondaryImageView(
+    SecondaryIconType type) {
+  ui::ImageModel icon_image;
+  switch (type) {
+    case SecondaryIconType::kTabFromDesktop:
+      icon_image = ui::ImageModel::FromVectorIcon(
+          kBirchSecondaryIconDesktopIcon, kSecondaryIconColorId);
+      break;
+    case SecondaryIconType::kTabFromPhone:
+      icon_image = ui::ImageModel::FromVectorIcon(
+          kBirchSecondaryIconPortraitIcon, kSecondaryIconColorId);
+      break;
+    case SecondaryIconType::kTabFromTablet:
+      icon_image = ui::ImageModel::FromVectorIcon(
+          kBirchSecondaryIconLandscapeIcon, kSecondaryIconColorId);
+      break;
+    case SecondaryIconType::kTabFromUnknown:
+      icon_image = ui::ImageModel::FromVectorIcon(
+          kBirchSecondaryIconUnknownIcon, kSecondaryIconColorId);
+      break;
+    case SecondaryIconType::kLostMediaAudio:
+      icon_image = ui::ImageModel::FromVectorIcon(kBirchSecondaryIconAudioIcon,
+                                                  kSecondaryIconColorId);
+      break;
+    case SecondaryIconType::kLostMediaVideo:
+      icon_image = ui::ImageModel::FromVectorIcon(kBirchSecondaryIconVideoIcon,
+                                                  kSecondaryIconColorId);
+      break;
+    case SecondaryIconType::kLostMediaVideoConference:
+      icon_image = ui::ImageModel::FromVectorIcon(
+          kBirchSecondaryIconVideoConferenceIcon, kSecondaryIconColorId);
+      break;
+    case SecondaryIconType::kSelfShareIcon:
+      // TODO(https://b/364912772): Remove temporary fix by adding sender's
+      // device form_factor to `SelfTabToSelfEntry`.
+      icon_image = ui::ImageModel::FromVectorIcon(
+          kBirchSecondaryIconGenericShareIcon, kSecondaryIconColorId);
+      break;
+    case SecondaryIconType::kNoIcon:
+      NOTREACHED();
+  }
+  return views::Builder<views::ImageView>()
+      .SetImage(icon_image)
+      .SetImageSize(gfx::Size(kSecondaryIconImageSize, kSecondaryIconImageSize))
+      .SetPosition(kSecondaryIconOffset)
+      .SetSize(gfx::Size(kSecondaryIconViewSize, kSecondaryIconViewSize))
+      .SetBackground(views::CreateThemedRoundedRectBackground(
+          kSecondaryIconBackgroundColorId, kSecondaryIconViewSize / 2))
+      .SetBorder(views::CreateThemedRoundedRectBorder(
+          1, kSecondaryIconViewSize / 2,
+          cros_tokens::kCrosSysSystemOnBaseOpaque))
+      .Build();
+}
+
 }  // namespace
 
 //------------------------------------------------------------------------------
@@ -116,9 +220,10 @@ class BirchChipButton::ChipMenuController
 
  private:
   // views::ContextMenuController:
-  void ShowContextMenuForViewImpl(views::View* source,
-                                  const gfx::Point& point,
-                                  ui::MenuSourceType source_type) override {
+  void ShowContextMenuForViewImpl(
+      views::View* source,
+      const gfx::Point& point,
+      ui::mojom::MenuSourceType source_type) override {
     if (auto* birch_bar_controller_ = BirchBarController::Get()) {
       birch_bar_controller_->ShowChipContextMenu(
           chip_, GetSuggestionTypeFromItemType(chip_->GetItem()->GetType()),
@@ -140,8 +245,6 @@ BirchChipButton::BirchChipButton()
       .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
       .SetInteriorMargin(kInteriorMarginsNoAddon);
 
-  raw_ptr<views::BoxLayoutView> titles_container = nullptr;
-
   // Build up the chip's contents.
   views::Builder<BirchChipButtonBase>(this)
       .SetLayoutManager(std::move(flex_layout))
@@ -151,17 +254,9 @@ BirchChipButton::BirchChipButton()
               .CopyAddressTo(&icon_parent_view_)
               .SetPreferredSize(
                   gfx::Size(kParentIconViewSize, kParentIconViewSize))
-              .SetProperty(views::kMarginsKey, kIconMargins)
-              .SetVisible(true)
-              .AddChildren(
-                  // Main icon.
-                  views::Builder<views::ImageView>().CopyAddressTo(
-                      &primary_icon_view_),
-                  // Secondary icon.
-                  views::Builder<views::ImageView>().CopyAddressTo(
-                      &secondary_icon_view_)),
+              .SetProperty(views::kMarginsKey, kIconMargins),
           views::Builder<views::BoxLayoutView>()
-              .CopyAddressTo(&titles_container)
+              .CopyAddressTo(&titles_container_)
               .SetProperty(views::kFlexBehaviorKey,
                            views::FlexSpecification(
                                views::MinimumFlexSizeRule::kScaleToZero,
@@ -191,6 +286,27 @@ BirchChipButton::BirchChipButton()
 
 BirchChipButton::~BirchChipButton() = default;
 
+void BirchChipButton::OnSelectionWidgetVisibilityChanged() {
+  CHECK(tab_app_selection_widget_);
+  UpdateRoundedCorners(tab_app_selection_widget_->IsVisible());
+
+  CHECK(addon_view_);
+  views::AsViewClass<IconButton>(addon_view_)
+      ->SetTooltipText(l10n_util::GetStringUTF16(
+          tab_app_selection_widget_->IsVisible()
+              ? IDS_ASH_BIRCH_CORAL_ADDON_SELECTOR_SHOWN
+              : IDS_ASH_BIRCH_CORAL_ADDON_SELECTOR_HIDDEN));
+}
+
+void BirchChipButton::ShutdownSelectionWidget() {
+  tab_app_selection_widget_.reset();
+}
+
+void BirchChipButton::ReloadIcon() {
+  item_->LoadIcon(base::BindOnce(&BirchChipButton::SetIconImage,
+                                 weak_factory_.GetWeakPtr()));
+}
+
 void BirchChipButton::Init(BirchItem* item) {
   item_ = item;
 
@@ -204,12 +320,55 @@ void BirchChipButton::Init(BirchItem* item) {
   // Add add-ons according to the add-on type.
   switch (addon_type) {
     case BirchAddonType::kButton: {
-      auto button = birch_bar_util::CreateAddonButton(
-          base::BindRepeating(&BirchItem::PerformAddonAction,
-                              base::Unretained(item_)),
-          *item_->addon_label());
+      base::RepeatingClosure callback = base::BindRepeating(
+          &BirchItem::PerformAddonAction, base::Unretained(item_));
+      auto button = birch_bar_util::CreateAddonButton(std::move(callback),
+                                                      *item_->addon_label());
       button->SetTooltipText(item->GetAddonAccessibleName());
       SetAddon(std::move(button));
+      break;
+    }
+    case BirchAddonType::kCoralButton: {
+      // Coral item works different since it triggers a new overview view.
+      base::RepeatingClosure callback = base::BindRepeating(
+          &BirchChipButton::OnCoralAddonClicked, base::Unretained(this));
+      // Coral chip's addon button contains no text.
+      auto button = birch_bar_util::CreateCoralAddonButton(
+          std::move(callback), vector_icons::kCaretUpIcon);
+      button->SetTooltipText(
+          l10n_util::GetStringUTF16(IDS_ASH_BIRCH_CORAL_ADDON_SELECTOR_HIDDEN));
+      SetAddon(std::move(button));
+      // Coral chip gets the real title from the group.
+      auto* coral_provider = BirchCoralProvider::Get();
+      const std::optional<std::string>& group_title =
+          coral_provider
+              ? coral_provider
+                    ->GetGroupById(
+                        static_cast<BirchCoralItem*>(item_)->group_id())
+                    ->title
+              : "";
+      if (group_title) {
+        // If the title is not empty, reset the `title_` with the real title.
+        if (!group_title->empty()) {
+          title_->SetText(base::UTF8ToUTF16(*group_title));
+        }
+        // Show title and delete the loading animation.
+        title_->SetVisible(true);
+        if (!!title_loading_animated_image_) {
+          title_loading_animated_image_->Stop();
+          titles_container_->RemoveChildViewT(
+              std::exchange(title_loading_animated_image_, nullptr));
+        }
+      } else {
+        // If the title is null, show the animation to wait for title loading.
+        title_->SetVisible(false);
+
+        BuildTitleLoadingAnimation();
+        title_loading_animated_image_->Play(
+            birch_animation_utils::GetLottiePlaybackConfig(
+                *title_loading_animated_image_->animated_image()->skottie(),
+                IDR_CORAL_LOADING_TITLE_ANIMATION));
+      }
       break;
     }
     case BirchAddonType::kWeatherTempLabelC:
@@ -241,122 +400,6 @@ void BirchChipButton::Shutdown() {
   // Invalidate all weakptrs to avoid previously triggered callbacks from using
   // `item_`.
   weak_factory_.InvalidateWeakPtrs();
-}
-
-void BirchChipButton::StylizeIconForItemType(
-    BirchItemType type,
-    SecondaryIconType secondary_icon_type,
-    bool use_smaller_dimension) {
-  int icon_size;
-  int rounded_corners;
-  std::optional<ui::ColorId> background_color_id;
-
-  switch (type) {
-    case BirchItemType::kTest:
-    case BirchItemType::kCalendar:
-    case BirchItemType::kAttachment:
-    case BirchItemType::kFile:
-      icon_size = kAppIconSize;
-      rounded_corners = kAppCornerRadius;
-      background_color_id = kIconBackgroundColorId;
-      break;
-    case BirchItemType::kWeather:
-      icon_size = kWeatherImageSize;
-      break;
-    case BirchItemType::kReleaseNotes:
-      icon_size = kIllustrationSize;
-      rounded_corners = kIllustrationCornerRadius;
-      background_color_id = kIconBackgroundColorId;
-      break;
-    case BirchItemType::kCoral:
-      icon_size = kCoralGroupedImageSize;
-      break;
-    case BirchItemType::kTab:
-    case BirchItemType::kSelfShare:
-    case BirchItemType::kMostVisited:
-    case BirchItemType::kLastActive:
-    case BirchItemType::kLostMedia:
-      // When `use_smaller_dimension` is true, we use the smaller app icon sizes
-      // because we have access only to smaller icons.
-      use_smaller_dimension ? icon_size = kAppIconSize
-                            : icon_size = kFaviconSize;
-      rounded_corners = kFaviconCornerRadius;
-      background_color_id = kIconBackgroundColorId;
-      break;
-  }
-
-  primary_icon_view_->SetImageSize(gfx::Size(icon_size, icon_size));
-  primary_icon_view_->SetBounds(0, 0, kMainIconViewSize, kMainIconViewSize);
-
-  primary_icon_view_->SetBorder(views::CreateEmptyBorder(
-      gfx::Insets((kMainIconViewSize - icon_size) / 2)));
-
-  if (background_color_id.has_value()) {
-    primary_icon_view_->SetBackground(views::CreateThemedRoundedRectBackground(
-        background_color_id.value(), rounded_corners));
-  }
-
-  if (secondary_icon_type == SecondaryIconType::kNoIcon) {
-    secondary_icon_view_->SetVisible(false);
-    return;
-  }
-
-  secondary_icon_view_->SetImageSize(
-      gfx::Size(kSecondaryIconImageSize, kSecondaryIconImageSize));
-  secondary_icon_view_->SetBounds(24, 24, kSecondaryIconViewSize,
-                                  kSecondaryIconViewSize);
-  secondary_icon_view_->SetBackground(views::CreateThemedRoundedRectBackground(
-      kSecondaryIconBackgroundColorId, kSecondaryIconViewSize / 2));
-  secondary_icon_view_->SetBorder(views::CreateThemedRoundedRectBorder(
-      1, kSecondaryIconViewSize / 2, cros_tokens::kCrosSysSystemOnBaseOpaque));
-}
-
-void BirchChipButton::SetIconImage(const ui::ImageModel& icon_image,
-                                   SecondaryIconType secondary_icon_type) {
-  primary_icon_view_->SetImage(icon_image);
-
-  if (secondary_icon_type != SecondaryIconType::kNoIcon) {
-    ui::ImageModel secondary_icon_image;
-
-    switch (secondary_icon_type) {
-      case SecondaryIconType::kTabFromDesktop:
-        secondary_icon_image = ui::ImageModel::FromVectorIcon(
-            kBirchSecondaryIconDesktopIcon, kSecondaryIconColorId);
-        break;
-      case SecondaryIconType::kTabFromPhone:
-        secondary_icon_image = ui::ImageModel::FromVectorIcon(
-            kBirchSecondaryIconPortraitIcon, kSecondaryIconColorId);
-        break;
-      case SecondaryIconType::kTabFromTablet:
-        secondary_icon_image = ui::ImageModel::FromVectorIcon(
-            kBirchSecondaryIconLandscapeIcon, kSecondaryIconColorId);
-        break;
-      case SecondaryIconType::kTabFromUnknown:
-        secondary_icon_image = ui::ImageModel::FromVectorIcon(
-            kBirchSecondaryIconUnknownIcon, kSecondaryIconColorId);
-        break;
-      case SecondaryIconType::kLostMediaAudio:
-        secondary_icon_image = ui::ImageModel::FromVectorIcon(
-            kBirchSecondaryIconAudioIcon, kSecondaryIconColorId);
-        break;
-      case SecondaryIconType::kLostMediaVideo:
-        secondary_icon_image = ui::ImageModel::FromVectorIcon(
-            kBirchSecondaryIconVideoIcon, kSecondaryIconColorId);
-        break;
-      case SecondaryIconType::kLostMediaVideoConference:
-        secondary_icon_image = ui::ImageModel::FromVectorIcon(
-            kBirchSecondaryIconVideoConferenceIcon, kSecondaryIconColorId);
-        break;
-      case SecondaryIconType::kNoIcon:
-        break;
-    }
-    secondary_icon_view_->SetImage(secondary_icon_image);
-  }
-
-  bool use_smaller_dimension = icon_image.Size().width() <= kAppIconSize ||
-                               icon_image.Size().height() <= kAppIconSize;
-  StylizeIconForItemType(item_->GetType(), secondary_icon_type,
-                         use_smaller_dimension);
 }
 
 void BirchChipButton::ExecuteCommand(int command_id, int event_flags) {
@@ -399,16 +442,18 @@ void BirchChipButton::ExecuteCommand(int command_id, int event_flags) {
                                                   /*show=*/false);
       break;
     case base::to_underlying(CommandId::kCoralNewDesk):
-      // TODO(yulunwu) implement behavior
+      item_->PerformAction();
       break;
-    case base::to_underlying(CommandId::kCoralSaveForLater):
-      // TODO(yulunwu) implement behavior
+    case base::to_underlying(CommandId::kCoralSaveForLater): {
+      CHECK_EQ(BirchItemType::kCoral, item_->GetType());
+      auto* coral_provider = BirchCoralProvider::Get();
+      Shell::Get()->coral_delegate()->CreateSavedDeskFromGroup(
+          coral_provider->ExtractGroupById(
+              static_cast<BirchCoralItem*>(item_)->group_id()));
       break;
+    }
     case base::to_underlying(CommandId::kProvideFeedback):
-      Shell::Get()->shell_delegate()->OpenFeedbackDialog(
-          ShellDelegate::FeedbackSource::kOverview,
-          /*description_template=*/std::string(),
-          /*category_tag=*/"Coral");
+      birch_bar_controller->ProvideFeedbackForCoral();
       break;
     default:
       birch_bar_controller->ExecuteMenuCommand(command_id, /*from_chip=*/true);
@@ -417,11 +462,56 @@ void BirchChipButton::ExecuteCommand(int command_id, int event_flags) {
 
 void BirchChipButton::SetAddon(std::unique_ptr<views::View> addon_view) {
   if (addon_view_) {
-    RemoveChildViewT(addon_view_);
+    RemoveChildViewT(std::exchange(addon_view_, nullptr));
   } else {
     flex_layout_->SetInteriorMargin(kInteriorMarginsWithAddon);
   }
   addon_view_ = AddChildView(std::move(addon_view));
+}
+
+void BirchChipButton::SetIconImage(PrimaryIconType primary_icon_type,
+                                   SecondaryIconType secondary_icon_type,
+                                   const ui::ImageModel& icon_image) {
+  icon_parent_view_->RemoveAllChildViews();
+  icon_parent_view_->AddChildView(
+      CreatePrimaryImageView(icon_image, primary_icon_type));
+  if (secondary_icon_type != SecondaryIconType::kNoIcon) {
+    icon_parent_view_->AddChildView(
+        CreateSecondaryImageView(secondary_icon_type));
+  }
+}
+
+void BirchChipButton::OnCoralAddonClicked() {
+  CHECK_EQ(BirchItemType::kCoral, item_->GetType());
+
+  if (!tab_app_selection_widget_) {
+    tab_app_selection_widget_ = std::make_unique<TabAppSelectionHost>(this);
+    tab_app_selection_widget_->Show();
+    return;
+  }
+
+  if (!tab_app_selection_widget_->IsVisible()) {
+    tab_app_selection_widget_->Show();
+  } else {
+    tab_app_selection_widget_->SlideOut();
+  }
+}
+
+void BirchChipButton::BuildTitleLoadingAnimation() {
+  // Build `title_loading_animated_image_` and insert into the
+  // front of `titles_container_`.
+  std::unique_ptr<views::AnimatedImageView> title_loading_animated_image =
+      views::Builder<views::AnimatedImageView>()
+          .SetAnimatedImage(birch_animation_utils::GetLottieAnimationData(
+              IDR_CORAL_LOADING_TITLE_ANIMATION))
+          .SetImageSize(kLoadingAnimationSize)
+          .SetVisible(true)
+          .SetHorizontalAlignment(views::ImageViewBase::Alignment::kLeading)
+          .Build();
+  // Setup rounder corners for `title_loading_animated_image_`.
+  title_loading_animated_image_ =
+      titles_container_->AddChildViewAt(std::move(title_loading_animated_image),
+                                        /*index=*/0);
 }
 
 BEGIN_METADATA(BirchChipButton)

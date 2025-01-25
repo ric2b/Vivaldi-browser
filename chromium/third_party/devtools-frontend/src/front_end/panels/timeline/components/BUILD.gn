@@ -20,9 +20,10 @@ generate_css("css_files") {
     "networkRequestDetails.css",
     "networkRequestTooltip.css",
     "networkThrottlingSelector.css",
+    "relatedInsightChips.css",
     "sidebarAnnotationsTab.css",
     "sidebarInsightsTab.css",
-    "sidebarSingleNavigation.css",
+    "sidebarSingleInsightSet.css",
   ]
 }
 
@@ -32,8 +33,6 @@ devtools_module("components") {
     "BreadcrumbsUI.ts",
     "CPUThrottlingSelector.ts",
     "DetailsView.ts",
-    "EntryName.ts",
-    "EntryStyles.ts",
     "FieldSettingsDialog.ts",
     "InteractionBreakdown.ts",
     "LayoutShiftDetails.ts",
@@ -43,15 +42,17 @@ devtools_module("components") {
     "NetworkRequestDetails.ts",
     "NetworkRequestTooltip.ts",
     "NetworkThrottlingSelector.ts",
+    "RelatedInsightChips.ts",
     "Sidebar.ts",
     "SidebarAnnotationsTab.ts",
     "SidebarInsightsTab.ts",
-    "SidebarSingleNavigation.ts",
+    "SidebarSingleInsightSet.ts",
     "Utils.ts",
   ]
 
   deps = [
     "../../../core/common:bundle",
+    "../../../core/host:bundle",
     "../../../core/i18n:bundle",
     "../../../core/platform:bundle",
     "../../../generated",
@@ -59,6 +60,7 @@ devtools_module("components") {
     "../../../models/live-metrics:bundle",
     "../../../models/trace:bundle",
     "../../../services/trace_bounds:bundle",
+    "../../../ui/components/buttons:bundle",
     "../../../ui/components/data_grid:bundle",
     "../../../ui/components/dialogs:bundle",
     "../../../ui/components/helpers:bundle",
@@ -103,7 +105,6 @@ ts_library("unittests") {
   sources = [
     "BreadcrumbsUI.test.ts",
     "CPUThrottlingSelector.test.ts",
-    "EntryName.test.ts",
     "FieldSettingsDialog.test.ts",
     "InteractionBreakdown.test.ts",
     "Invalidations.test.ts",
@@ -112,7 +113,12 @@ ts_library("unittests") {
     "MetricCard.test.ts",
     "NetworkRequestDetails.test.ts",
     "NetworkThrottlingSelector.test.ts",
+    "RelatedInsightChips.test.ts",
+    "Sidebar.test.ts",
     "SidebarAnnotationsTab.test.ts",
+    "SidebarInsightsTab.test.ts",
+    "SidebarSingleInsightSet.test.ts",
+    "Utils.test.ts",
   ]
 
   deps = [

@@ -10,6 +10,7 @@
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_service_observer.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/common/ui/util/image_util.h"
 #import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager_consumer.h"
@@ -45,7 +46,7 @@ NSString* avatarPlaceholder = @"person.circle.fill";
 }
 
 @property(nonatomic, assign) Browser* browser;
-@property(nonatomic, assign) ChromeBrowserState* browserState;
+@property(nonatomic, assign) ProfileIOS* profile;
 @property(nonatomic, assign) syncer::SyncService* syncService;
 @property(nonatomic, assign) VivaldiAccountManager* vivaldiAccountManager;
 @property(nonatomic, copy) NSURLSessionDataTask* task;
@@ -60,21 +61,20 @@ NSString* avatarPlaceholder = @"person.circle.fill";
 
 #pragma mark - INITIALIZERS
 - (instancetype)initWithBrowser:(Browser*)browser {
-  if ((self = [self initWithBrowserState:browser->GetBrowserState()])) {
+  if ((self =
+        [self initWithProfile:browser->GetProfile()->GetOriginalProfile()])) {
     _browser = browser;
   }
   return self;
 }
 
-- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState {
+- (instancetype)initWithProfile:(ProfileIOS*)profile {
   if ((self = [super init])) {
-    _browserState = browserState;
+    _profile = profile;
 
-    _syncService =
-        SyncServiceFactory::GetForBrowserState(_browserState);
+    _syncService = SyncServiceFactory::GetForProfile(_profile);
     _vivaldiAccountManager =
-        vivaldi::VivaldiAccountManagerFactory::
-            GetForBrowserState(_browserState);
+        vivaldi::VivaldiAccountManagerFactory::GetForProfile(_profile);
 
     _accountSyncManagerObserver.reset(
         new VivaldiAccountSyncManagerObserverBridge(

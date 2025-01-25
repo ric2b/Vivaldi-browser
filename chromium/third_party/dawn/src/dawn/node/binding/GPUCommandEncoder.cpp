@@ -37,7 +37,6 @@
 #include "src/dawn/node/binding/GPUQuerySet.h"
 #include "src/dawn/node/binding/GPURenderPassEncoder.h"
 #include "src/dawn/node/binding/GPUTexture.h"
-#include "src/dawn/node/utils/Debug.h"
 
 namespace wgpu::binding {
 
@@ -47,7 +46,7 @@ namespace wgpu::binding {
 GPUCommandEncoder::GPUCommandEncoder(wgpu::Device device,
                                      const wgpu::CommandEncoderDescriptor& desc,
                                      wgpu::CommandEncoder enc)
-    : device_(std::move(device)), enc_(std::move(enc)), label_(desc.label ? desc.label : "") {}
+    : device_(std::move(device)), enc_(std::move(enc)), label_(CopyLabel(desc.label)) {}
 
 interop::Interface<interop::GPURenderPassEncoder> GPUCommandEncoder::beginRenderPass(
     Napi::Env env,
@@ -120,8 +119,8 @@ void GPUCommandEncoder::copyBufferToBuffer(Napi::Env env,
 }
 
 void GPUCommandEncoder::copyBufferToTexture(Napi::Env env,
-                                            interop::GPUImageCopyBuffer source,
-                                            interop::GPUImageCopyTexture destination,
+                                            interop::GPUTexelCopyBufferInfo source,
+                                            interop::GPUTexelCopyTextureInfo destination,
                                             interop::GPUExtent3D copySize) {
     Converter conv(env);
 
@@ -138,8 +137,8 @@ void GPUCommandEncoder::copyBufferToTexture(Napi::Env env,
 }
 
 void GPUCommandEncoder::copyTextureToBuffer(Napi::Env env,
-                                            interop::GPUImageCopyTexture source,
-                                            interop::GPUImageCopyBuffer destination,
+                                            interop::GPUTexelCopyTextureInfo source,
+                                            interop::GPUTexelCopyBufferInfo destination,
                                             interop::GPUExtent3D copySize) {
     Converter conv(env);
 
@@ -156,8 +155,8 @@ void GPUCommandEncoder::copyTextureToBuffer(Napi::Env env,
 }
 
 void GPUCommandEncoder::copyTextureToTexture(Napi::Env env,
-                                             interop::GPUImageCopyTexture source,
-                                             interop::GPUImageCopyTexture destination,
+                                             interop::GPUTexelCopyTextureInfo source,
+                                             interop::GPUTexelCopyTextureInfo destination,
                                              interop::GPUExtent3D copySize) {
     Converter conv(env);
 
@@ -235,7 +234,7 @@ std::string GPUCommandEncoder::getLabel(Napi::Env) {
 }
 
 void GPUCommandEncoder::setLabel(Napi::Env, std::string value) {
-    enc_.SetLabel(value.c_str());
+    enc_.SetLabel(std::string_view(value));
     label_ = value;
 }
 

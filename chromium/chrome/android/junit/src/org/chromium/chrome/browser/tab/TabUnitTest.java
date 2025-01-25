@@ -13,6 +13,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -100,7 +101,7 @@ public class TabUnitTest {
         when(mUserPrefsNatives.get(mProfile)).thenReturn(mPrefs);
 
         mTab =
-                new TabImpl(TAB1_ID, mProfile, null) {
+                new TabImpl(TAB1_ID, mProfile, TabLaunchType.FROM_CHROME_UI) {
                     @Override
                     public boolean isInitialized() {
                         return true;
@@ -203,6 +204,41 @@ public class TabUnitTest {
 
     @Test
     @SmallTest
+    public void testSetTabHasSensitiveContentWithChange() {
+        TabStateAttributes.createForTab(mTab, TabCreationState.FROZEN_ON_RESTORE);
+        TabStateAttributes attributes = TabStateAttributes.from(mTab);
+
+        assertThat(
+                attributes.getDirtinessState(), equalTo(TabStateAttributes.DirtinessState.CLEAN));
+        assertFalse(mTab.getTabHasSensitiveContent());
+
+        mTab.setTabHasSensitiveContent(true);
+        verify(mObserver).onTabContentSensitivityChanged(mTab, true);
+        assertTrue(mTab.getTabHasSensitiveContent());
+        assertThat(
+                attributes.getDirtinessState(), equalTo(TabStateAttributes.DirtinessState.UNTIDY));
+    }
+
+    @Test
+    @SmallTest
+    public void testSetTabHasSensitiveContentWithoutChange() {
+        TabStateAttributes.createForTab(mTab, TabCreationState.FROZEN_ON_RESTORE);
+        TabStateAttributes attributes = TabStateAttributes.from(mTab);
+
+        assertThat(
+                attributes.getDirtinessState(), equalTo(TabStateAttributes.DirtinessState.CLEAN));
+        assertFalse(mTab.getTabHasSensitiveContent());
+
+        mTab.setTabHasSensitiveContent(false);
+
+        verify(mObserver, never()).onTabContentSensitivityChanged(any(Tab.class), anyBoolean());
+        assertFalse(mTab.getTabHasSensitiveContent());
+        assertThat(
+                attributes.getDirtinessState(), equalTo(TabStateAttributes.DirtinessState.CLEAN));
+    }
+
+    @Test
+    @SmallTest
     public void testFreezeDetachedNativePage() {
         mocker.mock(TabImplJni.TEST_HOOKS, mNativeMock);
 
@@ -218,7 +254,7 @@ public class TabUnitTest {
         doReturn(mChromeActivity).when(mWeakReferenceContext).get();
 
         mTab =
-                new TabImpl(TAB1_ID, mProfile, null) {
+                new TabImpl(TAB1_ID, mProfile, TabLaunchType.FROM_CHROME_UI) {
                     @Override
                     public WindowAndroid getWindowAndroid() {
                         return mWindowAndroid;

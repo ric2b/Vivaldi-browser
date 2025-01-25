@@ -62,7 +62,7 @@ void ContactServiceFactory::ShutdownForProfile(Profile* profile) {
 
 content::BrowserContext* ContactServiceFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
+  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 KeyedService* ContactServiceFactory::BuildServiceInstanceFor(

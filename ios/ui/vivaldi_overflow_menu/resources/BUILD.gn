@@ -156,6 +156,11 @@ bundle_data_xcassets("assets") {
     "Assets.xcassets/vivaldi_overflow_help.imageset/vivaldi_overflow_help.pdf",
     "Assets.xcassets/vivaldi_overflow_help.imageset/vivaldi_overflow_help_dark.pdf",
 
+    # vivaldi_overflow_share_feedback
+    "Assets.xcassets/vivaldi_overflow_share_feedback.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_overflow_share_feedback.imageset/vivaldi_overflow_share_feedback.pdf",
+    "Assets.xcassets/vivaldi_overflow_share_feedback.imageset/vivaldi_overflow_share_feedback_dark.pdf",
+
     # vivaldi_overflow_about
     "Assets.xcassets/vivaldi_overflow_about.imageset/Contents.json",
     "Assets.xcassets/vivaldi_overflow_about.imageset/vivaldi_overflow_about.pdf",

@@ -18,7 +18,6 @@ import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
-import org.chromium.components.sync.SyncFeatureMap;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.List;
@@ -37,6 +36,7 @@ public class ImprovedBookmarkRowCoordinator {
     private final BookmarkModel mBookmarkModel;
     private final BookmarkUiPrefs mBookmarkUiPrefs;
     private final ShoppingService mShoppingService;
+    private int mImageSize;
 
     /**
      * @param context The calling context.
@@ -56,6 +56,11 @@ public class ImprovedBookmarkRowCoordinator {
         mBookmarkModel = bookmarkModel;
         mBookmarkUiPrefs = bookmarkUiPrefs;
         mShoppingService = shoppingService;
+        onBookmarkRowDisplayPrefChanged(mBookmarkUiPrefs.getBookmarkRowDisplayPref());
+    }
+
+    private void onBookmarkRowDisplayPrefChanged(@BookmarkRowDisplayPref int displayPref) {
+        mImageSize = BookmarkUtils.getImageIconSize(mContext.getResources(), displayPref);
     }
 
     /** Sets the given bookmark id. */
@@ -110,8 +115,7 @@ public class ImprovedBookmarkRowCoordinator {
                         String.format(
                                 "%s %s",
                                 contentDescription,
-                                mContext.getResources()
-                                        .getString(R.string.local_bookmarks_section_header));
+                                mContext.getString(R.string.local_bookmarks_section_header));
             }
             propertyModel.set(
                     ImprovedBookmarkRowProperties.CONTENT_DESCRIPTION, contentDescription);
@@ -123,7 +127,6 @@ public class ImprovedBookmarkRowCoordinator {
         // Selection and drag state setup.
         propertyModel.set(ImprovedBookmarkRowProperties.SELECTED, false);
         propertyModel.set(ImprovedBookmarkRowProperties.SELECTION_ACTIVE, false);
-        propertyModel.set(ImprovedBookmarkRowProperties.DRAG_ENABLED, false);
         propertyModel.set(ImprovedBookmarkRowProperties.EDITABLE, bookmarkItem.isEditable());
 
         // Shopping coordinator setup.
@@ -193,7 +196,7 @@ public class ImprovedBookmarkRowCoordinator {
                                             mContext, item.getId(), mBookmarkModel, displayPref));
                         } else if (shouldShowImagesForBookmark(item, displayPref)) {
                             mBookmarkImageFetcher.fetchImageForBookmarkWithFaviconFallback(
-                                    item, this::set);
+                                    item, mImageSize, this::set);
                         } else {
                             mBookmarkImageFetcher.fetchFaviconForBookmark(item, this::set);
                         }
@@ -231,7 +234,7 @@ public class ImprovedBookmarkRowCoordinator {
                     public void doSet() {
                         if (shouldShowImagesForFolder(bookmarkItem.getId())) {
                             mBookmarkImageFetcher.fetchFirstTwoImagesForFolder(
-                                    bookmarkItem, this::set);
+                                    bookmarkItem, mImageSize, this::set);
                         } else {
                             set(new Pair<>(null, null));
                         }
@@ -248,12 +251,6 @@ public class ImprovedBookmarkRowCoordinator {
      */
     boolean shouldShowImagesForBookmark(
             BookmarkItem item, @BookmarkRowDisplayPref int displayPref) {
-        // Local bookmarks shouldn't get images, even if they're cached. This is only relevant when
-        // account bookmarks are enabled.
-        if (SyncFeatureMap.isEnabled(SyncFeatureMap.SYNC_ENABLE_BOOKMARKS_IN_TRANSPORT_MODE)
-                && !item.isAccountBookmark()) {
-            return false;
-        }
         return displayPref == BookmarkRowDisplayPref.VISUAL;
     }
 

@@ -11,6 +11,8 @@
 
 #include <float.h>
 
+#include "config/aom_config.h"
+
 #include "aom_dsp/txfm_common.h"
 
 #include "av1/common/av1_common_int.h"
@@ -41,6 +43,7 @@
 
 #define COLLECT_MOTION_SEARCH_FEATURE_SB 0
 
+#if CONFIG_PARTITION_SEARCH_ORDER
 void av1_reset_part_sf(PARTITION_SPEED_FEATURES *part_sf) {
   part_sf->partition_search_type = SEARCH_PARTITION;
   part_sf->less_rectangular_check_level = 0;
@@ -90,6 +93,7 @@ void av1_reset_part_sf(PARTITION_SPEED_FEATURES *part_sf) {
 void av1_reset_sf_for_ext_part(AV1_COMP *const cpi) {
   cpi->sf.inter_sf.prune_ref_frame_for_rect_partitions = 0;
 }
+#endif  // CONFIG_PARTITION_SEARCH_ORDER
 
 #if !CONFIG_REALTIME_ONLY
 // If input |features| is NULL, write tpl stats to file for each super block.
@@ -564,9 +568,11 @@ static void encode_superblock(const AV1_COMP *const cpi, TileDataEnc *tile_data,
                   (mbmi->skip_txfm || seg_skip) && is_inter_block(mbmi), xd);
   }
 
+#if !CONFIG_REALTIME_ONLY
   if (is_inter_block(mbmi) && !xd->is_chroma_ref && is_cfl_allowed(xd)) {
     cfl_store_block(xd, mbmi->bsize, mbmi->tx_size);
   }
+#endif
   if (!dry_run) {
     if (cpi->oxcf.pass == AOM_RC_ONE_PASS && cpi->svc.temporal_layer_id == 0 &&
         cpi->sf.rt_sf.use_temporal_noise_estimate &&
@@ -609,7 +615,8 @@ static void setup_block_rdmult(const AV1_COMP *const cpi, MACROBLOCK *const x,
   }
 #endif  // !CONFIG_REALTIME_ONLY
 
-  if (cpi->oxcf.tune_cfg.tuning == AOM_TUNE_SSIM) {
+  if (cpi->oxcf.tune_cfg.tuning == AOM_TUNE_SSIM ||
+      cpi->oxcf.tune_cfg.tuning == AOM_TUNE_SSIMULACRA2) {
     av1_set_ssim_rdmult(cpi, &x->errorperbit, bsize, mi_row, mi_col,
                         &x->rdmult);
   }
@@ -5407,13 +5414,13 @@ static void log_sub_block_var(const AV1_COMP *cpi, MACROBLOCK *x, BLOCK_SIZE bs,
   double min_var_4x4 = (double)INT_MAX;
   double max_var_4x4 = 0.0;
 
+  aom_variance_fn_t vf = cpi->ppi->fn_ptr[BLOCK_4X4].vf;
   for (int i = 0; i < bh; i += MI_SIZE) {
     for (int j = 0; j < bw; j += MI_SIZE) {
       int var;
       // Calculate the 4x4 sub-block variance.
       var = av1_calc_normalized_variance(
-          cpi->ppi->fn_ptr[BLOCK_4X4].vf,
-          x->plane[0].src.buf + (i * x->plane[0].src.stride) + j,
+          vf, x->plane[0].src.buf + (i * x->plane[0].src.stride) + j,
           x->plane[0].src.stride, is_hbd);
 
       // Record min and max for over-arching block

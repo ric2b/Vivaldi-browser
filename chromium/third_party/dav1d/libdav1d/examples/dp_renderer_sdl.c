@@ -43,11 +43,17 @@ typedef struct renderer_priv_ctx
     SDL_Texture *tex;
 } Dav1dPlayRendererPrivateContext;
 
-static void *sdl_renderer_create(void)
+static void *sdl_renderer_create(const Dav1dPlaySettings *settings)
 {
-    SDL_Window *win = dp_create_sdl_window(0);
+    int window_flags = 0;
+    if (settings->fullscreen)
+        window_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+
+    SDL_Window *win = dp_create_sdl_window(window_flags);
     if (win == NULL)
         return NULL;
+
+    SDL_ShowCursor(0);
 
     // Alloc
     Dav1dPlayRendererPrivateContext *rd_priv_ctx = malloc(sizeof(Dav1dPlayRendererPrivateContext));
@@ -79,7 +85,9 @@ static void sdl_renderer_destroy(void *cookie)
     Dav1dPlayRendererPrivateContext *rd_priv_ctx = cookie;
     assert(rd_priv_ctx != NULL);
 
+    SDL_DestroyTexture(rd_priv_ctx->tex);
     SDL_DestroyRenderer(rd_priv_ctx->renderer);
+    SDL_DestroyWindow(rd_priv_ctx->win);
     SDL_DestroyMutex(rd_priv_ctx->lock);
     free(rd_priv_ctx);
 }
@@ -142,6 +150,7 @@ static int sdl_update_texture(void *cookie, Dav1dPicture *dav1d_pic,
     if (texture == NULL) {
         texture = SDL_CreateTexture(rd_priv_ctx->renderer, SDL_PIXELFORMAT_IYUV,
             SDL_TEXTUREACCESS_STREAMING, width, height);
+        SDL_RenderSetLogicalSize(rd_priv_ctx->renderer, width, height);
     }
 
     SDL_UpdateYUVTexture(texture, NULL,

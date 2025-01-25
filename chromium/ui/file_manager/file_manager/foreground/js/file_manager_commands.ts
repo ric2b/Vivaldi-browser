@@ -13,7 +13,7 @@ import type {VolumeManager} from '../../background/js/volume_manager.js';
 import {getDlpRestrictionDetails, getHoldingSpaceState, startIOTask} from '../../common/js/api.js';
 import {isModal} from '../../common/js/dialog_type.js';
 import {getFocusedTreeItem} from '../../common/js/dom_utils.js';
-import {entriesToURLs, getTreeItemEntry, isDirectoryEntry, isFakeEntry, isGrandRootEntryInDrive, isNonModifiable, isRecentRootType, isTeamDriveRoot, isTeamDrivesGrandRoot, isTrashEntry, isTrashRoot, unwrapEntry} from '../../common/js/entry_utils.js';
+import {entriesToURLs, getTreeItemEntry, isDirectoryEntry, isFakeEntry, isGrandRootEntryInDrive, isNonModifiable, isReadOnlyForDelete, isRecentRootType, isTeamDriveRoot, isTeamDrivesGrandRoot, isTrashEntry, isTrashRoot, unwrapEntry} from '../../common/js/entry_utils.js';
 import {getExtension, getType, isEncrypted} from '../../common/js/file_type.js';
 import type {FakeEntry, FilesAppDirEntry, FilesAppEntry} from '../../common/js/files_app_entry_types.js';
 import {EntryList} from '../../common/js/files_app_entry_types.js';
@@ -22,7 +22,7 @@ import {recordEnum, recordUserAction} from '../../common/js/metrics.js';
 import {getFileErrorString, str, strf} from '../../common/js/translations.js';
 import type {TrashEntry} from '../../common/js/trash.js';
 import {deleteIsForever, RestoreFailedType, RestoreFailedTypesUMA, RestoreFailedUMA, shouldMoveToTrash} from '../../common/js/trash.js';
-import {isNullOrUndefined, visitURL} from '../../common/js/util.js';
+import {debug, isNullOrUndefined, visitURL} from '../../common/js/util.js';
 import {FileSystemType, isRecentArcEntry, RootType, VolumeError, VolumeType} from '../../common/js/volume_manager_types.js';
 import {readSubDirectories, updateFileData} from '../../state/ducks/all_entries.js';
 import {changeDirectory} from '../../state/ducks/current_directory.js';
@@ -124,7 +124,7 @@ export class UnmountCommand extends FilesCommand {
         await fileManager.volumeManager.unmount(volume);
       } catch (error) {
         console.warn('Cannot unmount (redacted):', error);
-        console.debug(`Cannot unmount '${volume.volumeId}':`, error);
+        debug(`Cannot unmount '${volume.volumeId}':`, error);
         if (error !== VolumeError.PATH_NOT_MOUNTED) {
           errorCallback(volume.volumeType);
         }
@@ -569,16 +569,6 @@ export class DeleteCommand extends FilesCommand {
       return;
     }
 
-    // Block fusebox volumes in SelectFileAsh (Lacros) file picker mode.
-    if (fileManager.volumeManager.getFuseBoxOnlyFilterEnabled()) {
-      // TODO(crbug/1292825) Make it work with fusebox volumes: MTP, etc.
-      if (fileManager.directoryModel.isOnFuseBox()) {
-        event.canExecute = false;
-        event.command.setHidden(true);
-        return;
-      }
-    }
-
     event.canExecute = this.canDeleteEntries_(entries, fileManager);
 
     // Remove if nothing is selected, e.g. user clicked in an empty
@@ -719,11 +709,8 @@ export class DeleteCommand extends FilesCommand {
   private containsReadOnlyEntry_(
       entries: Array<Entry|FilesAppEntry>,
       fileManager: CommandHandlerDeps): boolean {
-    return entries.some(entry => {
-      const locationInfo = fileManager.volumeManager.getLocationInfo(entry);
-      return (locationInfo && locationInfo.isReadOnly) ||
-          isNonModifiable(fileManager.volumeManager, entry);
-    });
+    return entries.some(
+        entry => isReadOnlyForDelete(fileManager.volumeManager, entry));
   }
 }
 
@@ -1140,16 +1127,6 @@ export class RenameCommand extends FilesCommand {
   }
 
   override canExecute(event: CanExecuteEvent, fileManager: CommandHandlerDeps) {
-    // Block fusebox volumes in SelectFileAsh (Lacros) file picker mode.
-    if (fileManager.volumeManager.getFuseBoxOnlyFilterEnabled()) {
-      // TODO(crbug/1292825) Make it work with fusebox volumes: MTP, etc.
-      if (fileManager.directoryModel.isOnFuseBox()) {
-        event.canExecute = false;
-        event.command.setHidden(true);
-        return;
-      }
-    }
-
     if (isOnTrashRoot(fileManager)) {
       event.canExecute = false;
       event.command.setHidden(true);

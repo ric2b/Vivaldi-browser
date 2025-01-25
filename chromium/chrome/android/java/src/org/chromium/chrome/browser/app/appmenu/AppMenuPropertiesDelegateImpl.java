@@ -40,7 +40,6 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.PowerBookmarkUtils;
-import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
 import org.chromium.chrome.browser.device.DeviceConditions;
 import org.chromium.chrome.browser.download.DownloadUtils;
@@ -54,6 +53,7 @@ import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.night_mode.WebContentsDarkModeController;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
+import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.quick_delete.QuickDeleteController;
 import org.chromium.chrome.browser.readaloud.ReadAloudController;
@@ -62,7 +62,7 @@ import org.chromium.chrome.browser.share.ShareUtils;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tinker_tank.TinkerTankDelegateImpl;
+import org.chromium.chrome.browser.tinker_tank.TinkerTankDelegate;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.translate.TranslateUtils;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
@@ -75,6 +75,7 @@ import org.chromium.chrome.browser.util.BrowserUiUtils;
 import org.chromium.chrome.browser.util.BrowserUiUtils.ModuleTypeOnStartAndNtp;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.components.browser_ui.accessibility.PageZoomCoordinator;
+import org.chromium.components.commerce.core.CommerceFeatureUtils;
 import org.chromium.components.commerce.core.CommerceSubscription;
 import org.chromium.components.commerce.core.IdentifierType;
 import org.chromium.components.commerce.core.ManagementType;
@@ -83,6 +84,7 @@ import org.chromium.components.commerce.core.SubscriptionType;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
+import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.components.webapk.lib.client.WebApkValidator;
 import org.chromium.components.webapps.AppBannerManager;
 import org.chromium.components.webapps.WebappsUtils;
@@ -105,9 +107,11 @@ import android.text.style.ForegroundColorSpan;
 import android.text.style.RelativeSizeSpan;
 import android.text.style.SuperscriptSpan;
 
-import org.chromium.build.BuildConfig;
+import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.accessibility.settings.AccessibilitySettings;
+import org.chromium.chrome.browser.dom_distiller.TabDistillabilityProvider;
 import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.tab.TabUtils;
@@ -425,6 +429,11 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 } else if (viewCount == 5) {
                     menutype = AppMenuItemType.FIVE_BUTTON_ROW;
                 }
+            }
+            else if (item.getItemId() == R.id.simplified_view_id_row // Vivaldi VAB-10343
+                    || item.getItemId() == R.id.simplified_view_id
+                    || item.getItemId() == R.id.simplified_view_id_check) {
+                menutype = AppMenuItemType.TITLE_BUTTON;
             } else {
                 // Could be standard items or custom items.
                 int customType = customItemViewTypeProvider.fromMenuItemId(item.getItemId());
@@ -493,7 +502,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             if (!ChromeApplicationImpl.isVivaldi()) {
             MenuItem bookmarkMenuItemShortcut = actionBar.findItem(R.id.bookmark_this_page_id);
             updateBookmarkMenuItemShortcut(
-                    bookmarkMenuItemShortcut, currentTab, /* fromCCT= */ false);
+                    bookmarkMenuItemShortcut, currentTab, /* fromCct= */ false);
 
             MenuItem offlineMenuItem = actionBar.findItem(R.id.offline_page_id);
             offlineMenuItem.setEnabled(isCurrentTabNotNull && shouldEnableDownloadPage(currentTab));
@@ -528,7 +537,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         if (ChromeApplicationImpl.isVivaldi()) {
             MenuItem bookmarkMenuItemShortcut = menu.findItem(R.id.bookmark_this_page_id);
 
-            updateBookmarkMenuItemShortcut(bookmarkMenuItemShortcut, currentTab, /*fromCCT=*/false);
+            updateBookmarkMenuItemShortcut(bookmarkMenuItemShortcut, currentTab, false);
 
             if (isCurrentTabNotNull
                     && (currentTab.isNativePage() || currentTab.getWebContents() == null)) {
@@ -588,16 +597,27 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                             mContext.getString(R.string.menu_set_default_browser), showNewTag));
                 }
             }
+
+            MenuItem addPageToMenuItem =  menu.findItem(R.id.add_page_to_menu_id);
+            if (addPageToMenuItem != null)
+                addPageToMenuItem.setVisible(!isNativePage);
         }
 
         // Don't allow either "chrome://" pages or interstitial pages to be shared, or when the
         // current tab is null.
-        menu.findItem(R.id.share_row_menu_id)
-                .setVisible(isCurrentTabNotNull && mShareUtils.shouldEnableShare(currentTab));
+        boolean showShare = isCurrentTabNotNull && mShareUtils.shouldEnableShare(currentTab);
+        menu.findItem(R.id.share_row_menu_id).setVisible(showShare);
 
         if (isCurrentTabNotNull) {
             updateDirectShareMenuItem(menu.findItem(R.id.direct_share_menu_id));
         }
+
+        // For the non-desktop case, Print action will be showed in the Share UI instead.
+        boolean showPrint =
+                showShare
+                        && BuildConfig.IS_DESKTOP_ANDROID
+                        && UserPrefs.get(currentTab.getProfile()).getBoolean(Pref.PRINTING_ENABLED);
+        menu.findItem(R.id.print_id).setVisible(showPrint);
 
         menu.findItem(R.id.paint_preview_show_id)
                 .setVisible(
@@ -690,6 +710,10 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         if (ChromeApplicationImpl.isVivaldi())
             menu.findItem(R.id.managed_by_standard_menu_id).setVisible(false);
 
+        if (ChromeApplicationImpl.isVivaldi()) // Vivaldi VAB-10343
+            updateSimplifiedViewButton(menu, currentTab, isNativePage);
+
+
         if (ChromeApplicationImpl.isVivaldi() && !mIsTablet) {
             MenuItem menuItem;
             int[] menuBarItemIds = VivaldiMenuUtils.getMenuItems(mContext);
@@ -737,8 +761,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                         && isMenuSelectTabsVisible
                         && mTabModelSelector.isTabStateInitialized()
                         && mTabModelSelector
-                                        .getTabModelFilterProvider()
-                                        .getCurrentTabModelFilter()
+                                        .getTabGroupModelFilterProvider()
+                                        .getCurrentTabGroupModelFilter()
                                         .getCount()
                                 != 0;
 
@@ -776,9 +800,9 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             }
 
             int itemGroupId = item.getGroupId();
-            if (!(menuGroup == MenuGroup.OVERVIEW_MODE_MENU
-                            && itemGroupId == R.id.OVERVIEW_MODE_MENU
-                    || menuGroup == MenuGroup.PAGE_MENU && itemGroupId == R.id.PAGE_MENU)) {
+            if (!((menuGroup == MenuGroup.OVERVIEW_MODE_MENU
+                            && itemGroupId == R.id.OVERVIEW_MODE_MENU)
+                    || (menuGroup == MenuGroup.PAGE_MENU && itemGroupId == R.id.PAGE_MENU))) {
                 continue;
             }
 
@@ -807,8 +831,9 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 item.setEnabled(isQuickDeleteEnabled(isIncognito));
             }
             if (item.getItemId() == R.id.tinker_tank_menu_id) {
-                item.setVisible(TinkerTankDelegateImpl.enabled());
-                item.setEnabled(TinkerTankDelegateImpl.enabled());
+                boolean enabled = TinkerTankDelegate.isEnabled();
+                item.setVisible(enabled);
+                item.setEnabled(enabled);
             }
 
             // This needs to be done after the visibility of the item is set.
@@ -865,6 +890,16 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         if (sItemBookmarkedForTesting != null) return sItemBookmarkedForTesting;
 
         if (!mBookmarkModelSupplier.hasValue()) return false;
+        if (ChromeApplicationImpl.isVivaldi()) {
+            // Note: Check bookmark button if the URL is added as a normal bookmark item, not as a
+            // reading list item.
+            if (!mBookmarkModelSupplier.get().isBookmarkModelLoaded()) return false;
+            BookmarkId bookmarkId =
+                    mBookmarkModelSupplier.get().getMostRecentlyAddedUserNormalBookmarkIdForUrl(
+                            currentTab.getOriginalUrl());
+            return bookmarkId != null && bookmarkId.getType() == BookmarkType.NORMAL
+                    && !mBookmarkModelSupplier.get().isInsideTrashFolder(bookmarkId);
+        }
         return mBookmarkModelSupplier.get().hasBookmarkIdForTab(currentTab);
     }
 
@@ -972,8 +1007,8 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
     /**
      * This method should only be called once per context menu shown.
+     *
      * @param currentTab The currentTab for which the app menu is showing.
-     * @param logging Whether logging should be performed in this check.
      * @return Whether the translate menu item should be displayed.
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
@@ -996,7 +1031,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             boolean isIncognito,
             @NonNull GURL url) {
         // Vivaldi
-        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return false;
+        if (BuildConfig.IS_VIVALDI) return false;
         // Hide 'Add to homescreen' for the following:
         // * native pages - Android doesn't know how to direct those URLs.
         // * incognito pages - To avoid problems where users create shortcuts in incognito
@@ -1212,7 +1247,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
             if (SyncSettingsUtils.getIdentityError(profile) != SyncSettingsUtils.SyncError.NO_ERROR
                     || SyncSettingsUtils.getSyncError(profile)
                             != SyncSettingsUtils.SyncError.NO_ERROR) {
-                return mContext.getResources().getString(R.string.menu_settings_account_error);
+                return mContext.getString(R.string.menu_settings_account_error);
             }
         }
         return null;
@@ -1319,7 +1354,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      * @param currentTab Current tab being displayed.
      */
     protected void updateBookmarkMenuItemShortcut(
-            MenuItem bookmarkMenuItemShortcut, @Nullable Tab currentTab, boolean fromCCT) {
+            MenuItem bookmarkMenuItemShortcut, @Nullable Tab currentTab, boolean fromCct) {
         if (!mBookmarkModelSupplier.hasValue() || currentTab == null) {
             // If the BookmarkModel still isn't available, assume the bookmark menu item is not
             // editable.
@@ -1341,10 +1376,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                         R.color.vivaldi_highlight));
                 bookmarkMenuItemShortcut.setIcon(icon);
                 bookmarkMenuItemShortcut.setTitle(mContext.getString(R.string.edit_bookmark));
-                // Vivaldi - make reading list item non-editable
-                if (mBookmarkModelSupplier.get().getUserBookmarkIdForTab(currentTab)
-                        .getType() == BookmarkType.READING_LIST)
-                    bookmarkMenuItemShortcut.setEnabled(false);
             }
         } else {
             if (ChromeApplicationImpl.isVivaldi()) {
@@ -1386,7 +1417,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
         }
 
         // If price tracking isn't enabled or the page isn't eligible, then hide both items.
-        if (!ShoppingFeatures.isShoppingListEligible(profile)
+        if (!CommerceFeatureUtils.isShoppingListEligible(service)
                 || !PowerBookmarkUtils.isPriceTrackingEligible(currentTab)
                 || !mBookmarkModelSupplier.hasValue()) {
             startPriceTrackingMenuItem.setVisible(false);
@@ -1590,4 +1621,36 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                         new RelativeSizeSpan(0.75f), new ForegroundColorSpan(
                                 SemanticColorUtils.getDefaultTextColorAccent1(mContext))));
     }
+
+    /**
+     * Vivaldi
+     * Determines and updates if Simplified Viewer button should be shown in the V menu
+     */
+    protected void updateSimplifiedViewButton(
+            Menu menu,
+            @Nullable Tab currentTab,
+            boolean isNativePage) {
+        MenuItem simplifiedViewMenuRow = menu.findItem(R.id.simplified_view_id_row);
+        MenuItem simplifiedViewMenu = menu.findItem(R.id.simplified_view_id);
+        MenuItem simplifiedViewMenucheck = menu.findItem(R.id.simplified_view_id_check);
+        if (currentTab == null) return;
+
+        boolean itemVisible =
+                        !isNativePage
+                        && VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                        AccessibilitySettings.PREF_READER_FOR_ACCESSIBILITY, false)
+                        && currentTab.getWebContents() != null
+                        && (TabDistillabilityProvider.get(currentTab).isDistillable()
+                            || shouldShowReaderModePrefs(currentTab));
+
+        simplifiedViewMenuRow.setVisible(itemVisible);
+        simplifiedViewMenucheck.setVisible(true);
+        simplifiedViewMenucheck.setChecked(shouldShowReaderModePrefs(currentTab));
+        // Change the title if already in simplified view.
+        simplifiedViewMenu.setTitle(shouldShowReaderModePrefs(currentTab) ?
+                mContext.getString(
+                R.string.menu_simplified_viewer_title_enabled) :
+                mContext.getString(
+                R.string.menu_simplified_viewer_title));
+    } // End Vivaldi
 }

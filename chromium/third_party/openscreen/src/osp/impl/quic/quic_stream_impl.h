@@ -16,12 +16,16 @@ class QuicStreamImpl final : public QuicStream, public quic::QuicStream {
                  quic::QuicStreamId id,
                  quic::QuicSession* session,
                  quic::StreamType type);
+  QuicStreamImpl(const QuicStreamImpl&) = delete;
+  QuicStreamImpl& operator=(const QuicStreamImpl&) = delete;
+  QuicStreamImpl(QuicStreamImpl&&) noexcept = delete;
+  QuicStreamImpl& operator=(QuicStreamImpl&&) noexcept = delete;
   ~QuicStreamImpl() override;
 
   // QuicStream overrides.
   uint64_t GetStreamId() override;
   void Write(ByteView bytes) override;
-  void CloseWriteEnd() override;
+  void Close() override;
 
   // quic::QuicStream overrides.
   void OnDataAvailable() override;

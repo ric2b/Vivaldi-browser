@@ -75,7 +75,9 @@
 #if defined(__apple_build_version__) || __clang_major__ >= 999
 #if __has_warning("-Woverriding-option")
 #define HWY_COMPILER_CLANG 1801
-#elif __has_attribute(unsafe_buffer_usage)  // no new warnings in 17.0
+// No new warnings in 17.0, and Apple LLVM 15.3, which should be 1600, already
+// has the unsafe_buffer_usage attribute, so we instead check for new builtins.
+#elif __has_builtin(__builtin_nondeterministic_value)
 #define HWY_COMPILER_CLANG 1700
 #elif __has_attribute(nouwtable)  // no new warnings in 16.0
 #define HWY_COMPILER_CLANG 1600
@@ -117,7 +119,8 @@
 #define HWY_COMPILER3_CLANG 0
 #endif
 
-#if HWY_COMPILER_GCC && !HWY_COMPILER_CLANG && !HWY_COMPILER_ICC
+#if HWY_COMPILER_GCC && !HWY_COMPILER_CLANG && !HWY_COMPILER_ICC && \
+    !HWY_COMPILER_ICX
 #define HWY_COMPILER_GCC_ACTUAL HWY_COMPILER_GCC
 #else
 #define HWY_COMPILER_GCC_ACTUAL 0
@@ -125,14 +128,14 @@
 
 // More than one may be nonzero, but we want at least one.
 #if 0 == (HWY_COMPILER_MSVC + HWY_COMPILER_CLANGCL + HWY_COMPILER_ICC + \
-          HWY_COMPILER_GCC + HWY_COMPILER_CLANG)
+          HWY_COMPILER_ICX + HWY_COMPILER_GCC + HWY_COMPILER_CLANG)
 #error "Unsupported compiler"
 #endif
 
-// We should only detect one of these (only clang/clangcl overlap)
-#if 1 <                                                                     \
-    (!!HWY_COMPILER_MSVC + !!HWY_COMPILER_ICC + !!HWY_COMPILER_GCC_ACTUAL + \
-     !!(HWY_COMPILER_CLANGCL | HWY_COMPILER_CLANG))
+// We should only detect one of these (only clang/clangcl/icx overlap)
+#if 1 < (!!HWY_COMPILER_MSVC + (!!HWY_COMPILER_ICC & !HWY_COMPILER_ICX) + \
+         !!HWY_COMPILER_GCC_ACTUAL +                                      \
+         !!(HWY_COMPILER_ICX | HWY_COMPILER_CLANGCL | HWY_COMPILER_CLANG))
 #error "Detected multiple compilers"
 #endif
 
@@ -163,11 +166,7 @@
 #define HWY_HAS_FEATURE(name) 0
 #endif
 
-#ifdef __has_include
-#define HWY_HAS_INCLUDE(header) __has_include(header)
-#else
-#define HWY_HAS_INCLUDE(header) 0
-#endif
+// NOTE: clang ~17 does not correctly handle wrapping __has_include in a macro.
 
 #if HWY_COMPILER_MSVC && defined(_MSVC_LANG) && _MSVC_LANG > __cplusplus
 #define HWY_CXX_LANG _MSVC_LANG

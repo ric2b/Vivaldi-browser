@@ -47,8 +47,7 @@ XDGToplevelWrapperImpl::DecorationMode ToDecorationMode(uint32_t mode) {
     case ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE:
       return XDGToplevelWrapperImpl::DecorationMode::kServerSide;
     default:
-      NOTREACHED_IN_MIGRATION();
-      return XDGToplevelWrapperImpl::DecorationMode::kClientSide;
+      NOTREACHED();
   }
 }
 
@@ -59,8 +58,7 @@ uint32_t ToInt32(XDGToplevelWrapperImpl::DecorationMode mode) {
     case XDGToplevelWrapperImpl::DecorationMode::kServerSide:
       return ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
     default:
-      NOTREACHED_IN_MIGRATION();
-      return ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
+      NOTREACHED();
   }
 }
 
@@ -84,8 +82,7 @@ zaura_toplevel_z_order_level ToZauraToplevelZOrderLevel(
       return ZAURA_TOPLEVEL_Z_ORDER_LEVEL_SECURITY_SURFACE;
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return ZAURA_TOPLEVEL_Z_ORDER_LEVEL_NORMAL;
+  NOTREACHED();
 }
 
 }  // namespace
@@ -103,8 +100,7 @@ XDGToplevelWrapperImpl::~XDGToplevelWrapperImpl() = default;
 
 bool XDGToplevelWrapperImpl::Initialize() {
   if (!connection_->shell()) {
-    NOTREACHED_IN_MIGRATION() << "Wrong shell protocol";
-    return false;
+    NOTREACHED() << "Wrong shell protocol";
   }
 
   if (!xdg_surface_wrapper_) {
@@ -126,12 +122,6 @@ bool XDGToplevelWrapperImpl::Initialize() {
         ZAURA_SHELL_GET_AURA_TOPLEVEL_FOR_XDG_TOPLEVEL_SINCE_VERSION) {
       aura_toplevel_.reset(zaura_shell_get_aura_toplevel_for_xdg_toplevel(
           connection_->zaura_shell()->wl_object(), xdg_toplevel_.get()));
-      if (ui::IsWaylandSurfaceSubmissionInPixelCoordinatesEnabled() &&
-          version >=
-              ZAURA_TOPLEVEL_SURFACE_SUBMISSION_IN_PIXEL_COORDINATES_SINCE_VERSION) {
-        zaura_toplevel_surface_submission_in_pixel_coordinates(
-            aura_toplevel_.get());
-      }
     }
   }
 
@@ -197,33 +187,6 @@ void XDGToplevelWrapperImpl::SetFullscreen(WaylandOutput* wayland_output) {
       xdg_toplevel_.get(),
       wayland_output ? wayland_output->get_output() : nullptr);
 }
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-void XDGToplevelWrapperImpl::SetUseImmersiveMode(bool immersive) {
-  auto mode = immersive ? ZAURA_TOPLEVEL_FULLSCREEN_MODE_IMMERSIVE
-                        : ZAURA_TOPLEVEL_FULLSCREEN_MODE_PLAIN;
-  zaura_toplevel_set_fullscreen_mode(aura_toplevel_.get(), mode);
-}
-
-void XDGToplevelWrapperImpl::SetTopInset(int height) {
-  if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
-                            ZAURA_TOPLEVEL_SET_TOP_INSET_SINCE_VERSION) {
-    zaura_toplevel_set_top_inset(aura_toplevel_.get(), height);
-  }
-}
-
-void XDGToplevelWrapperImpl::SetShadowCornersRadii(
-    const gfx::RoundedCornersF& radii) {
-  if (aura_toplevel_ &&
-      zaura_toplevel_get_version(aura_toplevel_.get()) >=
-          ZAURA_TOPLEVEL_SET_SHADOW_CORNER_RADII_SINCE_VERSION) {
-    zaura_toplevel_set_shadow_corner_radii(
-        aura_toplevel_.get(), radii.upper_left(), radii.upper_right(),
-        radii.lower_right(), radii.lower_left());
-  }
-}
-
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 void XDGToplevelWrapperImpl::UnSetFullscreen() {
   DCHECK(xdg_toplevel_);
@@ -322,7 +285,11 @@ void XDGToplevelWrapperImpl::OnToplevelConfigure(void* data,
   window_states.is_activated =
       CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_ACTIVATED);
 
-#if BUILDFLAG(IS_LINUX)
+  if (xdg_toplevel_get_version(toplevel) >=
+      XDG_TOPLEVEL_STATE_SUSPENDED_SINCE_VERSION) {
+    window_states.is_suspended =
+        CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_SUSPENDED);
+  }
   if (xdg_toplevel_get_version(toplevel) >=
       XDG_TOPLEVEL_STATE_TILED_LEFT_SINCE_VERSION) {
     // All four tiled states have the same since version, so it is enough to
@@ -334,7 +301,6 @@ void XDGToplevelWrapperImpl::OnToplevelConfigure(void* data,
         .bottom =
             CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_TILED_BOTTOM)};
   }
-#endif  // IS_LINUX || IS_CHROMEOS_LACROS
 
   self->wayland_window_->HandleToplevelConfigure(width, height, window_states);
 }
@@ -389,14 +355,6 @@ void XDGToplevelWrapperImpl::OnAuraToplevelConfigure(
       CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_MAXIMIZED);
   window_states.is_fullscreen =
       CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_FULLSCREEN);
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  window_states.is_immersive_fullscreen =
-      CheckIfWlArrayHasValue(states, ZAURA_TOPLEVEL_STATE_IMMERSIVE);
-  window_states.is_pinned_fullscreen =
-      CheckIfWlArrayHasValue(states, ZAURA_TOPLEVEL_STATE_PINNED);
-  window_states.is_trusted_pinned_fullscreen =
-      CheckIfWlArrayHasValue(states, ZAURA_TOPLEVEL_STATE_TRUSTED_PINNED);
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   window_states.is_activated =
       CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_ACTIVATED);
   window_states.is_minimized =
@@ -410,8 +368,8 @@ void XDGToplevelWrapperImpl::OnAuraToplevelConfigure(
   window_states.is_pip =
       CheckIfWlArrayHasValue(states, ZAURA_TOPLEVEL_STATE_PIP);
 
-  self->wayland_window_->HandleAuraToplevelConfigure(x, y, width, height,
-                                                     window_states);
+  self->wayland_window_->HandleToplevelConfigureWithOrigin(x, y, width, height,
+                                                           window_states);
 }
 
 // static
@@ -655,27 +613,6 @@ void XDGToplevelWrapperImpl::SetScaleFactor(float scale_factor) {
   }
 }
 
-void XDGToplevelWrapperImpl::SetRestoreInfo(int32_t restore_session_id,
-                                            int32_t restore_window_id) {
-  if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
-                            ZAURA_TOPLEVEL_SET_RESTORE_INFO_SINCE_VERSION) {
-    zaura_toplevel_set_restore_info(aura_toplevel_.get(), restore_session_id,
-                                    restore_window_id);
-  }
-}
-
-void XDGToplevelWrapperImpl::SetRestoreInfoWithWindowIdSource(
-    int32_t restore_session_id,
-    const std::string& restore_window_id_source) {
-  if (aura_toplevel_ &&
-      zaura_toplevel_get_version(aura_toplevel_.get()) >=
-          ZAURA_TOPLEVEL_SET_RESTORE_INFO_WITH_WINDOW_ID_SOURCE_SINCE_VERSION) {
-    zaura_toplevel_set_restore_info_with_window_id_source(
-        aura_toplevel_.get(), restore_session_id,
-        restore_window_id_source.c_str());
-  }
-}
-
 void XDGToplevelWrapperImpl::SetFloatToLocation(
     WaylandFloatStartLocation float_start_location) {
   if (!aura_toplevel_) {
@@ -723,8 +660,7 @@ void XDGToplevelWrapperImpl::CommitSnap(
         zaura_toplevel_set_snap_secondary(aura_toplevel_.get(), value);
         return;
       case WaylandWindowSnapDirection::kNone:
-        NOTREACHED_IN_MIGRATION() << "Toplevel does not support UnsetSnap yet";
-        return;
+        NOTREACHED() << "Toplevel does not support UnsetSnap yet";
     }
   }
 }

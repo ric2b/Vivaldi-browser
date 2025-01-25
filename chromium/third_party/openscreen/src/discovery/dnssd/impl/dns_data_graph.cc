@@ -101,8 +101,8 @@ class DnsDataGraphImpl : public DnsDataGraph {
     // Applies a record change for this node.
     Error ApplyDataRecordChange(MdnsRecord record, RecordChangedEvent event);
 
-    // Returns the first rdata of a record with type matching |type| in this
-    // node's |records_|, or std::nullopt if no such record exists.
+    // Returns the first rdata of a record with type matching `type` in this
+    // node's `records_`, or std::nullopt if no such record exists.
     template <typename T>
     std::optional<T> GetRdata(DnsType type) {
       auto it = FindRecord(type);
@@ -119,13 +119,13 @@ class DnsDataGraphImpl : public DnsDataGraph {
     const std::vector<MdnsRecord>& records() const { return records_; }
 
    private:
-    // Adds or removes an edge in |graph_|.
+    // Adds or removes an edge in `graph_`.
     // NOTE: The same edge may be added multiple times, and one call to remove
     // is needed for every such call.
     void AddChild(Node* child);
     void RemoveChild(Node* child);
 
-    // Applies the specified change to domain |child| for this node.
+    // Applies the specified change to domain `child` for this node.
     void ApplyChildChange(DomainName child_name, RecordChangedEvent event);
 
     // Finds an iterator to the record of the provided type, or to
@@ -136,10 +136,10 @@ class DnsDataGraphImpl : public DnsDataGraph {
     // associated.
     const DomainName name_;
 
-    // Currently extant mDNS Records at |name_|.
+    // Currently extant mDNS Records at `name_`.
     std::vector<MdnsRecord> records_;
 
-    // Nodes which contain records pointing to this node's |name|.
+    // Nodes which contain records pointing to this node's `name`.
     std::vector<Node*> parents_;
 
     // Nodes containing records pointed to by the records in this node.
@@ -188,7 +188,7 @@ class DnsDataGraphImpl : public DnsDataGraph {
   static bool IsValidSrvAndTxtNode(Node* node);
 
   // Calculates the set of DnsSdInstanceEndpoints associated with the PTR
-  // records present at the given |node|.
+  // records present at the given `node`.
   std::vector<ErrorOr<DnsSdInstanceEndpoint>> CalculatePtrRecordEndpoints(
       Node* node) const;
 
@@ -288,8 +288,8 @@ Error DnsDataGraphImpl::Node::ApplyDataRecordChange(MdnsRecord record,
   }
 
   // Apply any required edge changes to the graph. This is only applicable if
-  // a |child| was found earlier. Note that the same child can be added multiple
-  // times to the |children_| vector, which simplifies the code dramatically.
+  // a `child` was found earlier. Note that the same child can be added multiple
+  // times to the `children_` vector, which simplifies the code dramatically.
   if (!child_name.empty()) {
     ApplyChildChange(std::move(child_name), event);
   }

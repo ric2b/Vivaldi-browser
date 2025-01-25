@@ -56,15 +56,6 @@ using PostRequestCompleteCallback =
 using DownloadToFileCompleteCallback =
     update_client::NetworkFetcher::DownloadToFileCompleteCallback;
 
-namespace {
-
-base::span<const uint8_t> AsByteSpan(NSData* data) {
-  return base::span<const uint8_t>(static_cast<const uint8_t*>(data.bytes),
-                                   data.length);
-}
-
-}  // namespace
-
 @interface CRUUpdaterNetworkController : NSObject <NSURLSessionDelegate>
 - (instancetype)initWithResponseStartedCallback:
                     (ResponseStartedCallback)responseStartedCallback
@@ -338,7 +329,7 @@ base::span<const uint8_t> AsByteSpan(NSData* data) {
 - (void)URLSession:(NSURLSession*)session
           dataTask:(NSURLSessionDataTask*)dataTask
     didReceiveData:(NSData*)data {
-  if (_output.WriteAtCurrentPosAndCheck(AsByteSpan(data))) {
+  if (_output.WriteAtCurrentPosAndCheck(base::apple::NSDataToSpan(data))) {
     _callbackRunner->PostTask(
         FROM_HERE, base::BindOnce(_progressCallback, _output.GetLength()));
     [dataTask resume];
@@ -471,9 +462,9 @@ void NetworkFetcher::PostRequest(
 
   // Post additional headers could overwrite existing headers with the same key,
   // such as "Content-Type" above.
-  for (const auto& header : post_additional_headers) {
-    [urlRequest setValue:base::SysUTF8ToNSString(header.second)
-        forHTTPHeaderField:base::SysUTF8ToNSString(header.first)];
+  for (const auto& [name, value] : post_additional_headers) {
+    [urlRequest setValue:base::SysUTF8ToNSString(value)
+        forHTTPHeaderField:base::SysUTF8ToNSString(name)];
   }
   VLOG(1) << "Posting data: " << post_data.c_str();
 

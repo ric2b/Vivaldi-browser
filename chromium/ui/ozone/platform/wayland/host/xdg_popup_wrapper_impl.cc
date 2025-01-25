@@ -142,15 +142,12 @@ XDGPopupWrapperImpl::~XDGPopupWrapperImpl() = default;
 
 bool XDGPopupWrapperImpl::Initialize(const ShellPopupParams& params) {
   if (!connection_->shell()) {
-    NOTREACHED_IN_MIGRATION() << "Wrong shell protocol";
-    return false;
+    NOTREACHED() << "Wrong shell protocol";
   }
 
   auto* xdg_parent = wayland_window_->AsWaylandPopup()->GetXdgParentWindow();
   if (!xdg_parent) {
-    NOTREACHED_IN_MIGRATION()
-        << "xdg_popup does not have a valid parent xdg_surface";
-    return false;
+    NOTREACHED() << "xdg_popup does not have a valid parent xdg_surface";
   }
 
   XDGSurfaceWrapperImpl* parent_xdg_surface = nullptr;
@@ -195,11 +192,6 @@ bool XDGPopupWrapperImpl::Initialize(const ShellPopupParams& params) {
     if (version >= ZAURA_SHELL_GET_AURA_POPUP_FOR_XDG_POPUP_SINCE_VERSION) {
       aura_popup_.reset(zaura_shell_get_aura_popup_for_xdg_popup(
           connection_->zaura_shell()->wl_object(), xdg_popup_.get()));
-      if (IsWaylandSurfaceSubmissionInPixelCoordinatesEnabled() &&
-          version >=
-              ZAURA_POPUP_SURFACE_SUBMISSION_IN_PIXEL_COORDINATES_SINCE_VERSION) {
-        zaura_popup_surface_submission_in_pixel_coordinates(aura_popup_.get());
-      }
       if (version >= ZAURA_POPUP_SET_MENU_SINCE_VERSION &&
           wayland_window_->type() == PlatformWindowType::kMenu) {
         zaura_popup_set_menu(aura_popup_.get());

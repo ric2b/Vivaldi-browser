@@ -128,7 +128,7 @@ void AddSerializedNavigationEntries(
 
 // TabRestoreServiceHelper::Observer -------------------------------------------
 
-TabRestoreServiceHelper::Observer::~Observer() {}
+TabRestoreServiceHelper::Observer::~Observer() = default;
 
 void TabRestoreServiceHelper::Observer::OnClearEntries() {}
 

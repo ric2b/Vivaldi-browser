@@ -384,6 +384,10 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Resources -----------------------------------------------------------
 
+  // Returns true if GetDataResource would return non-null data for the
+  // specified |resource_id|.
+  virtual bool HasDataResource(int resource_id) const { return false; }
+
   // Returns a blob of data corresponding to |resource_id|. This should not be
   // used for resources which have compress="gzip" in *.grd.
   virtual WebData GetDataResource(
@@ -630,8 +634,6 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   virtual bool IsWebRtcEncryptionEnabled() { return true; }
 
-  virtual bool IsWebRtcSrtpEncryptedHeadersEnabled() { return false; }
-
   // TODO(qingsi): Consolidate the legacy |ip_handling_policy| with
   // |allow_mdns_obfuscation| following the latest spec on IP handling modes
   // with mDNS introduced
@@ -812,7 +814,6 @@ class BLINK_PLATFORM_EXPORT Platform {
 
  private:
   static void InitializeMainThreadCommon(
-      Platform* platform,
       std::unique_ptr<MainThread> main_thread);
 };
 

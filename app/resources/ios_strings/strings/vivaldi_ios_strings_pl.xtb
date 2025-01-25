@@ -2,24 +2,27 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
 <translation id="1063263220330818888">Prywatne wyszukiwanie</translation>
+<translation id="1097355661841455597">Chcemy poznać Twoją opinię.</translation>
 <translation id="1137850887415122856">Aby zablokować prywatne karty, skonfiguruj Touch ID, Face ID lub kod dostępu.</translation>
 <translation id="1310184829257917508">Poproś o prywatne otwieranie linków z innych aplikacji</translation>
-<translation id="1512201558627495343">Nowa karta prywatna</translation>
 <translation id="207677936531967364">Nowa strona karty prywatnej</translation>
+<translation id="2418705169960294134">Nowa karta prywatna</translation>
 <translation id="2899836479226240291">Ustaw Vivaldi jako przeglądarkę domyślną, aby linki otwierały się w niej automatycznie.</translation>
-<translation id="3365529507898144230">Zapisz w Zdjęciach</translation>
+<translation id="3463990832590571933">Otwórz w nowej prywatnej karcie</translation>
 <translation id="3473652525653758699">Nowe okno prywatne</translation>
 <translation id="3501504415290398157">Użyj <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />, aby odblokować Twoje prywatne karty.</translation>
 <translation id="3692650606013198282">Otwórz w trybie prywatnym</translation>
-<translation id="3709782636417497984">Otwórz w nowej karcie prywatnej</translation>
 <translation id="3981599532037327317">Otwórz ${url} w trybie prywatnym</translation>
 <translation id="398477389655464998">Kopiuj link do podświetlenia</translation>
-<translation id="4620246317052452550">Przeczytane strony</translation>
+<translation id="4026745073321351206">🙄 Coś nie działa?</translation>
 <translation id="4755216899422789286">Otwórz adresy URL w Vivaldi</translation>
+<translation id="5431239785743546285">Przeczytane strony</translation>
 <translation id="6233792867654386826">Otwiera wprowadzone adresy URL w Vivaldi.</translation>
 <translation id="6827597288286078054">Prywatne wyszukiwanie</translation>
 <translation id="7307970171564921489">Odblokuj prywatne karty używając <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Otworzyć w trybie prywatnym?</translation>
 <translation id="7549299604720382000">Nowa karta prywatna</translation>
+<translation id="7920949005883349320">Prywatność i bezpieczeństwo</translation>
+<translation id="8031932676440435547">Zapisz w zdjęciach</translation>
 <translation id="8326104954595890674">Nowa karta prywatna</translation>
 </translationbundle>

@@ -27,8 +27,8 @@ bool SDLAudioSpecsAreDifferent(const SDL_AudioSpec& a, const SDL_AudioSpec& b) {
          a.samples != b.samples;
 }
 
-// Convert |num_channels| separate |planes| of audio, each containing
-// |num_samples| samples, into a single array of |interleaved| samples. The
+// Convert `num_channels` separate `planes` of audio, each containing
+// `num_samples` samples, into a single array of `interleaved` samples. The
 // memory backing all of the input arrays and the output array is assumed to be
 // suitably aligned.
 template <typename Element>
@@ -105,9 +105,9 @@ ErrorOr<Clock::time_point> SDLAudioPlayer::RenderNextFrame(
   }
   pending_audio_spec_.channels = frame_channels;
 
-  // If |device_spec_| is different from what is required, re-compute the sample
-  // buffer size and the amount of time that represents. The |device_spec_| will
-  // be updated to match |pending_audio_spec_| later, in Present().
+  // If `device_spec_` is different from what is required, re-compute the sample
+  // buffer size and the amount of time that represents. The `device_spec_` will
+  // be updated to match `pending_audio_spec_` later, in Present().
   if (SDLAudioSpecsAreDifferent(device_spec_, pending_audio_spec_)) {
     // Find the smallest power-of-two number of samples that represents at least
     // 20ms of audio.

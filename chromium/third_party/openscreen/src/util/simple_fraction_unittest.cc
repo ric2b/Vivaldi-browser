@@ -38,14 +38,14 @@ TEST(SimpleFractionTest, FromStringParsesCorrectFractions) {
   ExpectFromStringEquals("0", SimpleFraction{0, 1});
   ExpectFromStringEquals("-20", SimpleFraction{-20, 1});
   ExpectFromStringEquals("100", SimpleFraction{100, 1});
+  ExpectFromStringEquals("1/", SimpleFraction{1, 1});
+  ExpectFromStringEquals("888/", SimpleFraction{888, 1});
 }
 
 TEST(SimpleFractionTest, FromStringErrorsOnInvalid) {
   ExpectFromStringError("");
   ExpectFromStringError("/");
-  ExpectFromStringError("1/");
   ExpectFromStringError("/1");
-  ExpectFromStringError("888/");
   ExpectFromStringError("1/2/3");
   ExpectFromStringError("not a fraction at all");
 }

@@ -682,12 +682,6 @@ developers/Web-page-views/WebContents.png
 developers/Web-page-views/WebContents.graffle
 developers/sublime-text/SublimeExample.png
 developers/whistling.jpg
-developers/tech-talk-videos/release-process/release process version 2.png
-developers/tech-talk-videos/release-process/death_metal_rooster3.png
-developers/tech-talk-videos/release-process/chromium-24.png
-developers/tech-talk-videos/release-process/starwars-disturbance2.jpg
-developers/tech-talk-videos/release-process/buildbot_screenshot.PNG
-developers/tech-talk-videos/release-process/update_software_popup.png
 developers/mandoline/Mandoline.png
 developers/testing/chromium-build-infrastructure/tour-of-the-chromium-buildbot/waterfall.png
 developers/testing/chromium-build-infrastructure/performance-test-plots/page_cycler_plot.png
@@ -699,6 +693,12 @@ developers/testing/flakiness-dashboard/seeResults.jpg
 developers/testing/flakiness-dashboard/seeResults2.jpg
 developers/testing/flakiness-dashboard/missingorextra.jpg
 developers/testing/adding-performance-tests/Screen Shot 2013-12-20 at 9.03.31 AM.png
+developers/release-process/release process version 2.png
+developers/release-process/death_metal_rooster3.png
+developers/release-process/chromium-24.png
+developers/release-process/starwars-disturbance2.jpg
+developers/release-process/buildbot_screenshot.PNG
+developers/release-process/update_software_popup.png
 developers/rendering-performance-case-study-1/19-populated.png
 developers/rendering-performance-case-study-1/07-hypothetsis.png
 developers/rendering-performance-case-study-1/06-invalidation.png

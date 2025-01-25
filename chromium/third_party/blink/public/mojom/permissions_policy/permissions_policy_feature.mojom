@@ -131,6 +131,7 @@ enum PermissionsPolicyFeature {
   kSharedAutofill = 83,
 
   // Controls access to Direct Sockets.
+  // See https://github.com/WICG/direct-sockets.
   kDirectSockets = 84,
 
   // Client Hint for the preferred color scheme.
@@ -269,6 +270,15 @@ enum PermissionsPolicyFeature {
   // Controlled Frame API.
   // See https://github.com/WICG/controlled-frame.
   kControlledFrame = 125,
+
+  // Controls private network access in the context of Direct Sockets.
+  // See https://github.com/WICG/direct-sockets.
+  kDirectSocketsPrivate = 126,
+
+  // Allow fenced frames to access unpartitioned data after giving up network
+  // access.
+  // See https://github.com/WICG/fenced-frame/blob/master/explainer/fenced_frames_with_local_unpartitioned_data_access.md
+  kFencedUnpartitionedStorageRead = 127,
 
   // Don't change assigned numbers of any item, and don't reuse removed slots.
   // Add new features at the end of the enum.

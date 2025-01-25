@@ -83,6 +83,7 @@
 #include "src/tint/lang/wgsl/sem/value_conversion.h"
 #include "src/tint/lang/wgsl/sem/variable.h"
 #include "src/tint/lang/wgsl/sem/while_statement.h"
+#include "src/tint/utils/constants/internal_limits.h"
 #include "src/tint/utils/containers/map.h"
 #include "src/tint/utils/containers/reverse.h"
 #include "src/tint/utils/containers/transform.h"
@@ -556,10 +557,6 @@ bool Validator::AddressSpaceLayout(const core::type::Type* store_ty,
         return true;
     }
 
-    if (!core::IsHostShareable(address_space)) {
-        return true;
-    }
-
     auto note_usage = [&] {
         AddNote(source) << style::Type(store_ty->FriendlyName()) << " used in address space "
                         << style::Enum(address_space) << " here";
@@ -636,6 +633,22 @@ bool Validator::AddressSpaceLayout(const core::type::Type* store_ty,
                     AddNote(prev_member_str->Declaration()->name->source)
                         << "and layout of previous member struct:\n"
                         << prev_member_str->Layout();
+                    note_usage();
+                    return false;
+                }
+            }
+
+            // If an alignment was explicitly specified, we need to validate that it satisfies the
+            // alignment requirement of the address space.
+            auto* align_attr =
+                ast::GetAttribute<ast::StructMemberAlignAttribute>(m->Declaration()->attributes);
+            if (align_attr && !enabled_extensions_.Contains(
+                                  wgsl::Extension::kChromiumInternalRelaxedUniformLayout)) {
+                auto align = sem_.GetVal(align_attr->expr)->ConstantValue()->ValueAs<uint32_t>();
+                if (align % required_align != 0) {
+                    AddError(align_attr->expr->source)
+                        << "alignment must be a multiple of " << style::Literal(required_align)
+                        << " bytes for the " << style::Enum(address_space) << " address space";
                     note_usage();
                     return false;
                 }
@@ -2166,6 +2179,12 @@ bool Validator::StructureInitializer(const ast::CallExpression* ctor,
 bool Validator::ArrayConstructor(const ast::CallExpression* ctor,
                                  const sem::Array* array_type) const {
     auto& values = ctor->args;
+    if (values.Length() > internal_limits::kMaxArrayConstructorElements) {
+        AddError(ctor->target->source) << "array constructor has excessive number of elements (>"
+                                       << internal_limits::kMaxArrayConstructorElements << ")";
+        return false;
+    }
+
     auto* elem_ty = array_type->ElemType();
     for (auto* value : values) {
         auto* value_ty = sem_.TypeOf(value)->UnwrapRef();

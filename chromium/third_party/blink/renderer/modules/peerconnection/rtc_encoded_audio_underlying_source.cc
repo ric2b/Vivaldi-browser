@@ -61,23 +61,23 @@ RTCEncodedAudioUnderlyingSource::GetController() {
   return Controller();
 }
 
-ScriptPromiseUntyped RTCEncodedAudioUnderlyingSource::Pull(
+ScriptPromise<IDLUndefined> RTCEncodedAudioUnderlyingSource::Pull(
     ScriptState* script_state,
     ExceptionState&) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   // WebRTC is a push source without backpressure support, so nothing to do
   // here.
-  return ScriptPromiseUntyped::CastUndefined(script_state);
+  return ToResolvedUndefinedPromise(script_state);
 }
 
-ScriptPromiseUntyped RTCEncodedAudioUnderlyingSource::Cancel(
+ScriptPromise<IDLUndefined> RTCEncodedAudioUnderlyingSource::Cancel(
     ScriptState* script_state,
     ScriptValue reason,
     ExceptionState&) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   if (disconnect_callback_)
     std::move(disconnect_callback_).Run();
-  return ScriptPromiseUntyped::CastUndefined(script_state);
+  return ToResolvedUndefinedPromise(script_state);
 }
 
 void RTCEncodedAudioUnderlyingSource::Trace(Visitor* visitor) const {

@@ -6,6 +6,7 @@
 #define QUICHE_QUIC_MOQT_TOOLS_MOQT_MOCK_VISITOR_H_
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -26,8 +27,7 @@ struct MockSessionCallbacks {
   testing::MockFunction<void()> session_established_callback;
   testing::MockFunction<void(absl::string_view)> session_terminated_callback;
   testing::MockFunction<void()> session_deleted_callback;
-  testing::MockFunction<std::optional<MoqtAnnounceErrorReason>(
-      absl::string_view)>
+  testing::MockFunction<std::optional<MoqtAnnounceErrorReason>(FullTrackName)>
       incoming_announce_callback;
 
   MockSessionCallbacks() {
@@ -67,6 +67,10 @@ class MockTrackPublisher : public MoqtTrackPublisher {
               (const, override));
   MOCK_METHOD(MoqtPriority, GetPublisherPriority, (), (const, override));
   MOCK_METHOD(MoqtDeliveryOrder, GetDeliveryOrder, (), (const, override));
+  MOCK_METHOD(std::unique_ptr<MoqtFetchTask>, Fetch,
+              (FullSequence, uint64_t, std::optional<uint64_t>,
+               MoqtDeliveryOrder),
+              (override));
 
  private:
   FullTrackName track_name_;
@@ -81,9 +85,8 @@ class MockRemoteTrackVisitor : public RemoteTrack::Visitor {
   MOCK_METHOD(void, OnCanAckObjects, (MoqtObjectAckFunction ack_function),
               (override));
   MOCK_METHOD(void, OnObjectFragment,
-              (const FullTrackName& full_track_name, uint64_t group_sequence,
-               uint64_t object_sequence, MoqtPriority publisher_priority,
-               MoqtObjectStatus status,
+              (const FullTrackName& full_track_name, FullSequence sequence,
+               MoqtPriority publisher_priority, MoqtObjectStatus status,
                MoqtForwardingPreference forwarding_preference,
                absl::string_view object, bool end_of_message),
               (override));

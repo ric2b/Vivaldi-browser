@@ -1,0 +1,168 @@
+// Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[
+  {
+    "namespace": "omniboxPrivate",
+    "description": "Use the <code>vivaldi.omniboxPrivate</code> API to start queries with the address field omnibox.</a>.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/omnibox/omnibox_private_api.h"
+    },
+    "dependencies": ["historyPrivate"],
+    "types": [
+      {
+        "id": "OmniboxItemCategory",
+        "type": "string",
+        "enum": [
+          "search",
+          "history",
+          "search-suggestion",
+          "url-suggestion",
+          "direct-match",
+          "bookmark",
+          "nickname",
+          "open-tab",
+          "top-sites",
+          "clipboard",
+          "calculator",
+          "internal-message",
+          "other"
+        ],
+        "description": "The category in which the item belong."
+      },
+      {
+        "id": "OmniboxProviderName",
+        "type": "string",
+        "enum": [
+          "Bookmark",
+          "Builtin",
+          "Clipboard",
+          "Document",
+          "HistoryQuick",
+          "HistoryURL",
+          "Keyword",
+          "OnDeviceHead",
+          "Search",
+          "Shortcuts",
+          "ZeroSuggest",
+          "LocalHistoryZeroSuggest",
+          "QueryTile",
+          "MostVisitedSites",
+          "VerbatimMatch",
+          "VoiceSuggest",
+          "HistoryFuzzy",
+          "OpenTab",
+          "HistoryCluster",
+          "Calculator",
+          "FeaturedSearch",
+          "HistoryEmbeddings",
+          "BookmarkNickname",
+          "DirectMatch",
+          "Unknown"
+        ]
+      },
+      {
+        "id": "OmniboxItem",
+        "type": "object",
+        "description": "An object encapsulating one result of a omnibox query.",
+        "properties": {
+          "allowedToBeDefaultMatch": {
+            "description": "Is allowed to be default match.",
+            "type": "boolean"
+          },
+          "contents": {
+            "type": "string",
+            "description": "The main text displayed in the address bar dropdown."
+          },
+          "destinationUrl": {
+            "type": "string",
+            "description": "The destination url"
+          },
+          "fillIntoEdit": {
+            "type": "string",
+            "description": "The text to fill into edit."
+          },
+          "hasTabMatch": {
+            "description": "Matches open tab.",
+            "type": "boolean"
+          },
+          "relevance": {
+            "type": "integer",
+            "description": "The relevance score."
+          },
+          "providerName": {
+            "$ref": "OmniboxProviderName",
+              "description": "The provider name."
+          },
+          "transition": {
+            "$ref": "historyPrivate.TransitionType",
+            "description": "The transition type to use when the user opens this match."
+          },
+          "description": {
+            "type": "string",
+            "description": "Helper text, such as a title, description or search."
+          },
+          "inlineAutocompletion": {
+            "type": "string",
+            "description": "The inline autocompletion to display after the user's input in the omnibox, if this match becomes the default match.  It may be empty."
+          },
+          "category": {
+            "$ref": "OmniboxItemCategory",
+            "description": "The category in which the item belong."
+          },
+          "deletable": {
+            "type": "boolean",
+            "description": "Should the user be able to delete this match."
+          },
+          "type": {
+            "type": "string",
+            "description": "The type of provider."
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "startOmnibox",
+        "type": "function",
+        "description": "",
+        "parameters": [
+          {
+            "name": "query",
+            "type": "string",
+            "description": "A piece of text entered in Omnibox"
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onOmniboxResultChanged",
+        "type": "function",
+        "description": "Fired when omnibox results are ready.",
+        "parameters": [
+          {
+            "name": "results",
+            "type": "object",
+            "properties": {
+              "combinedResults": {
+                "type": "array",
+                "items": { "$ref": "OmniboxItem" }
+              },
+              "cursorPosition": {
+                "description": "Curser postition.",
+                "type": "integer"
+              },
+              "inputText": {
+                "description": "User-provided text to be completed.",
+                "type": "string"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

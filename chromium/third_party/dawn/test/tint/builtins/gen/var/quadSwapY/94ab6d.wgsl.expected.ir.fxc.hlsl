@@ -1,9 +1,9 @@
-SKIP: FAILED
+SKIP: INVALID
 
 
 RWByteAddressBuffer prevent_dce : register(u0);
 int quadSwapY_94ab6d() {
-  int arg_0 = 1;
+  int arg_0 = int(1);
   int res = QuadReadAcrossY(arg_0);
   return res;
 }

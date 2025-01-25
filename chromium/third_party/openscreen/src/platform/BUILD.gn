@@ -82,8 +82,14 @@ openscreen_source_set("api") {
 }
 
 # The following target is only activated in standalone builds (see :platform).
-if (!build_with_chromium) {
+# Disable standalone implementation for IOS. It is not supported.
+if (!is_ios) {
   openscreen_source_set("standalone_impl") {
+    # Setting the target as testonly ensures that the standalone implementation is
+    # not included in Chromium.
+    if (build_with_chromium) {
+      testonly = true
+    }
     defines = []
     visibility += [
       "../cast/common:discovery_e2e_test",
@@ -113,9 +119,9 @@ if (!build_with_chromium) {
       "impl/tls_write_buffer.h",
     ]
 
-    public_configs = [ "//util:trace_logging_config" ]
+    public_configs = [ "../util:trace_logging_config" ]
 
-    if (is_linux) {
+    if (is_linux || is_chromeos || is_android) {
       sources += [ "impl/network_interface_linux.cc" ]
     } else if (is_mac) {
       defines += [

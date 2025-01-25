@@ -94,8 +94,8 @@ public class TabSwitcherActionMenuFacility extends Facility<PageStation> {
     }
 
     /**
-     * Select the "Close tab" menu option to close the current Tab, expecting to land on the regular
-     * Tab Switcher.
+     * Select the "Close tab" menu option to close the current Tab, expecting to land on a regular
+     * tab.
      *
      * <p>This happens when the last incognito tab is closed but there are other regular tabs.
      */
@@ -111,7 +111,7 @@ public class TabSwitcherActionMenuFacility extends Facility<PageStation> {
         return selectCloseTab(destination);
     }
 
-    private <T extends Station> T selectCloseTab(T destination) {
+    private <T extends Station<?>> T selectCloseTab(T destination) {
         return mHostStation.travelToSync(
                 destination,
                 Transition.conditionOption(

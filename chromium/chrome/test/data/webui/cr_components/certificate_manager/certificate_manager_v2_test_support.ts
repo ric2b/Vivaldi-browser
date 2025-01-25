@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type {CertificateManagerPageHandlerInterface, CertificateManagerPageRemote, CertificateSource, CertManagementMetadata, ImportResult, SummaryCertInfo} from 'chrome://resources/cr_components/certificate_manager/certificate_manager_v2.mojom-webui.js';
+import type {ActionResult, CertificateManagerPageHandlerInterface, CertificateManagerPageRemote, CertificateSource, CertManagementMetadata, SummaryCertInfo} from 'chrome://resources/cr_components/certificate_manager/certificate_manager_v2.mojom-webui.js';
 import {CertificateManagerPageCallbackRouter} from 'chrome://resources/cr_components/certificate_manager/certificate_manager_v2.mojom-webui.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 
@@ -20,23 +20,36 @@ class FakePageHandler extends TestBrowserProxy implements
 
   private importCertificateCallback_: (source: CertificateSource) => {
     result:
-      ImportResult,
+      ActionResult,
   } = (_) => {
     return {result: {error: 'default implementation called'}};
   };
 
   private importAndBindCertificateCallback_: (source: CertificateSource) => {
     result:
-      ImportResult,
+      ActionResult,
   } = (_) => {
     return {result: {error: 'default implementation called'}};
   };
 
+  private deleteCertificateCallback_:
+      (source: CertificateSource, displayName: string,
+       sha256hashHex: string) => {
+        result:
+          ActionResult,
+      } = (_) => {
+        return {result: {error: 'default implementation called'}};
+      };
+
   private metadata_: CertManagementMetadata = {
     includeSystemTrustStore: true,
     numUserAddedSystemCerts: 0,
+    // <if expr="not is_chromeos">
     isIncludeSystemTrustStoreManaged: false,
+    // </if>
     numPolicyCerts: 0,
+    numUserCerts: 0,
+    showUserCertsUi: false,
   };
 
   constructor() {
@@ -47,7 +60,9 @@ class FakePageHandler extends TestBrowserProxy implements
       'exportCertificates',
       'importCertificate',
       'importAndBindCertificate',
+      'deleteCertificate',
       'showNativeManageCertificates',
+      'setIncludeSystemTrustStore',
     ]);
   }
 
@@ -80,10 +95,26 @@ class FakePageHandler extends TestBrowserProxy implements
     return Promise.resolve(this.importAndBindCertificateCallback_(source));
   }
 
+  deleteCertificate(
+      source: CertificateSource, displayName: string, sha256hashHex: string) {
+    this.methodCalled('deleteCertificate', source, displayName, sha256hashHex);
+    return Promise.resolve(
+        this.deleteCertificateCallback_(source, displayName, sha256hashHex));
+  }
+
   setCertificatesCallback(callbackFn: (source: CertificateSource) => {
     certs: SummaryCertInfo[],
   }) {
     this.getCertificatesCallback_ = callbackFn;
+  }
+
+  setDeleteCertificateCallback(
+      callbackFn:
+          (source: CertificateSource, displayName: string,
+           sha256hashHex: string) => {
+            result: ActionResult,
+          }) {
+    this.deleteCertificateCallback_ = callbackFn;
   }
 
   setCertManagementMetadata(metadata: CertManagementMetadata) {
@@ -93,6 +124,12 @@ class FakePageHandler extends TestBrowserProxy implements
   // <if expr="is_win or is_macosx">
   showNativeManageCertificates() {
     this.methodCalled('showNativeManageCertificates');
+  }
+  // </if>
+
+  // <if expr="not is_chromeos">
+  setIncludeSystemTrustStore(include: boolean) {
+    this.methodCalled('setIncludeSystemTrustStore', include);
   }
   // </if>
 }

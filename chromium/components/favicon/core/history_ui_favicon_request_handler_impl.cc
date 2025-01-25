@@ -72,7 +72,8 @@ HistoryUiFaviconRequestHandlerImpl::HistoryUiFaviconRequestHandlerImpl(
   DCHECK(large_icon_service);
 }
 
-HistoryUiFaviconRequestHandlerImpl::~HistoryUiFaviconRequestHandlerImpl() {}
+HistoryUiFaviconRequestHandlerImpl::~HistoryUiFaviconRequestHandlerImpl() =
+    default;
 
 void HistoryUiFaviconRequestHandlerImpl::GetRawFaviconForPageURL(
     const GURL& page_url,

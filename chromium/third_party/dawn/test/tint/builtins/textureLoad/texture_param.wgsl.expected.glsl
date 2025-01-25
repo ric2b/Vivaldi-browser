@@ -1,65 +1,49 @@
 #version 310 es
 
-ivec4 textureLoad2d(highp isampler2D tint_symbol_1, ivec2 coords, int level) {
-  return texelFetch(tint_symbol_1, coords, level);
+uniform highp isampler2D arg_0;
+ivec4 textureLoad2d(ivec2 coords, int level) {
+  ivec2 v = ivec2(coords);
+  return texelFetch(arg_0, v, int(level));
 }
-
-uniform highp isampler2D arg_0_1;
 void doTextureLoad() {
-  ivec4 res = textureLoad2d(arg_0_1, ivec2(0), 0);
+  ivec4 res = textureLoad2d(ivec2(0), 0);
 }
-
-vec4 vertex_main() {
+vec4 vertex_main_inner() {
   doTextureLoad();
   return vec4(0.0f);
 }
-
 void main() {
-  gl_PointSize = 1.0;
-  vec4 inner_result = vertex_main();
-  gl_Position = inner_result;
-  gl_Position.y = -(gl_Position.y);
-  gl_Position.z = ((2.0f * gl_Position.z) - gl_Position.w);
-  return;
+  gl_Position = vertex_main_inner();
+  gl_Position[1u] = -(gl_Position.y);
+  gl_Position[2u] = ((2.0f * gl_Position.z) - gl_Position.w);
+  gl_PointSize = 1.0f;
 }
 #version 310 es
 precision highp float;
 precision highp int;
 
-ivec4 textureLoad2d(highp isampler2D tint_symbol_1, ivec2 coords, int level) {
-  return texelFetch(tint_symbol_1, coords, level);
+uniform highp isampler2D arg_0;
+ivec4 textureLoad2d(ivec2 coords, int level) {
+  ivec2 v = ivec2(coords);
+  return texelFetch(arg_0, v, int(level));
 }
-
-uniform highp isampler2D arg_0_1;
 void doTextureLoad() {
-  ivec4 res = textureLoad2d(arg_0_1, ivec2(0), 0);
+  ivec4 res = textureLoad2d(ivec2(0), 0);
 }
-
-void fragment_main() {
-  doTextureLoad();
-}
-
 void main() {
-  fragment_main();
-  return;
+  doTextureLoad();
 }
 #version 310 es
 
-ivec4 textureLoad2d(highp isampler2D tint_symbol_1, ivec2 coords, int level) {
-  return texelFetch(tint_symbol_1, coords, level);
+uniform highp isampler2D arg_0;
+ivec4 textureLoad2d(ivec2 coords, int level) {
+  ivec2 v = ivec2(coords);
+  return texelFetch(arg_0, v, int(level));
 }
-
-uniform highp isampler2D arg_0_1;
 void doTextureLoad() {
-  ivec4 res = textureLoad2d(arg_0_1, ivec2(0), 0);
+  ivec4 res = textureLoad2d(ivec2(0), 0);
 }
-
-void compute_main() {
-  doTextureLoad();
-}
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  compute_main();
-  return;
+  doTextureLoad();
 }

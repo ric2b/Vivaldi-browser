@@ -28,26 +28,17 @@ typedef NS_ENUM(NSUInteger, IPadLayoutState) {
 + (CGRect)windowSize;
 /// Returns whether device has a valid orientation state.
 + (BOOL)isValidOrientation;
-/// Returns whether iPad is in landscape or portrait.
-+ (BOOL)isiPadOrientationPortrait;
 /// Returns whether current device is iPad.
 + (BOOL)isDeviceTablet;
-/// Returns whether app is in split or slide over layout in iPad multitasking
-/// mode.
-+ (BOOL)isSplitOrSlideOver;
-/// Returns the layout state the app is running in iPad multitasking mode.
-+ (IPadLayoutState)iPadLayoutState;
-/// Returns true when iPhone orientation is Landscape
-+ (BOOL)isVerticalTraitCompact;
-/// Returns true for all iPad orientation except split view 1/3 in all
-/// and 1/2 in some devices.
-/// and iPhone portrait orientation.
-+ (BOOL)isHorizontalTraitRegular;
-/// Returns true for all iPad orientation, and iPhone portrait orientation.
-+ (BOOL)isVerticalTraitRegular;
-/// Returns true if device is iPad and multitasking UI has
-/// enough space to show iPad side panel.
-+ (BOOL)canShowSidePanel;
+/// Returns true if device is iPad and multitasking UI can show
+/// side panel. KeyWindow is not reliable since it doesn't return
+/// the active window for presented view always, therefore rely on
+/// the TraitCollection/TraitEnvironment of the presented view which is
+/// reliable and officially recommended API.
++ (BOOL)canShowSidePanelForTraitEnvironment:
+      (id<UITraitEnvironment> _Nullable)trait;
++ (BOOL)canShowSidePanelForTrait:
+      (UITraitCollection* _Nullable)trait;
 /// Safe area insets for the key window.
 + (UIEdgeInsets)safeAreaInsets;
 /// Returns boolean whether dark text should be used above a view using the
@@ -88,7 +79,9 @@ typedef NS_ENUM(NSUInteger, IPadLayoutState) {
 + (BOOL)isValidURL:(NSString* _Nonnull)urlString;
 /// Returns true if give string has http/s scheme.
 + (BOOL)urlStringHasHTTPorHTTPS:(NSString* _Nonnull)urlString;
-/// Returns the host of a given string
+/// Returns the host of a given string. Strip the `www.` part
+/// if exists. So, `https://www.vivaldi.com` or `www.vivaldi.com`
+/// will return `vivaldi.com`
 + (NSString* _Nonnull)hostOfURLString:(NSString* _Nonnull)urlString;
 /// Returns alphabetically  sorted result from two provided NSString keys.
 + (NSComparisonResult)compare:(NSString* _Nonnull)first

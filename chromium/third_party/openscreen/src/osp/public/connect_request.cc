@@ -11,11 +11,9 @@
 namespace openscreen::osp {
 
 ConnectRequestCallback::ConnectRequestCallback() = default;
-
 ConnectRequestCallback::~ConnectRequestCallback() = default;
 
 ConnectRequest::ConnectRequest() = default;
-
 ConnectRequest::ConnectRequest(ProtocolConnectionClient* parent,
                                uint64_t request_id)
     : parent_(parent), request_id_(request_id) {}
@@ -24,6 +22,7 @@ ConnectRequest::ConnectRequest(ConnectRequest&& other) noexcept
     : parent_(other.parent_), request_id_(other.request_id_) {
   other.request_id_ = 0;
 }
+
 ConnectRequest& ConnectRequest::operator=(ConnectRequest&& other) noexcept {
   using std::swap;
   swap(parent_, other.parent_);

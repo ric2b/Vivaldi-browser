@@ -43,6 +43,14 @@ update_target("//components/sync_bookmarks:sync_bookmarks") {
   ]
 }
 
+if (!is_ios) {
+  update_template_instance("//components/resources:components_resources") {
+    deps += [
+      "//vivaldi/components/request_filter/adblock_filter/interstitial:bundle_js_document_blocked_interstitial",
+    ]
+  }
+}
+
 if (vivaldi_build_tests) {
   update_target("//components:components_unittests") {
       deps += [

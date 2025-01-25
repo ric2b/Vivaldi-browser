@@ -1,4 +1,4 @@
-2b3517591f7bf20e0f74f3ec1381af1e *tests/data/fate/mov-mp4-iamf-ambisonic_1.mp4
+b0f4accdb8f1f3dfe594a6cbd6c00603 *tests/data/fate/mov-mp4-iamf-ambisonic_1.mp4
 57743 tests/data/fate/mov-mp4-iamf-ambisonic_1.mp4
 #extradata 0:       34, 0xad120cfe
 #extradata 1:       34, 0xad120cfe
@@ -96,6 +96,7 @@ DISPOSITION:descriptions=0
 DISPOSITION:metadata=0
 DISPOSITION:dependent=0
 DISPOSITION:still_image=0
+DISPOSITION:multilayer=0
 TAG:language=und
 TAG:handler_name=SoundHandler
 TAG:vendor_id=[0][0][0][0]
@@ -120,6 +121,7 @@ DISPOSITION:descriptions=0
 DISPOSITION:metadata=0
 DISPOSITION:dependent=1
 DISPOSITION:still_image=0
+DISPOSITION:multilayer=0
 [/STREAM]
 [STREAM]
 index=1
@@ -142,6 +144,7 @@ DISPOSITION:descriptions=0
 DISPOSITION:metadata=0
 DISPOSITION:dependent=1
 DISPOSITION:still_image=0
+DISPOSITION:multilayer=0
 [/STREAM]
 [STREAM]
 index=2
@@ -164,6 +167,7 @@ DISPOSITION:descriptions=0
 DISPOSITION:metadata=0
 DISPOSITION:dependent=1
 DISPOSITION:still_image=0
+DISPOSITION:multilayer=0
 [/STREAM]
 [STREAM]
 index=3
@@ -186,6 +190,7 @@ DISPOSITION:descriptions=0
 DISPOSITION:metadata=0
 DISPOSITION:dependent=1
 DISPOSITION:still_image=0
+DISPOSITION:multilayer=0
 [/STREAM]
 [/STREAM_GROUP]
 [STREAM_GROUP]
@@ -256,6 +261,7 @@ DISPOSITION:descriptions=0
 DISPOSITION:metadata=0
 DISPOSITION:dependent=0
 DISPOSITION:still_image=0
+DISPOSITION:multilayer=0
 TAG:language=und
 TAG:handler_name=SoundHandler
 TAG:vendor_id=[0][0][0][0]
@@ -280,6 +286,7 @@ DISPOSITION:descriptions=0
 DISPOSITION:metadata=0
 DISPOSITION:dependent=1
 DISPOSITION:still_image=0
+DISPOSITION:multilayer=0
 [/STREAM]
 [STREAM]
 index=1
@@ -302,6 +309,7 @@ DISPOSITION:descriptions=0
 DISPOSITION:metadata=0
 DISPOSITION:dependent=1
 DISPOSITION:still_image=0
+DISPOSITION:multilayer=0
 [/STREAM]
 [STREAM]
 index=2
@@ -324,6 +332,7 @@ DISPOSITION:descriptions=0
 DISPOSITION:metadata=0
 DISPOSITION:dependent=1
 DISPOSITION:still_image=0
+DISPOSITION:multilayer=0
 [/STREAM]
 [STREAM]
 index=3
@@ -346,5 +355,6 @@ DISPOSITION:descriptions=0
 DISPOSITION:metadata=0
 DISPOSITION:dependent=1
 DISPOSITION:still_image=0
+DISPOSITION:multilayer=0
 [/STREAM]
 [/STREAM_GROUP]

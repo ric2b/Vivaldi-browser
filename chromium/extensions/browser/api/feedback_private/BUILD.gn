@@ -33,7 +33,7 @@ source_set("feedback_private") {
     "//net",
   ]
 
-  if (is_chromeos_ash) {
+  if (is_chromeos) {
     sources += [
       "access_rate_limiter.cc",
       "access_rate_limiter.h",
@@ -46,6 +46,7 @@ source_set("feedback_private") {
     deps += [
       "//ash/public/cpp",
       "//chromeos/ash/components/cryptohome",
+      "//chromeos/ash/components/dbus/cryptohome:cryptohome_proto",
       "//chromeos/ash/components/dbus/debug_daemon",
       "//chromeos/ash/services/assistant/public/cpp",
       "//chromeos/ash/services/assistant/public/mojom",

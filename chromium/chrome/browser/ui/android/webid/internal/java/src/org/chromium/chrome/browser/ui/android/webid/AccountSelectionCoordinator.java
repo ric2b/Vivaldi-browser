@@ -14,7 +14,6 @@ import android.net.Uri;
 import android.provider.Browser;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.Px;
@@ -124,8 +123,8 @@ public class AccountSelectionCoordinator
         int avatarSize =
                 context.getResources()
                         .getDimensionPixelSize(
-                                rpMode == RpMode.BUTTON
-                                        ? R.dimen.account_selection_button_mode_sheet_avatar_size
+                                rpMode == RpMode.ACTIVE
+                                        ? R.dimen.account_selection_active_mode_sheet_avatar_size
                                         : R.dimen.account_selection_account_avatar_size);
         mMediator =
                 new AccountSelectionMediator(
@@ -137,7 +136,9 @@ public class AccountSelectionCoordinator
                         mBottomSheetContent,
                         imageFetcher,
                         avatarSize,
-                        rpMode);
+                        rpMode,
+                        context,
+                        windowAndroid.getModalDialogManager());
 
         // If this object is corresponding to the custom tab opened by showModalDialog, this
         // is the first chance to associate it with the opener, so do so now.
@@ -156,12 +157,10 @@ public class AccountSelectionCoordinator
             ModelList sheetItems,
             @RpMode.EnumType int rpMode) {
         int accountSelectionSheetLayout =
-                rpMode == RpMode.BUTTON
-                        ? R.layout.account_selection_button_mode_sheet
+                rpMode == RpMode.ACTIVE
+                        ? R.layout.account_selection_active_mode_sheet
                         : R.layout.account_selection_sheet;
-        View contentView =
-                (LinearLayout)
-                        LayoutInflater.from(context).inflate(accountSelectionSheetLayout, null);
+        View contentView = LayoutInflater.from(context).inflate(accountSelectionSheetLayout, null);
 
         PropertyModelChangeProcessor.create(
                 model, contentView, AccountSelectionViewBinder::bindContentView);
@@ -171,7 +170,7 @@ public class AccountSelectionCoordinator
                 new LinearLayoutManager(
                         sheetItemListView.getContext(), LinearLayoutManager.VERTICAL, false));
         sheetItemListView.setItemAnimator(null);
-        if (rpMode == RpMode.BUTTON) {
+        if (rpMode == RpMode.ACTIVE) {
             // AccountPickerItemDecoration updates the background and rounds the edges of the
             // account list items.
             sheetItemListView.addItemDecoration(new AccountPickerItemDecoration());
@@ -182,20 +181,23 @@ public class AccountSelectionCoordinator
         adapter.registerType(
                 AccountSelectionProperties.ITEM_TYPE_ACCOUNT,
                 new LayoutViewBuilder(
-                        rpMode == RpMode.BUTTON
-                                ? R.layout.account_selection_button_mode_account_item
+                        rpMode == RpMode.ACTIVE
+                                ? R.layout.account_selection_active_mode_account_item
                                 : R.layout.account_selection_account_item),
                 AccountSelectionViewBinder::bindAccountView);
         adapter.registerType(
                 AccountSelectionProperties.ITEM_TYPE_ADD_ACCOUNT,
-                new LayoutViewBuilder(R.layout.account_selection_add_account_row_item),
+                new LayoutViewBuilder(
+                        rpMode == RpMode.ACTIVE
+                                ? R.layout.account_selection_active_mode_add_account_row_item
+                                : R.layout.account_selection_add_account_row_item),
                 AccountSelectionViewBinder::bindAddAccountView);
         sheetItemListView.setAdapter(adapter);
 
         return contentView;
     }
 
-    static int generatedFedCMId() {
+    static int generatedFedCmId() {
         // Get a non-negative number so that we can use -1 as an error.
         return ++sCurrentFedcmId;
     }
@@ -290,7 +292,7 @@ public class AccountSelectionCoordinator
         intent.putExtra(Browser.EXTRA_APPLICATION_ID, context.getPackageName());
         assert context instanceof Activity;
         // Set a new FedCM ID, and store it.
-        int fedcmId = generatedFedCMId();
+        int fedcmId = generatedFedCmId();
         sFedCMDelegateMap.put(
                 fedcmId, new WeakReference<AccountSelectionComponent.Delegate>(mDelegate));
         intent.putExtra(IntentHandler.EXTRA_FEDCM_ID, fedcmId);

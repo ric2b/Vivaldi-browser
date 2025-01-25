@@ -191,17 +191,15 @@ if (${DAWN_ENABLE_EMSCRIPTEN})
     target_include_directories(emdawnwebgpu_config BEFORE INTERFACE
         "${EM_BUILD_GEN_DIR}/include"
     )
+    add_dependencies(emdawnwebgpu_config webgpu_generated_struct_info_js emdawnwebgpu_js_gen)
     target_link_options(emdawnwebgpu_config INTERFACE
         # We are using Dawn-generated bindings, not built-in ones
         "-sUSE_WEBGPU=0"
-        # We need Asyncify for Future implementation.
-        "-sASYNCIFY=1"
         # The JS libraries needed for bindings
         "--js-library=${EM_BUILD_GEN_DIR}/library_webgpu_enum_tables.js"
         "--js-library=${EM_BUILD_GEN_DIR}/library_webgpu_generated_struct_info.js"
         "--js-library=${EM_BUILD_GEN_DIR}/library_webgpu_generated_sig_info.js"
         "--js-library=${DAWN_EMDAWNWEBGPU_DIR}/library_webgpu.js"
-        "--js-library=${DAWN_EMDAWNWEBGPU_DIR}/library_html5_webgpu.js"
         "--closure-args=--externs=${DAWN_EMSCRIPTEN_TOOLCHAIN}/src/closure-externs/webgpu-externs.js"
     )
 
@@ -221,11 +219,34 @@ if (${DAWN_ENABLE_EMSCRIPTEN})
         ENABLE_EMSCRIPTEN
         HEADER_ONLY
         HEADERS
+            "${EM_BUILD_GEN_DIR}/include/dawn/webgpu_cpp_print.h"
             "${EM_BUILD_GEN_DIR}/include/webgpu/webgpu_cpp.h"
             "${EM_BUILD_GEN_DIR}/include/webgpu/webgpu_cpp_chained_struct.h"
             "${DAWN_INCLUDE_DIR}/webgpu/webgpu_enum_class_bitmasks.h"
         DEPENDS
             emdawnwebgpu_c
     )
+
+    if (${DAWN_BUILD_TESTS})
+        set(emdawnwebgpu_test_sources
+            "tests/FuturesTests.cpp"
+        )
+        add_executable(emdawnwebgpu_tests ${emdawnwebgpu_test_sources})
+        set_target_properties(emdawnwebgpu_tests PROPERTIES
+            SUFFIX ".html")
+        target_link_libraries(
+            emdawnwebgpu_tests
+            PUBLIC
+                dawn::dawn_wgpu_utils
+                emdawnwebgpu_cpp
+                gmock_main
+        )
+        target_link_options(emdawnwebgpu_tests PUBLIC
+            # We need ASYNCIFY for Future implementation. Note that for
+            # some reason, at the moment, these tests do not work with
+            # JSPI.
+            "-sJSPI=1"
+        )
+    endif()
 
 endif()

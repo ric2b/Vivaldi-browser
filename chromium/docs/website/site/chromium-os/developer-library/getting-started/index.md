@@ -42,9 +42,9 @@ WiFi.
 Links to Code Search for these repositories:
 
 * `chromium`: <a href="https://source.chromium.org/chromium" target="_blank">
-https://source.chromium.org/chromium</href>
+https://source.chromium.org/chromium</a>
 * `chromiumos`: <a href="https://source.chromium.org/chromiumos"
-target="_blank">https://source.chromium.org/chromiumos</href>
+target="_blank">https://source.chromium.org/chromiumos</a>
 
 ## Hardware requirements
 

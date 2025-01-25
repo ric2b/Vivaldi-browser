@@ -111,9 +111,19 @@ def AlertsHandlerPost():
   return alerts.AlertsHandlerPost()
 
 
+@flask_app.route('/alerts_skia', methods=['GET'])
+def SkiaAlertsHandlerGet():
+  return alerts.SkiaAlertsHandlerGet()
+
+
 @flask_app.route('/associate_alerts', methods=['GET', 'POST'])
 def AssociateAlertsHandlerPost():
   return associate_alerts.AssociateAlertsHandlerPost()
+
+
+@flask_app.route('/associate_alerts_skia', methods=['POST'])
+def SkiaExistingBugHandlerPost():
+  return associate_alerts.SkiaAssociateAlertsHandlerPost()
 
 
 @flask_app.route('/api/alerts', methods=['POST', 'OPTIONS'])
@@ -161,6 +171,11 @@ def EditAnomaliesPost():
   return edit_anomalies.EditAnomaliesPost()
 
 
+@flask_app.route('/edit_anomalies_skia', methods=['POST'])
+def SkiaEditAnomaliesPost():
+  return edit_anomalies.SkiaEditAnomaliesPost()
+
+
 @flask_app.route('/edit_site_config', methods=['GET'])
 def EditSiteConfigHandlerGet():
   return edit_site_config.EditSiteConfigHandlerGet()
@@ -174,6 +189,11 @@ def EditSiteConfigHandlerPost():
 @flask_app.route('/file_bug', methods=['GET', 'POST'])
 def FileBugHandlerGet():
   return file_bug.FileBugHandlerGet()
+
+
+@flask_app.route('/file_bug_skia', methods=['POST'])
+def SkiaFileBugHandlerPost():
+  return file_bug.SkiaFileBugHandlerPost()
 
 
 @flask_app.route('/graph_csv', methods=['GET'])
@@ -269,6 +289,11 @@ def ReportHandlerGet():
 @flask_app.route('/report', methods=['POST'])
 def ReportHandlerPost():
   return report.ReportHandlerPost()
+
+
+@flask_app.route('/sheriff_configs_skia', methods=['GET'])
+def SkiaLoadSheriffConfigsHandlerGet():
+  return alerts.SkiaLoadSheriffConfigsHandlerGet()
 
 
 @flask_app.route('/short_uri', methods=['GET'])

@@ -18,6 +18,7 @@
 #include "cast/streaming/sender_message.h"
 #include "json/value.h"
 #include "platform/api/task_runner.h"
+#include "platform/base/span.h"
 #include "util/flat_map.h"
 #include "util/weak_ptr.h"
 
@@ -75,7 +76,7 @@ class SenderSessionMessenger final : public SessionMessenger {
   [[nodiscard]] Error SendOutboundMessage(SenderMessage message);
 
   // Convenience method for sending a valid RPC message.
-  [[nodiscard]] Error SendRpcMessage(const std::vector<uint8_t>& message);
+  [[nodiscard]] Error SendRpcMessage(ByteView message);
 
   // Send a request (with optional reply callback).
   [[nodiscard]] Error SendRequest(SenderMessage message,
@@ -91,7 +92,7 @@ class SenderSessionMessenger final : public SessionMessenger {
  private:
   TaskRunner& task_runner_;
 
-  // This messenger should only be connected to one receiver, so |receiver_id_|
+  // This messenger should only be connected to one receiver, so `receiver_id_`
   // should not change.
   const std::string receiver_id_;
 

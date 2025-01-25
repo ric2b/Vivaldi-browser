@@ -18,6 +18,7 @@ schema_sources = [
   "devtools_private.json",
   "editcommand.json",
   "history_private.json",
+  "omnibox_private.json",
   "import_data.json",
   "infobars.json",
   "mail_private.json",

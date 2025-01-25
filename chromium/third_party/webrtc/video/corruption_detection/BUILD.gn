@@ -8,6 +8,36 @@
 
 import("../../webrtc.gni")
 
+rtc_library("corruption_classifier") {
+  sources = [
+    "corruption_classifier.cc",
+    "corruption_classifier.h",
+  ]
+  deps = [
+    ":halton_frame_sampler",
+    "../../api:array_view",
+    "../../rtc_base:checks",
+    "../../rtc_base:logging",
+  ]
+}
+
+rtc_library("frame_instrumentation_evaluation") {
+  sources = [
+    "frame_instrumentation_evaluation.cc",
+    "frame_instrumentation_evaluation.h",
+  ]
+  deps = [
+    ":corruption_classifier",
+    ":halton_frame_sampler",
+    "../../api:array_view",
+    "../../api:scoped_refptr",
+    "../../api/video:video_frame",
+    "../../common_video:frame_instrumentation_data",
+    "../../rtc_base:checks",
+    "../../rtc_base:logging",
+  ]
+}
+
 rtc_library("frame_instrumentation_generator") {
   sources = [
     "frame_instrumentation_generator.cc",
@@ -24,9 +54,27 @@ rtc_library("frame_instrumentation_generator") {
     "../../common_video:frame_instrumentation_data",
     "../../modules:module_api_public",
     "../../modules/video_coding:video_coding_utility",
+    "../../rtc_base:checks",
     "../../rtc_base:logging",
     "//third_party/abseil-cpp/absl/algorithm:container",
     "//third_party/abseil-cpp/absl/types:variant",
+  ]
+}
+
+rtc_library("frame_pair_corruption_score") {
+  sources = [
+    "frame_pair_corruption_score.cc",
+    "frame_pair_corruption_score.h",
+  ]
+  deps = [
+    ":corruption_classifier",
+    ":generic_mapping_functions",
+    ":halton_frame_sampler",
+    ":utils",
+    "../../api:scoped_refptr",
+    "../../api/video:video_frame",
+    "../../rtc_base:checks",
+    "//third_party/abseil-cpp/absl/strings:string_view",
   ]
 }
 
@@ -64,7 +112,42 @@ rtc_library("halton_sequence") {
   deps = [ "../../rtc_base:checks" ]
 }
 
+rtc_library("utils") {
+  sources = [
+    "utils.cc",
+    "utils.h",
+  ]
+  deps = [
+    "../../api:scoped_refptr",
+    "../../api/video:video_frame",
+    "//third_party/abseil-cpp/absl/strings:string_view",
+    "//third_party/abseil-cpp/absl/strings:strings",
+  ]
+}
+
 if (rtc_include_tests) {
+  rtc_library("corruption_classifier_unittest") {
+    testonly = true
+    sources = [ "corruption_classifier_unittest.cc" ]
+    deps = [
+      ":corruption_classifier",
+      ":halton_frame_sampler",
+      "../../test:test_support",
+    ]
+  }
+
+  rtc_library("frame_instrumentation_evaluation_unittest") {
+    testonly = true
+    sources = [ "frame_instrumentation_evaluation_unittest.cc" ]
+    deps = [
+      ":frame_instrumentation_evaluation",
+      "../../api:scoped_refptr",
+      "../../api/video:video_frame",
+      "../../common_video:frame_instrumentation_data",
+      "../../test:test_support",
+    ]
+  }
+
   rtc_library("frame_instrumentation_generator_unittest") {
     testonly = true
     sources = [ "frame_instrumentation_generator_unittest.cc" ]
@@ -78,6 +161,21 @@ if (rtc_include_tests) {
       "../../test:test_support",
       "//third_party/abseil-cpp/absl/types:variant",
     ]
+  }
+
+  rtc_library("frame_pair_corruption_score_unittest") {
+    testonly = true
+    sources = [ "frame_pair_corruption_score_unittest.cc" ]
+    deps = [
+      ":frame_pair_corruption_score",
+      "../../api:scoped_refptr",
+      "../../api/video:video_frame",
+      "../../test:fileutils",
+      "../../test:test_support",
+      "../../test:video_test_support",
+      "//third_party/abseil-cpp/absl/strings:string_view",
+    ]
+    data = [ "../../resources/ConferenceMotion_1280_720_50.yuv" ]
   }
 
   rtc_library("generic_mapping_functions_unittest") {
@@ -110,14 +208,28 @@ if (rtc_include_tests) {
     ]
   }
 
+  rtc_library("utils_unittest") {
+    testonly = true
+    sources = [ "utils_unittest.cc" ]
+    deps = [
+      ":utils",
+      "../../api/video:video_frame",
+      "../../test:test_support",
+    ]
+  }
+
   rtc_library("corruption_detection_tests") {
     testonly = true
     sources = []
     deps = [
+      ":corruption_classifier_unittest",
+      ":frame_instrumentation_evaluation_unittest",
       ":frame_instrumentation_generator_unittest",
+      ":frame_pair_corruption_score_unittest",
       ":generic_mapping_functions_unittest",
       ":halton_frame_sampler_unittest",
       ":halton_sequence_unittest",
+      ":utils_unittest",
     ]
   }
 }

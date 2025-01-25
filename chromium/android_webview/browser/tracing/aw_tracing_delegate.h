@@ -27,11 +27,9 @@ class AwTracingDelegate : public content::TracingDelegate {
 
   // content::TracingDelegate implementation:
   bool OnBackgroundTracingActive(bool requires_anonymized_data) override;
-  bool OnBackgroundTracingIdle(bool requires_anonymized_data) override;
+  void OnBackgroundTracingIdle() override;
 
  private:
-  bool IsAllowedToStartScenario() const;
-
   std::unique_ptr<tracing::BackgroundTracingStateManager> state_manager_;
 };
 

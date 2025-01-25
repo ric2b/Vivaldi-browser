@@ -36,7 +36,6 @@ import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.dependency_injection.ChromeActivityCommonsModule;
 import org.chromium.chrome.browser.dependency_injection.ModuleOverridesRule;
@@ -81,11 +80,9 @@ public class RunningInChromeTest {
                     .setOverride(
                             ChromeActivityCommonsModule.Factory.class,
                             (activity,
-                                    bottomSheetController,
                                     tabModelSelectorSupplier,
                                     browserControlsManager,
                                     browserControlsVisibilityManager,
-                                    browserControlsSizer,
                                     fullscreenManager,
                                     layoutManagerSupplier,
                                     lifecycleDispatcher,
@@ -104,7 +101,6 @@ public class RunningInChromeTest {
                                     legacyTabStartupMetricsTracker,
                                     startupMetricsTrackerSupplier,
                                     compositorViewHolderInitializer,
-                                    chromeActivityNativeDelegate,
                                     modalDialogManagerSupplier,
                                     browserControlsStateProvider,
                                     savedInstanceStateSupplier,
@@ -114,11 +110,9 @@ public class RunningInChromeTest {
                                     activityType) -> {
                                 return new ChromeActivityCommonsModule(
                                         activity,
-                                        bottomSheetController,
                                         tabModelSelectorSupplier,
                                         browserControlsManager,
                                         browserControlsVisibilityManager,
-                                        browserControlsSizer,
                                         fullscreenManager,
                                         layoutManagerSupplier,
                                         lifecycleDispatcher,
@@ -137,7 +131,6 @@ public class RunningInChromeTest {
                                         legacyTabStartupMetricsTracker,
                                         startupMetricsTrackerSupplier,
                                         compositorViewHolderInitializer,
-                                        chromeActivityNativeDelegate,
                                         modalDialogManagerSupplier,
                                         browserControlsStateProvider,
                                         savedInstanceStateSupplier,
@@ -155,7 +148,6 @@ public class RunningInChromeTest {
                     .around(mModuleOverridesRule);
 
     private String mTestPage;
-    private BrowserServicesStore mStore;
 
     @Before
     public void setUp() {
@@ -167,10 +159,7 @@ public class RunningInChromeTest {
 
         mMockNotificationManager.setNotificationsEnabled(false);
 
-        mStore =
-                new BrowserServicesStore(
-                        ChromeApplicationImpl.getComponent().resolveChromeSharedPreferences());
-        mStore.removeTwaDisclosureAcceptanceForPackage(PACKAGE_NAME);
+        BrowserServicesStore.removeTwaDisclosureAcceptanceForPackage(PACKAGE_NAME);
     }
 
     @Test

@@ -18,6 +18,7 @@
 
 #include "importer/imported_notes_entry.h"
 #include "importer/imported_speeddial_entry.h"
+#include "importer/imported_tab_entry.h"
 #include "importer/viv_importer.h"
 
 IPC_STRUCT_TRAITS_BEGIN(ImportedNotesEntry)
@@ -38,6 +39,21 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(importer::ChromeProfileInfo)
   IPC_STRUCT_TRAITS_MEMBER(profileName)
   IPC_STRUCT_TRAITS_MEMBER(profileDisplayName)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(NavigationEntry)
+  IPC_STRUCT_TRAITS_MEMBER(title)
+  IPC_STRUCT_TRAITS_MEMBER(url)
+  IPC_STRUCT_TRAITS_MEMBER(favicon_url)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(ImportedTabEntry)
+  IPC_STRUCT_TRAITS_MEMBER(navigations)
+  IPC_STRUCT_TRAITS_MEMBER(pinned)
+  IPC_STRUCT_TRAITS_MEMBER(timestamp)
+  IPC_STRUCT_TRAITS_MEMBER(current_navigation_index)
+  IPC_STRUCT_TRAITS_MEMBER(group)
+  IPC_STRUCT_TRAITS_MEMBER(viv_ext_data)
 IPC_STRUCT_TRAITS_END()
 
 #endif  // IMPORTER_PROFILE_VIVALDI_IMPORT_PROCESS_PARAM_TRAITS_MACROS_H_

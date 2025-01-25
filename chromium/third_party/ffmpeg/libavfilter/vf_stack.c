@@ -29,8 +29,8 @@
 
 #include "avfilter.h"
 #include "drawutils.h"
+#include "filters.h"
 #include "formats.h"
-#include "internal.h"
 #include "framesync.h"
 #include "video.h"
 
@@ -63,18 +63,22 @@ typedef struct StackContext {
     FFFrameSync fs;
 } StackContext;
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    StackContext *s = ctx->priv;
+    const StackContext *s = ctx->priv;
     int reject_flags = AV_PIX_FMT_FLAG_BITSTREAM |
                        AV_PIX_FMT_FLAG_HWACCEL   |
                        AV_PIX_FMT_FLAG_PAL;
 
     if (s->fillcolor_enable) {
-        return ff_set_common_formats(ctx, ff_draw_supported_pixel_formats(0));
+        return ff_set_common_formats2(ctx, cfg_in, cfg_out,
+                                      ff_draw_supported_pixel_formats(0));
     }
 
-    return ff_set_common_formats(ctx, ff_formats_pixdesc_filter(0, reject_flags));
+    return ff_set_common_formats2(ctx, cfg_in, cfg_out,
+                                  ff_formats_pixdesc_filter(0, reject_flags));
 }
 
 static av_cold int init(AVFilterContext *ctx)
@@ -196,7 +200,9 @@ static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     StackContext *s = ctx->priv;
-    AVRational frame_rate = ctx->inputs[0]->frame_rate;
+    FilterLink *il = ff_filter_link(ctx->inputs[0]);
+    FilterLink *ol = ff_filter_link(outlink);
+    AVRational frame_rate = il->frame_rate;
     AVRational sar = ctx->inputs[0]->sample_aspect_ratio;
     int height = ctx->inputs[0]->h;
     int width = ctx->inputs[0]->w;
@@ -383,16 +389,16 @@ static int config_output(AVFilterLink *outlink)
 
     outlink->w          = width;
     outlink->h          = height;
-    outlink->frame_rate = frame_rate;
+    ol->frame_rate      = frame_rate;
     outlink->sample_aspect_ratio = sar;
 
     for (i = 1; i < s->nb_inputs; i++) {
-        AVFilterLink *inlink = ctx->inputs[i];
-        if (outlink->frame_rate.num != inlink->frame_rate.num ||
-            outlink->frame_rate.den != inlink->frame_rate.den) {
+        il = ff_filter_link(ctx->inputs[i]);
+        if (ol->frame_rate.num != il->frame_rate.num ||
+            ol->frame_rate.den != il->frame_rate.den) {
             av_log(ctx, AV_LOG_VERBOSE,
                     "Video inputs have different frame rates, output will be VFR\n");
-            outlink->frame_rate = av_make_q(1, 0);
+            ol->frame_rate = av_make_q(1, 0);
             break;
         }
     }
@@ -460,7 +466,7 @@ const AVFilter ff_vf_hstack = {
     .priv_class    = &stack_class,
     .priv_size     = sizeof(StackContext),
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .init          = init,
     .uninit        = uninit,
     .activate      = activate,
@@ -477,7 +483,7 @@ const AVFilter ff_vf_vstack = {
     .priv_class    = &stack_class,
     .priv_size     = sizeof(StackContext),
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .init          = init,
     .uninit        = uninit,
     .activate      = activate,
@@ -505,7 +511,7 @@ const AVFilter ff_vf_xstack = {
     .priv_size     = sizeof(StackContext),
     .priv_class    = &xstack_class,
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .init          = init,
     .uninit        = uninit,
     .activate      = activate,

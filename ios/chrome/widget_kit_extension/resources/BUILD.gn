@@ -19,6 +19,9 @@ bundle_data_xcassets("resources") {
     "Assets.xcassets/widget_vivaldi_logo.imageset/widget_vivaldi_logo.png",
     "Assets.xcassets/widget_vivaldi_logo.imageset/widget_vivaldi_logo@2x.png",
     "Assets.xcassets/widget_vivaldi_logo.imageset/widget_vivaldi_logo@3x.png",
+    "Assets.xcassets/widget_vivaldi_logo.imageset/widget_vivaldi_logo_dark.png",
+    "Assets.xcassets/widget_vivaldi_logo.imageset/widget_vivaldi_logo_dark@2x.png",
+    "Assets.xcassets/widget_vivaldi_logo.imageset/widget_vivaldi_logo_dark@3x.png",
 
     "Assets.xcassets/widget_incognito_icon.imageset/Contents.json",
     "Assets.xcassets/widget_incognito_icon.imageset/widget_incognito_icon.pdf",

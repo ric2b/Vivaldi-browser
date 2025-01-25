@@ -849,7 +849,7 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
   }
 #endif
 
-  RANGE_CHECK(extra_cfg, tuning, AOM_TUNE_PSNR, AOM_TUNE_VMAF_SALIENCY_MAP);
+  RANGE_CHECK(extra_cfg, tuning, AOM_TUNE_PSNR, AOM_TUNE_SSIMULACRA2);
 
   RANGE_CHECK(extra_cfg, dist_metric, AOM_DIST_METRIC_PSNR,
               AOM_DIST_METRIC_QM_PSNR);
@@ -892,7 +892,7 @@ static aom_codec_err_t validate_config(aom_codec_alg_priv_t *ctx,
   RANGE_CHECK(extra_cfg, deltaq_strength, 0, 1000);
   RANGE_CHECK_HI(extra_cfg, loopfilter_control, 3);
   RANGE_CHECK_BOOL(extra_cfg, skip_postproc_filtering);
-  RANGE_CHECK_HI(extra_cfg, enable_cdef, 2);
+  RANGE_CHECK_HI(extra_cfg, enable_cdef, 3);
   RANGE_CHECK_BOOL(extra_cfg, auto_intra_tools_off);
   RANGE_CHECK_BOOL(extra_cfg, strict_level_conformance);
   RANGE_CHECK_BOOL(extra_cfg, sb_qp_sweep);
@@ -1784,10 +1784,29 @@ static aom_codec_err_t ctrl_set_arnr_strength(aom_codec_alg_priv_t *ctx,
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
+static aom_codec_err_t handle_tuning(aom_codec_alg_priv_t *ctx,
+                                     struct av1_extracfg *extra_cfg) {
+  if (extra_cfg->tuning == AOM_TUNE_SSIMULACRA2) {
+    if (ctx->cfg.g_usage != AOM_USAGE_ALL_INTRA) return AOM_CODEC_INCAPABLE;
+    // Enable QMs as they've been found to be beneficial for images, when used
+    // with an alternative QM formula (see aom_get_qmlevel_allintra()).
+    extra_cfg->enable_qm = 1;
+    // We can turn on loop filter sharpness, as frames do not have to serve as
+    // references to others.
+    extra_cfg->sharpness = 7;
+    // CDEF_ALL has been found to blur images at high quality QPs, so let's use
+    // a version that adapts on QP.
+    extra_cfg->enable_cdef = CDEF_ADAPTIVE;
+  }
+  return AOM_CODEC_OK;
+}
+
 static aom_codec_err_t ctrl_set_tuning(aom_codec_alg_priv_t *ctx,
                                        va_list args) {
   struct av1_extracfg extra_cfg = ctx->extra_cfg;
   extra_cfg.tuning = CAST(AOME_SET_TUNING, args);
+  aom_codec_err_t err = handle_tuning(ctx, &extra_cfg);
+  if (err != AOM_CODEC_OK) return err;
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
@@ -2183,6 +2202,11 @@ static aom_codec_err_t ctrl_set_enable_cfl_intra(aom_codec_alg_priv_t *ctx,
                                                  va_list args) {
   struct av1_extracfg extra_cfg = ctx->extra_cfg;
   extra_cfg.enable_cfl_intra = CAST(AV1E_SET_ENABLE_CFL_INTRA, args);
+#if CONFIG_REALTIME_ONLY
+  if (extra_cfg.enable_cfl_intra) {
+    ERROR("cfl can't be turned on in realtime only build.");
+  }
+#endif
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
@@ -2401,6 +2425,9 @@ static aom_codec_err_t ctrl_set_film_grain_table(aom_codec_alg_priv_t *ctx,
     // this parameter allows NULL as its value
     extra_cfg.film_grain_table_filename = str;
   } else {
+#if CONFIG_REALTIME_ONLY
+    ERROR("film_grain removed from realtime only build.");
+#endif
     const aom_codec_err_t ret = allocate_and_set_string(
         str, default_extra_cfg[0].film_grain_table_filename,
         &extra_cfg.film_grain_table_filename, ctx->ppi->error.detail);
@@ -2816,19 +2843,6 @@ static aom_codec_err_t ctrl_set_auto_intra_tools_off(aom_codec_alg_priv_t *ctx,
   return update_extra_cfg(ctx, &extra_cfg);
 }
 
-// Returns the index of the default_extra_cfg array element for the specified
-// usage. Returns index 0 if not found. This means default_extra_cfg[0] is used
-// for any usage that doesn't have a dedicated element in the default_extra_cfg
-// array.
-static int find_default_extra_cfg_for_usage(unsigned int usage) {
-  for (int i = 0; i < NELEMENTS(default_extra_cfg); ++i) {
-    if (default_extra_cfg[i].usage == usage) {
-      return i;
-    }
-  }
-  return 0;
-}
-
 static aom_codec_err_t encoder_init(aom_codec_ctx_t *ctx) {
   aom_codec_err_t res = AOM_CODEC_OK;
 
@@ -2844,21 +2858,23 @@ static aom_codec_err_t encoder_init(aom_codec_ctx_t *ctx) {
     priv->cfg = *ctx->config.enc;
     ctx->config.enc = &priv->cfg;
 
-    int extra_cfg_idx = 0;
-    if (ctx->init_flags & AOM_CODEC_USE_PRESET) {
-      if (!(ctx->init_flags & AOM_CODEC_USE_EXPERIMENTAL)) {
-        return AOM_CODEC_INCAPABLE;
-      }
-      extra_cfg_idx = find_default_extra_cfg_for_usage(priv->cfg.g_usage);
-    }
-    priv->extra_cfg = default_extra_cfg[extra_cfg_idx];
+    priv->extra_cfg = default_extra_cfg[0];
     // Special handling:
-    // By default, if omitted, --enable-cdef = 1.
-    // Here we set its default value to 0 when --allintra is turned on.
-    // However, if users set --enable-cdef = 1 from command line,
-    // The encoder still respects it.
+    // By default, if omitted: --enable-cdef=1, --qm-min=5, and --qm-max=9
+    // Here we set its default values to 0, 4, and 10 respectively when
+    // --allintra is turned on.
+    // However, if users set --enable-cdef, --qm-min, or --qm-max, either from
+    // the command line or aom_codec_control(), the encoder still respects it.
     if (priv->cfg.g_usage == AOM_USAGE_ALL_INTRA) {
+      // CDEF has been found to blur images, so it's disabled in all-intra mode
       priv->extra_cfg.enable_cdef = 0;
+      // These QM min/max values have been found to be beneficial for images,
+      // when used with an alternative QM formula (see
+      // aom_get_qmlevel_allintra()).
+      // These values could also be beneficial for other usage modes, but
+      // further testing is required.
+      priv->extra_cfg.qm_min = DEFAULT_QM_FIRST_ALLINTRA;
+      priv->extra_cfg.qm_max = DEFAULT_QM_LAST_ALLINTRA;
     }
     av1_initialize_enc(priv->cfg.g_usage, priv->cfg.rc_end_usage);
 
@@ -3110,9 +3126,10 @@ static aom_codec_err_t encoder_encode(aom_codec_alg_priv_t *ctx,
         }
       }
       for (int i = 0; i < ppi->num_fp_contexts - 1; i++) {
-        if (ppi->parallel_frames_data[i].cx_data == NULL) {
-          ppi->parallel_frames_data[i].cx_data_sz = uncompressed_frame_sz;
-          ppi->parallel_frames_data[i].frame_display_order_hint = -1;
+        if (ppi->parallel_frames_data[i].cx_data == NULL ||
+            ppi->parallel_frames_data[i].cx_data_sz < data_sz) {
+          ppi->parallel_frames_data[i].cx_data_sz = data_sz;
+          free(ppi->parallel_frames_data[i].cx_data);
           ppi->parallel_frames_data[i].frame_size = 0;
           ppi->parallel_frames_data[i].cx_data =
               (unsigned char *)malloc(ppi->parallel_frames_data[i].cx_data_sz);
@@ -3448,6 +3465,10 @@ static aom_codec_err_t encoder_encode(aom_codec_alg_priv_t *ctx,
 
       if (!cpi_data.frame_size) continue;
       assert(cpi_data.cx_data != NULL && cpi_data.cx_data_sz != 0);
+      if (cpi_data.frame_size > cpi_data.cx_data_sz) {
+        aom_internal_error(&ppi->error, AOM_CODEC_ERROR,
+                           "cpi_data.cx_data buffer overflow");
+      }
       const int write_temporal_delimiter =
           !cpi->common.spatial_layer_id && !ctx->pending_cx_data_sz;
 
@@ -3458,39 +3479,48 @@ static aom_codec_err_t encoder_encode(aom_codec_alg_priv_t *ctx,
             aom_uleb_size_in_bytes(obu_payload_size);
 
         const size_t move_offset = obu_header_size + length_field_size;
+        assert(ctx->cx_data_sz == cpi_data.cx_data_sz);
+        if (move_offset > ctx->cx_data_sz - cpi_data.frame_size) {
+          aom_internal_error(&ppi->error, AOM_CODEC_ERROR,
+                             "ctx->cx_data buffer full");
+        }
         memmove(ctx->cx_data + move_offset, ctx->cx_data, cpi_data.frame_size);
         obu_header_size = av1_write_obu_header(
             &ppi->level_params, &cpi->frame_header_count,
             OBU_TEMPORAL_DELIMITER,
             ppi->seq_params.has_nonzero_operating_point_idc, 0, ctx->cx_data);
-
-        // OBUs are preceded/succeeded by an unsigned leb128 coded integer.
-        if (av1_write_uleb_obu_size(obu_header_size, obu_payload_size,
-                                    ctx->cx_data,
-                                    ctx->cx_data_sz) != AOM_CODEC_OK) {
+        if (obu_header_size != 1) {
           aom_internal_error(&ppi->error, AOM_CODEC_ERROR, NULL);
         }
 
-        cpi_data.frame_size +=
-            obu_header_size + obu_payload_size + length_field_size;
+        // OBUs are preceded/succeeded by an unsigned leb128 coded integer.
+        if (av1_write_uleb_obu_size(obu_payload_size,
+                                    ctx->cx_data + obu_header_size,
+                                    length_field_size) != AOM_CODEC_OK) {
+          aom_internal_error(&ppi->error, AOM_CODEC_ERROR, NULL);
+        }
+
+        cpi_data.frame_size += move_offset;
       }
 
       if (ctx->oxcf.save_as_annexb) {
-        size_t curr_frame_size = cpi_data.frame_size;
-        if (av1_convert_sect5obus_to_annexb(cpi_data.cx_data,
-                                            &curr_frame_size) != AOM_CODEC_OK) {
+        if (av1_convert_sect5obus_to_annexb(
+                cpi_data.cx_data, cpi_data.cx_data_sz, &cpi_data.frame_size) !=
+            AOM_CODEC_OK) {
           aom_internal_error(&ppi->error, AOM_CODEC_ERROR, NULL);
         }
-        cpi_data.frame_size = curr_frame_size;
 
         // B_PRIME (add frame size)
         const size_t length_field_size =
             aom_uleb_size_in_bytes(cpi_data.frame_size);
+        if (length_field_size > cpi_data.cx_data_sz - cpi_data.frame_size) {
+          aom_internal_error(&ppi->error, AOM_CODEC_ERROR,
+                             "cpi_data.cx_data buffer full");
+        }
         memmove(cpi_data.cx_data + length_field_size, cpi_data.cx_data,
                 cpi_data.frame_size);
-        if (av1_write_uleb_obu_size(0, (uint32_t)cpi_data.frame_size,
-                                    cpi_data.cx_data,
-                                    cpi_data.cx_data_sz) != AOM_CODEC_OK) {
+        if (av1_write_uleb_obu_size(cpi_data.frame_size, cpi_data.cx_data,
+                                    length_field_size) != AOM_CODEC_OK) {
           aom_internal_error(&ppi->error, AOM_CODEC_ERROR, NULL);
         }
         cpi_data.frame_size += length_field_size;
@@ -3517,9 +3547,17 @@ static aom_codec_err_t encoder_encode(aom_codec_alg_priv_t *ctx,
         //  B_PRIME (add TU size)
         size_t tu_size = ctx->pending_cx_data_sz;
         const size_t length_field_size = aom_uleb_size_in_bytes(tu_size);
+        if (tu_size > ctx->cx_data_sz) {
+          aom_internal_error(&ppi->error, AOM_CODEC_ERROR,
+                             "ctx->cx_data buffer overflow");
+        }
+        if (length_field_size > ctx->cx_data_sz - tu_size) {
+          aom_internal_error(&ppi->error, AOM_CODEC_ERROR,
+                             "ctx->cx_data buffer full");
+        }
         memmove(ctx->cx_data + length_field_size, ctx->cx_data, tu_size);
-        if (av1_write_uleb_obu_size(0, (uint32_t)tu_size, ctx->cx_data,
-                                    ctx->cx_data_sz) != AOM_CODEC_OK) {
+        if (av1_write_uleb_obu_size(tu_size, ctx->cx_data, length_field_size) !=
+            AOM_CODEC_OK) {
           aom_internal_error(&ppi->error, AOM_CODEC_ERROR, NULL);
         }
         ctx->pending_cx_data_sz += length_field_size;
@@ -3858,11 +3896,18 @@ static aom_codec_err_t ctrl_set_svc_ref_frame_config(aom_codec_alg_priv_t *ctx,
       va_arg(args, aom_svc_ref_frame_config_t *);
   cpi->ppi->rtc_ref.set_ref_frame_config = 1;
   for (unsigned int i = 0; i < INTER_REFS_PER_FRAME; ++i) {
+    if (data->reference[i] != 0 && data->reference[i] != 1)
+      return AOM_CODEC_INVALID_PARAM;
+    if (data->ref_idx[i] > 7 || data->ref_idx[i] < 0)
+      return AOM_CODEC_INVALID_PARAM;
     cpi->ppi->rtc_ref.reference[i] = data->reference[i];
     cpi->ppi->rtc_ref.ref_idx[i] = data->ref_idx[i];
   }
-  for (unsigned int i = 0; i < REF_FRAMES; ++i)
+  for (unsigned int i = 0; i < REF_FRAMES; ++i) {
+    if (data->refresh[i] != 0 && data->refresh[i] != 1)
+      return AOM_CODEC_INVALID_PARAM;
     cpi->ppi->rtc_ref.refresh[i] = data->refresh[i];
+  }
   cpi->svc.use_flexible_mode = 1;
   cpi->svc.ksvc_fixed_mode = 0;
   return AOM_CODEC_OK;
@@ -4056,6 +4101,7 @@ static aom_codec_err_t encoder_set_option(aom_codec_alg_priv_t *ctx,
   } else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.tune_metric, argv,
                               err_string)) {
     extra_cfg.tuning = arg_parse_enum_helper(&arg, err_string);
+    err = handle_tuning(ctx, &extra_cfg);
   }
 #if CONFIG_TUNE_VMAF
   else if (arg_match_helper(&arg, &g_av1_codec_arg_defs.vmaf_model_path, argv,

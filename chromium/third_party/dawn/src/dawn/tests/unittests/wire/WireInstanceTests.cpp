@@ -28,7 +28,9 @@
 #include <unordered_set>
 #include <vector>
 
+#include "dawn/common/StringViewUtils.h"
 #include "dawn/tests/MockCallback.h"
+#include "dawn/tests/StringViewMatchers.h"
 #include "dawn/tests/unittests/wire/WireFutureTest.h"
 #include "dawn/tests/unittests/wire/WireTest.h"
 
@@ -41,13 +43,16 @@ namespace dawn::wire {
 namespace {
 
 using testing::_;
+using testing::EmptySizedString;
 using testing::Invoke;
 using testing::InvokeWithoutArgs;
 using testing::MockCallback;
 using testing::NiceMock;
+using testing::NonEmptySizedString;
 using testing::NotNull;
 using testing::Return;
 using testing::SetArgPointee;
+using testing::SizedString;
 using testing::StrEq;
 using testing::WithArg;
 
@@ -100,7 +105,7 @@ TEST_P(WireInstanceTests, RequestAdapterPassesOptions) {
                           static_cast<WGPUPowerPreference>(options.powerPreference));
                 EXPECT_EQ(apiOptions->forceFallbackAdapter, options.forceFallbackAdapter);
                 api.CallInstanceRequestAdapterCallback(apiInstance, WGPURequestAdapterStatus_Error,
-                                                       nullptr, nullptr);
+                                                       nullptr, kEmptyOutputStringView);
             })));
 
         FlushClient();
@@ -119,10 +124,10 @@ TEST_P(WireInstanceTests, RequestAdapterSuccess) {
     InstanceRequestAdapter(instance, &options, nullptr);
 
     WGPUAdapterInfo fakeInfo = {};
-    fakeInfo.vendor = "fake-vendor";
-    fakeInfo.architecture = "fake-architecture";
-    fakeInfo.device = "fake adapter";
-    fakeInfo.description = "hello world";
+    fakeInfo.vendor = ToOutputStringView("fake-vendor");
+    fakeInfo.architecture = ToOutputStringView("fake-architecture");
+    fakeInfo.device = ToOutputStringView("fake-device");
+    fakeInfo.description = ToOutputStringView("fake-description");
     fakeInfo.backendType = WGPUBackendType_D3D12;
     fakeInfo.adapterType = WGPUAdapterType_IntegratedGPU;
     fakeInfo.vendorID = 0x134;
@@ -167,7 +172,7 @@ TEST_P(WireInstanceTests, RequestAdapterSuccess) {
                     return fakeFeatures.size();
                 })));
             api.CallInstanceRequestAdapterCallback(apiInstance, WGPURequestAdapterStatus_Success,
-                                                   apiAdapter, nullptr);
+                                                   apiAdapter, kEmptyOutputStringView);
         }));
 
     FlushClient();
@@ -175,14 +180,19 @@ TEST_P(WireInstanceTests, RequestAdapterSuccess) {
 
     // Expect the callback in the client and all the adapter information to match.
     ExpectWireCallbacksWhen([&](auto& mockCb) {
-        EXPECT_CALL(mockCb, Call(WGPURequestAdapterStatus_Success, NotNull(), nullptr, nullptr))
+        EXPECT_CALL(mockCb,
+                    Call(WGPURequestAdapterStatus_Success, NotNull(), EmptySizedString(), nullptr))
             .WillOnce(WithArg<1>(Invoke([&](WGPUAdapter adapter) {
                 WGPUAdapterInfo info = {};
                 wgpuAdapterGetInfo(adapter, &info);
-                EXPECT_STREQ(info.vendor, fakeInfo.vendor);
-                EXPECT_STREQ(info.architecture, fakeInfo.architecture);
-                EXPECT_STREQ(info.device, fakeInfo.device);
-                EXPECT_STREQ(info.description, fakeInfo.description);
+                EXPECT_NE(info.vendor.length, WGPU_STRLEN);
+                EXPECT_EQ(info.vendor, fakeInfo.vendor);
+                EXPECT_NE(info.architecture.length, WGPU_STRLEN);
+                EXPECT_EQ(info.architecture, fakeInfo.architecture);
+                EXPECT_NE(info.device.length, WGPU_STRLEN);
+                EXPECT_EQ(info.device, fakeInfo.device);
+                EXPECT_NE(info.description.length, WGPU_STRLEN);
+                EXPECT_EQ(info.description, fakeInfo.description);
                 EXPECT_EQ(info.backendType, fakeInfo.backendType);
                 EXPECT_EQ(info.adapterType, fakeInfo.adapterType);
                 EXPECT_EQ(info.vendorID, fakeInfo.vendorID);
@@ -249,10 +259,10 @@ TEST_P(WireInstanceTests, RequestAdapterPassesChainedProperties) {
 
             EXPECT_CALL(api, AdapterGetInfo(apiAdapter, NotNull()))
                 .WillOnce(WithArg<1>(Invoke([&](WGPUAdapterInfo* info) {
-                    info->vendor = "fake-vendor";
-                    info->architecture = "fake-architecture";
-                    info->device = "fake adapter";
-                    info->description = "hello world";
+                    info->vendor = ToOutputStringView("fake-vendor");
+                    info->architecture = ToOutputStringView("fake-architecture");
+                    info->device = ToOutputStringView("fake-device");
+                    info->description = ToOutputStringView("fake-description");
 
                     WGPUChainedStructOut* chain = info->nextInChain;
                     while (chain != nullptr) {
@@ -300,7 +310,7 @@ TEST_P(WireInstanceTests, RequestAdapterPassesChainedProperties) {
                     return fakeFeatures.size();
                 })));
             api.CallInstanceRequestAdapterCallback(apiInstance, WGPURequestAdapterStatus_Success,
-                                                   apiAdapter, nullptr);
+                                                   apiAdapter, kEmptyOutputStringView);
         }));
 
     FlushClient();
@@ -308,7 +318,8 @@ TEST_P(WireInstanceTests, RequestAdapterPassesChainedProperties) {
 
     // Expect the callback in the client and the adapter information to match.
     ExpectWireCallbacksWhen([&](auto& mockCb) {
-        EXPECT_CALL(mockCb, Call(WGPURequestAdapterStatus_Success, NotNull(), nullptr, nullptr))
+        EXPECT_CALL(mockCb,
+                    Call(WGPURequestAdapterStatus_Success, NotNull(), EmptySizedString(), nullptr))
             .WillOnce(WithArg<1>(Invoke([&](WGPUAdapter adapter) {
                 // Request info without a chained struct.
                 // It should be nullptr.
@@ -372,10 +383,10 @@ TEST_P(WireInstanceTests, RequestAdapterWireLacksFeatureSupport) {
 
             EXPECT_CALL(api, AdapterGetInfo(apiAdapter, NotNull()))
                 .WillOnce(WithArg<1>(Invoke([&](WGPUAdapterInfo* info) {
-                    info->vendor = "fake-vendor";
-                    info->architecture = "fake-architecture";
-                    info->device = "fake adapter";
-                    info->description = "hello world";
+                    info->vendor = ToOutputStringView("fake-vendor");
+                    info->architecture = ToOutputStringView("fake-architecture");
+                    info->device = ToOutputStringView("fake-device");
+                    info->description = ToOutputStringView("fake-description");
                     return WGPUStatus_Success;
                 })));
 
@@ -396,7 +407,7 @@ TEST_P(WireInstanceTests, RequestAdapterWireLacksFeatureSupport) {
                     return fakeFeatures.size();
                 })));
             api.CallInstanceRequestAdapterCallback(apiInstance, WGPURequestAdapterStatus_Success,
-                                                   apiAdapter, nullptr);
+                                                   apiAdapter, kEmptyOutputStringView);
         }));
 
     FlushClient();
@@ -404,7 +415,8 @@ TEST_P(WireInstanceTests, RequestAdapterWireLacksFeatureSupport) {
 
     // Expect the callback in the client and all the adapter information to match.
     ExpectWireCallbacksWhen([&](auto& mockCb) {
-        EXPECT_CALL(mockCb, Call(WGPURequestAdapterStatus_Success, NotNull(), nullptr, nullptr))
+        EXPECT_CALL(mockCb,
+                    Call(WGPURequestAdapterStatus_Success, NotNull(), EmptySizedString(), nullptr))
             .WillOnce(WithArg<1>(Invoke([&](WGPUAdapter adapter) {
                 WGPUFeatureName feature;
                 ASSERT_EQ(wgpuAdapterEnumerateFeatures(adapter, nullptr), 1u);
@@ -425,7 +437,7 @@ TEST_P(WireInstanceTests, RequestAdapterError) {
     EXPECT_CALL(api, OnInstanceRequestAdapter(apiInstance, NotNull(), _))
         .WillOnce(InvokeWithoutArgs([&] {
             api.CallInstanceRequestAdapterCallback(apiInstance, WGPURequestAdapterStatus_Error,
-                                                   nullptr, "Some error");
+                                                   nullptr, ToOutputStringView("Some error"));
         }));
 
     FlushClient();
@@ -433,8 +445,8 @@ TEST_P(WireInstanceTests, RequestAdapterError) {
 
     // Expect the callback in the client.
     ExpectWireCallbacksWhen([&](auto& mockCb) {
-        EXPECT_CALL(mockCb,
-                    Call(WGPURequestAdapterStatus_Error, nullptr, StrEq("Some error"), nullptr))
+        EXPECT_CALL(mockCb, Call(WGPURequestAdapterStatus_Error, nullptr, SizedString("Some error"),
+                                 nullptr))
             .Times(1);
 
         FlushCallbacks();
@@ -451,7 +463,8 @@ TEST_P(WireInstanceTests, DISABLED_RequestAdapterInstanceDestroyedBeforeCallback
     InstanceRequestAdapter(instance, &options, nullptr);
 
     ExpectWireCallbacksWhen([&](auto& mockCb) {
-        EXPECT_CALL(mockCb, Call(WGPURequestAdapterStatus_Unknown, nullptr, NotNull(), nullptr))
+        EXPECT_CALL(mockCb,
+                    Call(WGPURequestAdapterStatus_Unknown, nullptr, NonEmptySizedString(), nullptr))
             .Times(1);
 
         instance = nullptr;
@@ -465,8 +478,8 @@ TEST_P(WireInstanceTests, RequestAdapterWireDisconnectBeforeCallback) {
     InstanceRequestAdapter(instance, &options, nullptr);
 
     ExpectWireCallbacksWhen([&](auto& mockCb) {
-        EXPECT_CALL(mockCb,
-                    Call(WGPURequestAdapterStatus_InstanceDropped, nullptr, NotNull(), nullptr))
+        EXPECT_CALL(mockCb, Call(WGPURequestAdapterStatus_InstanceDropped, nullptr,
+                                 NonEmptySizedString(), nullptr))
             .Times(1);
 
         GetWireClient()->Disconnect();

@@ -18,6 +18,13 @@ class QuicConnection {
  public:
   class Delegate {
    public:
+    Delegate() = default;
+    Delegate(const Delegate&) = delete;
+    Delegate& operator=(const Delegate&) = delete;
+    Delegate(Delegate&&) noexcept = delete;
+    Delegate& operator=(Delegate&&) noexcept = delete;
+    virtual ~Delegate() = default;
+
     // Called when the QUIC handshake has successfully completed. After the
     // handshake, an instance ID is assigned to `instance_id_`, which can be
     // used to as an identifier to find data about this connection.
@@ -34,7 +41,7 @@ class QuicConnection {
     // event loop.
     // TODO(btolsch): Hopefully this can be changed with future QUIC
     // implementations.
-    virtual void OnConnectionClosed(uint64_t instance_id) = 0;
+    virtual void OnConnectionClosed(std::string_view instance_name) = 0;
 
     // This is used to get a QuicStream::Delegate for an incoming stream, which
     // will be returned via OnIncomingStream immediately after this call.
@@ -44,13 +51,14 @@ class QuicConnection {
     virtual void OnClientCertificates(
         std::string_view instance_name,
         const std::vector<std::string>& certs) = 0;
-
-   protected:
-    virtual ~Delegate() = default;
   };
 
   QuicConnection(std::string_view instance_name, Delegate& delegate)
       : instance_name_(instance_name), delegate_(delegate) {}
+  QuicConnection(const QuicConnection&) = delete;
+  QuicConnection& operator=(const QuicConnection&) = delete;
+  QuicConnection(QuicConnection&&) noexcept = delete;
+  QuicConnection& operator=(QuicConnection&&) noexcept = delete;
   virtual ~QuicConnection() = default;
 
   virtual void OnPacketReceived(const UdpPacket& packet) = 0;

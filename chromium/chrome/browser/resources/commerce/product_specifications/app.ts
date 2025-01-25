@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '../strings.m.js';
+import '/strings.m.js';
 import './header.js';
 import './loading_state.js';
 import './new_column_selector.js';
@@ -15,9 +15,14 @@ import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import './shared_vars.css.js';
 
 import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
-import type {BrowserProxy} from 'chrome://resources/cr_components/commerce/browser_proxy.js';
-import {BrowserProxyImpl} from 'chrome://resources/cr_components/commerce/browser_proxy.js';
-import type {PageCallbackRouter, ProductSpecificationsFeatureState, ProductSpecificationsSet} from 'chrome://resources/cr_components/commerce/shopping_service.mojom-webui.js';
+import type {PageCallbackRouter} from 'chrome://resources/cr_components/commerce/product_specifications.mojom-webui.ts';
+import type {ProductSpecificationsBrowserProxy} from 'chrome://resources/cr_components/commerce/product_specifications_browser_proxy.js';
+import {ProductSpecificationsBrowserProxyImpl} from 'chrome://resources/cr_components/commerce/product_specifications_browser_proxy.js';
+import type {ProductSpecificationsSet} from 'chrome://resources/cr_components/commerce/shared.mojom-webui.js';
+import {UserFeedback} from 'chrome://resources/cr_components/commerce/shopping_service.mojom-webui.js';
+import type {ProductSpecificationsFeatureState} from 'chrome://resources/cr_components/commerce/shopping_service.mojom-webui.js';
+import type {ShoppingServiceBrowserProxy} from 'chrome://resources/cr_components/commerce/shopping_service_browser_proxy.js';
+import {ShoppingServiceBrowserProxyImpl} from 'chrome://resources/cr_components/commerce/shopping_service_browser_proxy.js';
 import type {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import {CrFeedbackOption} from 'chrome://resources/cr_elements/cr_feedback_buttons/cr_feedback_buttons.js';
 import type {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
@@ -29,7 +34,7 @@ import type {Uuid} from 'chrome://resources/mojo/mojo/public/mojom/base/uuid.moj
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './app.html.js';
-import type {BuyingOptionsLink} from './buying_options_section.js';
+import type {BuyingOptions} from './buying_options_section.js';
 import type {ProductDescription} from './description_section.js';
 import type {HeaderElement} from './header.js';
 import type {NewColumnSelectorElement} from './new_column_selector.js';
@@ -37,7 +42,6 @@ import {SectionType} from './product_selection_menu.js';
 import type {ProductSelectorElement} from './product_selector.js';
 import {Router} from './router.js';
 import type {ProductInfo, ProductSpecifications, ProductSpecificationsProduct} from './shopping_service.mojom-webui.js';
-import {UserFeedback} from './shopping_service.mojom-webui.js';
 import type {TableElement} from './table.js';
 import type {UrlListEntry} from './utils.js';
 import {WindowProxy} from './window_proxy.js';
@@ -52,7 +56,7 @@ interface LoadingState {
   urlCount: number;
 }
 
-export type Content = string|ProductDescription|BuyingOptionsLink|null;
+export type Content = string|ProductDescription|BuyingOptions|null;
 
 interface ProductDetail {
   title: string|null;
@@ -95,8 +99,20 @@ export enum CompareTableColumnAction {
   MAX_VALUE = 6,
 }
 
+// This enum is used for metrics and should be kept in sync with the enum of
+// the same name in enums.xml.
+export enum CompareTableLoadStatus {
+  SUCCESS = 0,
+  FAILURE = 1,
+  // Must be last:
+  MAX_VALUE = 2,
+}
+
 export const COLUMN_MODIFICATION_HISTOGRAM_NAME: string =
     'Commerce.Compare.Table.ColumnModification';
+
+export const TABLE_LOAD_HISTOGRAM_NAME: string =
+    'Commerce.Compare.Table.LoadStatus';
 
 enum AppState {
   ERROR = 0,
@@ -112,11 +128,14 @@ function getProductDetails(
     productInfo: ProductInfo|null): ProductDetail[] {
   const productDetails: ProductDetail[] = [];
 
-  // First add rows that don't come directly from the product
-  // specifications backend.
+  // First add rows that don't come directly from the product specifications
+  // backend. This includes the current price and buying options URL.
   productDetails.push({
     title: loadTimeData.getString('priceRowTitle'),
-    content: productInfo?.currentPrice || null,
+    content: {
+      price: productInfo?.priceSummary || productInfo?.currentPrice || '',
+      jackpotUrl: product?.buyingOptionsUrl.url || '',
+    },
   });
 
   // The second row is the product-level summary.
@@ -155,14 +174,6 @@ function getProductDetails(
     }
   });
 
-  // The last row is buying options.
-  productDetails.push({
-    title: null,
-    content: {
-      jackpotUrl: product?.buyingOptionsUrl.url || '',
-    },
-  });
-
   return productDetails;
 }
 
@@ -190,6 +201,13 @@ function findProductInResults(clusterId: bigint, specs: ProductSpecifications):
 
   return null;
 }
+
+// Custom event types for the start and end of the loading animation.
+export const LOADING_START_EVENT_TYPE: string = 'loading-animation-start';
+export const LOADING_END_EVENT_TYPE: string = 'loading-animation-end';
+
+const LOADING_ANIMATION_SLIDE_PX = 16;
+const LOADING_ANIMATION_SLIDE_DURATION_MS = 200;
 
 export class ProductSpecificationsElement extends PolymerElement {
   static get is() {
@@ -228,16 +246,17 @@ export class ProductSpecificationsElement extends PolymerElement {
   private eventTracker_: EventTracker = new EventTracker();
   private id_: Uuid|null = null;
   private listenerIds_: number[] = [];
-  private loadingAnimationSlidePx_: number = 16;
-  private loadingAnimationSlideDurationMs_: number = 200;
   private minLoadingAnimationMs_: number = 500;
   private productSpecificationsFeatureState_: ProductSpecificationsFeatureState;
-  private shoppingApi_: BrowserProxy = BrowserProxyImpl.getInstance();
+  private productSpecificationsProxy_: ProductSpecificationsBrowserProxy =
+      ProductSpecificationsBrowserProxyImpl.getInstance();
+  private shoppingApi_: ShoppingServiceBrowserProxy =
+      ShoppingServiceBrowserProxyImpl.getInstance();
   private showEmptyState_: boolean;
 
   constructor() {
     super();
-    this.callbackRouter_ = this.shoppingApi_.getCallbackRouter();
+    this.callbackRouter_ = this.productSpecificationsProxy_.getCallbackRouter();
     ColorChangeUpdater.forDocument().start();
   }
 
@@ -300,9 +319,8 @@ export class ProductSpecificationsElement extends PolymerElement {
     this.eventTracker_.removeAll();
   }
 
-  // TODO(b/364337413): update tests to not rely on animation rendering time
-  resetMinLoadingAnimationMsForTesting(newValue = 0) {
-    this.minLoadingAnimationMs_ = newValue;
+  disableMinLoadingAnimationMsForTesting() {
+    this.minLoadingAnimationMs_ = 0;
   }
 
   private async loadTable_(state: ProductSpecificationsFeatureState) {
@@ -321,7 +339,7 @@ export class ProductSpecificationsElement extends PolymerElement {
           {value: idParam});
       if (set) {
         const {disclosureShown} =
-            await this.shoppingApi_.maybeShowProductSpecificationDisclosure(
+            await this.productSpecificationsProxy_.maybeShowDisclosure(
                 /* urls= */[], /* name= */ '', idParam);
         if (disclosureShown) {
           this.showEmptyState_ = true;
@@ -415,7 +433,7 @@ export class ProductSpecificationsElement extends PolymerElement {
           'chrome://settings/syncSetup/advanced');
       return;
     }
-    this.shoppingApi_.showSyncSetupFlow();
+    this.productSpecificationsProxy_.showSyncSetupFlow();
   }
 
   private showOfflineToast_() {
@@ -450,7 +468,9 @@ export class ProductSpecificationsElement extends PolymerElement {
         const info = aggregatedDataByUrl.get(url)?.productInfo;
         const product = aggregatedDataByUrl.get(url)?.spec;
         const title = product?.title || info?.title ||
-            (await this.shoppingApi_.getPageTitleFromHistory({url})).title;
+            (await this.productSpecificationsProxy_.getPageTitleFromHistory(
+                 {url}))
+                .title;
 
         tableColumns.push({
           selectedItem: {
@@ -467,6 +487,13 @@ export class ProductSpecificationsElement extends PolymerElement {
       // the URLs in the comparison will still be displayed as columns.
       if (productSpecs.productDimensionMap.size === 0 && urls.length > 1) {
         this.$.errorToast.show();
+        chrome.metricsPrivate.recordEnumerationValue(
+            TABLE_LOAD_HISTOGRAM_NAME, CompareTableLoadStatus.FAILURE,
+            CompareTableLoadStatus.MAX_VALUE);
+      } else {
+        chrome.metricsPrivate.recordEnumerationValue(
+            TABLE_LOAD_HISTOGRAM_NAME, CompareTableLoadStatus.SUCCESS,
+            CompareTableLoadStatus.MAX_VALUE);
       }
     }
 
@@ -582,7 +609,7 @@ export class ProductSpecificationsElement extends PolymerElement {
       return;
     }
     const {disclosureShown} =
-        await this.shoppingApi_.maybeShowProductSpecificationDisclosure(
+        await this.productSpecificationsProxy_.maybeShowDisclosure(
             urls.map(url => ({url})), this.setName_ ? this.setName_ : '',
             /* set_id= */ '');
     // If the disclosure is shown, we won't update the current set.
@@ -752,36 +779,40 @@ export class ProductSpecificationsElement extends PolymerElement {
         'experimentalFeatureDisclaimer', loadTimeData.getString('userEmail'));
   }
 
-  private fadeAndSlideOutSummaryContainer_(): Animation {
-    return this.$.summaryContainer.animate(
-        [
-          {opacity: 1, transform: 'translateY(0px)'},
-          {
-            opacity: 0,
-            transform: `translateY(-${this.loadingAnimationSlidePx_}px)`,
-          },
-        ],
-        {
-          duration: this.loadingAnimationSlideDurationMs_,
-          easing: 'ease-out',
-          fill: 'forwards',
-        });
+  private async fadeAndSlideOutSummaryContainer_() {
+    await this.$.summaryContainer
+        .animate(
+            [
+              {opacity: 1, transform: 'translateY(0px)'},
+              {
+                opacity: 0,
+                transform: `translateY(-${LOADING_ANIMATION_SLIDE_PX}px)`,
+              },
+            ],
+            {
+              duration: LOADING_ANIMATION_SLIDE_DURATION_MS,
+              easing: 'ease-out',
+              fill: 'forwards',
+            })
+        .finished;
   }
 
-  private fadeAndSlideInSummaryContainer_(): Animation {
-    return this.$.summaryContainer.animate(
-        [
-          {
-            opacity: 0,
-            transform: `translateY(${this.loadingAnimationSlidePx_}px)`,
-          },
-          {opacity: 1, transform: 'translateY(0px)'},
-        ],
-        {
-          duration: this.loadingAnimationSlideDurationMs_,
-          easing: 'ease-out',
-          fill: 'forwards',
-        });
+  private async fadeAndSlideInSummaryContainer_() {
+    await this.$.summaryContainer
+        .animate(
+            [
+              {
+                opacity: 0,
+                transform: `translateY(${LOADING_ANIMATION_SLIDE_PX}px)`,
+              },
+              {opacity: 1, transform: 'translateY(0px)'},
+            ],
+            {
+              duration: LOADING_ANIMATION_SLIDE_DURATION_MS,
+              easing: 'ease-out',
+              fill: 'forwards',
+            })
+        .finished;
   }
 
   // Resolves upon updating the loading state.
@@ -789,25 +820,34 @@ export class ProductSpecificationsElement extends PolymerElement {
     if ([AppState.ERROR, AppState.SYNC_SCREEN, AppState.LOADING].includes(
             this.appState_)) {
       this.loadingState_ = {loading: true, urlCount};
+      this.dispatchLoadingStartEvent_();
       return Promise.resolve();
     }
 
-    const anim = this.fadeAndSlideOutSummaryContainer_();
-    return new Promise<void>(resolve => {
-      anim.addEventListener('finish', () => {
-        this.loadingState_ = {loading: true, urlCount};
-        resolve();
-        this.fadeAndSlideInSummaryContainer_();
-      });
+    return new Promise<void>(async resolve => {
+      await this.fadeAndSlideOutSummaryContainer_();
+      this.loadingState_ = {loading: true, urlCount};
+      resolve();
+      await this.fadeAndSlideInSummaryContainer_();
+      this.dispatchLoadingStartEvent_();
     });
   }
 
-  private exitLoadingState_() {
-    const anim = this.fadeAndSlideOutSummaryContainer_();
-    anim.addEventListener('finish', () => {
-      this.loadingState_ = {loading: false, urlCount: 0};
-      this.fadeAndSlideInSummaryContainer_();
-    });
+  private async exitLoadingState_() {
+    await this.fadeAndSlideOutSummaryContainer_();
+    this.loadingState_ = {loading: false, urlCount: 0};
+    await this.fadeAndSlideInSummaryContainer_();
+    this.dispatchLoadingEndEvent_();
+  }
+
+  private dispatchLoadingStartEvent_() {
+    this.dispatchEvent(new CustomEvent(
+        LOADING_START_EVENT_TYPE, {bubbles: true, composed: true}));
+  }
+
+  private dispatchLoadingEndEvent_() {
+    this.dispatchEvent(new CustomEvent(
+        LOADING_END_EVENT_TYPE, {bubbles: true, composed: true}));
   }
 }
 

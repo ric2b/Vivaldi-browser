@@ -207,7 +207,7 @@ D. Local Modifications
      windowsZones.txt
      zoneinfo64.txt
 
-  As of Mar 5, 2024, the latest version is 2024a
+  As of Oct 2, 2024, the latest version is 2024b
   and the above files are available at the ICU github repos.
 
 4. Build-related changes

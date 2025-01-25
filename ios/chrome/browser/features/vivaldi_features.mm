@@ -20,3 +20,11 @@ BASE_FEATURE(kViewMarkdownAsHTML,
 bool IsViewMarkdownAsHTMLEnabled() {
   return base::FeatureList::IsEnabled(kViewMarkdownAsHTML);
 }
+
+BASE_FEATURE(kShowNewSpeedDialDialog,
+             "kShowNewSpeedDialDialog",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+bool IsNewSpeedDialDialogEnabled() {
+  return base::FeatureList::IsEnabled(kShowNewSpeedDialDialog);
+}

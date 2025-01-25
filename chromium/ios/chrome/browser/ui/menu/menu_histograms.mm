@@ -74,6 +74,8 @@ const char kAutofillManualFallbackPlusAddressEntryActionsHistogram[] =
     "Mobile.ContextMenu.AutofillManualFallbackPlusAddressEntry.Actions";
 const char kTabGroupIndicatorNTPEntryActionsHistogram[] =
     "Mobile.ContextMenu.TabGroupIndicatorNTPEntry.Actions";
+const char kLastVisitedHistoryEntryActionsHistogram[] =
+    "Mobile.ContextMenu.LastVisitedHistoryEntry.Actions";
 // LINT.ThenChange(/tools/metrics/histograms/metadata/mobile/histograms.xml)
 
 // Vivaldi
@@ -156,6 +158,8 @@ const char* GetActionsHistogramName(MenuScenarioHistogram scenario) {
       return kAutofillManualFallbackPlusAddressEntryActionsHistogram;
     case kMenuScenarioHistogramTabGroupIndicatorNTPEntry:
       return kTabGroupIndicatorNTPEntryActionsHistogram;
+    case kMenuScenarioHistogramLastVisitedHistoryEntry:
+      return kLastVisitedHistoryEntryActionsHistogram;
     case kMenuScenarioHistogramCount:
       NOTREACHED();
 

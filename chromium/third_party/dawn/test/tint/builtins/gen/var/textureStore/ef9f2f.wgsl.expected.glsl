@@ -8,14 +8,8 @@ void textureStore_ef9f2f() {
   uvec4 arg_2 = uvec4(1u);
   imageStore(arg_0, arg_1, arg_2);
 }
-
-void fragment_main() {
-  textureStore_ef9f2f();
-}
-
 void main() {
-  fragment_main();
-  return;
+  textureStore_ef9f2f();
 }
 #version 310 es
 
@@ -25,13 +19,7 @@ void textureStore_ef9f2f() {
   uvec4 arg_2 = uvec4(1u);
   imageStore(arg_0, arg_1, arg_2);
 }
-
-void compute_main() {
-  textureStore_ef9f2f();
-}
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  compute_main();
-  return;
+  textureStore_ef9f2f();
 }

@@ -8,6 +8,7 @@
 
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "components/viz/common/switches.h"
@@ -36,8 +37,8 @@ void HandleDeterministicModeSwitch(base::CommandLine& command_line) {
   command_line.AppendSwitch(blink::switches::kDisableImageAnimationResync);
 
   // Renderer flags
-  command_line.AppendSwitch(cc::switches::kDisableThreadedAnimation);
-  command_line.AppendSwitch(cc::switches::kDisableCheckerImaging);
+  command_line.AppendSwitch(::switches::kDisableThreadedAnimation);
+  command_line.AppendSwitch(::switches::kDisableCheckerImaging);
 }
 
 bool HandleRemoteDebuggingPort(base::CommandLine& command_line,
@@ -88,6 +89,24 @@ bool HandleWindowSize(base::CommandLine& command_line,
   }
 
   builder.SetWindowSize(gfx::Size(width, height));
+  return true;
+}
+
+bool HandleScreenScaleFactor(base::CommandLine& command_line,
+                             HeadlessBrowser::Options::Builder& builder) {
+  DCHECK(command_line.HasSwitch(switches::kScreenScaleFactor));
+
+  const std::string switch_value =
+      command_line.GetSwitchValueASCII(switches::kScreenScaleFactor);
+
+  double scale_factor;
+  if (!base::StringToDouble(switch_value, &scale_factor) ||
+      scale_factor < 0.5) {
+    LOG(ERROR) << "Invalid screen scale factor: " << switch_value;
+    return false;
+  }
+
+  builder.SetScreenScaleFactor(static_cast<float>(scale_factor));
   return true;
 }
 
@@ -184,6 +203,12 @@ bool HandleCommandLineSwitches(base::CommandLine& command_line,
 
   if (command_line.HasSwitch(switches::kWindowSize)) {
     if (!HandleWindowSize(command_line, builder)) {
+      return false;
+    }
+  }
+
+  if (command_line.HasSwitch(switches::kScreenScaleFactor)) {
+    if (!HandleScreenScaleFactor(command_line, builder)) {
       return false;
     }
   }

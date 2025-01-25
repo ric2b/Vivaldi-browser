@@ -55,7 +55,7 @@ deps = {
   # since it's possible to cross-compile for the other architecture. This can
   # cause problems for tests that use node if the test device architecture does
   # not match the architecture of the compile machine.
-  'src/third_party/node/mac': {
+  'third_party/node/mac': {
     'dep_type': 'gcs',
     'condition': 'host_os == "mac" and non_git_source',
     'bucket': 'chromium-nodejs',
@@ -68,7 +68,7 @@ deps = {
       },
     ],
   },
-  'src/third_party/node/mac_arm64': {
+  'third_party/node/mac_arm64': {
     'dep_type': 'gcs',
     'condition': 'host_os == "mac" and non_git_source',
     'bucket': 'chromium-nodejs',
@@ -81,7 +81,7 @@ deps = {
       },
     ],
   },
-  'src/third_party/node/win': {
+  'third_party/node/win': {
     'dep_type': 'gcs',
     'condition': 'host_os == "win" and non_git_source',
     'bucket': 'chromium-nodejs',

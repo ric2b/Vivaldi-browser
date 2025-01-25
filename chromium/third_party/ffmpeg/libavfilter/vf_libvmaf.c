@@ -34,9 +34,9 @@
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
 #include "drawutils.h"
+#include "filters.h"
 #include "formats.h"
 #include "framesync.h"
-#include "internal.h"
 #include "video.h"
 
 #if CONFIG_LIBVMAF_CUDA_FILTER
@@ -497,6 +497,8 @@ static int config_output(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     LIBVMAFContext *s = ctx->priv;
     AVFilterLink *mainlink = ctx->inputs[0];
+    FilterLink *il = ff_filter_link(mainlink);
+    FilterLink *ol = ff_filter_link(outlink);
     int ret;
 
     ret = ff_framesync_init_dualinput(&s->fs, ctx);
@@ -506,7 +508,7 @@ static int config_output(AVFilterLink *outlink)
     outlink->h = mainlink->h;
     outlink->time_base = mainlink->time_base;
     outlink->sample_aspect_ratio = mainlink->sample_aspect_ratio;
-    outlink->frame_rate = mainlink->frame_rate;
+    ol->frame_rate = il->frame_rate;
     if ((ret = ff_framesync_configure(&s->fs)) < 0)
         return ret;
 
@@ -651,7 +653,8 @@ static int config_props_cuda(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     LIBVMAFContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
-    AVHWFramesContext *frames_ctx = (AVHWFramesContext*) inlink->hw_frames_ctx->data;
+    FilterLink      *inl = ff_filter_link(inlink);
+    AVHWFramesContext *frames_ctx = (AVHWFramesContext*) inl->hw_frames_ctx->data;
     AVCUDADeviceContext *device_hwctx = frames_ctx->device_ctx->hwctx;
     CUcontext cu_ctx = device_hwctx->cuda_ctx;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(frames_ctx->sw_format);
@@ -756,7 +759,8 @@ static int do_vmaf_cuda(FFFrameSync* fs)
     AVFilterContext* ctx = fs->parent;
     LIBVMAFContext* s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
-    AVHWFramesContext *frames_ctx = (AVHWFramesContext*) inlink->hw_frames_ctx->data;
+    FilterLink      *inl = ff_filter_link(inlink);
+    AVHWFramesContext *frames_ctx = (AVHWFramesContext*)inl->hw_frames_ctx->data;
     AVCUDADeviceContext *device_hwctx = frames_ctx->device_ctx->hwctx;
     VmafPicture pic_ref, pic_dist;
     AVFrame *ref, *dist;

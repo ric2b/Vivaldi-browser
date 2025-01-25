@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as TraceEngine from '../../../models/trace/trace.js';
+import * as Trace from '../../../models/trace/trace.js';
 import {renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
@@ -31,29 +31,29 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     renderElementIntoDOM(component);
 
     // Create Entry Label annotations
-    const entryLabelAnnotation: TraceEngine.Types.File.Annotation = {
+    const entryLabelAnnotation: Trace.Types.File.Annotation = {
       type: 'ENTRY_LABEL',
       entry: defaultTraceEvents[0],
       label: 'Entry Label 1',
     };
 
-    const entryLabelAnnotation2: TraceEngine.Types.File.Annotation = {
+    const entryLabelAnnotation2: Trace.Types.File.Annotation = {
       type: 'ENTRY_LABEL',
       entry: defaultTraceEvents[1],
       label: 'Entry Label 2',
     };
 
-    const labelledTimeRangeAnnotation: TraceEngine.Types.File.Annotation = {
+    const labelledTimeRangeAnnotation: Trace.Types.File.Annotation = {
       type: 'TIME_RANGE',
       bounds: {
-        min: TraceEngine.Types.Timing.MicroSeconds(0),
-        max: TraceEngine.Types.Timing.MicroSeconds(10),
-        range: TraceEngine.Types.Timing.MicroSeconds(10),
+        min: Trace.Types.Timing.MicroSeconds(0),
+        max: Trace.Types.Timing.MicroSeconds(10),
+        range: Trace.Types.Timing.MicroSeconds(10),
       },
       label: 'Labelled Time Range',
     };
 
-    const colorsMap = new Map<TraceEngine.Types.TraceEvents.TraceEventData, string>([
+    const colorsMap = new Map<Trace.Types.Events.Event, string>([
       [entryLabelAnnotation.entry, 'rgb(82, 252, 3)'],
       [entryLabelAnnotation2.entry, '#fc039d'],
     ]);
@@ -87,13 +87,34 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     assert.strictEqual(annotationEntryLabelElements[2].innerText, 'Labelled Time Range');
   });
 
+  it('gives the delete button accessible labels', async function() {
+    const component = new SidebarAnnotationsTab();
+    const defaultTraceEvents = await TraceLoader.rawEvents(null, 'basic.json.gz');
+    renderElementIntoDOM(component);
+
+    const entryLabelAnnotation: Trace.Types.File.Annotation = {
+      type: 'ENTRY_LABEL',
+      entry: defaultTraceEvents[0],
+      label: 'Entry Label 1',
+    };
+    component.annotations = [entryLabelAnnotation];
+    assert.isNotNull(component.shadowRoot);
+    await coordinator.done();
+
+    const deleteButton = component.shadowRoot.querySelector<HTMLElement>('.delete-button');
+    assert.isNotNull(deleteButton);
+    assert.strictEqual(
+        deleteButton.getAttribute('aria-label'),
+        'Delete annotation: A "thread_name" event annotated with the text "Entry Label 1"');
+  });
+
   it('uses the URL for displaying network event labels and truncates it', async function() {
-    const {traceData} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
-    const event = traceData.NetworkRequests.byTime.find(event => {
+    const {parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+    const event = parsedTrace.NetworkRequests.byTime.find(event => {
       return event.args.data.url.includes('private-aggregation-test');
     });
     assert.isOk(event);
-    const annotation: TraceEngine.Types.File.EntryLabelAnnotation = {
+    const annotation: Trace.Types.File.EntryLabelAnnotation = {
       type: 'ENTRY_LABEL',
       entry: event,
       label: 'hello world',
@@ -120,25 +141,22 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     });
 
     // Create Entry Label annotation
-    const entryLabelAnnotation: TraceEngine.Types.File.Annotation = {
+    const entryLabelAnnotation: Trace.Types.File.Annotation = {
       type: 'ENTRY_LABEL',
       entry: defaultTraceEvents[0],
       label: 'Entry Label 1',
     };
 
     component.annotations = [entryLabelAnnotation];
+    await coordinator.done();
     assert.isNotNull(component.shadowRoot);
 
-    await coordinator.done();
-
-    const deleteButton = component.shadowRoot.querySelector<HTMLElement>('.bin-icon');
+    const deleteButton = component.shadowRoot.querySelector<HTMLElement>('.delete-button');
     assert.isNotNull(deleteButton);
-
     // Make sure the remove annotation event is not fired before clicking the button
     assert.isFalse(removeAnnotationEventFired);
 
     deleteButton.dispatchEvent(new MouseEvent('click'));
-
     assert.isTrue(removeAnnotationEventFired);
   });
 
@@ -148,13 +166,13 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     renderElementIntoDOM(component);
 
     // Create Entry Label Annotation
-    const entryLabelAnnotation: TraceEngine.Types.File.Annotation = {
+    const entryLabelAnnotation: Trace.Types.File.Annotation = {
       type: 'ENTRY_LABEL',
       entry: defaultTraceEvents[0],
       label: 'Entry Label 1',
     };
 
-    const entryLabelAnnotation2: TraceEngine.Types.File.Annotation = {
+    const entryLabelAnnotation2: Trace.Types.File.Annotation = {
       type: 'ENTRY_LABEL',
       entry: defaultTraceEvents[1],
       label: 'Entry Label 2',
@@ -181,12 +199,12 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     entryLabelAnnotation.label = 'New Entry Label 1';
     entryLabelAnnotation2.label = 'New Entry Label 2';
 
-    const labelledTimeRangeAnnotation: TraceEngine.Types.File.Annotation = {
+    const labelledTimeRangeAnnotation: Trace.Types.File.Annotation = {
       type: 'TIME_RANGE',
       bounds: {
-        min: TraceEngine.Types.Timing.MicroSeconds(0),
-        max: TraceEngine.Types.Timing.MicroSeconds(10),
-        range: TraceEngine.Types.Timing.MicroSeconds(10),
+        min: Trace.Types.Timing.MicroSeconds(0),
+        max: Trace.Types.Timing.MicroSeconds(10),
+        range: Trace.Types.Timing.MicroSeconds(10),
       },
       label: 'Labelled Time Range',
     };
@@ -202,4 +220,70 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     assert.strictEqual(annotationLabelElements[1].innerText, 'New Entry Label 2');
     assert.strictEqual(annotationLabelElements[2].innerText, 'Labelled Time Range');
   });
+
+  it('does not display multiple not started annotations for one entry', async function() {
+    const component = new SidebarAnnotationsTab();
+    const defaultTraceEvents = await TraceLoader.rawEvents(null, 'basic.json.gz');
+    renderElementIntoDOM(component);
+
+    // Create Empty Entry Label Annotation (considered not started)
+    const entryLabelAnnotation: Trace.Types.File.Annotation = {
+      type: 'ENTRY_LABEL',
+      entry: defaultTraceEvents[0],
+      label: '',
+    };
+
+    // Create Entries link that only has 'to' entry (considered not started)
+    const entriesLink: Trace.Types.File.Annotation = {
+      type: 'ENTRIES_LINK',
+      entryFrom: defaultTraceEvents[0],
+      state: Trace.Types.File.EntriesLinkState.CREATION_NOT_STARTED,
+    };
+
+    component.annotations = [entryLabelAnnotation, entriesLink];
+    assert.isNotNull(component.shadowRoot);
+
+    await coordinator.done();
+
+    const annotationsWrapperElement = component.shadowRoot.querySelector<HTMLElement>('.annotations');
+    assert.isNotNull(annotationsWrapperElement);
+
+    // Ensure there is only one annotation displayed
+    const annotationIdentifierElements = component.shadowRoot.querySelectorAll<HTMLElement>('.annotation-identifier');
+    assert.strictEqual(annotationIdentifierElements.length, 1);
+  });
+
+  it('displays multiple not started annotations if they are not different entries', async function() {
+    const component = new SidebarAnnotationsTab();
+    const defaultTraceEvents = await TraceLoader.rawEvents(null, 'basic.json.gz');
+    renderElementIntoDOM(component);
+
+    // Create Empty Entry Label Annotation (considered not started)
+    const entryLabelAnnotation: Trace.Types.File.Annotation = {
+      type: 'ENTRY_LABEL',
+      entry: defaultTraceEvents[0],
+      label: '',
+    };
+
+    // Create Entries link that only has 'to' entry (considered not started).
+    // Not started link is on a different entry than the other not started annotation
+    const entriesLink: Trace.Types.File.Annotation = {
+      type: 'ENTRIES_LINK',
+      entryFrom: defaultTraceEvents[1],
+      state: Trace.Types.File.EntriesLinkState.CREATION_NOT_STARTED,
+    };
+
+    component.annotations = [entryLabelAnnotation, entriesLink];
+    assert.isNotNull(component.shadowRoot);
+
+    await coordinator.done();
+
+    const annotationsWrapperElement = component.shadowRoot.querySelector<HTMLElement>('.annotations');
+    assert.isNotNull(annotationsWrapperElement);
+
+    // Ensure both annotations are displayed
+    const annotationIdentifierElements = component.shadowRoot.querySelectorAll<HTMLElement>('.annotation-identifier');
+    assert.strictEqual(annotationIdentifierElements.length, 2);
+  });
+
 });

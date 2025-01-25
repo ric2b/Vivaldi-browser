@@ -19,6 +19,10 @@
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_options.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 
+#if !BUILDFLAG(IS_IOS)
+#include "components/webauthn/core/browser/internal_authenticator.h"
+#endif  // !BUILDFLAG(IS_IOS)
+
 namespace autofill::payments {
 
 PaymentsAutofillClient::~PaymentsAutofillClient() = default;
@@ -101,8 +105,8 @@ void PaymentsAutofillClient::ShowVirtualCardEnrollDialog(
 void PaymentsAutofillClient::VirtualCardEnrollCompleted(
     PaymentsRpcResult result) {}
 
-void PaymentsAutofillClient::OnVirtualCardDataAvailable(
-    const VirtualCardManualFallbackBubbleOptions& options) {}
+void PaymentsAutofillClient::OnCardDataAvailable(
+    const FilledCardInformationBubbleOptions& options) {}
 
 void PaymentsAutofillClient::ConfirmSaveIbanLocally(
     const Iban& iban,
@@ -215,14 +219,14 @@ const AutofillOfferManager* PaymentsAutofillClient::GetAutofillOfferManager()
 
 bool PaymentsAutofillClient::ShowTouchToFillCreditCard(
     base::WeakPtr<TouchToFillDelegate> delegate,
-    base::span<const autofill::CreditCard> cards_to_suggest,
+    base::span<const CreditCard> cards_to_suggest,
     base::span<const Suggestion> suggestions) {
   return false;
 }
 
 bool PaymentsAutofillClient::ShowTouchToFillIban(
     base::WeakPtr<TouchToFillDelegate> delegate,
-    base::span<const autofill::Iban> ibans_to_suggest) {
+    base::span<const Iban> ibans_to_suggest) {
   return false;
 }
 

@@ -171,6 +171,17 @@ void AwUrlCheckerDelegateImpl::NotifySuspiciousSiteDetected(
     const base::RepeatingCallback<content::WebContents*()>&
         web_contents_getter) {}
 
+void AwUrlCheckerDelegateImpl::SendUrlRealTimeAndHashRealTimeDiscrepancyReport(
+    std::unique_ptr<safe_browsing::ClientSafeBrowsingReportRequest> report,
+    const base::RepeatingCallback<content::WebContents*()>&
+        web_contents_getter) {}
+
+bool AwUrlCheckerDelegateImpl::AreBackgroundHashRealTimeSampleLookupsAllowed(
+    const base::RepeatingCallback<content::WebContents*()>&
+        web_contents_getter) {
+  return false;
+}
+
 const safe_browsing::SBThreatTypeSet&
 AwUrlCheckerDelegateImpl::GetThreatTypes() {
   return threat_types_;

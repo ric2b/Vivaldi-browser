@@ -22,6 +22,25 @@ PLATFORM_EXPORT BASE_DECLARE_FEATURE(kCanvasHibernationSnapshotZstd);
 // All the fields are main-thread only. See DCheckInvariant() for invariants.
 class PLATFORM_EXPORT CanvasHibernationHandler {
  public:
+  // The values of the enum entries must not change because they are used for
+  // usage metrics histograms. New values can be added to the end.
+  enum HibernationEvent {
+    kHibernationScheduled = 0,
+    kHibernationAbortedDueToDestructionWhileHibernatePending = 1,
+    // kHibernationAbortedDueToPendingDestruction = 2, (obsolete)
+    kHibernationAbortedDueToVisibilityChange = 3,
+    kHibernationAbortedDueGpuContextLoss = 4,
+    kHibernationAbortedDueToSwitchToUnacceleratedRendering = 5,
+    // kHibernationAbortedDueToAllocationFailure = 6, (obsolete)
+    kHibernationAbortedDueSnapshotFailure = 7,
+    kHibernationEndedNormally = 8,
+    kHibernationEndedWithSwitchToBackgroundRendering = 9,
+    kHibernationEndedWithFallbackToSW = 10,
+    kHibernationEndedWithTeardown = 11,
+    kHibernationAbortedBecauseNoSurface = 12,
+    kMaxValue = kHibernationAbortedBecauseNoSurface,
+  };
+
   ~CanvasHibernationHandler();
   // Semi-arbitrary threshold. Some past experiments (e.g. tile discard) have
   // shown that taking action after 5 minutes has a positive impact on memory,
@@ -60,6 +79,17 @@ class PLATFORM_EXPORT CanvasHibernationHandler {
           background_thread_task_runner) {
     main_thread_task_runner_for_testing_ = main_thread_task_runner;
     background_thread_task_runner_for_testing_ = background_thread_task_runner;
+  }
+
+  // Sets a callback that will be invoked on each completion of OnEncoded().
+  // The client can then check whether encoding has succeeded by check
+  // CanvasHibernationHandler::IsEncoded().
+  void SetOnEncodedCallbackForTesting(
+      base::RepeatingClosure on_encoded_callback) {
+    on_encoded_callback_for_testing_ = std::move(on_encoded_callback);
+  }
+  void SetBeforeCompressionDelayForTesting(base::TimeDelta delay) {
+    before_compression_delay_ = delay;
   }
 
   enum class CompressionAlgorithm { kZlib, kZstd };
@@ -113,6 +143,8 @@ class PLATFORM_EXPORT CanvasHibernationHandler {
       main_thread_task_runner_for_testing_;
   scoped_refptr<base::SingleThreadTaskRunner>
       background_thread_task_runner_for_testing_;
+  base::RepeatingClosure on_encoded_callback_for_testing_;
+  base::TimeDelta before_compression_delay_ = kBeforeCompressionDelay;
   int width_;
   int height_;
   int bytes_per_pixel_;

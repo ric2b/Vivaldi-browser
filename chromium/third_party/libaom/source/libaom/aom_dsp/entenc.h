@@ -63,8 +63,6 @@ void od_ec_encode_cdf_q15(od_ec_enc *enc, int s, const uint16_t *cdf, int nsyms)
 void od_ec_enc_bits(od_ec_enc *enc, uint32_t fl, unsigned ftb)
     OD_ARG_NONNULL(1);
 
-void od_ec_enc_patch_initial_bits(od_ec_enc *enc, unsigned val, int nbits)
-    OD_ARG_NONNULL(1);
 OD_WARN_UNUSED_RESULT unsigned char *od_ec_enc_done(od_ec_enc *enc,
                                                     uint32_t *nbytes)
     OD_ARG_NONNULL(1) OD_ARG_NONNULL(2);

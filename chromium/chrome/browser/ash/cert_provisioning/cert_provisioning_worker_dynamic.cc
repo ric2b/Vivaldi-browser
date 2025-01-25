@@ -51,7 +51,7 @@
 // a final state afterwards.
 #define FINAL_STATE_EXPECTED(UpdateStateStatement)                \
   if ((UpdateStateStatement) != UpdateStateResult::kFinalState) { \
-    NOTREACHED_IN_MIGRATION();                                    \
+    NOTREACHED();                                                 \
   }
 
 namespace em = enterprise_management;
@@ -61,8 +61,10 @@ namespace ash::cert_provisioning {
 namespace {
 
 constexpr unsigned int kNonVaKeyModulusLengthBits = 2048;
+constexpr char kEcNamedCurve[] = "P-256";
 
 constexpr base::TimeDelta kMinumumTryAgainLaterDelay = base::Seconds(10);
+constexpr base::TimeDelta kMaximumFetchInstructionDelay = base::Hours(8);
 
 const net::BackoffEntry::Policy kBackoffPolicy{
     /*num_errors_to_ignore=*/0,
@@ -71,6 +73,19 @@ const net::BackoffEntry::Policy kBackoffPolicy{
     /*multiply_factor=*/2.0,
     /*jitter_factor=*/0.15,
     /*maximum_backoff_ms=*/base::Hours(12).InMilliseconds(),
+    /*entry_lifetime_ms=*/-1,
+    /*always_use_initial_delay=*/false};
+
+// Used only for the first 3 attempts, after which
+// `kMaximumFetchInstructionDelay` is used. So the approximate waiting times
+// (ignoring the jitter) are: 30 sec, 2 min, 8 min, 8 hours, 8 hours, ...
+const net::BackoffEntry::Policy kFetchInstructionBackoffPolicy{
+    /*num_errors_to_ignore=*/0,
+    /*initial_delay_ms=*/
+    base::checked_cast<int>(base::Seconds(30).InMilliseconds()),
+    /*multiply_factor=*/4.0,
+    /*jitter_factor=*/0.10,
+    /*maximum_backoff_ms=*/kMaximumFetchInstructionDelay.InMilliseconds(),
     /*entry_lifetime_ms=*/-1,
     /*always_use_initial_delay=*/false};
 
@@ -184,6 +199,7 @@ CertProvisioningWorkerDynamic::CertProvisioningWorkerDynamic(
       state_change_callback_(std::move(state_change_callback)),
       result_callback_(std::move(result_callback)),
       request_backoff_(&kBackoffPolicy),
+      fetch_instruction_backoff_(&kFetchInstructionBackoffPolicy),
       cert_provisioning_client_(cert_provisioning_client),
       invalidator_(std::move(invalidator)) {
   CHECK(profile || cert_scope == CertScope::kDevice);
@@ -312,7 +328,7 @@ void CertProvisioningWorkerDynamic::DoStep() {
       CHECK(false);
       return;
   }
-  NOTREACHED_IN_MIGRATION() << " " << static_cast<uint>(state_);
+  NOTREACHED() << " " << static_cast<uint>(state_);
 }
 
 void CertProvisioningWorkerDynamic::MarkWorkerForReset() {
@@ -371,11 +387,22 @@ void CertProvisioningWorkerDynamic::GenerateKey() {
 }
 
 void CertProvisioningWorkerDynamic::GenerateRegularKey() {
-  platform_keys_service_->GenerateRSAKey(
-      GetPlatformKeysTokenId(cert_scope_), kNonVaKeyModulusLengthBits,
-      /*sw_backed=*/false,
-      base::BindOnce(&CertProvisioningWorkerDynamic::OnGenerateRegularKeyDone,
-                     weak_factory_.GetWeakPtr()));
+  switch (cert_profile_.key_type) {
+    case KeyType::kRsa:
+      platform_keys_service_->GenerateRSAKey(
+          GetPlatformKeysTokenId(cert_scope_), kNonVaKeyModulusLengthBits,
+          /*sw_backed=*/false,
+          base::BindOnce(
+              &CertProvisioningWorkerDynamic::OnGenerateRegularKeyDone,
+              weak_factory_.GetWeakPtr()));
+      break;
+    case KeyType::kEc:
+      platform_keys_service_->GenerateECKey(
+          GetPlatformKeysTokenId(cert_scope_), kEcNamedCurve,
+          base::BindOnce(
+              &CertProvisioningWorkerDynamic::OnGenerateRegularKeyDone,
+              weak_factory_.GetWeakPtr()));
+  }
 }
 
 void CertProvisioningWorkerDynamic::OnGenerateRegularKeyDone(
@@ -401,13 +428,26 @@ void CertProvisioningWorkerDynamic::GenerateKeyForVa() {
 
   tpm_challenge_key_subtle_impl_ =
       attestation::TpmChallengeKeySubtleFactory::Create();
-  tpm_challenge_key_subtle_impl_->StartPrepareKeyStep(
-      GetVaFlowType(cert_scope_),
-      /*will_register_key=*/true, ::attestation::KEY_TYPE_RSA,
-      GetKeyName(cert_profile_.profile_id), profile_,
-      base::BindOnce(&CertProvisioningWorkerDynamic::OnGenerateKeyForVaDone,
-                     weak_factory_.GetWeakPtr(), base::TimeTicks::Now()),
-      /*signals=*/std::nullopt);
+
+  switch (cert_profile_.key_type) {
+    case KeyType::kRsa:
+      tpm_challenge_key_subtle_impl_->StartPrepareKeyStep(
+          GetVaFlowType(cert_scope_),
+          /*will_register_key=*/true, ::attestation::KEY_TYPE_RSA,
+          GetKeyName(cert_profile_.profile_id), profile_,
+          base::BindOnce(&CertProvisioningWorkerDynamic::OnGenerateKeyForVaDone,
+                         weak_factory_.GetWeakPtr(), base::TimeTicks::Now()),
+          /*signals=*/std::nullopt);
+      break;
+    case KeyType::kEc:
+      tpm_challenge_key_subtle_impl_->StartPrepareKeyStep(
+          GetVaFlowType(cert_scope_),
+          /*will_register_key=*/true, ::attestation::KEY_TYPE_ECC,
+          GetKeyName(cert_profile_.profile_id), profile_,
+          base::BindOnce(&CertProvisioningWorkerDynamic::OnGenerateKeyForVaDone,
+                         weak_factory_.GetWeakPtr(), base::TimeTicks::Now()),
+          /*signals=*/std::nullopt);
+  }
 }
 
 void CertProvisioningWorkerDynamic::OnGenerateKeyForVaDone(
@@ -510,7 +550,7 @@ void CertProvisioningWorkerDynamic::OnGetNextInstructionResponse(
   }
   // CertProvisioningClient ensures that at least one of the instructions was
   // filled.
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void CertProvisioningWorkerDynamic::OnAuthorizeInstructionReceived(
@@ -550,6 +590,12 @@ void CertProvisioningWorkerDynamic::OnProofOfPossessionInstructionReceived(
   if (proof_of_possession_instruction.has_signature_algorithm()) {
     signature_algorithm_ =
         proof_of_possession_instruction.signature_algorithm();
+  } else {
+    failure_message_ =
+        base::StrCat({"No signature algorithm provided", GetLogInfoBlock()});
+    FINAL_STATE_EXPECTED(
+        UpdateState(FROM_HERE, CertProvisioningWorkerState::kFailed));
+    return;
   }
 
   data_to_sign_ = StrToBytes(proof_of_possession_instruction.data_to_sign());
@@ -755,6 +801,14 @@ void CertProvisioningWorkerDynamic::BuildProofOfPossession() {
               &CertProvisioningWorkerDynamic::OnBuildProofOfPossessionDone,
               weak_factory_.GetWeakPtr(), base::TimeTicks::Now()));
       break;
+    case em::CertProvSignatureAlgorithm::SIGNATURE_ALGORITHM_ECDSA_SHA256:
+      platform_keys_service_->SignEcdsa(
+          GetPlatformKeysTokenId(cert_scope_), std::move(data_to_sign_),
+          public_key_, chromeos::platform_keys::HASH_ALGORITHM_SHA256,
+          base::BindRepeating(
+              &CertProvisioningWorkerDynamic::OnBuildProofOfPossessionDone,
+              weak_factory_.GetWeakPtr(), base::TimeTicks::Now()));
+      break;
     case em::CertProvSignatureAlgorithm::SIGNATURE_ALGORITHM_UNSPECIFIED:
       failure_message_ =
           base::StrCat({"Unknown signature algorithm", GetLogInfoBlock()});
@@ -872,6 +926,8 @@ bool CertProvisioningWorkerDynamic::ProcessResponseErrors(
 
   if (response.has_value()) {
     last_backend_server_error_ = std::nullopt;
+    request_backoff_.InformOfRequest(true);
+    fetch_instruction_backoff_.InformOfRequest(true);
     return true;
   }
 
@@ -920,14 +976,22 @@ void CertProvisioningWorkerDynamic::ProcessResponseErrors(
     LOG(WARNING) << "No instruction available yet "
                  << " for profile ID: " << cert_profile_.profile_id
                  << GetLogInfoBlock();
+
+    fetch_instruction_backoff_.InformOfRequest(false);
+    if (fetch_instruction_backoff_.failure_count() > 3) {
+      fetch_instruction_backoff_.SetCustomReleaseTime(
+          base::TimeTicks::Now() + kMaximumFetchInstructionDelay);
+    }
+
     // Don't change state, just retry the operation in this state in a delay (or
     // when an invalidation is triggered).
-    // TODO(b/289983352): Use a backoff strategy for the delay.
     ScheduleNextStep(
-        base::Seconds(30),
+        fetch_instruction_backoff_.GetTimeUntilRelease(),
         /*try_provisioning_on_timeout=*/!ShouldOnlyUseInvalidations());
     return;
   }
+
+  fetch_instruction_backoff_.InformOfRequest(true);
 
   if (backend_error.error() == em::CertProvBackendError::INCONSISTENT_DATA ||
       backend_error.error() == em::CertProvBackendError::PROFILE_NOT_FOUND) {
@@ -1143,12 +1207,23 @@ void CertProvisioningWorkerDynamic::InitAfterDeserialization() {
   // PKCS#11 token ("registered") yet.
   if (cert_profile_.is_va_enabled &&
       key_location_ != KeyLocation::kPkcs11Token) {
-    tpm_challenge_key_subtle_impl_ =
-        attestation::TpmChallengeKeySubtleFactory::CreateForPreparedKey(
-            GetVaFlowType(cert_scope_),
-            /*will_register_key=*/true, ::attestation::KEY_TYPE_RSA,
-            GetKeyName(cert_profile_.profile_id), BytesToStr(public_key_),
-            profile_);
+    switch (cert_profile_.key_type) {
+      case KeyType::kRsa:
+        tpm_challenge_key_subtle_impl_ =
+            attestation::TpmChallengeKeySubtleFactory::CreateForPreparedKey(
+                GetVaFlowType(cert_scope_),
+                /*will_register_key=*/true, ::attestation::KEY_TYPE_RSA,
+                GetKeyName(cert_profile_.profile_id), BytesToStr(public_key_),
+                profile_);
+        break;
+      case KeyType::kEc:
+        tpm_challenge_key_subtle_impl_ =
+            attestation::TpmChallengeKeySubtleFactory::CreateForPreparedKey(
+                GetVaFlowType(cert_scope_),
+                /*will_register_key=*/true, ::attestation::KEY_TYPE_ECC,
+                GetKeyName(cert_profile_.profile_id), BytesToStr(public_key_),
+                profile_);
+    }
   }
 }
 

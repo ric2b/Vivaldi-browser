@@ -33,19 +33,19 @@
 - (void)start {
   [super start];
 
-  ChromeBrowserState* browserState = self.browser->GetBrowserState();
+  ProfileIOS* profile = self.browser->GetProfile();
   self.viewController = [[SpotlightDebuggerViewController alloc]
-      initWithPrefService:browserState->GetPrefs()];
+      initWithPrefService:profile->GetPrefs()];
   self.viewController.delegate = self;
-  self.viewController.bookmarksManager = [BookmarksSpotlightManager
-      bookmarksSpotlightManagerWithBrowserState:browserState];
+  self.viewController.bookmarksManager =
+      [BookmarksSpotlightManager bookmarksSpotlightManagerWithProfile:profile];
 
   self.viewController.readingListSpotlightManager = [ReadingListSpotlightManager
-      readingListSpotlightManagerWithBrowserState:browserState];
-  self.viewController.openTabsSpotlightManager = [OpenTabsSpotlightManager
-      openTabsSpotlightManagerWithBrowserState:browserState];
-  self.viewController.topSitesSpotlightManager = [TopSitesSpotlightManager
-      topSitesSpotlightManagerWithBrowserState:browserState];
+      readingListSpotlightManagerWithProfile:profile];
+  self.viewController.openTabsSpotlightManager =
+      [OpenTabsSpotlightManager openTabsSpotlightManagerWithProfile:profile];
+  self.viewController.topSitesSpotlightManager =
+      [TopSitesSpotlightManager topSitesSpotlightManagerWithProfile:profile];
 
   UINavigationController* navController = [[UINavigationController alloc]
       initWithRootViewController:self.viewController];

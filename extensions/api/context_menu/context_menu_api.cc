@@ -87,11 +87,23 @@ ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
               "and call preventDefault() to block the standard menu"));
   }
 
-  ::vivaldi::ContextMenuController::Create(window->web_contents(),
+  ::vivaldi::ContextMenuController::Create(window,
                                            rv_context_menu,
                                            std::move(params))->Show();
 
   return RespondNow(ArgumentList(context_menu::Show::Results::Create()));
 }
+
+ExtensionFunction::ResponseAction ContextMenuUpdateFunction::Run() {
+  auto params = context_menu::Update::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+  ::vivaldi::ContextMenuController* controller =
+    ::vivaldi::ContextMenuController::GetActive();
+  if (controller) {
+    controller->Update(params->properties);
+  }
+  return RespondNow(ArgumentList(context_menu::Update::Results::Create()));
+}
+
 
 }  // namespace extensions

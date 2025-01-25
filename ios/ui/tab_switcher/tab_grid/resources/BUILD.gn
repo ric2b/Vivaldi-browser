@@ -23,33 +23,21 @@ bundle_data_xcassets("resources") {
     "Assets.xcassets/page_control_incognito_tabs.imageset/page_control_incognito_tabs.pdf",
     "Assets.xcassets/page_control_incognito_tabs.imageset/page_control_incognito_tabs_dark.pdf",
 
-    "Assets.xcassets/page_control_incognito_tabs_selected.imageset/Contents.json",
-    "Assets.xcassets/page_control_incognito_tabs_selected.imageset/page_control_incognito_tabs_selected.pdf",
-    "Assets.xcassets/page_control_incognito_tabs_selected.imageset/page_control_incognito_tabs_selected_dark.pdf",
-
     "Assets.xcassets/page_control_regular_tabs.imageset/Contents.json",
-    "Assets.xcassets/page_control_regular_tabs.imageset/page_control_regular_tabs.pdf",
-    "Assets.xcassets/page_control_regular_tabs.imageset/page_control_regular_tabs_dark.pdf",
-
-    "Assets.xcassets/page_control_regular_tabs_selected.imageset/Contents.json",
-    "Assets.xcassets/page_control_regular_tabs_selected.imageset/page_control_regular_tabs_selected.pdf",
-    "Assets.xcassets/page_control_regular_tabs_selected.imageset/page_control_regular_tabs_selected_dark.pdf",
+    "Assets.xcassets/page_control_regular_tabs.imageset/page_control_regular_tabs.svg",
+    "Assets.xcassets/page_control_regular_tabs.imageset/page_control_regular_tabs_dark.svg",
 
     "Assets.xcassets/page_control_remote_tabs.imageset/Contents.json",
-    "Assets.xcassets/page_control_remote_tabs.imageset/page_control_remote_tabs.pdf",
-    "Assets.xcassets/page_control_remote_tabs.imageset/page_control_remote_tabs_dark.pdf",
+    "Assets.xcassets/page_control_remote_tabs.imageset/page_control_remote_tabs.svg",
+    "Assets.xcassets/page_control_remote_tabs.imageset/page_control_remote_tabs_dark.svg",
 
-    "Assets.xcassets/page_control_remote_tabs_selected.imageset/Contents.json",
-    "Assets.xcassets/page_control_remote_tabs_selected.imageset/page_control_remote_tabs_selected.pdf",
-    "Assets.xcassets/page_control_remote_tabs_selected.imageset/page_control_remote_tabs_selected_dark.pdf",
+    "Assets.xcassets/page_control_remote_tabs_synced.imageset/Contents.json",
+    "Assets.xcassets/page_control_remote_tabs_synced.imageset/page_control_remote_tabs_synced.svg",
+    "Assets.xcassets/page_control_remote_tabs_synced.imageset/page_control_remote_tabs_synced_dark.svg",
 
     "Assets.xcassets/page_control_closed_tabs.imageset/Contents.json",
-    "Assets.xcassets/page_control_closed_tabs.imageset/page_control_closed_tabs.pdf",
-    "Assets.xcassets/page_control_closed_tabs.imageset/page_control_closed_tabs_dark.pdf",
-
-    "Assets.xcassets/page_control_closed_tabs_selected.imageset/Contents.json",
-    "Assets.xcassets/page_control_closed_tabs_selected.imageset/page_control_closed_tabs_selected.pdf",
-    "Assets.xcassets/page_control_closed_tabs_selected.imageset/page_control_closed_tabs_selected_dark.pdf",
+    "Assets.xcassets/page_control_closed_tabs.imageset/page_control_closed_tabs.svg",
+    "Assets.xcassets/page_control_closed_tabs.imageset/page_control_closed_tabs_dark.svg",
 
     "Assets.xcassets/select_tabs_toolbar_button.imageset/Contents.json",
     "Assets.xcassets/select_tabs_toolbar_button.imageset/select_tabs_toolbar_button@2x.png",

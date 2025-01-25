@@ -225,7 +225,7 @@ class FakeSafeBrowsingService : public TestSafeBrowsingService {
     return it->second;
   }
 
-  bool SendDownloadReport(
+  void SendDownloadReport(
       download::DownloadItem* download,
       ClientSafeBrowsingReportRequest::ReportType report_type,
       bool did_proceed,
@@ -242,7 +242,7 @@ class FakeSafeBrowsingService : public TestSafeBrowsingService {
         DownloadProtectionService::GetDownloadPingToken(download));
     report->SerializeToString(&latest_report_);
     download_report_count_++;
-    return true;
+    return;
   }
 
   network::TestURLLoaderFactory* GetTestURLLoaderFactory(Profile* profile) {
@@ -765,11 +765,11 @@ class DownloadProtectionServiceTestBase
       return testing::AssertionFailure() << "No result";
     }
     has_result_ = false;
-    return result_ == expected ? testing::AssertionSuccess()
-                               : testing::AssertionFailure()
-                                     << "Expected "
-                                     << static_cast<int>(expected) << ", got "
-                                     << static_cast<int>(result_);
+    return result_ == expected
+               ? testing::AssertionSuccess()
+               : testing::AssertionFailure()
+                     << "Expected " << DownloadCheckResultToString(expected)
+                     << ", got " << DownloadCheckResultToString(result_);
   }
 
   void SetExtendedReportingPreference(bool is_extended_reporting) {

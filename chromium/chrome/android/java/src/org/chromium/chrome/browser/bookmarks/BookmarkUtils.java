@@ -137,10 +137,12 @@ public class BookmarkUtils {
                     bookmarkModel, tab.getTitle(),
                     tab.getOriginalUrl(),
                     fromExplicitTrackUi ? bookmarkModel.getDefaultFolder() : null, bookmarkType);
-            showSaveFlow(activity, bottomSheetController,
-                    tab.getProfile(),
-                    newBookmarkId, fromExplicitTrackUi,
-                    /*wasBookmarkMoved=*/false, /*isNewBookmark=*/true);
+            if (bookmarkType != BookmarkType.READING_LIST) {
+                showSaveFlow(activity, bottomSheetController,
+                        tab.getProfile(),
+                        newBookmarkId, fromExplicitTrackUi,
+                        /*wasBookmarkMoved=*/false, /*isNewBookmark=*/true);
+            }
             callback.onResult(newBookmarkId);
             return;
         }
@@ -530,7 +532,7 @@ public class BookmarkUtils {
         } else {
             // Use "New tab" as title for both incognito and regular NTP.
             if (url.getSpec().equals(UrlConstants.NTP_URL)) {
-                title = context.getResources().getString(R.string.new_tab_title);
+                title = context.getString(R.string.new_tab_title);
             }
 
             bookmarkId =
@@ -818,8 +820,6 @@ public class BookmarkUtils {
      * @param type The bookmark type of the folder.
      * @return The tint used on the bookmark folder icon.
      */
-    // TODO(crbug.com/40282037): This function isn't used in the new bookmarks manager, remove it
-    // after android-improved-bookmarks is the default.
     public static ColorStateList getFolderIconTint(Context context, @BookmarkType int type) {
         if (type == BookmarkType.READING_LIST) {
             return ColorStateList.valueOf(SemanticColorUtils.getDefaultIconColorAccent1(context));
@@ -977,6 +977,9 @@ public class BookmarkUtils {
     /** Return the icon tint for the given {@link BookmarkType}. */
     public static ColorStateList getIconTint(
             Context context, BookmarkModel bookmarkModel, BookmarkItem item) {
+        if (ChromeApplicationImpl.isVivaldi())
+            return AppCompatResources.getColorStateList(
+                    context, R.color.default_icon_color_secondary_tint_list);
         if (isSpecialFolder(bookmarkModel, item)) {
             return ColorStateList.valueOf(
                     SemanticColorUtils.getDefaultIconColorOnAccent1Container(context));
@@ -1023,5 +1026,35 @@ public class BookmarkUtils {
 
     public static String getFirstUrlToLoadPublic(Context context, BookmarkId folderId) {
         return getFirstUrlToLoad(folderId);
+    }
+
+    // Vivaldi ---
+    public static void addOrEditBookmark(
+            BookmarkModel bookmarkModel, GURL url, Tab tab,
+            BottomSheetController bottomSheetController, Activity activity,
+            @BookmarkType int bookmarkType, Callback<BookmarkId> callback) {
+        assert bookmarkModel.isBookmarkModelLoaded();
+        /*
+         Use Bookmarks folder, not Mobile folder as default save location
+         */
+        BookmarkId newBookmarkId = addBookmarkInternal(activity, tab.getProfile(), bookmarkModel,
+                url.getSpec(), url, bookmarkModel.getDefaultFolder(), bookmarkType);
+        showSaveFlow(activity, bottomSheetController, tab.getProfile(), newBookmarkId, false,
+                /*wasBookmarkMoved=*/false, /*isNewBookmark=*/true);
+        callback.onResult(newBookmarkId);
+    }
+
+    // Vivaldi - Force adds the given tab as a new bookmark instead of opening Edit Bookmark dialog,
+    // even if a bookmark already exists.
+    public static void forceAddBookmark(BookmarkModel bookmarkModel, Tab tab,
+            BottomSheetController bottomSheetController, Activity activity,
+            @BookmarkType int bookmarkType, BookmarkId parentId) {
+        assert bookmarkModel.isBookmarkModelLoaded();
+        BookmarkId newBookmarkId = addBookmarkInternal(activity, tab.getProfile(), bookmarkModel,
+                tab.getTitle(), tab.getOriginalUrl(),
+                parentId == null ? bookmarkModel.getDefaultFolder() : parentId, bookmarkType);
+        showSaveFlow(activity, bottomSheetController, tab.getProfile(), newBookmarkId,
+                /*fromExplicitTrackUi*/ false,
+                /*wasBookmarkMoved=*/false, /*isNewBookmark=*/true);
     }
 }

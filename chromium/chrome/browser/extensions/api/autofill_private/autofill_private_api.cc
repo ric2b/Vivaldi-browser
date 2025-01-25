@@ -17,9 +17,11 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/uuid.h"
 #include "base/values.h"
-#include "chrome/browser/browser_process.h"
+#include "chrome/browser/autofill_ai/autofill_ai_util.h"
 #include "chrome/browser/extensions/api/autofill_private/autofill_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/user_education/browser_user_education_interface.h"
+#include "chrome/browser/user_annotations/user_annotations_service_factory.h"
 #include "chrome/common/extensions/api/autofill_private.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
@@ -44,12 +46,16 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
+#include "components/feature_engagement/public/feature_constants.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/strings/grit/components_branded_strings.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/user_annotations/user_annotations_service.h"
+#include "components/user_annotations/user_annotations_types.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_function_registry.h"
+#include "extensions/browser/extensions_browser_client.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_ui.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_ui_component.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/localization.h"
@@ -68,6 +74,8 @@ namespace {
 static const char kSettingsOrigin[] = "Chrome settings";
 static const char kErrorCardDataUnavailable[] = "Credit card data unavailable";
 static const char kErrorDataUnavailable[] = "Autofill data unavailable.";
+static const char kErrorAutofillAIUnavailable[] =
+    "Autofill AI data unavailable.";
 static const char kErrorDeviceAuthUnavailable[] = "Device auth is unvailable";
 
 // Constant to assign a user-verified verification status to the autofill
@@ -216,7 +224,8 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveAddressFunction::Run() {
     if (field.type == autofill_private::FieldType::kNameFull) {
       profile.SetInfoWithVerificationStatus(
           autofill::NAME_FULL, base::UTF8ToUTF16(field.value),
-          g_browser_process->GetApplicationLocale(), kUserVerified);
+          ExtensionsBrowserClient::Get()->GetApplicationLocale(),
+          kUserVerified);
     } else {
       profile.SetRawInfoWithVerificationStatus(
           autofill::TypeNameToFieldType(autofill_private::ToString(field.type)),
@@ -286,7 +295,8 @@ AutofillPrivateGetAddressComponentsFunction::Run() {
   std::string language_code;
 
   autofill::GetAddressComponents(
-      parameters->country_code, g_browser_process->GetApplicationLocale(),
+      parameters->country_code,
+      ExtensionsBrowserClient::Get()->GetApplicationLocale(),
       /*include_literals=*/false, &lines, &language_code);
   // Convert std::vector<std::vector<::i18n::addressinput::AddressUiComponent>>
   // to AddressComponents
@@ -482,7 +492,7 @@ ExtensionFunction::ResponseAction AutofillPrivateRemoveEntryFunction::Run() {
 
   if (personal_data->payments_data_manager().GetIbanByGUID(parameters->guid)) {
     base::RecordAction(base::UserMetricsAction("AutofillIbanDeleted"));
-  } else if (autofill::CreditCard* credit_card =
+  } else if (const autofill::CreditCard* credit_card =
                  personal_data->payments_data_manager().GetCreditCardByGUID(
                      parameters->guid)) {
     base::RecordAction(base::UserMetricsAction("AutofillCreditCardDeleted"));
@@ -736,7 +746,7 @@ ExtensionFunction::ResponseAction AutofillPrivateAddVirtualCardFunction::Run() {
   if (!personal_data_manager || !personal_data_manager->IsDataLoaded())
     return RespondNow(Error(kErrorDataUnavailable));
 
-  autofill::CreditCard* card =
+  const autofill::CreditCard* card =
       personal_data_manager->payments_data_manager().GetCreditCardByServerId(
           parameters->card_id);
   if (!card)
@@ -778,7 +788,7 @@ AutofillPrivateRemoveVirtualCardFunction::Run() {
   if (!personal_data_manager || !personal_data_manager->IsDataLoaded())
     return RespondNow(Error(kErrorDataUnavailable));
 
-  autofill::CreditCard* card =
+  const autofill::CreditCard* card =
       personal_data_manager->payments_data_manager().GetCreditCardByServerId(
           parameters->card_id);
   if (!card)
@@ -1049,20 +1059,32 @@ AutofillPrivateSetAutofillSyncToggleEnabledFunction::Run() {
 
 ExtensionFunction::ResponseAction
 AutofillPrivateGetUserAnnotationsEntriesFunction::Run() {
+  Profile* profile =
+      Profile::FromBrowserContext(GetSenderWebContents()->GetBrowserContext());
+  user_annotations::UserAnnotationsService* user_annotations_service =
+      profile ? UserAnnotationsServiceFactory::GetForProfile(profile) : nullptr;
+  if (!user_annotations_service) {
+    return RespondNow(Error(kErrorAutofillAIUnavailable));
+  }
+
+  user_annotations_service->RetrieveAllEntries(base::BindOnce(
+      &AutofillPrivateGetUserAnnotationsEntriesFunction::OnEntriesRetrieved,
+      this));
+
+  return did_respond() ? AlreadyResponded() : RespondLater();
+}
+
+void AutofillPrivateGetUserAnnotationsEntriesFunction::OnEntriesRetrieved(
+    user_annotations::UserAnnotationsEntries response) {
   std::vector<autofill_private::UserAnnotationsEntry> result;
-
-  // TODO(crbug.com/361437117): Replace stubby data with real API call result.
-  result.emplace_back();
-  result.back().entry_id = 1;
-  result.back().key = "Date of birth";
-  result.back().value = "15/02/1989";
-
-  result.emplace_back();
-  result.back().entry_id = 2;
-  result.back().key = "Frequent flyer program";
-  result.back().value = "Aadvantage";
-
-  return RespondNow(ArgumentList(
+  result.reserve(response.size());
+  for (optimization_guide::proto::UserAnnotationsEntry& entry : response) {
+    result.emplace_back();
+    result.back().entry_id = entry.entry_id();
+    result.back().key = std::move(entry.key());
+    result.back().value = std::move(entry.value());
+  }
+  Respond(ArgumentList(
       api::autofill_private::GetUserAnnotationsEntries::Results::Create(
           result)));
 }
@@ -1078,9 +1100,125 @@ AutofillPrivateDeleteUserAnnotationsEntryFunction::Run() {
               args());
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
-  // TODO(crbug.com/361437117): Replace stubby data with real API call result.
+  Profile* profile =
+      Profile::FromBrowserContext(GetSenderWebContents()->GetBrowserContext());
+  user_annotations::UserAnnotationsService* user_annotations_service =
+      profile ? UserAnnotationsServiceFactory::GetForProfile(profile) : nullptr;
 
-  return RespondNow(NoArguments());
+  if (!user_annotations_service) {
+    return RespondNow(Error(kErrorAutofillAIUnavailable));
+  }
+
+  user_annotations_service->RemoveEntry(
+      parameters->entry_id,
+      base::BindOnce(
+          &AutofillPrivateDeleteUserAnnotationsEntryFunction::OnEntryDeleted,
+          this));
+
+  return did_respond() ? AlreadyResponded() : RespondLater();
+}
+
+void AutofillPrivateDeleteUserAnnotationsEntryFunction::OnEntryDeleted() {
+  Respond(NoArguments());
+}
+
+// Triggers bootstarping using `UserAnnotationsService`. On completion if
+// entries were added returns `true` and triggers `maybeShowHelpBubble`,
+// otherwise return `false`.
+ExtensionFunction::ResponseAction
+AutofillPrivateTriggerAnnotationsBootstrappingFunction::Run() {
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(WithArguments(false));
+  }
+
+  const autofill::PersonalDataManager* personal_data_manager =
+      client->GetPersonalDataManager();
+  if (!personal_data_manager) {
+    return RespondNow(WithArguments(false));
+  }
+
+  std::vector<const autofill::AutofillProfile*> autofill_profiles =
+      personal_data_manager->address_data_manager().GetProfiles(
+          autofill::AddressDataManager::ProfileOrder::kHighestFrecencyDesc);
+  if (autofill_profiles.size() == 0u) {
+    return RespondNow(WithArguments(false));
+  }
+
+  Profile* profile =
+      Profile::FromBrowserContext(GetSenderWebContents()->GetBrowserContext());
+  user_annotations::UserAnnotationsService* user_annotations_service =
+      profile ? UserAnnotationsServiceFactory::GetForProfile(profile) : nullptr;
+  if (!user_annotations_service) {
+    return RespondNow(WithArguments(false));
+  }
+
+  user_annotations_service->SaveAutofillProfile(
+      *autofill_profiles[0],
+      base::BindOnce(&AutofillPrivateTriggerAnnotationsBootstrappingFunction::
+                         OnBootstrappingComplete,
+                     this));
+
+  return did_respond() ? AlreadyResponded() : RespondLater();
+}
+
+void AutofillPrivateTriggerAnnotationsBootstrappingFunction::MaybeShowIPH() {
+  if (auto* const interface =
+          BrowserUserEducationInterface::MaybeGetForWebContentsInTab(
+              GetSenderWebContents())) {
+    interface->MaybeShowFeaturePromo(
+        feature_engagement::
+            kIPHAutofillPredictionImprovementsBootstrappingFeature);
+  }
+}
+
+void AutofillPrivateTriggerAnnotationsBootstrappingFunction::
+    OnBootstrappingComplete(
+        user_annotations::UserAnnotationsExecutionResult result) {
+  if (result == user_annotations::UserAnnotationsExecutionResult::kSuccess) {
+    // When the new data was added to memories, notify user with the IPH.
+    MaybeShowIPH();
+    Respond(WithArguments(true));
+    return;
+  }
+  Respond(WithArguments(false));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// AutofillPrivateHasUserAnnotationsEntriesFunction
+
+ExtensionFunction::ResponseAction
+AutofillPrivateHasUserAnnotationsEntriesFunction::Run() {
+  Profile* profile =
+      Profile::FromBrowserContext(GetSenderWebContents()->GetBrowserContext());
+  user_annotations::UserAnnotationsService* user_annotations_service =
+      profile ? UserAnnotationsServiceFactory::GetForProfile(profile) : nullptr;
+
+  if (!user_annotations_service) {
+    return RespondNow(WithArguments(false));
+  }
+
+  user_annotations_service->RetrieveAllEntries(base::BindOnce(
+      &AutofillPrivateHasUserAnnotationsEntriesFunction::OnEntriesRetrieved,
+      this));
+
+  return did_respond() ? AlreadyResponded() : RespondLater();
+}
+
+void AutofillPrivateHasUserAnnotationsEntriesFunction::OnEntriesRetrieved(
+    user_annotations::UserAnnotationsEntries response) {
+  Respond(WithArguments(response.size() > 0));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// AutofillPrivateIsUserEligibleForAutofillImprovementsFunction
+
+ExtensionFunction::ResponseAction
+AutofillPrivateIsUserEligibleForAutofillImprovementsFunction::Run() {
+  Profile* profile =
+      Profile::FromBrowserContext(GetSenderWebContents()->GetBrowserContext());
+  return RespondNow(WithArguments(autofill_ai::IsUserEligible(profile)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1088,7 +1226,41 @@ AutofillPrivateDeleteUserAnnotationsEntryFunction::Run() {
 
 ExtensionFunction::ResponseAction
 AutofillPrivateDeleteAllUserAnnotationsEntriesFunction::Run() {
-  // TODO(crbug.com/361437117): Add real API call.
+  Profile* profile =
+      Profile::FromBrowserContext(GetSenderWebContents()->GetBrowserContext());
+  user_annotations::UserAnnotationsService* user_annotations_service =
+      profile ? UserAnnotationsServiceFactory::GetForProfile(profile) : nullptr;
+
+  if (!user_annotations_service) {
+    return RespondNow(Error(kErrorAutofillAIUnavailable));
+  }
+
+  user_annotations_service->RemoveAllEntries(
+      base::BindOnce(&AutofillPrivateDeleteAllUserAnnotationsEntriesFunction::
+                         OnAllEntriesDeleted,
+                     this));
+
+  return did_respond() ? AlreadyResponded() : RespondLater();
+}
+
+void AutofillPrivateDeleteAllUserAnnotationsEntriesFunction::
+    OnAllEntriesDeleted() {
+  Respond(NoArguments());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// AutofillPrivatePredictionImprovementsIphFeatureUsedFunction
+
+ExtensionFunction::ResponseAction
+AutofillPrivatePredictionImprovementsIphFeatureUsedFunction::Run() {
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(GetSenderWebContents());
+  if (!client) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
+
+  client->NotifyIphFeatureUsed(
+      autofill::AutofillClient::IphFeature::kPredictionImprovements);
   return RespondNow(NoArguments());
 }
 

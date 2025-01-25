@@ -41,6 +41,11 @@
 // Must come after all headers that specialize FromJniType() / ToJniType().
 #include "components/translate/content/android/jni_headers/TranslateMessage_jni.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
+
 namespace translate {
 
 namespace {
@@ -563,6 +568,18 @@ TranslateMessage::HandleSecondaryMenuItemClicked(
             InfobarEvent::INFOBAR_MORE_LANGUAGES_TRANSLATE);
         ui_delegate_->ReportUIInteraction(UIInteraction::kChangeTargetLanguage);
         ui_delegate_->UpdateAndRecordTargetLanguage(language_code_utf8);
+        // Vivaldi
+        if (vivaldi::IsVivaldiRunning()) {
+          // Revert to original language to reset JS script properly.
+          ui_delegate_->RevertTranslation();
+          // Wait for execution of JS script to be finished before
+          // attempting translation.
+          content::GetUIThreadTaskRunner({})->PostDelayedTask(
+              FROM_HERE,
+              base::BindOnce(&TranslateMessage::InternalTranslate,
+              base::Unretained(this)),
+              base::Milliseconds(500));  // Delay for a half second.
+        } else
         ui_delegate_->Translate();
         break;
 
@@ -721,6 +738,11 @@ TranslateMessage::ConstructLanguagePickerMenu(
           env, base::HeapArray<bool>::WithSize(titles.size())),
       base::android::ToJavaIntArray(env, overflow_menu_item_ids),
       base::android::ToJavaArrayOfStrings(env, language_codes));
+}
+
+// Vivaldi
+void TranslateMessage::InternalTranslate() {
+  ui_delegate_->Translate();
 }
 
 }  // namespace translate

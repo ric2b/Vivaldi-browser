@@ -43,6 +43,12 @@ class TranslateJavaScriptFeature : public web::JavaScriptFeature {
   void ScriptMessageReceived(web::WebState* web_state,
                              const web::ScriptMessage& message) override;
 
+  // Vivaldi
+  void OnScriptExecuted(web::WebFrame* frame,
+                        const base::Value* value,
+                        NSError* error);
+  // End Vivaldi
+
   TranslateJavaScriptFeature();
   ~TranslateJavaScriptFeature() override;
 

@@ -73,6 +73,7 @@ template("tweak_info_plist") {
       "//build/util/version.py",
       lastchange_file,
       "//chrome/VERSION",
+      "//vivaldi/build/apple/vivaldi_tweak_plist.py",
     ]
     sources = [ _source_name ]
     outputs = [ _output_name ]

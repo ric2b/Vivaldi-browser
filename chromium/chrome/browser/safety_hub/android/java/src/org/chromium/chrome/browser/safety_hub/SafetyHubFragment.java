@@ -12,6 +12,7 @@ import static org.chromium.chrome.browser.safety_hub.SafetyHubMetricUtils.record
 import static org.chromium.chrome.browser.safety_hub.SafetyHubModuleViewBinder.getModuleState;
 import static org.chromium.chrome.browser.safety_hub.SafetyHubModuleViewBinder.isBrowserStateSafe;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
@@ -20,13 +21,17 @@ import android.provider.Browser;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.ViewStub;
 
 import androidx.annotation.VisibleForTesting;
 import androidx.browser.customtabs.CustomTabsIntent;
 
+import org.chromium.base.CallbackController;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omaha.UpdateStatusProvider;
 import org.chromium.chrome.browser.password_manager.PasswordStoreBridge;
@@ -100,6 +105,8 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
     @VisibleForTesting
     static final String HELP_CENTER_URL = "https://support.google.com/chrome?p=safety_check";
 
+    private static final int ORGANIC_HATS_SURVEY_DELAY_MS = 10000;
+
     private SafetyHubModuleDelegate mDelegate;
     private UnusedSitePermissionsBridge mUnusedSitePermissionsBridge;
     private NotificationPermissionReviewBridge mNotificationPermissionReviewBridge;
@@ -114,9 +121,18 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
     private PasswordStoreBridge mPasswordStoreBridge;
     private SigninManager mSigninManager;
     private final ObservableSupplierImpl<String> mPageTitle = new ObservableSupplierImpl<>();
+    private CallbackController mCallbackController;
 
     @Override
     public void onCreatePreferences(Bundle bundle, String s) {
+        if(ChromeFeatureList.sSafetyHubAndroidOrganicSurvey.isEnabled()) {
+          mCallbackController = new CallbackController();
+          PostTask.postDelayedTask(
+                  TaskTraits.UI_DEFAULT,
+                  mCallbackController.makeCancelable(this::triggerOrganicHatsSurvey),
+                  ORGANIC_HATS_SURVEY_DELAY_MS);
+        }
+
         SettingsUtils.addPreferencesFromResource(this, R.xml.safety_hub_preferences);
         mPageTitle.set(getString(R.string.prefs_safety_check));
 
@@ -170,6 +186,10 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
         CardPreference browserStatePreference = findPreference(PREF_BROWSER_STATE_INDICATOR);
         int compromisedPasswordsCount =
                 UserPrefs.get(getProfile()).getInteger(Pref.BREACHED_CREDENTIALS_COUNT);
+        int weakPasswordsCount =
+                UserPrefs.get(getProfile()).getInteger(Pref.WEAK_CREDENTIALS_COUNT);
+        int reusedPasswordsCount =
+                UserPrefs.get(getProfile()).getInteger(Pref.REUSED_CREDENTIALS_COUNT);
         int totalPasswordsCount = mDelegate.getAccountPasswordsCount(mPasswordStoreBridge);
         int sitesWithUnusedPermissionsCount =
                 mUnusedSitePermissionsBridge.getRevokedPermissions().length;
@@ -180,8 +200,15 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
                 new PropertyModel.Builder(SafetyHubModuleProperties.BROWSER_STATE_MODULE_KEYS)
                         .with(SafetyHubModuleProperties.UPDATE_STATUS, mDelegate.getUpdateStatus())
                         .with(
+                                SafetyHubModuleProperties.IS_SIGNED_IN,
+                                SafetyHubUtils.isSignedIn(getProfile()))
+                        .with(
                                 SafetyHubModuleProperties.COMPROMISED_PASSWORDS_COUNT,
                                 compromisedPasswordsCount)
+                        .with(SafetyHubModuleProperties.WEAK_PASSWORDS_COUNT, weakPasswordsCount)
+                        .with(
+                                SafetyHubModuleProperties.REUSED_PASSWORDS_COUNT,
+                                reusedPasswordsCount)
                         .with(SafetyHubModuleProperties.TOTAL_PASSWORDS_COUNT, totalPasswordsCount)
                         .with(
                                 SafetyHubModuleProperties.NOTIFICATION_PERMISSIONS_FOR_REVIEW_COUNT,
@@ -201,12 +228,19 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
     }
 
     private void setUpAccountPasswordCheckModule() {
+        boolean isSignedIn = SafetyHubUtils.isSignedIn(getProfile());
+        int compromisedPasswordsCount =
+                UserPrefs.get(getProfile()).getInteger(Pref.BREACHED_CREDENTIALS_COUNT);
         SafetyHubExpandablePreference passwordCheckPreference = findPreference(PREF_PASSWORDS);
 
         mPasswordCheckPropertyModel =
                 new PropertyModel.Builder(
                                 SafetyHubModuleProperties.PASSWORD_CHECK_SAFETY_HUB_MODULE_KEYS)
                         .with(SafetyHubModuleProperties.IS_VISIBLE, true)
+                        .with(SafetyHubModuleProperties.IS_SIGNED_IN, isSignedIn)
+                        .with(
+                                SafetyHubModuleProperties.COMPROMISED_PASSWORDS_COUNT,
+                                compromisedPasswordsCount)
                         .build();
 
         PropertyModelChangeProcessor.create(
@@ -290,14 +324,14 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
                         .with(
                                 SafetyHubModuleProperties.SECONDARY_BUTTON_LISTENER,
                                 v -> {
-                                    launchSettingsActivity(SafetyHubPermissionsFragment.class);
+                                    startSettings(SafetyHubPermissionsFragment.class);
                                     recordRevokedPermissionsInteraction(
                                             PermissionsModuleInteractions.OPEN_REVIEW_UI);
                                 })
                         .with(
                                 SafetyHubModuleProperties.SAFE_STATE_BUTTON_LISTENER,
                                 v -> {
-                                    launchSettingsActivity(SiteSettings.class);
+                                    startSettings(SiteSettings.class);
                                     recordRevokedPermissionsInteraction(
                                             PermissionsModuleInteractions.GO_TO_SETTINGS);
                                 })
@@ -354,7 +388,7 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
                         .with(
                                 SafetyHubModuleProperties.SECONDARY_BUTTON_LISTENER,
                                 v -> {
-                                    launchSettingsActivity(SafetyHubNotificationsFragment.class);
+                                    startSettings(SafetyHubNotificationsFragment.class);
                                     recordNotificationsInteraction(
                                             NotificationsModuleInteractions.OPEN_UI_REVIEW);
                                 })
@@ -385,14 +419,14 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
                         .with(
                                 SafetyHubModuleProperties.PRIMARY_BUTTON_LISTENER,
                                 v -> {
-                                    launchSettingsActivity(SafeBrowsingSettingsFragment.class);
+                                    startSettings(SafeBrowsingSettingsFragment.class);
                                     recordDashboardInteractions(
                                             DashboardInteractions.GO_TO_SAFE_BROWSING_SETTINGS);
                                 })
                         .with(
                                 SafetyHubModuleProperties.SAFE_STATE_BUTTON_LISTENER,
                                 v -> {
-                                    launchSettingsActivity(SafeBrowsingSettingsFragment.class);
+                                    startSettings(SafeBrowsingSettingsFragment.class);
                                     recordDashboardInteractions(
                                             DashboardInteractions.GO_TO_SAFE_BROWSING_SETTINGS);
                                 })
@@ -481,7 +515,7 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
         updateAllModules();
 
         // Fetch the passwords again to get the latest result.
-        mSafetyHubFetchService.fetchBreachedCredentialsCount(success -> {});
+        mSafetyHubFetchService.fetchCredentialsCount(success -> {});
     }
 
     @Override
@@ -496,6 +530,10 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
         if (mPasswordStoreBridge != null) {
             mPasswordStoreBridge.removeObserver(this);
         }
+        if (mCallbackController != null) {
+            mCallbackController.destroy();
+            mCallbackController = null;
+        }
     }
 
     @Override
@@ -509,7 +547,7 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
     }
 
     @Override
-    public void compromisedPasswordCountChanged() {
+    public void passwordCountsChanged() {
         updatePasswordCheckPreference();
     }
 
@@ -644,6 +682,10 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
     private void updatePasswordCheckPreference() {
         int compromisedPasswordsCount =
                 UserPrefs.get(getProfile()).getInteger(Pref.BREACHED_CREDENTIALS_COUNT);
+        int weakPasswordsCount =
+                UserPrefs.get(getProfile()).getInteger(Pref.WEAK_CREDENTIALS_COUNT);
+        int reusedPasswordsCount =
+                UserPrefs.get(getProfile()).getInteger(Pref.REUSED_CREDENTIALS_COUNT);
         int totalPasswordsCount = mDelegate.getAccountPasswordsCount(mPasswordStoreBridge);
         boolean isPasswordSavingEnabled =
                 UserPrefs.get(getProfile()).getBoolean(Pref.CREDENTIALS_ENABLE_SERVICE);
@@ -653,6 +695,10 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
 
         mPasswordCheckPropertyModel.set(
                 SafetyHubModuleProperties.COMPROMISED_PASSWORDS_COUNT, compromisedPasswordsCount);
+        mPasswordCheckPropertyModel.set(
+                SafetyHubModuleProperties.WEAK_PASSWORDS_COUNT, weakPasswordsCount);
+        mPasswordCheckPropertyModel.set(
+                SafetyHubModuleProperties.REUSED_PASSWORDS_COUNT, reusedPasswordsCount);
         mPasswordCheckPropertyModel.set(
                 SafetyHubModuleProperties.TOTAL_PASSWORDS_COUNT, totalPasswordsCount);
         mPasswordCheckPropertyModel.set(
@@ -666,24 +712,26 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
             mPasswordCheckPropertyModel.set(
                     SafetyHubModuleProperties.PRIMARY_BUTTON_LISTENER,
                     v -> {
-                        mDelegate.showPasswordCheckUI(getContext());
+                        mDelegate.showPasswordCheckUi(getContext());
                         recordDashboardInteractions(DashboardInteractions.OPEN_PASSWORD_MANAGER);
                     });
             mPasswordCheckPropertyModel.set(
                     SafetyHubModuleProperties.SAFE_STATE_BUTTON_LISTENER,
                     v -> {
-                        mDelegate.showPasswordCheckUI(getContext());
+                        mDelegate.showPasswordCheckUi(getContext());
                         recordDashboardInteractions(DashboardInteractions.OPEN_PASSWORD_MANAGER);
                     });
         } else {
             mPasswordCheckPropertyModel.set(
                     SafetyHubModuleProperties.SAFE_STATE_BUTTON_LISTENER,
                     v -> {
-                        mDelegate.launchSyncOrSigninPromo(getContext());
+                        mDelegate.launchSigninPromo(getContext());
                         recordDashboardInteractions(DashboardInteractions.SHOW_SIGN_IN_PROMO);
                     });
         }
 
+        mBrowserStateModule.set(
+                SafetyHubModuleProperties.IS_SIGNED_IN, SafetyHubUtils.isSignedIn(getProfile()));
         mBrowserStateModule.set(
                 SafetyHubModuleProperties.COMPROMISED_PASSWORDS_COUNT, compromisedPasswordsCount);
         mBrowserStateModule.set(
@@ -710,5 +758,16 @@ public class SafetyHubFragment extends SafetyHubBaseFragment
         int browserState =
                 isBrowserStateSafe(mBrowserStateModule) ? ModuleState.SAFE : ModuleState.WARNING;
         recordModuleState(browserState, DashboardModuleType.BROWSER_STATE, event);
+    }
+
+    private void triggerOrganicHatsSurvey() {
+        Activity activity = getActivity();
+        ViewStub hatsSurveyViewStub = activity.findViewById(R.id.hats_survey_container_stub);
+        if (hatsSurveyViewStub != null && hatsSurveyViewStub.getParent() != null) {
+            hatsSurveyViewStub.inflate();
+        }
+        SafetyHubHatsHelper safetyHubHatsHelper = SafetyHubHatsHelper.getForProfile(getProfile());
+        assert safetyHubHatsHelper != null && activity != null;
+        safetyHubHatsHelper.triggerOrganicHatsSurvey(activity);
     }
 }

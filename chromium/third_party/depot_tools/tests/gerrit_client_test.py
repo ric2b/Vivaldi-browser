@@ -158,6 +158,23 @@ class TestGerritClient(unittest.TestCase):
                                           1,
                                           labels={'some-label': '-2'})
 
+    @mock.patch('gerrit_util.SetReview', return_value='')
+    def test_addmessage(self, util_mock):
+        gerrit_client.main([
+            'addmessage',
+            '--host',
+            'https://example.org/foo',
+            '-c',
+            '1',
+            '-r',
+            '2',
+            '-m',
+            'This is a message',
+        ])
+        util_mock.assert_called_once_with('example.org',
+                                          1,
+                                          revision='2',
+                                          msg='This is a message')
 
 if __name__ == '__main__':
     logging.basicConfig(

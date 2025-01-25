@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 
@@ -110,7 +111,7 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedFallbackSearch(
     search_engines::SearchEngineChoiceService* search_engine_choice_service, SearchType search_type = SearchType::kMain);
 
 // Returns all prepopulated engines for all locales.
-std::vector<const PrepopulatedEngine*> GetAllPrepopulatedEngines();
+const base::span<const PrepopulatedEngine* const> GetAllPrepopulatedEngines();
 
 // Returns all the prepopulated engines that are used in the EEA region.
 std::vector<std::unique_ptr<TemplateURLData>>

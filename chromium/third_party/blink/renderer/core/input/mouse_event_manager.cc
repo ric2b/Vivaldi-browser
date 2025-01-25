@@ -92,10 +92,7 @@ void SetMouseEventAttributes(MouseEventInit* initializer,
   initializer->setButtons(
       MouseEvent::WebInputEventModifiersToButtons(mouse_event.GetModifiers()));
   initializer->setView(target_node->GetDocument().domWindow());
-  initializer->setComposed(
-      RuntimeEnabledFeatures::NonComposedEnterLeaveEventsEnabled()
-          ? !is_mouse_enter_or_leave
-          : true);
+  initializer->setComposed(!is_mouse_enter_or_leave);
   initializer->setDetail(click_count);
   initializer->setRelatedTarget(related_target);
   UIEventWithKeyState::SetFromWebInputEventModifiers(
@@ -141,7 +138,7 @@ void MouseEventManager::Clear() {
   mouse_down_may_start_drag_ = false;
   mouse_pressed_ = false;
   click_count_ = 0;
-  click_element_ = nullptr;
+  mousedown_element_ = nullptr;
   mouse_down_pos_ = gfx::Point();
   mouse_down_timestamp_ = base::TimeTicks();
   mouse_down_ = WebMouseEvent();
@@ -164,7 +161,7 @@ void MouseEventManager::Trace(Visitor* visitor) const {
   visitor->Trace(scroll_manager_);
   visitor->Trace(element_under_mouse_);
   visitor->Trace(mouse_press_node_);
-  visitor->Trace(click_element_);
+  visitor->Trace(mousedown_element_);
   SynchronousMutationObserver::Trace(visitor);
 }
 
@@ -300,6 +297,19 @@ MouseEventManager::SetElementUnderMouseAndDispatchMouseEvent(
           web_mouse_event.pointer_type));
 }
 
+namespace {
+
+bool HasClickListenersInAncestor(Node* node) {
+  for (; node; node = FlatTreeTraversal::Parent(*node)) {
+    if (node->HasEventListeners(event_type_names::kClick)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
+
 WebInputEventResult MouseEventManager::DispatchMouseClickIfNeeded(
     Element* mouse_release_target,
     Element* captured_click_target,
@@ -319,35 +329,41 @@ WebInputEventResult MouseEventManager::DispatchMouseClickIfNeeded(
 #endif
 
   const bool should_dispatch_click_event =
-      click_count_ > 0 && !context_menu_event && click_element_ &&
-      mouse_release_target && click_element_->isConnected();
+      click_count_ > 0 && !context_menu_event && mousedown_element_ &&
+      mouse_release_target && mousedown_element_->isConnected();
   if (!should_dispatch_click_event)
     return WebInputEventResult::kNotHandled;
 
   Node* click_target_node = nullptr;
+  Node* common_ancestor = mouse_release_target->CommonAncestor(
+      *mousedown_element_, event_handling_util::ParentForClickEvent);
+
   if (RuntimeEnabledFeatures::ClickToCapturedPointerEnabled() &&
       captured_click_target) {
     click_target_node = captured_click_target;
-  } else if (click_element_->GetDocument() ==
+  } else if (mousedown_element_->GetDocument() ==
              mouse_release_target->GetDocument()) {
-    click_target_node = mouse_release_target->CommonAncestor(
-        *click_element_, event_handling_util::ParentForClickEvent);
+    click_target_node = common_ancestor;
   }
 
   if (!click_target_node)
     return WebInputEventResult::kNotHandled;
 
-  if (captured_click_target && (click_target_node != captured_click_target)) {
+  const AtomicString click_event_type =
+      (mouse_event.button == WebPointerProperties::Button::kLeft)
+          ? event_type_names::kClick
+          : event_type_names::kAuxclick;
+
+  if (captured_click_target && (common_ancestor != captured_click_target) &&
+      (click_event_type == event_type_names::kClick) &&
+      (HasClickListenersInAncestor(common_ancestor) ||
+       HasClickListenersInAncestor(captured_click_target))) {
     UseCounter::Count(frame_->GetDocument(),
                       WebFeature::kExplicitPointerCaptureClickTargetDiff);
   }
 
-  return DispatchMouseEvent(
-      click_target_node,
-      (mouse_event.button == WebPointerProperties::Button::kLeft)
-          ? event_type_names::kClick
-          : event_type_names::kAuxclick,
-      mouse_event, nullptr, nullptr, false, pointer_id, pointer_type);
+  return DispatchMouseEvent(click_target_node, click_event_type, mouse_event,
+                            nullptr, nullptr, false, pointer_id, pointer_type);
 }
 
 void MouseEventManager::RecomputeMouseHoverStateIfNeeded() {
@@ -461,20 +477,23 @@ void MouseEventManager::NodeChildrenWillBeRemoved(ContainerNode& container) {
   if (RuntimeEnabledFeatures::BoundaryEventDispatchTracksNodeRemovalEnabled()) {
     return;
   }
-  if (container == click_element_)
+  if (container == mousedown_element_) {
     return;
-  if (!click_element_ ||
-      !container.IsShadowIncludingInclusiveAncestorOf(*click_element_))
+  }
+  if (!mousedown_element_ ||
+      !container.IsShadowIncludingInclusiveAncestorOf(*mousedown_element_)) {
     return;
-  click_element_ = nullptr;
+  }
+  mousedown_element_ = nullptr;
 }
 
 void MouseEventManager::NodeWillBeRemoved(Node& node_to_be_removed) {
-  if (click_element_ && node_to_be_removed.IsShadowIncludingInclusiveAncestorOf(
-                            *click_element_)) {
+  if (mousedown_element_ &&
+      node_to_be_removed.IsShadowIncludingInclusiveAncestorOf(
+          *mousedown_element_)) {
     // We don't dispatch click events if the mousedown node is removed
     // before a mouseup event. It is compatible with IE and Firefox.
-    click_element_ = nullptr;
+    mousedown_element_ = nullptr;
   }
   if (mouse_press_node_ &&
       node_to_be_removed.IsShadowIncludingInclusiveAncestorOf(
@@ -576,7 +595,10 @@ WebInputEventResult MouseEventManager::HandleMouseFocus(
   // default behavior).
   if (element && !element->IsMouseFocusable() &&
       SlideFocusOnShadowHostIfNecessary(*element)) {
-    return WebInputEventResult::kHandledSystem;
+    return RuntimeEnabledFeatures::
+                   SelectionOnShadowDOMWithDelegatesFocusEnabled()
+               ? WebInputEventResult::kNotHandled
+               : WebInputEventResult::kHandledSystem;
   }
 
   // We call setFocusedElement even with !element in order to blur
@@ -690,8 +712,10 @@ WebInputEventResult MouseEventManager::HandleMousePressEvent(
   // |SelectionController| calls |PositionForPoint()| which requires
   // |kPrePaintClean|. |FocusDocumentView| above is the last possible
   // modifications before we call |SelectionController|.
-  if (LocalFrameView* frame_view = frame_->View())
-    frame_view->UpdateLifecycleToPrePaintClean(DocumentUpdateReason::kInput);
+  if (LocalFrameView* frame_view = frame_->View()) {
+    frame_view->UpdateAllLifecyclePhasesExceptPaint(
+        DocumentUpdateReason::kInput);
+  }
 
   Node* inner_node = event.InnerNode();
 
@@ -728,8 +752,10 @@ WebInputEventResult MouseEventManager::HandleMouseReleaseEvent(
   // |SelectionController| calls |PositionForPoint()| which requires
   // |kPrePaintClean|. |FocusDocumentView| above is the last possible
   // modifications before we call |SelectionController|.
-  if (LocalFrameView* frame_view = frame_->View())
-    frame_view->UpdateLifecycleToPrePaintClean(DocumentUpdateReason::kInput);
+  if (LocalFrameView* frame_view = frame_->View()) {
+    frame_view->UpdateAllLifecyclePhasesExceptPaint(
+        DocumentUpdateReason::kInput);
+  }
 
   return frame_->GetEventHandler()
                  .GetSelectionController()
@@ -839,8 +865,10 @@ WebInputEventResult MouseEventManager::HandleMouseDraggedEvent(
 
   // |SelectionController| calls |PositionForPoint()| which requires
   // |kPrePaintClean|.
-  if (LocalFrameView* frame_view = frame_->View())
-    frame_view->UpdateLifecycleToPrePaintClean(DocumentUpdateReason::kInput);
+  if (LocalFrameView* frame_view = frame_->View()) {
+    frame_view->UpdateAllLifecyclePhasesExceptPaint(
+        DocumentUpdateReason::kInput);
+  }
 
   mouse_down_may_start_drag_ = false;
 
@@ -1177,7 +1205,7 @@ bool MouseEventManager::HandleSvgPanIfNeeded(bool is_release_event) {
 
 void MouseEventManager::InvalidateClick() {
   click_count_ = 0;
-  click_element_ = nullptr;
+  mousedown_element_ = nullptr;
 }
 
 bool MouseEventManager::MousePressed() {
@@ -1196,17 +1224,13 @@ void MouseEventManager::SetMousePressNode(Node* node) {
   mouse_press_node_ = node;
 }
 
-Element* MouseEventManager::ClickElement() {
-  return click_element_.Get();
-}
-
-void MouseEventManager::SetClickElement(Element* element) {
+void MouseEventManager::SetMouseDownElement(Element* element) {
   // TODO(mustaq): Why is SetDocument() not called earlier at
   // LocalFrame::DidAttachDocument()?  Because this is delayed call, the methods
   // MouseEventManager::WillBeRemoved() are not called until a mouse-press or
   // tap!
   SetDocument(element ? element->ownerDocument() : nullptr);
-  click_element_ = element;
+  mousedown_element_ = element;
 }
 
 void MouseEventManager::SetClickCount(int click_count) {

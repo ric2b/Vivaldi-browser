@@ -133,6 +133,10 @@ class Chrome(DesktopProduct):
 class HeadlessShell(DesktopProduct):
     name = 'headless_shell'
 
+    def update_runner_options(self, options: argparse.Namespace):
+        super().update_runner_options(options)
+        options.enable_swiftshader = True
+
     def additional_binary_args(self):
         # TODO(crbug.com/40887057): Support `--enable-leak-detection` and plumb
         # the flag here.
@@ -208,8 +212,7 @@ class ChromeAndroidBase(Product):
 
                 SyncParallelizer(instances).Start(  # pylint: disable=undefined-variable;
                     writable_system=True,
-                    window=self._options.emulator_window,
-                    require_fast_start=True)
+                    window=self._options.emulator_window)
 
             #TODO(weizhong): when choose device, make sure abi matches with target
             yield device_utils.DeviceUtils.HealthyDevices()  # pylint: disable=undefined-variable;

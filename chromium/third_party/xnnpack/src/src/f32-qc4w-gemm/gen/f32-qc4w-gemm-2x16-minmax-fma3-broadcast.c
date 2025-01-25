@@ -25,7 +25,7 @@ void xnn_f32_qc4w_gemm_minmax_ukernel_2x16__fma3_broadcast(
     float* restrict c,
     size_t cm_stride,
     size_t cn_stride,
-    const union xnn_f32_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(mr != 0);
   assert(mr <= 2);
@@ -44,10 +44,19 @@ void xnn_f32_qc4w_gemm_minmax_ukernel_2x16__fma3_broadcast(
     a1 = a0;
     c1 = c0;
   }
-  const __m256i vmagic_bias_c0 = _mm256_load_si256((const __m256i*) params->avx.magic_bias_c0);
-  const __m256i vmagic_bias_c1 = _mm256_load_si256((const __m256i*) params->avx.magic_bias_c1);
-  const __m256 vmagic_bias_plus_kernel_zero_point_c0 = _mm256_load_ps(params->avx.magic_bias_plus_kernel_zero_point_c0);
-  const __m256 vmagic_bias_plus_kernel_zero_point_c1 = _mm256_load_ps(params->avx.magic_bias_plus_kernel_zero_point_c1);
+  const __m256i vmagic_bias_c0 = _mm256_set1_epi32(0x4B0000F0);
+  const __m256i vmagic_bias_c1 = _mm256_set1_epi32(0x4900000F);
+  const __m256 vmagic_bias_plus_kernel_zero_point_c0 = _mm256_set1_ps(0x1.0001E0p+23f + (float) params->scalar.kernel_zero_point);
+  const __m256 vmagic_bias_plus_kernel_zero_point_c1 = _mm256_set1_ps(0x1.00001Ep+19f + (float) params->scalar.kernel_zero_point);
+  XNN_FORCE_REALIZATION(vmagic_bias_c0);
+  XNN_FORCE_REALIZATION(vmagic_bias_c1);
+  XNN_FORCE_REALIZATION(vmagic_bias_plus_kernel_zero_point_c0);
+  XNN_FORCE_REALIZATION(vmagic_bias_plus_kernel_zero_point_c1);
+
+  const __m256 vmin = _mm256_set1_ps(params->scalar.min);
+  const __m256 vmax = _mm256_set1_ps(params->scalar.max);
+  XNN_FORCE_REALIZATION(vmin);
+  XNN_FORCE_REALIZATION(vmax);
 
   do {
     __m256 vacc0x01234567 = _mm256_loadu_ps((const float*) w + 0);
@@ -128,13 +137,11 @@ void xnn_f32_qc4w_gemm_minmax_ukernel_2x16__fma3_broadcast(
     vacc0x89ABCDEF = _mm256_mul_ps(vacc0x89ABCDEF, vscale89ABCDEF);
     vacc1x89ABCDEF = _mm256_mul_ps(vacc1x89ABCDEF, vscale89ABCDEF);
     w = (const float*) w + 16;
-    const __m256 vmin = _mm256_load_ps(params->avx.min);
     vacc0x01234567 = _mm256_max_ps(vmin, vacc0x01234567);
     vacc1x01234567 = _mm256_max_ps(vmin, vacc1x01234567);
     vacc0x89ABCDEF = _mm256_max_ps(vmin, vacc0x89ABCDEF);
     vacc1x89ABCDEF = _mm256_max_ps(vmin, vacc1x89ABCDEF);
 
-    const __m256 vmax = _mm256_load_ps(params->avx.max);
     vacc0x01234567 = _mm256_min_ps(vmax, vacc0x01234567);
     vacc1x01234567 = _mm256_min_ps(vmax, vacc1x01234567);
     vacc0x89ABCDEF = _mm256_min_ps(vmax, vacc0x89ABCDEF);

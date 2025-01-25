@@ -259,7 +259,7 @@ class DiscoveryE2ETest : public testing::Test {
   }
   TaskRunner* task_runner_;
   FailOnErrorReporting reporting_client_;
-  std::unique_ptr<discovery::DnsSdService, TaskRunnerDeleter> dnssd_service_;
+  discovery::DnsSdServicePtr dnssd_service_;
   std::unique_ptr<ServiceReceiver> receiver_;
   std::unique_ptr<Publisher> publisher_;
 

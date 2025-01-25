@@ -152,6 +152,12 @@ void MenuContentAPI::MenuModelChanged(menus::Menu_Model* model,
   MenuContentAPI::SendOnChanged(browser_context_, model, select_id, menu);
 }
 
+void MenuContentAPI::MenuModelReset(menus::Menu_Model* model, bool all) {
+  if (all) {
+    SendOnResetAll(browser_context_, model);
+  }
+}
+
 // static
 void MenuContentAPI::SendOnChanged(BrowserContext* browser_context,
                                    Menu_Model* model,
@@ -184,6 +190,15 @@ void MenuContentAPI::SendOnChanged(BrowserContext* browser_context,
 }
 
 // static
+void MenuContentAPI::SendOnResetAll(content::BrowserContext*  browser_context,
+                                    menus::Menu_Model* model) {
+  ::vivaldi::BroadcastEvent(vivaldi::menu_content::OnResetAll::kEventName,
+                              vivaldi::menu_content::OnResetAll::Create(
+                                model->mode() == Menu_Model::kContextMenu),
+                              browser_context);
+}
+
+// static
 BrowserContextKeyedAPIFactory<MenuContentAPI>*
 MenuContentAPI::GetFactoryInstance() {
   return g_menu_content.Pointer();
@@ -205,7 +220,7 @@ ExtensionFunction::ResponseAction MenuContentGetFunction::Run() {
     } else {
       AddRef();  // Balanced in MenuModelLoaded().
       model->AddObserver(this);
-      model->Load();
+      model->Load(false);
       return RespondLater();
     }
   }
@@ -376,7 +391,7 @@ ExtensionFunction::ResponseAction MenuContentRemoveActionFunction::Run() {
   } else {
     AddRef();  // Balanced in MenuModelLoaded().
     model->AddObserver(this);
-    model->Load();
+    model->Load(false);
     return RespondLater();
   }
 }
@@ -495,11 +510,37 @@ ExtensionFunction::ResponseAction MenuContentResetFunction::Run() {
       ArgumentList(vivaldi::menu_content::Reset::Results::Create(false)));
 }
 
-
-void MenuContentResetFunction::MenuModelReset(menus::Menu_Model* model) {
+void MenuContentResetFunction::MenuModelReset(menus::Menu_Model* model,
+                                              bool all) {
   std::optional<vivaldi::menu_content::Reset::Params> params(
       vivaldi::menu_content::Reset::Params::Create(args()));
   Respond(ArgumentList(vivaldi::menu_content::Reset::Results::Create(true)));
+  model->RemoveObserver(this);
+  Release();  // Balanced in Run().
+}
+
+ExtensionFunction::ResponseAction MenuContentResetAllFunction::Run() {
+  std::optional<vivaldi::menu_content::ResetAll::Params> params(
+      vivaldi::menu_content::ResetAll::Params::Create(args()));
+  Menu_Model* model = params->is_context
+      ? ContextMenuServiceFactory::GetForBrowserContext(browser_context())
+      : MainMenuServiceFactory::GetForBrowserContext(browser_context());
+  if (model) {
+    AddRef();  // Balanced in MenuModelReset().
+    model->AddObserver(this);
+    model->ResetAll();
+    return RespondLater();
+  }
+
+  return RespondNow(
+      ArgumentList(vivaldi::menu_content::ResetAll::Results::Create(false)));
+}
+
+void MenuContentResetAllFunction::MenuModelReset(menus::Menu_Model* model,
+                                                 bool all) {
+  std::optional<vivaldi::menu_content::ResetAll::Params> params(
+      vivaldi::menu_content::ResetAll::Params::Create(args()));
+  Respond(ArgumentList(vivaldi::menu_content::ResetAll::Results::Create(true)));
   model->RemoveObserver(this);
   Release();  // Balanced in Run().
 }

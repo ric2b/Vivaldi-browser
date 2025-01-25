@@ -135,13 +135,15 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
 
   // Creates the "Use other account" button.
   std::unique_ptr<views::View> CreateUseOtherAccountButton(
-      const content::IdentityProviderMetadata& idp_metadata);
+      const content::IdentityProviderMetadata& idp_metadata,
+      const std::u16string& title,
+      int icon_margin);
 
   // Updates the header title, the header icon visibility and the header back
   // button visibiltiy. `idp_metadata` is not null when we need to set a header
   // image based on the IDP.
   void UpdateHeader(const content::IdentityProviderMetadata& idp_metadata,
-                    const std::u16string title,
+                    const std::u16string& title,
                     bool show_back_button);
 
   // Removes all children except for `header_view_`.
@@ -150,8 +152,8 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
   // Creates the "Choose an account" button, showing some IDP domains as well.
   // Prioritizes showing any IDPs for which there was a login status mismatch.
   std::unique_ptr<views::View> CreateChooseAnAccountButton(
-      const std::vector<std::u16string> mismatch_idps,
-      const std::vector<std::u16string> non_mismatch_idps);
+      const std::vector<std::u16string>& mismatch_idps,
+      const std::vector<std::u16string>& non_mismatch_idps);
 
   // The current title for the dialog.
   std::u16string title_;

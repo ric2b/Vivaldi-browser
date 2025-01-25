@@ -9,9 +9,9 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/picture_in_picture/auto_pip_setting_overlay_view.h"
 #include "chromeos/ui/frame/highlight_border_overlay.h"
+#include "components/global_media_controls/public/views/media_progress_view.h"
 #include "content/public/browser/overlay_window.h"
 #include "content/public/browser/video_picture_in_picture_window_controller.h"
 #include "ui/display/display.h"
@@ -89,6 +89,7 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   void SetHangUpButtonVisibility(bool is_visible) override;
   void SetPreviousSlideButtonVisibility(bool is_visible) override;
   void SetNextSlideButtonVisibility(bool is_visible) override;
+  void SetMediaPosition(const media_session::MediaPosition& position) override;
   void SetSurfaceId(const viz::SurfaceId& surface_id) override;
 
   // views::Widget:
@@ -120,7 +121,7 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   void OnAutoPipSettingOverlayViewHidden() override;
 
   bool ControlsHitTestContainsPoint(const gfx::Point& point);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Gets the proper hit test component when the hit point is on the resize
   // handle in order to force a drag-to-resize.
   int GetResizeHTComponent() const;
@@ -165,6 +166,7 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   gfx::Rect GetHangUpButtonBounds();
   gfx::Rect GetPreviousSlideControlsBounds();
   gfx::Rect GetNextSlideControlsBounds();
+  gfx::Rect GetProgressViewBounds();
 
   PlaybackImageButton* play_pause_controls_view_for_testing() const;
   SimpleOverlayWindowImageButton* next_track_controls_view_for_testing() const;
@@ -177,6 +179,7 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   SimpleOverlayWindowImageButton* next_slide_controls_view_for_testing() const;
   SimpleOverlayWindowImageButton* previous_slide_controls_view_for_testing()
       const;
+  global_media_controls::MediaProgressView* progress_view_for_testing() const;
   CloseImageButton* close_button_for_testing() const;
   OverlayWindowMinimizeButton* minimize_button_for_testing() const;
   OverlayWindowBackToTabButton* back_to_tab_button_for_testing() const;
@@ -296,6 +299,13 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   // Removes the `overlay_view_` if it exists.
   void RemoveOverlayViewIfExists();
 
+  void OnProgressDragStateChanged(global_media_controls::DragState drag_state);
+  void ChangePlaybackStateForProgressDrag(
+      global_media_controls::PlaybackStateChangeForDragging
+          playback_state_change);
+  void SeekForProgressBarInteraction(double seek_progress);
+  void OnProgressViewUpdateCurrentTime(base::TimeDelta current_time);
+
   // Not owned; |controller_| owns |this|.
   raw_ptr<content::VideoPictureInPictureWindowController> controller_;
 
@@ -364,12 +374,12 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   raw_ptr<SimpleOverlayWindowImageButton> previous_slide_controls_view_ =
       nullptr;
   raw_ptr<SimpleOverlayWindowImageButton> next_slide_controls_view_ = nullptr;
+  raw_ptr<global_media_controls::MediaProgressView> progress_view_ = nullptr;
   raw_ptr<AutoPipSettingOverlayView> overlay_view_ = nullptr;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Generates a nine patch layer painted with a highlight border for ChromeOS
-  // ASH only, not including LaCrOS. Highlight border for chrome pip window in
-  // LaCrOS will be added when `ash::NonClientFrameViewAsh` is created.
+  // Ash.
   std::unique_ptr<HighlightBorderOverlay> highlight_border_overlay_;
 #endif
 
@@ -409,6 +419,15 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   // case when Media Session "nextslide" action is handled by the website.
   bool show_next_slide_button_ = false;
 
+  // Tracks whether or not the progress bar is currently being dragged by the
+  // user. Used to ensure that controls don't hide while dragging.
+  global_media_controls::DragState progress_view_drag_state_ =
+      global_media_controls::DragState::kDragEnded;
+
+  // Tracks the current position of media playback. Used for seeking to the
+  // proper time when the user interacts with the progress bar.
+  media_session::MediaPosition position_;
+
   // Whether or not the current frame sink for the surface displayed in the
   // |video_view_| is registered as the child of the overlay window frame sink.
   bool has_registered_frame_sink_hierarchy_ = false;
@@ -418,7 +437,7 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   GetOverlayViewCb get_overlay_view_cb_;
 
 // Vivaldi
-  raw_ptr<vivaldi::VideoProgress> progress_view_ = nullptr;
+  raw_ptr<vivaldi::VideoProgress> vivaldi_progress_view_ = nullptr;
   raw_ptr<vivaldi::MuteButton> mute_button_ = nullptr;
   raw_ptr<vivaldi::VolumeSlider> volume_slider_ = nullptr;
 

@@ -27,8 +27,10 @@
 
 #include "src/tint/lang/glsl/writer/raise/raise.h"
 
+#include "src/tint/lang/core/ir/module.h"
 #include "src/tint/lang/core/ir/transform/add_empty_entry_point.h"
 #include "src/tint/lang/core/ir/transform/array_length_from_uniform.h"
+#include "src/tint/lang/core/ir/transform/bgra8unorm_polyfill.h"
 #include "src/tint/lang/core/ir/transform/binary_polyfill.h"
 #include "src/tint/lang/core/ir/transform/binding_remapper.h"
 #include "src/tint/lang/core/ir/transform/block_decorated_structs.h"
@@ -37,6 +39,7 @@
 #include "src/tint/lang/core/ir/transform/demote_to_helper.h"
 #include "src/tint/lang/core/ir/transform/direct_variable_access.h"
 #include "src/tint/lang/core/ir/transform/multiplanar_external_texture.h"
+#include "src/tint/lang/core/ir/transform/prepare_push_constants.h"
 #include "src/tint/lang/core/ir/transform/preserve_padding.h"
 #include "src/tint/lang/core/ir/transform/remove_continue_in_switch.h"
 #include "src/tint/lang/core/ir/transform/remove_terminator_args.h"
@@ -46,8 +49,16 @@
 #include "src/tint/lang/core/ir/transform/value_to_let.h"
 #include "src/tint/lang/core/ir/transform/vectorize_scalar_matrix_constructors.h"
 #include "src/tint/lang/core/ir/transform/zero_init_workgroup_memory.h"
+#include "src/tint/lang/core/type/f32.h"
+#include "src/tint/lang/core/type/u32.h"
 #include "src/tint/lang/glsl/writer/common/option_helpers.h"
+#include "src/tint/lang/glsl/writer/raise/binary_polyfill.h"
+#include "src/tint/lang/glsl/writer/raise/bitcast_polyfill.h"
+#include "src/tint/lang/glsl/writer/raise/builtin_polyfill.h"
+#include "src/tint/lang/glsl/writer/raise/offset_first_index.h"
 #include "src/tint/lang/glsl/writer/raise/shader_io.h"
+#include "src/tint/lang/glsl/writer/raise/texture_builtins_from_uniform.h"
+#include "src/tint/lang/glsl/writer/raise/texture_polyfill.h"
 
 namespace tint::glsl::writer {
 
@@ -59,6 +70,43 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
             return result.Failure();     \
         }                                \
     } while (false)
+
+    // Must come before TextureBuiltinsFromUniform as it may add `textureNumLevels` calls.
+    if (!options.disable_robustness) {
+        core::ir::transform::RobustnessConfig config{};
+        RUN_TRANSFORM(core::ir::transform::Robustness, module, config);
+    }
+
+    // PreparePushConstants must come before any transform that needs internal push constants.
+    core::ir::transform::PreparePushConstantsConfig push_constant_config;
+    if (options.first_instance_offset) {
+        push_constant_config.AddInternalConstant(options.first_instance_offset.value(),
+                                                 module.symbols.New("tint_first_instance"),
+                                                 module.Types().u32());
+    }
+    if (options.first_vertex_offset) {
+        push_constant_config.AddInternalConstant(options.first_vertex_offset.value(),
+                                                 module.symbols.New("tint_first_vertex"),
+                                                 module.Types().u32());
+    }
+    if (options.depth_range_offsets) {
+        push_constant_config.AddInternalConstant(options.depth_range_offsets.value().min,
+                                                 module.symbols.New("tint_frag_depth_min"),
+                                                 module.Types().f32());
+        push_constant_config.AddInternalConstant(options.depth_range_offsets.value().max,
+                                                 module.symbols.New("tint_frag_depth_max"),
+                                                 module.Types().f32());
+    }
+    auto push_constant_layout =
+        core::ir::transform::PreparePushConstants(module, push_constant_config);
+    if (push_constant_layout != Success) {
+        return push_constant_layout.Failure();
+    }
+
+    // Note, this comes before binding remapper as Dawn inserts _pre-remapping_ binding information.
+    // So, in order to move this later we'd need to update Dawn to send the _post-remapping_ data.
+    RUN_TRANSFORM(raise::TextureBuiltinsFromUniform, module,
+                  options.bindings.texture_builtins_from_uniform);
 
     tint::transform::multiplanar::BindingsMap multiplanar_map{};
     RemapperData remapper_data{};
@@ -87,12 +135,10 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
         core_polyfills.pack_unpack_4x8 = true;
         core_polyfills.pack_4xu8_clamp = true;
 
-        // TODO(dsinclair): bgra8unorm
-        // TODO(dsinclair): bitshift_modulo
-        // TODO(dsinclair): int_div_mod
-
         RUN_TRANSFORM(core::ir::transform::BuiltinPolyfill, module, core_polyfills);
     }
+
+    RUN_TRANSFORM(core::ir::transform::Bgra8UnormPolyfill, module);
 
     {
         core::ir::transform::ConversionPolyfillConfig conversion_polyfills;
@@ -100,38 +146,58 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
         RUN_TRANSFORM(core::ir::transform::ConversionPolyfill, module, conversion_polyfills);
     }
 
-    if (!options.disable_robustness) {
-        core::ir::transform::RobustnessConfig config{};
-        RUN_TRANSFORM(core::ir::transform::Robustness, module, config);
-    }
-
     RUN_TRANSFORM(core::ir::transform::MultiplanarExternalTexture, module, multiplanar_map);
 
     RUN_TRANSFORM(core::ir::transform::BlockDecoratedStructs, module);
 
-    // TODO(dsinclair): TextureBuiltinsFromUniform
-    // TODO(dsinclair): OffsetFirstIndex
-    // TODO(dsinclair): CombineSamplers
-    // TODO(dsinclair): PadStructs
-    // TODO(dsinclair): Texture1DTo2D
+    // `PreservePadding` must run before `DirectVariableAccess`.
+    RUN_TRANSFORM(core::ir::transform::PreservePadding, module);
 
-    RUN_TRANSFORM(core::ir::transform::DirectVariableAccess, module,
-                  core::ir::transform::DirectVariableAccessOptions{});
+    {
+        // This must come after `MultiplanarExternalTexture` as it will insert functions with
+        // texture parameters, and also after `PreservePadding` which inserts functions with storage
+        // buffer parameters.
+        core::ir::transform::DirectVariableAccessOptions dva_config{};
+        dva_config.transform_handle = true;
+        RUN_TRANSFORM(core::ir::transform::DirectVariableAccess, module, dva_config);
+    }
 
     if (!options.disable_workgroup_init) {
         RUN_TRANSFORM(core::ir::transform::ZeroInitWorkgroupMemory, module);
     }
 
-    RUN_TRANSFORM(core::ir::transform::PreservePadding, module);
-    RUN_TRANSFORM(core::ir::transform::VectorizeScalarMatrixConstructors, module);
-    RUN_TRANSFORM(core::ir::transform::RemoveContinueInSwitch, module);
-
     // DemoteToHelper must come before any transform that introduces non-core instructions.
     RUN_TRANSFORM(core::ir::transform::DemoteToHelper, module);
 
+    RUN_TRANSFORM(raise::BinaryPolyfill, module);
+    // Must come after zero-init as it will add builtins
+    RUN_TRANSFORM(raise::BuiltinPolyfill, module);
+
+    {
+        // Must come after DirectVariableAccess
+        raise::TexturePolyfillConfig tex_config;
+        tex_config.sampler_texture_to_name = options.bindings.sampler_texture_to_name;
+        tex_config.placeholder_sampler_bind_point = options.bindings.placeholder_sampler_bind_point;
+        tex_config.texture_builtins_from_uniform = options.bindings.texture_builtins_from_uniform;
+        RUN_TRANSFORM(raise::TexturePolyfill, module, tex_config);
+    }
+
+    // Must come after BuiltinPolyfill as builtins can add bitcasts
+    RUN_TRANSFORM(raise::BitcastPolyfill, module);
+
+    RUN_TRANSFORM(core::ir::transform::VectorizeScalarMatrixConstructors, module);
+    RUN_TRANSFORM(core::ir::transform::RemoveContinueInSwitch, module);
+
     RUN_TRANSFORM(core::ir::transform::AddEmptyEntryPoint, module);
 
-    RUN_TRANSFORM(raise::ShaderIO, module, raise::ShaderIOConfig{options.depth_range_offsets});
+    RUN_TRANSFORM(raise::ShaderIO, module,
+                  raise::ShaderIOConfig{push_constant_layout.Get(), options.depth_range_offsets});
+
+    // Must come after ShaderIO as it operates on module-scope `in` variables.
+    RUN_TRANSFORM(
+        raise::OffsetFirstIndex, module,
+        raise::OffsetFirstIndexConfig{push_constant_layout.Get(), options.first_vertex_offset,
+                                      options.first_instance_offset});
 
     RUN_TRANSFORM(core::ir::transform::Std140, module);
 
@@ -139,7 +205,12 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     // naming conflicts, and expressions that need to be explicitly not inlined.
     RUN_TRANSFORM(core::ir::transform::RemoveTerminatorArgs, module);
     RUN_TRANSFORM(core::ir::transform::RenameConflicts, module);
-    RUN_TRANSFORM(core::ir::transform::ValueToLet, module);
+
+    {
+        core::ir::transform::ValueToLetConfig cfg;
+        cfg.replace_pointer_lets = true;
+        RUN_TRANSFORM(core::ir::transform::ValueToLet, module, cfg);
+    }
 
     return Success;
 }

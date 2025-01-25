@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <list>
 #include <memory>
 #include <optional>
@@ -16,12 +17,16 @@
 #include "absl/strings/string_view.h"
 #include "quiche/quic/core/connection_id_generator.h"
 #include "quiche/quic/core/crypto/transport_parameters.h"
+#include "quiche/quic/core/frames/quic_frame.h"
+#include "quiche/quic/core/frames/quic_padding_frame.h"
 #include "quiche/quic/core/quic_connection_id.h"
 #include "quiche/quic/core/quic_constants.h"
 #include "quiche/quic/core/quic_dispatcher.h"
 #include "quiche/quic/core/quic_dispatcher_stats.h"
 #include "quiche/quic/core/quic_error_codes.h"
 #include "quiche/quic/core/quic_framer.h"
+#include "quiche/quic/core/quic_packet_number.h"
+#include "quiche/quic/core/quic_packet_writer.h"
 #include "quiche/quic/core/quic_packets.h"
 #include "quiche/quic/core/quic_time.h"
 #include "quiche/quic/core/quic_types.h"
@@ -34,6 +39,7 @@
 #include "quiche/quic/test_tools/mock_connection_id_generator.h"
 #include "quiche/quic/test_tools/quic_buffered_packet_store_peer.h"
 #include "quiche/quic/test_tools/quic_test_utils.h"
+#include "quiche/common/quiche_endian.h"
 
 namespace quic {
 static const size_t kDefaultMaxConnectionsInStore = 100;
@@ -50,11 +56,14 @@ const std::optional<ParsedClientHello> kDefaultParsedChlo =
 using BufferedPacket = QuicBufferedPacketStore::BufferedPacket;
 using BufferedPacketList = QuicBufferedPacketStore::BufferedPacketList;
 using EnqueuePacketResult = QuicBufferedPacketStore::EnqueuePacketResult;
+using ::testing::_;
 using ::testing::A;
 using ::testing::Conditional;
 using ::testing::Each;
 using ::testing::ElementsAre;
+using ::testing::Invoke;
 using ::testing::Ne;
+using ::testing::Return;
 using ::testing::SizeIs;
 using ::testing::Truly;
 
@@ -81,8 +90,7 @@ class QuicBufferedPacketStoreVisitor
 
   ~QuicBufferedPacketStoreVisitor() override {}
 
-  void OnExpiredPackets(QuicConnectionId /*connection_id*/,
-                        BufferedPacketList early_arrived_packets) override {
+  void OnExpiredPackets(BufferedPacketList early_arrived_packets) override {
     last_expired_packet_queue_ = std::move(early_arrived_packets);
   }
 
@@ -150,6 +158,83 @@ TEST_F(QuicBufferedPacketStoreTest, SimpleEnqueueAndDeliverPacket) {
   EXPECT_FALSE(store_.HasBufferedPackets(connection_id));
 }
 
+TEST_F(QuicBufferedPacketStoreTest, SimpleEnqueueAckSent) {
+  SetQuicReloadableFlag(quic_ecn_in_first_ack, true);
+  QuicConnectionId connection_id = TestConnectionId(1);
+  MockPacketWriter writer;
+  store_.set_writer(&writer);
+  // Build a decryptable Initial packet with PADDING.
+  QuicFramer client_framer(ParsedQuicVersionVector{ParsedQuicVersion::RFCv1()},
+                           QuicTime::Zero(), Perspective::IS_CLIENT, 8);
+  client_framer.SetInitialObfuscators(connection_id);
+  QuicPacketHeader header;
+  header.destination_connection_id = connection_id;
+  header.version_flag = true;
+  header.packet_number = QuicPacketNumber(1);
+  header.packet_number_length = PACKET_1BYTE_PACKET_NUMBER;
+  header.long_packet_type = INITIAL;
+  header.length_length = quiche::VARIABLE_LENGTH_INTEGER_LENGTH_2;
+  header.retry_token_length_length = quiche::VARIABLE_LENGTH_INTEGER_LENGTH_1;
+  QuicFrames frames = {QuicFrame(QuicPaddingFrame(1200))};
+
+  char* buffer = new char[1500];
+  EncryptionLevel level = HeaderToEncryptionLevel(header);
+  size_t length =
+      client_framer.BuildDataPacket(header, frames, buffer, 1500, level);
+
+  ASSERT_GT(length, 0);
+
+  // Re-construct the data packet with data ownership.
+  auto data = std::make_unique<QuicPacket>(
+      buffer, length, /* owns_buffer */ true,
+      GetIncludedDestinationConnectionIdLength(header),
+      GetIncludedSourceConnectionIdLength(header), header.version_flag,
+      header.nonce != nullptr, header.packet_number_length,
+      header.retry_token_length_length, header.retry_token.length(),
+      header.length_length);
+  unsigned char raw[1500] = {};
+  size_t final_size = client_framer.EncryptPayload(
+      ENCRYPTION_INITIAL, header.packet_number, *data, (char*)raw, 1500);
+  QuicReceivedPacket packet((char*)raw, final_size, QuicTime::Zero(), false, 0,
+                            true, nullptr, 0, false, ECN_ECT1);
+
+  EXPECT_CALL(writer, IsWriteBlocked()).WillOnce(Return(false));
+  std::unique_ptr<QuicEncryptedPacket> ack_packet;
+  EXPECT_CALL(writer, WritePacket(_, _, _, _, _, _))
+      .WillOnce(Invoke([&](const char* buffer, size_t buf_len,
+                           const QuicIpAddress& /*self_address*/,
+                           const QuicSocketAddress& /*peer_address*/,
+                           PerPacketOptions* /*options*/,
+                           const QuicPacketWriterParams& /*params*/) {
+        auto tmp_packet =
+            std::make_unique<QuicEncryptedPacket>(buffer, buf_len);
+        ack_packet = tmp_packet->Clone();
+        return WriteResult(WRITE_STATUS_OK, 1);
+      }));
+  EXPECT_CALL(writer, Flush());
+  EnqueuePacketToStore(store_, connection_id, IETF_QUIC_LONG_HEADER_PACKET,
+                       INITIAL, packet, self_address_, peer_address_,
+                       ParsedQuicVersion::RFCv1(), kNoParsedChlo,
+                       connection_id_generator_);
+  const BufferedPacketList* buffered_list = store_.GetPacketList(connection_id);
+  ASSERT_NE(buffered_list, nullptr);
+  ASSERT_EQ(buffered_list->dispatcher_sent_packets.size(), 1);
+  EXPECT_EQ(buffered_list->dispatcher_sent_packets[0].largest_acked,
+            QuicPacketNumber(1));
+
+  // Decrypt the packet, and verify it reports ECN.
+  MockFramerVisitor mock_framer_visitor;
+  client_framer.set_visitor(&mock_framer_visitor);
+  EXPECT_CALL(mock_framer_visitor, OnPacket()).Times(1);
+  EXPECT_CALL(mock_framer_visitor, OnAckFrameStart(_, _))
+      .WillOnce(Return(true));
+  EXPECT_CALL(mock_framer_visitor, OnAckRange(_, _)).WillOnce(Return(true));
+  std::optional<QuicEcnCounts> counts = QuicEcnCounts(0, 1, 0);
+  EXPECT_CALL(mock_framer_visitor, OnAckFrameEnd(_, counts))
+      .WillOnce(Return(true));
+  client_framer.ProcessPacket(*ack_packet);
+}
+
 TEST_F(QuicBufferedPacketStoreTest, DifferentPacketAddressOnOneConnection) {
   QuicSocketAddress addr_with_new_port(QuicIpAddress::Any4(), 256);
   QuicConnectionId connection_id = TestConnectionId(1);
@@ -198,10 +283,7 @@ TEST_F(QuicBufferedPacketStoreTest,
 TEST_F(QuicBufferedPacketStoreTest,
        FailToBufferTooManyPacketsOnExistingConnection) {
   // Max number of packets that can be buffered per connection.
-  const size_t kMaxPacketsPerConnection =
-      store_.replace_cid_on_first_packet()
-          ? kDefaultMaxUndecryptablePackets
-          : kDefaultMaxUndecryptablePackets + 1;
+  const size_t kMaxPacketsPerConnection = kDefaultMaxUndecryptablePackets;
   QuicConnectionId connection_id = TestConnectionId(1);
   EXPECT_EQ(QuicBufferedPacketStore::SUCCESS,
             EnqueuePacketToStore(store_, connection_id,
@@ -298,11 +380,7 @@ TEST_F(QuicBufferedPacketStoreTest, BasicGeneratorBuffering) {
       store_.DeliverPacketsForNextConnection(&delivered_conn_id);
   EXPECT_EQ(1u, packet_list.buffered_packets.size());
   EXPECT_EQ(delivered_conn_id, TestConnectionId(1));
-  if (GetQuicRestartFlag(quic_dispatcher_replace_cid_on_first_packet)) {
-    EXPECT_EQ(packet_list.connection_id_generator, nullptr);
-  } else {
-    EXPECT_EQ(packet_list.connection_id_generator, &connection_id_generator_);
-  }
+  EXPECT_EQ(packet_list.connection_id_generator, nullptr);
 }
 
 TEST_F(QuicBufferedPacketStoreTest, GeneratorIgnoredForNonChlo) {
@@ -322,11 +400,7 @@ TEST_F(QuicBufferedPacketStoreTest, GeneratorIgnoredForNonChlo) {
       store_.DeliverPacketsForNextConnection(&delivered_conn_id);
   EXPECT_EQ(2u, packet_list.buffered_packets.size());
   EXPECT_EQ(delivered_conn_id, TestConnectionId(1));
-  if (GetQuicRestartFlag(quic_dispatcher_replace_cid_on_first_packet)) {
-    EXPECT_EQ(packet_list.connection_id_generator, nullptr);
-  } else {
-    EXPECT_EQ(packet_list.connection_id_generator, &connection_id_generator_);
-  }
+  EXPECT_EQ(packet_list.connection_id_generator, nullptr);
 }
 
 TEST_F(QuicBufferedPacketStoreTest, EnqueueChloOnTooManyDifferentConnections) {
@@ -385,11 +459,7 @@ TEST_F(QuicBufferedPacketStoreTest, EnqueueChloOnTooManyDifferentConnections) {
       EXPECT_EQ(2u, packet_list.buffered_packets.size());
       EXPECT_EQ(TestConnectionId(1u), delivered_conn_id);
     }
-    if (GetQuicRestartFlag(quic_dispatcher_replace_cid_on_first_packet)) {
-      EXPECT_EQ(packet_list.connection_id_generator, nullptr);
-    } else {
-      EXPECT_EQ(packet_list.connection_id_generator, &connection_id_generator_);
-    }
+    EXPECT_EQ(packet_list.connection_id_generator, nullptr);
   }
   EXPECT_FALSE(store_.HasChlosBuffered());
 }
@@ -448,11 +518,7 @@ TEST_F(QuicBufferedPacketStoreTest, PacketQueueExpiredBeforeDelivery) {
 
   // Connection 3 is the next to be delivered as connection 1 already expired.
   EXPECT_EQ(connection_id3, delivered_conn_id);
-  if (GetQuicRestartFlag(quic_dispatcher_replace_cid_on_first_packet)) {
-    EXPECT_EQ(packet_list.connection_id_generator, nullptr);
-  } else {
-    EXPECT_EQ(packet_list.connection_id_generator, &connection_id_generator_);
-  }
+  EXPECT_EQ(packet_list.connection_id_generator, nullptr);
   ASSERT_EQ(1u, packet_list.buffered_packets.size());
   // Packets in connection 3 should use another peer address.
   EXPECT_EQ(another_client_address,
@@ -584,11 +650,7 @@ TEST_F(QuicBufferedPacketStoreTest, MultipleDiscardPackets) {
   // Since connection_id_2's chlo arrives, verify version is set.
   EXPECT_EQ(valid_version_, packets.version);
 
-  if (store_.replace_cid_on_first_packet()) {
-    EXPECT_FALSE(store_.HasChlosBuffered());
-  } else {
-    EXPECT_TRUE(store_.HasChlosBuffered());
-  }
+  EXPECT_FALSE(store_.HasChlosBuffered());
   // Discard the packets for connection 2
   store_.DiscardPackets(connection_id_2);
   EXPECT_FALSE(store_.HasChlosBuffered());

@@ -17,36 +17,39 @@ import {Button} from '../widgets/button';
 import {Icons} from '../base/semantic_icons';
 import {ThreadSliceTrack} from './thread_slice_track';
 import {uuidv4Sql} from '../base/uuid';
-import {Engine} from '../trace_processor/engine';
 import {createView} from '../trace_processor/sql_utils';
-import {globals} from './globals';
+import {Trace} from '../public/trace';
 
 export interface VisualizedArgsTrackAttrs {
   readonly uri: string;
-  readonly engine: Engine;
+  readonly trace: Trace;
   readonly trackId: number;
   readonly maxDepth: number;
   readonly argName: string;
+  readonly onClose: () => void;
 }
 
-export class VisualisedArgsTrack extends ThreadSliceTrack {
+export class VisualizedArgsTrack extends ThreadSliceTrack {
   private readonly viewName: string;
   private readonly argName: string;
+  private readonly onClose: () => void;
 
   constructor({
     uri,
-    engine,
+    trace,
     trackId,
     maxDepth,
     argName,
+    onClose,
   }: VisualizedArgsTrackAttrs) {
     const uuid = uuidv4Sql();
     const escapedArgName = argName.replace(/[^a-zA-Z]/g, '_');
     const viewName = `__arg_visualisation_helper_${escapedArgName}_${uuid}_slice`;
 
-    super({engine, uri}, trackId, maxDepth, viewName);
+    super({trace, uri}, trackId, maxDepth, viewName);
     this.viewName = viewName;
     this.argName = argName;
+    this.onClose = onClose;
   }
 
   async onInit() {
@@ -81,11 +84,9 @@ export class VisualisedArgsTrack extends ThreadSliceTrack {
 
   getTrackShellButtons(): m.Children {
     return m(Button, {
-      onclick: () => {
-        globals.workspace.getTrackByUri(this.uri)?.remove();
-      },
+      onclick: () => this.onClose(),
       icon: Icons.Close,
-      title: 'Close',
+      title: 'Close all visualised args tracks for this arg',
       compact: true,
     });
   }

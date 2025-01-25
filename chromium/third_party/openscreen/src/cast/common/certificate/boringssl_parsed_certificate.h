@@ -20,7 +20,7 @@ class BoringSSLParsedCertificate final : public ParsedCertificate {
  public:
   BoringSSLParsedCertificate();
 
-  // Takes ownership of |cert|.
+  // Takes ownership of `cert`.
   explicit BoringSSLParsedCertificate(bssl::UniquePtr<X509> cert);
 
   ~BoringSSLParsedCertificate() override;

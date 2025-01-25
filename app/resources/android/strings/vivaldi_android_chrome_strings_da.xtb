@@ -5,19 +5,17 @@
 <translation id="1456207338570705181">Tryk for Søgning er en funktion, der kun er tilgængelig når Google er indstillet som standardsøemaskine i Vivaldi. Det sender det valgte ord og den nuværende side som kontekst til Google Søgning. Du kan slå det fra i <ph name="BEGIN_LINK" />Indstillinger<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Skift mellem normale/private faner</translation>
 <translation id="1644574205037202324">Historik</translation>
-<translation id="17513872634828108">Åbne faner</translation>
 <translation id="1829244130665387512">Find på siden</translation>
 <translation id="1910514478706885609">Åbn i ny fanestak</translation>
-<translation id="1925021887439448749">Angiv tilpasset webadresse</translation>
-<translation id="2038563949887743358">Slå anmodning om standardwebside til</translation>
-<translation id="2139186145475833000">Føj til startskærm</translation>
+<translation id="1925021887439448749">Indtast brugerdefineret webadresse</translation>
+<translation id="2038563949887743358">Slå anmodning om PC-site til</translation>
 <translation id="2149973817440762519">Rediger bogmærke</translation>
 <translation id="2306442503286132111">Bogmærke gemt i mappen <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Udseende</translation>
 <translation id="2501278716633472235">Gå tilbage</translation>
 <translation id="2633278372998075009">Private faner</translation>
 <translation id="272026394418727548">Vivaldi's hjemmeside</translation>
-<translation id="2951071800649516099">Føj sider til din læseliste, til senere læsning</translation>
+<translation id="2951071800649516099">Føj sider til din læseliste til senere</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT,plural,
 =1 {<ph name="BOOKMARKS_COUNT_ONE" /> bogmærke}
 other {<ph name="BOOKMARKS_COUNT_MANY" /> bogmærker}}</translation>
@@ -32,15 +30,16 @@ other {<ph name="BOOKMARKS_COUNT_MANY" /> bogmærker}}</translation>
 <translation id="3719826155360621982">Hjemmeside</translation>
 <translation id="385051799172605136">Tilbage</translation>
 <translation id="399014816462153200">Læste artikler:</translation>
-<translation id="4121750346708795461">Ved at bruge denne app accepterer du Vivaldi's <ph name="BEGIN_LINK1" />slutbruger-licensaftale<ph name="END_LINK1" /> og <ph name="BEGIN_LINK2" />privatlivspolitik<ph name="END_LINK2" />.</translation>
-<translation id="4137746084635924146">Aktuelt enhedssprog</translation>
+<translation id="4121750346708795461">Ved at bruge denne applikation accepterer du Vivaldi's <ph name="BEGIN_LINK1" />Slutbrugerlicensaftale<ph name="END_LINK1" /> og <ph name="BEGIN_LINK2" />Privatlivspolitik<ph name="END_LINK2" />.</translation>
+<translation id="4137746084635924146">Nuværende enhedssprog</translation>
 <translation id="4167670741834902166">Ny privat fane</translation>
 <translation id="4195643157523330669">Åbn på ny fane</translation>
+<translation id="4225895483398857530">Genvej til værktøjslinje</translation>
 <translation id="4243710787042215766">Åbn i privat fane</translation>
 <translation id="4304713468139749426">Adgangskodeadministrator</translation>
 <translation id="451872707440238414">Søg i dine bogmærker</translation>
 <translation id="4526803704855831732">Private faner</translation>
-<translation id="4719086422742491124">Lær om emner på websider uden at forlade siden. Vælg et eller flere ord på siden, for at søge på dem.
+<translation id="4719086422742491124">Lær om emner på websites uden at forlade siden. Vælg et eller flere ord på siden, for at søge på dem.
 
 Tryk for Søgning er en funktion, der kun er tilgængelig, når Google er indstillet som standardsøgemaskine i Vivaldi.</translation>
 <translation id="4759238208242260848">Downloads</translation>
@@ -48,11 +47,11 @@ Tryk for Søgning er en funktion, der kun er tilgængelig, når Google er indsti
 <translation id="4883379392681899581">Forlad privat tilstand</translation>
 <translation id="4943872375798546930">Ingen resultater</translation>
 <translation id="49576331685473090">Indholdsblokering</translation>
-<translation id="5079259810715830221">Når et Google-websted spørger om privat forudindlæsning af links på deres side, krypterer og forudindlæser Vivaldi sider gennem Google-servere uden cookies. Dette skjuler din identitet fra det forudindlæste websted.</translation>
+<translation id="5079259810715830221">Når et Google-site spørger om privat forudindlæsning af links på deres side, krypterer og forudindlæser Vivaldi sider gennem Google-servere uden cookies. Dette skjuler din identitet fra det forudindlæste site.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" />-lagerplads</translation>
 <translation id="5186185447130319458">Privat</translation>
 <translation id="5233638681132016545">Ny fane</translation>
-<translation id="5375131951310889874">Lær om emner på websider uden at forlade siden. Tryk for Søgning er en funktion, der kun er tilgængelig når Google er valgt som standardsøgemaskine i Vivaldi. Det sender et ord or det omkringliggede kontekst til Google Søgning, og returnerer definitioner, billeder, søgeresultater og andre detaljer.
+<translation id="5375131951310889874">Lær om emner på websites uden at forlade siden. Tryk for Søgning er en funktion, der kun er tilgængelig når Google er valgt som standardsøgemaskine i Vivaldi. Det sender et ord or det omkringliggede kontekst til Google Søgning, og returnerer definitioner, billeder, søgeresultater og andre detaljer.
 
 Hold fingeren nede, for at tilpasse dine søgetermer. Stryg panelet hele vejen op, og tryk på søgeboksen, for at udpensle din søgning.</translation>
 <translation id="572328651809341494">Seneste faner</translation>
@@ -60,21 +59,22 @@ Hold fingeren nede, for at tilpasse dine søgetermer. Stryg panelet hele vejen o
 <translation id="6336451774241870485">Ny privat fane</translation>
 <translation id="6404511346730675251">Rediger bogmærke</translation>
 <translation id="6585139692466700358">Tilbyd at oversætte sider på andre sprog, ved brug af Vivaldi's oversættelsestjeneste</translation>
-<translation id="6593061639179217415">Standardwebside</translation>
+<translation id="6593061639179217415">Computerside</translation>
 <translation id="6610147964972079463">Luk private faner</translation>
-<translation id="7029995644714925509">Når et websted spørger om privat forudindlæsning af links på deres side, krypterer og forudindlæser Vivaldi sider gennem Google-servere uden cookies. Dette skjuler din identitet fra det forudindlæste websted.</translation>
+<translation id="7029995644714925509">Når et website spørger om privat forudindlæsning af links på deres side, krypterer og forudindlæser Vivaldi sider gennem Google-servere uden cookies. Dette skjuler din identitet fra det forudindlæste site.</translation>
 <translation id="706339621163631076">Browser-privatlivspolitik</translation>
 <translation id="732145680195464316">Bogmærke gemt i <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Om Vivaldi</translation>
 <translation id="7465104139234185284">Luk alle private faner</translation>
 <translation id="7481312909269577407">Frem</translation>
 <translation id="7968014550143838305">Føjet til læseliste</translation>
-<translation id="804786196054284061">Servicevilkår</translation>
+<translation id="804786196054284061">Slutbrugerlicensaftale</translation>
 <translation id="8127542551745560481">Rediger hjemmeside</translation>
 <translation id="8560602726703398413">Se din læseliste under Bogmærker</translation>
 <translation id="85991616550051997">Gå til hjemmeside</translation>
 <translation id="8820817407110198400">Bogmærker</translation>
-<translation id="9063523880881406963">Slå anmodning om standardwebside fra</translation>
+<translation id="9042893549633094279">Privatliv og sikkerhed</translation>
+<translation id="9063523880881406963">Slå anmodning om PC-site fra</translation>
 <translation id="9080642952018487277">Gå i privat tilstand</translation>
 <translation id="96681097142096641">Vis forenklet side?</translation>
 </translationbundle>

@@ -541,7 +541,8 @@ static int eb_send_frame(AVCodecContext *avctx, const AVFrame *frame)
         const AVDOVIMetadata *metadata = (const AVDOVIMetadata *)sd->data;
         uint8_t *t35;
         int size;
-        if ((ret = ff_dovi_rpu_generate(&svt_enc->dovi, metadata, &t35, &size)) < 0)
+        if ((ret = ff_dovi_rpu_generate(&svt_enc->dovi, metadata, FF_DOVI_WRAP_T35,
+                                        &t35, &size)) < 0)
             return ret;
         ret = svt_add_metadata(headerPtr, EB_AV1_METADATA_TYPE_ITUT_T35, t35, size);
         av_free(t35);
@@ -768,6 +769,7 @@ const FFCodec ff_libsvtav1_encoder = {
     .p.pix_fmts     = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV420P,
                                                     AV_PIX_FMT_YUV420P10,
                                                     AV_PIX_FMT_NONE },
+    .color_ranges   = AVCOL_RANGE_MPEG | AVCOL_RANGE_JPEG,
     .p.priv_class   = &class,
     .defaults       = eb_enc_defaults,
     .p.wrapper_name = "libsvtav1",

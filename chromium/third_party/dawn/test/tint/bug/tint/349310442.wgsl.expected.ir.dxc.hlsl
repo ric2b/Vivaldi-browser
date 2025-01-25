@@ -126,18 +126,13 @@ tint_ExternalTextureParams v_39(uint start_byte_offset) {
   uint4 v_56 = t_params[((256u + start_byte_offset) / 16u)];
   uint2 v_57 = ((((((256u + start_byte_offset) % 16u) / 4u) == 2u)) ? (v_56.zw) : (v_56.xy));
   uint4 v_58 = t_params[((264u + start_byte_offset) / 16u)];
-  tint_GammaTransferParams v_59 = v_43;
-  tint_GammaTransferParams v_60 = v_44;
-  tint_ExternalTextureParams v_61 = {v_40, v_41, v_42, v_59, v_60, v_45, v_46, v_47, v_49, v_51, v_53, v_55, v_57, asfloat(((((((264u + start_byte_offset) % 16u) / 4u) == 2u)) ? (v_58.zw) : (v_58.xy)))};
-  return v_61;
+  tint_ExternalTextureParams v_59 = {v_40, v_41, v_42, v_43, v_44, v_45, v_46, v_47, v_49, v_51, v_53, v_55, v_57, asfloat(((((((264u + start_byte_offset) % 16u) / 4u) == 2u)) ? (v_58.zw) : (v_58.xy)))};
+  return v_59;
 }
 
 [numthreads(1, 1, 1)]
 void i() {
-  Texture2D<float4> v_62 = t_plane0;
-  Texture2D<float4> v_63 = t_plane1;
-  tint_ExternalTextureParams v_64 = v_39(0u);
-  tint_ExternalTextureParams v_65 = v_64;
-  float4 r = tint_TextureLoadExternal(v_62, v_63, v_65, uint2((0).xx));
+  tint_ExternalTextureParams v_60 = v_39(0u);
+  float4 r = tint_TextureLoadExternal(t_plane0, t_plane1, v_60, uint2((int(0)).xx));
 }
 

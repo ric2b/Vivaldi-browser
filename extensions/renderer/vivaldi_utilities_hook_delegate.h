@@ -41,9 +41,6 @@ class VivaldiUtilitiesHookDelegate : public APIBindingHooksDelegate {
   APIBindingHooks::RequestResult HandleUrlToThumbnailText(
       v8::Local<v8::Context> context,
       v8::LocalVector<v8::Value>& arguments);
-  APIBindingHooks::RequestResult HandleSupportsProxy(
-      v8::Local<v8::Context> context,
-      v8::LocalVector<v8::Value>& arguments);
   APIBindingHooks::RequestResult HandleIsRTL(
       v8::Local<v8::Context> context,
       v8::LocalVector<v8::Value>& arguments);

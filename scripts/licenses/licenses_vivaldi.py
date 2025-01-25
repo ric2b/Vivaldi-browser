@@ -82,6 +82,7 @@ for mline in maindeps.splitlines():
     "CC0-1.0",
     "Creative Commons Attribution 2.5 License",
     "ISC",
+    "MIT AND ISC",
     "MIT Licensed. http://www.opensource.org/licenses/mit-license.php",
     "MIT",
     "(MPL-2.0 OR Apache-2.0)",
@@ -184,6 +185,12 @@ SPECIAL_CASES = {
         "License": "MIT",
         "License File": ["/../vivapp/src/forked_modules/react-motion/LICENSE"],
     },
+    join('..', 'scripts', 'licenses', 'geonames'): {
+        "Name": "GeoNames",
+        "URL": "https://www.geonames.org",
+        "License": "CC BY 4.0",
+        "License File": ["/../scripts/licenses/geonames_license.txt"],
+    },
 }
 
 ADDITIONAL_PATHS = tuple(SPECIAL_CASES.keys())
@@ -197,3 +204,14 @@ def GetEntries(entry_template, EvaluateTemplate):
         'license_file': [] if not 'file_name' in license else [license['file_name']],
         })
   return entries
+
+def RemoveEntries(entries):
+  # AUTO-208: Remove some license statements of code not used in release builds
+  return [
+    entry for entry in entries
+       # From third_party/subresource-filter-ruleset/README.chromium:
+       # "This copy is included in WebLayer releases, but is not used for Chrome."
+    if entry['name'] != 'EasyList' and
+       # Only referenced in ChromeOS build files
+       entry['name'] != 'Braille Translation Library'
+  ]

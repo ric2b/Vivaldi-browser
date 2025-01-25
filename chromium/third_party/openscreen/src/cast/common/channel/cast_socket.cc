@@ -78,7 +78,7 @@ void CastSocket::OnError(TlsConnection* connection, const Error& error) {
 
 void CastSocket::OnRead(TlsConnection* connection, std::vector<uint8_t> block) {
   read_buffer_.insert(read_buffer_.end(), block.begin(), block.end());
-  // NOTE: Read as many messages as possible out of |read_buffer_| since we only
+  // NOTE: Read as many messages as possible out of `read_buffer_` since we only
   // get one callback opportunity for this.
   do {
     ErrorOr<DeserializeResult> message_or_error =

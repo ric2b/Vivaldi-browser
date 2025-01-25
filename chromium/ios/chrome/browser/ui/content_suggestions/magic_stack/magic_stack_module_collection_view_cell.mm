@@ -33,6 +33,9 @@ const float kCornerRadius = 24;
 
 @property(nonatomic, assign) ContentSuggestionsModuleType type;
 
+// Indicates whether the user has chosen to hide this module type.
+@property(nonatomic, assign) BOOL shouldHide;
+
 @end
 
 @implementation MagicStackModuleCollectionViewCell {
@@ -83,6 +86,7 @@ const float kCornerRadius = 24;
     [self removeInteraction:_contextMenuInteraction];
     _contextMenuInteraction = nil;
   }
+  _shouldHide = NO;
   [_moduleContainer resetView];
 }
 
@@ -104,16 +108,34 @@ const float kCornerRadius = 24;
                                                actionProvider:actionProvider];
 }
 
+- (void)contextMenuInteraction:(UIContextMenuInteraction*)interaction
+       willEndForConfiguration:(UIContextMenuConfiguration*)configuration
+                      animator:(id<UIContextMenuInteractionAnimating>)animator {
+  if (configuration && _shouldHide) {
+    __weak MagicStackModuleCollectionViewCell* weakSelf = self;
+
+    [animator addCompletion:^{
+      [weakSelf.delegate neverShowModuleType:weakSelf.type];
+    }];
+  }
+}
+
 #pragma mark - Helpers
 
-// Returns the list of actions for the long-press /  context menu.
+// Returns the list of actions for the long-press/context menu.
 - (NSArray<UIAction*>*)contextMenuActions {
   NSMutableArray<UIAction*>* actions = [[NSMutableArray alloc] init];
 
-  if ((IsSetUpListModuleType(_type) && IsIOSTipsNotificationsEnabled()) ||
-      (_type == ContentSuggestionsModuleType::kSafetyCheck &&
-       IsSafetyCheckNotificationsEnabled())) {
-    [actions addObject:[self toggleNotificationsActionForModuleType:self.type]];
+  BOOL canShowTipsNotificationsOptIn =
+      IsIOSTipsNotificationsEnabled() &&
+      (IsSetUpListModuleType(_type) || IsTipsModuleType(_type));
+
+  BOOL canShowSafetyCheckNotificationsOptIn =
+      _type == ContentSuggestionsModuleType::kSafetyCheck &&
+      IsSafetyCheckNotificationsEnabled();
+
+  if (canShowTipsNotificationsOptIn || canShowSafetyCheckNotificationsOptIn) {
+    [actions addObject:[self toggleNotificationsActionForModuleType:_type]];
   }
 
   [actions addObject:[self hideAction]];
@@ -126,14 +148,17 @@ const float kCornerRadius = 24;
 // Returns the menu action to hide this module type.
 - (UIAction*)hideAction {
   __weak __typeof(self) weakSelf = self;
+
   UIAction* hideAction = [UIAction
       actionWithTitle:[self contextMenuHideDescription]
                 image:DefaultSymbolWithPointSize(kHideActionSymbol, 18)
            identifier:nil
               handler:^(UIAction* action) {
-                [weakSelf.delegate neverShowModuleType:weakSelf.type];
+                weakSelf.shouldHide = YES;
               }];
+
   hideAction.attributes = UIMenuElementAttributesDestructive;
+
   return hideAction;
 }
 
@@ -165,6 +190,9 @@ const float kCornerRadius = 24;
     case ContentSuggestionsModuleType::kCompactedSetUpList:
     case ContentSuggestionsModuleType::kParcelTracking:
     case ContentSuggestionsModuleType::kPriceTrackingPromo:
+    case ContentSuggestionsModuleType::kSendTabPromo:
+    case ContentSuggestionsModuleType::kTipsWithProductImage:
+    case ContentSuggestionsModuleType::kTips:
       return YES;
     default:
       return NO;
@@ -217,14 +245,14 @@ const float kCornerRadius = 24;
 - (PushNotificationClientId)pushNotificationClientId:
     (ContentSuggestionsModuleType)type {
   // This is only supported for Set Up List and Safety Check modules.
-  CHECK(IsSetUpListModuleType(type) ||
+  CHECK(IsSetUpListModuleType(type) || IsTipsModuleType(type) ||
         type == ContentSuggestionsModuleType::kSafetyCheck);
 
   if (type == ContentSuggestionsModuleType::kSafetyCheck) {
     return PushNotificationClientId::kSafetyCheck;
   }
 
-  if (IsSetUpListModuleType(type)) {
+  if (IsSetUpListModuleType(type) || IsTipsModuleType(type)) {
     return PushNotificationClientId::kTips;
   }
 
@@ -237,7 +265,7 @@ const float kCornerRadius = 24;
 // modules.
 - (int)pushNotificationTitleMessageId:(ContentSuggestionsModuleType)type {
   // This is only supported for Set Up List and Safety Check modules.
-  CHECK(IsSetUpListModuleType(type) ||
+  CHECK(IsSetUpListModuleType(type) || IsTipsModuleType(type) ||
         type == ContentSuggestionsModuleType::kSafetyCheck);
 
   if (type == ContentSuggestionsModuleType::kSafetyCheck) {
@@ -246,6 +274,10 @@ const float kCornerRadius = 24;
 
   if (IsSetUpListModuleType(type)) {
     return content_suggestions::SetUpListTitleStringID();
+  }
+
+  if (IsTipsModuleType(type)) {
+    return IDS_IOS_MAGIC_STACK_TIP_TITLE;
   }
 
   NOTREACHED();
@@ -284,7 +316,12 @@ const float kCornerRadius = 24;
     case ContentSuggestionsModuleType::kParcelTracking:
       return l10n_util::GetNSString(IDS_IOS_PARCEL_TRACKING_CONTEXT_MENU_TITLE);
     case ContentSuggestionsModuleType::kPriceTrackingPromo:
+    case ContentSuggestionsModuleType::kSendTabPromo:
       return @"";
+    case ContentSuggestionsModuleType::kTipsWithProductImage:
+    case ContentSuggestionsModuleType::kTips:
+      return l10n_util::GetNSString(
+          IDS_IOS_MAGIC_STACK_TIP_CONTEXT_MENU_DESCRIPTION);
     default:
       NOTREACHED();
   }
@@ -316,6 +353,17 @@ const float kCornerRadius = 24;
     case ContentSuggestionsModuleType::kPriceTrackingPromo:
       return l10n_util::GetNSString(
           IDS_IOS_CONTENT_SUGGESTIONS_PRICE_TRACKING_PROMO_HIDE_CARD);
+    case ContentSuggestionsModuleType::kSendTabPromo:
+      return l10n_util::GetNSStringF(
+          IDS_IOS_SEND_TAB_TO_SELF_HIDE_CONTEXT_MENU_DESCRIPTION,
+          base::SysNSStringToUTF16(
+              l10n_util::GetNSString(IDS_IOS_SEND_TAB_PROMO_TITLE)));
+    case ContentSuggestionsModuleType::kTipsWithProductImage:
+    case ContentSuggestionsModuleType::kTips:
+      return l10n_util::GetNSStringF(
+          IDS_IOS_MAGIC_STACK_TIP_CONTEXT_MENU_HIDE_CHROME_TIPS,
+          base::SysNSStringToUTF16(
+              l10n_util::GetNSString(IDS_IOS_MAGIC_STACK_TIP_TITLE)));
     default:
       NOTREACHED();
   }

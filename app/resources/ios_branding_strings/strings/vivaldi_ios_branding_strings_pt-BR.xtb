@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-BR">
+<translation id="1411542563378906926">Vivaldi Technologies AS.</translation>
 <translation id="1786453623676543866">Inicia uma pesquisa em uma nova aba do Vivaldi.</translation>
-<translation id="2899836479226240291">Você pode abrir links no Vivaldi automaticamente, tornando-o seu aplicativo de navegador padrão.</translation>
+<translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Todos os direitos reservados.</translation>
+<translation id="261127087791356050">Abrir no Vivaldi</translation>
 <translation id="3171582312249481866">Abrir as configurações do Vivaldi</translation>
 <translation id="3372807273343182542">Abrir URLs no Vivaldi em Privado</translation>
 <translation id="3379322781901918214">1. Abrir as definições do Vivaldi</translation>
+<translation id="4044951018940382324">Vivaldi</translation>
+<translation id="5444185556951208294">Deixe o Vivaldi travar suas Abas Privadas.</translation>
+<translation id="7064418729866177180">Bloquear Abas Privadas Quando Você Fechar o Vivaldi</translation>
 <translation id="7175743738896712454">Abre as URLs em uma janela privada do Vivaldi.</translation>
 <translation id="8763006697839582351">Abrir em privado no Vivaldi</translation>
 <translation id="9060728682512999830">Pesquisar no Vivaldi</translation>

@@ -195,6 +195,8 @@ static_library("apis") {
     "guest_view/web_view_private_api.h",
     "history/history_private_api.cc",
     "history/history_private_api.h",
+    "omnibox/omnibox_private_api.cc",
+    "omnibox/omnibox_private_api.h",
     "import_data/import_data_api.cc",
     "import_data/import_data_api.h",
     "infobars/infobars_api.cc",

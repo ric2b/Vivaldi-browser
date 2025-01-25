@@ -2,7 +2,6 @@ ci/Mac13 Tests
 ci/Oreo Phone Tester
 ci/ios-simulator
 ci/ios-simulator-full-configs
-ci/lacros-arm64-generic-rel
 ci/linux-official
 try/android-arm-compile-dbg
 try/android-arm64-rel
@@ -10,15 +9,14 @@ try/android-arm64-rel-compilator
 try/android-binary-size
 try/android-oreo-arm64-dbg
 try/android-pie-arm64-dbg
+try/android-pie-x86-rel
 try/android-webview-oreo-arm64-dbg
 try/android-webview-pie-arm64-dbg
-try/android-x64-cast
 try/android_compile_dbg
 try/android_compile_x64_dbg
 try/android_compile_x86_dbg
 try/android_optional_gpu_tests_rel
 try/chromeos-amd64-generic-dbg
-try/chromeos-amd64-generic-lacros-dbg
 try/chromeos-arm-generic-rel
 try/chromeos-arm64-generic-rel
 try/chromium_presubmit
@@ -30,9 +28,6 @@ try/gpu-fyi-cq-android-arm64
 try/ios-simulator
 try/ios-simulator-compilator
 try/ios-simulator-full-configs
-try/lacros-amd64-generic-rel
-try/lacros-arm-generic-rel
-try/lacros-arm64-generic-rel
 try/linux-afl-asan-rel
 try/linux-blink-rel
 try/linux-centipede-asan-rel
@@ -40,9 +35,6 @@ try/linux-chromeos-compile-dbg
 try/linux-chromeos-dbg
 try/linux-chromeos-rel
 try/linux-chromeos-rel-compilator
-try/linux-lacros-dbg
-try/linux-lacros-rel
-try/linux-lacros-rel-compilator
 try/linux-libfuzzer-asan-rel
 try/linux-official
 try/linux-rel

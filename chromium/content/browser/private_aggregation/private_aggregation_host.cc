@@ -43,6 +43,7 @@
 #include "content/browser/private_aggregation/private_aggregation_budgeter.h"
 #include "content/browser/private_aggregation/private_aggregation_caller_api.h"
 #include "content/browser/private_aggregation/private_aggregation_features.h"
+#include "content/browser/private_aggregation/private_aggregation_manager.h"
 #include "content/browser/private_aggregation/private_aggregation_utils.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
@@ -196,8 +197,7 @@ PrivateAggregationHost::PrivateAggregationHost(
         void(ReportRequestGenerator,
              std::vector<blink::mojom::AggregatableReportHistogramContribution>,
              PrivateAggregationBudgetKey,
-             PrivateAggregationBudgeter::BudgetDeniedBehavior)>
-        on_report_request_details_received,
+             NullReportBehavior)> on_report_request_details_received,
     BrowserContext* browser_context)
     : should_not_delay_reports_(
           base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -285,8 +285,9 @@ bool PrivateAggregationHost::BindNewReceiver(
 
   // Timeouts should only be set for deterministic reports.
   // TODO(alexmt): Consider requiring timeouts for deterministic reports.
-  if (timeout.has_value() && !context_id.has_value() &&
-      filtering_id_max_bytes == kDefaultFilteringIdMaxBytes) {
+  if (timeout.has_value() &&
+      !PrivateAggregationManager::ShouldSendReportDeterministically(
+          context_id, filtering_id_max_bytes)) {
     return false;
   }
 
@@ -478,7 +479,11 @@ AggregatableReportRequest PrivateAggregationHost::GenerateReportRequest(
     size_t max_num_contributions,
     std::vector<blink::mojom::AggregatableReportHistogramContribution>
         contributions) {
-  CHECK(context_id.has_value() || !contributions.empty());
+  // When there are zero contributions, we should only reach here if we are
+  // sending a report deterministically.
+  CHECK(!contributions.empty() ||
+        PrivateAggregationManager::ShouldSendReportDeterministically(
+            context_id, specified_filtering_id_max_bytes));
   CHECK(debug_mode_details);
 
   bool use_new_report_version =
@@ -661,10 +666,11 @@ void PrivateAggregationHost::SendReportOnTimeoutOrDisconnect(
         blink::mojom::DebugModeDetails::New();
   }
 
-  PrivateAggregationBudgeter::BudgetDeniedBehavior budget_denied_behavior =
-      receiver_context.context_id.has_value()
-          ? PrivateAggregationBudgeter::BudgetDeniedBehavior::kSendNullReport
-          : PrivateAggregationBudgeter::BudgetDeniedBehavior::kDontSendReport;
+  const NullReportBehavior null_report_behavior =
+      PrivateAggregationManager::ShouldSendReportDeterministically(
+          receiver_context.context_id, receiver_context.filtering_id_max_bytes)
+          ? NullReportBehavior::kSendNullReport
+          : NullReportBehavior::kDontSendReport;
 
   std::vector<blink::mojom::AggregatableReportHistogramContribution>
       contributions;
@@ -693,15 +699,19 @@ void PrivateAggregationHost::SendReportOnTimeoutOrDisconnect(
   }
 
   if (contributions.empty()) {
-    if (!receiver_context.context_id.has_value()) {
-      RecordPipeResultHistogram(PipeResult::kNoReportButNoError);
-      return;
-    }
+    switch (null_report_behavior) {
+      case NullReportBehavior::kDontSendReport:
+        RecordPipeResultHistogram(PipeResult::kNoReportButNoError);
+        return;
 
-    // Null reports caused by no contributions never have debug mode enabled.
-    // TODO(crbug.com/40276453): Consider permitting this.
-    receiver_context.report_debug_details =
-        blink::mojom::DebugModeDetails::New();
+      case NullReportBehavior::kSendNullReport:
+        // Null reports caused by no contributions never have debug mode
+        // enabled.
+        // TODO(crbug.com/40276453): Consider permitting this.
+        receiver_context.report_debug_details =
+            blink::mojom::DebugModeDetails::New();
+        break;
+    }
   }
 
   const base::Time now = base::Time::Now();
@@ -756,7 +766,7 @@ void PrivateAggregationHost::SendReportOnTimeoutOrDisconnect(
 
   on_report_request_details_received_.Run(
       std::move(report_request_generator), std::move(contributions),
-      std::move(budget_key.value()), budget_denied_behavior);
+      std::move(budget_key.value()), null_report_behavior);
 }
 
 }  // namespace content

@@ -28,7 +28,7 @@
 #include "xnnpack/allocator.h"
 #include "xnnpack/hardware-config.h"
 
-#include "bench/utils.h"
+#include "utils.h"
 
 static void* wipe_buffer = nullptr;
 static size_t wipe_buffer_size = 0;
@@ -152,34 +152,17 @@ size_t GetMaxCacheSize() {
   return max_cache_size;
 }
 
-void MultiThreadingParameters(benchmark::internal::Benchmark* benchmark) {
-  benchmark->ArgName("T");
+bool CheckArchFlags(benchmark::State& state, uint64_t arch_flags) {
+  const xnn_hardware_config* hardware_config = xnn_init_hardware_config();
+  if (hardware_config == nullptr) {
+    state.SkipWithError("no hardware config");
+    return false;
+  } else if ((hardware_config->arch_flags & arch_flags) != arch_flags) {
+    state.SkipWithError("architecture unsupported");
+    return false;
+  }
 
-  // Disabled thread pool (execution on the caller thread only).
-  benchmark->Arg(1);
-
-  #if XNN_ENABLE_CPUINFO
-    if (cpuinfo_initialize()) {
-      // All cores except the little ones.
-      uint32_t max_cores = cpuinfo_get_cores_count();
-      if (cpuinfo_get_clusters_count() > 1) {
-        max_cores -= cpuinfo_get_cluster(cpuinfo_get_clusters_count() - 1)->core_count;
-      }
-      for (uint32_t t = 2; t <= max_cores; t++) {
-        benchmark->Arg(t);
-      }
-
-      // All cores (if more than one cluster).
-      if (cpuinfo_get_cores_count() > max_cores) {
-        benchmark->Arg(cpuinfo_get_cores_count());
-      }
-
-      // All cores + hyperthreads (only if hyperthreading supported).
-      if (cpuinfo_get_processors_count() > cpuinfo_get_cores_count()) {
-        benchmark->Arg(cpuinfo_get_processors_count());
-      }
-    }
-  #endif  // XNN_ENABLE_CPUINFO
+  return true;
 }
 
 #if XNN_ARCH_ARM
@@ -308,7 +291,7 @@ void MultiThreadingParameters(benchmark::internal::Benchmark* benchmark) {
   }
 #endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
 
-#if XNN_ARCH_ARM || XNN_ARCH_ARM64
+#if XNN_ARCH_ARM64
   bool CheckNEONI8MM(benchmark::State& state) {
     const xnn_hardware_config* hardware_config = xnn_init_hardware_config();
     if (hardware_config == nullptr || !hardware_config->use_arm_neon_i8mm) {
@@ -317,7 +300,7 @@ void MultiThreadingParameters(benchmark::internal::Benchmark* benchmark) {
     }
     return true;
   }
-#endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
+#endif  // XNN_ARCH_ARM64
 
 #if XNN_ARCH_RISCV
   bool CheckRVV(benchmark::State& state) {
@@ -496,6 +479,17 @@ void MultiThreadingParameters(benchmark::internal::Benchmark* benchmark) {
 #endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
 #if XNN_ARCH_X86 || XNN_ARCH_X86_64
+  bool CheckAVXVNNIINT8(benchmark::State& state) {
+    const xnn_hardware_config* hardware_config = xnn_init_hardware_config();
+    if (hardware_config == nullptr || !hardware_config->use_x86_avxvnniint8) {
+      state.SkipWithError("no AVX VNNI INT8 extension");
+      return false;
+    }
+    return true;
+  }
+#endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
+
+#if XNN_ARCH_X86 || XNN_ARCH_X86_64
   bool CheckAVX256SKX(benchmark::State& state) {
     const xnn_hardware_config* hardware_config = xnn_init_hardware_config();
     if (hardware_config == nullptr || !hardware_config->use_x86_avx256skx) {
@@ -579,20 +573,6 @@ void MultiThreadingParameters(benchmark::internal::Benchmark* benchmark) {
   }
 #endif  // XNN_ARCH_WASMRELAXEDSIMD
 
-
-#if XNN_PLATFORM_JIT
-
-CodeMemoryHelper::CodeMemoryHelper() {
-  status = xnn_allocate_code_memory(&buffer, XNN_DEFAULT_CODE_BUFFER_SIZE);
-}
-
-CodeMemoryHelper::~CodeMemoryHelper() {
-  if (status == xnn_status_success) {
-    xnn_release_code_memory(&buffer);
-  }
-}
-
-#endif  // XNN_PLATFORM_JIT
 
 }  // namespace utils
 }  // namespace benchmark

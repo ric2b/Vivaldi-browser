@@ -15,6 +15,8 @@
 #include "ios/chrome/browser/shared/model/profile/profile_manager_observer_ios.h"
 #include "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 
+class AccountProfileMapper;
+
 // ProfileManagerIOS implementation for tests.
 //
 // Register itself with the TestApplicationContext on creation. Requires
@@ -32,7 +34,6 @@ class TestProfileManagerIOS : public ProfileManagerIOS {
   void AddObserver(ProfileManagerObserverIOS* observer) override;
   void RemoveObserver(ProfileManagerObserverIOS* observer) override;
   void LoadProfiles() override;
-  ProfileIOS* GetLastUsedProfileDeprecatedDoNotUse() override;
   ProfileIOS* GetProfileWithName(std::string_view name) override;
   std::vector<ProfileIOS*> GetLoadedProfiles() override;
   bool LoadProfileAsync(std::string_view name,
@@ -43,6 +44,7 @@ class TestProfileManagerIOS : public ProfileManagerIOS {
                           ProfileLoadedCallback created_callback) override;
   ProfileIOS* LoadProfile(std::string_view name) override;
   ProfileIOS* CreateProfile(std::string_view name) override;
+  void DestroyAllProfiles() override;
   ProfileAttributesStorageIOS* GetProfileAttributesStorage() override;
 
   // Builds and adds a TestProfileIOS using `builder`. Asserts that no Profile
@@ -53,11 +55,10 @@ class TestProfileManagerIOS : public ProfileManagerIOS {
   // The ProfileAttributesStorageIOS owned by this instance.
   ProfileAttributesStorageIOS profile_attributes_storage_;
 
+  std::unique_ptr<AccountProfileMapper> account_profile_mapper_;
+
   // The path in which the Profiles' data are stored.
   const base::FilePath profile_data_dir_;
-
-  // The name of the last used Profile (i.e. the first registered).
-  std::string last_used_profile_name_;
 
   // Mapping of name to TestProfileIOS instances.
   std::map<std::string, std::unique_ptr<TestProfileIOS>, std::less<>>

@@ -29,11 +29,13 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/notimplemented.h"
 #include "base/notreached.h"
@@ -351,15 +353,23 @@ bool Database::Open(const base::FilePath& path) {
   DCHECK_NE(path_string, kSqliteOpenInMemoryPath)
       << "Path conflicts with SQLite magic identifier";
 
-  if (OpenInternal(path_string)) {
-    return true;
+  {
+    ScopedOpenErrorReporter reporter(this,
+                                     "Sql.Database.Open.FirstAttempt.Error");
+    if (OpenInternal(path_string)) {
+      return true;
+    }
   }
   // OpenInternal() may have run the error callback before returning false. If
   // the error callback poisoned `this`, the database may have been recovered or
   // razed, so a second attempt may succeed.
   if (poisoned_) {
     Close();
-    return OpenInternal(path_string);
+    {
+      ScopedOpenErrorReporter reporter(this,
+                                       "Sql.Database.Open.SecondAttempt.Error");
+      return OpenInternal(path_string);
+    }
   }
   // Otherwise, do not attempt to reopen.
   return false;
@@ -585,8 +595,7 @@ base::FilePath Database::DbPath() const {
 #elif BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
   return base::FilePath(db_path);
 #else
-  NOTREACHED_IN_MIGRATION();
-  return base::FilePath();
+  NOTREACHED();
 #endif
 }
 
@@ -638,7 +647,7 @@ std::string Database::CollectErrorInfo(int sqlite_error_code,
     diagnostics->last_errno = last_errno;
   }
 #else
-  NOTREACHED_IN_MIGRATION();  // Add appropriate log info.
+  NOTREACHED();  // Add appropriate log info.
 #endif
 
   if (stmt) {
@@ -747,8 +756,8 @@ std::string Database::CollectCorruptionInfo() {
   // If the file cannot be accessed it is unlikely that an integrity check will
   // turn up actionable information.
   const base::FilePath db_path = DbPath();
-  int64_t db_size = -1;
-  if (!base::GetFileSize(db_path, &db_size) || db_size < 0) {
+  std::optional<int64_t> db_size = GetFileSize(db_path);
+  if (db_size && *db_size < 0) {
     return std::string();
   }
 
@@ -757,11 +766,11 @@ std::string Database::CollectCorruptionInfo() {
   // fixed-size reporting buffer.
   std::string debug_info;
   base::StringAppendF(&debug_info, "SQLITE_CORRUPT, db size %" PRId64 "\n",
-                      db_size);
+                      *db_size);
 
   // Only check files up to 8M to keep things from blocking too long.
   const int64_t kMaxIntegrityCheckSize = 8192 * 1024;
-  if (db_size > kMaxIntegrityCheckSize) {
+  if (*db_size > kMaxIntegrityCheckSize) {
     debug_info += "integrity_check skipped due to size\n";
   } else {
     std::vector<std::string> messages;
@@ -1492,6 +1501,7 @@ bool Database::ExecuteWithTimeout(base::cstring_view sql,
   SqliteResultCode sqlite_result_code = ExecuteAndReturnResultCode(sql);
   sqlite3_busy_timeout(db_, 0);
   if (sqlite_result_code != SqliteResultCode::kOk) {
+    MaybeReportErrorDuringOpen(sqlite_result_code);
     OnSqliteError(ToSqliteErrorCode(sqlite_result_code), nullptr, sql.c_str());
     // At this point, `this` may have been modified or even deleted as a result
     // of the caller-provided error callback.
@@ -1857,6 +1867,40 @@ const char* Database::GetErrorMessage() const {
   return sqlite3_errmsg(db_);
 }
 
+Database::ScopedOpenErrorReporter::ScopedOpenErrorReporter(
+    Database* db,
+    std::string_view histogram)
+    : db_(db), histogram_(histogram) {
+  db_->open_error_reporting_callback_ =
+      base::BindRepeating(&Database::ScopedOpenErrorReporter::OnErrorDuringOpen,
+                          base::Unretained(this));
+}
+
+Database::ScopedOpenErrorReporter::~ScopedOpenErrorReporter() {
+  db_->open_error_reporting_callback_.Reset();
+}
+
+void Database::ScopedOpenErrorReporter::OnErrorDuringOpen(
+    SqliteResultCode code) {
+  // Use `base::UmaHistogramSparse` because sqlite result codes aren't
+  // sequential. The large integers they represent make it so that the
+  // non-sparse histograms end up with too many buckets.
+  if (db_->histogram_tag().empty()) {
+    base::UmaHistogramSparse(base::StrCat({histogram_, ".NoTag"}),
+                             static_cast<int>(code));
+  } else {
+    base::UmaHistogramSparse(
+        base::StrCat({histogram_, ".", db_->histogram_tag()}),
+        static_cast<int>(code));
+  }
+}
+
+void Database::MaybeReportErrorDuringOpen(SqliteResultCode code) {
+  if (open_error_reporting_callback_) {
+    open_error_reporting_callback_.Run(code);
+  }
+}
+
 bool Database::OpenInternal(const std::string& db_file_path) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   TRACE_EVENT1("sql", "Database::OpenInternal", "path", db_file_path);
@@ -1921,6 +1965,7 @@ bool Database::OpenInternal(const std::string& db_file_path) {
       sqlite3_close(db);
     }
 
+    MaybeReportErrorDuringOpen(sqlite_result_code);
     OnSqliteError(ToSqliteErrorCode(sqlite_result_code), nullptr,
                   "-- sqlite3_open_v2()");
     return false;
@@ -1965,6 +2010,7 @@ bool Database::OpenInternal(const std::string& db_file_path) {
       /*pzDataType=*/nullptr, /*pzCollSeq=*/nullptr, /*pNotNull=*/nullptr,
       /*pPrimaryKey=*/nullptr, /*pAutoinc=*/nullptr));
   if (sqlite_result_code != SqliteResultCode::kOk) {
+    MaybeReportErrorDuringOpen(sqlite_result_code);
     OnSqliteError(ToSqliteErrorCode(sqlite_result_code), nullptr,
                   "-- sqlite3_table_column_metadata()");
     return false;

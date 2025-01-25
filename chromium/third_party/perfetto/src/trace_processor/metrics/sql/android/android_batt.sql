@@ -71,6 +71,43 @@ DROP TABLE IF EXISTS screen_state_span_with_suspend;
 CREATE VIRTUAL TABLE screen_state_span_with_suspend
 USING span_join(screen_state_span, suspend_slice_);
 
+DROP TABLE IF EXISTS power_mw_intervals;
+CREATE PERFETTO TABLE power_mw_intervals AS
+WITH power_mw_counter AS (
+  SELECT counter.id, ts, track_id, value
+  FROM counter
+  JOIN counter_track ON counter_track.id = counter.track_id
+  WHERE name = 'batt.power_mw'
+)
+SELECT * FROM counter_leading_intervals!(power_mw_counter);
+
+DROP TABLE IF EXISTS energy_usage_estimate;
+CREATE PERFETTO TABLE energy_usage_estimate AS
+with energy_counters as (
+select
+  ts,
+  CASE
+    WHEN energy_counter_uwh IS NOT NULL THEN energy_counter_uwh
+    ELSE charge_uah *  voltage_uv / 1e12 END as energy
+ from android_battery_charge
+), start_energy as (
+  select
+  min(ts),
+  energy
+  from energy_counters
+), end_energy as (
+  select
+  max(ts),
+  energy
+  from energy_counters
+)
+select
+  -- If the battery is discharging, the start value will be greater than the end
+  -- and the estimate will report a positive value.
+  -- Battery energy is in watt hours, so multiply by 3600 to convert to joules.
+  (s.energy - e.energy) * 3600 as estimate
+from start_energy s, end_energy e;
+
 DROP VIEW IF EXISTS android_batt_output;
 CREATE PERFETTO VIEW android_batt_output AS
 SELECT AndroidBatteryMetric(
@@ -103,7 +140,11 @@ SELECT AndroidBatteryMetric(
       'sleep_screen_doze_ns',
       SUM(CASE WHEN state = 3.0 AND tbl = 'sleep' THEN dur ELSE 0 END),
       'total_wakelock_ns',
-      (SELECT SUM(ts_end - ts) FROM android_batt_wakelocks_merged)
+      (SELECT SUM(ts_end - ts) FROM android_batt_wakelocks_merged),
+      'avg_power_mw',
+      (SELECT SUM(value * dur) / SUM(dur) FROM power_mw_intervals),
+      'energy_usage_estimate',
+      (select estimate FROM energy_usage_estimate)
       ))
     FROM (
       SELECT dur, value AS state, 'total' AS tbl

@@ -16,7 +16,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.IntentUtils;
-import org.chromium.base.cached_flags.IntCachedFieldTrialParameter;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeInactivityTracker;
@@ -34,6 +33,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.util.BrowserUiUtils;
 import org.chromium.chrome.browser.util.BrowserUiUtils.ModuleTypeOnStartAndNtp;
+import org.chromium.components.cached_flags.IntCachedFieldTrialParameter;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -41,6 +41,9 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Locale;
+
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
  * This is a utility class for managing features related to returning to Chrome after haven't used
@@ -86,7 +89,7 @@ public final class ReturnToChromeUtil {
             ChromeFeatureList.newIntCachedFieldTrialParameter(
                     ChromeFeatureList.START_SURFACE_RETURN_TIME,
                     HOME_SURFACE_RETURN_TIME_SECONDS_PARAM,
-                    28800); // 8 hours
+                    14400); // 4 hours
 
     private ReturnToChromeUtil() {}
 
@@ -105,7 +108,8 @@ public final class ReturnToChromeUtil {
 
         // Note(david@vivaldi.com): We never show the tab switcher on startup. We reset the field
         // trial parameter here.
-        tabSwitcherAfterMillis = -1;
+        if (ChromeApplicationImpl.isVivaldi())
+            tabSwitcherAfterMillis = -1;
 
         if (lastTimeMillis == -1) {
             // No last background timestamp set, use control behavior unless "immediate" was set.

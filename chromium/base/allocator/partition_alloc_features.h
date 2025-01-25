@@ -18,6 +18,25 @@
 namespace base {
 namespace features {
 
+namespace internal {
+
+enum class PAFeatureEnabledProcesses {
+  // Enabled only in the browser process.
+  kBrowserOnly,
+  // Enabled only in the browser and renderer processes.
+  kBrowserAndRenderer,
+  // Enabled in all processes, except renderer.
+  kNonRenderer,
+  // Enabled only in renderer processes.
+  kRendererOnly,
+  // Enabled in all child processes, except zygote.
+  kAllChildProcesses,
+  // Enabled in all processes.
+  kAllProcesses,
+};
+
+}  // namespace internal
+
 extern const BASE_EXPORT Feature kPartitionAllocUnretainedDanglingPtr;
 enum class UnretainedDanglingPtrMode {
   kCrash,
@@ -58,16 +77,8 @@ enum class DanglingPtrType {
 extern const BASE_EXPORT base::FeatureParam<DanglingPtrType>
     kDanglingPtrTypeParam;
 
-enum class PartitionAllocWithAdvancedChecksEnabledProcesses {
-  // Enabled only in the browser process.
-  kBrowserOnly,
-  // Enabled only in the browser and renderer processes.
-  kBrowserAndRenderer,
-  // Enabled in all processes, except renderer.
-  kNonRenderer,
-  // Enabled in all processes.
-  kAllProcesses,
-};
+using PartitionAllocWithAdvancedChecksEnabledProcesses =
+    internal::PAFeatureEnabledProcesses;
 
 #if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 BASE_EXPORT BASE_DECLARE_FEATURE(kPartitionAllocLargeThreadCacheSize);
@@ -86,18 +97,14 @@ extern const BASE_EXPORT base::FeatureParam<int>
     kPartitionAllocSchedulerLoopQuarantineBranchCapacity;
 
 BASE_EXPORT BASE_DECLARE_FEATURE(kPartitionAllocZappingByFreeFlags);
+
+// Eventually zero out most PartitionAlloc memory. This is not meant as a
+// security guarantee, but to increase the compression ratio of PartitionAlloc's
+// fragmented super pages.
+BASE_EXPORT BASE_DECLARE_FEATURE(kPartitionAllocEventuallyZeroFreedMemory);
 #endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
-enum class BackupRefPtrEnabledProcesses {
-  // BRP enabled only in the browser process.
-  kBrowserOnly,
-  // BRP enabled only in the browser and renderer processes.
-  kBrowserAndRenderer,
-  // BRP enabled in all processes, except renderer.
-  kNonRenderer,
-  // BRP enabled in all processes.
-  kAllProcesses,
-};
+using BackupRefPtrEnabledProcesses = internal::PAFeatureEnabledProcesses;
 
 enum class BackupRefPtrMode {
   // BRP is disabled across all partitions. Equivalent to the Finch flag being
@@ -124,37 +131,12 @@ enum class RetagMode {
   kRandom,
 };
 
-enum class MemoryTaggingEnabledProcesses {
-  // Memory tagging enabled only in the browser process.
-  kBrowserOnly,
-  // Memory tagging enabled in all processes, except renderer.
-  kNonRenderer,
-  // Memory tagging enabled in all processes.
-  kAllProcesses,
-};
+using MemoryTaggingEnabledProcesses = internal::PAFeatureEnabledProcesses;
 
 enum class BucketDistributionMode : uint8_t {
   kDefault,
   kDenser,
 };
-
-// Parameter for 'kPartitionAllocMakeFreeNoOpOnShutdown' feature which
-// controls when free() becomes a no-op during Shutdown()
-enum class WhenFreeBecomesNoOp {
-  kBeforePreShutdown,
-  kBeforeHaltingStartupTracingController,
-  kBeforeShutDownThreads,
-  kInShutDownThreads,
-  kAfterShutDownThreads,
-};
-
-// Inserts a no-op on 'free()' allocator shim at the front of the
-// dispatch chain if called from the appropriate callsite.
-BASE_EXPORT void MakeFreeNoOp(WhenFreeBecomesNoOp callsite);
-
-BASE_EXPORT BASE_DECLARE_FEATURE(kPartitionAllocMakeFreeNoOpOnShutdown);
-extern const BASE_EXPORT base::FeatureParam<WhenFreeBecomesNoOp>
-    kPartitionAllocMakeFreeNoOpOnShutdownParam;
 
 BASE_EXPORT BASE_DECLARE_FEATURE(kPartitionAllocBackupRefPtr);
 extern const BASE_EXPORT base::FeatureParam<BackupRefPtrEnabledProcesses>
@@ -236,6 +218,14 @@ BASE_EXPORT BASE_DECLARE_FEATURE(kPartitionAllocAdjustSizeWhenInForeground);
 //
 // See also: https://crbug.com/333443437
 BASE_EXPORT BASE_DECLARE_FEATURE(kPartitionAllocUseSmallSingleSlotSpans);
+
+#if PA_CONFIG(ENABLE_SHADOW_METADATA)
+using ShadowMetadataEnabledProcesses = internal::PAFeatureEnabledProcesses;
+
+BASE_EXPORT BASE_DECLARE_FEATURE(kPartitionAllocShadowMetadata);
+extern const BASE_EXPORT base::FeatureParam<ShadowMetadataEnabledProcesses>
+    kShadowMetadataEnabledProcessesParam;
+#endif  // PA_CONFIG(ENABLE_SHADOW_METADATA)
 
 }  // namespace features
 }  // namespace base

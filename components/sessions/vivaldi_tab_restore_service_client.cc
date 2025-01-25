@@ -9,7 +9,7 @@ LiveTabContext* TabRestoreServiceClient::CreateLiveTabContext(
     SessionWindow::WindowType type,
     const std::string& app_name,
     const gfx::Rect& bounds,
-    ui::WindowShowState show_state,
+    ui::mojom::WindowShowState show_state,
     const std::string& workspace,
     const std::string& user_title,
     const std::map<std::string, std::string>& extra_data) {
@@ -24,7 +24,7 @@ LiveTabContext* TabRestoreServiceClient::CreateLiveTabContext(
     SessionWindow::WindowType type,
     const std::string& app_name,
     const gfx::Rect& bounds,
-    ui::WindowShowState show_state,
+    ui::mojom::WindowShowState show_state,
     const std::string& workspace,
     const std::string& user_title,
     const std::map<std::string, std::string>& extra_data,

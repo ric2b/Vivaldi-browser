@@ -38,6 +38,10 @@ import {
   ColorMatcher,
   ColorMixMatch,
   ColorMixMatcher,
+  type CSSWideKeywordMatch,
+  CSSWideKeywordMatcher,
+  type FlexGridMatch,
+  FlexGridMatcher,
   type FontMatch,
   FontMatcher,
   type GridTemplateMatch,
@@ -53,13 +57,15 @@ import {
   LinkableNameProperties,
   type PositionAnchorMatch,
   PositionAnchorMatcher,
+  type PositionTryMatch,
+  PositionTryMatcher,
   type ShadowMatch,
   ShadowMatcher,
   ShadowType,
 } from './PropertyMatchers.js';
 import {type MatchRenderer, Renderer, RenderingContext, StringRenderer, URLRenderer} from './PropertyRenderer.js';
 import {StyleEditorWidget} from './StyleEditorWidget.js';
-import {type StylePropertiesSection} from './StylePropertiesSection.js';
+import type {StylePropertiesSection} from './StylePropertiesSection.js';
 import {getCssDeclarationAsJavascriptProperty} from './StylePropertyUtils.js';
 import {
   CSSPropertyPrompt,
@@ -90,7 +96,7 @@ const UIStrings = {
   /**
    *@description Context menu item for style property in edit mode
    */
-  revealInSourcesPanel: 'Reveal in Sources panel',
+  openInSourcesPanel: 'Open in Sources panel',
   /**
    *@description A context menu item in Styles panel to copy CSS declaration
    */
@@ -135,6 +141,10 @@ const UIStrings = {
    *@description A context menu item in Styles panel to copy all declarations of CSS rule as JavaScript properties.
    */
   copyAllCssDeclarationsAsJs: 'Copy all declarations as JS',
+  /**
+   *@description Title of the link in Styles panel to jump to the Animations panel.
+   */
+  jumpToAnimationsPanel: 'Jump to Animations panel',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/elements/StylePropertyTreeElement.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -149,6 +159,74 @@ interface StylePropertyTreeElementParams {
   inherited: boolean;
   overloaded: boolean;
   newProperty: boolean;
+}
+
+export class FlexGridRenderer implements MatchRenderer<FlexGridMatch> {
+  #treeElement: StylePropertyTreeElement;
+  constructor(treeElement: StylePropertyTreeElement) {
+    this.#treeElement = treeElement;
+  }
+
+  matcher(): SDK.CSSPropertyParser.Matcher<FlexGridMatch> {
+    return new FlexGridMatcher();
+  }
+
+  render(match: FlexGridMatch, context: RenderingContext): Node[] {
+    const key =
+        `${this.#treeElement.section().getSectionIdx()}_${this.#treeElement.section().nextEditorTriggerButtonIdx}`;
+    const button = StyleEditorWidget.createTriggerButton(
+        this.#treeElement.parentPane(), this.#treeElement.section(), match.isFlex ? FlexboxEditor : GridEditor,
+        match.isFlex ? i18nString(UIStrings.flexboxEditorButton) : i18nString(UIStrings.gridEditorButton), key);
+    button.setAttribute(
+        'jslog', `${VisualLogging.showStyleEditor().track({click: true}).context(match.isFlex ? 'flex' : 'grid')}`);
+    this.#treeElement.section().nextEditorTriggerButtonIdx++;
+    button.addEventListener('click', () => {
+      Host.userMetrics.swatchActivated(
+          match.isFlex ? Host.UserMetrics.SwatchType.FLEX : Host.UserMetrics.SwatchType.GRID);
+    });
+    const helper = this.#treeElement.parentPane().swatchPopoverHelper();
+    if (helper.isShowing(StyleEditorWidget.instance()) && StyleEditorWidget.instance().getTriggerKey() === key) {
+      helper.setAnchorElement(button);
+    }
+    return [...Renderer.render(ASTUtils.siblings(ASTUtils.declValue(match.node)), context).nodes, button];
+  }
+}
+
+export class CSSWideKeywordRenderer implements MatchRenderer<CSSWideKeywordMatch> {
+  #treeElement: StylePropertyTreeElement;
+  constructor(treeElement: StylePropertyTreeElement) {
+    this.#treeElement = treeElement;
+  }
+
+  matcher(): SDK.CSSPropertyParser.Matcher<CSSWideKeywordMatch> {
+    return new CSSWideKeywordMatcher(this.#treeElement.property, this.#treeElement.matchedStyles());
+  }
+
+  render(match: CSSWideKeywordMatch, context: RenderingContext): Node[] {
+    const resolvedProperty = match.resolveProperty();
+    if (!resolvedProperty) {
+      return [document.createTextNode(match.text)];
+    }
+
+    const swatch = new InlineEditor.LinkSwatch.LinkSwatch();
+    UI.UIUtils.createTextChild(swatch, match.text);
+    swatch.data = {
+      text: match.text,
+      isDefined: Boolean(resolvedProperty),
+      onLinkActivate: () => resolvedProperty && this.#treeElement.parentPane().jumpToDeclaration(resolvedProperty),
+      jslogContext: 'css-wide-keyword-link',
+    };
+
+    if (SDK.CSSMetadata.cssMetadata().isColorAwareProperty(resolvedProperty.name) ||
+        SDK.CSSMetadata.cssMetadata().isCustomProperty(resolvedProperty.name)) {
+      const color = Common.Color.parse(context.matchedResult.getComputedText(match.node));
+      if (color) {
+        return [new ColorRenderer(this.#treeElement).renderColorSwatch(color, swatch)];
+      }
+    }
+
+    return [swatch];
+  }
 }
 
 export class VariableRenderer implements MatchRenderer<SDK.CSSPropertyParser.VariableMatch> {
@@ -185,7 +263,7 @@ export class VariableRenderer implements MatchRenderer<SDK.CSSPropertyParser.Var
     const renderedFallback = match.fallback.length > 0 ? Renderer.render(match.fallback, context) : undefined;
 
     const {declaration, value: variableValue} = this.resolveVariable(match) ?? {};
-    const fromFallback = !variableValue;
+    const fromFallback = variableValue === undefined;
     const computedValue = variableValue ?? this.fallbackValue(match);
 
     const varSwatch = new InlineEditor.LinkSwatch.CSSVarSwatch();
@@ -243,17 +321,17 @@ export class VariableRenderer implements MatchRenderer<SDK.CSSPropertyParser.Var
     return this.#treeElement.matchedStyles();
   }
 
-  #handleVarDefinitionActivate(variable: string|SDK.CSSProperty.CSSProperty|
-                               SDK.CSSMatchedStyles.CSSRegisteredProperty): void {
+  #handleVarDefinitionActivate(variable: string|SDK.CSSMatchedStyles.CSSValueSource): void {
     Host.userMetrics.actionTaken(Host.UserMetrics.Action.CustomPropertyLinkClicked);
     Host.userMetrics.swatchActivated(Host.UserMetrics.SwatchType.VAR_LINK);
-    if (variable instanceof SDK.CSSProperty.CSSProperty) {
-      this.#pane.revealProperty(variable);
-    } else if (variable instanceof SDK.CSSMatchedStyles.CSSRegisteredProperty) {
-      this.#pane.jumpToProperty('initial-value', variable.propertyName(), REGISTERED_PROPERTY_SECTION_NAME);
-    } else {
+
+    if (typeof variable === 'string') {
       this.#pane.jumpToProperty(variable) ||
           this.#pane.jumpToProperty('initial-value', variable, REGISTERED_PROPERTY_SECTION_NAME);
+    } else if (variable.declaration instanceof SDK.CSSProperty.CSSProperty) {
+      this.#pane.revealProperty(variable.declaration);
+    } else if (variable.declaration instanceof SDK.CSSMatchedStyles.CSSRegisteredProperty) {
+      this.#pane.jumpToProperty('initial-value', variable.name, REGISTERED_PROPERTY_SECTION_NAME);
     }
   }
 }
@@ -289,14 +367,14 @@ export class ColorRenderer implements MatchRenderer<ColorMatch> {
   }
 
   matcher(): ColorMatcher {
-    return new ColorMatcher();
+    const getCurrentColorCallback = (): string|null => this.treeElement.getComputedStyle('color');
+    return new ColorMatcher(getCurrentColorCallback);
   }
 
   #getValueChild(match: ColorMatch, context: RenderingContext):
       {valueChild: HTMLSpanElement, cssControls?: SDK.CSSPropertyParser.CSSControlMap} {
     const valueChild = document.createElement('span');
-    if (match.node.name === 'ColorLiteral' ||
-        (match.node.name === 'ValueName' && Common.Color.Nicknames.has(match.text))) {
+    if (match.node.name === 'ColorLiteral' || match.node.name === 'ValueName') {
       valueChild.appendChild(document.createTextNode(match.text));
       return {valueChild};
     }
@@ -641,7 +719,7 @@ export class LinkableNameRenderer implements MatchRenderer<LinkableNameMatch> {
 
   #getLinkData(match: LinkableNameMatch):
       {jslogContext: string, metric: null|Host.UserMetrics.SwatchType, ruleBlock: string, isDefined: boolean} {
-    switch (match.properyName) {
+    switch (match.propertyName) {
       case LinkableNameProperties.ANIMATION:
       case LinkableNameProperties.ANIMATION_NAME:
         return {
@@ -682,6 +760,34 @@ export class LinkableNameRenderer implements MatchRenderer<LinkableNameMatch> {
       },
       jslogContext,
     };
+
+    if (match.propertyName === LinkableNameProperties.ANIMATION ||
+        match.propertyName === LinkableNameProperties.ANIMATION_NAME) {
+      const el = document.createElement('span');
+      el.appendChild(swatch);
+
+      const node = this.#treeElement.node();
+      if (node) {
+        const animationModel = node.domModel().target().model(SDK.AnimationModel.AnimationModel);
+        void animationModel?.getAnimationGroupForAnimation(match.text, node.id).then(maybeAnimationGroup => {
+          if (!maybeAnimationGroup) {
+            return;
+          }
+
+          const icon = IconButton.Icon.create('animation', 'open-in-animations-panel');
+          icon.setAttribute('jslog', `${VisualLogging.link('open-in-animations-panel').track({click: true})}`);
+          icon.setAttribute('role', 'button');
+          icon.setAttribute('title', i18nString(UIStrings.jumpToAnimationsPanel));
+          icon.addEventListener('mouseup', ev => {
+            ev.consume(true);
+
+            void Common.Revealer.reveal(maybeAnimationGroup);
+          });
+          el.insertBefore(icon, swatch);
+        });
+      }
+      return [el];
+    }
 
     return [swatch];
   }
@@ -1188,6 +1294,39 @@ export class PositionAnchorRenderer implements MatchRenderer<PositionAnchorMatch
   }
 }
 
+export class PositionTryRenderer implements MatchRenderer<PositionTryMatch> {
+  #treeElement: StylePropertyTreeElement;
+
+  constructor(treeElement: StylePropertyTreeElement) {
+    this.#treeElement = treeElement;
+  }
+
+  render(match: PositionTryMatch, context: RenderingContext): Node[] {
+    const content = [];
+    if (match.preamble.length > 0) {
+      const {nodes} = Renderer.render(match.preamble, context);
+      content.push(...nodes);
+    }
+    for (const [i, fallback] of match.fallbacks.entries()) {
+      const fallbackContent = document.createElement('span');
+      if (i > 0) {
+        fallbackContent.appendChild(document.createTextNode(', '));
+      }
+      if (i !== this.#treeElement.matchedStyles().activePositionFallbackIndex()) {
+        fallbackContent.style.textDecoration = 'line-through';
+      }
+      Renderer.renderInto(fallback, context, fallbackContent);
+
+      content.push(fallbackContent);
+    }
+    return content;
+  }
+
+  matcher(): PositionTryMatcher {
+    return new PositionTryMatcher();
+  }
+}
+
 export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
   private readonly style: SDK.CSSStyleDeclaration.CSSStyleDeclaration;
   private matchedStylesInternal: SDK.CSSMatchedStyles.CSSMatchedStyles;
@@ -1572,7 +1711,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
         })]);
 
     const decl = SDK.CSSPropertyParser.ASTUtils.siblings(SDK.CSSPropertyParser.ASTUtils.declValue(matching.ast.tree));
-    return matching.getComputedTextRange(decl[0], decl[decl.length - 1]);
+    return decl.length > 0 ? matching.getComputedTextRange(decl[0], decl[decl.length - 1]) : '';
   }
 
   refreshIfComputedValueChanged(): void {
@@ -1608,12 +1747,15 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
           new BezierRenderer(this),
           new StringRenderer(),
           new ShadowRenderer(this),
-          new FontRenderer(this),
+          new CSSWideKeywordRenderer(this),
           new LightDarkColorRenderer(this),
           new GridTemplateRenderer(),
           new LinearGradientRenderer(),
           new AnchorFunctionRenderer(this),
           new PositionAnchorRenderer(this),
+          new FlexGridRenderer(this),
+          new PositionTryRenderer(this),
+          new FontRenderer(this),
         ] :
         [];
 
@@ -1658,30 +1800,6 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
       semicolon.onmouseup = this.mouseUp.bind(this);
       if (this.property.disabled) {
         UI.UIUtils.createTextChild(this.listItemElement.createChild('span', 'styles-clipboard-only'), ' */');
-      }
-    }
-
-    if (this.valueElement && this.#parentSection.editable && this.property.name === 'display') {
-      const propertyValue = this.property.trimmedValueWithoutImportant();
-      const isFlex = propertyValue === 'flex' || propertyValue === 'inline-flex';
-      const isGrid = propertyValue === 'grid' || propertyValue === 'inline-grid';
-      if (isFlex || isGrid) {
-        const key = `${this.#parentSection.getSectionIdx()}_${this.#parentSection.nextEditorTriggerButtonIdx}`;
-        const button = StyleEditorWidget.createTriggerButton(
-            this.parentPaneInternal, this.#parentSection, isFlex ? FlexboxEditor : GridEditor,
-            isFlex ? i18nString(UIStrings.flexboxEditorButton) : i18nString(UIStrings.gridEditorButton), key);
-        button.setAttribute(
-            'jslog', `${VisualLogging.showStyleEditor().track({click: true}).context(isFlex ? 'flex' : 'grid')}`);
-        this.#parentSection.nextEditorTriggerButtonIdx++;
-        button.addEventListener('click', () => {
-          Host.userMetrics.swatchActivated(
-              isFlex ? Host.UserMetrics.SwatchType.FLEX : Host.UserMetrics.SwatchType.GRID);
-        });
-        this.listItemElement.appendChild(button);
-        const helper = this.parentPaneInternal.swatchPopoverHelper();
-        if (helper.isShowing(StyleEditorWidget.instance()) && StyleEditorWidget.instance().getTriggerKey() === key) {
-          helper.setAnchorElement(button);
-        }
       }
     }
 
@@ -1848,7 +1966,7 @@ export class StylePropertyTreeElement extends UI.TreeOutline.TreeElement {
     }
     const revealCallback = this.navigateToSource.bind(this) as () => void;
     contextMenu.defaultSection().appendItem(
-        i18nString(UIStrings.revealInSourcesPanel), revealCallback, {jslogContext: 'reveal-in-sources-panel'});
+        i18nString(UIStrings.openInSourcesPanel), revealCallback, {jslogContext: 'reveal-in-sources-panel'});
     void contextMenu.show();
   }
 

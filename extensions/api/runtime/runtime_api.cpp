@@ -651,7 +651,7 @@ RuntimePrivateGetProfileStatisticsFunction::Run() {
   } else {
     // Mark the profile to be a gather-profile that does not need a
     // vivaldirootdocumenthandler.
-    MarkProfileForNoVivaldiClient(profile_path);
+    MarkProfilePathForNoVivaldiClient(profile_path);
     g_browser_process->profile_manager()->LoadProfileByPath(
         profile_path, false,
         base::BindOnce(
@@ -687,6 +687,7 @@ void RuntimePrivateGetProfileStatisticsFunction::GetProfileStatsCallback(
       stat.count = item.count;
       results_.push_back(std::move(stat));
     }
+    ClearProfilePathForNoVivaldiClient(profile_path);
     Respond(ArgumentList(Results::Create(results_)));
   }
 }

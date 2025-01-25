@@ -26,7 +26,6 @@
 #include "libavutil/opt.h"
 #include "filters.h"
 #include "dnn_filter_common.h"
-#include "internal.h"
 #include "video.h"
 #include "libavutil/time.h"
 #include "libavutil/avstring.h"
@@ -84,7 +83,7 @@ static const AVOption dnn_detect_options[] = {
     { NULL }
 };
 
-AVFILTER_DNN_DEFINE_CLASS(dnn_detect);
+AVFILTER_DNN_DEFINE_CLASS(dnn_detect, DNN_TF | DNN_OV);
 
 static inline float sigmoid(float x) {
     return 1.f / (1.f + exp(-x));
@@ -807,11 +806,13 @@ static av_cold void dnn_detect_uninit(AVFilterContext *context)
     DnnDetectContext *ctx = context->priv;
     AVDetectionBBox *bbox;
     ff_dnn_uninit(&ctx->dnnctx);
-    while(av_fifo_can_read(ctx->bboxes_fifo)) {
-        av_fifo_read(ctx->bboxes_fifo, &bbox, 1);
-        av_freep(&bbox);
+    if (ctx->bboxes_fifo) {
+        while (av_fifo_can_read(ctx->bboxes_fifo)) {
+            av_fifo_read(ctx->bboxes_fifo, &bbox, 1);
+            av_freep(&bbox);
+        }
+        av_fifo_freep2(&ctx->bboxes_fifo);
     }
-    av_fifo_freep2(&ctx->bboxes_fifo);
     av_freep(&ctx->anchors);
     free_detect_labels(ctx);
 }

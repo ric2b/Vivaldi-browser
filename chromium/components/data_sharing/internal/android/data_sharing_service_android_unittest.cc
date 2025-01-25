@@ -5,13 +5,14 @@
 #include "components/data_sharing/internal/android/data_sharing_service_android.h"
 
 #include "base/android/jni_android.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/functional/callback_forward.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "components/data_sharing/internal/data_sharing_service_impl.h"
-#include "components/data_sharing/internal/fake_data_sharing_sdk_delegate.h"
 #include "components/data_sharing/public/data_sharing_service.h"
 #include "components/data_sharing/public/group_data.h"
+#include "components/data_sharing/test_support/fake_data_sharing_sdk_delegate.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/sync/test/data_type_store_test_util.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
@@ -80,8 +81,12 @@ sync_pb::CollaborationGroupSpecifics MakeCollaborationGroupSpecifics(
     const GroupId& id) {
   sync_pb::CollaborationGroupSpecifics result;
   result.set_collaboration_id(id.value());
+
+  base::Time now = base::Time::Now();
   result.set_changed_at_timestamp_millis_since_unix_epoch(
-      base::Time::Now().InMillisecondsSinceUnixEpoch());
+      now.InMillisecondsSinceUnixEpoch());
+  result.set_consistency_token(
+      base::NumberToString(now.InMillisecondsSinceUnixEpoch()));
   return result;
 }
 
@@ -120,6 +125,8 @@ class DataSharingServiceAndroidTest : public testing::Test {
 
   void SetUp() override {
     Test::SetUp();
+    EXPECT_TRUE(profile_dir_.CreateUniqueTempDir());
+
     scoped_refptr<network::SharedURLLoaderFactory> test_url_loader_factory =
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             &test_url_loader_factory_);
@@ -129,7 +136,7 @@ class DataSharingServiceAndroidTest : public testing::Test {
     not_owned_sdk_delegate_ = sdk_delegate.get();
 
     data_sharing_service_ = std::make_unique<DataSharingServiceImpl>(
-        std::move(test_url_loader_factory),
+        profile_dir_.GetPath(), std::move(test_url_loader_factory),
         identity_test_env_.identity_manager(),
         syncer::DataTypeStoreTestUtil::FactoryForInMemoryStoreForTest(),
         version_info::Channel::UNKNOWN, std::move(sdk_delegate),
@@ -198,6 +205,7 @@ class DataSharingServiceAndroidTest : public testing::Test {
 
  protected:
   base::test::TaskEnvironment task_environment_;
+  base::ScopedTempDir profile_dir_;
   signin::IdentityTestEnvironment identity_test_env_;
   network::TestURLLoaderFactory test_url_loader_factory_;
   std::unique_ptr<DataSharingServiceImpl> data_sharing_service_;

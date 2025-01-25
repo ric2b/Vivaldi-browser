@@ -24,6 +24,10 @@ import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStats;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescription;
 import org.chromium.components.browser_ui.widget.RadioButtonWithDescriptionLayout;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+import org.chromium.ui.base.DeviceFormFactor;
+
 /** Fragment that allows the user to configure toolbar shortcut preferences. */
 public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
         implements RadioGroup.OnCheckedChangeListener {
@@ -74,6 +78,15 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
 
         // Vivaldi
         mAutoButton.setVisibility(View.GONE);
+        // For tablets the add bookmarks and new tab toolbar buttons are already there.
+        boolean isTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext());
+        if (isTablet) {
+            mAddToBookmarksButton.setVisibility(View.GONE);
+            mNewTabButton.setVisibility(View.GONE);
+        }
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
+            // Share feature unavailable on automotive.
+            mShareButton.setVisibility(View.GONE);
 
         initializeRadioButtonSelection();
         RecordUserAction.record("Mobile.AdaptiveToolbarButton.SettingsPage.Opened");
@@ -105,6 +118,15 @@ public class RadioButtonGroupAdaptiveToolbarPreference extends Preference
                                             R.string
                                                     .adaptive_toolbar_button_preference_based_on_your_usage_description,
                                             getButtonString(uiState.autoButtonCaption)));
+                    // Description to indicate these buttons only appear on small windows,
+                    // as large windows (tablets) show them elsewhere on UI (strip, omnibox).
+                    String basedOnWindowDesc =
+                            getContext()
+                                    .getString(
+                                            R.string
+                                                    .adaptive_toolbar_button_preference_based_on_window_width_description);
+                    mNewTabButton.setDescriptionText(basedOnWindowDesc);
+                    mAddToBookmarksButton.setDescriptionText(basedOnWindowDesc);
                     updateVoiceButtonVisibility();
                     updateReadAloudButtonVisibility();
                     updatePageSummaryButtonVisibility();

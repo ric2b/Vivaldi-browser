@@ -8,8 +8,8 @@
 #include <chrono>
 #include <optional>
 
-#include "cast/streaming/public/frame_id.h"
 #include "cast/streaming/impl/rtp_defines.h"
+#include "cast/streaming/public/frame_id.h"
 #include "cast/streaming/rtp_time.h"
 #include "cast/streaming/ssrc.h"
 #include "platform/base/span.h"
@@ -41,9 +41,9 @@ class RtpPacketParser {
     FrameId referenced_frame_id;  // ID of frame required to decode this one.
     std::chrono::milliseconds new_playout_delay{};  // Ignore if non-positive.
 
-    // Portion of the |packet| that was passed into Parse() that contains the
+    // Portion of the `packet` that was passed into Parse() that contains the
     // payload. WARNING: This memory region is only valid while the original
-    // |packet| memory remains valid.
+    // `packet` memory remains valid.
     ByteView payload;
 
     ParseResult();
@@ -55,7 +55,7 @@ class RtpPacketParser {
 
   // Parses the packet. The caller should use InspectPacketForRouting()
   // beforehand to ensure that the packet is meant to be parsed by this
-  // instance. Returns std::nullopt if the |packet| was corrupt.
+  // instance. Returns std::nullopt if the `packet` was corrupt.
   std::optional<ParseResult> Parse(ByteView packet);
 
  private:

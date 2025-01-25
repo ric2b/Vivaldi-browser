@@ -118,8 +118,8 @@ struct SimpleHistogram {
   // ...
   // Bucket N-1: [max - width, max - 1]
   // Overflow bucket: >= max
-  // |min| must be less than |max|.
-  // |width| must divide |max - min| evenly.
+  // `min` must be less than `max`.
+  // `width` must divide `max - min` evenly.
   SimpleHistogram(int64_t min, int64_t max, int64_t width);
 
   SimpleHistogram();

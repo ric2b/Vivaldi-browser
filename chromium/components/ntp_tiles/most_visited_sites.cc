@@ -37,7 +37,7 @@
 #include "third_party/re2/src/re2/re2.h"
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "components/supervised_user/core/browser/supervised_user_capabilities.h"
+#include "components/supervised_user/core/browser/family_link_user_capabilities.h"
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #endif
 
@@ -835,7 +835,7 @@ bool MostVisitedSites::WasNtpAppMigratedToWebApp(PrefService* prefs, GURL url) {
 
 NTPTilesVector MostVisitedSites::RemoveInvalidPreinstallApps(
     NTPTilesVector new_tiles) {
-  std::erase_if(new_tiles, [this](NTPTile ntp_tile) {
+  std::erase_if(new_tiles, [this](const NTPTile& ntp_tile) {
     return MostVisitedSites::IsNtpTileFromPreinstalledApp(ntp_tile.url) &&
            MostVisitedSites::WasNtpAppMigratedToWebApp(prefs_, ntp_tile.url);
   });

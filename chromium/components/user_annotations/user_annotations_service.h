@@ -5,10 +5,13 @@
 #ifndef COMPONENTS_USER_ANNOTATIONS_USER_ANNOTATIONS_SERVICE_H_
 #define COMPONENTS_USER_ANNOTATIONS_USER_ANNOTATIONS_SERVICE_H_
 
+#include <memory>
+#include <queue>
 #include <string>
 #include <vector>
 
 #include "base/callback_list.h"
+#include "base/containers/queue.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
@@ -20,14 +23,14 @@
 #include "url/gurl.h"
 
 namespace autofill {
-class FormData;
+class AutofillProfile;
+class FormStructure;
 }  // namespace autofill
 
 namespace optimization_guide {
 class OptimizationGuideDecider;
 namespace proto {
 class AXTreeUpdate;
-class UserAnnotationsEntry;
 }  // namespace proto
 }  // namespace optimization_guide
 
@@ -38,22 +41,11 @@ class OSCryptAsync;
 
 namespace user_annotations {
 
+class FormSubmissionHandler;
 class UserAnnotationsDatabase;
-struct Entry;
 
 class UserAnnotationsService : public KeyedService {
  public:
-  // `ImportFormCallback` carries `to_be_upserted_entries` that will be shown in
-  // the Autofill prediction improvements prompt. The prompt then notifies the
-  // `UserAnnotationsService` about the user decision by running
-  // `prompt_acceptance_callback`, that is also provided by
-  // `ImportFormCallback`.
-  using ImportFormCallback = base::OnceCallback<void(
-      std::vector<optimization_guide::proto::UserAnnotationsEntry>
-          to_be_upserted_entries,
-      base::OnceCallback<void(bool prompt_was_accepted)>
-          prompt_acceptance_callback)>;
-
   UserAnnotationsService(
       optimization_guide::OptimizationGuideModelExecutor* model_executor,
       const base::FilePath& storage_dir,
@@ -72,11 +64,13 @@ class UserAnnotationsService : public KeyedService {
   // to the outcome of the import process. The `callback` will notify Autofill
   // code about the import attempt so they can show a save prompt to the user.
   // When the prompt is closed, the inner `prompt_acceptance_callback` will
-  // notify `this` about the user's decision.
-  // Virtual for testing.
+  // notify `this` about the user's decision. `form` is assumed to never be
+  // `nullptr`. Virtual for testing.
   virtual void AddFormSubmission(
+      const GURL& url,
+      const std::string& title,
       optimization_guide::proto::AXTreeUpdate ax_tree_update,
-      const autofill::FormData& form_data,
+      std::unique_ptr<autofill::FormStructure> form,
       ImportFormCallback callback);
 
   // Retrieves all entries from the database. Invokes `callback` when complete.
@@ -86,11 +80,13 @@ class UserAnnotationsService : public KeyedService {
 
   // Remove the user annotation entry with `entry_id` and calls `callback` upon
   // completion.
-  void RemoveEntry(EntryID entry_id, base::OnceClosure callback);
+  // Virtual for testing.
+  virtual void RemoveEntry(EntryID entry_id, base::OnceClosure callback);
 
   // Removes all the user annotation entries and calls `callback` upon
   // completion.
-  void RemoveAllEntries(base::OnceClosure callback);
+  // Virtual for testing.
+  virtual void RemoveAllEntries(base::OnceClosure callback);
 
   // Removes the user annotation entries that were last modified from
   // `delete_begin` to `delete_end`.
@@ -98,54 +94,56 @@ class UserAnnotationsService : public KeyedService {
   virtual void RemoveAnnotationsInRange(const base::Time& delete_begin,
                                         const base::Time& delete_end);
 
+  // Returns the number of unique user annotations that were last modified
+  // between [`begin`, `end`).
+  // Virtual for testing.
+  virtual void GetCountOfValuesContainedBetween(
+      base::Time begin,
+      base::Time end,
+      base::OnceCallback<void(int)> callback);
+
   // KeyedService:
   void Shutdown() override;
 
+  // Saves `autofill_profile` to the database, then runs `callback`.
+  virtual void SaveAutofillProfile(
+      const autofill::AutofillProfile& autofill_profile,
+      base::OnceCallback<void(UserAnnotationsExecutionResult)> callback);
+
  private:
   friend class TestUserAnnotationsService;
+  friend class FormSubmissionHandler;
 
   // Used in testing, to construct the service without encryptor and database.
   UserAnnotationsService();
-
-  // Processes model execution response. Invoked when model execution has been
-  // received.
-  void OnModelExecuted(
-      ImportFormCallback callback,
-      optimization_guide::OptimizationGuideModelExecutionResult result,
-      std::unique_ptr<optimization_guide::ModelQualityLogEntry> log_entry);
 
   // Called when the encryptor is ready.
   void OnOsCryptAsyncReady(const base::FilePath& storage_dir,
                            os_crypt_async::Encryptor encryptor,
                            bool success);
 
-  // Called after the `entries` are retrieved, to submit the form `request`
-  // filling the entries.
-  void ExecuteModelWithEntries(
-      optimization_guide::proto::FormsAnnotationsRequest request,
-      ImportFormCallback callback,
-      UserAnnotationsEntries entries);
+  void InitializeFormsAnnotationsFromCommandLine(
+      const optimization_guide::proto::FormsAnnotationsResponse&
+          manual_entries);
 
-  // Sends the result of form submission.
-  void SendFormSubmissionResult(
-      UserAnnotationsService::ImportFormCallback callback,
-      const UserAnnotationsEntries& to_be_upserted_entries,
-      UserAnnotationsExecutionResult result);
+  // Returns whether the database initialization is complete.
+  bool IsDatabaseReady();
 
-  // Called when decision has been made whether to import form entries.
-  // `prompt_was_accepted` is the user decision, and `entries` will be persisted
-  // to database when true.
-  void OnImportFormConfirmation(const UserAnnotationsEntries& entries,
-                                bool prompt_was_accepted);
+  // Starts the processing of next pending form submission.
+  void ProcessNextFormSubmission();
 
-  // An in-memory representation of the "database" of user annotation entries.
-  // Used only when `ShouldPersistUserAnnotations()` is false.
-  std::vector<Entry> entries_;
+  // Saves the entries to database.
+  void SaveEntries(
+      const optimization_guide::proto::FormsAnnotationsResponse& entries);
 
-  int64_t entry_id_counter_ = 0;
+  // Called when the form submission is fully complete.
+  void OnFormSubmissionComplete();
+
+  optimization_guide::OptimizationGuideModelExecutor* model_executor() {
+    return model_executor_;
+  }
 
   // Database used to persist the user annotation entries.
-  // Used only when `ShouldPersistUserAnnotations()` is true.
   base::SequenceBound<UserAnnotationsDatabase> user_annotations_database_;
 
   // Maintains the subscription for `OSCryptAsync` and cancels upon destruction.
@@ -164,6 +162,12 @@ class UserAnnotationsService : public KeyedService {
   // TODO: b/361692317 - Remove this once optimization guide actually populates
   // list.
   const std::vector<std::string> allowed_hosts_for_forms_annotations_;
+
+  // The queue of form submissions pending to be processed. Each form submission
+  // goes through multiple stages of processing, and until then the form
+  // submissions will wait in this queue. The first entry is the one that is
+  // currently being processed.
+  base::queue<std::unique_ptr<FormSubmissionHandler>> pending_form_submissions_;
 
   base::WeakPtrFactory<UserAnnotationsService> weak_ptr_factory_{this};
 };

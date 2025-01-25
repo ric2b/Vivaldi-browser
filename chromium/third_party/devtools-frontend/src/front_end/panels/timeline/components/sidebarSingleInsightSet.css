@@ -1,0 +1,61 @@
+/*
+ * Copyright 2024 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+:host {
+  display: block;
+  padding: 5px 10px;
+}
+
+.metrics-row {
+  display: flex;
+  flex-direction: row;
+}
+
+.metric {
+  flex: 1;
+  user-select: text;
+  cursor: pointer;
+  /* metric container is a button for a11y reasons, so remove default styles
+   * */
+  background: none;
+  border: none;
+  padding: 0;
+  display: block;
+  text-align: left;
+}
+
+.metric-value {
+  font-size: var(--sys-size-11);
+}
+
+.metric-value-bad {
+  color: var(--app-color-performance-bad);
+}
+
+.metric-value-ok {
+  color: var(--app-color-performance-ok);
+}
+
+.metric-value-good {
+  color: var(--app-color-performance-good);
+}
+
+.metric-score-unclassified {
+  color: var(--sys-color-token-subtle);
+}
+
+.metric-label {
+  font: var(--sys-typescale-body4-medium);
+}
+
+.number-with-unit {
+  white-space: nowrap;
+
+  .unit {
+    font-size: 14px;
+    padding: 0 1px;
+  }
+}

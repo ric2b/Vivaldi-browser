@@ -180,7 +180,7 @@ void SDLPlayerBase::RenderAndSchedulePresentation() {
     it = next_it;
   }
 
-  // Remove the frame from the queue, making it the |current_frame_|. Then,
+  // Remove the frame from the queue, making it the `current_frame_`. Then,
   // render it and, if successful, schedule its presentation.
   current_frame_ = std::move(it->second);
   frames_to_render_.erase(it);

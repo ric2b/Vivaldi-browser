@@ -7,6 +7,7 @@
 
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_column.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_style.h"
+#import "ios/ui/settings/start_page/vivaldi_start_page_start_item_type.h"
 
 // A protocol implemented by consumers to handle start page settings
 // state change.
@@ -22,6 +23,8 @@
 - (void)setPreferenceSpeedDialLayout:(VivaldiStartPageLayoutStyle)layout;
 // Updates the state with the speed dial maximum number columns preference value
 - (void)setPreferenceSpeedDialColumn:(VivaldiStartPageLayoutColumn)column;
+// Updates the state with the start page reopen with item type
+- (void)setPreferenceStartPageReopenWithItem:(VivaldiStartPageStartItemType)item;
 
 @end
 

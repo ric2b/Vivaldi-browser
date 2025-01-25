@@ -11,6 +11,7 @@
 #import "app/vivaldi_apptools.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
+#import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -51,7 +52,13 @@ UIImage* GetOmniboxSuggestionIcon(OmniboxSuggestionIconType icon_type) {
       symbol_name = kCalendarSymbol;
       break;
     case OmniboxSuggestionIconType::kTranslation:
+
+      if (IsVivaldiRunning()) {
+        symbol_name = vOverflowTranslate;
+      } else {
       symbol_name = kTranslateSymbol;
+      } // End Vivaldi
+
       default_symbol = false;
       break;
     case OmniboxSuggestionIconType::kFallbackAnswer:
@@ -62,9 +69,7 @@ UIImage* GetOmniboxSuggestionIcon(OmniboxSuggestionIconType icon_type) {
       default_symbol = false;
       break;
     case OmniboxSuggestionIconType::kCount:
-      NOTREACHED_IN_MIGRATION();
-      symbol_name = kGlobeAmericasSymbol;
-      break;
+      NOTREACHED();
   }
 
   // Vivaldi

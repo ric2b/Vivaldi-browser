@@ -21,6 +21,7 @@ build_webui_tests("build") {
   files = [
     "fake_canvas_context.ts",
     "fake_input_method_private.ts",
+    "fake_in_session_auth.ts",
     "fake_language_settings_private.ts",
     "fake_media_devices.ts",
     "fake_metrics_private.ts",
@@ -306,6 +307,7 @@ build_webui_tests("build") {
     "os_people_page/add_user_dialog_test.ts",
     "os_people_page/additional_accounts_settings_card_test.ts",
     "os_people_page/fingerprint_list_subpage_test.ts",
+    "os_people_page/graduation_settings_card_test.ts",
     "os_people_page/os_people_page_test.ts",
     "os_people_page/os_sync_controls_subpage_test.ts",
     "os_people_page/personalization_options_test.ts",
@@ -319,6 +321,7 @@ build_webui_tests("build") {
     "os_people_page/test_os_sync_browser_proxy.ts",
     "os_people_page/test_parental_controls_browser_proxy.ts",
     "os_people_page/test_profile_info_browser_proxy.ts",
+    "os_people_page/test_graduation_handler_provider.ts",
 
     "os_printing_page/cups_print_server_test.ts",
     "os_printing_page/cups_printer_dialog_test.ts",
@@ -371,6 +374,8 @@ build_webui_tests("build") {
     "os_settings_search_box/test_open_window_proxy.ts",
     "os_settings_search_box/test_os_settings_search_box_browser_proxy.ts",
 
+    "os_settings_subpage/os_settings_subpage_test.ts",
+
     "os_settings_ui/os_settings_ui_about_page_test.ts",
     "os_settings_ui/os_settings_ui_hats_test.ts",
     "os_settings_ui/os_settings_ui_menu_test.ts",
@@ -416,7 +421,6 @@ build_webui_tests("build") {
     "//chrome/browser/resources/ash/settings:build_ts",
     "//chrome/test/data/webui/chromeos:build_ts",
     "//chrome/test/data/webui/chromeos/nearby_share:build_ts",
-    "//chrome/test/data/webui/cr_components/chromeos:build_ts",
     "//third_party/polymer/v3_0:library",
     "//ui/webui/resources/cr_components/app_management:build_ts",
     "//ui/webui/resources/js:build_ts",
@@ -435,10 +439,6 @@ build_webui_tests("build") {
     "chrome://webui-test/chromeos/*|" +
         rebase_path("$root_gen_dir/chrome/test/data/webui/chromeos/tsc/*",
                     target_gen_dir),
-    "chrome://webui-test/cr_components/chromeos/*|" +
-        rebase_path(
-            "$root_gen_dir/chrome/test/data/webui/cr_components/chromeos/tsc/*",
-            target_gen_dir),
     "chrome://webui-test/chromeos/nearby_share/*|" +
         rebase_path(
             "$root_gen_dir/chrome/test/data/webui/chromeos/nearby_share/tsc/*",

@@ -38,6 +38,7 @@ import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.lens.LensController;
 import org.chromium.chrome.browser.lens.LensEntryPoint;
@@ -56,7 +57,6 @@ import org.chromium.chrome.browser.omnibox.suggestions.OmniboxLoadUrlParams;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.prefetch.settings.PreloadPagesSettingsBridge;
 import org.chromium.chrome.browser.prefetch.settings.PreloadPagesState;
-import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -64,6 +64,7 @@ import org.chromium.chrome.browser.tab.Tab.LoadUrlResult;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.theme.ThemeUtils;
+import org.chromium.chrome.browser.ui.default_browser_promo.DefaultBrowserPromoUtils;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
@@ -74,7 +75,6 @@ import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.OmniboxFeatures;
-import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.ResourceRequestBody;
@@ -97,6 +97,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+import org.chromium.components.metrics.OmniboxEventProtos;
 import org.chromium.build.BuildConfig;
 import org.vivaldi.browser.common.VivaldiIntentHandler;
 import org.vivaldi.browser.common.VivaldiUrlConstants;
@@ -183,13 +184,11 @@ class LocationBarMediator
     private OmniboxPrerender mOmniboxPrerender;
     private UrlBarCoordinator mUrlCoordinator;
     private ObservableSupplier<Profile> mProfileSupplier;
-    private PrivacyPreferencesManager mPrivacyPreferencesManager;
     private CallbackController mCallbackController = new CallbackController();
     private final OverrideUrlLoadingDelegate mOverrideUrlLoadingDelegate;
     private final LocaleManager mLocaleManager;
     private final List<Runnable> mDeferredNativeRunnables = new ArrayList<>();
     private final OneshotSupplier<TemplateUrlService> mTemplateUrlServiceSupplier;
-    private TemplateUrl mSearchEngine;
     private final Context mContext;
     private final BackKeyBehaviorDelegate mBackKeyBehavior;
     private final WindowAndroid mWindowAndroid;
@@ -234,7 +233,6 @@ class LocationBarMediator
             @NonNull LocationBarDataProvider locationBarDataProvider,
             @NonNull LocationBarEmbedderUiOverrides embedderUiOverrides,
             @NonNull ObservableSupplier<Profile> profileSupplier,
-            @NonNull PrivacyPreferencesManager privacyPreferencesManager,
             @NonNull OverrideUrlLoadingDelegate overrideUrlLoadingDelegate,
             @NonNull LocaleManager localeManager,
             @NonNull OneshotSupplier<TemplateUrlService> templateUrlServiceSupplier,
@@ -258,7 +256,6 @@ class LocationBarMediator
         mVoiceRecognitionHandler.addObserver(this);
         mProfileSupplier = profileSupplier;
         mProfileSupplier.addObserver(mCallbackController.makeCancelable(this::setProfile));
-        mPrivacyPreferencesManager = privacyPreferencesManager;
         mTemplateUrlServiceSupplier = templateUrlServiceSupplier;
         mBackKeyBehavior = backKeyBehavior;
         mWindowAndroid = windowAndroid;
@@ -299,7 +296,6 @@ class LocationBarMediator
         mStatusCoordinator = null;
         mAutocompleteCoordinator = null;
         mUrlCoordinator = null;
-        mPrivacyPreferencesManager = null;
         mVoiceRecognitionHandler.removeObserver(this);
         mVoiceRecognitionHandler.destroy();
         mVoiceRecognitionHandler = null;
@@ -688,6 +684,7 @@ class LocationBarMediator
         }
         // Vivaldi
         updateQrCodeButtonVisibility();
+        updateReloadButtonVisibility();
     }
 
     /**
@@ -840,8 +837,7 @@ class LocationBarMediator
             mLocationBarLayout.getRootView().getLocalVisibleRect(mRootViewBounds);
             float screenSizeRatio =
                     (mRootViewBounds.height()
-                            / (float)
-                                    (Math.max(mRootViewBounds.height(), mRootViewBounds.width())));
+                            / (float) Math.max(mRootViewBounds.height(), mRootViewBounds.width()));
             mUrlFocusChangeAnimator =
                     ObjectAnimator.ofFloat(
                             this, mUrlFocusChangeFractionProperty, hasFocus ? 1f : 0f);
@@ -1276,7 +1272,9 @@ class LocationBarMediator
 
     private boolean shouldShowSaveOfflineButton() {
         assert mIsTablet;
-        if (!mNativeInitialized || mLocationBarDataProvider == null) return false;
+        if (hideSaveOfflineButton() || !mNativeInitialized || mLocationBarDataProvider == null) {
+            return false;
+        }
         Tab tab = mLocationBarDataProvider.getTab();
         if (tab == null) return false;
         // The save offline button should not be shown on native pages. Currently, trying to
@@ -1287,6 +1285,10 @@ class LocationBarMediator
     private boolean isSaveOfflineButtonEnabled() {
         if (mLocationBarDataProvider == null) return false;
         return mSaveOfflineButtonState.isEnabled(mLocationBarDataProvider.getTab());
+    }
+
+    private boolean hideSaveOfflineButton() {
+        return ChromeFeatureList.sHideTabletToolbarDownloadButton.isEnabled();
     }
 
     private boolean shouldShowPageActionButtons() {
@@ -1680,6 +1682,7 @@ class LocationBarMediator
 
     @Override
     public void onPauseWithNative() {
+        OmniboxFeatures.updateLastExitTimestamp();
         if (OmniboxFeatures.sUseFusedLocationProvider.isEnabled()) {
             GeolocationHeader.stopListeningForLocationUpdates();
         }
@@ -1717,9 +1720,14 @@ class LocationBarMediator
         mLocationBarLayout.updateUrlActionContainerEndMargin(useDefaultUrlActionContainerEndMargin);
     }
 
+    public void maybeShowDefaultBrowserPromo() {
+        DefaultBrowserPromoUtils.getInstance()
+                .maybeShowDefaultBrowserPromoMessages(
+                        mContext, mWindowAndroid, mProfileSupplier.get());
+    }
+
     /** Vivaldi
      * Launch the Vivaldi QR scanner using an intent (to avoid unwanted source dependencies).
-     * @param view
      */
     /* package */ void qrCodeButtonClicked(View view) {
         if (!mNativeInitialized) return;
@@ -1740,13 +1748,18 @@ class LocationBarMediator
         mContext.startActivity(intent);
     }
 
-    /** Vivaldi
+    /**
+     * Vivaldi
      * @return Whether the QR-code button should be shown.
      */
     private boolean shouldShowQrCodeButton() {
-        if (mUrlCoordinator == null) return false;
-        return TextUtils.isEmpty(mUrlCoordinator.getTextWithAutocomplete()) &&
-                        (mUrlHasFocus || mShouldShowMicButtonWhenUnfocused);
+        if (mUrlCoordinator == null
+                || mLocationBarDataProvider.getPageClassification(false)
+                        == OmniboxEventProtos.OmniboxEventProto.PageClassification
+                                   .ANDROID_HUB_VALUE)
+            return false;
+        return TextUtils.isEmpty(mUrlCoordinator.getTextWithAutocomplete())
+                && (mUrlHasFocus || mShouldShowMicButtonWhenUnfocused);
     }
 
     /** Vivaldi
@@ -1756,8 +1769,21 @@ class LocationBarMediator
         mLocationBarLayout.setQrCodeButtonVisibility(shouldShowQrCodeButton());
     }
 
-    /** Vivaldi - Checks if status bar is hidden or not
-     * Due to dependency issues, we have to use hard-coded values here */
+    /**
+     * Vivaldi
+     * Updates the display of the Reload button.
+     */
+    private void updateReloadButtonVisibility() {
+        Tab currentTab = mLocationBarDataProvider.getTab();
+        boolean isVisible = false;
+        if (currentTab != null) isVisible = !mUrlHasFocus && !currentTab.isNativePage();
+        mLocationBarLayout.setReloadButtonVisibility(isVisible);
+    }
+
+    /**
+     * Vivaldi - Checks if status bar is hidden or not
+     * Due to dependency issues, we have to use hard-coded values here
+     */
     private boolean isStatusBarHidden() {
         int visibilitySetting = ChromeSharedPreferences.getInstance().readInt(
                 "status_bar_visibility");
@@ -1793,4 +1819,5 @@ class LocationBarMediator
             }
         }
     }
+    // End Vivaldi
 }

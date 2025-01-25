@@ -498,6 +498,8 @@ void InterestGroupAuctionReporter::RequestSellerWorklet(
       devtools_auction_id_, *seller_info->auction_config->decision_logic_url,
       seller_info->auction_config->trusted_scoring_signals_url,
       seller_info->auction_config->seller_experiment_group_id,
+      seller_info->auction_config->non_shared_params
+          .trusted_scoring_signals_coordinator,
       base::BindOnce(&InterestGroupAuctionReporter::OnSellerWorkletReceived,
                      base::Unretained(this), base::Unretained(seller_info),
                      top_seller_signals),
@@ -659,6 +661,8 @@ void InterestGroupAuctionReporter::OnSellerReportResultComplete(
               : PrivateAggregationPhase::kNonTopLevelSeller)];
   participant_data.average_code_fetch_time =
       timing_metrics->js_fetch_latency.value_or(base::TimeDelta());
+  participant_data.percent_scripts_timeout =
+      timing_metrics->script_timed_out ? 100 : 0;
 
   if (!ValidateReportingPrivateAggregationRequests(pa_requests)) {
     pa_requests.clear();
@@ -990,6 +994,8 @@ void InterestGroupAuctionReporter::OnBidderReportWinComplete(
   participant_data.average_code_fetch_time =
       code_fetch_time.GetNumRecords() != 0 ? code_fetch_time.GetMeanLatency()
                                            : base::TimeDelta();
+  participant_data.percent_scripts_timeout =
+      timing_metrics->script_timed_out ? 100 : 0;
 
   if (!ValidateReportingPrivateAggregationRequests(pa_requests)) {
     pa_requests.clear();
@@ -1237,8 +1243,7 @@ bool InterestGroupAuctionReporter::CheckReportUrl(const GURL& url) {
            ->browser()
            ->IsPrivacySandboxReportingDestinationAttested(
                browser_context_, url::Origin::Create(url),
-               PrivacySandboxInvokingAPI::kProtectedAudience,
-               /*post_impression_reporting=*/false)) {
+               PrivacySandboxInvokingAPI::kProtectedAudience)) {
     errors_.push_back(base::StringPrintf(
         "The reporting destination %s is not attested for Protected Audience.",
         url.spec().c_str()));

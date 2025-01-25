@@ -137,26 +137,26 @@ static int qsv_get_continuous_buffer(AVCodecContext *avctx, AVFrame *frame,
     if (ret < 0)
         return ret;
 
-    frame->width       = avctx->width;
-    frame->height      = avctx->height;
+    frame->width       = avctx->coded_width;
+    frame->height      = avctx->coded_height;
 
     switch (avctx->pix_fmt) {
     case AV_PIX_FMT_NV12:
-        frame->linesize[0] = FFALIGN(avctx->width, 128);
+        frame->linesize[0] = FFALIGN(avctx->coded_width, 128);
         break;
     case AV_PIX_FMT_P010:
     case AV_PIX_FMT_P012:
     case AV_PIX_FMT_YUYV422:
-        frame->linesize[0] = 2 * FFALIGN(avctx->width, 128);
+        frame->linesize[0] = 2 * FFALIGN(avctx->coded_width, 128);
         break;
     case AV_PIX_FMT_Y210:
     case AV_PIX_FMT_VUYX:
     case AV_PIX_FMT_XV30:
     case AV_PIX_FMT_Y212:
-        frame->linesize[0] = 4 * FFALIGN(avctx->width, 128);
+        frame->linesize[0] = 4 * FFALIGN(avctx->coded_width, 128);
         break;
     case AV_PIX_FMT_XV36:
-        frame->linesize[0] = 8 * FFALIGN(avctx->width, 128);
+        frame->linesize[0] = 8 * FFALIGN(avctx->coded_width, 128);
         break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Unsupported pixel format.\n");
@@ -173,7 +173,7 @@ static int qsv_get_continuous_buffer(AVCodecContext *avctx, AVFrame *frame,
         avctx->pix_fmt == AV_PIX_FMT_P012) {
         frame->linesize[1] = frame->linesize[0];
         frame->data[1] = frame->data[0] +
-            frame->linesize[0] * FFALIGN(avctx->height, 64);
+            frame->linesize[0] * FFALIGN(avctx->coded_height, 64);
     }
 
     ret = ff_attach_decode_data(frame);
@@ -413,7 +413,7 @@ static int qsv_decode_init_context(AVCodecContext *avctx, QSVContext *q, mfxVide
     q->frame_info = param->mfx.FrameInfo;
 
     if (!avctx->hw_frames_ctx) {
-        ret = av_image_get_buffer_size(avctx->pix_fmt, FFALIGN(avctx->width, 128), FFALIGN(avctx->height, 64), 1);
+        ret = av_image_get_buffer_size(avctx->pix_fmt, FFALIGN(avctx->coded_width, 128), FFALIGN(avctx->coded_height, 64), 1);
         if (ret < 0)
             return ret;
         q->pool = av_buffer_pool_init(ret, av_buffer_allocz);
@@ -538,7 +538,8 @@ static int alloc_frame(AVCodecContext *avctx, QSVContext *q, QSVFrame *frame)
 #endif
 
 #if QSV_VERSION_ATLEAST(1, 35)
-    if (QSV_RUNTIME_VERSION_ATLEAST(q->ver, 1, 35) && avctx->codec_id == AV_CODEC_ID_HEVC) {
+    if ((QSV_RUNTIME_VERSION_ATLEAST(q->ver, 1, 35) && avctx->codec_id == AV_CODEC_ID_HEVC) ||
+        (QSV_RUNTIME_VERSION_ATLEAST(q->ver, 2, 9) && avctx->codec_id == AV_CODEC_ID_AV1)) {
         frame->mdcv.Header.BufferId = MFX_EXTBUFF_MASTERING_DISPLAY_COLOUR_VOLUME;
         frame->mdcv.Header.BufferSz = sizeof(frame->mdcv);
         // The data in mdcv is valid when this flag is 1
@@ -742,6 +743,45 @@ static int qsv_export_hdr_side_data(AVCodecContext *avctx, mfxExtMasteringDispla
     return 0;
 }
 
+static int qsv_export_hdr_side_data_av1(AVCodecContext *avctx, mfxExtMasteringDisplayColourVolume *mdcv,
+                                        mfxExtContentLightLevelInfo *clli, AVFrame *frame)
+{
+    if (mdcv->InsertPayloadToggle) {
+        AVMasteringDisplayMetadata *mastering = av_mastering_display_metadata_create_side_data(frame);
+        const int chroma_den   = 1 << 16;
+        const int max_luma_den = 1 << 8;
+        const int min_luma_den = 1 << 14;
+
+        if (!mastering)
+            return AVERROR(ENOMEM);
+
+        for (int i = 0; i < 3; i++) {
+            mastering->display_primaries[i][0] = av_make_q(mdcv->DisplayPrimariesX[i], chroma_den);
+            mastering->display_primaries[i][1] = av_make_q(mdcv->DisplayPrimariesY[i], chroma_den);
+        }
+
+        mastering->white_point[0] = av_make_q(mdcv->WhitePointX, chroma_den);
+        mastering->white_point[1] = av_make_q(mdcv->WhitePointY, chroma_den);
+
+        mastering->max_luminance = av_make_q(mdcv->MaxDisplayMasteringLuminance, max_luma_den);
+        mastering->min_luminance = av_make_q(mdcv->MinDisplayMasteringLuminance, min_luma_den);
+
+        mastering->has_luminance = 1;
+        mastering->has_primaries = 1;
+    }
+
+    if (clli->InsertPayloadToggle) {
+        AVContentLightMetadata *light = av_content_light_metadata_create_side_data(frame);
+        if (!light)
+            return AVERROR(ENOMEM);
+
+        light->MaxCLL  = clli->MaxContentLightLevel;
+        light->MaxFALL = clli->MaxPicAverageLightLevel;
+    }
+
+    return 0;
+}
+
 #endif
 
 static int qsv_decode(AVCodecContext *avctx, QSVContext *q,
@@ -874,6 +914,12 @@ static int qsv_decode(AVCodecContext *avctx, QSVContext *q,
             if (ret < 0)
                 return ret;
         }
+
+        if (QSV_RUNTIME_VERSION_ATLEAST(q->ver, 2, 9) && avctx->codec_id == AV_CODEC_ID_AV1) {
+            ret = qsv_export_hdr_side_data_av1(avctx, &aframe.frame->mdcv, &aframe.frame->clli, frame);
+            if (ret < 0)
+                return ret;
+        }
 #endif
 
         frame->repeat_pict =
@@ -885,13 +931,24 @@ static int qsv_decode(AVCodecContext *avctx, QSVContext *q,
         frame->flags |= AV_FRAME_FLAG_INTERLACED *
             !(outsurf->Info.PicStruct & MFX_PICSTRUCT_PROGRESSIVE);
         frame->pict_type = ff_qsv_map_pictype(aframe.frame->dec_info.FrameType);
-        //Key frame is IDR frame is only suitable for H264. For HEVC, IRAPs are key frames.
-        if (avctx->codec_id == AV_CODEC_ID_H264) {
+
+        if (avctx->codec_id == AV_CODEC_ID_H264 ||
+            avctx->codec_id == AV_CODEC_ID_HEVC ||
+            avctx->codec_id == AV_CODEC_ID_VVC) {
             if (aframe.frame->dec_info.FrameType & MFX_FRAMETYPE_IDR)
                 frame->flags |= AV_FRAME_FLAG_KEY;
             else
                 frame->flags &= ~AV_FRAME_FLAG_KEY;
+        } else {
+            if (aframe.frame->dec_info.FrameType & MFX_FRAMETYPE_I)
+                frame->flags |= AV_FRAME_FLAG_KEY;
+            else
+                frame->flags &= ~AV_FRAME_FLAG_KEY;
         }
+        frame->crop_left   = outsurf->Info.CropX;
+        frame->crop_top    = outsurf->Info.CropY;
+        frame->crop_right  = outsurf->Info.Width - (outsurf->Info.CropX + outsurf->Info.CropW);
+        frame->crop_bottom = outsurf->Info.Height - (outsurf->Info.CropY + outsurf->Info.CropH);
 
         /* update the surface properties */
         if (avctx->pix_fmt == AV_PIX_FMT_QSV)
@@ -1181,7 +1238,7 @@ const FFCodec ff_##x##_qsv_decoder = { \
     .p.priv_class   = &x##_qsv_class, \
     .hw_configs     = qsv_hw_configs, \
     .p.wrapper_name = "qsv", \
-    .caps_internal  = FF_CODEC_CAP_NOT_INIT_THREADSAFE, \
+    .caps_internal  = FF_CODEC_CAP_NOT_INIT_THREADSAFE | FF_CODEC_CAP_EXPORTS_CROPPING, \
 }; \
 
 #define DEFINE_QSV_DECODER(x, X, bsf_name) DEFINE_QSV_DECODER_WITH_OPTION(x, X, bsf_name, options)
@@ -1243,4 +1300,8 @@ DEFINE_QSV_DECODER(vp9, VP9, NULL)
 
 #if CONFIG_AV1_QSV_DECODER
 DEFINE_QSV_DECODER(av1, AV1, NULL)
+#endif
+
+#if CONFIG_VVC_QSV_DECODER
+DEFINE_QSV_DECODER(vvc, VVC, "vvc_mp4toannexb")
 #endif

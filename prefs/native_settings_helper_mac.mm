@@ -21,6 +21,14 @@ namespace {
       static_cast<int>(255.999f*blue));
   }
 
+  bool IsDarkMode() {
+    NSAppearanceName appearance =
+        [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[
+          NSAppearanceNameAqua, NSAppearanceNameDarkAqua
+        ]];
+    return [appearance isEqual:NSAppearanceNameDarkAqua];
+  }
+
 } // namespace
 
 std::string getActionOnDoubleClick() {
@@ -49,12 +57,9 @@ bool getSwipeDirection() {
 
 int getSystemDarkMode() {
   vivaldiprefs::SystemDesktopThemeColorValues theme_color =
-      vivaldiprefs::SystemDesktopThemeColorValues::kLight;
-  NSString *osxMode =
-    [[NSUserDefaults standardUserDefaults] stringForKey:@"AppleInterfaceStyle"];
-  if (osxMode && [osxMode isEqual:@"Dark"]) {
-    theme_color = vivaldiprefs::SystemDesktopThemeColorValues::kDark;
-  }
+      IsDarkMode() ? vivaldiprefs::SystemDesktopThemeColorValues::kDark
+                   : vivaldiprefs::SystemDesktopThemeColorValues::kLight;
+
   return static_cast<int>(theme_color);
 }
 

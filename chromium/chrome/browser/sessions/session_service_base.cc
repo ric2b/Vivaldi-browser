@@ -14,6 +14,7 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/strings/to_string.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -35,10 +36,12 @@
 #include "components/sessions/core/command_storage_manager.h"
 #include "components/sessions/core/session_command.h"
 #include "components/sessions/core/session_constants.h"
+#include "components/sessions/core/session_id.h"
 #include "components/sessions/core/session_types.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/session_storage_namespace.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 
 #if BUILDFLAG(IS_MAC)
 #include "chrome/browser/app_controller_mac.h"
@@ -208,9 +211,10 @@ void SessionServiceBase::SetTabWindow(SessionID window_id, SessionID tab_id) {
   ScheduleCommand(sessions::CreateSetTabWindowCommand(window_id, tab_id));
 }
 
-void SessionServiceBase::SetWindowBounds(SessionID window_id,
-                                         const gfx::Rect& bounds,
-                                         ui::WindowShowState show_state) {
+void SessionServiceBase::SetWindowBounds(
+    SessionID window_id,
+    const gfx::Rect& bounds,
+    ui::mojom::WindowShowState show_state) {
   if (!ShouldTrackChangesToWindow(window_id))
     return;
 
@@ -385,8 +389,7 @@ void SessionServiceBase::SetTabUserAgentOverride(
   // This is overridden by session_service implementation.
   // We still need it here because we derive from
   // sessions::SessionTabHelperDelegate.
-  NOTREACHED_IN_MIGRATION();
-  return;
+  NOTREACHED();
 }
 
 void SessionServiceBase::SetSelectedNavigationIndex(SessionID window_id,
@@ -472,6 +475,37 @@ void SessionServiceBase::TabNavigationPathEntriesDeleted(SessionID window_id,
   rebuild_on_next_save_ = true;
   command_storage_manager_->StartSaveTimer();
 }
+
+#if DCHECK_IS_ON()
+base::Value SessionServiceBase::ToDebugValue() const {
+  base::Value::Dict result;
+  result.Set("profile", base::ToString(profile_.get()));
+  if (command_storage_manager_) {
+    result.Set("command_storage_manager",
+               command_storage_manager_->ToDebugValue());
+  }
+  for (const auto& [id, range] : tab_to_available_range_) {
+    base::Value::Dict* range_dict =
+        result.EnsureDict("tab_to_available_range")
+            ->EnsureDict(base::NumberToString(id.id()));
+    range_dict->Set("first", range.first);
+    range_dict->Set("second", range.first);
+  }
+  result.Set("rebuild_on_next_save", rebuild_on_next_save_);
+  for (const auto& [id, tab_index] : last_selected_tab_in_window_) {
+    result.EnsureDict("last_selected_tab_in_window")
+        ->Set(base::NumberToString(id.id()), tab_index);
+  }
+  for (const SessionID& window_tracking : windows_tracking_) {
+    result.EnsureList("windows_tracking")
+        ->Append(base::NumberToString(window_tracking.id()));
+  }
+  result.Set("is_saving_enabled", is_saving_enabled_);
+  result.Set("did_save_commands_at_least_once",
+             did_save_commands_at_least_once_);
+  return base::Value(std::move(result));
+}
+#endif  // DCHECK_IS_ON()
 
 void SessionServiceBase::DestroyCommandStorageManager() {
   command_storage_manager_.reset(nullptr);

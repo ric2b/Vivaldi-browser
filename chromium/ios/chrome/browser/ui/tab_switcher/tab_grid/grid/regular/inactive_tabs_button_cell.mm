@@ -11,6 +11,13 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 constexpr CGFloat kHorizontalPadding = 16;
 constexpr CGFloat kVerticalPadding = 10;
@@ -32,8 +39,15 @@ constexpr CGFloat kCornerRadius = 10;
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (self) {
+
+    if (IsVivaldiRunning()) {
+      self.backgroundColor =
+          [UIColor colorNamed:vBackgroundColor];
+    } else {
     self.backgroundColor =
         [UIColor colorNamed:kGroupedSecondaryBackgroundColor];
+    } // End Vivaldi
+
     self.layer.cornerRadius = kCornerRadius;
     self.accessibilityIdentifier = kInactiveTabsButtonAccessibilityIdentifier;
     self.isAccessibilityElement = YES;
@@ -157,8 +171,15 @@ constexpr CGFloat kCornerRadius = 10;
   if (highlighted) {
     self.backgroundColor = [UIColor systemGray4Color];
   } else {
+
+    if (IsVivaldiRunning()) {
+      self.backgroundColor =
+          [UIColor colorNamed:vBackgroundColor];
+    } else {
     self.backgroundColor =
         [UIColor colorNamed:kGroupedSecondaryBackgroundColor];
+    } // End Vivaldi
+
   }
 }
 
@@ -199,7 +220,12 @@ constexpr CGFloat kCornerRadius = 10;
   label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
   label.adjustsFontForContentSizeCategory = YES;
   label.text = l10n_util::GetNSString(IDS_IOS_INACTIVE_TABS_BUTTON_TITLE);
+
+  if (IsVivaldiRunning()) {
+    label.textColor = UIColor.labelColor;
+  } else {
   label.textColor = UIColor.whiteColor;
+  } // End Vivaldi
 
   return label;
 }

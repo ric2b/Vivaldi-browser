@@ -443,21 +443,20 @@ public class WebPaymentIntentHelperTest {
 
         PaymentItem total = new PaymentItem(new PaymentCurrencyAmount("CAD", "200"));
 
-        Intent payIntent =
-                WebPaymentIntentHelper.createPayIntent(
-                        "package.name",
-                        "activity.name",
-                        "id",
-                        /* merchantName= */ "",
-                        "schemeless.origin",
-                        "schemeless.iframe.origin",
-                        /* certificateChain= */ null,
-                        methodDataMap,
-                        total,
-                        /* displayItems= */ null,
-                        /* modifiers= */ null,
-                        /* paymentOptions= */ null,
-                        /* shippingOptions= */ null);
+        WebPaymentIntentHelper.createPayIntent(
+                "package.name",
+                "activity.name",
+                "id",
+                /* merchantName= */ "",
+                "schemeless.origin",
+                "schemeless.iframe.origin",
+                /* certificateChain= */ null,
+                methodDataMap,
+                total,
+                /* displayItems= */ null,
+                /* modifiers= */ null,
+                /* paymentOptions= */ null,
+                /* shippingOptions= */ null);
     }
 
     @Test
@@ -700,8 +699,6 @@ public class WebPaymentIntentHelperTest {
         Map<String, PaymentMethodData> methodDataMap = new HashMap<String, PaymentMethodData>();
         PaymentMethodData bobPayMethodData = new PaymentMethodData("method", "null");
         methodDataMap.put("bobPay", bobPayMethodData);
-
-        PaymentItem total = new PaymentItem(new PaymentCurrencyAmount("CAD", "200"));
 
         WebPaymentIntentHelper.createPayIntent(
                 "package.name",
@@ -1147,8 +1144,6 @@ public class WebPaymentIntentHelperTest {
         PaymentMethodData bobPayMethodData = new PaymentMethodData("method", "null");
         methodDataMap.put("bobPay", bobPayMethodData);
 
-        PaymentItem total = new PaymentItem(new PaymentCurrencyAmount("CAD", "200"));
-
         WebPaymentIntentHelper.createIsReadyToPayIntent(
                 /* packageName= */ null,
                 "service.name",
@@ -1171,8 +1166,6 @@ public class WebPaymentIntentHelperTest {
         PaymentMethodData bobPayMethodData = new PaymentMethodData("method", "null");
         methodDataMap.put("bobPay", bobPayMethodData);
 
-        PaymentItem total = new PaymentItem(new PaymentCurrencyAmount("CAD", "200"));
-
         WebPaymentIntentHelper.createIsReadyToPayIntent(
                 /* packageName= */ null,
                 "service.name",
@@ -1181,5 +1174,39 @@ public class WebPaymentIntentHelperTest {
                 /* certificateChain= */ null,
                 methodDataMap,
                 /* clearIdFields= */ true);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Payments"})
+    public void createPaymentDetailsUpdateServiceIntent() throws Throwable {
+        Intent intent =
+                WebPaymentIntentHelper.createPaymentDetailsUpdateServiceIntent(
+                        "package.name", "service.name");
+        Assert.assertEquals("package.name", intent.getComponent().getPackageName());
+        Assert.assertEquals("service.name", intent.getComponent().getClassName());
+        Assert.assertNull(intent.getExtras());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Payments"})
+    public void createPaymentDetailsUpdateServiceIntentThrowsWithoutPackageName() throws Throwable {
+        thrown.expect(IllegalArgumentException.class);
+        thrown.expectMessage("packageName should not be null or empty.");
+
+        WebPaymentIntentHelper.createPaymentDetailsUpdateServiceIntent(
+                /* packageName= */ null, "service.name");
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Payments"})
+    public void createPaymentDetailsUpdateServiceIntentThrowsWithoutServiceName() throws Throwable {
+        thrown.expect(IllegalArgumentException.class);
+        thrown.expectMessage("serviceName should not be null or empty.");
+
+        WebPaymentIntentHelper.createPaymentDetailsUpdateServiceIntent(
+                "package.name", /* serviceName= */ null);
     }
 }

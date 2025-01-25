@@ -2,14 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../ui/components/icon_button/icon_button.js';
+
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Protocol from '../../../generated/protocol.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
-import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 
 import sharedStorageMetadataViewStyles from './sharedStorageMetadataView.css.js';
 import {StorageMetadataView} from './StorageMetadataView.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -54,7 +57,6 @@ interface SharedStorageMetadataGetter {
 }
 
 export class SharedStorageMetadataView extends StorageMetadataView {
-  static override readonly litTagName = LitHtml.literal`devtools-shared-storage-metadata-view`;
   #sharedStorageMetadataGetter: SharedStorageMetadataGetter;
   #creationTime: Protocol.Network.TimeSinceEpoch|null = null;
   #length: number = 0;
@@ -90,7 +92,7 @@ export class SharedStorageMetadataView extends StorageMetadataView {
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
+    return html`
       ${await super.renderReportContent()}
       ${this.key(i18nString(UIStrings.creation))}
       ${this.value(this.#renderDateForCreationTime())}
@@ -98,28 +100,28 @@ export class SharedStorageMetadataView extends StorageMetadataView {
       ${this.value(String(this.#length))}
       ${this.key(i18nString(UIStrings.numBytesUsed))}
       ${this.value(String(this.#bytesUsed))}
-      ${this.key(LitHtml.html`${i18nString(UIStrings.entropyBudget)}<${IconButton.Icon.Icon.litTagName} name="info" title=${i18nString(UIStrings.budgetExplanation)}></${IconButton.Icon.Icon.litTagName}>`)}
-      ${this.value(LitHtml.html`${this.#remainingBudget}${this.#renderResetBudgetButton()}`)}`;
+      ${this.key(html`${i18nString(UIStrings.entropyBudget)}<devtools-icon name="info" title=${i18nString(UIStrings.budgetExplanation)}></devtools-icon>`)}
+      ${this.value(html`${this.#remainingBudget}${this.#renderResetBudgetButton()}`)}`;
     // clang-format on
   }
 
   #renderDateForCreationTime(): LitHtml.TemplateResult {
     if (!this.#creationTime) {
-      return LitHtml.html`${i18nString(UIStrings.notYetCreated)}`;
+      return html`${i18nString(UIStrings.notYetCreated)}`;
     }
     const date = new Date(1e3 * (this.#creationTime as number));
-    return LitHtml.html`${date.toLocaleString()}`;
+    return html`${date.toLocaleString()}`;
   }
 
   #renderResetBudgetButton(): LitHtml.TemplateResult {
     // clang-format off
-    return LitHtml.html`
-      <${Buttons.Button.Button.litTagName} .iconName=${'undo'}
-                                           .jslogContext=${'reset-entropy-budget'}
-                                           .size=${Buttons.Button.Size.SMALL}
-                                           .title=${i18nString(UIStrings.resetBudget)}
-                                           .variant=${Buttons.Button.Variant.ICON}
-                                           @click=${this.#resetBudget.bind(this)}></${Buttons.Button.Button.litTagName}>
+    return html`
+      <devtools-button .iconName=${'undo'}
+                       .jslogContext=${'reset-entropy-budget'}
+                       .size=${Buttons.Button.Size.SMALL}
+                       .title=${i18nString(UIStrings.resetBudget)}
+                       .variant=${Buttons.Button.Variant.ICON}
+                       @click=${this.#resetBudget.bind(this)}></devtools-button>
     `;
     // clang-format on
   }

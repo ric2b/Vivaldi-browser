@@ -46,9 +46,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Batch(Batch.PER_CLASS)
 public class NativePostTaskTest {
     private static class BlockedTask extends BackgroundOnlyAsyncTask<Integer> {
-        private Object mStartLock = new Object();
-        private AtomicInteger mValue = new AtomicInteger(0);
-        private AtomicBoolean mStarted = new AtomicBoolean(false);
+        private final Object mStartLock = new Object();
+        private final AtomicInteger mValue = new AtomicInteger(0);
+        private final AtomicBoolean mStarted = new AtomicBoolean(false);
         private Thread mBackgroundThread;
 
         @Override
@@ -248,7 +248,7 @@ public class NativePostTaskTest {
 
         // Post a task that reposts itself until nativeSchedulerStarted is set to true.  This tests
         // that tasks posted before the native library is loaded still run afterwards.
-        taskQueue.postTask(
+        taskQueue.execute(
                 new Runnable() {
                     @Override
                     public void run() {
@@ -259,7 +259,7 @@ public class NativePostTaskTest {
                                 lock.notify();
                             }
                         } else {
-                            taskQueue.postTask(this);
+                            taskQueue.execute(this);
                         }
                     }
                 });

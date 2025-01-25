@@ -43,8 +43,10 @@
 #include "third_party/blink/renderer/core/css/style_containment_scope_tree.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
+#include "third_party/blink/renderer/core/dom/column_pseudo_element.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/first_letter_pseudo_element.h"
+#include "third_party/blink/renderer/core/dom/scroll_marker_pseudo_element.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
@@ -96,10 +98,7 @@
 #include "third_party/blink/renderer/core/layout/layout_object_inl.h"
 #include "third_party/blink/renderer/core/layout/layout_object_inlines.h"
 #include "third_party/blink/renderer/core/layout/layout_result.h"
-#include "third_party/blink/renderer/core/layout/layout_ruby.h"
 #include "third_party/blink/renderer/core/layout/layout_ruby_as_block.h"
-#include "third_party/blink/renderer/core/layout/layout_ruby_column.h"
-#include "third_party/blink/renderer/core/layout/layout_ruby_text.h"
 #include "third_party/blink/renderer/core/layout/layout_text_combine.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
@@ -414,24 +413,17 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
     case EDisplay::kBlockMath:
       return MakeGarbageCollected<LayoutMathMLBlock>(element);
     case EDisplay::kRuby:
-      if (RuntimeEnabledFeatures::RubyLineBreakableEnabled()) {
-        return MakeGarbageCollected<LayoutInline>(element);
-      }
-      return MakeGarbageCollected<LayoutRuby>(element);
+      return MakeGarbageCollected<LayoutInline>(element);
     case EDisplay::kBlockRuby:
       return MakeGarbageCollected<LayoutRubyAsBlock>(element);
     case EDisplay::kRubyText:
-      if (RuntimeEnabledFeatures::RubyLineBreakableEnabled()) {
-        return MakeGarbageCollected<LayoutInline>(element);
-      }
-      return MakeGarbageCollected<LayoutRubyText>(element);
+      return MakeGarbageCollected<LayoutInline>(element);
     case EDisplay::kLayoutCustom:
     case EDisplay::kInlineLayoutCustom:
       return MakeGarbageCollected<LayoutCustom>(element);
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 // static
@@ -500,14 +492,12 @@ bool LayoutObject::IsDescendantOf(const LayoutObject* obj) const {
 
 bool LayoutObject::IsInlineRuby() const {
   NOT_DESTROYED();
-  return RuntimeEnabledFeatures::RubyLineBreakableEnabled() &&
-         IsLayoutInline() && StyleRef().Display() == EDisplay::kRuby;
+  return IsLayoutInline() && StyleRef().Display() == EDisplay::kRuby;
 }
 
 bool LayoutObject::IsInlineRubyText() const {
   NOT_DESTROYED();
-  return RuntimeEnabledFeatures::RubyLineBreakableEnabled() &&
-         IsLayoutInline() && StyleRef().Display() == EDisplay::kRubyText;
+  return IsLayoutInline() && StyleRef().Display() == EDisplay::kRubyText;
 }
 
 bool LayoutObject::IsHR() const {
@@ -641,7 +631,7 @@ void LayoutObject::AssertClearedPaintInvalidationFlags() const {
 
   if (PaintInvalidationStateIsDirty()) {
     ShowLayoutTreeForThis();
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
   // Assert that the number of FragmentData and PhysicalBoxFragment objects
@@ -874,8 +864,16 @@ bool LayoutObject::IsScrollMarkerGroupBefore() const {
 
 LayoutObject* LayoutObject::GetScrollMarkerGroup() const {
   NOT_DESTROYED();
-  if (Style()->ScrollMarkerGroup() == EScrollMarkerGroup::kNone ||
-      !IsScrollContainer()) {
+  if (Style()->ScrollMarkerGroup() == EScrollMarkerGroup::kNone) {
+    return nullptr;
+  }
+  if (IsFieldset()) {
+    const LayoutBlock* fieldset_content =
+        To<LayoutFieldset>(this)->FindAnonymousFieldsetContentBox();
+    if (!fieldset_content || !fieldset_content->IsScrollContainer()) {
+      return nullptr;
+    }
+  } else if (!IsScrollContainer()) {
     return nullptr;
   }
   if (auto* element = DynamicTo<Element>(GetNode())) {
@@ -1064,8 +1062,7 @@ bool LayoutObject::IsBeforeInPreOrder(const LayoutObject& other) const {
     if (child == data.other_last)
       return false;
   }
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 LayoutObject* LayoutObject::LastLeafChild() const {
@@ -1708,23 +1705,6 @@ void LayoutObject::InvalidateSubtreeLayoutForFontUpdates() {
   }
 }
 
-void LayoutObject::DeprecatedInvalidateIntersectionObserverCachedRects() {
-  NOT_DESTROYED();
-  if (!RuntimeEnabledFeatures::IntersectionOptimizationEnabled()) {
-    InvalidateIntersectionObserverCachedRects();
-  }
-}
-
-void LayoutObject::InvalidateIntersectionObserverCachedRects() {
-  NOT_DESTROYED();
-  if (const auto* element = DynamicTo<Element>(GetNode())) {
-    if (auto* data = element->IntersectionObserverData()) {
-      data->InvalidateCachedRects();
-    }
-  }
-  GetFrameView()->SetIntersectionObservationState(LocalFrameView::kDesired);
-}
-
 static inline bool ShouldInvalidateBeyond(LayoutObject* o) {
   // We don't work on individual inline objects, instead at an IFC level. We
   // never clear these bits on inline elements so invalidate past them.
@@ -1992,6 +1972,26 @@ PhysicalRect LayoutObject::AbsoluteBoundingBoxRectForScrollIntoView() const {
           ? kIgnoreStickyOffset
           : 0;
 
+  if (const auto* scroll_marker =
+          DynamicTo<ScrollMarkerPseudoElement>(GetNode())) {
+    // Scroll markers are reparented into a scroll marker group. We want the
+    // rectangle of the originating element (or column).
+    const Element* originating_element =
+        scroll_marker->UltimateOriginatingElement();
+    const auto* originating_object = originating_element->GetLayoutObject();
+    const auto* column_pseudo =
+        DynamicTo<ColumnPseudoElement>(scroll_marker->parentNode());
+    if (!column_pseudo) {
+      return originating_object->AbsoluteBoundingBoxRectForScrollIntoView();
+    }
+    // This is a ::column::scroll-marker
+    const auto* scroller = originating_element->GetLayoutBoxForScrolling();
+    PhysicalRect bounds = column_pseudo->ColumnRect();
+    bounds.offset -= PhysicalOffset::FromVector2dFRound(
+        scroller->GetScrollableArea()->GetScrollOffset());
+    return scroller->LocalToAbsoluteRect(bounds, flag);
+  }
+
   return AbsoluteBoundingBoxRectHandlingEmptyInline(flag);
 }
 
@@ -2246,19 +2246,6 @@ void LayoutObject::InvalidatePaint(
   ObjectPaintInvalidatorWithContext(*this, context).InvalidatePaint();
 }
 
-PhysicalRect LayoutObject::VisualRectInDocument(VisualRectFlags flags) const {
-  NOT_DESTROYED();
-  PhysicalRect rect = LocalVisualRect();
-  MapToVisualRectInAncestorSpace(View(), rect, flags);
-  return rect;
-}
-
-PhysicalRect LayoutObject::LocalVisualRectIgnoringVisibility() const {
-  NOT_DESTROYED();
-  NOTREACHED_IN_MIGRATION();
-  return PhysicalRect();
-}
-
 bool LayoutObject::MapToVisualRectInAncestorSpaceInternalFastPath(
     const LayoutBoxModelObject* ancestor,
     gfx::RectF& rect,
@@ -2419,11 +2406,6 @@ HitTestResult LayoutObject::HitTestForOcclusion(
                                                           this, true);
 }
 
-HitTestResult LayoutObject::HitTestForOcclusion() const {
-  NOT_DESTROYED();
-  return HitTestForOcclusion(VisualRectInDocument());
-}
-
 std::ostream& operator<<(std::ostream& out, const LayoutObject& object) {
   String info;
 #if DCHECK_IS_ON()
@@ -2476,7 +2458,18 @@ void LayoutObject::ShowLayoutObject() const {
 void LayoutObject::DumpLayoutObject(StringBuilder& string_builder,
                                     bool dump_address,
                                     unsigned show_tree_character_offset) const {
-  NOT_DESTROYED();
+  // This function doesn't call `NOT_DESTROYED()` to aid debugging.
+#if DCHECK_IS_ON()
+  std::optional<base::AutoReset<bool>> is_destroyed;
+  if (is_destroyed_) {
+    string_builder.Append("[DESTROYED] ");
+
+    // Temporarily reset `is_destroyed_` to make dumping possible. Code and
+    // functions in this function must be safe to call for a destroyed object.
+    is_destroyed.emplace(const_cast<bool*>(&is_destroyed_), false);
+  }
+#endif  // DCHECK_IS_ON()
+
   string_builder.Append(DecoratedName());
 
   if (dump_address)
@@ -2555,17 +2548,22 @@ const ComputedStyle& LayoutObject::SlowEffectiveStyle(
       if (IsInline() && IsAtomicInlineLevel())
         return StyleRef();
       return FirstLineStyleRef();
-    case StyleVariant::kEllipsis:
+    case StyleVariant::kStandardEllipsis:
       // The ellipsis is styled according to the line style.
       // https://www.w3.org/TR/css-overflow-3/#ellipsing-details
-      // Use first-line style if exists since most cases it is the first line.
       DCHECK(IsInline());
-      if (LayoutObject* block = ContainingBlock())
+      if (const LayoutObject* block = ContainingBlock()) {
+        return block->StyleRef();
+      }
+      return StyleRef();
+    case StyleVariant::kFirstLineEllipsis:
+      DCHECK(IsInline());
+      if (const LayoutObject* block = ContainingBlock()) {
         return block->FirstLineStyleRef();
+      }
       return FirstLineStyleRef();
   }
-  NOTREACHED_IN_MIGRATION();
-  return StyleRef();
+  NOTREACHED();
 }
 
 // Called when an object that was floating or positioned becomes a normal flow
@@ -2644,13 +2642,16 @@ void LayoutObject::SetPseudoElementStyle(const LayoutObject& owner,
                                          bool match_parent_size) {
   NOT_DESTROYED();
   const ComputedStyle* pseudo_style = owner.Style();
-  DCHECK(pseudo_style->StyleType() == kPseudoIdBefore ||
+  DCHECK(pseudo_style->StyleType() == kPseudoIdCheck ||
+         pseudo_style->StyleType() == kPseudoIdBefore ||
          pseudo_style->StyleType() == kPseudoIdAfter ||
+         pseudo_style->StyleType() == kPseudoIdSelectArrow ||
          pseudo_style->StyleType() == kPseudoIdMarker ||
          pseudo_style->StyleType() == kPseudoIdFirstLetter ||
          pseudo_style->StyleType() == kPseudoIdScrollMarkerGroup ||
          pseudo_style->IsPageMarginBox() ||
          pseudo_style->StyleType() == kPseudoIdScrollMarker ||
+         pseudo_style->StyleType() == kPseudoIdColumnScrollMarker ||
          pseudo_style->StyleType() == kPseudoIdScrollNextButton ||
          pseudo_style->StyleType() == kPseudoIdScrollPrevButton);
 
@@ -2885,7 +2886,7 @@ void LayoutObject::SetStyle(const ComputedStyle* style,
   }
 
   if (!IsLayoutNGObject() && old_style &&
-      old_style->UsedVisibility() != style_->UsedVisibility()) {
+      old_style->Visibility() != style_->Visibility()) {
     SetShouldDoFullPaintInvalidation();
   }
 
@@ -2970,8 +2971,7 @@ void LayoutObject::StyleWillChange(StyleDifference diff,
                                    const ComputedStyle& new_style) {
   NOT_DESTROYED();
   if (style_) {
-    bool visibility_changed =
-        style_->UsedVisibility() != new_style.UsedVisibility();
+    bool visibility_changed = style_->Visibility() != new_style.Visibility();
     // If our z-index changes value or our visibility changes,
     // we need to dirty our stacking context's z-order list.
     if (visibility_changed ||
@@ -3770,13 +3770,8 @@ PhysicalOffset LayoutObject::OffsetFromAncestor(
   return offset;
 }
 
-PhysicalRect LayoutObject::LocalCaretRect(
-    int,
-    LayoutUnit* extra_width_to_end_of_line) const {
+PhysicalRect LayoutObject::LocalCaretRect(int) const {
   NOT_DESTROYED();
-  if (extra_width_to_end_of_line)
-    *extra_width_to_end_of_line = LayoutUnit();
-
   return PhysicalRect();
 }
 
@@ -3788,6 +3783,11 @@ bool LayoutObject::IsRooted() const {
   if (object->HasLayer())
     return To<LayoutBoxModelObject>(object)->Layer()->Root()->IsRootLayer();
   return false;
+}
+
+Node* LayoutObject::EnclosingNode() const {
+  Node* node = GetNode();
+  return node ? node : Parent()->EnclosingNode();
 }
 
 RespectImageOrientationEnum LayoutObject::GetImageOrientation(
@@ -3872,8 +3872,8 @@ void LayoutObject::InsertedIntoTree() {
   // If |this| is visible but this object was not, tell the layer it has some
   // visible content that needs to be drawn and layer visibility optimization
   // can't be used
-  if (Parent()->StyleRef().UsedVisibility() != EVisibility::kVisible &&
-      StyleRef().UsedVisibility() == EVisibility::kVisible && !HasLayer()) {
+  if (Parent()->StyleRef().Visibility() != EVisibility::kVisible &&
+      StyleRef().Visibility() == EVisibility::kVisible && !HasLayer()) {
     if (!layer)
       layer = Parent()->EnclosingLayer();
     if (layer)
@@ -3935,8 +3935,8 @@ void LayoutObject::WillBeRemovedFromTree() {
   // If we remove a visible child from an invisible parent, we don't know the
   // layer visibility any more.
   PaintLayer* layer = nullptr;
-  if (Parent()->StyleRef().UsedVisibility() != EVisibility::kVisible &&
-      StyleRef().UsedVisibility() == EVisibility::kVisible && !HasLayer()) {
+  if (Parent()->StyleRef().Visibility() != EVisibility::kVisible &&
+      StyleRef().Visibility() == EVisibility::kVisible && !HasLayer()) {
     layer = Parent()->EnclosingLayer();
     if (layer)
       layer->DirtyVisibleContentStatus();
@@ -3961,22 +3961,13 @@ void LayoutObject::WillBeRemovedFromTree() {
     FindReferencingScrollAnchors(this, kClear);
   }
 
-  if (LocalFrameView* frame_view = GetFrameView())
+  if (LocalFrameView* frame_view = GetFrameView()) {
     frame_view->GetPaintTimingDetector().LayoutObjectWillBeDestroyed(*this);
-
-  InvalidateIntersectionObserverCachedRects();
+    frame_view->SetIntersectionObservationState(LocalFrameView::kDesired);
+  }
 }
 
 void LayoutObject::SetNeedsPaintPropertyUpdate() {
-  NOT_DESTROYED();
-  if (bitfields_.NeedsPaintPropertyUpdate()) {
-    return;
-  }
-  SetNeedsPaintPropertyUpdatePreservingCachedRects();
-  DeprecatedInvalidateIntersectionObserverCachedRects();
-}
-
-void LayoutObject::SetNeedsPaintPropertyUpdatePreservingCachedRects() {
   NOT_DESTROYED();
   DCHECK(!GetDocument().InvalidationDisallowed());
   if (bitfields_.NeedsPaintPropertyUpdate())
@@ -4069,13 +4060,6 @@ void LayoutObject::DestroyAndCleanupAnonymousWrappers(
     if (destroy_root_parent->Parent() &&
         destroy_root_parent->Parent()->IsFieldset()) {
       break;
-    }
-    // RubyBase should be kept if RubyText exists
-    if (destroy_root_parent->IsRubyBase()) {
-      auto* ruby_run =
-          DynamicTo<LayoutRubyColumn>(destroy_root_parent->Parent());
-      if (ruby_run && ruby_run->HasRubyText())
-        break;
     }
 
     // We need to keep the anonymous parent, if it won't become empty by the
@@ -4312,7 +4296,9 @@ const ComputedStyle* LayoutObject::GetCachedPseudoElementStyle(
     PseudoId pseudo) const {
   NOT_DESTROYED();
   DCHECK_NE(pseudo, kPseudoIdBefore);
+  DCHECK_NE(pseudo, kPseudoIdCheck);
   DCHECK_NE(pseudo, kPseudoIdAfter);
+  DCHECK_NE(pseudo, kPseudoIdSelectArrow);
   if (!GetNode())
     return nullptr;
 
@@ -4327,7 +4313,9 @@ const ComputedStyle* LayoutObject::GetUncachedPseudoElementStyle(
     const StyleRequest& request) const {
   NOT_DESTROYED();
   DCHECK_NE(request.pseudo_id, kPseudoIdBefore);
+  DCHECK_NE(request.pseudo_id, kPseudoIdCheck);
   DCHECK_NE(request.pseudo_id, kPseudoIdAfter);
+  DCHECK_NE(request.pseudo_id, kPseudoIdSelectArrow);
   if (!GetNode())
     return nullptr;
 
@@ -4351,9 +4339,10 @@ const ComputedStyle* LayoutObject::GetSelectionStyle() const {
 void LayoutObject::AddDraggableRegions(Vector<DraggableRegionValue>& regions) {
   NOT_DESTROYED();
   // Convert the style regions to absolute coordinates.
-  if (StyleRef().UsedVisibility() != EVisibility::kVisible || !IsBox()) {
+  if (StyleRef().Visibility() != EVisibility::kVisible || !IsBox()) {
     return;
   }
+
   if (StyleRef().DraggableRegionMode() == EDraggableRegionMode::kNone) {
     return;
   }
@@ -4373,7 +4362,7 @@ bool LayoutObject::WillRenderImage() {
   NOT_DESTROYED();
   // Without visibility we won't render (and therefore don't care about
   // animation).
-  if (StyleRef().UsedVisibility() != EVisibility::kVisible) {
+  if (StyleRef().Visibility() != EVisibility::kVisible) {
     return false;
   }
   // We will not render a new image when ExecutionContext is paused
@@ -4602,26 +4591,22 @@ SVGLayoutResult LayoutObject::UpdateSVGLayout(const SVGLayoutInfo&) {
 
 gfx::RectF LayoutObject::ObjectBoundingBox() const {
   NOT_DESTROYED();
-  NOTREACHED_IN_MIGRATION();
-  return gfx::RectF();
+  NOTREACHED();
 }
 
 gfx::RectF LayoutObject::StrokeBoundingBox() const {
   NOT_DESTROYED();
-  NOTREACHED_IN_MIGRATION();
-  return gfx::RectF();
+  NOTREACHED();
 }
 
 gfx::RectF LayoutObject::DecoratedBoundingBox() const {
   NOT_DESTROYED();
-  NOTREACHED_IN_MIGRATION();
-  return gfx::RectF();
+  NOTREACHED();
 }
 
 gfx::RectF LayoutObject::VisualRectInLocalSVGCoordinates() const {
   NOT_DESTROYED();
-  NOTREACHED_IN_MIGRATION();
-  return gfx::RectF();
+  NOTREACHED();
 }
 
 AffineTransform LayoutObject::LocalSVGTransform() const {
@@ -4657,7 +4642,6 @@ void LayoutObject::SetShouldDoFullPaintInvalidation(
   DCHECK(IsLayoutFullPaintInvalidationReason(reason));
   SetShouldCheckForPaintInvalidation();
   SetShouldDoFullPaintInvalidationWithoutLayoutChangeInternal(reason);
-  DeprecatedInvalidateIntersectionObserverCachedRects();
 }
 
 void LayoutObject::SetShouldDoFullPaintInvalidationWithoutLayoutChange(
@@ -5039,8 +5023,7 @@ const LayoutObject* AssociatedLayoutObjectOf(const Node& node,
 
 bool LayoutObject::CanBeSelectionLeaf() const {
   NOT_DESTROYED();
-  if (SlowFirstChild() ||
-      StyleRef().UsedVisibility() != EVisibility::kVisible ||
+  if (SlowFirstChild() || StyleRef().Visibility() != EVisibility::kVisible ||
       DisplayLockUtilities::LockedAncestorPreventingPaint(*this)) {
     return false;
   }

@@ -15,11 +15,20 @@
 
 namespace blink {
 
+class CorpusChunk;
 class FindResults;
 class LayoutBlockFlow;
 class Node;
 class OffsetMapping;
-class WebString;
+
+enum class RubySupport {
+  // No support.
+  kDisabled,
+  // Support if a target IFC contains a <ruby>.
+  kEnabledIfNecessary,
+  // Support always.
+  kEnabledForcefully,
+};
 
 // Buffer for find-in-page, collects text until it meets a block/other
 // delimiters. Uses TextSearcherICU to find match in buffer.
@@ -28,10 +37,8 @@ class CORE_EXPORT FindBuffer {
   STACK_ALLOCATED();
 
  public:
-  using RubySupport = base::StrongAlias<class RubySupportTag, bool>;
-
   explicit FindBuffer(const EphemeralRangeInFlatTree& range,
-                      RubySupport ruby_support = RubySupport(false));
+                      RubySupport ruby_support = RubySupport::kDisabled);
 
   static EphemeralRangeInFlatTree FindMatchInRange(
       const EphemeralRangeInFlatTree& range,
@@ -54,8 +61,11 @@ class CORE_EXPORT FindBuffer {
   static Node* ForwardVisibleTextNode(Node& start_node);
   static Node* BackwardVisibleTextNode(Node& start_node);
 
+  static bool ShouldIgnoreContents(const Node& node);
+  static std::optional<UChar> CharConstantForNode(const Node& node);
+
   // Finds all the match for |search_text| in |buffer_|.
-  FindResults FindMatches(const WebString& search_text,
+  FindResults FindMatches(const String& search_text,
                           const blink::FindOptions options);
 
   // Gets a flat tree range corresponding to text in the [start_index,
@@ -63,6 +73,13 @@ class CORE_EXPORT FindBuffer {
   EphemeralRangeInFlatTree RangeFromBufferIndex(unsigned start_index,
                                                 unsigned end_index) const;
 
+  // Returns a position at which the next FindBuffer should start.
+  //
+  // This function returns the node next to the end node of the specified
+  // `range`. If the end position of the `range` points the middle of a Text
+  // node, this function skips a part of the Text after the position. Usually
+  // this behavior won't cause problems because we don't need to search text
+  // after the end position.
   PositionInFlatTree PositionAfterBlock() const {
     if (!node_after_block_)
       return PositionInFlatTree();
@@ -70,6 +87,8 @@ class CORE_EXPORT FindBuffer {
   }
 
   bool IsInvalidMatch(MatchResultICU match) const;
+
+  Vector<String> BuffersForTesting() const;
 
  private:
   // Collects text for one LayoutBlockFlow located within |range| to |buffer_|,
@@ -81,7 +100,8 @@ class CORE_EXPORT FindBuffer {
                                      RubySupport ruby_support);
 
   // Replaces nodes that should be ignored with appropriate char constants.
-  void ReplaceNodeWithCharConstants(const Node& node);
+  static void ReplaceNodeWithCharConstants(const Node& node,
+                                           Vector<UChar>& buffer);
 
   // Mapping for position in buffer -> actual node where the text came from,
   // along with the offset in the OffsetMapping of this find_buffer.
@@ -119,13 +139,22 @@ class CORE_EXPORT FindBuffer {
 
   PositionInFlatTree PositionAtEndOfCharacterAtIndex(unsigned index) const;
 
-  // Adds text in |text_node| that are located within |range| to |buffer_|.
-  void AddTextToBuffer(const Text& text_node,
-                       LayoutBlockFlow& block_flow,
-                       const EphemeralRangeInFlatTree& range);
+  Vector<UChar> SerializeLevelInGraph(
+      const HeapVector<Member<CorpusChunk>>& chunk_list,
+      const String& level,
+      const EphemeralRangeInFlatTree& range);
 
-  Node* node_after_block_ = nullptr;
+  // Adds text in |text_node| that are located within |range| to |buffer|.
+  void AddTextToBuffer(const Text& text_node,
+                       const EphemeralRangeInFlatTree& range,
+                       Vector<UChar>& buffer,
+                       Vector<BufferNodeMapping>* mappings);
+
+  const Node* node_after_block_ = nullptr;
   Vector<UChar> buffer_;
+  // buffer_list_ is usually empty. It contains items only if an element
+  // with display:ruby-text exists.
+  Vector<Vector<UChar>> buffer_list_;
   Vector<BufferNodeMapping> buffer_node_mappings_;
   TextSearcherICU text_searcher_;
 

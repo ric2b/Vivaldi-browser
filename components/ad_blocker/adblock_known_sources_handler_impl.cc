@@ -36,8 +36,7 @@ const PermanentSource kPermanentKnownTrackingSources[] = {
 
 const PermanentSource kPermanentKnownAdBlockSources[] = {
     {kEasyList, {}},
-    // Flip allow_attribution_tracker_rules once we are ready to release.
-    {kPartnersList, {}},
+    {kPartnersList, {.allow_attribution_tracker_rules = true}},
     {kAdblockPlusAntiCv, {.allow_abp_snippets = true}},
     {kAdblockPlusAntiAdblock, {.allow_abp_snippets = true}}};
 
@@ -126,7 +125,8 @@ const PresetSourceInfo kPresetAdBlockSources[] = {
     // "http://abp.mozilla-hispano.org/nauscopio/filtros.txt". Inaccessible due
     // to an HSTS issue and unmaintained. Expecting it to disappear.
     {"", "8e4f4bf9-5cba-40fc-b0f0-91d395c23dc7"},
-    {"https://raw.githubusercontent.com/hufilter/hufilter/master/hufilter.txt",
+    {"https://raw.githubusercontent.com/hufilter/hufilter/refs/heads/gh-pages/"
+     "hufilter.txt",
      "5ec4c886-a4b7-4fd4-9654-a7a138bf74bf"},
     {"https://pgl.yoyo.org/adservers/"
      "serverlist.php?hostformat=adblockplus&mimetype=plaintext",
@@ -150,8 +150,10 @@ const PresetSourceInfo kPresetAdBlockSources[] = {
      "366ed9e8-aa6e-4fd2-b3ff-bdc151f48fa9"},
     {"https://secure.fanboy.co.nz/fanboy-turkish.txt",
      "c29c4544-679b-4335-94f2-b27c7d099803"},
-    {"https://www.i-dont-care-about-cookies.eu/abp/",
-     "c1e5bcb8-edf6-4a71-b61b-ca96a87f30e3"},
+     // Removed Jan 2025 - Was I don't care about cookies
+     // https://www.i-dont-care-about-cookies.eu/abp/
+     // Not maintained anymore and expired certificate.
+    {"", "c1e5bcb8-edf6-4a71-b61b-ca96a87f30e3"},
     {"https://secure.fanboy.co.nz/fanboy-cookiemonster.txt",
      "78610306-e2ab-4147-9a10-fb6072e6675e"},
     {"https://secure.fanboy.co.nz/fanboy-annoyance.txt",
@@ -250,6 +252,17 @@ KnownRuleSourcesHandlerImpl::KnownRuleSourcesHandlerImpl(
       EnableSource(
           RuleGroup::kAdBlockingRules,
           RuleSourceCore::FromUrl(GURL(kAdblockPlusAntiAdblock))->id());
+    }
+  }
+
+  if (storage_version < 10) {
+    uint32_t partner_list_id =
+        RuleSourceCore::FromUrl(GURL(kPartnersList))->id();
+    if (IsSourceEnabled(RuleGroup::kAdBlockingRules, partner_list_id)) {
+      // This forces the partner list to be reloaded with the ad attribution
+      // option enabled.
+      DisableSource(RuleGroup::kAdBlockingRules, partner_list_id);
+      EnableSource(RuleGroup::kAdBlockingRules, partner_list_id);
     }
   }
 }

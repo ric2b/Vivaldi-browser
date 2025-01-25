@@ -470,25 +470,48 @@ const BookmarkNode* GetStartPageNode(BookmarkModel* model) {
   return nullptr;
 }
 
-bool IsURLAddedToStartPage(BookmarkModel* model, const GURL& url) {
-  // Return early if there's no start page node.
-  const BookmarkNode* start_page_node = GetStartPageNode(model);
-  if (!start_page_node)
-    return false;
+const BookmarkNode* GetOrCreateStartPageNode(BookmarkModel* model,
+                                             const std::u16string& node_title) {
+  const BookmarkNode* startPageNode = GetStartPageNode(model);
 
+  if (startPageNode)
+    return startPageNode;
+
+  if (!model)
+    return nullptr;
+
+  const BookmarkNode* bookmarkBarNode = model->bookmark_bar_node();
+
+  startPageNode = model->AddFolder(
+      bookmarkBarNode, bookmarkBarNode->children().size(), node_title);
+  SetNodeSpeeddial(model, startPageNode, true);
+
+  return startPageNode;
+}
+
+bool IsURLAddedToStartPage(BookmarkModel* model, const GURL& url) {
+  const BookmarkNode* start_page_node = GetStartPageNode(model);
+  return IsURLAddedToNode(model, start_page_node, url);
+}
+
+bool IsURLAddedToNode(BookmarkModel* model,
+                      const BookmarkNode* node,
+                      const GURL& url) {
+  if (!node) {
+    return false;
+  }
   // Get all nodes where the URL is added.
   std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> nodes =
       model->GetNodesByURL(url);
 
   // Check if any of the found nodes have the start page node as their parent.
   for (const auto& node_ptr : nodes) {
-    const BookmarkNode* node = node_ptr.get();
-    if (node && node->parent() == start_page_node &&
-        !model->client()->IsNodeManaged(node)) {
+    const BookmarkNode* added_node = node_ptr.get();
+    if (added_node && added_node->parent() == node &&
+        !model->client()->IsNodeManaged(added_node)) {
       return true;
     }
   }
-
   return false;
 }
 

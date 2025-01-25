@@ -46,8 +46,6 @@ group("all") {
     ":system_api-lorgnette-protos",
     ":system_api-lvmd-goprotos",
     ":system_api-lvmd-protos",
-    ":system_api-metrics_event-goprotos",
-    ":system_api-metrics_event-protos",
     ":system_api-minios-protos",
     ":system_api-ml-goprotos",
     ":system_api-ml-protos",
@@ -85,6 +83,7 @@ group("all") {
     ":system_api-u2f-protos",
     ":system_api-update_engine-goprotos",
     ":system_api-update_engine-protos",
+    ":system_api-vhost_user_starter-protos",
     ":system_api-vm_applications-goprotos",
     ":system_api-vm_applications-protos",
     ":system_api-vm_cicerone-goprotos",
@@ -429,20 +428,6 @@ goproto_library("system_api-tpm_manager-goprotos") {
   proto_in_dir = "dbus/tpm_manager"
   proto_out_dir = "go/src/"
   sources = [ "${proto_in_dir}/tpm_manager.proto" ]
-}
-
-proto_library("system_api-metrics_event-protos") {
-  proto_in_dir = "dbus/metrics_event"
-  proto_out_dir = "include/metrics_event/proto_bindings"
-  sources = [ "${proto_in_dir}/metrics_event.proto" ]
-  standalone = true
-  install_package = true
-}
-
-goproto_library("system_api-metrics_event-goprotos") {
-  proto_in_dir = "dbus/metrics_event"
-  proto_out_dir = "go/src/"
-  sources = [ "${proto_in_dir}/metrics_event.proto" ]
 }
 
 proto_library("system_api-plugin_vm_service-protos") {
@@ -942,6 +927,14 @@ proto_library("system_api-regmon-protos") {
   proto_in_dir = "dbus/regmon"
   proto_out_dir = "include/regmon/proto_bindings"
   sources = [ "${proto_in_dir}/regmon_service.proto" ]
+  standalone = true
+  install_package = true
+}
+
+proto_library("system_api-vhost_user_starter-protos") {
+  proto_in_dir = "dbus/vhost_user_starter"
+  proto_out_dir = "include/vhost_user_starter/proto_bindings"
+  sources = [ "${proto_in_dir}/vhost_user_starter.proto" ]
   standalone = true
   install_package = true
 }

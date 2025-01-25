@@ -20,7 +20,6 @@
 #include "components/autofill/core/browser/payments_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/test_autofill_clock.h"
-#include "components/autofill/core/browser/ui/address_combobox_model.h"
 #include "components/payments/content/payment_request.h"
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/core/features.h"
@@ -94,7 +93,7 @@ IN_PROC_BROWSER_TEST_F(DISABLED_PaymentRequestCreditCardEditorTest,
   EXPECT_EQ(
       1u,
       personal_data_manager->payments_data_manager().GetCreditCards().size());
-  autofill::CreditCard* credit_card =
+  const autofill::CreditCard* credit_card =
       personal_data_manager->payments_data_manager().GetCreditCards()[0];
   EXPECT_EQ(5, credit_card->expiration_month());
   EXPECT_EQ(2026, credit_card->expiration_year());
@@ -152,7 +151,7 @@ IN_PROC_BROWSER_TEST_F(DISABLED_PaymentRequestCreditCardEditorTest,
   EXPECT_EQ(
       1u,
       personal_data_manager->payments_data_manager().GetCreditCards().size());
-  autofill::CreditCard* credit_card =
+  const autofill::CreditCard* credit_card =
       personal_data_manager->payments_data_manager().GetCreditCards()[0];
   EXPECT_EQ(5, credit_card->expiration_month());
   EXPECT_EQ(2026, credit_card->expiration_year());
@@ -369,7 +368,7 @@ IN_PROC_BROWSER_TEST_F(DISABLED_PaymentRequestCreditCardEditorTest,
   EXPECT_EQ(
       1u,
       personal_data_manager->payments_data_manager().GetCreditCards().size());
-  autofill::CreditCard* credit_card =
+  const autofill::CreditCard* credit_card =
       personal_data_manager->payments_data_manager().GetCreditCards()[0];
   EXPECT_EQ(5, credit_card->expiration_month());
   EXPECT_EQ(2026, credit_card->expiration_year());
@@ -454,7 +453,7 @@ IN_PROC_BROWSER_TEST_F(DISABLED_PaymentRequestCreditCardEditorTest,
   EXPECT_EQ(
       1u,
       personal_data_manager->payments_data_manager().GetCreditCards().size());
-  autofill::CreditCard* credit_card =
+  const autofill::CreditCard* credit_card =
       personal_data_manager->payments_data_manager().GetCreditCards()[0];
   EXPECT_EQ(11, credit_card->expiration_month());
   EXPECT_EQ(2017, credit_card->expiration_year());
@@ -521,7 +520,7 @@ IN_PROC_BROWSER_TEST_F(DISABLED_PaymentRequestCreditCardEditorTest,
   EXPECT_EQ(
       1u,
       personal_data_manager->payments_data_manager().GetCreditCards().size());
-  autofill::CreditCard* credit_card =
+  const autofill::CreditCard* credit_card =
       personal_data_manager->payments_data_manager().GetCreditCards()[0];
   EXPECT_EQ(billing_profile.guid(), credit_card->billing_address_id());
   // It retains other properties.
@@ -584,7 +583,7 @@ IN_PROC_BROWSER_TEST_F(DISABLED_PaymentRequestCreditCardEditorTest,
   EXPECT_EQ(
       1u,
       personal_data_manager->payments_data_manager().GetCreditCards().size());
-  autofill::CreditCard* credit_card =
+  const autofill::CreditCard* credit_card =
       personal_data_manager->payments_data_manager().GetCreditCards()[0];
   EXPECT_EQ(u"Bob Newname",
             credit_card->GetRawInfo(autofill::CREDIT_CARD_NAME_FULL));

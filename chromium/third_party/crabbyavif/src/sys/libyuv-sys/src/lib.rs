@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(warnings)]
+#[allow(warnings)]
 pub mod bindings {
-    #[cfg(not(android_soong))]
+    // Blaze does not support the `OUT_DIR` configuration used by Cargo. Instead, it specifies a
+    // complete path to the generated bindings as an environment variable.
+    #[cfg(google3)]
     include!(env!("CRABBYAVIF_LIBYUV_BINDINGS_RS"));
-    // Android's soong build system does not support setting environment variables. Set the source
-    // file name directly relative to the OUT_DIR environment variable.
-    #[cfg(android_soong)]
+    #[cfg(not(google3))]
     include!(concat!(env!("OUT_DIR"), "/libyuv_bindgen.rs"));
 }

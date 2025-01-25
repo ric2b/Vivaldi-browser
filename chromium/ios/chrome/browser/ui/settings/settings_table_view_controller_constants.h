@@ -58,7 +58,6 @@ typedef NS_ENUM(NSInteger, SettingsItemType) {
   SettingsItemTypeDefaultBrowser,
   SettingsItemTypeSigninDisabled,
   SettingsItemTypeTabs,
-  SettingsItemTypePlusAddresses,
   SettingsItemTypeSwitchProfile,
   SettingsItemTypeESBPromo
 
@@ -72,6 +71,7 @@ typedef NS_ENUM(NSInteger, SettingsItemType) {
   SettingsItemTypeVivaldiStartPageSettings,
   SettingsItemTypeVivaldiATBSettings,
   SettingsItemTypeAppIconSettings,
+  SettingsItemTypeVivaldiShareFeedbackSettings,
   // End Vivaldi
 };
 
@@ -221,7 +221,9 @@ extern NSString* const kSettingsPrivacyGuideCellId;
 // The accessibility identifier of the Detect Units cell.
 extern NSString* const kSettingsDetectUnitsCellId;
 
-// The accessibility identifier of the plus addresses setting.
-extern NSString* const kSettingsPlusAddressesId;
+// Vivaldi
+// The accessibility identifier of the Prefer Translate Panel cell.
+extern NSString* const kSettingsPreferTranslatePanelCellId;
+// End Vivaldi
 
 #endif  // IOS_CHROME_BROWSER_UI_SETTINGS_SETTINGS_TABLE_VIEW_CONTROLLER_CONSTANTS_H_

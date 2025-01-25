@@ -79,7 +79,7 @@ void TaskRunnerImpl::RunUntilStopped() {
   is_running_ = true;
 
   OSP_DVLOG << "Running tasks until stopped...";
-  // Main loop: Run until the |is_running_| flag is set back to false by the
+  // Main loop: Run until the `is_running_` flag is set back to false by the
   // "quit task" posted by RequestStopSoon(), or the process received a
   // termination signal.
   while (is_running_) {

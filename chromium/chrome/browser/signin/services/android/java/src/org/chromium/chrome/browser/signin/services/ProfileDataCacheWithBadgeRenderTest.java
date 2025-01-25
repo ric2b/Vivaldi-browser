@@ -25,6 +25,7 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
+import org.chromium.components.signin.test.util.TestAccounts;
 import org.chromium.ui.test.util.BlankUiTestActivityTestCase;
 import org.chromium.ui.widget.ChromeImageView;
 
@@ -37,7 +38,6 @@ import java.io.IOException;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @Batch(ProfileDataCacheRenderTest.PROFILE_DATA_BATCH_NAME)
 public class ProfileDataCacheWithBadgeRenderTest extends BlankUiTestActivityTestCase {
-    private static final String TEST_ACCOUNT_NAME = "test@example.com";
 
     @Rule
     public final ChromeRenderTestRule mRenderTestRule =
@@ -54,7 +54,7 @@ public class ProfileDataCacheWithBadgeRenderTest extends BlankUiTestActivityTest
 
     @Before
     public void setUp() {
-        mAccountManagerTestRule.addAccount(TEST_ACCOUNT_NAME);
+        mAccountManagerTestRule.addAccount(TestAccounts.ACCOUNT1);
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -137,14 +137,14 @@ public class ProfileDataCacheWithBadgeRenderTest extends BlankUiTestActivityTest
                 () -> {
                     return !TextUtils.isEmpty(
                             mProfileDataCache
-                                    .getProfileDataOrDefault(TEST_ACCOUNT_NAME)
+                                    .getProfileDataOrDefault(TestAccounts.ACCOUNT1.getEmail())
                                     .getFullName());
                 });
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     mImageView.setImageDrawable(
                             mProfileDataCache
-                                    .getProfileDataOrDefault(TEST_ACCOUNT_NAME)
+                                    .getProfileDataOrDefault(TestAccounts.ACCOUNT1.getEmail())
                                     .getImage());
                 });
     }
@@ -158,14 +158,14 @@ public class ProfileDataCacheWithBadgeRenderTest extends BlankUiTestActivityTest
                 () -> {
                     return !TextUtils.isEmpty(
                             mProfileDataCache
-                                    .getProfileDataOrDefault(TEST_ACCOUNT_NAME)
+                                    .getProfileDataOrDefault(TestAccounts.ACCOUNT1.getEmail())
                                     .getFullName());
                 });
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     mImageView.setImageDrawable(
                             mProfileDataCache
-                                    .getProfileDataOrDefault(TEST_ACCOUNT_NAME)
+                                    .getProfileDataOrDefault(TestAccounts.ACCOUNT1.getEmail())
                                     .getImage());
                 });
     }

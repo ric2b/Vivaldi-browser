@@ -11,6 +11,8 @@ import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import dialogStyles from './dialog.css.js';
 
+const {html} = LitHtml;
+
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 const IS_DIALOG_SUPPORTED = 'HTMLDialogElement' in globalThis;
@@ -21,6 +23,7 @@ const IS_DIALOG_SUPPORTED = 'HTMLDialogElement' in globalThis;
 export const CONNECTOR_HEIGHT = 10;
 const CONNECTOR_WIDTH = 2 * CONNECTOR_HEIGHT;
 
+// The offset used by the dialog's animation as it slides in when opened.
 const DIALOG_ANIMATION_OFFSET = 20;
 
 export const DIALOG_SIDE_PADDING = 5;
@@ -89,7 +92,6 @@ export const MODAL = 'MODAL';
 
 export type DialogOrigin = DialogAnchor|null|(() => DialogAnchor)|typeof MODAL;
 export class Dialog extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-dialog`;
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #renderBound = this.#render.bind(this);
   readonly #forceDialogCloseInDevToolsBound = this.#forceDialogCloseInDevToolsMutation.bind(this);
@@ -298,9 +300,14 @@ export class Dialog extends HTMLElement {
 
   #mouseEventWasInDialogContent(evt: MouseEvent): boolean {
     const dialogBounds = this.#dialogClientRect;
-    const animationOffSetValue = this.bestVerticalPosition === DialogVerticalPosition.BOTTOM ?
+
+    let animationOffSetValue = this.bestVerticalPosition === DialogVerticalPosition.BOTTOM ?
         DIALOG_ANIMATION_OFFSET :
         -1 * DIALOG_ANIMATION_OFFSET;
+    if (this.#props.origin === MODAL) {
+      // When shown as a modal, the dialog is not animated
+      animationOffSetValue = 0;
+    }
     const eventWasDialogContentX =
         evt.pageX >= dialogBounds.left && evt.pageX <= dialogBounds.left + dialogBounds.width;
     const eventWasDialogContentY = evt.pageY >= dialogBounds.top + animationOffSetValue &&
@@ -667,7 +674,7 @@ export class Dialog extends HTMLElement {
       // we have to explicitly render a slot and hide it with CSS.
       LitHtml.render(
           // clang-format off
-      LitHtml.html`
+      html`
         <slot></slot>
       `,  this.#shadow, {host: this});
       // clang-format on
@@ -675,13 +682,11 @@ export class Dialog extends HTMLElement {
     }
 
     // clang-format off
-    LitHtml.render(LitHtml.html`
+    LitHtml.render(html`
       <dialog @click=${this.#handlePointerEvent} @pointermove=${this.#handlePointerEvent} @cancel=${this.#onCancel}
               jslog=${VisualLogging.dialog(this.#props.jslogContext).track({resize: true, keydown: 'Escape'}).parent('mapped')}>
-        <div id="content-wrap">
-          <div id="content">
-            <slot></slot>
-          </div>
+        <div id="content">
+          <slot></slot>
         </div>
       </dialog>
     `, this.#shadow, { host: this });

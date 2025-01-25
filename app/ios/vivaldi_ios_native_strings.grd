@@ -477,6 +477,27 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_NOTE_VIEW_AS_HTML" desc="Title of the toggle button to render markdown as HTML. ">
         View as HTML
       </message>
+      <message name="IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_CONFIRM" desc="Confirm button when adding a link or an image in markdown. ">
+        Confirm
+      </message>
+      <message name="IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_CANCEL" desc="Cancel button when adding a link or an image in markdown. ">
+        Cancel
+      </message>
+      <message name="IDS_VIVALDI_NOTE_MARKDOWN_ADD_IMAGE_TITLE" desc="Title of dialog when adding an image in markdown. ">
+        Input Image
+      </message>
+      <message name="IDS_VIVALDI_NOTE_MARKDOWN_ADD_IMAGE_MESSAGE" desc="Message in the dialog when adding an image in markdown. ">
+        Please enter the image URL
+      </message>
+      <message name="IDS_VIVALDI_NOTE_MARKDOWN_ADD_IMAGE_TITLE_ENTRY" desc="Placeholder text in a textfield in the dialog where the image title is entered when adding an image in markdown. ">
+        Enter Title
+      </message>
+      <message name="IDS_VIVALDI_NOTE_MARKDOWN_ADD_LINK_TITLE" desc="Title of dialog when adding a link in markdown. ">
+        Input Link
+      </message>
+      <message name="IDS_VIVALDI_NOTE_MARKDOWN_ADD_LINK_MESSAGE" desc="Message in the dialog when adding a link in markdown. ">
+        Please enter the URL
+      </message>
       <!-- End Notes -->
       <!-- START PAGE AND SPEED DIAL -->
       <message name="IDS_IOS_TABS_SPEED_DIAL" desc="The title for the new tab on desktop tabs tab view and tab switcher">
@@ -769,6 +790,12 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_SYNC_AUTH_ERROR" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
         Server refused your credentials.
       </message>
+      <message name="IDS_VIVALDI_SYNC_ERROR_STATUS" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
+        Sync has failed: <ph name="ERROR_MESSAGE">$1<ex>Server Error</ex></ph>
+      </message>
+      <message name="IDS_VIVALDI_SYNC_ERROR_STATUS_DESCRIPTION" desc="(Vivaldi) Description text used to indicate a temporary sync failure status.">
+        Vivaldi Sync service may be experiencing problems. Get service updates at: <ph name="BEGIN_LINK">BEGIN_LINK</ph>VivaldiStatus.com<ph name="END_LINK">END_LINK</ph>
+      </message>
       <message name="IDS_VIVALDI_SYNC_SERVER_ERROR" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
         Server error.
       </message>
@@ -786,6 +813,15 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_SYNC_DEVICE_NAME" desc="(Vivaldi) Device name field in sync account set up.">
         Device name
+      </message>
+      <message name="IDS_VIVALDI_SYNC_DEVICE_NAME_EDIT" desc="(Vivaldi) Title for Edit button for the device name.">
+        Edit
+      </message>
+      <message name="IDS_VIVALDI_SYNC_DEVICE_NAME_EDIT_CANCEL_TITLE" desc="(Vivaldi) Title for Cancel button for the device name update dialog.">
+        Cancel
+      </message>
+      <message name="IDS_VIVALDI_SYNC_DEVICE_NAME_EDIT_CONFIRM_TITLE" desc="(Vivaldi) Title for Confirm button for the device name update dialog.">
+        Confirm
       </message>
       <message name="IDS_VIVALDI_USER_AGE" desc="(Vivaldi) Age field in sync account set up.">
         Age
@@ -1377,6 +1413,18 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_START_PAGE_SPEED_DIAL_SETTINGS_COLUMN_UNLIMITED_TITLE" desc="Title for the speed dial size maximum column unlimited option on start page settings">
         Unlimited
       </message>
+      <message name="IDS_IOS_START_PAGE_START_PAGE_OPEN_WITH_TITLE" desc="Title for the `Reopen Start Page with` option on start page settings. The settings allow users to select which group to be focused on when they open the app.">
+        Reopen Start Page with
+      </message>
+      <message name="IDS_IOS_START_PAGE_START_PAGE_OPEN_WITH_FIRST_GROUP_TITLE" desc="Title for the `First Group` option for `Reopen Start Page with` settings on start page settings. The settings allow users to select which group to be focused on when they open the app.">
+        First Group
+      </message>
+      <message name="IDS_IOS_START_PAGE_START_PAGE_OPEN_WITH_TOP_SITES_TITLE" desc="Title for the `Top Sites` option for `Reopen Start Page with` settings on start page settings. The settings allow users to select which group to be focused on when they open the app.">
+        Top Sites
+      </message>
+      <message name="IDS_IOS_START_PAGE_START_PAGE_OPEN_WITH_LAST_VISITED_GROUP_TITLE" desc="Title for the `Last Visited Group` option for `Reopen Start Page with` settings on start page settings. The settings allow users to select which group to be focused on when they open the app.">
+        Last Visited Group
+      </message>
       <!-- END START PAGE SETTINGS -->
       <!--TABS SETTINGS -->
       <message name="IDS_IOS_PREFS_VIVALDI_TABS" desc="Title for the tabs settings">
@@ -1444,6 +1492,12 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_GENERAL_SETTING_TITLE" desc="Title for General settings title">
         General
       </message>
+      <message name="IDS_IOS_GENERAL_ACCEPT_LANGUAGES_TITLE" desc="Title for Accept Language setting option under general settings">
+        Accept Languages
+      </message>
+      <message name="IDS_IOS_GENERAL_ACCEPT_LANGUAGES_DESCRIPTION" desc="Description for Accept Language setting option under general settings">
+        Preferred languages, accepted by compatible websites in given order.
+      </message>
       <message name="IDS_IOS_GENERAL_HOMEPAGE_SETTING_TITLE" desc="Title for Homepage settings on general settings">
         Homepage
       </message>
@@ -1457,6 +1511,26 @@ locale.  The strings in this file are specific to iOS.
         Display Home Button
       </message>
       <!--END GENERAL SETTINGS -->
+      <!--PAGEZOOM SETTINGS -->
+      <message name="IDS_IOS_PAGEZOOM_SETTING_TITLE" desc="Title for pagezoom settings title">
+        Page Zoom
+      </message>
+      <message name="IDS_IOS_PAGEZOOM_SETTING_RESET_TITLE" desc="Reset button Title for pagezoom settings">
+        Reset
+      </message>
+      <message name="IDS_IOS_PAGEZOOM_SETTING_DONE_TITLE" desc="Done button Title for pagezoom settings">
+        Done
+      </message>
+      <message name="IDS_IOS_PAGEZOOM_SETTING_GLOBAL_TITLE" desc="Global switch title for pagezoom settings">
+        Set as Global Default Zoom
+      </message>
+      <message name="IDS_IOS_PAGEZOOM_SETTING_GLOBAL_SUBTITLE" desc="Global switch subtitle for pagezoom settings">
+        This will set the selected zoom level for all pages
+      </message>
+      <message name="IDS_IOS_PAGEZOOM_SETTING_HOST_TITLE" desc="Title showing zoom level for specific host">
+        Zoom level for <ph name="HOST">$1<ex>example.com</ex></ph>
+      </message>
+      <!--END PAGEZOOM SETTINGS -->
       <!-- ADDRESSBAR SETTINGS -->
       <message name="IDS_IOS_PREFS_VIVALDI_ADDRESSBAR" desc="Title for the addressbar settings">
         Address Bar
@@ -1468,13 +1542,13 @@ locale.  The strings in this file are specific to iOS.
         Show Full Address in the Address Bar instead of Domain only.
       </message>
       <message name="IDS_IOS_ADDRESSBAR_BOOKMARKS_MATCHING_TITLE" desc="Title for the bookmarks matching option for addressbar settings">
-        Bookmarks Matching
+        Prioritize Bookmarks
       </message>
       <message name="IDS_IOS_ADDRESSBAR_BOOKMARKS_MATCHING_DESCRIPTION" desc="Description for the bookmarks matching option for addressbar settings">
         Prioritize bookmarks in autocomplete suggestions
       </message>
       <message name="IDS_IOS_ADDRESSBAR_NICKNAME_MATCHING_TITLE" desc="Title for the nickname matching option for addressbar settings">
-        Nickname Matching
+        Prioritize Bookmark Nicknames
       </message>
       <message name="IDS_IOS_ADDRESSBAR_NICKNAME_MATCHING_DESCRIPTION" desc="Description for the nickname matching option for addressbar settings">
         Prioritize bookmark nicknames in autocomplete suggestions
@@ -1484,6 +1558,12 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_ADDRESSBAR_ENABLE_DIRECT_MATCH_DESCRIPTION" desc="Description for the enable direct match option for addressbar settings">
         Enables quick access to specific websites directly from the address bar, saving clicks compared to going through a search engine. Learn more about [Direct Match]
+      </message>
+      <message name="IDS_IOS_ADDRESSBAR_PRIORITIZE_DIRECT_MATCH_TITLE" desc="Title for the prioritize direct match option for addressbar settings">
+        Prioritize Direct Match
+      </message>
+      <message name="IDS_IOS_ADDRESSBAR_PRIORITIZE_DIRECT_MATCH_DESCRIPTION" desc="Description for the prioritize direct match option for addressbar settings">
+        Prioritize Direct Match in autocomplete suggestions.
       </message>
       <!-- END ADDRESSBAR SETTINGS -->
       <!-- TOOLBAR -->
@@ -1523,7 +1603,7 @@ locale.  The strings in this file are specific to iOS.
       <!-- END TOOLBAR -->
       <!-- OVERFLOW MENU/MAIN MENU -->
       <message name="IDS_VIVALDI_TOOLS_MENU_SHARE" desc="The title for the share item on the overflow menu destination">
-        Share
+        Share Page
       </message>
       <message name="IDS_VIVALDI_TOOLS_MENU_ZOOM_TEXT" desc="The title for the zoom text item on the overflow menu destination">
         Zoom Text
@@ -1678,11 +1758,8 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_IOS_ONBOARDING_START_LETS_GET_STARTED_TITLE" desc="Title for the let's get started button on the onboarding start page">
         Let's get started
       </message>
-      <message name="IDS_VIVALDI_IOS_ONBOARDING_START_AGREEMENT_START_TITLE" desc="Title for the first part of agreement text [non tapable] on the onboarding start page">
-        By continuing, you agree to Vivaldi's
-      </message>
-      <message name="IDS_VIVALDI_IOS_ONBOARDING_START_AGREEMENT_AND_TITLE" desc="Title for the 'and' text [non tapable] in between license and privacy policy link on the onboarding start page">
-        and
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_START_AGREEMENT_TITLE" desc="Title for the agreement text on the onboarding start page.">
+        By continuing, you agree to Vivaldi's <ph name="BEGIN_LINK">BEGIN_LINK</ph>End User License Agreement<ph name="END_LINK">END_LINK</ph> and <ph name="BEGIN_LINK">BEGIN_LINK</ph>Privacy Policy<ph name="END_LINK">END_LINK</ph>
       </message>
       <message name="IDS_VIVALDI_IOS_ONBOARDING_START_AGREEMENT_LICENSE_TITLE" desc="Title for the End User License Agreement on the onboarding start page">
         End User License Agreement
@@ -1741,6 +1818,12 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_PRIVATE_TAB_TITLE" desc="(Vivaldi) Title of the private tab button on the search engine settings UI.">
          Private Tab
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_ENABLE_SEARCH_SUGGESTION_TITLE" desc="(Vivaldi) Title of the enable search suggestion in address bar toggle on the search engine settings UI.">
+        Allow Search Suggestions in Address Field
+      </message>
+      <message name="IDS_VIVALDI_SEARCH_ENGINE_ENABLE_SEARCH_SUGGESTION_DESCRIPTION" desc="(Vivaldi) Description of the enable search suggestion in address bar toggle on the search engine settings UI.">
+        When typing in the address bar, your input is sent to your search provider for suggestions. This is off in private window.
       </message>
       <message name="IDS_VIVALDI_SEARCH_ENGINE_SETTINGS_ENABLE_NICKNAME_TITLE" desc="(Vivaldi) Title of the enable search engine nickname toggle on the search engine settings UI.">
         Enable Search Engine Nicknames
@@ -1849,6 +1932,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <!-- END SEND TABS TO YOUR DEVICES -->
       <!-- FEEDBACK PROMPT -->
+      <message name="IDS_IOS_FEEDBACK_MENU_TITLE" desc="Title for menu item of the feedback prompt.">
+        Share feedback
+      </message>
       <message name="IDS_IOS_FEEDBACK_SUBMIT_TITLE" desc="Title for submit button on the feedback prompt.">
         Submit
       </message>
@@ -1883,7 +1969,7 @@ locale.  The strings in this file are specific to iOS.
         Wow, we're so happy to hear that!
       </message>
       <message name="IDS_IOS_FEEDBACK_HAPPY_PATH_SUBTITLE" desc="Sub-title for the happy path on the feedback prompt.">
-        Please share the love by rating Vivaldi on the App Store.
+        We'd love to see your feedback on the App Store.
       </message>
       <message name="IDS_IOS_FEEDBACK_SAD_PATH_TITLE" desc="Title for the sad path on the feedback prompt.">
         We're sorry to hear that!
@@ -2081,6 +2167,129 @@ locale.  The strings in this file are specific to iOS.
         Something else
       </message>
       <!-- END FEEDBACK PROMPT -->
+      <!-- VIVALDI TRANSLATE -->
+      <message name="IDS_VIVALDI_TRANSLATE_TITLE" desc="Title for the Vivaldi Translate panel item">
+        Translate
+      </message>
+      <message name="IDS_IOS_TRANSLATE_CLOSE_BUTTON_ACC_TITLE" desc="Accessibility title for the close button on the translate page.">
+        Close the translation view
+      </message>
+      <message name="IDS_IOS_TRANSLATE_ENTER_TEXT_PLACEHOLDER_TITLE" desc="Title for placeholder for the input textfield on translate page.">
+        Enter text to translate
+      </message>
+      <message name="IDS_IOS_TRANSLATE_BUTTON_TITLE" desc="Title for translate button on the translate page toolbar.">
+        Translate
+      </message>
+      <message name="IDS_IOS_TRANSLATE_OPEN_TRANSLATOR_BUTTON_TITLE" desc="Title for open translator button on the translate page toolbar. This is visible for iPad only in full width, which means not visible on slide over or split view.">
+        Open Translator
+      </message>
+      <message name="IDS_IOS_TRANSLATE_CLEAR_BUTTON_ACC_TITLE" desc="Accessibility title for clear button on the translate page toolbar.">
+        Clears the input field
+      </message>
+      <message name="IDS_IOS_TRANSLATE_TRANSLATED_TEXT_ACC_DESCRIPTION" desc="Accessibility description for the translated text on the translate page.">
+        Translated Text
+      </message>
+      <message name="IDS_IOS_TRANSLATE_PICKER_SOURCE_LANGUAGE_TITLE" desc="Title for the source language picker item on the translate page. This is not visible on the screen, but used as the accessibility title.">
+        Select source language
+      </message>
+      <message name="IDS_IOS_TRANSLATE_PICKER_DESTINATION_LANGUAGE_TITLE" desc="Title for the destination language picker item on the translate page. This is not visible on the screen, but used as the accessibility title.">
+        Select destination language
+      </message>
+      <message name="IDS_IOS_TRANSLATE_PICKER_AUTO_DETECTED_TITLE" desc="Title for the Auto Detected item for the source language picker item on the translate page.">
+        Auto Detected
+      </message>
+      <message name="IDS_IOS_TRANSLATE_PICKER_SWAP_LANGUAGE_ACC_TITLE" desc="Accessibility title for the swap language button on the translate page.">
+        Swap Languages
+      </message>
+      <message name="IDS_IOS_TRANSLATE_PICKER_SWAP_LANGUAGE_ACC_DESCRIPTION" desc="Accessibility description for the swap language button on the translate page.">
+        Swaps the source and destination languages
+      </message>
+      <message name="IDS_IOS_TRANSLATE_CREDIT_TEXT" desc="Credit text visible at the bottom of the translate page.">
+        Powered by Lingvanex, hosted by Vivaldi.
+      </message>
+      <message name="IDS_IOS_TRANSLATE_COPY_BUTTON_ACC_TITLE" desc="Accessibility title for copy button on the translate page toolbar.">
+        Copy
+      </message>
+      <message name="IDS_IOS_TRANSLATE_COPY_BUTTON_ACC_DESCRIPTION" desc="Accessibility description for copy button on the translate page toolbar.">
+        Copies the translated text to clipboard
+      </message>
+      <message name="IDS_IOS_TRANSLATE_COPIED_TRANSLATION_MESSAGE" desc="Message to show on the snackbar when translation is copied using the copy button on the translate page toolbar.">
+        Translation Copied!
+      </message>
+      <message name="IDS_IOS_TRANSLATE_FAILED_MESSAGE" desc="Message to show when translation is failed on the translate page toolbar.">
+        Translation failed!
+      </message>
+      <!-- END VIVALDI TRANSLATE -->
+      <message name="IDS_IOS_PANEL_PREFER_TRANSLATE_PANEL" desc="Title for the option in Settings for showing translate panel instead of dialog from web page text selection. [Length: unlimited] [iOS only]">
+        Prefer translate panel
+      </message>
+      <message name="IDS_IOS_PANEL_PREFER_TRANSLATE_PANEL_FOOTER" desc="Footer description for the option in Settings for showing translate panel instead of dialog from web page text selection. [Length: unlimited] [iOS only]">
+        Translate panel will be used instead of dialog when translating selected text
+      </message>
+      <!-- DIRECT MATCH CATEGORIES -->
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_TRAVEL_TITLE" desc="Direct Match Category that contains partners for travel and booking services.">
+        Travel
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_SHOPPING_TITLE" desc="Direct Match Category that contains partners for shopping and e-commerce services.">
+        Shopping
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_GAMING_TITLE" desc="Direct Match Category that contains partners for gaming and entertainment services.">
+        Gaming
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_SOCIAL_TITLE" desc="Direct Match Category that contains partners for social networking and messaging.">
+        Social
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_FINANCE_TITLE" desc="Direct Match Category that contains partners for finance, banking, and investment.">
+        Finance
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_NEWS_TITLE" desc="Direct Match Category that contains partners for news and media services.">
+        News
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_EDUCATION_TITLE" desc="Direct Match Category that contains partners for educational resources and learning.">
+        Education
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_SPORT_TITLE" desc="Direct Match Category that contains partners for sports apps and live scores.">
+        Sport
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_STREAMING_TITLE" desc="Direct Match Category that contains partners for video and music streaming.">
+        Streaming
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_FOOD_TITLE" desc="Direct Match Category that contains partners for food delivery and restaurant services.">
+        Food
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_HEALTH_TITLE" desc="Direct Match Category that contains partners for health and fitness services.">
+        Health
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_PARENTING_TITLE" desc="Direct Match Category that contains partners for parenting and family resources.">
+        Parenting
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_BOOKS_TITLE" desc="Direct Match Category that contains partners for books and reading services.">
+        Books
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_PHOTOGRAPHY_TITLE" desc="Direct Match Category that contains partners for photography and photo editing.">
+        Photography
+      </message>
+      <message name="IDS_IOS_DIRECT_MATCH_CATEGORY_TOOLS_TITLE" desc="Direct Match Category that contains partners for utility and productivity tools.">
+        Tools
+      </message>
+      <!-- END DIRECT MATCH CATEGORIES -->
+      <!-- NEW SPEED DIAL DIALOG -->
+      <message name="IDS_IOS_SD_WEBSITE_ADDRESS_TITLE" desc="Title for the Website Address section of the new speed dial dialog.">
+        Website Address
+      </message>
+      <message name="IDS_IOS_SD_TYPE_URL_TITLE" desc="Placeholder for the Website Address section textfield of the new speed dial dialog.">
+        Type URL
+      </message>
+      <message name="IDS_IOS_SD_POPULAR_SITES_TITLE" desc="Title for the Popular Sites section of the new speed dial dialog.">
+        Popular Sites
+      </message>
+      <message name="IDS_IOS_SD_CATEGORIES_TITLE" desc="Title for the Categories section of the new speed dial dialog.">
+        Categories
+      </message>
+      <message name="IDS_IOS_SD_TOP_SITES_TITLE" desc="Title for the Top Sites section of the new speed dial dialog.">
+        Frequently Visited
+      </message>
+      <!-- END NEW SPEED DIAL DIALOG -->
     </messages>
   </release>
 </grit>

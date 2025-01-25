@@ -1,103 +1,74 @@
-SKIP: FAILED
-
-#version 310 es
-
-uniform highp sampler2DArrayShadow arg_0_arg_1;
-
-layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
-  float inner;
-} prevent_dce;
-
-void textureSampleCompareLevel_bcb3dd() {
-  vec2 arg_2 = vec2(1.0f);
-  uint arg_3 = 1u;
-  float arg_4 = 1.0f;
-  float res = textureOffset(arg_0_arg_1, vec4(vec3(arg_2, float(arg_3)), arg_4), ivec2(1));
-  prevent_dce.inner = res;
-}
-
-vec4 vertex_main() {
-  textureSampleCompareLevel_bcb3dd();
-  return vec4(0.0f);
-}
-
-void main() {
-  gl_PointSize = 1.0;
-  vec4 inner_result = vertex_main();
-  gl_Position = inner_result;
-  gl_Position.y = -(gl_Position.y);
-  gl_Position.z = ((2.0f * gl_Position.z) - gl_Position.w);
-  return;
-}
-error: Error parsing GLSL shader:
-ERROR: 0:13: 'sampler' : TextureOffset does not support sampler2DArrayShadow :  ES Profile
-ERROR: 0:13: '' : compilation terminated 
-ERROR: 2 compilation errors.  No code generated.
-
-
-
-#version 310 es
+#version 460
 precision highp float;
 precision highp int;
 
-uniform highp sampler2DArrayShadow arg_0_arg_1;
-
-layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+layout(binding = 0, std430)
+buffer prevent_dce_block_1_ssbo {
   float inner;
-} prevent_dce;
-
-void textureSampleCompareLevel_bcb3dd() {
+} v;
+uniform highp sampler2DArrayShadow arg_0_arg_1;
+float textureSampleCompareLevel_bcb3dd() {
   vec2 arg_2 = vec2(1.0f);
   uint arg_3 = 1u;
   float arg_4 = 1.0f;
-  float res = textureOffset(arg_0_arg_1, vec4(vec3(arg_2, float(arg_3)), arg_4), ivec2(1));
-  prevent_dce.inner = res;
+  vec2 v_1 = arg_2;
+  float v_2 = arg_4;
+  float res = textureOffset(arg_0_arg_1, vec4(v_1, float(arg_3), v_2), ivec2(1));
+  return res;
 }
-
-void fragment_main() {
-  textureSampleCompareLevel_bcb3dd();
-}
-
 void main() {
-  fragment_main();
-  return;
+  v.inner = textureSampleCompareLevel_bcb3dd();
 }
-error: Error parsing GLSL shader:
-ERROR: 0:15: 'sampler' : TextureOffset does not support sampler2DArrayShadow :  ES Profile
-ERROR: 0:15: '' : compilation terminated 
-ERROR: 2 compilation errors.  No code generated.
+#version 460
 
-
-
-#version 310 es
-
-uniform highp sampler2DArrayShadow arg_0_arg_1;
-
-layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+layout(binding = 0, std430)
+buffer prevent_dce_block_1_ssbo {
   float inner;
-} prevent_dce;
-
-void textureSampleCompareLevel_bcb3dd() {
+} v;
+uniform highp sampler2DArrayShadow arg_0_arg_1;
+float textureSampleCompareLevel_bcb3dd() {
   vec2 arg_2 = vec2(1.0f);
   uint arg_3 = 1u;
   float arg_4 = 1.0f;
-  float res = textureOffset(arg_0_arg_1, vec4(vec3(arg_2, float(arg_3)), arg_4), ivec2(1));
-  prevent_dce.inner = res;
+  vec2 v_1 = arg_2;
+  float v_2 = arg_4;
+  float res = textureOffset(arg_0_arg_1, vec4(v_1, float(arg_3), v_2), ivec2(1));
+  return res;
 }
-
-void compute_main() {
-  textureSampleCompareLevel_bcb3dd();
-}
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  compute_main();
-  return;
+  v.inner = textureSampleCompareLevel_bcb3dd();
 }
-error: Error parsing GLSL shader:
-ERROR: 0:13: 'sampler' : TextureOffset does not support sampler2DArrayShadow :  ES Profile
-ERROR: 0:13: '' : compilation terminated 
-ERROR: 2 compilation errors.  No code generated.
+#version 460
 
 
+struct VertexOutput {
+  vec4 pos;
+  float prevent_dce;
+};
 
+uniform highp sampler2DArrayShadow arg_0_arg_1;
+layout(location = 0) flat out float vertex_main_loc0_Output;
+float textureSampleCompareLevel_bcb3dd() {
+  vec2 arg_2 = vec2(1.0f);
+  uint arg_3 = 1u;
+  float arg_4 = 1.0f;
+  vec2 v = arg_2;
+  float v_1 = arg_4;
+  float res = textureOffset(arg_0_arg_1, vec4(v, float(arg_3), v_1), ivec2(1));
+  return res;
+}
+VertexOutput vertex_main_inner() {
+  VertexOutput tint_symbol = VertexOutput(vec4(0.0f), 0.0f);
+  tint_symbol.pos = vec4(0.0f);
+  tint_symbol.prevent_dce = textureSampleCompareLevel_bcb3dd();
+  return tint_symbol;
+}
+void main() {
+  VertexOutput v_2 = vertex_main_inner();
+  gl_Position = v_2.pos;
+  gl_Position[1u] = -(gl_Position.y);
+  gl_Position[2u] = ((2.0f * gl_Position.z) - gl_Position.w);
+  vertex_main_loc0_Output = v_2.prevent_dce;
+  gl_PointSize = 1.0f;
+}

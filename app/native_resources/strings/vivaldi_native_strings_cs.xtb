@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Vesnička (Krajina 12)</translation>
 <translation id="1158503667684816647">Již nezobrazovat potvrzení</translation>
 <translation id="1222195720020481779">Spouštění instalátoru…</translation>
+<translation id="1224683873953469764">Získejte Vivaldi pro mobily</translation>
 <translation id="1270785070369717623">Je nám líto, ale nemůžeme získat nastavení prohlížeče Opera GX, když zrova běží. Pro import těchto nastavení do Vivaldi, uložte vše potřebné a ukončete všechna okna prohlížeče Opera GX. Pak klepněte na Pokračovat.</translation>
 <translation id="1276145862619442150">Rychlé přístupy</translation>
 <translation id="1281950884873973195">Kočka (Zvířena 6)</translation>
@@ -12,6 +13,7 @@
 <translation id="1454726940098520109">Již nezobrazovat</translation>
 <translation id="1462666970065907900">Opravdu chcete uzavřít toto okno?</translation>
 <translation id="1480046233931937785">Titulky</translation>
+<translation id="1521774566618522728">Aktivní dnes</translation>
 <translation id="1526344461589023948">Při pokusu o uložení stahované aktualizace došlo k chybě. Zkontrolujte, že má váš počítač dostatek volného místa na disku a zkuste to znovu.</translation>
 <translation id="1635542496948266458">Přepnout profily</translation>
 <translation id="1657174850639146440">Týpek (Příšerka 9)</translation>
@@ -97,6 +99,7 @@
 <translation id="4430019312045809116">Hlasitost</translation>
 <translation id="443008484043213881">Nástroje</translation>
 <translation id="4456211719108566931">Hromádka neštěstí… (Příšerka 6)</translation>
+<translation id="4459169140545916303">Aktivní před <ph name="DEVICE_LAST_ACTIVATED_TIME" /> dny</translation>
 <translation id="4512900838580567989">Otevřít odkaz v novém listu na pozadí</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Otevřít obrázek v novém listu na pozadí</translation>
@@ -148,6 +151,7 @@
 <translation id="7099506190679014195">Povýšení bezpečného úložiště</translation>
 <translation id="7111492742514999492">Větrný mlýn (Krajina 9)</translation>
 <translation id="7208252576848052204">Je nám líto, ale nemůžeme získat nastavení prohlížeče Arc, když zrova běží. Pro import těchto nastavení do Vivaldi, uložte vše potřebné a ukončete všechna okna Arc. Pak klepněte na Pokračovat.</translation>
+<translation id="7321500017121629018">Aktivní včera</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Instalátor aktualizace se nepodařilo spustit. Zkontrolujte, že má váš počítač dostatek volné paměti a místa na disku a zkuste to znovu.</translation>
 <translation id="7658239707568436148">Zrušit</translation>

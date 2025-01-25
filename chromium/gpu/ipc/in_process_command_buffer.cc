@@ -205,7 +205,8 @@ gpu::ContextResult InProcessCommandBuffer::Initialize(
       base::WaitableEvent::InitialState::NOT_SIGNALED);
   gpu::ContextResult result = gpu::ContextResult::kSuccess;
   task_sequence_->ScheduleTask(
-      WrapTaskWithResult(std::move(init_task), &result, &completion), {});
+      WrapTaskWithResult(std::move(init_task), &result, &completion),
+      /*sync_token_fences=*/{}, SyncToken());
   completion.Wait();
 
   if (result == gpu::ContextResult::kSuccess) {
@@ -213,8 +214,7 @@ gpu::ContextResult InProcessCommandBuffer::Initialize(
     gl_capabilities_ = gl_capabilities;
     shared_image_interface_ =
         base::MakeRefCounted<SharedImageInterfaceInProcess>(
-            task_sequence_, task_executor_->sync_point_manager(),
-            task_executor_->gpu_preferences(),
+            task_sequence_, task_executor_->gpu_preferences(),
             context_group_->feature_info()->workarounds(),
             task_executor_->gpu_feature_info(), context_state_.get(),
             task_executor_->shared_image_manager(),
@@ -484,7 +484,8 @@ void InProcessCommandBuffer::Destroy() {
   base::OnceCallback<bool(void)> destroy_task = base::BindOnce(
       &InProcessCommandBuffer::DestroyOnGpuThread, base::Unretained(this));
   task_sequence_->ScheduleTask(
-      WrapTaskWithResult(std::move(destroy_task), &result, &completion), {});
+      WrapTaskWithResult(std::move(destroy_task), &result, &completion),
+      /*sync_token_fences=*/{}, SyncToken());
 
   completion.Wait();
   task_sequence_ = nullptr;
@@ -567,7 +568,7 @@ void InProcessCommandBuffer::ScheduleGpuTask(
       &InProcessCommandBuffer::RunTaskOnGpuThread,
       gpu_thread_weak_ptr_factory_.GetWeakPtr(), std::move(task));
   task_sequence_->ScheduleTask(std::move(gpu_task),
-                               std::move(sync_token_fences),
+                               std::move(sync_token_fences), SyncToken(),
                                std::move(report_callback));
 }
 
@@ -836,15 +837,15 @@ void InProcessCommandBuffer::OnFenceSyncRelease(uint64_t release) {
 }
 
 void InProcessCommandBuffer::OnDescheduleUntilFinished() {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void InProcessCommandBuffer::OnRescheduleAfterFinished() {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void InProcessCommandBuffer::OnSwapBuffers(uint64_t swap_id, uint32_t flags) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void InProcessCommandBuffer::ScheduleGrContextCleanup() {
@@ -1003,7 +1004,7 @@ void InProcessCommandBuffer::GetGpuFenceOnGpuThread(
 
 void InProcessCommandBuffer::SetLock(base::Lock*) {
   // No support for using on multiple threads.
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void InProcessCommandBuffer::EnsureWorkVisible() {

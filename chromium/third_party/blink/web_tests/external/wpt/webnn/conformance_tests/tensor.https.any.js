@@ -27,7 +27,7 @@ const bytesPerDataType = (dataType) => {
 };
 
 const sizeOfDescriptor = (descriptor) => {
-  return descriptor.dimensions.reduce(
+  return descriptor.shape.reduce(
       (accumulator, currentValue) => accumulator * currentValue,
       bytesPerDataType(descriptor.dataType));
 };
@@ -35,8 +35,10 @@ const sizeOfDescriptor = (descriptor) => {
 const getDescriptorFromTensor = (tensor) => {
   return {
     dataType: tensor.dataType,
-    dimensions: tensor.shape,
-    usage: tensor.usage
+    shape: tensor.shape,
+    readable: tensor.readable,
+    writable: tensor.writable,
+    importableToWebGPU: tensor.importableToWebGPU,
   };
 };
 
@@ -57,7 +59,7 @@ const testDestroyTensor = (testName) => {
 
     try {
       const mlTensor =
-          await mlContext.createTensor({dataType: 'int32', dimensions: [2, 3]});
+          await mlContext.createTensor({dataType: 'int32', shape: [2, 3]});
     } catch (e) {
       throw new AssertionError(
           `Unable to create tensor for ${variant} variant. ${e}`);
@@ -65,7 +67,7 @@ const testDestroyTensor = (testName) => {
   });
   promise_test(async () => {
     let mlTensor =
-        await mlContext.createTensor({dataType: 'int32', dimensions: [2, 3]});
+        await mlContext.createTensor({dataType: 'int32', shape: [2, 3]});
     mlTensor.destroy();
     mlTensor.destroy();
   }, `${testName}`);
@@ -100,8 +102,7 @@ const testCreateTensor = (testName, tensorDescriptor) => {
         mlTensor.dataType, tensorDescriptor.dataType,
         'tensor data types do not match');
     assert_array_equals(
-        mlTensor.shape, tensorDescriptor.dimensions,
-        'tensor shapes do not match');
+        mlTensor.shape, tensorDescriptor.shape, 'tensor shapes do not match');
   }, `${testName} / ${tensorDescriptor.dataType}`);
 };
 
@@ -156,7 +157,7 @@ const testWriteTensor = (testName) => {
 
     try {
       const mlTensor =
-          await mlContext.createTensor({dataType: 'int32', dimensions: [2, 3]});
+          await mlContext.createTensor({dataType: 'int32', shape: [2, 3]});
     } catch (e) {
       throw new AssertionError(
           `Unable to create tensor for ${variant} variant. ${e}`);
@@ -166,57 +167,69 @@ const testWriteTensor = (testName) => {
   promise_test(async () => {
     const tensorDescriptor = {
       dataType: 'int32',
-      dimensions: [1],
-      usage: MLTensorUsage.WRITE,
+      shape: [4],
+      readable: true,
+      writable: true,
     };
-    let mlTensor = await mlContext.createTensor(tensorDescriptor);
-
     const tensorByteLength = sizeOfDescriptor(tensorDescriptor);
+
+    // Required to use SharedArrayBuffer.
+    assert_true(
+        self.crossOriginIsolated,
+        'The page is served with COOP and COEP, it should be cross-origin-isolated.');
+
     let arrayBuffer = new ArrayBuffer(tensorByteLength);
+    let arrayBufferView = new Int32Array(arrayBuffer);
+    arrayBufferView.fill(7);
 
-    // Writing with a size that goes past that source tensor length.
-    assert_throws_js(
-        TypeError,
-        () => mlContext.writeTensor(
-            mlTensor, new Uint8Array(arrayBuffer), /*srcOffset=*/ 0,
-            /*srcSize=*/ tensorByteLength + 1));
-    assert_throws_js(
-        TypeError,
-        () => mlContext.writeTensor(
-            mlTensor, new Uint8Array(arrayBuffer), /*srcOffset=*/ 3,
-            /*srcSize=*/ tensorByteLength));
+    let sharedArrayBuffer = new SharedArrayBuffer(tensorByteLength);
+    let sharedArrayBufferView = new Int32Array(sharedArrayBuffer);
+    sharedArrayBufferView.fill(7);
 
-    // Writing with a source offset that is out of range of the source size.
-    assert_throws_js(
-        TypeError,
-        () => mlContext.writeTensor(
-            mlTensor, new Uint8Array(arrayBuffer),
-            /*srcOffset=*/ tensorByteLength + 1));
+    const tensors = await Promise.all([
+      mlContext.createTensor(tensorDescriptor),
+      mlContext.createTensor(tensorDescriptor),
+      mlContext.createTensor(tensorDescriptor),
+      mlContext.createTensor(tensorDescriptor)
+    ]);
 
-    // Writing with a source offset that is out of range of implicit copy size.
-    assert_throws_js(
-        TypeError,
-        () => mlContext.writeTensor(
-            mlTensor, new Uint8Array(arrayBuffer),
-            /*srcOffset=*/ tensorByteLength + 1, /*srcSize=*/ undefined));
+    mlContext.writeTensor(tensors[0], arrayBuffer);
+    mlContext.writeTensor(tensors[2], arrayBufferView);
+    mlContext.writeTensor(tensors[1], sharedArrayBuffer);
+    mlContext.writeTensor(tensors[3], sharedArrayBufferView);
 
-    assert_throws_js(
-        TypeError,
-        () => mlContext.writeTensor(
-            mlTensor, new Uint8Array(arrayBuffer), /*srcOffset=*/ undefined,
-            /*srcSize=*/ tensorByteLength + 1));
-
-    assert_throws_js(
-        TypeError,
-        () => mlContext.writeTensor(
-            mlTensor, Uint8Array.from([0xEE, 0xEE, 0xEE, 0xEE, 0xEE])));
-  }, `${testName} / error`);
+    await Promise.all(tensors.map(async (tensor) => {
+      assert_tensor_data_equals(mlContext, tensor, arrayBufferView);
+    }));
+  }, `${testName} / write with different kinds of buffers`);
 
   promise_test(async () => {
     const tensorDescriptor = {
       dataType: 'int32',
-      dimensions: [2, 2],
-      usage: MLTensorUsage.WRITE,
+      shape: [1],
+      writable: true,
+    };
+    let mlTensor = await mlContext.createTensor(tensorDescriptor);
+
+    const tensorByteLength = sizeOfDescriptor(tensorDescriptor);
+
+    // Writing with a buffer larger than the source tensor.
+    assert_throws_js(
+        TypeError,
+        () => mlContext.writeTensor(
+            mlTensor, new ArrayBuffer(tensorByteLength + 1)));
+    // Writing with a buffer smaller than the source tensor.
+    assert_throws_js(
+        TypeError,
+        () => mlContext.writeTensor(
+            mlTensor, new ArrayBuffer(tensorByteLength - 1)));
+  }, `${testName} / write with buffer of wrong size`);
+
+  promise_test(async () => {
+    const tensorDescriptor = {
+      dataType: 'int32',
+      shape: [2, 2],
+      writable: true,
     };
     let mlTensor = await mlContext.createTensor(tensorDescriptor);
 
@@ -232,8 +245,8 @@ const testWriteTensor = (testName) => {
   promise_test(async () => {
     const tensorDescriptor = {
       dataType: 'int32',
-      dimensions: [2, 3],
-      usage: MLTensorUsage.WRITE,
+      shape: [2, 3],
+      writable: true,
     };
     let mlTensor = await mlContext.createTensor(tensorDescriptor);
 
@@ -251,48 +264,39 @@ const testWriteTensor = (testName) => {
   promise_test(async () => {
     let mlTensor = await mlContext.createTensor({
       dataType: 'int32',
-      dimensions: [1],
-      usage: MLTensorUsage.WRITE | MLTensorUsage.READ,
+      shape: [],
+      readable: true,
+      writable: true,
     });
 
-    // Initialize the tensor.
-    const inputData = Uint8Array.from([0xAA, 0xAA, 0xAA, 0xAA]);
+    const inputData = Int32Array.from([0xAAAABBBB]);
     mlContext.writeTensor(mlTensor, inputData);
-
-    // Writing zero bytes from a zero write size.
-    mlContext.writeTensor(mlTensor, Uint8Array.from([0xBB]), 0, 0);
-
     await assert_tensor_data_equals(mlContext, mlTensor, inputData);
-
-    // Writing zero bytes at the end of the tensor.
-    mlContext.writeTensor(
-        mlTensor, Uint32Array.from([0xBBBBBBBB]), /*srcOffset=*/ 1);
-
-    await assert_tensor_data_equals(mlContext, mlTensor, inputData);
-  }, `${testName} / zero_write`);
+  }, `${testName} / scalar`);
 
   promise_test(async () => {
     const tensorDescriptor = {
       dataType: 'int32',
-      dimensions: [2, 2],
-      usage: MLTensorUsage.WRITE | MLTensorUsage.READ,
+      shape: [2, 2],
+      readable: true,
+      writable: true,
     };
     let mlTensor = await mlContext.createTensor(tensorDescriptor);
 
     const tensorByteLength = sizeOfDescriptor(tensorDescriptor);
     let inputBuffer = new ArrayBuffer(tensorByteLength);
 
-    // Initialize the tensor.
     const int32View = new Int32Array(inputBuffer);
     int32View.fill(0xBBBBBBBB);
 
     mlContext.writeTensor(mlTensor, int32View);
 
-    // Writing to a detached buffer should be ignored.
+    // Writing to a detached buffer should fail.
     const detachedBuffer = inputBuffer.transfer();
     assert_true(inputBuffer.detached, 'array buffer should be detached.');
 
-    mlContext.writeTensor(mlTensor, inputBuffer);
+    assert_throws_js(
+        TypeError, () => mlContext.writeTensor(mlTensor, inputBuffer));
 
     await assert_tensor_data_equals(
         mlContext, mlTensor, new Int32Array(detachedBuffer));
@@ -315,7 +319,7 @@ const testReadTensor = (testName) => {
 
     try {
       const mlTensor =
-          await mlContext.createTensor({dataType: 'int32', dimensions: [2, 3]});
+          await mlContext.createTensor({dataType: 'int32', shape: [2, 3]});
     } catch (e) {
       throw new AssertionError(
           `Unable to create tensor for ${variant} variant. ${e}`);
@@ -325,8 +329,8 @@ const testReadTensor = (testName) => {
   promise_test(async t => {
     let mlTensor = await mlContext.createTensor({
       dataType: 'int32',
-      dimensions: [2, 2],
-      usage: MLTensorUsage.READ,
+      shape: [2, 2],
+      readable: true,
     });
 
     // Reading a destroyed MLTensor should reject.
@@ -339,8 +343,8 @@ const testReadTensor = (testName) => {
   promise_test(async t => {
     let mlTensor = await mlContext.createTensor({
       dataType: 'int32',
-      dimensions: [2, 3],
-      usage: MLTensorUsage.READ,
+      shape: [2, 3],
+      readable: true,
     });
 
     let promise = mlContext.readTensor(mlTensor);
@@ -355,8 +359,8 @@ const testReadTensor = (testName) => {
   promise_test(async () => {
     let mlTensor = await mlContext.createTensor({
       dataType: 'int32',
-      dimensions: [1024],
-      usage: MLTensorUsage.READ,
+      shape: [1024],
+      readable: true,
     });
 
     await assert_tensor_data_equals(mlContext, mlTensor, new Uint32Array(1024));
@@ -365,95 +369,25 @@ const testReadTensor = (testName) => {
   promise_test(async () => {
     let mlTensor = await mlContext.createTensor({
       dataType: 'int32',
-      dimensions: [1],
-      usage: MLTensorUsage.READ | MLTensorUsage.WRITE,
+      shape: [1],
+      readable: true,
+      writable: true,
     });
 
-    // Initialize the tensor.
     mlContext.writeTensor(mlTensor, Uint8Array.from([0xAA, 0xAA, 0xAA, 0xAA]));
 
+    // Write over previously-written data.
     mlContext.writeTensor(mlTensor, Uint32Array.from([0xBBBBBBBB]));
     await assert_tensor_data_equals(
         mlContext, mlTensor, Uint32Array.from([0xBBBBBBBB]));
     ;
-  }, `${testName} / full_size`);
-
-  promise_test(async () => {
-    let mlTensor = await mlContext.createTensor({
-      dataType: 'int32',
-      dimensions: [1],
-      usage: MLTensorUsage.WRITE | MLTensorUsage.READ,
-    });
-
-    // Initialize the tensor.
-    mlContext.writeTensor(mlTensor, Uint8Array.from([0xAA, 0xAA, 0xAA, 0xAA]));
-
-    // Writing to the remainder of the tensor from source offset.
-    mlContext.writeTensor(
-        mlTensor, Uint8Array.from([0xCC, 0xCC, 0xBB, 0xBB]),
-        /*srcOffset=*/ 2);
-    await assert_tensor_data_equals(
-        mlContext, mlTensor, Uint8Array.from([0xBB, 0xBB, 0xAA, 0xAA]));
-  }, `${testName} / src_offset_only`);
-
-  promise_test(async () => {
-    let mlTensor = await mlContext.createTensor({
-      dataType: 'int32',
-      dimensions: [1],
-      usage: MLTensorUsage.WRITE | MLTensorUsage.READ,
-    });
-
-    // Initialize the tensor.
-    mlContext.writeTensor(mlTensor, Uint8Array.from([0xAA, 0xAA, 0xAA, 0xAA]));
-
-    // Writing with both a source offset and size.
-    mlContext.writeTensor(
-        mlTensor, Uint8Array.from([0xDD, 0xDD, 0xCC, 0xDD]),
-        /*srcOffset=*/ 2, /*srcSize=*/ 1);
-    await assert_tensor_data_equals(
-        mlContext, mlTensor, Uint8Array.from([0xCC, 0xAA, 0xAA, 0xAA]));
-  }, `${testName} / src_offset_and_size`);
-
-  promise_test(async () => {
-    let mlTensor = await mlContext.createTensor({
-      dataType: 'int32',
-      dimensions: [1],
-      usage: MLTensorUsage.WRITE | MLTensorUsage.READ,
-    });
-
-    // Initialize the tensor.
-    mlContext.writeTensor(mlTensor, Uint8Array.from([0xAA, 0xAA, 0xAA, 0xAA]));
-
-    // Using an offset allows a larger source tensor to fit.
-    mlContext.writeTensor(
-        mlTensor, Uint8Array.from([0xEE, 0xEE, 0xEE, 0xEE, 0xEE]),
-        /*srcOffset=*/ 1);
-    await assert_tensor_data_equals(
-        mlContext, mlTensor, Uint8Array.from([0xEE, 0xEE, 0xEE, 0xEE]));
-  }, `${testName} / larger_src_data`);
-
-  promise_test(async () => {
-    let mlTensor = await mlContext.createTensor({
-      dataType: 'int32',
-      dimensions: [1],
-      usage: MLTensorUsage.WRITE | MLTensorUsage.READ,
-    });
-
-    const inputData = [0xAA, 0xAA, 0xAA, 0xAA];
-
-    // Writing with a source offset of undefined should be treated as 0.
-    mlContext.writeTensor(
-        mlTensor, Uint8Array.from(inputData), /*srcOffset=*/ undefined,
-        /*srcSize=*/ inputData.length);
-    await assert_tensor_data_equals(
-        mlContext, mlTensor, Uint8Array.from(inputData));
-  }, `${testName} / no_src_offset`);
+  }, `${testName} / overwrite`);
 
   promise_test(async t => {
     const tensorDescriptor = {
       dataType: 'int32',
-      dimensions: [2, 3],
-      usage: MLTensorUsage.READ,
+      shape: [2, 3],
+      readable: true,
     };
     let mlTensor = await mlContext.createTensor(tensorDescriptor);
 
@@ -488,8 +422,9 @@ const testDispatchTensor = (testName) => {
     const builder = new MLGraphBuilder(mlContext);
     const tensorDescriptor = {
       dataType: 'float32',
-      dimensions: shape,
-      usage: MLTensorUsage.WRITE | MLTensorUsage.READ,
+      shape: shape,
+      readable: true,
+      writable: true,
     };
     const lhsOperand = builder.input('lhs', tensorDescriptor);
     const rhsOperand = builder.input('rhs', tensorDescriptor);
@@ -500,7 +435,7 @@ const testDispatchTensor = (testName) => {
 
     try {
       const mlTensor =
-          await mlContext.createTensor({dataType: 'int32', dimensions: [2, 3]});
+          await mlContext.createTensor({dataType: 'int32', shape: [2, 3]});
     } catch (e) {
       throw new AssertionError(
           `Unable to create tensor for ${variant} variant. ${e}`);
@@ -551,7 +486,7 @@ const testDispatchTensor = (testName) => {
     const lhsTensor = await mlContext.createTensor({
       dataType: inputs['lhs'].dataType,
       // Input rank is too high.
-      dimensions: inputs['lhs'].shape.concat([2])
+      shape: inputs['lhs'].shape.concat([2])
     });
 
     assert_throws_js(
@@ -566,7 +501,7 @@ const testDispatchTensor = (testName) => {
     const rhsTensor = await mlContext.createTensor({
       dataType: inputs['rhs'].dataType,
       // Input rank is too low.
-      dimensions: inputs['rhs'].shape.slice(1)
+      shape: inputs['rhs'].shape.slice(1)
     });
 
     assert_throws_js(
@@ -582,7 +517,7 @@ const testDispatchTensor = (testName) => {
     let output1WrongShape = [...outputs['output1'].shape];
     output1WrongShape[0] += 2;
     const outputTensor1 = await mlContext.createTensor(
-        {dataType: outputs['output1'].dataType, dimensions: output1WrongShape});
+        {dataType: outputs['output1'].dataType, shape: output1WrongShape});
 
     assert_throws_js(TypeError, () => mlContext.dispatch(mlGraph, inputs, {
       'output1': outputTensor1,
@@ -593,7 +528,7 @@ const testDispatchTensor = (testName) => {
     let output2WrongShape = [...outputs['output2'].shape];
     output2WrongShape[1] -= 1;
     const outputTensor2 = await mlContext.createTensor(
-        {dataType: outputs['output2'].dataType, dimensions: output2WrongShape});
+        {dataType: outputs['output2'].dataType, shape: output2WrongShape});
 
     assert_throws_js(TypeError, () => mlContext.dispatch(mlGraph, inputs, {
       'output1': outputs['output1'],
@@ -613,10 +548,8 @@ const testDispatchTensor = (testName) => {
         TypeError,
         () => mlContext.dispatch(
             mlGraph, {
-              'lhs': mlContext.createTensor({
-                dataType: inputWrongDataType,
-                dimensions: inputs['lhs'].shape
-              }),
+              'lhs': mlContext.createTensor(
+                  {dataType: inputWrongDataType, shape: inputs['lhs'].shape}),
               'rhs': inputs['rhs'],
             },
             outputs));
@@ -626,10 +559,8 @@ const testDispatchTensor = (testName) => {
         () => mlContext.dispatch(
             mlGraph, {
               'lhs': inputs['lhs'],
-              'rhs': mlContext.createTensor({
-                dataType: inputWrongDataType,
-                dimensions: inputs['rhs'].shape
-              }),
+              'rhs': mlContext.createTensor(
+                  {dataType: inputWrongDataType, shape: inputs['rhs'].shape}),
             },
             outputs));
 
@@ -638,7 +569,7 @@ const testDispatchTensor = (testName) => {
     assert_not_equals(outputs['output1'].dataType, outputWrongDataType);
     assert_not_equals(outputs['output2'].dataType, outputWrongDataType);
     const outputTensor1 = await mlContext.createTensor(
-        {dataType: outputWrongDataType, dimensions: outputs['output1'].shape});
+        {dataType: outputWrongDataType, shape: outputs['output1'].shape});
 
     assert_throws_js(TypeError, () => mlContext.dispatch(mlGraph, inputs, {
       'output1': outputTensor1,
@@ -646,7 +577,7 @@ const testDispatchTensor = (testName) => {
     }));
 
     const outputTensor2 = await mlContext.createTensor(
-        {dataType: outputWrongDataType, dimensions: outputs['output2'].shape});
+        {dataType: outputWrongDataType, shape: outputs['output2'].shape});
 
     assert_throws_js(TypeError, () => mlContext.dispatch(mlGraph, inputs, {
       'output1': outputs['output1'],
@@ -961,7 +892,7 @@ const testDispatchTensor = (testName) => {
   promise_test(async () => {
     // Construct a simple graph: OUTPUT = LHS - RHS.
     const builder = new MLGraphBuilder(mlContext);
-    const operandType = {dataType: 'float32', dimensions: shape};
+    const operandType = {dataType: 'float32', shape};
     const lhsOperand = builder.input('lhs', operandType);
     const rhsOperand = builder.input('rhs', operandType);
     const graph =
@@ -1148,16 +1079,16 @@ const testDispatchTensor = (testName) => {
 };
 
 if (navigator.ml) {
-  testCreateTensor('create', {dataType: 'float16', dimensions: [2, 3]});
-  testCreateTensor('create', {dataType: 'float32', dimensions: [1, 5]});
-  testCreateTensor('create', {dataType: 'int32', dimensions: [4]});
-  testCreateTensor('create', {dataType: 'uint8', dimensions: [3, 2, 4]});
+  testCreateTensor('create', {dataType: 'float16', shape: [2, 3]});
+  testCreateTensor('create', {dataType: 'float32', shape: [1, 5]});
+  testCreateTensor('create', {dataType: 'int32', shape: [4]});
+  testCreateTensor('create', {dataType: 'uint8', shape: [3, 2, 4]});
 
   testCreateTensorFails(
-      'createFailsEmptyDimension', {dataType: 'int32', dimensions: [2, 0, 3]});
+      'createFailsEmptyDimension', {dataType: 'int32', shape: [2, 0, 3]});
   testCreateTensorFails('createFailsTooLarge', {
     dataType: 'int32',
-    dimensions: [kMaxUnsignedLong, kMaxUnsignedLong, kMaxUnsignedLong]
+    shape: [kMaxUnsignedLong, kMaxUnsignedLong, kMaxUnsignedLong]
   });
 
   testDestroyTensor('destroyTwice');

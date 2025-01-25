@@ -13,7 +13,6 @@
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/headless/headless_mode_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -35,7 +34,9 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "ui/base/hit_test.h"
+#include "ui/base/mojom/menu_source_type.mojom-forward.h"
 #include "ui/base/mojom/themes.mojom.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/color/color_provider_key.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/font_list.h"
@@ -43,15 +44,12 @@
 #include "ui/views/widget/native_widget.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "chromeos/ui/wm/desks/desks_helper.h"
-#include "ui/aura/window.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "components/user_manager/user_manager.h"
+#include "ui/aura/window.h"
 #endif
 
 #if BUILDFLAG(IS_LINUX)
@@ -251,8 +249,9 @@ bool BrowserFrame::ShouldDrawFrameHeader() const {
   return true;
 }
 
-void BrowserFrame::GetWindowPlacement(gfx::Rect* bounds,
-                                      ui::WindowShowState* show_state) const {
+void BrowserFrame::GetWindowPlacement(
+    gfx::Rect* bounds,
+    ui::mojom::WindowShowState* show_state) const {
   return native_browser_frame_->GetWindowPlacement(bounds, show_state);
 }
 
@@ -383,9 +382,10 @@ void BrowserFrame::OnNativeWidgetWorkspaceChanged() {
   Widget::OnNativeWidgetWorkspaceChanged();
 }
 
-void BrowserFrame::ShowContextMenuForViewImpl(views::View* source,
-                                              const gfx::Point& p,
-                                              ui::MenuSourceType source_type) {
+void BrowserFrame::ShowContextMenuForViewImpl(
+    views::View* source,
+    const gfx::Point& p,
+    ui::mojom::MenuSourceType source_type) {
   if (IsRunningInForcedAppMode()) {
     return;
   }
@@ -427,7 +427,7 @@ bool BrowserFrame::IsMenuRunnerRunningForTesting() const {
 ui::MenuModel* BrowserFrame::GetSystemMenuModel() {
   // TODO(b/271137301): Refactor this class to remove chromeos specific code to
   // subclasses.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   if (user_manager::UserManager::IsInitialized() &&
       user_manager::UserManager::Get()->GetLoggedInUsers().size() > 1) {
     // In Multi user mode, the number of users as well as the order of users
@@ -436,8 +436,7 @@ ui::MenuModel* BrowserFrame::GetSystemMenuModel() {
     // changes happened since the last invocation.
     menu_model_builder_.reset();
   }
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
+
   auto* desks_helper = chromeos::DesksHelper::Get(GetNativeWindow());
   int current_num_desks = desks_helper ? desks_helper->GetNumberOfDesks() : -1;
   if (current_num_desks != num_desks_) {
@@ -487,12 +486,12 @@ ui::ColorProviderKey BrowserFrame::GetColorProviderKey() const {
 
   key.app_controller = browser_view_->browser()->app_controller();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // ChromeOS SystemWebApps use the OS theme all the time.
   if (ash::IsSystemWebApp(browser_view_->browser())) {
     return key;
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   const auto* theme_service =
       ThemeServiceFactory::GetForProfile(browser_view_->browser()->profile());

@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Touch to Search هي ميزة لا تتوفر إلا عندما يتم تعيين Google كمحرك بحث افتراضي في Vivaldi. يرسل الكلمة المحددة والصفحة الحالية كسياق إلى بحث Google. يمكنك إيقاف تشغيله في <ph name="BEGIN_LINK" />الإعدادات<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">تبديل علامات التبويب العادية / الخاصة</translation>
 <translation id="1644574205037202324">السجل</translation>
-<translation id="17513872634828108">علامات التبويب المفتوحة</translation>
 <translation id="1829244130665387512">البحث في الصفحة</translation>
 <translation id="1910514478706885609">افتح في مكدس علامات تبويب جديدة</translation>
 <translation id="1925021887439448749">أدخل عنوان الويب المخصص</translation>
 <translation id="2038563949887743358">تشغيل طلب موقع سطح المكتب</translation>
-<translation id="2139186145475833000">الإضافة إلى الشاشة الرئيسية</translation>
 <translation id="2149973817440762519">تعديل الإشارة المرجعية</translation>
 <translation id="2306442503286132111">تم حفظ الإشارة المرجعية في مجلد <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">المظهر</translation>
@@ -26,6 +24,7 @@
 <translation id="3504699618187058974">تكديس علامات التبويب</translation>
 <translation id="3518985090088779359">القبول و المتابعة</translation>
 <translation id="3571177741182643350">مقالات غير مقروءة - متوفرة حاليًا:</translation>
+<translation id="3602290021589620013">معاينة</translation>
 <translation id="3700829948786686853">‏مرحبًا بك في Vivaldi‏</translation>
 <translation id="3719826155360621982">الصفحة الرئيسية</translation>
 <translation id="385051799172605136">الرجوع</translation>
@@ -35,6 +34,7 @@
 <translation id="4167670741834902166">علامة تبويب خاصة جديدة</translation>
 <translation id="4195643157523330669">افتح في علامة تبويب جديدة</translation>
 <translation id="4243710787042215766">افتح في علامة التبويب الخاصة</translation>
+<translation id="4304713468139749426">مدير كلمات المرور</translation>
 <translation id="451872707440238414">البحث في الإشارات المرجعية</translation>
 <translation id="4526803704855831732">علامات التبويب الخاصة</translation>
 <translation id="4719086422742491124">تعرف على مواضيع على مواقع الويب دون مغادرة الصفحة. حدد كلمة واحدة أو أكثر في الصفحة للبحث عنها.

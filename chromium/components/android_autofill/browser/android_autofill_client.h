@@ -74,6 +74,7 @@ class AndroidAutofillClient : public autofill::ContentAutofillClient {
   ~AndroidAutofillClient() override;
 
   // AutofillClient:
+  base::WeakPtr<AutofillClient> GetWeakPtr() override;
   bool IsOffTheRecord() const override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   autofill::AutofillCrowdsourcingManager* GetCrowdsourcingManager() override;
@@ -84,6 +85,7 @@ class AndroidAutofillClient : public autofill::ContentAutofillClient {
   const PrefService* GetPrefs() const override;
   syncer::SyncService* GetSyncService() override;
   signin::IdentityManager* GetIdentityManager() override;
+  const signin::IdentityManager* GetIdentityManager() const override;
   autofill::FormDataImporter* GetFormDataImporter() override;
   autofill::StrikeDatabase* GetStrikeDatabase() override;
   ukm::UkmRecorder* GetUkmRecorder() override;
@@ -141,6 +143,8 @@ class AndroidAutofillClient : public autofill::ContentAutofillClient {
 
   std::unique_ptr<autofill::AutofillCrowdsourcingManager>
       crowdsourcing_manager_;
+
+  base::WeakPtrFactory<AndroidAutofillClient> weak_ptr_factory_{this};
 };
 
 }  // namespace android_autofill

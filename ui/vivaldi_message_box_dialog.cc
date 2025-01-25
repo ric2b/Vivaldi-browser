@@ -82,7 +82,7 @@ UINT GetMessageBoxFlagsFromType(chrome::MessageBoxType type,
       }
       return flags | MB_YESNO | MB_ICONQUESTION;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 #endif
 

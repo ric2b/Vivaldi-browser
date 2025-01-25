@@ -3,21 +3,18 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
-
-import networkWaterfallColumnStyles from './networkWaterfallColumn.css.js';
-
 import type * as SDK from '../../core/sdk/sdk.js';
-import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as Coordinator from '../../ui/components/render_coordinator/render_coordinator.js';
+import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
 
-import {type NetworkNode} from './NetworkDataGridNode.js';
+import type {NetworkNode} from './NetworkDataGridNode.js';
 import {RequestTimeRangeNameToColor} from './NetworkOverview.js';
-import {type Label, type NetworkTimeCalculator} from './NetworkTimeCalculator.js';
-
-import {RequestTimeRangeNames, RequestTimingView, type RequestTimeRange} from './RequestTimingView.js';
+import type {Label, NetworkTimeCalculator} from './NetworkTimeCalculator.js';
 import networkingTimingTableStyles from './networkTimingTable.css.js';
+import networkWaterfallColumnStyles from './networkWaterfallColumn.css.js';
+import {type RequestTimeRange, RequestTimeRangeNames, RequestTimingView} from './RequestTimingView.js';
 
 const BAR_SPACING = 1;
 
@@ -508,6 +505,7 @@ export class NetworkWaterfallColumn extends UI.Widget.VBox {
     }
   }
 
+  // Used when `network-color-code-resource-types` is true
   private getSimplifiedBarRange(request: SDK.NetworkRequest.NetworkRequest, borderOffset: number): {
     start: number,
     mid: number,
@@ -522,6 +520,7 @@ export class NetworkWaterfallColumn extends UI.Widget.VBox {
     };
   }
 
+  // Used when `network-color-code-resource-types` is true
   private buildSimplifiedBarLayers(context: CanvasRenderingContext2D, node: NetworkNode, y: number): void {
     const request = node.request();
     if (!request) {

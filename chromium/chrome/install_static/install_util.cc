@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <ranges>
 #include <sstream>
 
 #include "base/compiler_specific.h"
@@ -296,6 +297,27 @@ bool ProcessNeedsProfileDir(ProcessType process_type) {
   return false;
 }
 
+// Returns the user's temporary directory, or an empty string in case of
+// failure.
+std::wstring GetTempDir() {
+  constexpr DWORD kBufferLength = MAX_PATH + 1U;
+  wchar_t temp_path[kBufferLength];
+  DWORD temp_path_len = ::GetTempPath(kBufferLength, temp_path);
+  if (temp_path_len == 0 || temp_path_len > kBufferLength) {
+    return {};
+  }
+
+  std::wstring temp_dir(temp_path, temp_path_len);
+
+  // Strip the trailing slashes if any to duplicate //base method behavior.
+  while (!temp_dir.empty() &&
+         (temp_dir.back() == '\\' || temp_dir.back() == '/')) {
+    temp_dir.pop_back();
+  }
+
+  return temp_dir;
+}
+
 }  // namespace
 
 bool IsSystemInstall() {
@@ -363,6 +385,25 @@ std::wstring GetElevationServiceDisplayName() {
   static constexpr wchar_t kElevationServiceDisplayName[] =
       L" Elevation Service";
   return GetBaseAppName() + kElevationServiceDisplayName;
+}
+
+const CLSID& GetTracingServiceClsid() {
+  return InstallDetails::Get().tracing_service_clsid();
+}
+
+const IID& GetTracingServiceIid() {
+  return InstallDetails::Get().tracing_service_iid();
+}
+
+std::wstring GetTracingServiceName() {
+  std::wstring name = GetTracingServiceDisplayName();
+  name.erase(std::remove_if(name.begin(), name.end(), isspace), name.end());
+  return name;
+}
+
+std::wstring GetTracingServiceDisplayName() {
+  static constexpr wchar_t kTracingServiceDisplayName[] = L" Tracing Service";
+  return GetBaseAppName() + kTracingServiceDisplayName;
 }
 
 std::wstring GetBaseAppName() {
@@ -518,9 +559,8 @@ bool ReportingIsEnforcedByPolicy(bool* crash_reporting_enabled) {
 
 void InitializeProcessType() {
   assert(g_process_type == ProcessType::UNINITIALIZED);
-  std::wstring process_type =
-      GetSwitchValueFromCommandLine(::GetCommandLine(), kProcessType);
-  g_process_type = GetProcessType(process_type);
+  g_process_type = GetProcessType(
+      GetCommandLineSwitchValue(::GetCommandLine(), kProcessType));
 }
 
 bool IsProcessTypeInitialized() {
@@ -810,22 +850,38 @@ std::vector<std::wstring> TokenizeCommandLineToArray(
   return result;
 }
 
-std::wstring GetSwitchValueFromCommandLine(const std::wstring& command_line,
-                                           const std::wstring& switch_name) {
-  static constexpr wchar_t kSwitchTerminator[] = L"--";
+std::optional<std::wstring> GetCommandLineSwitch(
+    const std::wstring& command_line,
+    std::wstring_view switch_name) {
   assert(!command_line.empty());
   assert(!switch_name.empty());
 
-  std::vector<std::wstring> as_array = TokenizeCommandLineToArray(command_line);
-  std::wstring switch_with_equal = L"--" + switch_name + L"=";
-  auto end = std::find(as_array.cbegin(), as_array.cend(), kSwitchTerminator);
-  for (auto scan = as_array.cbegin(); scan != end; ++scan) {
-    const std::wstring& arg = *scan;
-    if (arg.compare(0, switch_with_equal.size(), switch_with_equal) == 0)
-      return arg.substr(switch_with_equal.size());
+  std::vector<std::wstring> switches = TokenizeCommandLineToArray(command_line);
+
+  // Stop scanning if lone '--' switch prefix is found.
+  auto cend = std::ranges::find(switches, L"--");
+
+  std::wstring switch_with_prefix = L"--" + std::wstring(switch_name);
+  for (auto it = switches.cbegin(); it != cend; ++it) {
+    if (it->starts_with(switch_with_prefix)) {
+      if (it->length() == switch_with_prefix.length()) {
+        return std::wstring();
+      }
+      if ((*it)[switch_with_prefix.length()] == L'=') {
+        return it->substr(switch_with_prefix.length() + 1);
+      }
+    }
   }
 
-  return std::wstring();
+  return std::nullopt;
+}
+
+std::wstring GetCommandLineSwitchValue(const std::wstring& command_line,
+                                       std::wstring_view switch_name) {
+  assert(!command_line.empty());
+  assert(!switch_name.empty());
+  return GetCommandLineSwitch(command_line, switch_name)
+      .value_or(std::wstring());
 }
 
 bool RecursiveDirectoryCreate(const std::wstring& full_path) {
@@ -871,6 +927,45 @@ bool RecursiveDirectoryCreate(const std::wstring& full_path) {
     }
   }
   return true;
+}
+
+std::wstring CreateUniqueTempDirectory(std::wstring_view prefix) {
+  std::wstring temp_dir = GetTempDir();
+  if (temp_dir.empty()) {
+    Trace(L"Failed to retrieve temporary directory");
+    return {};
+  }
+
+  // The following code uses std::to_wstring() which is banned in Chrome,
+  // however, since the //base alternative is not available here, we use it as
+  // the last resort. Please DO NOT copy/paste this code outside install_static!
+  temp_dir.push_back(L'\\');
+  temp_dir.append(prefix);
+  temp_dir.append(kProductPathName, kProductPathNameLength);
+  temp_dir.append(std::to_wstring(::GetCurrentProcessId()));
+  temp_dir.append(std::to_wstring(::GetTickCount()));
+  size_t temp_dir_length = temp_dir.length();
+
+  // Try to create a new temporary directory. If the one exists, keep trying
+  // adding a randomized suffix to the path until we reach some limit.
+  for (int count = 0; count < 50; ++count) {
+    if (::CreateDirectory(temp_dir.c_str(), /*lpSecurityAttributes*/ nullptr)) {
+      return temp_dir;
+    }
+
+    // Seed the rand() once.
+    [[maybe_unused]] static bool once = []() {
+      srand(::GetTickCount());
+      return true;
+    }();
+
+    temp_dir.erase(temp_dir_length);
+    temp_dir.append(std::to_wstring(rand()));
+  }
+
+  Trace(L"Failed to create unique temporary directory %ls", temp_dir.c_str());
+
+  return {};
 }
 
 // This function takes these inputs rather than accessing the module's

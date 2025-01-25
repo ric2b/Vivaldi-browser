@@ -12,7 +12,7 @@ import android.view.VelocityTracker;
 import org.chromium.base.MathUtils;
 import org.chromium.base.ThreadUtils;
 
-/** Vivaldi **/
+/* Vivaldi **/
 import android.view.View;
 
 /**
@@ -211,7 +211,7 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
      */
     public boolean onInterceptTouchEvent(MotionEvent e) {
 
-        /** Vivaldi : Pass through if not in toolbar **/
+        /* Vivaldi : Pass through if not in toolbar **/
         if (mSwipeWithToolbar) {
             float toolbarYPos = e.getY() /
                     ((View) mSheetDelegate).getResources().getDisplayMetrics().density;

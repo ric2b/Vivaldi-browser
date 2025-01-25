@@ -29,6 +29,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.append(os.path.abspath('../../build/apple'))
+import vivaldi_tweak_plist
+
 TOP = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 assert sys.version_info.major >= 3, "Requires python 3.0 or higher."
@@ -258,59 +261,6 @@ def _AddPrivilegedHelperId(plist, privileged_helper_id):
 def _RemovePrivilegedHelperId(plist):
   _RemoveKeys(plist, 'SMPrivilegedExecutables')
 
-
-def _AddSparkleKeys(plist, vivaldi_release_kind):
-  """Adds the Sparkle keys."""
-  plist['SUScheduledCheckInterval'] = 86400
-  plist['SUEnableAutomaticChecks'] = 'YES'
-  plist['SUAllowsAutomaticUpdates'] = 'YES'
-  if vivaldi_release_kind == 'vivaldi_final':
-    plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/public/mac/appcast.xml'
-  elif vivaldi_release_kind == 'vivaldi_snapshot':
-    plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/snapshot/mac/appcast.xml'
-  else: #vivaldi_sopranos
-    plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/sopranos_new/mac/appcast.xml'
-
-def _RemoveSparkleKeys(plist):
-  """Removes any set Sparkle keys."""
-  _RemoveKeys(plist,
-    'SUScheduledCheckInterval',
-    'SUEnableAutomaticChecks',
-    'SUAllowsAutomaticUpdates',
-    'SUFeedURL')
-
-# Vivaldi
-def _UpdateiOSDisplayName(plist, vivaldi_release_kind):
-  """Update iOS display name based on release kind."""
-  if vivaldi_release_kind == 'vivaldi_final':
-    plist['CFBundleDisplayName'] = 'Vivaldi'
-  else: # iOS only has final and snapshot type.
-    plist['CFBundleDisplayName'] = 'Vivaldi Snapshot'
-
-def _UpdateUIApplicationShortcutItems(plist):
-  """Removes voice search related shortcut keys"""
-  for idx, dict_item in enumerate(plist['UIApplicationShortcutItems']):
-      if dict_item.get('UIApplicationShortcutItemIconSymbolName') == 'mic':
-        try:
-          del plist['UIApplicationShortcutItems'][idx]
-        except:
-          pass
-  """Swap chrome icons names for vivaldi icons names"""
-  for idx, dict_item in enumerate(plist['UIApplicationShortcutItems']):
-      if dict_item.get('UIApplicationShortcutItemIconFile') == 'quick_action_incognito':
-        try:
-          plist['UIApplicationShortcutItems'][idx]['UIApplicationShortcutItemIconFile'] = 'vivaldi_private_tab'
-        except:
-          pass
-  for idx, dict_item in enumerate(plist['UIApplicationShortcutItems']):
-      if dict_item.get('UIApplicationShortcutItemIconSymbolName') == 'qrcode':
-        try:
-          del plist['UIApplicationShortcutItems'][idx]['UIApplicationShortcutItemIconSymbolName']
-          plist['UIApplicationShortcutItems'][idx]['UIApplicationShortcutItemIconFile'] = 'vivaldi_qr_code'
-        except:
-          pass
-# End Vivaldi
-
 def Main(argv):
   parser = optparse.OptionParser('%prog [options]')
   parser.add_option('--plist',
@@ -362,7 +312,7 @@ def Main(argv):
                     default=None,
                     help='The bundle id of the binary')
   parser.add_option('--platform',
-                    choices=('ios', 'mac'),
+                    choices=('ios', 'mac', 'watchos'),
                     default='mac',
                     help='The target platform of the bundle')
   parser.add_option('--add-gtm-metadata',
@@ -483,12 +433,6 @@ def Main(argv):
   else:
     _RemoveBreakpadKeys(plist)
 
-  if (options.vivaldi_plist and options.platform == 'ios'):
-    # Remove Voice Search shortcut item from Vivaldi iOS
-    _UpdateUIApplicationShortcutItems(plist)
-    # Update display name for Vivaldi iOS
-    _UpdateiOSDisplayName(plist, options.vivaldi_release_kind)
-
   # Add Keystone if configured to do so.
   if options.use_keystone:
     if options.bundle_identifier is None:
@@ -499,11 +443,9 @@ def Main(argv):
   else:
     _RemoveKeystoneKeys(plist)
 
-  # Add Sparkle.
-  if options.use_sparkle:
-    _AddSparkleKeys(plist, options.vivaldi_release_kind)
-  else:
-    _RemoveSparkleKeys(plist)
+  # Vivaldi
+  vivaldi_tweak_plist.ApplyVivaldiTweaks(plist, options)
+  # End Vivaldi
 
   # Adds or removes any SCM keys.
   if not _DoSCMKeys(plist, options.add_scm_info):

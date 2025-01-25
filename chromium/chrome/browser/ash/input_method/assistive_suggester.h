@@ -125,11 +125,7 @@ class AssistiveSuggester : public SuggestionsSource {
 
   bool IsEmojiSuggestAdditionEnabled();
 
-  bool IsEnhancedEmojiSuggestEnabled();
-
   bool IsMultiWordSuggestEnabled();
-
-  bool IsExpandedMultiWordSuggestEnabled();
 
   bool IsDiacriticsOnPhysicalKeyboardLongpressEnabled();
 

@@ -59,22 +59,15 @@ enum DCLayerResult {
   DC_LAYER_FAILED_NOT_DAMAGED = 15,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_MOVED = 16,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_HDR_TONE_MAPPING = 17,
-  DC_LAYER_FAILED_YUV_VIDEO_QUAD_NO_HDR_METADATA = 18,
+  DC_LAYER_FAILED_YUV_VIDEO_QUAD_NO_HDR_METADATA [[deprecated]] = 18,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_HLG = 19,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_NO_P010_VIDEO_PROCESSOR_SUPPORT = 20,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_HDR_NON_FULLSCREEN [[deprecated]] = 21,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_HDR_NON_P010 = 22,
   DC_LAYER_FAILED_YUV_VIDEO_QUAD_UNSUPPORTED_COLORSPACE = 23,
-  kMaxValue = DC_LAYER_FAILED_YUV_VIDEO_QUAD_UNSUPPORTED_COLORSPACE,
+  DC_LAYER_FAILED_YUV_VIDEO_QUAD_HDR_NON_PQ10 = 24,
+  kMaxValue = DC_LAYER_FAILED_YUV_VIDEO_QUAD_HDR_NON_PQ10,
 };
-
-bool IsCompatibleHDRMetadata(
-    const std::optional<gfx::HDRMetadata>& hdr_metadata) {
-  return hdr_metadata &&
-         ((hdr_metadata->smpte_st_2086 &&
-           hdr_metadata->smpte_st_2086->IsValid()) ||
-          (hdr_metadata->cta_861_3 && hdr_metadata->cta_861_3->IsValid()));
-}
 
 DCLayerResult ValidateYUVOverlay(
     const gfx::ProtectedVideoType& protected_video_type,
@@ -115,13 +108,17 @@ DCLayerResult ValidateYUVOverlay(
   }
 
   if (video_color_space.IsHDR()) {
-    // Otherwise, it could be a parser bug like https://crbug.com/1362288 if the
-    // hdr metadata is still missing. Missing `smpte_st_2086` or `cta_861_3`
-    // could always causes intel driver crash when in HDR overlay mode, and
-    // technically as long as one of the `smpte_st_2086` or `cta_861_3` exists
-    // could solve the crash issue.
-    if (!IsCompatibleHDRMetadata(hdr_metadata)) {
-      return DC_LAYER_FAILED_YUV_VIDEO_QUAD_NO_HDR_METADATA;
+    // We allow HDR10 overlays to be created without metadata if the input
+    // stream is BT.2020 and the transfer function is PQ (Perceptual
+    // Quantizer). For this combination, the corresponding DXGI color space is
+    // DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 (full range RGB),
+    // DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020 (studio range RGB)
+    // DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_TOPLEFT_P2020 (studio range YUV)
+    if ((video_color_space.GetPrimaryID() !=
+         gfx::ColorSpace::PrimaryID::BT2020) ||
+        (video_color_space.GetTransferID() !=
+         gfx::ColorSpace::TransferID::PQ)) {
+      return DC_LAYER_FAILED_YUV_VIDEO_QUAD_HDR_NON_PQ10;
     }
 
     // Do not promote hdr overlay if buffer is not in 10bit P010 format. as this
@@ -197,6 +194,9 @@ void FromTextureQuad(const TextureDrawQuad* quad,
   dc_layer->uv_rect =
       gfx::BoundingRect(quad->uv_top_left, quad->uv_bottom_right);
   dc_layer->display_rect = gfx::RectF(quad->rect);
+  dc_layer->format =
+      resource_provider->GetSharedImageFormat(quad->resource_id());
+
   // Quad rect is in quad content space so both quad to target, and target to
   // root transforms must be applied to it.
   gfx::Transform quad_to_root_transform;
@@ -272,7 +272,7 @@ bool IsOccluded(
       const auto* rpdq = AggregatedRenderPassDrawQuad::MaterialCast(quad);
       auto render_pass_it = render_pass_filters.find(rpdq->render_pass_id);
       if (render_pass_it != render_pass_filters.end()) {
-        auto* filters = render_pass_it->second;
+        auto* filters = render_pass_it->second.get();
         overlap_rect = gfx::RectF(
             GetExpandedRectWithPixelMovingForegroundFilter(*rpdq, *filters));
         has_pixel_moving_filter = true;
@@ -1297,33 +1297,8 @@ void DCLayerOverlayProcessor::ProcessForUnderlay(
   // across all render passes.
   dc_layer.plane_z_order = -1 - overlay_data.promoted_overlays.size();
 
-  // If the video is translucent and uses SrcOver blend mode, we can achieve the
-  // same result as compositing with video on top if we replace video quad with
-  // a solid color quad with DstOut blend mode, and rely on SrcOver blending
-  // of the root surface with video on bottom. Essentially,
-  //
-  // SrcOver_quad(V, B, V_alpha) = SrcOver_premul(DstOut(BLACK, B, V_alpha), V)
-  // where
-  //    V is the video quad
-  //    B is the background
-  //    SrcOver_quad uses opacity of source quad (V_alpha)
-  //    SrcOver_premul uses alpha channel and assumes premultipled alpha
-  //
-  // This also applies to quads with a mask filter for rounded corners.
   bool is_opaque = false;
-
-  if (it->ShouldDrawWithBlending() &&
-      it->shared_quad_state->blend_mode == SkBlendMode::kSrcOver) {
-    render_pass->ReplaceExistingQuadWithSolidColor(it, SkColors::kBlack,
-                                                   SkBlendMode::kDstOut);
-  } else {
-    // When the opacity == 1.0, drawing with transparent will be done without
-    // blending and will have the proper effect of completely clearing the
-    // layer.
-    render_pass->ReplaceExistingQuadWithSolidColor(it, SkColors::kTransparent,
-                                                   SkBlendMode::kSrcOver);
-    is_opaque = true;
-  }
+  render_pass->ReplaceExistingQuadWithHolePunch(it, &is_opaque);
 
   const bool display_rect_unchanged =
       render_pass->output_rect == previous_frame_state.display_rect;

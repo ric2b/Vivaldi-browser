@@ -1,0 +1,16 @@
+# Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+
+source_set("ios_translate") {
+  sources = [
+    "vivaldi_ios_translate_client.h",
+    "vivaldi_ios_translate_client.mm",
+    "vivaldi_ios_translate_server_request.h",
+    "vivaldi_ios_translate_server_request.mm",
+    "vivaldi_ios_translate_service.h",
+    "vivaldi_ios_translate_service.mm",
+  ]
+  deps = [
+    "//base",
+    "//components/infobars/core",
+  ]
+}

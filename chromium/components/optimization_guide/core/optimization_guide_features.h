@@ -18,6 +18,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/optimization_guide/core/model_execution/feature_keys.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
 #include "components/optimization_guide/proto/hints.pb.h"
@@ -77,6 +78,21 @@ COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kTextSafetyRemoteFallback);
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kOnDeviceModelValidation);
+
+#if !BUILDFLAG(IS_ANDROID)
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+BASE_DECLARE_FEATURE(kAiSettingsPageRefresh);
+
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+extern const base::FeatureParam<bool> kShowAiSettingsForTesting;
+#endif
+
+// Comma-separated list of performance classes (e.g. "3,4,5") that should
+// download the base model. Use "*" if there is no performance class
+// requirement.
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+extern const base::FeatureParam<std::string>
+    kPerformanceClassListForOnDeviceModel;
 
 typedef base::EnumSet<proto::RequestContext,
                       proto::RequestContext_MIN,
@@ -357,10 +373,6 @@ bool ShouldLoadOnDeviceModelExecutionConfigWithHigherPriority();
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 base::TimeDelta GetOnDeviceModelIdleTimeout();
 
-// Returns whether to enable multiple sessions support with the on device model.
-COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
-bool GetOnDeviceModelSupportMultipleSessions();
-
 // Returns the delay before starting the on device model inference when
 // running validation.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
@@ -385,35 +397,28 @@ int GetOnDeviceModelMaxTokensForExecute();
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 int GetOnDeviceModelMaxTokensForOutput();
 
+// The maximum total tokens, for input and output combined.
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+uint32_t GetOnDeviceModelMaxTokens();
+
 // Returns the number of crashes without a successful response before the
 // on-device model won't be used.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 int GetOnDeviceModelCrashCountBeforeDisable();
 
-// Returns the number of sessions that timed out before the on-device model
-// won't be used.
+// Feature params for handling exponential backoff after crashes.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
-int GetOnDeviceModelTimeoutCountBeforeDisable();
+base::TimeDelta GetOnDeviceModelMaxCrashBackoffTime();
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+base::TimeDelta GetOnDeviceModelCrashBackoffBaseTime();
 
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 base::TimeDelta GetOnDeviceStartupMetricDelay();
-
-// Returns the amount of time before the initial response needs to be received
-// from the on-device model before falling back to the server.
-COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
-base::TimeDelta GetOnDeviceModelTimeForInitialResponse();
 
 // Returns true if during execution a disconnect is received (which generally
 // means a crash) the message should be sent to the server for processing.
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 bool GetOnDeviceFallbackToServerOnDisconnect();
-
-// Returns whether the performance class is compatible with executing the
-// on-device model. Used to determine whether or not to fetch the on-device
-// model.
-COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
-bool IsPerformanceClassCompatibleWithOnDeviceModel(
-    OnDeviceModelPerformanceClass performance_class);
 
 // Whether any features are enabled that allow launching the on-device
 // service.

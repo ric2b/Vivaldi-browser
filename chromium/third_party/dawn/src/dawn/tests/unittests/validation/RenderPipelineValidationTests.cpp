@@ -477,28 +477,6 @@ TEST_F(RenderPipelineValidationTest, NonBlendableFormat) {
     }
 
     {
-        // Fails because RGBA32Float is not blendable
-        utils::ComboRenderPipelineDescriptor descriptor;
-        descriptor.vertex.module = vsModule;
-        descriptor.cFragment.module = fsModule;
-        descriptor.cTargets[0].blend = &descriptor.cBlends[0];
-        descriptor.cTargets[0].format = wgpu::TextureFormat::RGBA32Float;
-
-        ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&descriptor));
-    }
-
-    {
-        // Succeeds because RGBA32Float is not blendable but blending is disabled
-        utils::ComboRenderPipelineDescriptor descriptor;
-        descriptor.vertex.module = vsModule;
-        descriptor.cFragment.module = fsModule;
-        descriptor.cTargets[0].blend = nullptr;
-        descriptor.cTargets[0].format = wgpu::TextureFormat::RGBA32Float;
-
-        device.CreateRenderPipeline(&descriptor);
-    }
-
-    {
         // Fails because RGBA8Uint is not blendable
         utils::ComboRenderPipelineDescriptor descriptor;
         descriptor.vertex.module = vsModule;
@@ -506,7 +484,8 @@ TEST_F(RenderPipelineValidationTest, NonBlendableFormat) {
         descriptor.cTargets[0].blend = &descriptor.cBlends[0];
         descriptor.cTargets[0].format = wgpu::TextureFormat::RGBA8Uint;
 
-        ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&descriptor));
+        ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&descriptor),
+                            testing::HasSubstr("Blending is enabled but color format"));
     }
 
     {
@@ -516,6 +495,79 @@ TEST_F(RenderPipelineValidationTest, NonBlendableFormat) {
         descriptor.cFragment.module = fsModuleUint;
         descriptor.cTargets[0].blend = nullptr;
         descriptor.cTargets[0].format = wgpu::TextureFormat::RGBA8Uint;
+
+        device.CreateRenderPipeline(&descriptor);
+    }
+}
+
+// Tests that the float32 color formats are not blendable without the float32-blendable feature.
+TEST_F(RenderPipelineValidationTest, Float32NonBlendableFormats) {
+    for (const auto f32Format : {wgpu::TextureFormat::R32Float, wgpu::TextureFormat::RG32Float,
+                                 wgpu::TextureFormat::RGBA32Float}) {
+        {
+            // Control case: Succeeds because blending is disabled
+            utils::ComboRenderPipelineDescriptor descriptor;
+            descriptor.vertex.module = vsModule;
+            descriptor.cFragment.module = fsModule;
+            descriptor.cTargets[0].blend = nullptr;
+            descriptor.cTargets[0].format = f32Format;
+
+            device.CreateRenderPipeline(&descriptor);
+        }
+        {
+            // Fails because float32 color format blending requires the float32-blendable feature.
+            utils::ComboRenderPipelineDescriptor descriptor;
+            descriptor.vertex.module = vsModule;
+            descriptor.cFragment.module = fsModule;
+            descriptor.cTargets[0].blend = &descriptor.cBlends[0];
+            descriptor.cTargets[0].format = f32Format;
+
+            ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&descriptor),
+                                testing::HasSubstr("Blending is enabled but color format"));
+        }
+    }
+}
+
+class Float32BlendableValidationTest : public RenderPipelineValidationTest {
+  protected:
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        return {wgpu::FeatureName::Float32Blendable};
+    }
+};
+
+// Tests that the float32 color formats are blendable only with the float32-blendable feature.
+TEST_F(Float32BlendableValidationTest, Float32BlendableFormatsWithFeatureEnabled) {
+    for (const auto f32Format : {wgpu::TextureFormat::R32Float, wgpu::TextureFormat::RG32Float,
+                                 wgpu::TextureFormat::RGBA32Float}) {
+        utils::ComboRenderPipelineDescriptor descriptor;
+        descriptor.vertex.module = vsModule;
+        descriptor.cFragment.module = fsModule;
+        descriptor.cTargets[0].blend = &descriptor.cBlends[0];
+        descriptor.cTargets[0].format = f32Format;
+
+        device.CreateRenderPipeline(&descriptor);
+    }
+}
+
+class Float32FilterableValidationTest : public RenderPipelineValidationTest {
+  protected:
+    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
+        return {wgpu::FeatureName::Float32Filterable};
+    }
+};
+
+// TODO(crbug.com/364987733): Remove this test once float filterable texture types
+// are not considered blendable.
+// Tests that blending a float32 color formats without the float32-blendable feature
+// is still valid with the float32-filterable feature.
+TEST_F(Float32FilterableValidationTest, Float32BlendableFormatsWithoutFeature) {
+    for (const auto f32Format : {wgpu::TextureFormat::R32Float, wgpu::TextureFormat::RG32Float,
+                                 wgpu::TextureFormat::RGBA32Float}) {
+        utils::ComboRenderPipelineDescriptor descriptor;
+        descriptor.vertex.module = vsModule;
+        descriptor.cFragment.module = fsModule;
+        descriptor.cTargets[0].blend = &descriptor.cBlends[0];
+        descriptor.cTargets[0].format = f32Format;
 
         device.CreateRenderPipeline(&descriptor);
     }
@@ -1027,6 +1079,27 @@ TEST_F(RenderPipelineValidationTest, VertexOnlyPipelineRequireDepthStencilAttach
 
         ASSERT_DEVICE_ERROR(encoder.Finish());
     }
+}
+
+// Tests that render pipeline without attachments are disallowed.
+TEST_F(RenderPipelineValidationTest, NoAttachments) {
+    utils::ComboRenderPipelineDescriptor desc;
+    desc.vertex.module = vsModule;
+    desc.fragment = nullptr;
+    ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&desc));
+
+    // Setting a fragment state with no targets is also 0 attachments.
+    wgpu::FragmentState fragment;
+    fragment.targetCount = 0;
+    fragment.module = utils::CreateShaderModule(device, R"(
+        @fragment fn fs() {}
+    )");
+    desc.fragment = &fragment;
+    ASSERT_DEVICE_ERROR(device.CreateRenderPipeline(&desc));
+
+    // Control case, with a DS attachment, creating the pipeline is allowed.
+    desc.EnableDepthStencil(wgpu::TextureFormat::Depth32Float);
+    device.CreateRenderPipeline(&desc);
 }
 
 // Tests that the sample count of the render pipeline must be valid

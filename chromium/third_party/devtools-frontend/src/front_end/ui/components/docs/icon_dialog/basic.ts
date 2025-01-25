@@ -7,15 +7,17 @@ import * as FrontendHelpers from '../../../../testing/EnvironmentHelpers.js';  /
 import * as Dialogs from '../../../../ui/components/dialogs/dialogs.js';
 import * as LitHtml from '../../../lit-html/lit-html.js';
 
+const {html} = LitHtml;
+
 await ComponentHelpers.ComponentServerSetup.setup();
 await FrontendHelpers.initializeGlobalVars();
 
 // Disabled until https://crbug.com/1079231 is fixed.
 // clang-format off
-const iconDialog = LitHtml.html`
+const iconDialog = html`
 Hello...
 
-<${Dialogs.IconDialog.IconDialog.litTagName}
+<devtools-icon-dialog
   .data=${{
     iconData: {
       iconName: 'info',
@@ -28,7 +30,7 @@ Hello...
     horizontalAlignment: Dialogs.Dialog.DialogHorizontalAlignment.AUTO,
     closeOnESC: true,
     closeOnScroll: false,
-  } as Dialogs.IconDialog.IconDialogData}
+  }}
 >
   <div>
     <h2>Hello world!</h2>
@@ -36,9 +38,9 @@ Hello...
       This is a dialog describing some additional information.
     </div>
   </div>
-</${Dialogs.IconDialog.IconDialog.litTagName}>
+</devtools-icon-dialog>
 `;
-// clang-format on
+    // clang-format on
 
-const container = document.getElementById('container') as HTMLElement;
-LitHtml.render(iconDialog, container);
+    const container = document.getElementById('container') as HTMLElement;
+    LitHtml.render(iconDialog, container);

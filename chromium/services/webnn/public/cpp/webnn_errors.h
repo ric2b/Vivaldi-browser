@@ -25,6 +25,7 @@ inline constexpr char kElu[] = "elu";
 inline constexpr char kExpand[] = "expand";
 inline constexpr char kGather[] = "gather";
 inline constexpr char kGatherElements[] = "gatherElements";
+inline constexpr char kGatherNd[] = "gatherND";
 inline constexpr char kGelu[] = "gelu";
 inline constexpr char kGemm[] = "gemm";
 inline constexpr char kGru[] = "gru";
@@ -44,6 +45,7 @@ inline constexpr char kQuantizeLinear[] = "quantizeLinear";
 inline constexpr char kRelu[] = "relu";
 inline constexpr char kResample2d[] = "resample2d";
 inline constexpr char kReshape[] = "reshape";
+inline constexpr char kScatterElements[] = "scatterElements";
 inline constexpr char kScatterND[] = "scatterND";
 inline constexpr char kSigmoid[] = "sigmoid";
 inline constexpr char kSlice[] = "slice";
@@ -74,6 +76,9 @@ inline constexpr char kGreater[] = "greater";
 inline constexpr char kGreaterOrEqual[] = "greaterOrEqual";
 inline constexpr char kLesser[] = "lesser";
 inline constexpr char kLesserOrEqual[] = "lesserOrEqual";
+inline constexpr char kLogicalAnd[] = "logicalAnd";
+inline constexpr char kLogicalOr[] = "logicalOr";
+inline constexpr char kLogicalXor[] = "logicalXor";
 
 // elementwise unary ops.
 inline constexpr char kAbs[] = "abs";

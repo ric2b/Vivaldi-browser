@@ -9,6 +9,9 @@ enable_testing()
 # C tests and tools
 
 set(COVERAGE_TARGETS)
+
+configure_file(${AVIF_SOURCE_DIR}/tests/CTestCustom.cmake ${CMAKE_BINARY_DIR})
+
 # Macro to register a test for coverage. The first argument is the target name.
 # Other arguments, like data path, can be added.
 macro(register_test_for_coverage TEST_NAME)
@@ -47,17 +50,6 @@ if(AVIF_ENABLE_FUZZTEST OR AVIF_ENABLE_GTEST OR AVIF_BUILD_APPS)
     add_library(aviftest_helpers_internal OBJECT gtest/aviftest_helpers.cc)
     target_link_libraries(aviftest_helpers_internal PUBLIC avif_apps_internal avif_internal)
     target_link_libraries(aviftest_helpers_internal PRIVATE avif_enable_warnings)
-endif()
-
-if(CMAKE_CXX_COMPILER_LOADED)
-    # Fuzz target without any fuzzing engine dependency. For easy reproduction of oss-fuzz issues.
-    add_executable(repro_avif_decode_fuzzer oss-fuzz/avif_decode_fuzzer.cc oss-fuzz/repro_fuzz.cc)
-    set_target_properties(repro_avif_decode_fuzzer PROPERTIES LINKER_LANGUAGE "CXX")
-    target_link_libraries(repro_avif_decode_fuzzer avif avif_enable_warnings)
-    # The test below exists for coverage and as a usage example: repro_avif_decode_fuzzer [reproducer file path]
-    add_test(NAME repro_avif_decode_fuzzer COMMAND repro_avif_decode_fuzzer
-                                                   ${CMAKE_CURRENT_SOURCE_DIR}/data/color_grid_alpha_nogrid.avif
-    )
 endif()
 
 ################################################################################
@@ -139,13 +131,13 @@ if(AVIF_ENABLE_GTEST)
     add_avif_gtest_with_data(aviflosslesstest)
     add_avif_gtest_with_data(avifmetadatatest)
 
-    if(AVIF_ENABLE_EXPERIMENTAL_MINI)
+    if(AVIF_ENABLE_EXPERIMENTAL_MINI AND AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
         add_avif_gtest(avifminitest)
     endif()
 
     add_avif_gtest(avifopaquetest)
     add_avif_gtest_with_data(avifpng16bittest)
-    add_avif_gtest(avifprogressivetest)
+    add_avif_gtest_with_data(avifprogressivetest)
     add_avif_gtest(avifrangetest)
     add_avif_gtest_with_data(avifreadimagetest)
     add_avif_internal_gtest(avifrgbtest)
@@ -183,11 +175,11 @@ if(AVIF_ENABLE_FUZZTEST)
     # Adds a fuzztest from file TEST_NAME.cc located in the gtest folder. Extra arguments
     # are considered as extra source files.
     macro(add_avif_fuzztest TEST_NAME)
-        add_executable(${TEST_NAME} gtest/${TEST_NAME}.cc gtest/avif_fuzztest_helpers.cc ${ARGN})
+        add_executable(${TEST_NAME} gtest/${TEST_NAME}.cc ${ARGN})
         # FuzzTest bundles GoogleTest so no need to link to gtest librairies.
-        target_link_libraries(${TEST_NAME} PRIVATE aviftest_helpers_internal avif_enable_warnings)
+        target_link_libraries(${TEST_NAME} PRIVATE avif_fuzztest_helpers aviftest_helpers_internal avif_enable_warnings)
         link_fuzztest(${TEST_NAME})
-        add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+        add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME} --stack_limit_kb=512)
         set_property(TEST ${TEST_NAME} PROPERTY ENVIRONMENT "TEST_DATA_DIRS=${CMAKE_CURRENT_SOURCE_DIR}/data/")
     endmacro()
 
@@ -205,6 +197,9 @@ if(AVIF_ENABLE_FUZZTEST)
         if(CMAKE_VERSION VERSION_LESS 3.25.0)
             message(FATAL_ERROR "CMake must be at least 3.25 to pass the SYSTEM argument to add_subdirectory(), bailing out")
         endif()
+        # Add the fuzztest project. Note this may add some tests which may not be built because of EXCLUDE_FROM_ALL and will
+        # therefore fail. They can be ignored by adding them to CTestCustom.cmake
+        # See https://gitlab.kitware.com/cmake/cmake/-/issues/20212
         add_subdirectory(${AVIF_SOURCE_DIR}/ext/fuzztest ${AVIF_SOURCE_DIR}/ext/fuzztest/build.libavif EXCLUDE_FROM_ALL SYSTEM)
     else()
         message(
@@ -214,10 +209,16 @@ if(AVIF_ENABLE_FUZZTEST)
     endif()
     fuzztest_setup_fuzzing_flags()
 
+    # Create a library with avif_fuzztest_helpers.cc to compile it only once.
+    add_library(avif_fuzztest_helpers OBJECT gtest/avif_fuzztest_helpers.cc)
+    target_link_libraries(avif_fuzztest_helpers PUBLIC aviftest_helpers_internal)
+    link_fuzztest(avif_fuzztest_helpers)
+
     add_avif_fuzztest(avif_fuzztest_dec)
     add_avif_fuzztest(avif_fuzztest_dec_incr gtest/avifincrtest_helpers.cc)
     add_avif_fuzztest(avif_fuzztest_enc_dec)
     add_avif_fuzztest(avif_fuzztest_enc_dec_anim)
+    add_avif_fuzztest(avif_fuzztest_enc_dec_incr gtest/avifincrtest_helpers.cc)
     add_avif_fuzztest(avif_fuzztest_read_image)
     add_avif_fuzztest(avif_fuzztest_yuvrgb)
 
@@ -225,8 +226,6 @@ if(AVIF_ENABLE_FUZZTEST)
         add_avif_fuzztest(avif_fuzztest_enc_dec_experimental)
         add_avif_fuzztest(avif_fuzztest_enc_dec_incr_experimental gtest/avifincrtest_helpers.cc)
     endif()
-
-    add_avif_fuzztest(avif_fuzztest_enc_dec_incr gtest/avifincrtest_helpers.cc)
 else()
     message(STATUS "FuzzTest targets are disabled because AVIF_ENABLE_FUZZTEST is OFF.")
 endif()
@@ -239,9 +238,10 @@ if(AVIF_BUILD_APPS)
     # 'are_images_equal' is used to make sure inputs/outputs are unchanged.
     add_executable(are_images_equal gtest/are_images_equal.cc)
     if(WIN32)
-        target_sources(are_images_equal PRIVATE ${CMAKE_SOURCE_DIR}/apps/utf8.rc)
-        if(NOT MINGW)
-            target_link_options(are_images_equal PRIVATE /MANIFEST:NO)
+        if(MSVC)
+            target_sources(are_images_equal PRIVATE ${CMAKE_SOURCE_DIR}/apps/utf8.manifest)
+        elseif(MINGW)
+            target_sources(are_images_equal PRIVATE ${CMAKE_SOURCE_DIR}/apps/utf8.rc)
         endif()
     endif()
     target_link_libraries(are_images_equal aviftest_helpers avif_enable_warnings)
@@ -328,6 +328,9 @@ endif()
 if(AVIF_CODEC_AVM_ENABLED)
     if(AVIF_ENABLE_GTEST)
         add_avif_gtest(avifavmtest)
+        if(AVIF_ENABLE_EXPERIMENTAL_MINI)
+            add_avif_gtest(avifavmminitest)
+        endif()
     endif()
 
     if(AVIF_BUILD_APPS)
@@ -367,7 +370,7 @@ if(AVIF_CODEC_AVM_ENABLED)
                 PROPERTIES DISABLED True
             )
 
-            if(AVIF_ENABLE_EXPERIMENTAL_MINI)
+            if(AVIF_ENABLE_EXPERIMENTAL_MINI AND AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
                 set_tests_properties(avifminitest PROPERTIES DISABLED True)
             endif()
             if(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)

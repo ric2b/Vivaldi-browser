@@ -6,14 +6,14 @@ page_name: web-capabilities-fugu
 title: "Web Capabilities (Project Fugu \U0001F421)"
 ---
 
-**Web developers, check out the [developer-facing Project Fugu 🐡 homepage](https://developer.chrome.com/capabilities/)!**
+**Web developers, check out the [developer-facing Project Fugu 🐡 homepage](https://developer.chrome.com/docs/capabilities)!**
 
 **Overview**
 
 Project Fugu 🐡 is an effort to close gaps in the web's capabilities enabling new
 classes of applications to run on the web. The developer-friendly landing page
-of the project is <https://web.dev/fugu-status/>. The list of in-process APIs is
-available at <https://goo.gle/fugu-api-tracker>.
+of the project is <https://developer.chrome.com/docs/capabilities/status>. The list of in-process APIs is
+available at <https://goo.gle/all-fugu-features>.
 APIs that Project Fugu is delivering enable new experiences on the web while
 preserving the web's core benefits of security, low-friction, and cross-platform
 delivery. All Project Fugu API proposals are made in the open and on the
@@ -47,7 +47,7 @@ A guide on how we will approach Fugu capabilities, including how we gather
 developer demand, externalize our steps, and generate blog posts / tutorials.
 
 [Developer Updates Status
-page](https://developers.google.com/web/updates/capabilities): Public list
+page](https://developer.chrome.com/blog/capabilities): Public list
 showing the status of current capabilities.
 
 **Specific Capabilities & Prioritization model**
@@ -56,7 +56,7 @@ We prioritize capabilities by which partners we enable or improve by a given
 capability.
 
 [Full list of
-capabilities](https://goo.gle/fugu-api-tracker):
+capabilities](https://goo.gle/all-fugu-features):
 Every capability that is currently considered as part of Fugu
 
 [Bug Tracking

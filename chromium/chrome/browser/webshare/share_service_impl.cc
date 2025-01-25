@@ -31,6 +31,9 @@
 #include "chrome/browser/webshare/win/share_operation.h"
 #endif
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+
 // IsDangerousFilename() and IsDangerousMimeType() should be kept in sync with
 // //third_party/blink/renderer/modules/webshare/FILE_TYPES.md
 // //components/browser_ui/webshare/android/java/src/org/chromium/components/browser_ui/webshare/ShareServiceImpl.java
@@ -265,6 +268,14 @@ void ShareServiceImpl::OnSafeBrowsingResultReceived(
                            std::move(callback));
 #elif BUILDFLAG(IS_MAC)
   auto sharing_service_operation =
+
+    // VB-110626 Need outermost webcontents in Vivaldi
+    vivaldi::IsVivaldiRunning() ?
+      std::make_unique<webshare::SharingServiceOperation>(
+          title, text, share_url, std::move(files),
+          web_contents->GetOutermostWebContents())
+      :
+
       std::make_unique<webshare::SharingServiceOperation>(
           title, text, share_url, std::move(files), web_contents);
 
@@ -282,16 +293,27 @@ void ShareServiceImpl::OnSafeBrowsingResultReceived(
          blink::mojom::ShareError result) { std::move(callback).Run(result); },
       std::move(sharing_service_operation), std::move(callback)));
 #elif BUILDFLAG(IS_WIN)
+  // Drop fullscreen mode so the Share UI can be easily clicked away from,
+  // without clicking back into the web contents
+  base::ScopedClosureRunner fullscreen_block =
+      web_contents->ForSecurityDropFullscreen(
+          /*display_id=*/display::kInvalidDisplayId);
+
   auto share_operation = std::make_unique<webshare::ShareOperation>(
-      title, text, share_url, std::move(files), web_contents);
+      title, text, share_url, web_contents);
   auto* const share_operation_ptr = share_operation.get();
-  share_operation_ptr->Run(base::BindOnce(
-      [](std::unique_ptr<webshare::ShareOperation> share_operation,
-         ShareCallback callback,
-         blink::mojom::ShareError result) { std::move(callback).Run(result); },
-      std::move(share_operation), std::move(callback)));
+  share_operation_ptr->Run(
+      std::move(files),
+      base::BindOnce(
+          [](std::unique_ptr<webshare::ShareOperation> share_operation,
+             base::ScopedClosureRunner fullscreen_block, ShareCallback callback,
+             blink::mojom::ShareError result) {
+            fullscreen_block.RunAndReset();
+            std::move(callback).Run(result);
+          },
+          std::move(share_operation), std::move(fullscreen_block),
+          std::move(callback)));
 #else
-  NOTREACHED_IN_MIGRATION();
-  std::move(callback).Run(blink::mojom::ShareError::INTERNAL_ERROR);
+  NOTREACHED();
 #endif
 }

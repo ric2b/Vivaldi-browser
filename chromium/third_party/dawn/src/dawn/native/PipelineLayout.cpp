@@ -95,12 +95,28 @@ ResultOrError<UnpackedPtr<PipelineLayoutDescriptor>> ValidatePipelineLayoutDescr
     }
 
     DAWN_TRY(ValidateBindingCounts(device->GetLimits(), bindingCounts));
+
+    // Validate immediateDataRangeByteSize.
+    if (descriptor->immediateDataRangeByteSize) {
+        DAWN_INVALID_IF(!device->HasFeature(Feature::ChromiumExperimentalImmediateData),
+                        "Set non-zero immediateDatRangeByteSize without "
+                        "%s feature is not allowed.",
+                        ToAPI(Feature::ChromiumExperimentalImmediateData));
+
+        uint32_t maxImmediateDataRangeByteSize =
+            device->GetLimits().experimentalImmediateDataLimits.maxImmediateDataRangeByteSize;
+
+        DAWN_INVALID_IF(descriptor->immediateDataRangeByteSize > maxImmediateDataRangeByteSize,
+                        "immediateDataRangeByteSize (%i) is larger than the maximum allowed (%i).",
+                        descriptor->immediateDataRangeByteSize, maxImmediateDataRangeByteSize);
+    }
+
     return unpacked;
 }
 
 StageAndDescriptor::StageAndDescriptor(SingleShaderStage shaderStage,
                                        ShaderModuleBase* module,
-                                       const char* entryPoint,
+                                       StringView entryPoint,
                                        size_t constantCount,
                                        ConstantEntry const* constants)
     : shaderStage(shaderStage),
@@ -114,7 +130,8 @@ StageAndDescriptor::StageAndDescriptor(SingleShaderStage shaderStage,
 PipelineLayoutBase::PipelineLayoutBase(DeviceBase* device,
                                        const UnpackedPtr<PipelineLayoutDescriptor>& descriptor,
                                        ApiObjectBase::UntrackedByDeviceTag tag)
-    : ApiObjectBase(device, descriptor->label) {
+    : ApiObjectBase(device, descriptor->label),
+      mImmediateDataRangeByteSize(descriptor->immediateDataRangeByteSize) {
     DAWN_ASSERT(descriptor->bindGroupLayoutCount <= kMaxBindGroups);
 
     auto bgls = ityp::SpanFromUntyped<BindGroupIndex>(descriptor->bindGroupLayouts,
@@ -144,7 +161,7 @@ PipelineLayoutBase::PipelineLayoutBase(DeviceBase* device,
 
 PipelineLayoutBase::PipelineLayoutBase(DeviceBase* device,
                                        ObjectBase::ErrorTag tag,
-                                       const char* label)
+                                       StringView label)
     : ApiObjectBase(device, tag, label) {}
 
 PipelineLayoutBase::~PipelineLayoutBase() = default;
@@ -154,7 +171,7 @@ void PipelineLayoutBase::DestroyImpl() {
 }
 
 // static
-Ref<PipelineLayoutBase> PipelineLayoutBase::MakeError(DeviceBase* device, const char* label) {
+Ref<PipelineLayoutBase> PipelineLayoutBase::MakeError(DeviceBase* device, StringView label) {
     return AcquireRef(new PipelineLayoutBase(device, ObjectBase::kError, label));
 }
 
@@ -306,6 +323,8 @@ ResultOrError<Ref<PipelineLayoutBase>> PipelineLayoutBase::CreateDefault(
     // there's no issue with using the same struct multiple times.
     ExternalTextureBindingLayout externalTextureBindingLayout;
 
+    uint32_t immediateDataRangeByteSize = 0;
+
     // Loops over all the reflected BindGroupLayoutEntries from shaders.
     for (const StageAndDescriptor& stage : stages) {
         const EntryPointMetadata& metadata = stage.module->GetEntryPoint(stage.entryPoint);
@@ -342,6 +361,13 @@ ResultOrError<Ref<PipelineLayoutBase>> PipelineLayoutBase::CreateDefault(
                 entry->texture.sampleType = wgpu::TextureSampleType::Float;
             }
         }
+
+        // For render pipeline that might has vertex and
+        // fragment stages, it is possible that each stage has their own immediate data variable
+        // shares the same immediate data block. Pick the max size of immediate data variable from
+        // vertex and fragment stage as the pipelineLayout immediate data block size.
+        immediateDataRangeByteSize =
+            std::max(immediateDataRangeByteSize, metadata.immediateDataRangeByteSize);
     }
 
     // Create the bind group layouts. We need to keep track of the last non-empty BGL because
@@ -368,16 +394,19 @@ ResultOrError<Ref<PipelineLayoutBase>> PipelineLayoutBase::CreateDefault(
     PipelineLayoutDescriptor desc = {};
     desc.bindGroupLayouts = bgls.data();
     desc.bindGroupLayoutCount = static_cast<uint32_t>(pipelineBGLCount);
+    desc.immediateDataRangeByteSize = immediateDataRangeByteSize;
 
     Ref<PipelineLayoutBase> result;
     DAWN_TRY_ASSIGN(result, device->CreatePipelineLayout(&desc, pipelineCompatibilityToken));
     DAWN_ASSERT(!result->IsError());
 
-    // Check in debug that the pipeline layout is compatible with the current pipeline.
+    // That the auto pipeline layout is compatible with the current pipeline.
+    // Note: the currently specified rules can generate invalid default layouts.
+    // Hopefully the spec will be updated to prevent this.
+    // See: https://github.com/gpuweb/gpuweb/issues/4952
     for (const StageAndDescriptor& stage : stages) {
         const EntryPointMetadata& metadata = stage.module->GetEntryPoint(stage.entryPoint);
-        DAWN_ASSERT(
-            ValidateCompatibilityWithPipelineLayout(device, metadata, result.Get()).IsSuccess());
+        DAWN_TRY(ValidateCompatibilityWithPipelineLayout(device, metadata, result.Get()));
     }
 
     return std::move(result);
@@ -467,6 +496,9 @@ size_t PipelineLayoutBase::ComputeContentHash() {
         recorder.Record(slotFormat);
     }
 
+    // Hash the immediate data range byte size
+    recorder.Record(mImmediateDataRangeByteSize);
+
     return recorder.GetContentHash();
 }
 
@@ -495,7 +527,16 @@ bool PipelineLayoutBase::EqualityFunc::operator()(const PipelineLayoutBase* a,
         }
     }
 
+    // Check immediate data range
+    if (a->mImmediateDataRangeByteSize != b->mImmediateDataRangeByteSize) {
+        return false;
+    }
+
     return true;
+}
+
+uint32_t PipelineLayoutBase::GetImmediateDataRangeByteSize() const {
+    return mImmediateDataRangeByteSize;
 }
 
 }  // namespace dawn::native

@@ -20,13 +20,17 @@ class Profile;
 
 namespace ash {
 
+class AppLaunchSplashScreen;
 class KioskProfileLoadFailedObserver;
 class KioskSystemSession;
 class LoginDisplayHost;
 
 namespace kiosk_vision {
+
 class TelemetryProcessor;
-}
+class InternalsPageProcessor;
+
+}  // namespace kiosk_vision
 
 // Public interface for Kiosk.
 class KioskController {
@@ -44,7 +48,8 @@ class KioskController {
   // Launches a kiosk session running the given app.
   virtual void StartSession(const KioskAppId& app,
                             bool is_auto_launch,
-                            LoginDisplayHost* host) = 0;
+                            LoginDisplayHost* host,
+                            AppLaunchSplashScreen* splash_screen) = 0;
   // Launches a kiosk session after a browser crash, which is a faster launch
   // without any UI.
   virtual void StartSessionAfterCrash(const KioskAppId& app,

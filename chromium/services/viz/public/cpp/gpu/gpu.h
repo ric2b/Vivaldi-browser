@@ -68,9 +68,6 @@ class Gpu : public gpu::GpuChannelEstablishFactory {
   void LoseChannel();
   scoped_refptr<gpu::GpuChannelHost> GetGpuChannel();
 
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  void SetForceAllowAccessToGpu(bool enable) override;
-
  private:
   friend class GpuTest;
 

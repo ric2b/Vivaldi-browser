@@ -12,14 +12,34 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/app_home/app_home.mojom.h"
 #include "chrome/browser/ui/webui/app_home/app_home_page_handler.h"
+#include "chrome/browser/ui/webui/page_not_available_for_guest/page_not_available_for_guest_ui.h"
 #include "chrome/browser/ui/webui/webui_util.h"
-#include "chrome/common/webui_url_constants.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/grit/app_home_resources.h"
 #include "chrome/grit/app_home_resources_map.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "extensions/browser/extension_system.h"
 #include "ui/base/resource/resource_bundle.h"
+
+bool AppHomeUIConfig::IsWebUIEnabled(content::BrowserContext* browser_context) {
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  return profile &&
+         extensions::ExtensionSystem::Get(profile)->extension_service() &&
+         !profile->IsGuestSession();
+}
+
+std::unique_ptr<content::WebUIController>
+AppHomeUIConfig::CreateWebUIController(content::WebUI* web_ui,
+                                       const GURL& url) {
+  Profile* profile = Profile::FromWebUI(web_ui);
+  if (profile->IsGuestSession()) {
+    return std::make_unique<PageNotAvailableForGuestUI>(
+        web_ui, chrome::kChromeUIAppLauncherPageHost);
+  }
+  return std::make_unique<webapps::AppHomeUI>(web_ui);
+}
 
 namespace webapps {
 

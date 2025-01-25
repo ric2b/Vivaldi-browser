@@ -13,7 +13,7 @@ namespace {
 // Cell Identifier for the top menu CV Cell.
 NSString* cellId = @"cellId";
 
-NSInteger numberOfPages = 4;
+NSInteger numberOfPages = 5;
 
 CGFloat iconSize = 56.0;
 }

@@ -35,7 +35,8 @@ enum ImportItem {
   EMAIL              = 1 << 10,
   CONTACTS           = 1 << 11,
   EXTENSIONS         = 1 << 12,
-  ALL                = (1 << 13) - 1  // All the bits should be 1, hence the -1.
+  TABS               = 1 << 13,
+  ALL                = (1 << 14) - 1  // All the bits should be 1, hence the -1.
 };
 
 // Contains information needed for importing bookmarks/search engine urls, etc.

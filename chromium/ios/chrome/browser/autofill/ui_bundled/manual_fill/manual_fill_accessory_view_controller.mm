@@ -256,7 +256,7 @@ static NSTimeInterval MFAnimationDuration = 0.2;
                         manual_fill::kAccessoryCreditCardAccessibilityIdentifier
                       accessibilityLabel:
                           l10n_util::GetNSString(
-                              IDS_IOS_MANUAL_FALLBACK_SHOW_CREDIT_CARDS)];
+                                IDS_IOS_MANUAL_FALLBACK_SHOW_PAYMENT_METHODS)];
     self.cardsButton.hidden = self.isCreditCardButtonHidden;
     [icons addObject:self.cardsButton];
 
@@ -277,7 +277,7 @@ static NSTimeInterval MFAnimationDuration = 0.2;
                    manual_fill::kAccessoryCreditCardAccessibilityIdentifier
                     accessibilityLabel:
                         l10n_util::GetNSString(
-                            IDS_IOS_MANUAL_FALLBACK_SHOW_CREDIT_CARDS)];
+                            IDS_IOS_MANUAL_FALLBACK_SHOW_PAYMENT_METHODS)];
   self.cardsButton.hidden = self.isCreditCardButtonHidden;
   [icons addObject:self.cardsButton];
 

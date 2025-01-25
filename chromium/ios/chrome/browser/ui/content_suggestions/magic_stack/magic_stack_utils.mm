@@ -5,10 +5,12 @@
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack/magic_stack_utils.h"
 
 #import "base/metrics/field_trial_params.h"
+#import "base/strings/string_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/commerce/core/commerce_feature_list.h"
 #import "components/commerce/core/shopping_service.h"
 #import "components/prefs/pref_service.h"
+#import "components/segmentation_platform/embedder/home_modules/constants.h"
 #import "components/segmentation_platform/public/features.h"
 #import "components/variations/service/variations_service_utils.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_client_id.h"
@@ -53,8 +55,7 @@ bool IsPriceTrackingPromoCardEnabled(commerce::ShoppingService* service,
                    kSegmentationPlatformEphemeralCardRanker,
                segmentation_platform::features::
                    kEphemeralCardRankerForceShowCardParam,
-               "") == segmentation_platform::features::
-                          kPriceTrackingPromoForceOverride &&
-           GetCurrentCountryCode(
-               GetApplicationContext()->GetVariationsService()) == "us"));
+               "") == segmentation_platform::kPriceTrackingNotificationPromo &&
+           base::ToLowerASCII(GetCurrentCountryCode(
+               GetApplicationContext()->GetVariationsService())) == "us"));
 }

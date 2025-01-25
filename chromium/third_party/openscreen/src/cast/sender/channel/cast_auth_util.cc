@@ -141,7 +141,7 @@ Error MapToOpenscreenError(const Error& verify_error, bool crl_required) {
                    string_util::StrCat({"Failed with untrusted certificate: ",
                                         verify_error.message()}));
     case Error::Code::kErrCrlInvalid:
-      // This error is only encountered if |crl_required| is true.
+      // This error is only encountered if `crl_required` is true.
       OSP_CHECK(crl_required);
       return Error(Error::Code::kErrCrlInvalid,
                    string_util::StrCat({"Failed to provide a valid CRL: ",
@@ -257,7 +257,7 @@ Error VerifyTLSCertificateValidity(const ParsedCertificate& peer_cert,
 
 ErrorOr<CastDeviceCertPolicy> VerifyCredentialsImpl(
     const AuthResponse& response,
-    const std::vector<uint8_t>& signature_input,
+    ByteView signature_input,
     const CRLPolicy& crl_policy,
     TrustStore* cast_trust_store,
     TrustStore* crl_trust_store,
@@ -335,24 +335,24 @@ ErrorOr<CastDeviceCertPolicy> AuthenticateChallengeReplyForTest(
 
 // This function does the following
 //
-// * Verifies that the certificate chain |response.client_auth_certificate| +
-//   |response.intermediate_certificate| is valid and chains to a trusted Cast
+// * Verifies that the certificate chain `response.client_auth_certificate` +
+//   `response.intermediate_certificate` is valid and chains to a trusted Cast
 //   root. The list of trusted Cast roots can be overrided by providing a
-//   non-nullptr |cast_trust_store|. The certificate is verified at
-//   |verification_time|.
+//   non-nullptr `cast_trust_store`. The certificate is verified at
+//   `verification_time`.
 //
 // * Verifies that none of the certificates in the chain are revoked based on
-//   the CRL provided in the response |response.crl|. The CRL is verified to be
+//   the CRL provided in the response `response.crl`. The CRL is verified to be
 //   valid and its issuer certificate chains to a trusted Cast CRL root. The
 //   list of trusted Cast CRL roots can be overrided by providing a non-nullptr
-//   |crl_trust_store|. If |crl_policy| is kCrlOptional then the result of
-//   revocation checking is ignored. The CRL is verified at |verification_time|.
+//   `crl_trust_store`. If `crl_policy` is kCrlOptional then the result of
+//   revocation checking is ignored. The CRL is verified at `verification_time`.
 //
-// * Verifies that |response.signature| matches the signature of
-//   |signature_input| by |response.client_auth_certificate|'s public key.
+// * Verifies that `response.signature` matches the signature of
+//   `signature_input` by `response.client_auth_certificate`'s public key.
 ErrorOr<CastDeviceCertPolicy> VerifyCredentialsImpl(
     const AuthResponse& response,
-    const std::vector<uint8_t>& signature_input,
+    ByteView signature_input,
     const CRLPolicy& crl_policy,
     TrustStore* cast_trust_store,
     TrustStore* crl_trust_store,
@@ -398,8 +398,8 @@ ErrorOr<CastDeviceCertPolicy> VerifyCredentialsImpl(
   }
 
   ByteView signature = ByteViewFromString(response.signature());
-  ByteView siginput(signature_input);
-  if (!target_cert->VerifySignedData(digest_algorithm, siginput, signature)) {
+  if (!target_cert->VerifySignedData(digest_algorithm, signature_input,
+                                     signature)) {
     return Error(Error::Code::kCastV2SignedBlobsMismatch,
                  "Failed verifying signature over data.");
   }
@@ -409,7 +409,7 @@ ErrorOr<CastDeviceCertPolicy> VerifyCredentialsImpl(
 
 ErrorOr<CastDeviceCertPolicy> VerifyCredentials(
     const AuthResponse& response,
-    const std::vector<uint8_t>& signature_input,
+    ByteView signature_input,
     TrustStore* cast_trust_store,
     TrustStore* crl_trust_store,
     bool enforce_revocation_checking,
@@ -425,7 +425,7 @@ ErrorOr<CastDeviceCertPolicy> VerifyCredentials(
 
 ErrorOr<CastDeviceCertPolicy> VerifyCredentialsForTest(
     const AuthResponse& response,
-    const std::vector<uint8_t>& signature_input,
+    ByteView signature_input,
     CRLPolicy crl_policy,
     TrustStore* cast_trust_store,
     TrustStore* crl_trust_store,

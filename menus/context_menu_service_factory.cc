@@ -51,7 +51,7 @@ void ContextMenuServiceFactory::ShutdownForProfile(Profile* profile) {
 
 content::BrowserContext* ContextMenuServiceFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
+  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 KeyedService* ContextMenuServiceFactory::BuildServiceInstanceFor(

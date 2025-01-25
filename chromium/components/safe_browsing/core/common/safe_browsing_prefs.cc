@@ -48,7 +48,7 @@ void RecordExtendedReportingPrefChanged(
                             pref_value);
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 
@@ -214,7 +214,13 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(
       prefs::kSafeBrowsingEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterBooleanPref(prefs::kSafeBrowsingEnhanced, false);  // Vivaldi: Keep disabled
+  if (base::FeatureList::IsEnabled(kEsbAsASyncedSetting)) {
+    registry->RegisterBooleanPref(
+        prefs::kSafeBrowsingEnhanced, false,  // Vivaldi: Keep disabled
+        user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  } else {
+    registry->RegisterBooleanPref(prefs::kSafeBrowsingEnhanced, false);  // Vivaldi: Keep disabled
+  }
   registry->RegisterBooleanPref(prefs::kSafeBrowsingProceedAnywayDisabled,
                                 false);
   registry->RegisterDictionaryPref(prefs::kSafeBrowsingIncidentsSent);
@@ -270,6 +276,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
                                 false);
   registry->RegisterBooleanPref(
       prefs::kSafeBrowsingScoutReportingEnabledWhenDeprecated, false);
+  registry->RegisterDictionaryPref(prefs::kExternalAppRedirectTimestamps);
 }
 
 const base::Value::Dict& GetExtensionTelemetryConfig(const PrefService& prefs) {
@@ -475,7 +482,7 @@ bool MatchesPasswordProtectionLoginURL(const GURL& url,
   return MatchesURLList(url, login_urls);
 }
 
-bool MatchesURLList(const GURL& target_url, const std::vector<GURL> url_list) {
+bool MatchesURLList(const GURL& target_url, const std::vector<GURL>& url_list) {
   if (url_list.empty() || !target_url.is_valid()) {
     return false;
   }

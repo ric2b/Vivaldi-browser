@@ -44,6 +44,7 @@ default_chrome_public_jinja_variables = [
   "enable_vr=$enable_vr",
   "enable_openxr=$enable_openxr",
   "enable_arcore=$enable_arcore",
+  "is_desktop_android=$is_desktop_android",
   "zygote_preload_class=org.chromium.content_public.app.ZygotePreload",
 ] + vivaldi_manifest_jinja_strings
 
@@ -505,19 +506,7 @@ template("chrome_common_apk_or_module_tmpl") {
         ]
         asset_deps += [ "//chrome/android:chrome_public_non_pak_assets" ]
       }
-      if (_is_bundle && !is_vivaldi) {
-        deps += [
-          # deps in delegate_public_impl_java are put into the Chrome module, but the language deps
-          # are needed by the base module.
-          "//components/language/android:ulp_delegate_public_java",
-        ]
-        if (_is_monochrome) {
-          # WebView needs these in the base module.
-          deps += [
-            "//content/public/android:identity_credentials_public_impl_java",
-          ]
-        }
-      } else {
+      if (!_is_bundle || is_vivaldi) {
         deps += [
           "//chrome/android:chrome_all_java",
           "//chrome/android:delegate_public_impl_java",
@@ -533,8 +522,6 @@ template("chrome_common_apk_or_module_tmpl") {
     # See //third_party/android_sdk/window_extensions/README.md
     assert_no_deps = [
       "//third_party/android_deps:org_jetbrains_kotlin_kotlin_parcelize_runtime",
-      "//third_party/androidx:androidx_window_extensions_core_core_java",
-      "//third_party/androidx:androidx_window_sidecar_sidecar_java",
       "//third_party/androidx:androidx_window_window_java_java",
     ]
     if (defined(invoker.assert_no_deps)) {

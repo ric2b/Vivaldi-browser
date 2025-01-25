@@ -542,6 +542,10 @@ DeveloperPrivateEventRouter::DeveloperPrivateEventRouter(Profile* profile)
       kMV2DeprecationDisabledAcknowledgedGloballyPref.name,
       base::BindRepeating(&DeveloperPrivateEventRouter::OnProfilePrefChanged,
                           base::Unretained(this)));
+  pref_change_registrar_.Add(
+      kMV2DeprecationUnsupportedAcknowledgedGloballyPref.name,
+      base::BindRepeating(&DeveloperPrivateEventRouter::OnProfilePrefChanged,
+                          base::Unretained(this)));
 }
 
 DeveloperPrivateEventRouter::~DeveloperPrivateEventRouter() {
@@ -1134,7 +1138,7 @@ DeveloperPrivateUpdateExtensionConfigurationFunction::Run() {
         modifier.SetWithholdHostPermissions(false);
         break;
       case developer::HostAccess::kNone:
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
     }
   }
   if (update.show_access_requests_in_toolbar) {
@@ -1462,18 +1466,10 @@ DeveloperPrivateInstallDroppedFileFunction::Run() {
 
   ExtensionService* service = GetExtensionService(browser_context());
   if (path.MatchesExtension(FILE_PATH_LITERAL(".zip"))) {
-    if (base::FeatureList::IsEnabled(
-            extensions_features::kExtensionsZipFileInstalledInProfileDir)) {
       ZipFileInstaller::Create(GetExtensionFileTaskRunner(),
                                MakeRegisterInExtensionServiceCallback(service))
           ->InstallZipFileToUnpackedExtensionsDir(
               path, service->unpacked_install_directory());
-    } else {
-      ZipFileInstaller::Create(GetExtensionFileTaskRunner(),
-                               MakeRegisterInExtensionServiceCallback(service))
-          ->InstallZipFileToTempDir(path);
-    }
-
   } else {
     auto prompt = std::make_unique<ExtensionInstallPrompt>(web_contents);
     scoped_refptr<CrxInstaller> crx_installer =
@@ -1904,7 +1900,7 @@ ExtensionFunction::ResponseAction DeveloperPrivateChoosePathFunction::Run() {
     file_type_info.include_all_files = true;
     file_type_index = 1;
   } else {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
   const base::FilePath last_directory =
@@ -2418,7 +2414,7 @@ DeveloperPrivateAddUserSpecifiedSitesFunction::Run() {
       return RespondNow(
           Error("Site set must be USER_PERMITTED or USER_RESTRICTED"));
     case developer::SiteSet::kNone:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 
   return RespondNow(NoArguments());
@@ -2457,7 +2453,7 @@ DeveloperPrivateRemoveUserSpecifiedSitesFunction::Run() {
       return RespondNow(
           Error("Site set must be USER_PERMITTED or USER_RESTRICTED"));
     case developer::SiteSet::kNone:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 
   return RespondNow(NoArguments());
@@ -2698,7 +2694,7 @@ DeveloperPrivateUpdateSiteAccessFunction::Run() {
         done_callback.Run();
         break;
       case developer::HostAccess::kNone:
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
     }
   }
 
@@ -2896,6 +2892,11 @@ DeveloperPrivateDismissMv2DeprecationNoticeForExtensionFunction::Run() {
 
       return RespondLater();
     }
+
+    case MV2ExperimentStage::kUnsupported:
+      // TODO(https://crbug.com/367395349): Add handling for the kUnsupported
+      // experiment stage.
+      NOTREACHED();
   }
 }
 

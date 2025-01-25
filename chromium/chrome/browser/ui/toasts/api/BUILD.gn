@@ -16,16 +16,14 @@ source_set("toasts") {
   public_deps = [
     "//base",
     "//ui/base",
+    "//ui/menus",
   ]
   deps = [ "//components/vector_icons:vector_icons" ]
 }
 
 source_set("unit_tests") {
   testonly = true
-  sources = [
-    "toast_id_unittest.cc",
-    "toast_registry_unittest.cc",
-  ]
+  sources = [ "toast_registry_unittest.cc" ]
   deps = [
     ":toasts",
     "//base",
@@ -33,5 +31,6 @@ source_set("unit_tests") {
     "//chrome/test:test_support",
     "//testing/gtest",
     "//ui/gfx",
+    "//ui/menus",
   ]
 }

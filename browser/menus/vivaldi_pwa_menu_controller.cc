@@ -17,7 +17,7 @@
 #include "components/webapps/browser/banners/app_banner_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/models/simple_menu_model.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/gfx/text_elider.h"
 
 constexpr size_t kMaxAppNameLength = 30;

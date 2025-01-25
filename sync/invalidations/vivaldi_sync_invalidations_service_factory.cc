@@ -35,11 +35,12 @@ VivaldiSyncInvalidationsServiceFactory::
 VivaldiSyncInvalidationsServiceFactory::
     ~VivaldiSyncInvalidationsServiceFactory() = default;
 
-KeyedService* VivaldiSyncInvalidationsServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+VivaldiSyncInvalidationsServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
 
-  return new VivaldiSyncInvalidationsService(
+  return std::make_unique<VivaldiSyncInvalidationsService>(
       g_browser_process->local_state()->GetString(
           vivaldiprefs::kVivaldiSyncNotificationsServerUrl),
       VivaldiAccountManagerFactory::GetForProfile(profile),

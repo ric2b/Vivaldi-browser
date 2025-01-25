@@ -32,7 +32,6 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab_ui.TabContentManager;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 
 /** Tests for the TabModelSelectorTabRegistrationObserver. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -45,6 +44,7 @@ public class TabModelSelectorTabRegistrationObserverUnitTest {
     @Mock private TabModelJniBridge.Natives mTabModelJniBridge;
     @Mock private TabContentManager mTabContentManager;
     @Mock private TabCreatorManager mTabCreatorManager;
+    @Mock private TabRemover mTabRemover;
 
     @Mock private Profile mProfile;
     @Mock private Profile mIncognitoProfile;
@@ -78,7 +78,7 @@ public class TabModelSelectorTabRegistrationObserverUnitTest {
                 AsyncTabParamsManagerFactory.createAsyncTabParamsManager();
         NextTabPolicy.NextTabPolicySupplier nextTabPolicySupplier =
                 () -> NextTabPolicy.HIERARCHICAL;
-        TabModel normalTabModel =
+        TabModelImpl normalTabModel =
                 new TabModelImpl(
                         mProfile,
                         ActivityType.TABBED,
@@ -89,6 +89,7 @@ public class TabModelSelectorTabRegistrationObserverUnitTest {
                         nextTabPolicySupplier,
                         realAsyncTabParamsManager,
                         selector,
+                        mTabRemover,
                         /* supportUndo= */ true,
                         /* trackInNativeModelList= */ true);
         TestIncognitoTabModel incognitoTabModel =
@@ -102,10 +103,14 @@ public class TabModelSelectorTabRegistrationObserverUnitTest {
                         nextTabPolicySupplier,
                         realAsyncTabParamsManager,
                         selector,
+                        mTabRemover,
                         /* supportUndo= */ false,
                         /* trackInNativeModelList= */ true);
 
-        selector.initialize(normalTabModel, incognitoTabModel);
+        TabUngrouperFactory factory =
+                (isIncognitoBranded, tabGroupModelFilterSupplier) ->
+                        new PassthroughTabUngrouper(tabGroupModelFilterSupplier);
+        selector.initialize(normalTabModel, incognitoTabModel, factory);
 
         return selector;
     }
@@ -349,7 +354,7 @@ public class TabModelSelectorTabRegistrationObserverUnitTest {
 
     private static class TestTabModelSelector extends TabModelSelectorBase {
         public TestTabModelSelector(TabCreatorManager tabCreatorManager) {
-            super(tabCreatorManager, TabGroupModelFilter::new, false);
+            super(tabCreatorManager, false);
         }
 
         @Override
@@ -361,7 +366,8 @@ public class TabModelSelectorTabRegistrationObserverUnitTest {
         }
     }
 
-    private static class TestIncognitoTabModel extends TabModelImpl implements IncognitoTabModel {
+    private static class TestIncognitoTabModel extends TabModelImpl
+            implements IncognitoTabModelInternal {
         public TestIncognitoTabModel(
                 @NonNull Profile profile,
                 @ActivityType int activityType,
@@ -372,6 +378,7 @@ public class TabModelSelectorTabRegistrationObserverUnitTest {
                 NextTabPolicy.NextTabPolicySupplier nextTabPolicySupplier,
                 AsyncTabParamsManager asyncTabParamsManager,
                 TabModelDelegate modelDelegate,
+                TabRemover tabRemover,
                 boolean supportUndo,
                 boolean trackInNativeModelList) {
             super(
@@ -384,6 +391,7 @@ public class TabModelSelectorTabRegistrationObserverUnitTest {
                     nextTabPolicySupplier,
                     asyncTabParamsManager,
                     modelDelegate,
+                    tabRemover,
                     supportUndo,
                     trackInNativeModelList);
         }

@@ -378,7 +378,7 @@ class DeleteStreamDelegate : public TestDelegateBase {
     TestDelegateBase::OnHeadersReceived(headers_copy);
   }
 
-  void OnDataSent() override { NOTREACHED_IN_MIGRATION(); }
+  void OnDataSent() override { NOTREACHED(); }
 
   void OnDataRead(int bytes_read) override {
     DCHECK_NE(ON_HEADERS_RECEIVED, phase_);
@@ -567,6 +567,8 @@ class BidirectionalStreamQuicImplTest
         base::SingleThreadTaskRunner::GetCurrentDefault().get(),
         /*socket_performance_watcher=*/nullptr, ConnectionEndpointMetadata(),
         /*report_ecn=*/true, /*enable_origin_frame=*/true,
+        /*server_preferred_address=*/true,
+        MultiplexedSessionCreationInitiator::kUnknown,
         NetLogWithSource::Make(NetLogSourceType::NONE));
     session_->Initialize();
 
@@ -733,8 +735,11 @@ class BidirectionalStreamQuicImplTest
       std::string_view data,
       QuicTestPacketMaker* maker) {
     std::unique_ptr<quic::QuicReceivedPacket> packet(
-        maker->MakeAckAndDataPacket(packet_number, stream_id_, largest_received,
-                                    smallest_received, fin, data));
+        maker->Packet(packet_number)
+            .AddAckFrame(/*first_received=*/1, largest_received,
+                         smallest_received)
+            .AddStreamFrame(stream_id_, fin, data)
+            .Build());
     DVLOG(2) << "packet(" << packet_number << "): " << std::endl
              << quiche::QuicheTextUtils::HexDump(packet->AsStringPiece());
     return packet;

@@ -6,16 +6,29 @@
 
 #include "base/apple/foundation_util.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/feature_list.h"
 #include "base/functional/callback_forward.h"
 #import "components/remote_cocoa/app_shim/NSToolbar+Private.h"
 #import "components/remote_cocoa/app_shim/bridged_content_view.h"
+#import "components/remote_cocoa/app_shim/browser_native_widget_window_mac.h"
+#include "components/remote_cocoa/app_shim/features.h"
+
+namespace {
+void SetAlwaysShowTrafficLights(NSWindow* browser_window, bool always_show) {
+  if (base::FeatureList::IsEnabled(
+          remote_cocoa::features::kFullscreenAlwaysShowTrafficLights)) {
+    [base::apple::ObjCCast<BrowserNativeWidgetWindow>(browser_window)
+        setAlwaysShowTrafficLights:always_show ? YES : NO];
+  }
+}
+}  // namespace
 
 namespace remote_cocoa {
 
 ImmersiveModeTabbedControllerCocoa::ImmersiveModeTabbedControllerCocoa(
     NativeWidgetMacNSWindow* browser_window,
-    NativeWidgetMacNSWindow* overlay_window,
-    NativeWidgetMacNSWindow* tab_window)
+    NativeWidgetMacOverlayNSWindow* overlay_window,
+    NativeWidgetMacOverlayNSWindow* tab_window)
     : ImmersiveModeControllerCocoa(browser_window, overlay_window) {
   tab_window_ = tab_window;
 #ifndef NDEBUG
@@ -32,9 +45,17 @@ ImmersiveModeTabbedControllerCocoa::ImmersiveModeTabbedControllerCocoa(
   // enough is able to paint underneath the traffic lights. This also works with
   // RTL setups.
   tab_titlebar_view_controller_.layoutAttribute = NSLayoutAttributeTrailing;
+
+  // During fullscreen restore or split screen restore tab window can be left
+  // without a parent, leading to the window being hidden which causes
+  // compositing to stop.
+  if (!tab_window.parentWindow) {
+    [overlay_window addChildWindow:tab_window ordered:NSWindowAbove];
+  }
 }
 
 ImmersiveModeTabbedControllerCocoa::~ImmersiveModeTabbedControllerCocoa() {
+  SetAlwaysShowTrafficLights(browser_window(), false);
   StopObservingChildWindows(tab_window_);
   browser_window().toolbar = nil;
   BridgedContentView* tab_content_view = tab_content_view_;
@@ -45,6 +66,8 @@ ImmersiveModeTabbedControllerCocoa::~ImmersiveModeTabbedControllerCocoa() {
 }
 
 void ImmersiveModeTabbedControllerCocoa::Init() {
+  SetAlwaysShowTrafficLights(browser_window(), true);
+
   ImmersiveModeControllerCocoa::Init();
   BridgedContentView* tab_content_view =
       base::apple::ObjCCastStrict<BridgedContentView>(tab_window_.contentView);
@@ -54,6 +77,10 @@ void ImmersiveModeTabbedControllerCocoa::Init() {
   // Use a placeholder view since the content has been moved to the
   // NSTitlebarAccessoryViewController.
   tab_window_.contentView = [[OpaqueView alloc] init];
+  if (base::FeatureList::IsEnabled(
+          remote_cocoa::features::kImmersiveFullscreenOverlayWindowDebug)) {
+    [tab_window_ debugWithColor:NSColor.redColor];
+  }
 
   // This will allow the NSToolbarFullScreenWindow to become key when
   // interacting with the tab strip.
@@ -133,10 +160,7 @@ void ImmersiveModeTabbedControllerCocoa::UpdateToolbarVisibility(
   }
   ImmersiveModeControllerCocoa::UpdateToolbarVisibility(style);
 
-  // During fullscreen restore or split screen restore tab window can be left
-  // without a parent, leading to the window being hidden which causes
-  // compositing to stop. This call ensures that tab window is parented to
-  // overlay window and is in the correct z-order.
+  // Ensures that tab window is in the correct z-order.
   OrderTabWindowZOrderOnTop();
 
   // macOS 10.15 does not call `OnTitlebarFrameDidChange` as often as newer

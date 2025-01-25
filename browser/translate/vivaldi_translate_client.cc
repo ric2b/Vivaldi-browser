@@ -375,11 +375,6 @@ VivaldiTranslateClient::GetTranslatePrefs() {
 }
 
 #if BUILDFLAG(IS_ANDROID)
-std::unique_ptr<infobars::InfoBar> VivaldiTranslateClient::CreateInfoBar(
-    std::unique_ptr<translate::TranslateInfoBarDelegate> delegate) const {
-  return nullptr;
-}
-
 void VivaldiTranslateClient::ManualTranslateWhenReady() {
   if (GetLanguageState().source_language().empty()) {
     manual_translate_on_ready_ = true;

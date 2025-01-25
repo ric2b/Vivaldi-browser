@@ -72,9 +72,9 @@ class UdpSocket {
   using Version = IPAddress::Version;
 
   // Creates a new, scoped UdpSocket within the IPv4 or IPv6 family.
-  // |local_endpoint| may be zero (see comments for Bind()). This method must be
-  // defined in the platform-level implementation. All |client| methods called
-  // will be queued on the provided |task_runner|. For this reason, the provided
+  // `local_endpoint` may be zero (see comments for Bind()). This method must be
+  // defined in the platform-level implementation. All `client` methods called
+  // will be queued on the provided `task_runner`. For this reason, the provided
   // TaskRunner and Client must exist for the duration of the created socket's
   // lifetime.
   static ErrorOr<std::unique_ptr<UdpSocket>> Create(
@@ -84,7 +84,7 @@ class UdpSocket {
 
   virtual ~UdpSocket();
 
-  // Returns true if |socket| belongs to the IPv4/IPv6 address family.
+  // Returns true if `socket` belongs to the IPv4/IPv6 address family.
   virtual bool IsIPv4() const = 0;
   virtual bool IsIPv6() const = 0;
 

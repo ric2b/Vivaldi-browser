@@ -30,7 +30,7 @@
 #include "libavutil/timestamp.h"
 #include "audio.h"
 #include "avfilter.h"
-#include "internal.h"
+#include "filters.h"
 
 typedef struct SilenceDetectContext {
     const AVClass *class;

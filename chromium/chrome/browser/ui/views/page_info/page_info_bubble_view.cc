@@ -48,11 +48,19 @@ class InternalPageInfoBubbleView : public PageInfoBubbleViewBase {
                              const gfx::Rect& anchor_rect,
                              gfx::NativeView parent_window,
                              content::WebContents* web_contents,
-                             const GURL& url);
+                             const GURL& url,
+                             PageInfoClosingCallback closing_callback /* vivaldi */);
   InternalPageInfoBubbleView(const InternalPageInfoBubbleView&) = delete;
   InternalPageInfoBubbleView& operator=(const InternalPageInfoBubbleView&) =
       delete;
   ~InternalPageInfoBubbleView() override;
+
+  // Vivaldi
+ private:
+  void OnWidgetDestroying(views::Widget* widget) override;
+
+  PageInfoClosingCallback closing_callback_;
+  // End Vivaldi
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -64,12 +72,15 @@ InternalPageInfoBubbleView::InternalPageInfoBubbleView(
     const gfx::Rect& anchor_rect,
     gfx::NativeView parent_window,
     content::WebContents* web_contents,
-    const GURL& url)
+    const GURL& url,
+    PageInfoClosingCallback closing_callback // Vivaldi
+  )
     : PageInfoBubbleViewBase(anchor_view,
                              anchor_rect,
                              parent_window,
                              PageInfoBubbleViewBase::BUBBLE_INTERNAL_PAGE,
-                             web_contents) {
+                             web_contents),
+      closing_callback_(std::move(closing_callback)) /* Vivaldi */ {
   int text = IDS_PAGE_INFO_INTERNAL_PAGE;
   if (url.SchemeIs(extensions::kExtensionScheme)) {
     text = IDS_PAGE_INFO_EXTENSION_PAGE;
@@ -121,6 +132,16 @@ InternalPageInfoBubbleView::InternalPageInfoBubbleView(
 }
 
 InternalPageInfoBubbleView::~InternalPageInfoBubbleView() = default;
+
+// Vivaldi VB-112354
+void InternalPageInfoBubbleView::OnWidgetDestroying(views::Widget* widget) {
+  PageInfoBubbleViewBase::OnWidgetDestroying(widget);
+
+  if (closing_callback_) {
+    std::move(closing_callback_).Run(widget->closed_reason(), false);
+  }
+}
+// End Vivaldi
 
 BEGIN_METADATA(InternalPageInfoBubbleView)
 END_METADATA
@@ -196,7 +217,8 @@ views::BubbleDialogDelegateView* PageInfoBubbleView::CreatePageInfoBubble(
     const GURL& url,
     base::OnceClosure initialized_callback,
     PageInfoClosingCallback closing_callback,
-    bool allow_about_this_site) {
+    bool allow_about_this_site,
+    std::optional<ContentSettingsType> type) {
   DCHECK(web_contents);
   gfx::NativeView parent_view = platform_util::GetViewForWindow(parent_window);
 
@@ -204,13 +226,18 @@ views::BubbleDialogDelegateView* PageInfoBubbleView::CreatePageInfoBubble(
       url.SchemeIs(extensions::kExtensionScheme) ||
       url.SchemeIs(dom_distiller::kDomDistillerScheme)) {
     return new InternalPageInfoBubbleView(anchor_view, anchor_rect, parent_view,
-                                          web_contents, url);
+                                          web_contents, url,
+                                          std::move(closing_callback) /* Vivaldi */);
   }
 
-  return new PageInfoBubbleView(
+  PageInfoBubbleView* bubble = new PageInfoBubbleView(
       anchor_view, anchor_rect, parent_view, web_contents, url,
       std::move(initialized_callback), std::move(closing_callback),
       allow_about_this_site);
+  if (type) {
+    bubble->OpenPermissionPage(*type);
+  }
+  return bubble;
 }
 
 void PageInfoBubbleView::OpenMainPage(base::OnceClosure initialized_callback) {
@@ -332,7 +359,8 @@ void ShowPageInfoDialogImpl(Browser* browser,
                             const GURL& virtual_url,
                             bubble_anchor_util::Anchor anchor,
                             base::OnceClosure initialized_callback,
-                            PageInfoClosingCallback closing_callback) {
+                            PageInfoClosingCallback closing_callback,
+                            std::optional<ContentSettingsType> type) {
   AnchorConfiguration configuration =
       GetPageInfoAnchorConfiguration(browser, anchor);
   gfx::Rect anchor_rect =
@@ -343,7 +371,7 @@ void ShowPageInfoDialogImpl(Browser* browser,
       PageInfoBubbleView::CreatePageInfoBubble(
           configuration.anchor_view, anchor_rect, parent_window, web_contents,
           virtual_url, std::move(initialized_callback),
-          std::move(closing_callback), /*allow_about_this_site=*/true);
+          std::move(closing_callback), /*allow_about_this_site=*/true, type);
   bubble->SetHighlightedButton(configuration.highlighted_button);
   bubble->SetArrow(configuration.bubble_arrow);
   bubble->GetWidget()->Show();

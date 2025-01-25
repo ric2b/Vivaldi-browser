@@ -256,10 +256,7 @@ class TestPrintRenderFrame
   }
 
   // mojom::PrintRenderFrameInterceptorForTesting
-  mojom::PrintRenderFrame* GetForwardingInterface() override {
-    NOTREACHED_IN_MIGRATION();
-    return nullptr;
-  }
+  mojom::PrintRenderFrame* GetForwardingInterface() override { NOTREACHED(); }
   void PrintFrameContent(mojom::PrintFrameContentParamsPtr params,
                          PrintFrameContentCallback callback) override {
     // Sends the printed result back.
@@ -1037,7 +1034,12 @@ IN_PROC_BROWSER_TEST_F(PrintBrowserTest,
   EXPECT_NE(old_height, new_height);
 }
 
-IN_PROC_BROWSER_TEST_F(PrintBrowserTest, LazyLoadedImagesFetchedScriptedPrint) {
+// TODO(tcaptan):
+// Re-enable this test if a solution is found that allows blocking of JS
+// initiated `window.print()` call while permitting the loading of print only
+// resources.
+IN_PROC_BROWSER_TEST_F(PrintBrowserTest,
+                       DISABLED_LazyLoadedImagesFetchedScriptedPrint) {
   ASSERT_TRUE(embedded_test_server()->Started());
   GURL url(embedded_test_server()->GetURL(
       "/printing/lazy-loaded-image-offscreen.html"));
@@ -2209,6 +2211,12 @@ class PrintCompositorDocumentDataTypeBrowserTest
          {{features::kEnableOopPrintDriversJobPrint.name, "true"}}});
     if (GetParam() == DocumentDataType::kXps) {
       enabled_features.push_back({features::kUseXpsForPrinting, {}});
+
+      // Use of XPS printing requires using LPAC for the sandbox, otherwise
+      // the permissions for token-based sandboxing have to be significantly
+      // relaxed.
+      enabled_features.push_back(
+          {sandbox::policy::features::kPrintCompositorLPAC, {}});
     } else {
       disabled_features.push_back(features::kUseXpsForPrinting);
     }

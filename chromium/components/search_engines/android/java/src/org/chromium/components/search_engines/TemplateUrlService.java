@@ -27,6 +27,7 @@ import java.util.List;
  *
  * See components/search_engines/template_url_service.h for more details.
  */
+@SuppressWarnings("EnumOrdinal") // Vivaldi
 public class TemplateUrlService {
     public enum DefaultSearchType {
         DEFAULT_SEARCH_MAIN,

@@ -23,10 +23,11 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <fp16/fp16.h>
 #include "xnnpack.h"
+#include "xnnpack/buffer.h"
 #include "xnnpack/cache.h"
 #include "xnnpack/common.h"
+#include "xnnpack/math.h"
 #include "xnnpack/microparams.h"
 #include "replicable_random_device.h"
 
@@ -448,17 +449,6 @@ class DeconvolutionOperatorTester {
     return this->use_weights_cache_;
   }
 
-#if XNN_PLATFORM_JIT
-  DeconvolutionOperatorTester& use_jit(bool use_jit) {
-    this->use_jit_ = use_jit;
-    return *this;
-  }
-
-  bool use_jit() const {
-    return this->use_jit_;
-  }
-#endif
-
   DeconvolutionOperatorTester& iterations(size_t iterations) {
     this->iterations_ = iterations;
     return *this;
@@ -479,14 +469,14 @@ class DeconvolutionOperatorTester {
       -std::numeric_limits<int8_t>::max(), std::numeric_limits<int8_t>::max());
     std::uniform_real_distribution<float> f32dist(0.1f, 1.0f);
 
-    std::vector<int8_t> input(XNN_EXTRA_BYTES / sizeof(int8_t) +
+    xnnpack::Buffer<int8_t> input(XNN_EXTRA_BYTES / sizeof(int8_t) +
       (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + groups() * group_input_channels());
-    std::vector<int8_t> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
-    std::vector<int32_t> bias(groups() * group_output_channels());
-    std::vector<int8_t> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels());
-    std::vector<int32_t> accumulators(batch_size() * output_height() * output_width() * groups() * group_output_channels());
-    std::vector<double> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
-    std::vector<float> requantization_scales(groups() * group_output_channels());
+    xnnpack::Buffer<int8_t> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
+    xnnpack::Buffer<int32_t> bias(groups() * group_output_channels());
+    xnnpack::Buffer<int8_t> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels());
+    xnnpack::Buffer<int32_t> accumulators(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<double> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<float> requantization_scales(groups() * group_output_channels());
 
     const int8_t input_zero_point = 1;
 
@@ -494,7 +484,6 @@ class DeconvolutionOperatorTester {
       std::generate(input.begin(), input.end(), [&]() { return i8dist(rng); });
       std::generate(kernel.begin(), kernel.end(), [&]() { return w8dist(rng); });
       std::generate(bias.begin(), bias.end(), [&]() { return i32dist(rng); });
-      std::fill(output.begin(), output.end(), INT8_C(0xA5));
 
       // Compute reference results, without renormalization.
       if (has_bias()) {
@@ -650,7 +639,7 @@ class DeconvolutionOperatorTester {
 
         // Smart pointer to automatically delete deconvolution_op2.
         std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_deconvolution_op(deconvolution_op2, xnn_delete_operator);
-        std::vector<int8_t> output2(output.size(), INT8_C(0xA5));
+        xnnpack::Buffer<int8_t> output2(output.size(), INT8_C(0xA5));
 
         ASSERT_EQ(xnn_status_success,
                   xnn_reshape_deconvolution2d_nhwc_qs8_qc8w(
@@ -674,8 +663,8 @@ class DeconvolutionOperatorTester {
     }
   }
 
-  void VerifyQC8(const std::vector<int8_t> &output,
-                 const std::vector<double> &output_ref) const {
+  void VerifyQC8(const xnnpack::Buffer<int8_t> &output,
+                 const xnnpack::Buffer<double> &output_ref) const {
     for (size_t i = 0; i < batch_size(); i++) {
       for (size_t y = 0; y < output_height(); y++) {
         for (size_t x = 0; x < output_width(); x++) {
@@ -711,13 +700,13 @@ class DeconvolutionOperatorTester {
     std::uniform_int_distribution<int32_t> u8dist(
       std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
 
-    std::vector<uint8_t> input(XNN_EXTRA_BYTES / sizeof(uint8_t) +
+    xnnpack::Buffer<uint8_t> input(XNN_EXTRA_BYTES / sizeof(uint8_t) +
       (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + groups() * group_input_channels());
-    std::vector<uint8_t> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
-    std::vector<int32_t> bias(groups() * group_output_channels());
-    std::vector<uint8_t> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels());
-    std::vector<int32_t> accumulators(batch_size() * output_height() * output_width() * groups() * group_output_channels());
-    std::vector<double> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<uint8_t> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
+    xnnpack::Buffer<int32_t> bias(groups() * group_output_channels());
+    xnnpack::Buffer<uint8_t> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels());
+    xnnpack::Buffer<int32_t> accumulators(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<double> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
 
     const uint8_t input_zero_point = 127;
     const uint8_t kernel_zero_point = 127;
@@ -726,7 +715,6 @@ class DeconvolutionOperatorTester {
       std::generate(input.begin(), input.end(), [&]() { return u8dist(rng); });
       std::generate(kernel.begin(), kernel.end(), [&]() { return u8dist(rng); });
       std::generate(bias.begin(), bias.end(), [&]() { return i32dist(rng); });
-      std::fill(output.begin(), output.end(), UINT8_C(0xA5));
 
       // Compute reference results, without renormalization.
       if (has_bias()) {
@@ -888,8 +876,8 @@ class DeconvolutionOperatorTester {
     }
   }
 
-  void VerifyQU8(const std::vector<uint8_t> &output,
-                 const std::vector<double> &output_ref,
+  void VerifyQU8(const xnnpack::Buffer<uint8_t> &output,
+                 const xnnpack::Buffer<double> &output_ref,
                  uint8_t output_zero_point) const {
     for (size_t i = 0; i < batch_size(); i++) {
       for (size_t y = 0; y < output_height(); y++) {
@@ -925,22 +913,21 @@ class DeconvolutionOperatorTester {
     xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.1f, 1.0f);
 
-    std::vector<uint16_t> input(XNN_EXTRA_BYTES / sizeof(uint16_t) +
+    xnnpack::Buffer<xnn_float16> input(XNN_EXTRA_BYTES / sizeof(xnn_float16) +
       (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + groups() * group_input_channels());
-    std::vector<uint16_t> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
-    std::vector<float> kernel_as_float(kernel.size());
-    std::vector<uint16_t> bias(groups() * group_output_channels());
-    std::vector<float> bias_as_float(bias.size());
-    std::vector<uint16_t> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels());
-    std::vector<float> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<xnn_float16> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
+    xnnpack::Buffer<float> kernel_as_float(kernel.size());
+    xnnpack::Buffer<xnn_float16> bias(groups() * group_output_channels());
+    xnnpack::Buffer<float> bias_as_float(bias.size());
+    xnnpack::Buffer<xnn_float16> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels());
+    xnnpack::Buffer<float> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
 
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
-      std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-      std::generate(kernel.begin(), kernel.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-      std::transform(kernel.cbegin(), kernel.cend(), kernel_as_float.begin(), fp16_ieee_to_fp32_value);
-      std::generate(bias.begin(), bias.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-      std::transform(bias.cbegin(), bias.cend(), bias_as_float.begin(), fp16_ieee_to_fp32_value);
-      std::fill(output.begin(), output.end(), UINT16_C(0x7E00) /* NaN */);
+      std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
+      std::generate(kernel.begin(), kernel.end(), [&]() { return f32dist(rng); });
+      std::copy(kernel.cbegin(), kernel.cend(), kernel_as_float.begin());
+      std::generate(bias.begin(), bias.end(), [&]() { return f32dist(rng); });
+      std::copy(bias.cbegin(), bias.cend(), bias_as_float.begin());
 
       // Compute reference results, without clamping.
       if (has_bias()) {
@@ -974,7 +961,7 @@ class DeconvolutionOperatorTester {
                       for (size_t oc = 0; oc < group_output_channels(); oc++) {
                         for (size_t ic = 0; ic < group_input_channels(); ic++) {
                           output_ref[(((i * output_height() + oy) * output_width() + ox) * groups() + g) * group_output_channels() + oc] +=
-                            fp16_ieee_to_fp32_value(input[((i * input_height() + iy) * input_width() + ix) * input_pixel_stride() + g * group_input_channels() + ic]) *
+                            input[((i * input_height() + iy) * input_width() + ix) * input_pixel_stride() + g * group_input_channels() + ic] *
                             kernel_as_float[(((g * group_output_channels() + oc) * kernel_height() + ky) * kernel_width() + kx) * group_input_channels() + ic];
                         }
                       }
@@ -993,8 +980,8 @@ class DeconvolutionOperatorTester {
       const float accumulated_range = accumulated_max - accumulated_min;
       float output_min = accumulated_min + accumulated_range / 255.0f * float(qmin());
       float output_max = accumulated_max - accumulated_range / 255.0f * float(255 - qmax());
-      output_min = fp16_ieee_to_fp32_value(fp16_ieee_from_fp32_value(output_min));
-      output_max = fp16_ieee_to_fp32_value(fp16_ieee_from_fp32_value(output_max));
+      output_min = xnn_float16(output_min);
+      output_max = xnn_float16(output_max);
       if (accumulated_range == 0.0f) {
         output_min = -std::numeric_limits<float>::infinity();
         output_max = +std::numeric_limits<float>::infinity();
@@ -1095,7 +1082,7 @@ class DeconvolutionOperatorTester {
 
         // Smart pointer to automatically delete deconvolution_op2.
         std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_deconvolution_op(deconvolution_op2, xnn_delete_operator);
-        std::vector<uint16_t> output2(output.size(), UINT16_C(0x7E00) /* NaN */);
+        xnnpack::Buffer<xnn_float16> output2(output.size(), std::nanf(""));
 
         ASSERT_EQ(xnn_status_success,
                   xnn_reshape_deconvolution2d_nhwc_f16(
@@ -1119,8 +1106,8 @@ class DeconvolutionOperatorTester {
     }
   }
 
-  void VerifyF16(const std::vector<uint16_t> &output,
-                 const std::vector<float> &output_ref,
+  void VerifyF16(const xnnpack::Buffer<xnn_float16> &output,
+                 const xnnpack::Buffer<float> &output_ref,
                  float output_max,
                  float output_min) const {
     for (size_t i = 0; i < batch_size(); i++) {
@@ -1128,12 +1115,12 @@ class DeconvolutionOperatorTester {
         for (size_t x = 0; x < output_width(); x++) {
           for (size_t g = 0; g < groups(); g++) {
             for (size_t c = 0; c < group_output_channels(); c++) {
-              EXPECT_GE(fp16_ieee_to_fp32_value(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + g * group_output_channels() + c]), output_min)
+              EXPECT_GE(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + g * group_output_channels() + c], output_min)
                   << "(x, y) = (" << x << ", " << y << "), group = " << g << ", channel = " << c;
-              EXPECT_LE(fp16_ieee_to_fp32_value(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + g * group_output_channels() + c]), output_max)
+              EXPECT_LE(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + g * group_output_channels() + c], output_max)
                   << "(x, y) = (" << x << ", " << y << "), group = " << g << ", channel = " << c;
               EXPECT_NEAR(
-                  fp16_ieee_to_fp32_value(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + g * group_output_channels() + c]),
+                  output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + g * group_output_channels() + c],
                   output_ref[(((i * output_height() + y) * output_width() + x) * groups() + g) * group_output_channels() + c],
                   1.0e-2f * std::abs(output_ref[(((i * output_height() + y) * output_width() + x) * groups() + g) * group_output_channels() + c]))
                   << "(x, y) = (" << x << ", " << y << "), group = " << g << ", channel = " << c;
@@ -1153,14 +1140,14 @@ class DeconvolutionOperatorTester {
     std::uniform_int_distribution<int32_t> w8dist(
     std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
 
-    std::vector<int8_t> input(XNN_EXTRA_BYTES / sizeof(int8_t) +
+    xnnpack::Buffer<int8_t> input(XNN_EXTRA_BYTES / sizeof(int8_t) +
       (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + groups() * group_input_channels());
-    std::vector<int8_t> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
-    std::vector<float> bias(groups() * group_output_channels());
-    std::vector<float> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels());
-    std::vector<float> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
-    std::vector<xnn_qd8_quantization_params> quantization_params(batch_size());
-    std::vector<float> kernel_scale(groups() * group_output_channels());
+    xnnpack::Buffer<int8_t> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
+    xnnpack::Buffer<float> bias(groups() * group_output_channels());
+    xnnpack::Buffer<float> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels());
+    xnnpack::Buffer<float> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<xnn_qd8_quantization_params> quantization_params(batch_size());
+    xnnpack::Buffer<float> kernel_scale(groups() * group_output_channels());
 
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return w8dist(rng); });
@@ -1190,7 +1177,6 @@ class DeconvolutionOperatorTester {
           quantization_params.begin(), quantization_params.end(), [&]() {
             return xnn_qd8_quantization_params{w8dist(rng), f32idist(rng)};
           });
-      std::fill(output.begin(), output.end(), nanf(""));
 
       // Compute reference results, without clamping.
       std::fill(output_ref.begin(), output_ref.end(), 0.0f);
@@ -1270,15 +1256,7 @@ class DeconvolutionOperatorTester {
       ASSERT_EQ(xnn_status_success, xnn_initialize(nullptr /* allocator */));
       xnn_operator_t deconvolution_op = nullptr;
 
-      std::unique_ptr<xnn_code_cache, decltype(&xnn_release_code_cache)> auto_code_cache(
-          nullptr, xnn_release_code_cache);
-      #if XNN_PLATFORM_JIT
-        xnn_code_cache code_cache;
-        if (use_jit()) {
-          xnn_init_code_cache(&code_cache);
-          auto_code_cache.reset(&code_cache);
-        }
-      #endif
+      xnn_code_cache_t auto_code_cache = nullptr;
       struct xnn_internal_weights_cache* internal_weights_cache = nullptr;
       std::unique_ptr<xnn_weights_cache_provider, decltype(&xnn_delete_weights_cache)> auto_weights_cache(
         nullptr, xnn_delete_weights_cache);
@@ -1300,7 +1278,7 @@ class DeconvolutionOperatorTester {
               group_input_channels(), group_output_channels(),
               input_pixel_stride(), output_pixel_stride(), kernel_scale.data(), kernel.data(),
               has_bias() ? bias.data() : nullptr, output_min, output_max,
-              /*flags=*/0, auto_code_cache.get(), auto_weights_cache.get(), &deconvolution_op));
+              /*flags=*/0, auto_code_cache, auto_weights_cache.get(), &deconvolution_op));
       if (use_weights_cache()) {
         ASSERT_EQ(xnn_status_success,
                   xnn_finalize_weights_cache(auto_weights_cache.get(), xnn_weights_cache_finalization_kind_soft));
@@ -1308,14 +1286,6 @@ class DeconvolutionOperatorTester {
 
       // Smart pointer to automatically delete deconvolution_op.
       std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_deconvolution_op(deconvolution_op, xnn_delete_operator);
-
-      #if XNN_PLATFORM_JIT
-        if (use_jit()) {
-          // Check that we actually generated code.
-          ASSERT_GT(code_cache.cache.code.size, 0);
-          xnn_finalize_code_memory(&code_cache.cache.code);
-        }
-      #endif
 
       ASSERT_EQ(xnn_status_success,
         xnn_reshape_deconvolution2d_nhwc_qd8_f32_qc8w(
@@ -1329,7 +1299,7 @@ class DeconvolutionOperatorTester {
           xnn_status_success,
           xnn_setup_deconvolution2d_nhwc_qd8_f32_qc8w(
               deconvolution_op, input.data(), output.data(),
-              reinterpret_cast<const struct xnn_dynamic_quantization_params*>(
+              reinterpret_cast<const struct xnn_quantization_params*>(
                   quantization_params.data())));
 
       ASSERT_EQ(xnn_status_success,
@@ -1339,16 +1309,7 @@ class DeconvolutionOperatorTester {
 
       if (use_weights_cache()) {
         // We already finalized the code cache, so create a new code cache if we are testing JIT.
-        std::unique_ptr<xnn_code_cache, decltype(&xnn_release_code_cache)> auto_inner_code_cache(
-            nullptr, xnn_release_code_cache);
-        #if XNN_PLATFORM_JIT
-          xnn_code_cache inner_code_cache;
-          if (use_jit()) {
-            xnn_init_code_cache(&inner_code_cache);
-            auto_inner_code_cache.reset(&inner_code_cache);
-          }
-        #endif
-
+        xnn_code_cache_t auto_inner_code_cache = nullptr;
         xnn_operator_t deconvolution_op2 = nullptr;
         size_t old_weights_cache_size = internal_weights_cache->cache.weights.size;
 
@@ -1361,19 +1322,11 @@ class DeconvolutionOperatorTester {
                 group_input_channels(), group_output_channels(),
                 input_pixel_stride(), output_pixel_stride(), kernel_scale.data(), kernel.data(),
                 has_bias() ? bias.data() : nullptr, output_min, output_max,
-                /*flags=*/0, auto_inner_code_cache.get(), auto_weights_cache.get(), &deconvolution_op2));
+                /*flags=*/0, auto_inner_code_cache, auto_weights_cache.get(), &deconvolution_op2));
 
         // Smart pointer to automatically delete deconvolution_op2.
         std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_deconvolution_op(deconvolution_op2, xnn_delete_operator);
-        std::vector<float> output2(output.size(), nanf(""));
-
-        #if XNN_PLATFORM_JIT
-          if (use_jit()) {
-            // Check that we actually generated code.
-            ASSERT_GT(inner_code_cache.cache.code.size, 0);
-            xnn_finalize_code_memory(&inner_code_cache.cache.code);
-          }
-        #endif
+        xnnpack::Buffer<float> output2(output.size(), nanf(""));
 
         ASSERT_EQ(xnn_status_success,
                   xnn_reshape_deconvolution2d_nhwc_qd8_f32_qc8w(
@@ -1387,7 +1340,7 @@ class DeconvolutionOperatorTester {
             xnn_status_success,
             xnn_setup_deconvolution2d_nhwc_qd8_f32_qc8w(
                 deconvolution_op2, input.data(), output2.data(),
-                reinterpret_cast<const struct xnn_dynamic_quantization_params*>(
+                reinterpret_cast<const struct xnn_quantization_params*>(
                     quantization_params.data())));
 
         ASSERT_EQ(xnn_status_success,
@@ -1405,12 +1358,12 @@ class DeconvolutionOperatorTester {
     xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(-1.0f, 1.0f);
 
-    std::vector<float> input(XNN_EXTRA_BYTES / sizeof(float) +
+    xnnpack::Buffer<float> input(XNN_EXTRA_BYTES / sizeof(float) +
       (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + groups() * group_input_channels());
-    std::vector<float> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
-    std::vector<float> bias(groups() * group_output_channels());
-    std::vector<float> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels());
-    std::vector<float> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<float> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
+    xnnpack::Buffer<float> bias(groups() * group_output_channels());
+    xnnpack::Buffer<float> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels());
+    xnnpack::Buffer<float> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
 
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
@@ -1433,7 +1386,6 @@ class DeconvolutionOperatorTester {
         }
       }
 
-      std::fill(output.begin(), output.end(), nanf(""));
 
       // Compute reference results, without clamping.
       if (has_bias()) {
@@ -1515,15 +1467,7 @@ class DeconvolutionOperatorTester {
       ASSERT_EQ(xnn_status_success, xnn_initialize(nullptr /* allocator */));
       xnn_operator_t deconvolution_op = nullptr;
 
-      std::unique_ptr<xnn_code_cache, decltype(&xnn_release_code_cache)> auto_code_cache(
-          nullptr, xnn_release_code_cache);
-      #if XNN_PLATFORM_JIT
-        xnn_code_cache code_cache;
-        if (use_jit()) {
-          xnn_init_code_cache(&code_cache);
-          auto_code_cache.reset(&code_cache);
-        }
-      #endif
+      xnn_code_cache_t auto_code_cache = nullptr;
       struct xnn_internal_weights_cache* internal_weights_cache = nullptr;
       std::unique_ptr<xnn_weights_cache_provider, decltype(&xnn_delete_weights_cache)> auto_weights_cache(
         nullptr, xnn_delete_weights_cache);
@@ -1545,7 +1489,7 @@ class DeconvolutionOperatorTester {
               group_input_channels(), group_output_channels(),
               input_pixel_stride(), output_pixel_stride(), kernel.data(),
               has_bias() ? bias.data() : nullptr, output_min, output_max,
-              /*flags=*/0, auto_code_cache.get(), auto_weights_cache.get(), &deconvolution_op));
+              /*flags=*/0, auto_code_cache, auto_weights_cache.get(), &deconvolution_op));
       if (use_weights_cache()) {
         ASSERT_EQ(xnn_status_success,
                   xnn_finalize_weights_cache(auto_weights_cache.get(), xnn_weights_cache_finalization_kind_soft));
@@ -1553,14 +1497,6 @@ class DeconvolutionOperatorTester {
 
       // Smart pointer to automatically delete deconvolution_op.
       std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_deconvolution_op(deconvolution_op, xnn_delete_operator);
-
-      #if XNN_PLATFORM_JIT
-        if (use_jit()) {
-          // Check that we actually generated code.
-          ASSERT_GT(code_cache.cache.code.size, 0);
-          xnn_finalize_code_memory(&code_cache.cache.code);
-        }
-      #endif
 
       ASSERT_EQ(xnn_status_success,
         xnn_reshape_deconvolution2d_nhwc_f32(
@@ -1582,16 +1518,7 @@ class DeconvolutionOperatorTester {
 
       if (use_weights_cache()) {
         // We already finalized the code cache, so create a new code cache if we are testing JIT.
-        std::unique_ptr<xnn_code_cache, decltype(&xnn_release_code_cache)> auto_inner_code_cache(
-            nullptr, xnn_release_code_cache);
-        #if XNN_PLATFORM_JIT
-          xnn_code_cache inner_code_cache;
-          if (use_jit()) {
-            xnn_init_code_cache(&inner_code_cache);
-            auto_inner_code_cache.reset(&inner_code_cache);
-          }
-        #endif
-
+        xnn_code_cache_t auto_inner_code_cache = nullptr;
         xnn_operator_t deconvolution_op2 = nullptr;
         size_t old_weights_cache_size = internal_weights_cache->cache.weights.size;
 
@@ -1604,19 +1531,11 @@ class DeconvolutionOperatorTester {
                 group_input_channels(), group_output_channels(),
                 input_pixel_stride(), output_pixel_stride(), kernel.data(),
                 has_bias() ? bias.data() : nullptr, output_min, output_max,
-                /*flags=*/0, auto_inner_code_cache.get(), auto_weights_cache.get(), &deconvolution_op2));
+                /*flags=*/0, auto_inner_code_cache, auto_weights_cache.get(), &deconvolution_op2));
 
         // Smart pointer to automatically delete deconvolution_op2.
         std::unique_ptr<xnn_operator, decltype(&xnn_delete_operator)> auto_deconvolution_op(deconvolution_op2, xnn_delete_operator);
-        std::vector<float> output2(output.size(), nanf(""));
-
-        #if XNN_PLATFORM_JIT
-          if (use_jit()) {
-            // Check that we actually generated code.
-            ASSERT_GT(inner_code_cache.cache.code.size, 0);
-            xnn_finalize_code_memory(&inner_code_cache.cache.code);
-          }
-        #endif
+        xnnpack::Buffer<float> output2(output.size(), nanf(""));
 
         ASSERT_EQ(xnn_status_success,
                   xnn_reshape_deconvolution2d_nhwc_f32(
@@ -1663,11 +1582,11 @@ class DeconvolutionOperatorTester {
 
     std::vector<xnn_operator_t> operators;
     operators.reserve(iterations());
-    std::vector<std::vector<float>> inputs;
+    std::vector<xnnpack::Buffer<float>> inputs;
     inputs.reserve(iterations());
-    std::vector<std::vector<float>> outputs;
+    std::vector<xnnpack::Buffer<float>> outputs;
     outputs.reserve(iterations());
-    std::vector<std::vector<float>> output_refs;
+    std::vector<xnnpack::Buffer<float>> output_refs;
     output_refs.reserve(iterations());
     std::vector<float> output_mins;
     output_mins.reserve(iterations());
@@ -1675,17 +1594,16 @@ class DeconvolutionOperatorTester {
     output_maxs.reserve(iterations());
 
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
-      std::vector<float> input(XNN_EXTRA_BYTES / sizeof(float) +
+      xnnpack::Buffer<float> input(XNN_EXTRA_BYTES / sizeof(float) +
                                (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + groups() * group_input_channels());
-      std::vector<float> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
-      std::vector<float> bias(groups() * group_output_channels());
-      std::vector<float> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels());
-      std::vector<float> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+      xnnpack::Buffer<float> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
+      xnnpack::Buffer<float> bias(groups() * group_output_channels());
+      xnnpack::Buffer<float> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels());
+      xnnpack::Buffer<float> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
 
       std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
       std::generate(kernel.begin(), kernel.end(), [&]() { return f32dist(rng); });
       std::generate(bias.begin(), bias.end(), [&]() { return f32dist(rng); });
-      std::fill(output.begin(), output.end(), nanf(""));
 
       // Compute reference results, without clamping.
       if (has_bias()) {
@@ -1807,8 +1725,8 @@ class DeconvolutionOperatorTester {
     ASSERT_EQ(iterations(), internal_weights_cache->cache.num_entries);
   }
 
-  void VerifyF32(const std::vector<float> &output,
-                 const std::vector<float> &output_ref,
+  void VerifyF32(const xnnpack::Buffer<float> &output,
+                 const xnnpack::Buffer<float> &output_ref,
                  float output_max,
                  float output_min) const {
     for (size_t i = 0; i < batch_size(); i++) {
@@ -1842,18 +1760,18 @@ class DeconvolutionOperatorTester {
     std::uniform_int_distribution<int32_t> w8dist(
       -std::numeric_limits<int8_t>::max(), std::numeric_limits<int8_t>::max());
 
-    std::vector<int8_t> input(XNN_EXTRA_BYTES / sizeof(int8_t) + std::max(
+    xnnpack::Buffer<int8_t> input(XNN_EXTRA_BYTES / sizeof(int8_t) + std::max(
       (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + groups() * group_input_channels(),
       (next_batch_size() * next_input_height() * next_input_width() - 1) * input_pixel_stride() + groups() * group_input_channels()));
-    std::vector<int8_t> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
-    std::vector<int32_t> bias(groups() * group_output_channels());
-    std::vector<int8_t> output(std::max(
+    xnnpack::Buffer<int8_t> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
+    xnnpack::Buffer<int32_t> bias(groups() * group_output_channels());
+    xnnpack::Buffer<int8_t> output(std::max(
       (batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels(),
       (next_batch_size() * next_output_height() * next_output_width() - 1) * output_pixel_stride() + groups() * group_output_channels()));
-    std::vector<int32_t> accumulators(batch_size() * output_height() * output_width() * groups() * group_output_channels());
-    std::vector<double> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
-    std::vector<int32_t> next_accumulators(next_batch_size() * next_output_height() * next_output_width() * groups() * group_output_channels());
-    std::vector<double> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<int32_t> accumulators(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<double> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<int32_t> next_accumulators(next_batch_size() * next_output_height() * next_output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<double> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * groups() * group_output_channels());
 
     const int8_t input_zero_point = 127;
 
@@ -1861,7 +1779,6 @@ class DeconvolutionOperatorTester {
       std::generate(input.begin(), input.end(), [&]() { return i8dist(rng); });
       std::generate(kernel.begin(), kernel.end(), [&]() { return w8dist(rng); });
       std::generate(bias.begin(), bias.end(), [&]() { return i32dist(rng); });
-      std::fill(output.begin(), output.end(), INT8_C(0xA5));
 
       // Compute reference results, without renormalization.
       if (has_bias()) {
@@ -1983,7 +1900,6 @@ class DeconvolutionOperatorTester {
 
       // Re-generate data for the second run.
       std::generate(input.begin(), input.end(), [&]() { return i8dist(rng); });
-      std::fill(output.begin(), output.end(), INT8_C(0xA5));
 
       // Compute reference results for the second run, including renormalization.
       if (has_bias()) {
@@ -2082,18 +1998,18 @@ class DeconvolutionOperatorTester {
     std::uniform_int_distribution<int32_t> u8dist(
       std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
 
-    std::vector<uint8_t> input(XNN_EXTRA_BYTES / sizeof(uint8_t) + std::max(
+    xnnpack::Buffer<uint8_t> input(XNN_EXTRA_BYTES / sizeof(uint8_t) + std::max(
       (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + groups() * group_input_channels(),
       (next_batch_size() * next_input_height() * next_input_width() - 1) * input_pixel_stride() + groups() * group_input_channels()));
-    std::vector<uint8_t> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
-    std::vector<int32_t> bias(groups() * group_output_channels());
-    std::vector<uint8_t> output(std::max(
+    xnnpack::Buffer<uint8_t> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
+    xnnpack::Buffer<int32_t> bias(groups() * group_output_channels());
+    xnnpack::Buffer<uint8_t> output(std::max(
       (batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels(),
       (next_batch_size() * next_output_height() * next_output_width() - 1) * output_pixel_stride() + groups() * group_output_channels()));
-    std::vector<int32_t> accumulators(batch_size() * output_height() * output_width() * groups() * group_output_channels());
-    std::vector<double> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
-    std::vector<int32_t> next_accumulators(next_batch_size() * next_output_height() * next_output_width() * groups() * group_output_channels());
-    std::vector<double> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<int32_t> accumulators(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<double> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<int32_t> next_accumulators(next_batch_size() * next_output_height() * next_output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<double> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * groups() * group_output_channels());
 
     const uint8_t input_zero_point = 127;
     const uint8_t kernel_zero_point = 127;
@@ -2102,7 +2018,6 @@ class DeconvolutionOperatorTester {
       std::generate(input.begin(), input.end(), [&]() { return u8dist(rng); });
       std::generate(kernel.begin(), kernel.end(), [&]() { return u8dist(rng); });
       std::generate(bias.begin(), bias.end(), [&]() { return i32dist(rng); });
-      std::fill(output.begin(), output.end(), UINT8_C(0xA5));
 
       // Compute reference results, without renormalization.
       if (has_bias()) {
@@ -2224,7 +2139,6 @@ class DeconvolutionOperatorTester {
 
       // Re-generate data for the second run.
       std::generate(input.begin(), input.end(), [&]() { return u8dist(rng); });
-      std::fill(output.begin(), output.end(), 0xA5);
 
       // Compute reference results for the second run, including renormalization.
       if (has_bias()) {
@@ -2321,22 +2235,21 @@ class DeconvolutionOperatorTester {
     xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.1f, 1.0f);
 
-    std::vector<uint16_t> input(XNN_EXTRA_BYTES / sizeof(uint16_t) + std::max(
+    xnnpack::Buffer<xnn_float16> input(XNN_EXTRA_BYTES / sizeof(xnn_float16) + std::max(
       (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + groups() * group_input_channels(),
       (next_batch_size() * next_input_height() * next_input_width() - 1) * input_pixel_stride() + groups() * group_input_channels()));
-    std::vector<uint16_t> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
-    std::vector<uint16_t> bias(groups() * group_output_channels());
-    std::vector<uint16_t> output(std::max(
+    xnnpack::Buffer<xnn_float16> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
+    xnnpack::Buffer<xnn_float16> bias(groups() * group_output_channels());
+    xnnpack::Buffer<xnn_float16> output(std::max(
       (batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels(),
       (next_batch_size() * next_output_height() * next_output_width() - 1) * output_pixel_stride() + groups() * group_output_channels()));
-    std::vector<float> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
-    std::vector<float> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<float> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<float> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * groups() * group_output_channels());
 
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
-      std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-      std::generate(kernel.begin(), kernel.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-      std::generate(bias.begin(), bias.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-      std::fill(output.begin(), output.end(), UINT16_C(0x7E00) /* NaN */);
+      std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
+      std::generate(kernel.begin(), kernel.end(), [&]() { return f32dist(rng); });
+      std::generate(bias.begin(), bias.end(), [&]() { return f32dist(rng); });
 
       // Compute reference results, without clamping.
       if (has_bias()) {
@@ -2346,7 +2259,7 @@ class DeconvolutionOperatorTester {
               for (size_t g = 0; g < groups(); g++) {
                 for (size_t oc = 0; oc < group_output_channels(); oc++) {
                   output_ref[(((i * output_height() + oy) * output_width() + ox) * groups() + g) * group_output_channels() + oc] =
-                    fp16_ieee_to_fp32_value(bias[g * group_output_channels() + oc]);
+                    bias[g * group_output_channels() + oc];
                 }
               }
             }
@@ -2370,8 +2283,8 @@ class DeconvolutionOperatorTester {
                       for (size_t oc = 0; oc < group_output_channels(); oc++) {
                         for (size_t ic = 0; ic < group_input_channels(); ic++) {
                           output_ref[(((i * output_height() + oy) * output_width() + ox) * groups() + g) * group_output_channels() + oc] +=
-                            fp16_ieee_to_fp32_value(input[((i * input_height() + iy) * input_width() + ix) * input_pixel_stride() + g * group_input_channels() + ic]) *
-                            fp16_ieee_to_fp32_value(kernel[(((g * group_output_channels() + oc) * kernel_height() + ky) * kernel_width() + kx) * group_input_channels() + ic]);
+                            input[((i * input_height() + iy) * input_width() + ix) * input_pixel_stride() + g * group_input_channels() + ic] *
+                            kernel[(((g * group_output_channels() + oc) * kernel_height() + ky) * kernel_width() + kx) * group_input_channels() + ic];
                         }
                       }
                     }
@@ -2389,8 +2302,8 @@ class DeconvolutionOperatorTester {
       const float accumulated_range = accumulated_max - accumulated_min;
       float output_min = accumulated_min + accumulated_range / 255.0f * float(qmin());
       float output_max = accumulated_max - accumulated_range / 255.0f * float(255 - qmax());
-      output_min = fp16_ieee_to_fp32_value(fp16_ieee_from_fp32_value(output_min));
-      output_max = fp16_ieee_to_fp32_value(fp16_ieee_from_fp32_value(output_max));
+      output_min = xnn_float16(output_min);
+      output_max = xnn_float16(output_max);
       if (accumulated_range == 0.0f) {
         output_min = -std::numeric_limits<float>::infinity();
         output_max = +std::numeric_limits<float>::infinity();
@@ -2452,12 +2365,12 @@ class DeconvolutionOperatorTester {
           for (size_t x = 0; x < output_width(); x++) {
             for (size_t g = 0; g < groups(); g++) {
               for (size_t c = 0; c < group_output_channels(); c++) {
-                EXPECT_GE(fp16_ieee_to_fp32_value(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + g * group_output_channels() + c]), output_min)
+                EXPECT_GE(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + g * group_output_channels() + c], output_min)
                   << "(x, y) = (" << x << ", " << y << "), group = " << g << ", channel = " << c;
-                EXPECT_LE(fp16_ieee_to_fp32_value(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + g * group_output_channels() + c]), output_max)
+                EXPECT_LE(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + g * group_output_channels() + c], output_max)
                   << "(x, y) = (" << x << ", " << y << "), group = " << g << ", channel = " << c;
                 EXPECT_NEAR(
-                    fp16_ieee_to_fp32_value(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + g * group_output_channels() + c]),
+                    output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + g * group_output_channels() + c],
                     output_ref[(((i * output_height() + y) * output_width() + x) * groups() + g) * group_output_channels() + c],
                     1.0e-2f * std::abs(output_ref[(((i * output_height() + y) * output_width() + x) * groups() + g) * group_output_channels() + c]))
                   << "(x, y) = (" << x << ", " << y << "), group = " << g << ", channel = " << c;
@@ -2468,8 +2381,7 @@ class DeconvolutionOperatorTester {
       }
 
       // Re-generate data for the second run.
-      std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-      std::fill(output.begin(), output.end(), UINT16_C(0x7E00) /* NaN */);
+      std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
 
       // Compute reference results for the second run, including clamping.
       if (has_bias()) {
@@ -2479,7 +2391,7 @@ class DeconvolutionOperatorTester {
               for (size_t g = 0; g < groups(); g++) {
                 for (size_t oc = 0; oc < group_output_channels(); oc++) {
                   next_output_ref[(((i * next_output_height() + oy) * next_output_width() + ox) * groups() + g) * group_output_channels() + oc] =
-                    fp16_ieee_to_fp32_value(bias[g * group_output_channels() + oc]);
+                    bias[g * group_output_channels() + oc];
                 }
               }
             }
@@ -2503,8 +2415,8 @@ class DeconvolutionOperatorTester {
                       for (size_t oc = 0; oc < group_output_channels(); oc++) {
                         for (size_t ic = 0; ic < group_input_channels(); ic++) {
                           next_output_ref[(((i * next_output_height() + oy) * next_output_width() + ox) * groups() + g) * group_output_channels() + oc] +=
-                            fp16_ieee_to_fp32_value(input[((i * next_input_height() + iy) * next_input_width() + ix) * input_pixel_stride() + g * group_input_channels() + ic]) *
-                            fp16_ieee_to_fp32_value(kernel[(((g * group_output_channels() + oc) * kernel_height() + ky) * kernel_width() + kx) * group_input_channels() + ic]);
+                            input[((i * next_input_height() + iy) * next_input_width() + ix) * input_pixel_stride() + g * group_input_channels() + ic] *
+                            kernel[(((g * group_output_channels() + oc) * kernel_height() + ky) * kernel_width() + kx) * group_input_channels() + ic];
                         }
                       }
                     }
@@ -2542,12 +2454,12 @@ class DeconvolutionOperatorTester {
           for (size_t x = 0; x < next_output_width(); x++) {
             for (size_t g = 0; g < groups(); g++) {
               for (size_t c = 0; c < group_output_channels(); c++) {
-                EXPECT_GE(fp16_ieee_to_fp32_value(output[((i * next_output_height() + y) * next_output_width() + x) * output_pixel_stride() + g * group_output_channels() + c]), output_min)
+                EXPECT_GE(output[((i * next_output_height() + y) * next_output_width() + x) * output_pixel_stride() + g * group_output_channels() + c], output_min)
                   << "(x, y) = (" << x << ", " << y << "), group = " << g << ", channel = " << c;
-                EXPECT_LE(fp16_ieee_to_fp32_value(output[((i * next_output_height() + y) * next_output_width() + x) * output_pixel_stride() + g * group_output_channels() + c]), output_max)
+                EXPECT_LE(output[((i * next_output_height() + y) * next_output_width() + x) * output_pixel_stride() + g * group_output_channels() + c], output_max)
                   << "(x, y) = (" << x << ", " << y << "), group = " << g << ", channel = " << c;
                 EXPECT_NEAR(
-                    fp16_ieee_to_fp32_value(output[((i * next_output_height() + y) * next_output_width() + x) * output_pixel_stride() + g * group_output_channels() + c]),
+                    output[((i * next_output_height() + y) * next_output_width() + x) * output_pixel_stride() + g * group_output_channels() + c],
                     next_output_ref[(((i * next_output_height() + y) * next_output_width() + x) * groups() + g) * group_output_channels() + c],
                     1.0e-2f * std::abs(next_output_ref[(((i * next_output_height() + y) * next_output_width() + x) * groups() + g) * group_output_channels() + c]))
                   << "(x, y) = (" << x << ", " << y << "), group = " << g << ", channel = " << c;
@@ -2565,22 +2477,21 @@ class DeconvolutionOperatorTester {
     xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.1f, 1.0f);
 
-    std::vector<float> input(XNN_EXTRA_BYTES / sizeof(float) + std::max(
+    xnnpack::Buffer<float> input(XNN_EXTRA_BYTES / sizeof(float) + std::max(
       (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + groups() * group_input_channels(),
       (next_batch_size() * next_input_height() * next_input_width() - 1) * input_pixel_stride() + groups() * group_input_channels()));
-    std::vector<float> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
-    std::vector<float> bias(groups() * group_output_channels());
-    std::vector<float> output(std::max(
+    xnnpack::Buffer<float> kernel(groups() * group_output_channels() * kernel_height() * kernel_width() * group_input_channels());
+    xnnpack::Buffer<float> bias(groups() * group_output_channels());
+    xnnpack::Buffer<float> output(std::max(
       (batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + groups() * group_output_channels(),
       (next_batch_size() * next_output_height() * next_output_width() - 1) * output_pixel_stride() + groups() * group_output_channels()));
-    std::vector<float> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
-    std::vector<float> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<float> output_ref(batch_size() * output_height() * output_width() * groups() * group_output_channels());
+    xnnpack::Buffer<float> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * groups() * group_output_channels());
 
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
       std::generate(kernel.begin(), kernel.end(), [&]() { return f32dist(rng); });
       std::generate(bias.begin(), bias.end(), [&]() { return f32dist(rng); });
-      std::fill(output.begin(), output.end(), nanf(""));
 
       // Compute reference results, without clamping.
       if (has_bias()) {
@@ -2697,7 +2608,6 @@ class DeconvolutionOperatorTester {
 
       // Re-generate data for the second run.
       std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
-      std::fill(output.begin(), output.end(), nanf(""));
 
       // Compute reference results for the second run, including clamping.
       if (has_bias()) {
@@ -2817,8 +2727,5 @@ class DeconvolutionOperatorTester {
   bool has_bias_{true};
   WeightsType weights_type_{WeightsType::Default};
   bool use_weights_cache_{false};
-#if XNN_PLATFORM_JIT
-  bool use_jit_{false};
-#endif
   size_t iterations_{1};
 };

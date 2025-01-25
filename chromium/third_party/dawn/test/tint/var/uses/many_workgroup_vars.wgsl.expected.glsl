@@ -100,8 +100,8 @@ shared mat2 m96;
 shared mat2 m97;
 shared mat2 m98;
 shared mat2 m99;
-void tint_zero_workgroup_memory(uint local_idx) {
-  if ((local_idx < 1u)) {
+void tint_symbol_inner(uint idx) {
+  if ((idx == 0u)) {
     m00 = mat2(vec2(0.0f), vec2(0.0f));
     m01 = mat2(vec2(0.0f), vec2(0.0f));
     m02 = mat2(vec2(0.0f), vec2(0.0f));
@@ -204,10 +204,6 @@ void tint_zero_workgroup_memory(uint local_idx) {
     m99 = mat2(vec2(0.0f), vec2(0.0f));
   }
   barrier();
-}
-
-void tint_symbol(uint idx) {
-  tint_zero_workgroup_memory(idx);
   m00[0][0] = 1.0f;
   m01[0][0] = 1.0f;
   m02[0][0] = 1.0f;
@@ -309,9 +305,7 @@ void tint_symbol(uint idx) {
   m98[0][0] = 1.0f;
   m99[0][0] = 1.0f;
 }
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  tint_symbol(gl_LocalInvocationIndex);
-  return;
+  tint_symbol_inner(gl_LocalInvocationIndex);
 }

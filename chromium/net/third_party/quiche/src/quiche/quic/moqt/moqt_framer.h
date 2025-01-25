@@ -31,6 +31,7 @@ class QUICHE_EXPORT MoqtFramer {
   // Serializes the header for an object, including the appropriate stream
   // header if `is_first_in_stream` is set to true.
   quiche::QuicheBuffer SerializeObjectHeader(const MoqtObject& message,
+                                             MoqtDataStreamType message_type,
                                              bool is_first_in_stream);
   quiche::QuicheBuffer SerializeObjectDatagram(const MoqtObject& message,
                                                absl::string_view payload);
@@ -55,9 +56,27 @@ class QUICHE_EXPORT MoqtFramer {
   quiche::QuicheBuffer SerializeUnannounce(const MoqtUnannounce& message);
   quiche::QuicheBuffer SerializeTrackStatus(const MoqtTrackStatus& message);
   quiche::QuicheBuffer SerializeGoAway(const MoqtGoAway& message);
+  quiche::QuicheBuffer SerializeSubscribeAnnounces(
+      const MoqtSubscribeAnnounces& message);
+  quiche::QuicheBuffer SerializeSubscribeAnnouncesOk(
+      const MoqtSubscribeAnnouncesOk& message);
+  quiche::QuicheBuffer SerializeSubscribeAnnouncesError(
+      const MoqtSubscribeAnnouncesError& message);
+  quiche::QuicheBuffer SerializeUnsubscribeAnnounces(
+      const MoqtUnsubscribeAnnounces& message);
+  quiche::QuicheBuffer SerializeMaxSubscribeId(
+      const MoqtMaxSubscribeId& message);
+  quiche::QuicheBuffer SerializeFetch(const MoqtFetch& message);
+  quiche::QuicheBuffer SerializeFetchCancel(const MoqtFetchCancel& message);
+  quiche::QuicheBuffer SerializeFetchOk(const MoqtFetchOk& message);
+  quiche::QuicheBuffer SerializeFetchError(const MoqtFetchError& message);
   quiche::QuicheBuffer SerializeObjectAck(const MoqtObjectAck& message);
 
  private:
+  // Returns true if the metadata is internally consistent.
+  static bool ValidateObjectMetadata(const MoqtObject& object,
+                                     MoqtDataStreamType message_type);
+
   quiche::QuicheBufferAllocator* allocator_;
   bool using_webtrans_;
 };

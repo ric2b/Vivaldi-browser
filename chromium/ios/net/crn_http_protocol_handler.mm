@@ -297,8 +297,7 @@ void HttpProtocolHandlerCore::HandleStreamEvent(NSStream* stream,
     case NSStreamEventHasSpaceAvailable:
       break;
     default:
-      NOTREACHED_IN_MIGRATION() << "Unexpected stream event: " << event;
-      break;
+      NOTREACHED() << "Unexpected stream event: " << event;
   }
 }
 
@@ -639,7 +638,7 @@ void HttpProtocolHandlerCore::Start(id<CRNNetworkClientProtocol> base_client) {
       std::unique_ptr<UploadElementReader> reader(
           new UploadOwnedBytesElementReader(&owned_data));
       net_request_->set_upload(
-          ElementsUploadDataStream::CreateWithReader(std::move(reader), 0));
+          ElementsUploadDataStream::CreateWithReader(std::move(reader)));
     }
   }
 
@@ -704,9 +703,7 @@ void HttpProtocolHandlerCore::StopListeningStream(NSStream* stream) {
     case NSStreamStatusError:
       break;
     default:
-      NOTREACHED_IN_MIGRATION()
-          << "Unexpected stream status: " << [stream streamStatus];
-      break;
+      NOTREACHED() << "Unexpected stream status: " << [stream streamStatus];
   }
 }
 

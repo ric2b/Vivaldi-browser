@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Win Builder (dbg)",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-win-archive",
@@ -36,7 +36,7 @@
         {
           "bucket": "ci",
           "builder": "Win Builder (dbg)",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -45,7 +45,8 @@
           "group": "tryserver.chromium.win"
         }
       ],
-      "retry_failed_shards": true
+      "retry_failed_shards": true,
+      "targets_spec_directory": "src/infra/config/generated/builders/ci/Win Builder (dbg)/targets"
     }
   },
   "$build/reclient": {

@@ -141,7 +141,7 @@ void AdaptClientTagForFullUpdateData(DataType data_type,
         AUTOFILL_WALLET_OFFER, GetUnhashedClientTagFromAutofillOfferSpecifics(
                                    data->specifics.autofill_offer()));
   } else {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 }
 

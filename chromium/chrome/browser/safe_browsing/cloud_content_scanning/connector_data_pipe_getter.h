@@ -16,6 +16,7 @@
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/time/time.h"
+#include "components/enterprise/obfuscation/core/download_obfuscator.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/network/public/mojom/data_pipe_getter.mojom.h"
 
@@ -85,7 +86,8 @@ class ConnectorDataPipeGetter : public network::mojom::DataPipeGetter {
   // printed page. In both cases, the memory handle is assumed to be valid.
   ConnectorDataPipeGetter(const std::string& boundary,
                           const std::string& metadata,
-                          std::unique_ptr<InternalMemoryMappedFile> file);
+                          std::unique_ptr<InternalMemoryMappedFile> file,
+                          bool is_obfuscated);
   ConnectorDataPipeGetter(const std::string& boundary,
                           const std::string& metadata,
                           base::ReadOnlySharedMemoryMapping page);
@@ -105,7 +107,8 @@ class ConnectorDataPipeGetter : public network::mojom::DataPipeGetter {
   static std::unique_ptr<ConnectorDataPipeGetter> CreateMultipartPipeGetter(
       const std::string& boundary,
       const std::string& metadata,
-      base::File file);
+      base::File file,
+      bool is_obfuscated);
 
   // Returns nullptr if `page` is invalid or if a memory region can't be created
   // from it.
@@ -120,7 +123,8 @@ class ConnectorDataPipeGetter : public network::mojom::DataPipeGetter {
   // Returns nullptr if `file` is invalid or if a memory mapped file can't be
   // created from it.
   static std::unique_ptr<ConnectorDataPipeGetter> CreateResumablePipeGetter(
-      base::File file);
+      base::File file,
+      bool is_obfuscated);
 
   // Returns nullptr if `page` is invalid or if a memory region can't be created
   // from it.
@@ -187,6 +191,8 @@ class ConnectorDataPipeGetter : public network::mojom::DataPipeGetter {
 
   // Indicates if this data pipe streams a pipe. If false, it streams a page.
   bool file_data_pipe_;
+
+  std::unique_ptr<enterprise_obfuscation::DownloadObfuscator> deobfuscator_;
 
   mojo::ScopedDataPipeProducerHandle pipe_;
   std::unique_ptr<mojo::SimpleWatcher> watcher_;

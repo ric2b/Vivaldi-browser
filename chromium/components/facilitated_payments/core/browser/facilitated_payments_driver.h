@@ -15,16 +15,23 @@ class GURL;
 
 namespace payments::facilitated {
 
+class EwalletManager;
 class FacilitatedPaymentsManager;
 
 // A cross-platform interface which is a gateway for all PIX payments related
 // communication from the browser code to the DOM (`FacilitatedPaymentsAgent`).
-// There can be one instance for each outermost main frame. It is only created
-// if the main frame is active at the time of load.
+// Also, it receives notifications when payment links are detected from renderer
+// process during DOM construction . There can be one instance for each
+// outermost main frame. It is only created if the main frame is active at the
+// time of load.
+//
+// TODO(crbug.com/371059457): `FacilitatedPaymentsDriver` is currently an
+// abstract class. Considering migrating it to a pure interface and use delegate
+// to handle common logics shared by cross-platform.
 class FacilitatedPaymentsDriver {
  public:
-  explicit FacilitatedPaymentsDriver(
-      std::unique_ptr<FacilitatedPaymentsManager> manager);
+  FacilitatedPaymentsDriver(std::unique_ptr<FacilitatedPaymentsManager> manager,
+                            std::unique_ptr<EwalletManager> ewallet_manager);
   FacilitatedPaymentsDriver(const FacilitatedPaymentsDriver&) = delete;
   FacilitatedPaymentsDriver& operator=(const FacilitatedPaymentsDriver&) =
       delete;
@@ -35,13 +42,6 @@ class FacilitatedPaymentsDriver {
   // away from the currently displayed page. It is invoked only for the primary
   // main frame by the platform-specific implementation.
   void DidNavigateToOrAwayFromPage() const;
-
-  // Informs `FacilitatedPaymentsManager` that the content has finished loading
-  // in the primary main frame. It is invoked by the platform-specific
-  // implementation.
-  virtual void OnContentLoadedInThePrimaryMainFrame(
-      const GURL& url,
-      ukm::SourceId ukm_source_id) const;
 
   // Trigger PIX code detection on the page. The `callback` is called after
   // running PIX code detection.
@@ -55,8 +55,19 @@ class FacilitatedPaymentsDriver {
                                        const std::u16string& copied_text,
                                        ukm::SourceId ukm_source_id);
 
+  // Inform the `EwalletManager` to trigger the eWallet push payment flow. The
+  // payment information is included in the `payment_link_url` contained by the
+  // page with URL as `page_url`.
+  virtual void TriggerEwalletPushPayment(const GURL& payment_link_url,
+                                         const GURL& page_url);
+
+  virtual void SetEwalletManagerForTesting(
+      std::unique_ptr<EwalletManager> ewallet_manager);
+
  private:
   std::unique_ptr<FacilitatedPaymentsManager> manager_;
+
+  std::unique_ptr<EwalletManager> ewallet_manager_;
 };
 
 }  // namespace payments::facilitated

@@ -7,7 +7,7 @@
 #import "ios/web/public/web_state_user_data.h"
 
 @class WebsiteDarkModeAgent;
-class ChromeBrowserState;
+class ProfileIOS;
 
 // Class binding an instance of WebsiteDarkModeAgent to a WebState.
 class WebsiteDarkModeTabHelper: public web::WebStateObserver,
@@ -26,8 +26,8 @@ class WebsiteDarkModeTabHelper: public web::WebStateObserver,
   // web::WebStateObserver implementation.
   void WebStateDestroyed(web::WebState* web_state) override;
 
-  // The BrowserState associated with this WebState.
-  ChromeBrowserState* browser_state_;
+  // The profile associated with this WebState.
+  ProfileIOS* profile_;
 
   // The Objective-C AutofillAgent instance.
   __strong WebsiteDarkModeAgent* website_dark_mode_agent_;

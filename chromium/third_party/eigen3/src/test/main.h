@@ -742,40 +742,80 @@ struct GetDifferentType<std::complex<T> > {
 };
 
 template <typename T>
-std::string type_name() {
-  return "other";
+std::string type_name(T) {
+  return typeid(T).name();
 }
 template <>
-std::string type_name<float>() {
+std::string type_name<float>(float) {
   return "float";
 }
 template <>
-std::string type_name<double>() {
+std::string type_name<double>(double) {
   return "double";
 }
 template <>
-std::string type_name<long double>() {
+std::string type_name<long double>(long double) {
   return "long double";
 }
 template <>
-std::string type_name<int>() {
-  return "int";
+std::string type_name<Eigen::half>(Eigen::half) {
+  return "half";
 }
 template <>
-std::string type_name<std::complex<float> >() {
+std::string type_name<Eigen::bfloat16>(Eigen::bfloat16) {
+  return "bfloat16";
+}
+template <>
+std::string type_name<int8_t>(int8_t) {
+  return "int8_t";
+}
+template <>
+std::string type_name<int16_t>(int16_t) {
+  return "int16_t";
+}
+template <>
+std::string type_name<int32_t>(int32_t) {
+  return "int32_t";
+}
+template <>
+std::string type_name<int64_t>(int64_t) {
+  return "int64_t";
+}
+template <>
+std::string type_name<uint8_t>(uint8_t) {
+  return "uint8_t";
+}
+template <>
+std::string type_name<uint16_t>(uint16_t) {
+  return "uint16_t";
+}
+template <>
+std::string type_name<uint32_t>(uint32_t) {
+  return "uint32_t";
+}
+template <>
+std::string type_name<uint64_t>(uint64_t) {
+  return "uint64_t";
+}
+template <>
+std::string type_name<std::complex<float> >(std::complex<float>) {
   return "complex<float>";
 }
 template <>
-std::string type_name<std::complex<double> >() {
+std::string type_name<std::complex<double> >(std::complex<double>) {
   return "complex<double>";
 }
 template <>
-std::string type_name<std::complex<long double> >() {
+std::string type_name<std::complex<long double> >(std::complex<long double>) {
   return "complex<long double>";
 }
 template <>
-std::string type_name<std::complex<int> >() {
+std::string type_name<std::complex<int> >(std::complex<int>) {
   return "complex<int>";
+}
+template <typename T>
+std::string type_name() {
+  return type_name(T());
 }
 
 using namespace Eigen;

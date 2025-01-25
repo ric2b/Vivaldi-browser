@@ -14,21 +14,16 @@
 
 import m from 'mithril';
 import {Icons} from '../base/semantic_icons';
-import {Time, TimeSpan} from '../base/time';
+import {TimeSpan} from '../base/time';
 import {exists} from '../base/utils';
-import {raf} from '../core/raf_scheduler';
 import {Engine} from '../trace_processor/engine';
-import {LONG, LONG_NULL, NUM, STR_NULL} from '../trace_processor/query_result';
 import {Button} from '../widgets/button';
 import {DetailsShell} from '../widgets/details_shell';
 import {GridLayout, GridLayoutColumn} from '../widgets/grid_layout';
 import {MenuItem, PopupMenu2} from '../widgets/menu';
 import {Section} from '../widgets/section';
 import {Tree} from '../widgets/tree';
-import {BottomTab, NewBottomTabArgs} from './bottom_tab';
-import {addDebugSliceTrack} from './debug_tracks/debug_tracks';
-import {Flow, FlowPoint, globals} from './globals';
-import {addQueryResultsTab} from './query_result_tab';
+import {Flow, FlowPoint} from '../core/flow_types';
 import {hasArgs, renderArguments} from './slice_args';
 import {renderDetails} from './slice_details';
 import {getSlice, SliceDetails} from '../trace_processor/sql_utils/slice';
@@ -38,16 +33,20 @@ import {
 } from './sql/thread_state';
 import {asSliceSqlId} from '../trace_processor/sql_utils/core_types';
 import {DurationWidget} from './widgets/duration';
-import {addSqlTableTab} from './sql_table_tab_command';
 import {SliceRef} from './widgets/slice';
 import {BasicTable} from '../widgets/basic_table';
 import {getSqlTableDescription} from './widgets/sql/table/sql_table_registry';
 import {assertExists} from '../base/logging';
+import {Trace} from '../public/trace';
+import {TrackEventDetailsPanel} from '../public/details_panel';
+import {TrackEventSelection} from '../public/selection';
+import {extensions} from '../public/lib/extensions';
+import {TraceImpl} from '../core/trace_impl';
 
 interface ContextMenuItem {
   name: string;
   shouldDisplay(slice: SliceDetails): boolean;
-  run(slice: SliceDetails): void;
+  run(slice: SliceDetails, trace: Trace): void;
 }
 
 function getTidFromSlice(slice: SliceDetails): number | undefined {
@@ -90,8 +89,8 @@ const ITEMS: ContextMenuItem[] = [
   {
     name: 'Ancestor slices',
     shouldDisplay: (slice: SliceDetails) => slice.parentId !== undefined,
-    run: (slice: SliceDetails) =>
-      addSqlTableTab({
+    run: (slice: SliceDetails, trace: Trace) =>
+      extensions.addSqlTableTab(trace, {
         table: assertExists(getSqlTableDescription('slice')),
         filters: [
           {
@@ -106,8 +105,8 @@ const ITEMS: ContextMenuItem[] = [
   {
     name: 'Descendant slices',
     shouldDisplay: () => true,
-    run: (slice: SliceDetails) =>
-      addSqlTableTab({
+    run: (slice: SliceDetails, trace: Trace) =>
+      extensions.addSqlTableTab(trace, {
         table: assertExists(getSqlTableDescription('slice')),
         filters: [
           {
@@ -122,8 +121,8 @@ const ITEMS: ContextMenuItem[] = [
   {
     name: 'Average duration of slice name',
     shouldDisplay: (slice: SliceDetails) => hasName(slice),
-    run: (slice: SliceDetails) =>
-      addQueryResultsTab({
+    run: (slice: SliceDetails, trace: Trace) =>
+      extensions.addQueryResultsTab(trace, {
         query: `SELECT AVG(dur) / 1e9 FROM slice WHERE name = '${slice.name!}'`,
         title: `${slice.name} average dur`,
       }),
@@ -135,30 +134,16 @@ const ITEMS: ContextMenuItem[] = [
       hasThreadName(slice) &&
       hasTid(slice) &&
       hasPid(slice),
-    run: (slice: SliceDetails) => {
-      const engine = getEngine();
-      if (engine === undefined) {
-        return;
-      }
-      engine
+    run: (slice: SliceDetails, trace: Trace) => {
+      trace.engine
         .query(
-          `
-        INCLUDE PERFETTO MODULE android.binder;
-        INCLUDE PERFETTO MODULE android.monitor_contention;
-      `,
+          `INCLUDE PERFETTO MODULE android.binder;
+           INCLUDE PERFETTO MODULE android.monitor_contention;`,
         )
         .then(() =>
-          addDebugSliceTrack(
-            // NOTE(stevegolton): This is a temporary patch, this menu should
-            // become part of another plugin, at which point we can just use the
-            // plugin's context object.
-            {
-              engine,
-              tracks: {
-                registerTrack: (x) => globals.trackManager.registerTrack(x),
-              },
-            },
-            {
+          extensions.addDebugSliceTrack({
+            trace,
+            data: {
               sqlSource: `
                                 WITH merged AS (
                                   SELECT s.ts, s.dur, tx.aidl_name AS name, 0 AS depth
@@ -197,12 +182,10 @@ const ITEMS: ContextMenuItem[] = [
                                   ORDER BY depth
                                 ) SELECT ts, dur, name FROM merged`,
             },
-            `Binder names (${getProcessNameFromSlice(
+            title: `Binder names (${getProcessNameFromSlice(
               slice,
             )}:${getThreadNameFromSlice(slice)})`,
-            {ts: 'ts', dur: 'dur', name: 'name'},
-            [],
-          ),
+          }),
         );
     },
   },
@@ -212,92 +195,22 @@ function getSliceContextMenuItems(slice: SliceDetails) {
   return ITEMS.filter((item) => item.shouldDisplay(slice));
 }
 
-function getEngine(): Engine | undefined {
-  const engineId = globals.getCurrentEngine()?.id;
-  if (engineId === undefined) {
-    return undefined;
-  }
-  const engine = globals.engines.get(engineId)?.getProxy('SlicePanel');
-  return engine;
-}
-
-async function getAnnotationSlice(
-  engine: Engine,
-  id: number,
-): Promise<SliceDetails | undefined> {
-  const query = await engine.query(`
-    SELECT
-      id,
-      name,
-      ts,
-      dur,
-      track_id as trackId,
-      thread_dur as threadDur,
-      cat,
-      ABS_TIME_STR(ts) as absTime
-    FROM annotation_slice
-    where id = ${id}`);
-
-  const it = query.firstRow({
-    id: NUM,
-    name: STR_NULL,
-    ts: LONG,
-    dur: LONG,
-    trackId: NUM,
-    threadDur: LONG_NULL,
-    cat: STR_NULL,
-    absTime: STR_NULL,
-  });
-
-  return {
-    id: asSliceSqlId(it.id),
-    name: it.name ?? 'null',
-    ts: Time.fromRaw(it.ts),
-    dur: it.dur,
-    depth: 0,
-    trackId: it.trackId,
-    threadDur: it.threadDur ?? undefined,
-    category: it.cat ?? undefined,
-    absTime: it.absTime ?? undefined,
-  };
-}
-
 async function getSliceDetails(
   engine: Engine,
   id: number,
-  table: string,
 ): Promise<SliceDetails | undefined> {
-  if (table === 'annotation_slice') {
-    return getAnnotationSlice(engine, id);
-  } else {
-    return getSlice(engine, asSliceSqlId(id));
-  }
+  return getSlice(engine, asSliceSqlId(id));
 }
 
-interface ThreadSliceDetailsTabConfig {
-  id: number;
-  table: string;
-}
-
-export class ThreadSliceDetailsTab extends BottomTab<ThreadSliceDetailsTabConfig> {
+export class ThreadSliceDetailsPanel implements TrackEventDetailsPanel {
   private sliceDetails?: SliceDetails;
   private breakdownByThreadState?: BreakdownByThreadState;
 
-  static create(
-    args: NewBottomTabArgs<ThreadSliceDetailsTabConfig>,
-  ): ThreadSliceDetailsTab {
-    return new ThreadSliceDetailsTab(args);
-  }
+  constructor(private readonly trace: TraceImpl) {}
 
-  constructor(args: NewBottomTabArgs<ThreadSliceDetailsTabConfig>) {
-    super(args);
-    this.load();
-  }
-
-  async load() {
-    // Start loading the slice details
-    const {id, table} = this.config;
-    const details = await getSliceDetails(this.engine, id, table);
+  async load({eventId}: TrackEventSelection) {
+    const {trace} = this;
+    const details = await getSliceDetails(trace.engine, eventId);
 
     if (
       details !== undefined &&
@@ -305,21 +218,16 @@ export class ThreadSliceDetailsTab extends BottomTab<ThreadSliceDetailsTabConfig
       details.dur > 0
     ) {
       this.breakdownByThreadState = await breakDownIntervalByThreadState(
-        this.engine,
+        trace.engine,
         TimeSpan.fromTimeAndDuration(details.ts, details.dur),
         details.thread.utid,
       );
     }
 
     this.sliceDetails = details;
-    raf.scheduleFullRedraw();
   }
 
-  getTitle(): string {
-    return `Current Selection`;
-  }
-
-  viewTab() {
+  render() {
     if (!exists(this.sliceDetails)) {
       return m(DetailsShell, {title: 'Slice', description: 'Loading...'});
     }
@@ -333,17 +241,13 @@ export class ThreadSliceDetailsTab extends BottomTab<ThreadSliceDetailsTabConfig
       },
       m(
         GridLayout,
-        renderDetails(slice, this.breakdownByThreadState),
-        this.renderRhs(this.engine, slice),
+        renderDetails(this.trace, slice, this.breakdownByThreadState),
+        this.renderRhs(this.trace, slice),
       ),
     );
   }
 
-  isLoading() {
-    return !exists(this.sliceDetails);
-  }
-
-  private renderRhs(engine: Engine, slice: SliceDetails): m.Children {
+  private renderRhs(trace: Trace, slice: SliceDetails): m.Children {
     const precFlows = this.renderPrecedingFlows(slice);
     const followingFlows = this.renderFollowingFlows(slice);
     const args =
@@ -351,7 +255,7 @@ export class ThreadSliceDetailsTab extends BottomTab<ThreadSliceDetailsTabConfig
       m(
         Section,
         {title: 'Arguments'},
-        m(Tree, renderArguments(engine, slice.args)),
+        m(Tree, renderArguments(trace, slice.args)),
       );
     // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
     if (precFlows ?? followingFlows ?? args) {
@@ -362,7 +266,7 @@ export class ThreadSliceDetailsTab extends BottomTab<ThreadSliceDetailsTabConfig
   }
 
   private renderPrecedingFlows(slice: SliceDetails): m.Children {
-    const flows = globals.connectedFlows;
+    const flows = this.trace.flows.connectedFlows;
     const inFlows = flows.filter(({end}) => end.sliceId === slice.id);
 
     if (inFlows.length > 0) {
@@ -382,9 +286,6 @@ export class ThreadSliceDetailsTab extends BottomTab<ThreadSliceDetailsTabConfig
                   id: asSliceSqlId(flow.begin.sliceId),
                   name:
                     flow.begin.sliceChromeCustomName ?? flow.begin.sliceName,
-                  ts: flow.begin.sliceStartTs,
-                  dur: flow.begin.sliceEndTs - flow.begin.sliceStartTs,
-                  sqlTrackId: flow.begin.trackId,
                 }),
             },
             {
@@ -409,7 +310,7 @@ export class ThreadSliceDetailsTab extends BottomTab<ThreadSliceDetailsTabConfig
   }
 
   private renderFollowingFlows(slice: SliceDetails): m.Children {
-    const flows = globals.connectedFlows;
+    const flows = this.trace.flows.connectedFlows;
     const outFlows = flows.filter(({begin}) => begin.sliceId === slice.id);
 
     if (outFlows.length > 0) {
@@ -428,9 +329,6 @@ export class ThreadSliceDetailsTab extends BottomTab<ThreadSliceDetailsTabConfig
                 m(SliceRef, {
                   id: asSliceSqlId(flow.end.sliceId),
                   name: flow.end.sliceChromeCustomName ?? flow.end.sliceName,
-                  ts: flow.end.sliceStartTs,
-                  dur: flow.end.sliceEndTs - flow.end.sliceStartTs,
-                  sqlTrackId: flow.end.trackId,
                 }),
             },
             {
@@ -475,7 +373,7 @@ export class ThreadSliceDetailsTab extends BottomTab<ThreadSliceDetailsTabConfig
         PopupMenu2,
         {trigger},
         contextMenuItems.map(({name, run}) =>
-          m(MenuItem, {label: name, onclick: () => run(sliceInfo)}),
+          m(MenuItem, {label: name, onclick: () => run(sliceInfo, this.trace)}),
         ),
       );
     } else {

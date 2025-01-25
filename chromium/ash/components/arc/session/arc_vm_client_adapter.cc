@@ -23,7 +23,6 @@
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/components/arc/session/arc_client_adapter.h"
-#include "ash/components/arc/session/arc_dlc_installer.h"
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/session/arc_session.h"
 #include "ash/components/arc/session/connection_holder.h"
@@ -200,8 +199,6 @@ std::vector<std::string> GenerateUpgradeProps(
 void AppendParamsFromStartParams(
     vm_tools::concierge::StartArcVmRequest& request,
     const StartParams& start_params) {
-  request.set_enable_keyboard_shortcut_helper_integration(
-      start_params.enable_keyboard_shortcut_helper_integration);
 
   switch (IdentifyBinaryTranslationType(start_params)) {
     case ArcBinaryTranslationType::NONE:
@@ -247,11 +244,6 @@ int GetDefaultVmMemoryMiB(ArcVmClientAdapterDelegate* delegate) {
 
 // Returns whether an LVM-provided disk should be used for virtio-blk /data.
 bool ShouldUseLvmApplicationContainerForVirtioBlkData() {
-  // Allow tests to override use_lvm param.
-  if (base::FeatureList::IsEnabled(kVirtioBlkDataConfigOverride)) {
-    return kVirtioBlkDataConfigUseLvm.Get();
-  }
-
   // Use LVM backend if LVM application containers feature is supported and
   // user cryptohome data is not ephemeral (b/278305150).
   return base::FeatureList::IsEnabled(kLvmApplicationContainers) &&
@@ -274,15 +266,12 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
   request.set_owner_id(user_id_hash);
   request.set_use_per_vm_core_scheduling(use_per_vm_core_scheduling);
 
-  const bool should_set_blocksize =
-      !base::FeatureList::IsEnabled(arc::kUseDefaultBlockSize);
   constexpr uint32_t kBlockSize = 4096;
 
   // Add rootfs as /dev/vda.
   request.set_rootfs_writable(file_system_status.is_host_rootfs_writable() &&
                               file_system_status.is_system_image_ext_format());
-  if (should_set_blocksize)
-    request.set_rootfs_block_size(kBlockSize);
+  request.set_rootfs_block_size(kBlockSize);
 
   // Enable O_DIRECT for ARC system image (rootfs) and vendor image if the
   // images are formatted with EROFS. (b/287383456)
@@ -301,8 +290,7 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
   disk_image->set_writable(false);
   disk_image->set_do_mount(true);
   disk_image->set_o_direct(is_arc_erofs_enabled);
-  if (should_set_blocksize)
-    disk_image->set_block_size(kBlockSize);
+  disk_image->set_block_size(kBlockSize);
 
   // Add /run/imageloader/.../android_demo_apps.squash as /dev/block/vdc if
   // needed. If it's not needed we pass /dev/null so that /dev/block/vdc
@@ -313,8 +301,7 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
   disk_image->set_do_mount(true);
   if (!demo_session_apps_path.empty()) {
     disk_image->set_path(demo_session_apps_path.value());
-    if (should_set_blocksize)
-      disk_image->set_block_size(kBlockSize);
+    disk_image->set_block_size(kBlockSize);
   } else {
     // This should never be mounted as it's only mounted if
     // ro.boot.arc_demo_mode is set.
@@ -346,9 +333,7 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
     disk_image->set_multiple_workers(
         base::FeatureList::IsEnabled(kEnableVirtioBlkMultipleWorkers));
     disk_image->set_writable(true);
-    if (should_set_blocksize) {
-      disk_image->set_block_size(kBlockSize);
-    }
+    disk_image->set_block_size(kBlockSize);
     // Set the O_DIRECT option only when the disk image is backed by LVM
     // application container, because the option is invalidated on disk images
     // in ext4 crypto.
@@ -380,6 +365,19 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
     disk_image->set_path(kEmptyDiskPath);
     disk_image->set_writable(false);
   }
+
+  // Always add the ARCVM runtime system properties file as a disk at path
+  // /dev/block/vdg. We share this file as a disk image instead of using a
+  // shared directory because it needs to be accessed during early init before
+  // virtio-fs is available in Android.
+  const std::string sysprop_disk_path =
+      base::StringPrintf("/run/daemon-store/crosvm/%s/%s.runtime.prop",
+                         user_id_hash.c_str(), kArcvmEncodedName);
+  disk_image = request.add_disks();
+  disk_image->set_image_type(vm_tools::concierge::DISK_IMAGE_RAW);
+  disk_image->set_do_mount(true);
+  disk_image->set_path(sysprop_disk_path);
+  disk_image->set_writable(false);
 
   // Add cpus.
   request.set_cpus(cpus);
@@ -938,18 +936,6 @@ class ArcVmClientAdapter : public ArcClientAdapter,
     if (file_system_status_rewriter_for_testing_)
       file_system_status_rewriter_for_testing_.Run(&file_system_status);
 
-    VLOG(2) << "Wait for DLC installation if necessary";
-    // Waits for a stable state (kInstalled/kUninstalled) and proceeds
-    // regardless of installation result because even if the installation
-    // has failed, it will only affect limited functionality (e.g. without
-    // Houdini library for ARM apps). ARCVM should still continue to start.
-    ArcDlcInstaller::Get()->WaitForStableState(base::BindOnce(
-        &ArcVmClientAdapter::LoadDemoResources, weak_factory_.GetWeakPtr(),
-        std::move(callback), std::move(file_system_status)));
-  }
-
-  void LoadDemoResources(chromeos::VoidDBusMethodCallback callback,
-                         FileSystemStatus file_system_status) {
     VLOG(2) << "Retrieving demo session apps path";
     DCHECK(demo_mode_delegate_);
     demo_mode_delegate_->EnsureResourcesLoaded(base::BindOnce(

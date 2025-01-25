@@ -23,6 +23,10 @@ class QuicDispatcherImpl : public quic::QuicDispatcher {
       uint8_t expected_server_connection_id_length,
       quic::ConnectionIdGeneratorInterface& generator,
       QuicConnectionFactoryServer& parent_factory);
+  QuicDispatcherImpl(const QuicDispatcherImpl&) = delete;
+  QuicDispatcherImpl& operator=(const QuicDispatcherImpl&) = delete;
+  QuicDispatcherImpl(QuicDispatcherImpl&&) noexcept = delete;
+  QuicDispatcherImpl& operator=(QuicDispatcherImpl&&) noexcept = delete;
   ~QuicDispatcherImpl() override;
 
  protected:

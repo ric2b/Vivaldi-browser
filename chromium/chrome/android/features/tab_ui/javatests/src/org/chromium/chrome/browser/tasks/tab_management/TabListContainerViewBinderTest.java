@@ -8,13 +8,18 @@ import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.lessThan;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.hamcrest.MockitoHamcrest.intThat;
+
+import android.os.Build;
+import android.view.View;
 
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -28,6 +33,7 @@ import org.mockito.Spy;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Batch;
+import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.R;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -120,6 +126,17 @@ public class TabListContainerViewBinderTest extends BlankUiTestActivityTestCase 
     @Test
     @MediumTest
     @UiThreadTest
+    public void testSetClipToPadding() {
+        mContainerModel.set(TabListContainerProperties.IS_CLIP_TO_PADDING, false);
+        assertFalse(mRecyclerView.getClipToPadding());
+
+        mContainerModel.set(TabListContainerProperties.IS_CLIP_TO_PADDING, true);
+        assertTrue(mRecyclerView.getClipToPadding());
+    }
+
+    @Test
+    @MediumTest
+    @UiThreadTest
     public void testSetInitialScrollIndex_Grid() {
         setUpGridLayoutManager();
         mRecyclerView.layout(0, 0, 100, 500);
@@ -165,5 +182,19 @@ public class TabListContainerViewBinderTest extends BlankUiTestActivityTestCase 
         // 500 / 2 - range / 9 / 2 = result.
         verify(mLinearLayoutManager, times(1))
                 .scrollToPositionWithOffset(eq(5), eq(250 - range / 9 / 2));
+    }
+
+    @Test
+    @MediumTest
+    @UiThreadTest
+    @MinAndroidSdkLevel(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    public void testSetIsContentSensitive() {
+        // Chances are the sensitivity is set to auto initially. That's not a problem, it just needs
+        // not to be sensitive.
+        assertNotEquals(View.CONTENT_SENSITIVITY_SENSITIVE, mRecyclerView.getContentSensitivity());
+        mContainerModel.set(TabListContainerProperties.IS_CONTENT_SENSITIVE, true);
+        assertEquals(View.CONTENT_SENSITIVITY_SENSITIVE, mRecyclerView.getContentSensitivity());
+        mContainerModel.set(TabListContainerProperties.IS_CONTENT_SENSITIVE, false);
+        assertEquals(View.CONTENT_SENSITIVITY_NOT_SENSITIVE, mRecyclerView.getContentSensitivity());
     }
 }

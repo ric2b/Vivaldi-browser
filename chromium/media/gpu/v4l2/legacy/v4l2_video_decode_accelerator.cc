@@ -188,16 +188,12 @@ bool V4L2VideoDecodeAccelerator::Initialize(const Config& config,
   }
 
   if (config.is_encrypted()) {
-    NOTREACHED_IN_MIGRATION()
-        << "Encrypted streams are not supported for this VDA";
-    return false;
+    NOTREACHED() << "Encrypted streams are not supported for this VDA";
   }
 
   if (config.output_mode != Config::OutputMode::kAllocate &&
       config.output_mode != Config::OutputMode::kImport) {
-    NOTREACHED_IN_MIGRATION()
-        << "Only ALLOCATE and IMPORT OutputModes are supported";
-    return false;
+    NOTREACHED() << "Only ALLOCATE and IMPORT OutputModes are supported";
   }
 
   client_ptr_factory_.reset(new base::WeakPtrFactory<Client>(client));
@@ -1372,7 +1368,7 @@ bool V4L2VideoDecodeAccelerator::EnqueueOutputRecord(
       ret = std::move(buffer).QueueDMABuf(output_record.output_frame);
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 
   if (!ret) {
@@ -2228,17 +2224,14 @@ bool V4L2VideoDecodeAccelerator::ProcessFrame(int32_t bitstream_buffer_id,
       return false;
     }
 
-    // We should never need Intel media compressed buffers with V4L2.
     std::unique_ptr<VideoFrameMapper> output_frame_mapper;
     output_frame_mapper = VideoFrameMapperFactory::CreateMapper(
         PIXEL_FORMAT_NV12, VideoFrame::STORAGE_DMABUFS,
-        /*force_linear_buffer_mapper=*/true,
-        /*must_support_intel_media_compressed_buffers=*/false);
+        /*force_linear_buffer_mapper=*/true);
     if (!output_frame_mapper) {
       output_frame_mapper = VideoFrameMapperFactory::CreateMapper(
           PIXEL_FORMAT_NV12, VideoFrame::STORAGE_GPU_MEMORY_BUFFER,
-          /*force_linear_buffer_mapper=*/true,
-          /*must_support_intel_media_compressed_buffers=*/false);
+          /*force_linear_buffer_mapper=*/true);
     }
     if (!output_frame_mapper) {
       LOG(ERROR) << "Failed to instantiate MT21 frame mapper!";

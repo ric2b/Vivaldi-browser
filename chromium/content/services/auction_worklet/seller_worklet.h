@@ -101,6 +101,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
       const url::Origin& top_window_origin,
       mojom::AuctionWorkletPermissionsPolicyStatePtr permissions_policy_state,
       std::optional<uint16_t> experiment_group_id,
+      mojom::TrustedSignalsPublicKeyPtr public_key,
       GetNextThreadIndexCallback next_thread_index_callback);
 
   explicit SellerWorklet(const SellerWorklet&) = delete;
@@ -146,6 +147,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
       bool browser_signal_for_debugging_only_in_cooldown_or_lockout,
       const std::optional<base::TimeDelta> seller_timeout,
       uint64_t trace_id,
+      const url::Origin& bidder_joining_origin,
       mojo::PendingRemote<auction_worklet::mojom::ScoreAdClient>
           score_ad_client) override;
   void SendPendingSignalsRequests() override;
@@ -200,6 +202,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
     mojom::ComponentAuctionOtherSellerPtr browser_signals_other_seller;
     std::optional<blink::AdCurrency> component_expect_bid_currency;
     url::Origin browser_signal_interest_group_owner;
+    url::Origin bidder_joining_origin;
     GURL browser_signal_render_url;
     std::optional<std::string>
         browser_signal_selected_buyer_and_seller_reporting_id;
@@ -335,6 +338,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
         PrivateAggregationRequests pa_requests,
         RealTimeReportingContributions real_time_contributions,
         base::TimeDelta scoring_latency,
+        bool script_timed_out,
         std::vector<std::string> errors)>;
     using ReportResultCallbackInternal =
         base::OnceCallback<void(std::optional<std::string> signals_for_winner,
@@ -342,6 +346,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
                                 base::flat_map<std::string, GURL> ad_beacon_map,
                                 PrivateAggregationRequests pa_requests,
                                 base::TimeDelta reporting_latency,
+                                bool script_timed_out,
                                 std::vector<std::string> errors)>;
 
     V8State(
@@ -440,6 +445,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
     void PostScoreAdCallbackToUserThreadOnError(
         ScoreAdCallbackInternal callback,
         base::TimeDelta scoring_latency,
+        bool script_timed_out,
         std::vector<std::string> errors,
         PrivateAggregationRequests pa_requests = {},
         RealTimeReportingContributions real_time_contributions = {});
@@ -457,6 +463,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
         PrivateAggregationRequests pa_requests,
         RealTimeReportingContributions real_time_contributions,
         base::TimeDelta scoring_latency,
+        bool script_timed_out,
         std::vector<std::string> errors);
 
     void PostReportResultCallbackToUserThread(
@@ -466,6 +473,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
         base::flat_map<std::string, GURL> ad_beacon_map,
         PrivateAggregationRequests pa_requests,
         base::TimeDelta reporting_latency,
+        bool script_timed_out,
         std::vector<std::string> errors);
 
     static void PostResumeToUserThread(
@@ -557,6 +565,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
       PrivateAggregationRequests pa_requests,
       RealTimeReportingContributions real_time_contributions,
       base::TimeDelta scoring_latency,
+      bool script_timed_out,
       std::vector<std::string> errors);
 
   // Removes `task` from `score_ad_tasks_` only. Used in case where the
@@ -587,6 +596,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
       base::flat_map<std::string, GURL> ad_beacon_map,
       PrivateAggregationRequests pa_requests,
       base::TimeDelta reporting_latency,
+      bool script_timed_out,
       std::vector<std::string> errors);
 
   // Returns true if unpaused and the script has loaded.
@@ -599,6 +609,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
   mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory_;
 
   const GURL script_source_url_;
+  mojom::TrustedSignalsPublicKeyPtr public_key_;
 
   // Populated only if `this` was created with a non-null
   // `trusted_scoring_signals_url`.

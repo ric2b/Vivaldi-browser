@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Landskap 12</translation>
 <translation id="1158503667684816647">Ikke vis denne bekreftelsen igjen</translation>
 <translation id="1222195720020481779">Starter installasjonsprogrammet...</translation>
+<translation id="1224683873953469764">Skaff Vivaldi for mobil</translation>
 <translation id="1270785070369717623">Dessverre er ikke dine Opera GX-innstillinger tilgjengelige mens den nettleseren kjører. For å importere disse instillingene til Vivaldi, lagre arbeidet ditt og lukk alle Opera GX-vinduer. Klikk deretter Fortsett.</translation>
 <translation id="1276145862619442150">Hurtigvalg</translation>
 <translation id="1281950884873973195">Dyr 6</translation>
@@ -12,6 +13,7 @@
 <translation id="1454726940098520109">Ikke vis bekreftelse igjen</translation>
 <translation id="1462666970065907900">Sikker på at du vil lukke dette vinduet?</translation>
 <translation id="1480046233931937785">Anerkjennelser</translation>
+<translation id="1521774566618522728">Aktiv i dag</translation>
 <translation id="1526344461589023948">En feil oppstod ved lagring av en nedlastet oppdatering. Sjekk at datamaskinen har nok ledig diskplass og prøv igjen.</translation>
 <translation id="1635542496948266458">Bytt profil</translation>
 <translation id="1657174850639146440">Monster 9</translation>
@@ -97,6 +99,7 @@
 <translation id="4430019312045809116">Volum</translation>
 <translation id="443008484043213881">Verktøy</translation>
 <translation id="4456211719108566931">Monster 6</translation>
+<translation id="4459169140545916303">Aktiv for <ph name="DEVICE_LAST_ACTIVATED_TIME" /> dager siden</translation>
 <translation id="4512900838580567989">Åpne lenken i ny bakgrunnsfane</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Åpne bilde i ny bakgrunnsfane</translation>
@@ -148,6 +151,7 @@
 <translation id="7099506190679014195">Sikker oppgradering av nøkkellager</translation>
 <translation id="7111492742514999492">Landskap 9</translation>
 <translation id="7208252576848052204">Dessverre er ikke dine Arc-innstillinger tilgjengelige mens den nettleseren kjører. For å importere disse instillingene til Vivaldi, lagre arbeidet ditt og lukk alle Arc-vinduer. Klikk deretter Fortsett.</translation>
+<translation id="7321500017121629018">Aktiv i går</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Kunne ikke starte oppdateringsprogrammet. Sjekk at datamaskinen har nok ledig diskplass og arbeidsminne og prøv igjen.</translation>
 <translation id="7658239707568436148">Avbryt</translation>

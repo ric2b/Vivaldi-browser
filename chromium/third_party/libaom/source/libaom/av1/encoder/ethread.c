@@ -711,8 +711,9 @@ static int enc_row_mt_worker_hook(void *arg1, void *unused) {
 
     av1_init_above_context(&cm->above_contexts, av1_num_planes(cm), tile_row,
                            &td->mb.e_mbd);
-
+#if !CONFIG_REALTIME_ONLY
     cfl_init(&td->mb.e_mbd.cfl, cm->seq_params);
+#endif
     if (td->mb.txfm_search_info.mb_rd_record != NULL) {
       av1_crc32c_calculator_init(
           &td->mb.txfm_search_info.mb_rd_record->crc_calculator);

@@ -19,11 +19,12 @@ void xnn_qs8_rsum_ukernel__avx256vnni_u32(
     size_t batch,
     const int8_t* input,
     int32_t* output,
-    const union xnn_qs8_rsum_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_qs8_rsum_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(input != NULL);
   assert(output != NULL);
+
 
   const __m256i vone = _mm256_set1_epi8(1);
   __m256i vacc0 = _mm256_setzero_si256();

@@ -17,6 +17,7 @@ namespace {
 
 static constexpr const char * kDebuggingSearchEngines = "debug-search-engines";
 static constexpr const char * kSearchEnginesUrl = "search-engines-url";
+static constexpr const char * kSearchEnginesPromptUrl = "search-engines-prompt-url";
 
 #include "vivaldi_key.inc"
 
@@ -51,6 +52,16 @@ std::string GetSearchEnginesTemplate() {
     return kSignedResourceSearchEnginesSnapshot;
   }
   return kSignedResourceSearchEngines;
+}
+
+std::string GetSearchEnginesPromptTemplate() {
+  if (!version_info::IsOfficialBuild()) {
+    return kSignedResourceSearchEnginesPromptSopranos;
+  }
+  if (ReleaseKind() <= Release::kSnapshot) {
+    return kSignedResourceSearchEnginesPromptSnapshot;
+  }
+  return kSignedResourceSearchEnginesPrompt;
 }
 }  // namespace
 
@@ -95,6 +106,9 @@ std::string GetSignedResourceUrl(vivaldi::SignedResourceUrl url_id) {
     case SignedResourceUrl::kDirectMatchUrl:
       url_template = kSignedResourceDirectMatch;
       break;
+    case SignedResourceUrl::kSearchEnginesPromptUrl:
+      url_template = GetSearchEnginesPromptTemplate();
+      break;
   }
 
   size_t pos = url_template.find("{}");
@@ -113,6 +127,15 @@ bool UsesCustomSearchEnginesUrl() {
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   return command_line->HasSwitch(kSearchEnginesUrl);
+}
+
+bool UsesCustomSearchEnginesPromptUrl() {
+  if (version_info::IsOfficialBuild()) {
+    return false;
+  }
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  return command_line->HasSwitch(kSearchEnginesPromptUrl);
 }
 
 bool IsDebuggingSearchEngines() {

@@ -1,5 +1,7 @@
 Name: libFuzzer
 URL: http://llvm.org/docs/LibFuzzer.html
+Version: N/A
+Revision: debe7d2d1982e540fbd6bd78604bf001753f9e74
 License: University of Illinois/NCSA Open Source
 License File: LICENSE.txt
 Security Critical: no

@@ -26,7 +26,7 @@ struct DeviceCredentials {
   bssl::UniquePtr<EVP_PKEY> private_key;
 
   // If non-empty, this contains a serialized CrlBundle protobuf.  This may be
-  // used by the sender as part of verifying |certs|.
+  // used by the sender as part of verifying `certs`.
   std::string serialized_crl;
 };
 
@@ -41,7 +41,7 @@ class DeviceAuthNamespaceHandler final : public CastMessageHandler {
     virtual ~CredentialsProvider();
   };
 
-  // |creds_provider| must outlive |this|.
+  // `creds_provider` must outlive `this`.
   explicit DeviceAuthNamespaceHandler(CredentialsProvider& creds_provider);
   ~DeviceAuthNamespaceHandler();
 

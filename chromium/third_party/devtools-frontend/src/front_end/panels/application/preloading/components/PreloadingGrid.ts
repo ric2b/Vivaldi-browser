@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../../ui/components/data_grid/data_grid.js';
+import '../../../../ui/components/icon_button/icon_button.js';
+
 import * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import type * as Platform from '../../../../core/platform/platform.js';
 import {assertNotNullOrUndefined} from '../../../../core/platform/platform.js';
 import * as SDK from '../../../../core/sdk/sdk.js';
 import type * as Protocol from '../../../../generated/protocol.js';
-import * as DataGrid from '../../../../ui/components/data_grid/data_grid.js';
-import * as IconButton from '../../../../ui/components/icon_button/icon_button.js';
+import type * as DataGrid from '../../../../ui/components/data_grid/data_grid.js';
 import * as LegacyWrapper from '../../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import type * as UI from '../../../../ui/legacy/legacy.js';
 import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
@@ -49,7 +51,6 @@ export interface PreloadingGridRow {
 
 // Grid component to show prerendering attempts.
 export class PreloadingGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<UI.Widget.VBox> {
-  static readonly litTagName = LitHtml.literal`devtools-resources-preloading-grid`;
 
   readonly #shadow = this.attachShadow({mode: 'open'});
   #data: PreloadingGridData|null = null;
@@ -112,9 +113,7 @@ export class PreloadingGrid extends LegacyWrapper.LegacyWrapper.WrappableCompone
     // clang-format off
     render(html`
       <div class="preloading-container">
-        <${DataGrid.DataGridController.DataGridController.litTagName} .data=${
-            reportsGridData as DataGrid.DataGridController.DataGridControllerData}>
-        </${DataGrid.DataGridController.DataGridController.litTagName}>
+        <devtools-data-grid-controller .data=${reportsGridData}></devtools-data-grid-controller>
       </div>
     `, this.#shadow, {host: this});
     // clang-format on
@@ -123,33 +122,33 @@ export class PreloadingGrid extends LegacyWrapper.LegacyWrapper.WrappableCompone
   #buildReportRows(): DataGrid.DataGridUtils.Row[] {
     function statusRenderer(statusString: string, status: SDK.PreloadingModel.PreloadingStatus): LitHtml.LitTemplate {
       if (status !== SDK.PreloadingModel.PreloadingStatus.FAILURE) {
-        return LitHtml.html`<div>${statusString}</div>`;
+        return html`<div>${statusString}</div>`;
       }
 
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
-      return LitHtml.html`
+      return html`
         <div
           style=${LitHtml.Directives.styleMap({
             color: 'var(--sys-color-error)',
           })}
         >
-          <${IconButton.Icon.Icon.litTagName}
+          <devtools-icon
             .data=${{
               iconName: 'cross-circle-filled',
               color: 'var(--sys-color-error)',
               width: '16px',
               height: '16px',
-            } as IconButton.Icon.IconData}
+            }}
             style=${LitHtml.Directives.styleMap({
               'vertical-align': 'sub',
             })}
           >
-          </${IconButton.Icon.Icon.litTagName}>
+          </devtools-icon>
           ${statusString}
         </div>
       `;
-      // clang-format on
+              // clang-format on
     }
 
     assertNotNullOrUndefined(this.#data);

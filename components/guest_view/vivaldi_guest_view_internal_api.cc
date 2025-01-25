@@ -32,10 +32,9 @@ bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
     int tab_index = 0;
     bool include_incognito = true;
     Profile* profile = Profile::FromBrowserContext(browser_context());
-    Browser* browser;
-    TabStripModel* tab_strip;
+    WindowController* browser;
     extensions::ExtensionTabUtil::GetTabById(tab_id, profile, include_incognito,
-                                             &browser, &tab_strip, &contents,
+                                             &browser, &contents,
                                              &tab_index);
   }
 

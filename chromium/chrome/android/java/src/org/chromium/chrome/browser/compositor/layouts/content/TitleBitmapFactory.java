@@ -23,7 +23,7 @@ import androidx.appcompat.content.res.AppCompatResources;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.ColorPickerUtils;
 import org.chromium.components.tab_groups.TabGroupColorId;
 import org.chromium.ui.util.StyleUtils;
@@ -128,8 +128,9 @@ public class TitleBitmapFactory {
 
             // Note(david@vivaldi.com): We rather scale the image here with the correct density
             // instead of using a canvas. This allows us to scale the favicons properly.
-            b = Bitmap.createScaledBitmap(favicon, mFaviconDimension, mFaviconDimension, false);
-            if (!ChromeApplicationImpl.isVivaldi()) {
+            if (ChromeApplicationImpl.isVivaldi())
+                b = Bitmap.createScaledBitmap(favicon, mFaviconDimension, mFaviconDimension, false);
+            else {
             Canvas c = new Canvas(b);
             if (favicon.getWidth() > mFaviconDimension || favicon.getHeight() > mFaviconDimension) {
                 float scale =

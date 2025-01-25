@@ -25,7 +25,6 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_parsing/field_candidates.h"
 #include "components/autofill/core/browser/form_types.h"
-#include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/dense_set.h"
@@ -72,13 +71,12 @@ class FormStructure {
   // types.
   void DetermineHeuristicTypes(
       const GeoIpCountryCode& client_country,
-      AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
       LogManager* log_manager);
 
   // Returns predictions using the details from the given |form_structures| and
   // their fields' predicted types.
   static std::vector<FormDataPredictions> GetFieldTypePredictions(
-      const std::vector<raw_ptr<FormStructure, VectorExperimental>>&
+      base::span<const raw_ptr<FormStructure, VectorExperimental>>
           form_structures);
 
   // Creates FormStructure that has bare minimum information for uploading
@@ -228,15 +226,15 @@ class FormStructure {
   // All returned values are standardized to upper case.
   std::set<std::u16string> PossibleValues(FieldType type);
 
-  // Rationalize phone number fields in a given section, that is only fill
-  // the fields that are considered composing a first complete phone number.
-  void RationalizePhoneNumbersInSection(const Section& section);
+  // Rationalize phone number fields so that, in every section, only the first
+  // complete phone number is filled automatically. This is useful for when a
+  // form contains a first phone number and second phone number, which usually
+  // should be distinct.
+  void RationalizePhoneNumberFieldsForFilling();
 
   // Rationalize the form's autocomplete attributes, repeated fields and field
   // type predictions.
-  void RationalizeFormStructure(
-      AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
-      LogManager* log_manager);
+  void RationalizeFormStructure(LogManager* log_manager);
 
   // Returns the FieldGlobalIds of the |fields_| that are eligible for manual
   // filling on form interaction.
@@ -437,9 +435,6 @@ class FormStructure {
   [[nodiscard]] bool ShouldBeParsed(ShouldBeParsedParams params,
                                     LogManager* log_manager = nullptr) const;
 
-  // Further processes the extracted |fields_|.
-  void ProcessExtractedFields();
-
   // Extracts the parseable field name by removing a common affix.
   void ExtractParseableFieldNames();
 
@@ -525,9 +520,6 @@ class FormStructure {
 
   // The timestamp when this form or one of its fields was last filled.
   std::optional<base::TimeTicks> last_filling_timestamp_;
-
-  // If phone number rationalization has been performed for a given section.
-  std::set<Section> phone_rationalized_;
 
   // Used to record whether developer has used autocomplete markup or
   // UPI-VPA hints, This is a bitmask of DeveloperEngagementMetric and set in

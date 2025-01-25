@@ -4,6 +4,7 @@
 
 #include "components/optimization_guide/core/model_execution/on_device_model_adaptation_controller.h"
 
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -14,6 +15,7 @@
 #include "components/optimization_guide/core/model_execution/on_device_model_access_controller.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "services/on_device_model/public/cpp/model_assets.h"
+#include "services/on_device_model/public/mojom/on_device_model.mojom-shared.h"
 #include "services/on_device_model/public/mojom/on_device_model.mojom.h"
 
 namespace optimization_guide {
@@ -43,7 +45,7 @@ OnDeviceModelAdaptationController::OnDeviceModelAdaptationController(
     ModelBasedCapabilityKey feature,
     base::WeakPtr<OnDeviceModelServiceController> controller)
     : feature_(feature), controller_(controller) {
-  CHECK(features::internal::IsOnDeviceModelEnabled(feature));
+  CHECK(features::internal::GetOptimizationTargetForCapability(feature_));
 }
 
 OnDeviceModelAdaptationController::~OnDeviceModelAdaptationController() =
@@ -53,7 +55,7 @@ mojo::Remote<on_device_model::mojom::OnDeviceModel>&
 OnDeviceModelAdaptationController::GetOrCreateModelRemote(
     const on_device_model::AdaptationAssetPaths& adaptation_assets) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK(features::internal::IsOnDeviceModelAdaptationEnabled(feature_));
+  CHECK(features::internal::GetOptimizationTargetForCapability(feature_));
   if (!model_remote_) {
     base::ThreadPool::PostTaskAndReplyWithResult(
         FROM_HERE, {base::MayBlock()},
@@ -63,13 +65,9 @@ OnDeviceModelAdaptationController::GetOrCreateModelRemote(
                        model_remote_.BindNewPipeAndPassReceiver()));
     model_remote_.set_disconnect_handler(base::BindOnce(
         &OnDeviceModelServiceController::OnModelAdaptationRemoteDisconnected,
-        controller_, feature_, ModelRemoteDisconnectReason::kDisconncted));
-    model_remote_.set_idle_handler(
-        features::GetOnDeviceModelIdleTimeout(),
-        base::BindRepeating(&OnDeviceModelServiceController::
-                                OnModelAdaptationRemoteDisconnected,
-                            controller_, feature_,
-                            ModelRemoteDisconnectReason::kRemoteIdle));
+        controller_));
+    model_remote_.reset_on_idle_timeout(
+        features::GetOnDeviceModelIdleTimeout());
   }
   return model_remote_;
 }
@@ -90,28 +88,7 @@ void OnDeviceModelAdaptationController::LoadAdaptationModelFromAssets(
 
   base_model_remote->LoadAdaptation(
       std::move(params), std::move(model),
-      base::BindOnce(&OnDeviceModelAdaptationController::OnLoadModelResult,
-                     weak_ptr_factory_.GetWeakPtr()));
-}
-
-void OnDeviceModelAdaptationController::OnLoadModelResult(
-    on_device_model::mojom::LoadModelResult result) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::UmaHistogramEnumeration(
-      "OptimizationGuide.ModelExecution.OnDeviceModelAdaptationLoadResult",
-      ConvertToOnDeviceModelLoadResult(result));
-  switch (result) {
-    case on_device_model::mojom::LoadModelResult::kGpuBlocked:
-      controller_->OnModelAdaptationRemoteDisconnected(
-          feature_, ModelRemoteDisconnectReason::kGpuBlocked);
-      break;
-    case on_device_model::mojom::LoadModelResult::kFailedToLoadLibrary:
-      controller_->OnModelAdaptationRemoteDisconnected(
-          feature_, ModelRemoteDisconnectReason::kModelLoadFailed);
-      break;
-    case on_device_model::mojom::LoadModelResult::kSuccess:
-      break;
-  }
+      base::DoNothingAs<void(on_device_model::mojom::LoadModelResult)>());
 }
 
 }  // namespace optimization_guide

@@ -70,6 +70,7 @@ public class UrlConstants {
 
     public static final String RECENT_TABS_HOST = "recent-tabs";
     public static final String RECENT_TABS_URL = "chrome-native://recent-tabs/";
+    public static final String GRID_TAB_SWITCHER_URL = "chrome-native://gts/";
 
     // TODO(dbeam): do we need both HISTORY_URL and NATIVE_HISTORY_URL?
     public static final String HISTORY_HOST = "history";
@@ -122,6 +123,9 @@ public class UrlConstants {
 
     public static final String GOOGLE_EMBEDDED_PRIVACY_POLICY =
             "https://policies.google.com/privacy/embedded";
+
+    public static final String GOOGLE_EMBEDDED_PRIVACY_POLICY_DARK_MODE =
+            "https://policies.google.com/privacy/embedded?color_scheme=dark";
 
     public static final String GOOGLE_URL = "https://www.google.com/";
 

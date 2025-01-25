@@ -183,7 +183,7 @@ void ApplyQueryResults(MdnsMessage* message,
                              DnsType::kA, clazz, target == domain);
       }
 
-      // Must re-calculate the |srv_record|, |target| refs in case a resize of
+      // Must re-calculate the `srv_record`, `target` refs in case a resize of
       // the additional_records() vector has invalidated them.
       {
         const MdnsRecord& srv_record = message->additional_records()[i];
@@ -308,7 +308,7 @@ void MdnsResponder::TruncatedQuery::SetQuery(const MdnsMessage& message) {
   questions_.insert(questions_.end(), message.questions().begin(),
                     message.questions().end());
 
-  // |messages_received_so_far| does not need to be validated here because it is
+  // `messages_received_so_far` does not need to be validated here because it is
   // checked as part of RescheduleSend().
   known_answers_.insert(known_answers_.end(), message.answers().begin(),
                         message.answers().end());
@@ -319,7 +319,7 @@ void MdnsResponder::TruncatedQuery::SetQuery(const MdnsMessage& message) {
 
 void MdnsResponder::TruncatedQuery::AddKnownAnswers(
     const std::vector<MdnsRecord>& records) {
-  // |messages_received_so_far| does not need to be validated here because it is
+  // `messages_received_so_far` does not need to be validated here because it is
   // checked as part of RescheduleSend().
   known_answers_.insert(known_answers_.end(), records.begin(), records.end());
   messages_received_so_far++;

@@ -30,7 +30,6 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.memory.MemoryPressureUma;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
-import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.ChainedTasks;
 import org.chromium.base.task.PostTask;
@@ -40,7 +39,6 @@ import org.chromium.build.BuildConfig;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeActivitySessionTracker;
-import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeStrictMode;
 import org.chromium.chrome.browser.DefaultBrowserInfo;
 import org.chromium.chrome.browser.DeferredStartupHandler;
@@ -52,6 +50,7 @@ import org.chromium.chrome.browser.app.usb.UsbNotificationService;
 import org.chromium.chrome.browser.backup.ChromeBackupAgentImpl;
 import org.chromium.chrome.browser.bluetooth.BluetoothNotificationManager;
 import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
+import org.chromium.chrome.browser.browserservices.ClearDataDialogResultRecorder;
 import org.chromium.chrome.browser.contacts_picker.ChromePickerAdapter;
 import org.chromium.chrome.browser.content_capture.ContentCaptureHistoryDeletionObserver;
 import org.chromium.chrome.browser.crash.CrashUploadCountStore;
@@ -71,8 +70,8 @@ import org.chromium.chrome.browser.media.MediaViewerUtils;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
 import org.chromium.chrome.browser.metrics.PackageMetrics;
 import org.chromium.chrome.browser.metrics.UmaUtils;
+import org.chromium.chrome.browser.notifications.TrampolineActivityTracker;
 import org.chromium.chrome.browser.notifications.channels.ChannelsUpdater;
-import org.chromium.chrome.browser.ntp.FeedPositionUtils;
 import org.chromium.chrome.browser.offlinepages.measurements.OfflineMeasurementsBackgroundTask;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeFactory;
@@ -104,6 +103,7 @@ import org.chromium.chrome.browser.webapps.ChromeWebApkHost;
 import org.chromium.chrome.browser.webapps.WebApkUninstallTracker;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
+import org.chromium.components.browser_ui.accessibility.PageZoomUtils;
 import org.chromium.components.browser_ui.contacts_picker.ContactsPickerDialog;
 import org.chromium.components.browser_ui.photo_picker.DecoderServiceHost;
 import org.chromium.components.browser_ui.photo_picker.PhotoPickerDelegateBase;
@@ -357,6 +357,11 @@ public class ProcessInitializationHandler {
     /** Performs the post native initialization. */
     @CallSuper
     protected void handlePostNativeInitialization() {
+        // Triggered early in post native startup to allow any flags that have not be accessed to
+        // use the most up to date flag state from the server
+        // (see ChromeCachedFlags#cacheNativeFlags for more details).
+        ChromeCachedFlags.getInstance().cacheNativeFlags();
+
         ChromeActivitySessionTracker.getInstance().initializeWithNative();
         ProfileManagerUtils.removeSessionCookiesForAllProfiles();
         AppBannerManager.setAppDetailsDelegate(
@@ -457,16 +462,11 @@ public class ProcessInitializationHandler {
         }
 
         // Initialize UMA settings for survey component.
-        // TODO(crbug.com/40281638): Observe PrivacyPreferencesManagerImpl from SurveyClientFactory.
-        ObservableSupplierImpl<Boolean> crashUploadPermissionSupplier =
-                new ObservableSupplierImpl<>();
-        crashUploadPermissionSupplier.set(
-                PrivacyPreferencesManagerImpl.getInstance().isUsageAndCrashReportingPermitted());
-        PrivacyPreferencesManagerImpl.getInstance().addObserver(crashUploadPermissionSupplier::set);
-        SurveyClientFactory.initialize(crashUploadPermissionSupplier);
+        SurveyClientFactory.initialize(PrivacyPreferencesManagerImpl.getInstance());
 
         AppHooks.get().registerPolicyProviders(CombinedPolicyProvider.get());
         SpeechRecognition.initialize();
+        TrampolineActivityTracker.getInstance().onNativeInitialized();
     }
 
     /**
@@ -525,12 +525,11 @@ public class ProcessInitializationHandler {
      */
     @CallSuper
     protected void handleProfileDependentPostNativeInitialization(Profile profile) {
-        FeedPositionUtils.cacheSegmentationResult(profile);
-
         HistoryDeletionBridge.getForProfile(profile)
                 .addObserver(
                         new ContentCaptureHistoryDeletionObserver(
                                 () -> PlatformContentCaptureController.getInstance()));
+        PageZoomUtils.recordFeatureUsage(profile);
     }
 
     /**
@@ -691,9 +690,7 @@ public class ProcessInitializationHandler {
 
         tasks.add(MediaViewerUtils::updateMediaLauncherActivityEnabled);
 
-        tasks.add(
-                ChromeApplicationImpl.getComponent().resolveClearDataDialogResultRecorder()
-                        ::makeDeferredRecordings);
+        tasks.add(ClearDataDialogResultRecorder::makeDeferredRecordings);
         tasks.add(WebApkUninstallTracker::runDeferredTasks);
 
         tasks.add(OfflineContentAvailabilityStatusProvider::getInstance);

@@ -12,32 +12,27 @@ title: Gerrit Guide
 
 ### (EVERYONE) To get access to the Chromium Gerrit instance
 
-1.  Go to <https://www.googlesource.com/new-password>
-2.  Log in with the email you use for your git commits.
+1.  Install [depot_tools](https://www.chromium.org/developers/how-tos/install-depot-tools/).
+2.  Log in by running `luci-auth login -scopes "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gerritcodereview"`.
+    *   Log in with the email you use for your git commits
+3.  Go to <https://www.googlesource.com/new-password>
+4.  Log in with the email you use for your git commits.
     *   **If you are a Googler, make sure you're using the account you
                 want to use (either @google.com or @chromium.org, depending on
                 how you want to use things).**
     *   **You can verify this by ensuring that the Username field looks
                 like git-&lt;user&gt;.chromium.org**
-3.  Follow the directions on the new-password page to set up/append to
+5.  Follow the directions on the new-password page to set up/append to
             your .gitcookies file.
     *   You should click the radio button labeled "only
                 chromium.googlesource.com" if it exists.
-4.  **Verification:** Run `git ls-remote
+6.  **Verification:** Run `git ls-remote
             https://chromium.googlesource.com/chromiumos/manifest.git`
     *   This should **not** prompt for any credentials, and should just
                 print out a list of git references.
-5.  Make sure to set your real name.
+7.  Make sure to set your real name.
     1.  Visit <https://chromium-review.googlesource.com/#/settings/> and
                 check the "Full Name" field.
-
-### (EVERYONE) Configure local checkouts for your account
-
-Now that you've configured your account on the server, you should configure your
-local checkouts.
-
-1.  Run `cd src && git config --local gerrit.host true` to default
-            to uploading your reviews to Gerrit.
 
 ### (Googler) Link @chromium.org & @google.com accounts
 

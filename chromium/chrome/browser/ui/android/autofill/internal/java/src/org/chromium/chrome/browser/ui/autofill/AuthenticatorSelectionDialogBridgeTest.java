@@ -17,14 +17,11 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.ui.autofill.data.AuthenticatorOption;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
 import org.chromium.ui.test.util.modaldialog.FakeModalDialogManager;
@@ -34,7 +31,6 @@ import java.util.List;
 
 /** Unit tests for {@link AuthenticatorSelectionDialogBridge}. */
 @RunWith(BaseRobolectricTestRunner.class)
-@EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_MOVING_GPAY_LOGO_TO_THE_RIGHT_ON_CLANK})
 public class AuthenticatorSelectionDialogBridgeTest {
     // The icon set on the AuthenticatorOption is not important and any icon would do.
     private static final AuthenticatorOption OPTION_1 =
@@ -67,7 +63,6 @@ public class AuthenticatorSelectionDialogBridgeTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         reset(mNativeMock);
         mOptions.add(OPTION_1);
         mOptions.add(OPTION_2);

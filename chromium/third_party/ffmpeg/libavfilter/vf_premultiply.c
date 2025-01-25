@@ -27,7 +27,6 @@
 #include "filters.h"
 #include "formats.h"
 #include "framesync.h"
-#include "internal.h"
 #include "video.h"
 
 typedef struct ThreadData {
@@ -36,8 +35,8 @@ typedef struct ThreadData {
 
 typedef struct PreMultiplyContext {
     const AVClass *class;
-    int width[4], height[4];
-    int linesize[4];
+    int width[AV_VIDEO_MAX_PLANES], height[AV_VIDEO_MAX_PLANES];
+    int linesize[AV_VIDEO_MAX_PLANES];
     int nb_planes;
     int planes;
     int inverse;
@@ -45,7 +44,7 @@ typedef struct PreMultiplyContext {
     int half, depth, offset, max;
     FFFrameSync fs;
 
-    void (*premultiply[4])(const uint8_t *msrc, const uint8_t *asrc,
+    void (*premultiply[AV_VIDEO_MAX_PLANES])(const uint8_t *msrc, const uint8_t *asrc,
                            uint8_t *dst,
                            ptrdiff_t mlinesize, ptrdiff_t alinesize,
                            ptrdiff_t dlinesize,
@@ -64,9 +63,11 @@ static const AVOption options[] = {
 
 AVFILTER_DEFINE_CLASS_EXT(premultiply, "(un)premultiply", options);
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    PreMultiplyContext *s = ctx->priv;
+    const PreMultiplyContext *s = ctx->priv;
 
     static const enum AVPixelFormat no_alpha_pix_fmts[] = {
         AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUVJ444P,
@@ -87,7 +88,8 @@ static int query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_NONE
     };
 
-    return ff_set_common_formats_from_list(ctx, s->inplace ? alpha_pix_fmts : no_alpha_pix_fmts);
+    return ff_set_common_formats_from_list2(ctx, cfg_in, cfg_out,
+                                            s->inplace ? alpha_pix_fmts : no_alpha_pix_fmts);
 }
 
 static void premultiply8(const uint8_t *msrc, const uint8_t *asrc,
@@ -696,6 +698,8 @@ static int config_output(AVFilterLink *outlink)
     PreMultiplyContext *s = ctx->priv;
     AVFilterLink *base = ctx->inputs[0];
     AVFilterLink *alpha;
+    FilterLink *il = ff_filter_link(base);
+    FilterLink *ol = ff_filter_link(outlink);
     FFFrameSyncIn *in;
     int ret;
 
@@ -717,7 +721,7 @@ static int config_output(AVFilterLink *outlink)
     outlink->h = base->h;
     outlink->time_base = base->time_base;
     outlink->sample_aspect_ratio = base->sample_aspect_ratio;
-    outlink->frame_rate = base->frame_rate;
+    ol->frame_rate = il->frame_rate;
 
     if (s->inplace)
         return 0;
@@ -829,7 +833,7 @@ const AVFilter ff_vf_premultiply = {
     .activate      = activate,
     .inputs        = NULL,
     FILTER_OUTPUTS(premultiply_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .priv_class    = &premultiply_class,
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                      AVFILTER_FLAG_DYNAMIC_INPUTS |
@@ -850,7 +854,7 @@ const AVFilter ff_vf_unpremultiply = {
     .activate      = activate,
     .inputs        = NULL,
     FILTER_OUTPUTS(premultiply_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
                      AVFILTER_FLAG_DYNAMIC_INPUTS |
                      AVFILTER_FLAG_SLICE_THREADS,

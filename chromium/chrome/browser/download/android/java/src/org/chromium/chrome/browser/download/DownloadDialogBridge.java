@@ -55,8 +55,6 @@ public class DownloadDialogBridge implements DownloadLocationDialogController {
     private Context mContext;
     private ModalDialogManager mModalDialogManager;
     private WindowAndroid mWindowAndroid;
-    private long mTotalBytes;
-    private @ConnectionType int mConnectionType = ConnectionType.CONNECTION_NONE;
     private @DownloadLocationDialogType int mLocationDialogType;
     private String mSuggestedPath;
     private Profile mProfile;
@@ -142,8 +140,6 @@ public class DownloadDialogBridge implements DownloadLocationDialogController {
         mContext = context;
         mModalDialogManager = modalDialogManager;
 
-        mTotalBytes = totalBytes;
-        mConnectionType = connectionType;
         mLocationDialogType = dialogType;
         mSuggestedPath = suggestedPath;
 

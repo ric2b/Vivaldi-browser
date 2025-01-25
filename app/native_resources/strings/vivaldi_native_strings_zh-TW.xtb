@@ -6,13 +6,13 @@
 <translation id="1158503667684816647">不再顯示確認對話方塊</translation>
 <translation id="1222195720020481779">啟動安裝程式中…</translation>
 <translation id="1224683873953469764">取得 Vivaldi 行動版</translation>
-<translation id="1270785070369717623">很抱歉，無法在 Opera GX 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Opera GX 視窗，然後點選繼續。</translation>
+<translation id="1270785070369717623">很抱歉，無法在 Opera GX 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Opera GX 視窗，然後點擊繼續。</translation>
 <translation id="1276145862619442150">快速撥號</translation>
 <translation id="1281950884873973195">動物 6</translation>
 <translation id="1411638389238344450">透過郵件傳送連結</translation>
 <translation id="1454726940098520109">不再顯示確認對話方塊</translation>
 <translation id="1462666970065907900">您確定要關閉這個視窗嗎？</translation>
-<translation id="1480046233931937785">製作群</translation>
+<translation id="1480046233931937785">開放原始碼軟體</translation>
 <translation id="1521774566618522728">今天活躍</translation>
 <translation id="1526344461589023948">嘗試儲存下載的更新檔時發生錯誤，請檢查電腦有足夠硬碟空間並稍後再試。</translation>
 <translation id="1635542496948266458">切換設定檔</translation>
@@ -38,8 +38,8 @@
 <translation id="2486841023299517366">動物 4</translation>
 <translation id="2612127540243995147">已準備好安裝。Vivaldi 將被關閉並重新啟動。</translation>
 <translation id="2613387515621326337">顯示更新網站</translation>
-<translation id="2645477450146475243">很抱歉，無法在 Opera 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Opera 視窗，然後點選繼續。</translation>
-<translation id="2647368062414805334">很抱歉，無法在 Edge 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Edge 視窗，然後點選繼續。</translation>
+<translation id="2645477450146475243">很抱歉，無法在 Opera 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Opera 視窗，然後點擊繼續。</translation>
+<translation id="2647368062414805334">很抱歉，無法在 Edge 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Edge 視窗，然後點擊繼續。</translation>
 <translation id="2721334646575696520">Microsoft Edge 瀏覽器</translation>
 <translation id="2848085334714181751">動物 3</translation>
 <translation id="2873951654529031587">垃圾桶</translation>
@@ -49,7 +49,7 @@
 <translation id="2977472760057091832">在無痕視窗中開啟連結</translation>
 <translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">在新分頁開啟</translation>
-<translation id="3027988479108856431">很抱歉，無法在 Yandex 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Yandex 視窗，然後點選繼續。</translation>
+<translation id="3027988479108856431">很抱歉，無法在 Yandex 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Yandex 視窗，然後點擊繼續。</translation>
 <translation id="3084011186245865060">風景 6</translation>
 <translation id="3085906383264247940">Opera（Beta）</translation>
 <translation id="3093931836425623631">Vivaldi 是基於 Chromium 開放原始碼專案及其它開放原始碼軟體而實現的。</translation>
@@ -79,7 +79,7 @@
 <translation id="3732157130969736834">新增連結為書籤</translation>
 <translation id="3732388226447288666">動物 2</translation>
 <translation id="3732439195215136813">動物 5</translation>
-<translation id="3795800845758778870">很抱歉，無法在 Brave 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Brave 視窗，然後點選繼續。</translation>
+<translation id="3795800845758778870">很抱歉，無法在 Brave 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Brave 視窗，然後點擊繼續。</translation>
 <translation id="3822431842304177896">新增分隔線</translation>
 <translation id="3832132597516774400">風景 5</translation>
 <translation id="3914946330804881301">從 Opera 匯入</translation>
@@ -129,7 +129,7 @@
 <translation id="5770433027661640693">風景 10</translation>
 <translation id="5857090052475505287">新增資料夾</translation>
 <translation id="588258955323874662">全螢幕模式</translation>
-<translation id="5916080360077521750">很抱歉，無法在 Chrome 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Chrome 視窗，然後點選繼續。</translation>
+<translation id="5916080360077521750">很抱歉，無法在 Chrome 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Chrome 視窗，然後點擊繼續。</translation>
 <translation id="6040143037577758943">關閉</translation>
 <translation id="6229528619562190452">點此更新 Vivaldi。</translation>
 <translation id="6234173136417926046">使用圖片作為起始頁背景</translation>
@@ -150,7 +150,7 @@
 <translation id="7086554968911045110">風景 7</translation>
 <translation id="7099506190679014195">安全金鑰儲存庫升級</translation>
 <translation id="7111492742514999492">風景 9</translation>
-<translation id="7208252576848052204">很抱歉，無法在 Arc 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Arc 視窗，然後點選繼續。</translation>
+<translation id="7208252576848052204">很抱歉，無法在 Arc 瀏覽器執行時使用您的設定，要匯入設定至 Vivaldi，請先儲存您的工作並關閉所有 Arc 視窗，然後點擊繼續。</translation>
 <translation id="7321500017121629018">昨天活躍</translation>
 <translation id="7337881442233988129">Chromium 瀏覽器</translation>
 <translation id="7581266044164103589">啟動更新安裝程式失敗，請檢查電腦有足夠記憶體或硬碟空間並稍後再試。</translation>

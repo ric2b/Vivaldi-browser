@@ -222,26 +222,23 @@ void WriteParamCaptureReplay(std::ostream &os, const CallCapture &call, const Pa
             WriteParamValueReplay<ParamType::TGLDEBUGPROCKHR>(os, call,
                                                               param.value.GLDEBUGPROCKHRVal);
             break;
+        case ParamType::TGLGETBLOBPROCANGLE:
+            WriteParamValueReplay<ParamType::TGLGETBLOBPROCANGLE>(
+                os, call, param.value.GLGETBLOBPROCANGLEVal);
+            break;
+        case ParamType::TGLSETBLOBPROCANGLE:
+            WriteParamValueReplay<ParamType::TGLSETBLOBPROCANGLE>(
+                os, call, param.value.GLSETBLOBPROCANGLEVal);
+            break;
         case ParamType::TGLbitfield:
             WriteParamValueReplay<ParamType::TGLbitfield>(os, call, param.value.GLbitfieldVal);
             break;
         case ParamType::TGLboolean:
             WriteParamValueReplay<ParamType::TGLboolean>(os, call, param.value.GLbooleanVal);
             break;
-        case ParamType::TGLbooleanConstPointer:
-            WriteParamValueReplay<ParamType::TGLbooleanConstPointer>(
-                os, call, param.value.GLbooleanConstPointerVal);
-            break;
         case ParamType::TGLbooleanPointer:
             WriteParamValueReplay<ParamType::TGLbooleanPointer>(os, call,
                                                                 param.value.GLbooleanPointerVal);
-            break;
-        case ParamType::TGLbyte:
-            WriteParamValueReplay<ParamType::TGLbyte>(os, call, param.value.GLbyteVal);
-            break;
-        case ParamType::TGLbyteConstPointer:
-            WriteParamValueReplay<ParamType::TGLbyteConstPointer>(
-                os, call, param.value.GLbyteConstPointerVal);
             break;
         case ParamType::TGLcharConstPointer:
             WriteParamValueReplay<ParamType::TGLcharConstPointer>(
@@ -257,17 +254,6 @@ void WriteParamCaptureReplay(std::ostream &os, const CallCapture &call, const Pa
             break;
         case ParamType::TGLclampx:
             WriteParamValueReplay<ParamType::TGLclampx>(os, call, param.value.GLclampxVal);
-            break;
-        case ParamType::TGLdouble:
-            WriteParamValueReplay<ParamType::TGLdouble>(os, call, param.value.GLdoubleVal);
-            break;
-        case ParamType::TGLdoubleConstPointer:
-            WriteParamValueReplay<ParamType::TGLdoubleConstPointer>(
-                os, call, param.value.GLdoubleConstPointerVal);
-            break;
-        case ParamType::TGLdoublePointer:
-            WriteParamValueReplay<ParamType::TGLdoublePointer>(os, call,
-                                                               param.value.GLdoublePointerVal);
             break;
         case ParamType::TGLeglClientBufferEXT:
             WriteParamValueReplay<ParamType::TGLeglClientBufferEXT>(
@@ -326,10 +312,6 @@ void WriteParamCaptureReplay(std::ostream &os, const CallCapture &call, const Pa
         case ParamType::TGLintptr:
             WriteParamValueReplay<ParamType::TGLintptr>(os, call, param.value.GLintptrVal);
             break;
-        case ParamType::TGLintptrConstPointer:
-            WriteParamValueReplay<ParamType::TGLintptrConstPointer>(
-                os, call, param.value.GLintptrConstPointerVal);
-            break;
         case ParamType::TGLshort:
             WriteParamValueReplay<ParamType::TGLshort>(os, call, param.value.GLshortVal);
             break;
@@ -350,10 +332,6 @@ void WriteParamCaptureReplay(std::ostream &os, const CallCapture &call, const Pa
             break;
         case ParamType::TGLsizeiptr:
             WriteParamValueReplay<ParamType::TGLsizeiptr>(os, call, param.value.GLsizeiptrVal);
-            break;
-        case ParamType::TGLsizeiptrConstPointer:
-            WriteParamValueReplay<ParamType::TGLsizeiptrConstPointer>(
-                os, call, param.value.GLsizeiptrConstPointerVal);
             break;
         case ParamType::TGLsync:
             WriteParamValueReplay<ParamType::TGLsync>(os, call, param.value.GLsyncVal);
@@ -390,17 +368,6 @@ void WriteParamCaptureReplay(std::ostream &os, const CallCapture &call, const Pa
         case ParamType::TGLuintPointer:
             WriteParamValueReplay<ParamType::TGLuintPointer>(os, call,
                                                              param.value.GLuintPointerVal);
-            break;
-        case ParamType::TGLushort:
-            WriteParamValueReplay<ParamType::TGLushort>(os, call, param.value.GLushortVal);
-            break;
-        case ParamType::TGLushortConstPointer:
-            WriteParamValueReplay<ParamType::TGLushortConstPointer>(
-                os, call, param.value.GLushortConstPointerVal);
-            break;
-        case ParamType::TGLushortPointer:
-            WriteParamValueReplay<ParamType::TGLushortPointer>(os, call,
-                                                               param.value.GLushortPointerVal);
             break;
         case ParamType::TGraphicsResetStatus:
             WriteParamValueReplay<ParamType::TGraphicsResetStatus>(
@@ -768,18 +735,16 @@ const char *ParamTypeToString(ParamType paramType)
             return "GLDEBUGPROC";
         case ParamType::TGLDEBUGPROCKHR:
             return "GLDEBUGPROCKHR";
+        case ParamType::TGLGETBLOBPROCANGLE:
+            return "GLGETBLOBPROCANGLE";
+        case ParamType::TGLSETBLOBPROCANGLE:
+            return "GLSETBLOBPROCANGLE";
         case ParamType::TGLbitfield:
             return "GLbitfield";
         case ParamType::TGLboolean:
             return "GLboolean";
-        case ParamType::TGLbooleanConstPointer:
-            return "const GLboolean *";
         case ParamType::TGLbooleanPointer:
             return "GLboolean *";
-        case ParamType::TGLbyte:
-            return "GLbyte";
-        case ParamType::TGLbyteConstPointer:
-            return "const GLbyte *";
         case ParamType::TGLcharConstPointer:
             return "const GLchar *";
         case ParamType::TGLcharConstPointerPointer:
@@ -788,12 +753,6 @@ const char *ParamTypeToString(ParamType paramType)
             return "GLchar *";
         case ParamType::TGLclampx:
             return "GLclampx";
-        case ParamType::TGLdouble:
-            return "GLdouble";
-        case ParamType::TGLdoubleConstPointer:
-            return "const GLdouble *";
-        case ParamType::TGLdoublePointer:
-            return "GLdouble *";
         case ParamType::TGLeglClientBufferEXT:
             return "GLeglClientBufferEXT";
         case ParamType::TGLenum:
@@ -826,8 +785,6 @@ const char *ParamTypeToString(ParamType paramType)
             return "GLint *";
         case ParamType::TGLintptr:
             return "GLintptr";
-        case ParamType::TGLintptrConstPointer:
-            return "const GLintptr *";
         case ParamType::TGLshort:
             return "GLshort";
         case ParamType::TGLshortConstPointer:
@@ -840,8 +797,6 @@ const char *ParamTypeToString(ParamType paramType)
             return "GLsizei *";
         case ParamType::TGLsizeiptr:
             return "GLsizeiptr";
-        case ParamType::TGLsizeiptrConstPointer:
-            return "const GLsizeiptr *";
         case ParamType::TGLsync:
             return "GLsync";
         case ParamType::TGLubyte:
@@ -862,12 +817,6 @@ const char *ParamTypeToString(ParamType paramType)
             return "const GLuint *";
         case ParamType::TGLuintPointer:
             return "GLuint *";
-        case ParamType::TGLushort:
-            return "GLushort";
-        case ParamType::TGLushortConstPointer:
-            return "const GLushort *";
-        case ParamType::TGLushortPointer:
-            return "GLushort *";
         case ParamType::TGraphicsResetStatus:
             return "GLenum";
         case ParamType::THandleType:

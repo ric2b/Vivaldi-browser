@@ -173,7 +173,7 @@ static inline void read_coeffs_tx_intra_block(
     struct aom_usec_timer timer;
     aom_usec_timer_start(&timer);
 #endif
-    av1_read_coeffs_txb_facade(cm, dcb, r, plane, row, col, tx_size);
+    av1_read_coeffs_txb(cm, dcb, r, plane, row, col, tx_size);
 #if TXCOEFF_TIMER
     aom_usec_timer_mark(&timer);
     const int64_t elapsed_time = aom_usec_timer_elapsed(&timer);
@@ -1811,6 +1811,14 @@ static inline void setup_quantization(CommonQuantParams *quant_params,
   }
 }
 
+// Get global dequant matrix.
+static const qm_val_t *get_iqmatrix(const CommonQuantParams *quant_params,
+                                    int qmlevel, int plane, TX_SIZE tx_size) {
+  assert(quant_params->giqmatrix[qmlevel][plane][tx_size] != NULL ||
+         qmlevel == NUM_QM_LEVELS - 1);
+  return quant_params->giqmatrix[qmlevel][plane][tx_size];
+}
+
 // Build y/uv dequant values based on segmentation.
 static inline void setup_segmentation_dequant(AV1_COMMON *const cm,
                                               MACROBLOCKD *const xd) {
@@ -1839,19 +1847,19 @@ static inline void setup_segmentation_dequant(AV1_COMMON *const cm,
         use_qmatrix ? quant_params->qmatrix_level_y : NUM_QM_LEVELS - 1;
     for (int j = 0; j < TX_SIZES_ALL; ++j) {
       quant_params->y_iqmatrix[i][j] =
-          av1_iqmatrix(quant_params, qmlevel_y, AOM_PLANE_Y, j);
+          get_iqmatrix(quant_params, qmlevel_y, AOM_PLANE_Y, j);
     }
     const int qmlevel_u =
         use_qmatrix ? quant_params->qmatrix_level_u : NUM_QM_LEVELS - 1;
     for (int j = 0; j < TX_SIZES_ALL; ++j) {
       quant_params->u_iqmatrix[i][j] =
-          av1_iqmatrix(quant_params, qmlevel_u, AOM_PLANE_U, j);
+          get_iqmatrix(quant_params, qmlevel_u, AOM_PLANE_U, j);
     }
     const int qmlevel_v =
         use_qmatrix ? quant_params->qmatrix_level_v : NUM_QM_LEVELS - 1;
     for (int j = 0; j < TX_SIZES_ALL; ++j) {
       quant_params->v_iqmatrix[i][j] =
-          av1_iqmatrix(quant_params, qmlevel_v, AOM_PLANE_V, j);
+          get_iqmatrix(quant_params, qmlevel_v, AOM_PLANE_V, j);
     }
   }
 }
@@ -1861,12 +1869,18 @@ static InterpFilter read_frame_interp_filter(struct aom_read_bit_buffer *rb) {
                              : aom_rb_read_literal(rb, LOG_SWITCHABLE_FILTERS);
 }
 
+static void read_frame_size(struct aom_read_bit_buffer *rb, int num_bits_width,
+                            int num_bits_height, int *width, int *height) {
+  *width = aom_rb_read_literal(rb, num_bits_width) + 1;
+  *height = aom_rb_read_literal(rb, num_bits_height) + 1;
+}
+
 static inline void setup_render_size(AV1_COMMON *cm,
                                      struct aom_read_bit_buffer *rb) {
   cm->render_width = cm->superres_upscaled_width;
   cm->render_height = cm->superres_upscaled_height;
   if (aom_rb_read_bit(rb))
-    av1_read_frame_size(rb, 16, 16, &cm->render_width, &cm->render_height);
+    read_frame_size(rb, 16, 16, &cm->render_width, &cm->render_height);
 }
 
 // TODO(afergs): make "struct aom_read_bit_buffer *const rb"?
@@ -1970,7 +1984,7 @@ static inline void setup_frame_size(AV1_COMMON *cm,
   if (frame_size_override_flag) {
     int num_bits_width = seq_params->num_bits_width;
     int num_bits_height = seq_params->num_bits_height;
-    av1_read_frame_size(rb, num_bits_width, num_bits_height, &width, &height);
+    read_frame_size(rb, num_bits_width, num_bits_height, &width, &height);
     if (width > seq_params->max_frame_width ||
         height > seq_params->max_frame_height) {
       aom_internal_error(cm->error, AOM_CODEC_CORRUPT_FRAME,
@@ -2035,7 +2049,7 @@ static inline void setup_frame_size_with_refs(AV1_COMMON *cm,
     int num_bits_width = seq_params->num_bits_width;
     int num_bits_height = seq_params->num_bits_height;
 
-    av1_read_frame_size(rb, num_bits_width, num_bits_height, &width, &height);
+    read_frame_size(rb, num_bits_width, num_bits_height, &width, &height);
     setup_superres(cm, rb, &width, &height);
     resize_context_buffers(cm, width, height);
     setup_render_size(cm, rb);
@@ -2691,7 +2705,7 @@ static inline void set_decode_func_pointers(ThreadData *td,
 
   if (parse_decode_flag & 0x1) {
     td->read_coeffs_tx_intra_block_visit = read_coeffs_tx_intra_block;
-    td->read_coeffs_tx_inter_block_visit = av1_read_coeffs_txb_facade;
+    td->read_coeffs_tx_inter_block_visit = av1_read_coeffs_txb;
   }
   if (parse_decode_flag & 0x2) {
     td->predict_and_recon_intra_block_visit =
@@ -5129,12 +5143,6 @@ struct aom_read_bit_buffer *av1_init_read_bit_buffer(
   rb->bit_buffer = data;
   rb->bit_buffer_end = data_end;
   return rb;
-}
-
-void av1_read_frame_size(struct aom_read_bit_buffer *rb, int num_bits_width,
-                         int num_bits_height, int *width, int *height) {
-  *width = aom_rb_read_literal(rb, num_bits_width) + 1;
-  *height = aom_rb_read_literal(rb, num_bits_height) + 1;
 }
 
 BITSTREAM_PROFILE av1_read_profile(struct aom_read_bit_buffer *rb) {

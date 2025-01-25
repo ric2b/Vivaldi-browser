@@ -70,7 +70,7 @@ class FrameCrypto {
   }
 
  private:
-  // The 244-byte AES_KEY struct, derived from the |aes_key| passed to the ctor,
+  // The 244-byte AES_KEY struct, derived from the `aes_key` passed to the ctor,
   // and initialized by boringssl's AES_set_encrypt_key() function.
   const AES_KEY aes_key_;
 

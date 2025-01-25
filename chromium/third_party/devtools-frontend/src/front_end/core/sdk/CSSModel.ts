@@ -200,6 +200,10 @@ export class CSSModel extends SDKModel<EventTypes> {
     return this.#domModel;
   }
 
+  async trackComputedStyleUpdatesForNode(nodeId: Protocol.DOM.NodeId|undefined): Promise<void> {
+    await this.agent.invoke_trackComputedStyleUpdatesForNode({nodeId});
+  }
+
   async setStyleText(
       styleSheetId: Protocol.CSS.StyleSheetId, range: TextUtils.TextRange.TextRange, text: string,
       majorChange: boolean): Promise<boolean> {
@@ -362,6 +366,7 @@ export class CSSModel extends SDKModel<EventTypes> {
       propertyRules: response.cssPropertyRules ?? [],
       cssPropertyRegistrations: response.cssPropertyRegistrations ?? [],
       fontPaletteValuesRule: response.cssFontPaletteValuesRule,
+      activePositionFallbackIndex: response.activePositionFallbackIndex ?? -1,
     });
   }
 
@@ -650,6 +655,10 @@ export class CSSModel extends SDKModel<EventTypes> {
     return this.#styleSheetIdToHeader.values();
   }
 
+  computedStyleUpdated(nodeId: Protocol.DOM.NodeId): void {
+    this.dispatchEventToListeners(Events.ComputedStyleUpdated, {nodeId});
+  }
+
   styleSheetAdded(header: Protocol.CSS.CSSStyleSheetHeader): void {
     console.assert(!this.#styleSheetIdToHeader.get(header.styleSheetId));
     if (header.loadingFailed) {
@@ -899,6 +908,7 @@ export enum Events {
   StyleSheetAdded = 'StyleSheetAdded',
   StyleSheetChanged = 'StyleSheetChanged',
   StyleSheetRemoved = 'StyleSheetRemoved',
+  ComputedStyleUpdated = 'ComputedStyleUpdated',
   /* eslint-enable @typescript-eslint/naming-convention */
 }
 
@@ -913,6 +923,10 @@ export interface PseudoStateForcedEvent {
   enable: boolean;
 }
 
+export interface ComputedStyleUpdatedEvent {
+  nodeId: Protocol.DOM.NodeId;
+}
+
 export type EventTypes = {
   [Events.FontsUpdated]: void,
   [Events.MediaQueryResultChanged]: void,
@@ -922,6 +936,7 @@ export type EventTypes = {
   [Events.StyleSheetAdded]: CSSStyleSheetHeader,
   [Events.StyleSheetChanged]: StyleSheetChangedEvent,
   [Events.StyleSheetRemoved]: CSSStyleSheetHeader,
+  [Events.ComputedStyleUpdated]: ComputedStyleUpdatedEvent,
 };
 
 const PseudoStateMarker = 'pseudo-state-marker';
@@ -988,6 +1003,10 @@ class CSSDispatcher implements ProtocolProxyApi.CSSDispatcher {
 
   styleSheetRemoved({styleSheetId}: Protocol.CSS.StyleSheetRemovedEvent): void {
     this.#cssModel.styleSheetRemoved(styleSheetId);
+  }
+
+  computedStyleUpdated({nodeId}: Protocol.CSS.ComputedStyleUpdatedEvent): void {
+    this.#cssModel.computedStyleUpdated(nodeId);
   }
 }
 

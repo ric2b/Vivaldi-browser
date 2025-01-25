@@ -68,7 +68,6 @@ TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_Normal) {
   const uint8_t kAlphaData[] = "sideshow bob";
   const uint32_t kSpatialLayers[] = {36, 24, 36};
   const size_t kDataSize = std::size(kData);
-  const size_t kAlphaDataSize = std::size(kAlphaData);
   const size_t kSpatialLayersSize = std::size(kSpatialLayers);
   const size_t kSecureHandle = 42;
 
@@ -78,8 +77,8 @@ TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_Normal) {
   buffer->set_duration(base::Milliseconds(456));
   buffer->set_discard_padding(DecoderBuffer::DiscardPadding(
       base::Milliseconds(5), base::Milliseconds(6)));
-  buffer->WritableSideData().alpha_data.assign(kAlphaData,
-                                               kAlphaData + kAlphaDataSize);
+  buffer->WritableSideData().alpha_data =
+      base::HeapArray<uint8_t>::CopiedFrom(kAlphaData);
   buffer->WritableSideData().spatial_layers.assign(
       kSpatialLayers, kSpatialLayers + kSpatialLayersSize);
   buffer->WritableSideData().secure_handle = kSecureHandle;
@@ -93,7 +92,7 @@ TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_Normal) {
   // DecoderBuffer; no need to check the data here.
   EXPECT_EQ(kDataSize, result->size());
   EXPECT_TRUE(result->has_side_data());
-  EXPECT_TRUE(buffer->side_data()->Matches(result->side_data().value()));
+  EXPECT_TRUE(buffer->side_data()->Matches(*result->side_data()));
   EXPECT_EQ(buffer->timestamp(), result->timestamp());
   EXPECT_EQ(buffer->duration(), result->duration());
   EXPECT_EQ(buffer->is_key_frame(), result->is_key_frame());
@@ -114,6 +113,37 @@ TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_EOS) {
 
   // Compare.
   EXPECT_TRUE(result->end_of_stream());
+}
+
+TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_EOS_Video_NextConfig) {
+  // Original.
+  auto buffer = DecoderBuffer::CreateEOSBuffer(TestVideoConfig::Normal());
+
+  // Convert from and back.
+  auto ptr = mojom::DecoderBuffer::From(*buffer);
+  auto result = ptr.To<scoped_refptr<DecoderBuffer>>();
+
+  // Compare.
+  EXPECT_TRUE(result->end_of_stream());
+  ASSERT_TRUE(result->next_config());
+  EXPECT_TRUE(absl::get<VideoDecoderConfig>(*result->next_config())
+                  .Matches(TestVideoConfig::Normal()));
+}
+
+TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_EOS_Audio_NextConfig) {
+  // Original.
+  auto buffer = DecoderBuffer::CreateEOSBuffer(TestAudioConfig::Normal());
+
+  // Convert from and back.
+  auto ptr = mojom::DecoderBuffer::From(*buffer);
+  ASSERT_TRUE(ptr);
+  auto result = ptr.To<scoped_refptr<DecoderBuffer>>();
+
+  // Compare.
+  EXPECT_TRUE(result->end_of_stream());
+  ASSERT_TRUE(result->next_config());
+  EXPECT_TRUE(absl::get<AudioDecoderConfig>(*result->next_config())
+                  .Matches(TestAudioConfig::Normal()));
 }
 
 TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_KeyFrame) {

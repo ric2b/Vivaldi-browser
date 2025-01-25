@@ -59,6 +59,7 @@ class RcInterfaceTest : public ::libaom_test::EncoderTest,
     if (video->frame() == 0 && layer_frame_cnt_ == 0) {
       encoder->Control(AOME_SET_CPUUSED, 7);
       encoder->Control(AV1E_SET_AQ_MODE, aq_mode_);
+      encoder->Control(AV1E_SET_ENABLE_ORDER_HINT, 0);
       if (rc_cfg_.is_screen) {
         encoder->Control(AV1E_SET_TUNE_CONTENT, AOM_CONTENT_SCREEN);
       } else {

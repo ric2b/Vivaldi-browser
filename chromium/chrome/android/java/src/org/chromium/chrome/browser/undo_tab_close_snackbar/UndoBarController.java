@@ -18,10 +18,10 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeatures;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;
@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Set;
 
 // Vivaldi
+import org.chromium.build.BuildConfig;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
@@ -85,6 +86,13 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
                         // because TabGridDialog has its own undo bar. See crbug.com/1119899. Note
                         // that we don't disable attempts to dismiss snack bar to make sure that
                         // snack bar state is in sync with tab model.
+
+                        // Vivaldi
+                        if (BuildConfig.IS_VIVALDI) {
+                            boolean show = VivaldiPreferences.getSharedPreferencesManager()
+                                    .readBoolean("show_undo_tab_close", false);
+                            return showingUndoBar && !show;
+                        }
                         return showingUndoBar
                                 && dialogVisibilitySupplier != null
                                 && dialogVisibilitySupplier.get();
@@ -93,8 +101,14 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
                     @Override
                     public void tabPendingClosure(Tab tab) {
                         // Vivaldi
-                        // NOTE(jarle@vivaldi.com): do not show undo bar when closing last tab.
-                        if (mTabModelSelector.getModel(false).getCount() == 0) return;
+                        if (BuildConfig.IS_VIVALDI) {
+                            TabModel model = mTabModelSelector.getModel(false);
+                            if ((model != null && model.getCount() == 0) || disableUndo(true)) {
+                                model.commitTabClosure(tab.getId());
+                                return;
+                            }
+                        }
+                        else
                         if (disableUndo(true)) return;
                         showUndoBar(List.of(tab), /* isAllTabs= */ false);
                     }
@@ -127,7 +141,13 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
                     public void multipleTabsPendingClosure(List<Tab> tabs, boolean isAllTabs) {
                         // Vivaldi:
                         // Disable undo because it will take too long before our NTP is shown.
-                        if (isAllTabs) return;
+                        if (isAllTabs && disableUndo(true)) {
+                            for (Tab tab : tabs) {
+                                commitTabClosure(tab.getId());
+                            }
+                            return;
+                        }
+                        else
                         if (disableUndo(true)) return;
                         showUndoBar(tabs, isAllTabs);
                     }
@@ -161,19 +181,13 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
     /**
      * Shows an undo close all bar. Based on user actions, this will cause a call to either {@link
      * TabModel#commitTabClosure(int)} or {@link TabModel#cancelTabClosure(int)} to be called for
-     * each tab in {@code closedTabIds}. This will happen unless {@code
+     * each tab in {@code closedTabs}. This will happen unless {@code
      * SnackbarManager#removeFromStackForData(Object)} is called.
      *
      * @param closedTabs A list of tabs that were closed.
      * @param isAllTabs Whether all tabs were closed.
      */
     private void showUndoBar(List<Tab> closedTabs, boolean isAllTabs) {
-        // Vivaldi - Show/Hide Undo Snackbar as per the user preference. Ref: VAB-10060
-        if (!VivaldiPreferences.getSharedPreferencesManager().readBoolean(
-                    "show_undo_tab_close", false)) {
-            for (Tab tab : closedTabs) commitTabClosure(tab.getId());
-            return;
-        }
         if (closedTabs.isEmpty()) return;
 
         boolean singleTab = closedTabs.size() == 1;
@@ -233,10 +247,9 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
         assert !closedTabs.get(0).isIncognito();
 
         TabGroupModelFilter filter =
-                (TabGroupModelFilter)
-                        mTabModelSelector
-                                .getTabModelFilterProvider()
-                                .getTabModelFilter(/* isIncognito= */ false);
+                mTabModelSelector
+                        .getTabGroupModelFilterProvider()
+                        .getTabGroupModelFilter(/* isIncognito= */ false);
         Profile profile = filter.getTabModel().getProfile();
         boolean tabGroupSyncEnabled =
                 profile != null
@@ -295,10 +308,9 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
             if (closureMetadata.ungroupedOrPartialGroupTabs == 0) {
                 int rootId = closureMetadata.fullyClosingRootIds.iterator().next();
                 TabGroupModelFilter filter =
-                        (TabGroupModelFilter)
-                                mTabModelSelector
-                                        .getTabModelFilterProvider()
-                                        .getTabModelFilter(false);
+                        mTabModelSelector
+                                .getTabGroupModelFilterProvider()
+                                .getTabGroupModelFilter(false);
                 @Nullable String tabGroupTitle = filter.getTabGroupTitle(rootId);
                 if (tabGroupTitle == null) {
                     tabGroupTitle =

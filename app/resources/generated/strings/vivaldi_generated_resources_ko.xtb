@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">오류</translation>
 <translation id="1175364870820465910">인쇄... (&amp;P)</translation>
 <translation id="1181037720776840403">제거</translation>
+<translation id="1184037892196730210">화면을 전송할 수 없습니다</translation>
 <translation id="1187722533808055681">유휴 상태 해제</translation>
 <translation id="122082903575839559">인증서 서명 알고리즘</translation>
 <translation id="1221825588892235038">선택 영역만</translation>
@@ -169,6 +170,7 @@
 <translation id="3838085852053358637">확장 프로그램을 로드하지 못함</translation>
 <translation id="383891835335927981">확대 또는 축소된 사이트가 없음</translation>
 <translation id="385051799172605136">뒤로</translation>
+<translation id="3861977424605124250">시작 시 표시</translation>
 <translation id="3867944738977021751">인증서 필드</translation>
 <translation id="3905761538810670789">앱 복구</translation>
 <translation id="3908501907586732282">확장 프로그램 사용</translation>
@@ -366,6 +368,7 @@
 <translation id="7287143125007575591">액세스가 거부되었습니다.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">입력 시 맞춤법 검사</translation>
+<translation id="7359680654975233185">탭을 전송할 수 없습니다</translation>
 <translation id="7385854874724088939">인쇄를 시도하는 동안 문제가 발생했습니다. 프린터를 점검한 다음 다시 시도해 보세요.</translation>
 <translation id="7412226954991670867">GPU 메모리</translation>
 <translation id="7421925624202799674">페이지 소스 보기(&amp;V)</translation>
@@ -379,6 +382,7 @@
 <translation id="7661259717474717992">사이트에서 쿠키 데이터 저장 및 읽기 허용</translation>
 <translation id="7663719505383602579">수신기: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">관리자가 설치함</translation>
+<translation id="7685038817958445325">전송할 수 없습니다</translation>
 <translation id="7685049629764448582">JavaScript 메모리</translation>
 <translation id="7701869757853594372">사용자 처리</translation>
 <translation id="7704305437604973648">작업</translation>

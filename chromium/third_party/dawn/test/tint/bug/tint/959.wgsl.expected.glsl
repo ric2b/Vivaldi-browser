@@ -2,78 +2,90 @@
 precision highp float;
 precision highp int;
 
+
 struct S {
   float a;
 };
 
-layout(binding = 0, std430) buffer b0_block_ssbo {
+layout(binding = 0, std430)
+buffer b0_block_1_ssbo {
   S inner;
-} b0;
-
-layout(binding = 0, std430) buffer b0_block_ssbo_1 {
+} v;
+layout(binding = 0, std430)
+buffer b1_block_1_ssbo {
   S inner;
-} b1;
-
-layout(binding = 0, std430) buffer b0_block_ssbo_2 {
+} v_1;
+layout(binding = 0, std430)
+buffer b2_block_1_ssbo {
   S inner;
-} b2;
-
-layout(binding = 0, std430) buffer b0_block_ssbo_3 {
+} v_2;
+layout(binding = 0, std430)
+buffer b3_block_1_ssbo {
   S inner;
-} b3;
-
-layout(binding = 0, std430) buffer b0_block_ssbo_4 {
+} v_3;
+layout(binding = 0, std430)
+buffer b4_block_1_ssbo {
   S inner;
-} b4;
-
-layout(binding = 0, std430) buffer b0_block_ssbo_5 {
+} v_4;
+layout(binding = 0, std430)
+buffer b5_block_1_ssbo {
   S inner;
-} b5;
-
-layout(binding = 0, std430) buffer b0_block_ssbo_6 {
+} v_5;
+layout(binding = 0, std430)
+buffer b6_block_1_ssbo {
   S inner;
-} b6;
-
-layout(binding = 0, std430) buffer b0_block_ssbo_7 {
+} v_6;
+layout(binding = 0, std430)
+buffer b7_block_1_ssbo {
   S inner;
-} b7;
-
-layout(binding = 1, std140) uniform b0_block_ubo {
+} v_7;
+layout(binding = 1, std140)
+uniform b8_block_1_ubo {
   S inner;
-} b8;
-
-layout(binding = 1, std140) uniform b0_block_ubo_1 {
+} v_8;
+layout(binding = 1, std140)
+uniform b9_block_1_ubo {
   S inner;
-} b9;
-
-layout(binding = 1, std140) uniform b0_block_ubo_2 {
+} v_9;
+layout(binding = 1, std140)
+uniform b10_block_1_ubo {
   S inner;
-} b10;
-
-layout(binding = 1, std140) uniform b0_block_ubo_3 {
+} v_10;
+layout(binding = 1, std140)
+uniform b11_block_1_ubo {
   S inner;
-} b11;
-
-layout(binding = 1, std140) uniform b0_block_ubo_4 {
+} v_11;
+layout(binding = 1, std140)
+uniform b12_block_1_ubo {
   S inner;
-} b12;
-
-layout(binding = 1, std140) uniform b0_block_ubo_5 {
+} v_12;
+layout(binding = 1, std140)
+uniform b13_block_1_ubo {
   S inner;
-} b13;
-
-layout(binding = 1, std140) uniform b0_block_ubo_6 {
+} v_13;
+layout(binding = 1, std140)
+uniform b14_block_1_ubo {
   S inner;
-} b14;
-
-layout(binding = 1, std140) uniform b0_block_ubo_7 {
+} v_14;
+layout(binding = 1, std140)
+uniform b15_block_1_ubo {
   S inner;
-} b15;
-
-void tint_symbol() {
-}
-
+} v_15;
+uniform highp sampler2D t0;
+uniform highp sampler2D t1;
+uniform highp sampler2D t2;
+uniform highp sampler2D t3;
+uniform highp sampler2D t4;
+uniform highp sampler2D t5;
+uniform highp sampler2D t6;
+uniform highp sampler2D t7;
+uniform highp sampler2DShadow t8;
+uniform highp sampler2DShadow t9;
+uniform highp sampler2DShadow t10;
+uniform highp sampler2DShadow t11;
+uniform highp sampler2DShadow t12;
+uniform highp sampler2DShadow t13;
+uniform highp sampler2DShadow t14;
+uniform highp sampler2DShadow t15;
 void main() {
-  tint_symbol();
-  return;
 }

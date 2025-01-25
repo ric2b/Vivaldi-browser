@@ -564,12 +564,12 @@ static int setup_frame(AVCodecContext *ctx, const AVFrame *frame,
 
     mbinfo_sd = av_frame_get_side_data(frame, AV_FRAME_DATA_VIDEO_HINT);
     if (mbinfo_sd) {
-        int ret = setup_mb_info(ctx, pic, frame, (const AVVideoHint *)mbinfo_sd->data);
-        if (ret < 0) {
+        int err = setup_mb_info(ctx, pic, frame, (const AVVideoHint *)mbinfo_sd->data);
+        if (err < 0) {
             /* No need to fail here, this is not fatal. We just proceed with no
              * mb_info and log a message */
 
-            av_log(ctx, AV_LOG_WARNING, "setup_mb_info failed with error: %s\n", av_err2str(ret));
+            av_log(ctx, AV_LOG_WARNING, "setup_mb_info failed with error: %s\n", av_err2str(err));
         }
     }
 
@@ -725,7 +725,7 @@ static int X264_frame(AVCodecContext *ctx, AVPacket *pkt, const AVFrame *frame,
 
                 /* SSE = MSE * width * height / scale -> because of possible chroma downsampling */
                 sse[i] = (int64_t)floor(mse * plane_size + .5);
-            };
+            }
 
             errors = sse;
         }
@@ -922,7 +922,9 @@ static int set_avcc_extradata(AVCodecContext *avctx, x264_nal_t *nal, int nnal)
          *
          * +4 to skip until sps id.
          */
-        init_get_bits8(&gbc, sps + 4, sps_nal->i_payload - 4 - 4);
+        ret = init_get_bits8(&gbc, sps + 4, sps_nal->i_payload - 4 - 4);
+        if (ret < 0)
+            return ret;
         // Skip sps id
         get_ue_golomb_31(&gbc);
         chroma_format_idc = get_ue_golomb_31(&gbc);
@@ -1632,6 +1634,7 @@ const FFCodec ff_libx264_encoder = {
     .close            = X264_close,
     .defaults         = x264_defaults,
     .p.pix_fmts       = pix_fmts_all,
+    .color_ranges     = AVCOL_RANGE_MPEG | AVCOL_RANGE_JPEG,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP | FF_CODEC_CAP_AUTO_THREADS
 #if X264_BUILD < 158
                       | FF_CODEC_CAP_NOT_INIT_THREADSAFE
@@ -1689,6 +1692,7 @@ const FFCodec ff_libx262_encoder = {
                         AV_CODEC_CAP_OTHER_THREADS |
                         AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
     .p.pix_fmts       = pix_fmts_8bit,
+    .color_ranges     = AVCOL_RANGE_MPEG,
     .p.priv_class     = &X262_class,
     .p.wrapper_name   = "libx264",
     .priv_data_size   = sizeof(X264Context),

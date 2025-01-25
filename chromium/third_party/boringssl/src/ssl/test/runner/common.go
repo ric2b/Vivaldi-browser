@@ -70,6 +70,7 @@ const (
 	recordTypeHandshake          recordType = 22
 	recordTypeApplicationData    recordType = 23
 	recordTypePlaintextHandshake recordType = 24
+	recordTypeACK                recordType = 26
 )
 
 // TLS handshake message types.
@@ -713,6 +714,11 @@ type ProtocolBugs struct {
 	// HelloVerifyRequest message.
 	SkipHelloVerifyRequest bool
 
+	// ForceHelloVerifyRequest causes a DTLS server to send a
+	// HelloVerifyRequest message in DTLS 1.3 or other cases where it
+	// otherwise wouldn't.
+	ForceHelloVerifyRequest bool
+
 	// HelloVerifyRequestCookieLength, if non-zero, is the length of the cookie
 	// to request in HelloVerifyRequest.
 	HelloVerifyRequestCookieLength int
@@ -759,6 +765,10 @@ type ProtocolBugs struct {
 	// EndOfEarlyData.
 	NonEmptyEndOfEarlyData bool
 
+	// SendEndOfEarlyDataInQUICAndDTLS causes the implementation to send
+	// EndOfEarlyData even in QUIC and DTLS, which do not use the message.
+	SendEndOfEarlyDataInQUICAndDTLS bool
+
 	// SkipCertificateVerify, if true causes peer to skip sending a
 	// CertificateVerify message after the Certificate message.
 	SkipCertificateVerify bool
@@ -773,11 +783,6 @@ type ProtocolBugs struct {
 	// message in DTLS to be prefaced by stray ChangeCipherSpec record. This
 	// may be used to test DTLS's handling of reordered ChangeCipherSpec.
 	StrayChangeCipherSpec bool
-
-	// ReorderChangeCipherSpec causes the ChangeCipherSpec message to be
-	// sent at start of each flight in DTLS. Unlike EarlyChangeCipherSpec,
-	// the cipher change happens at the usual time.
-	ReorderChangeCipherSpec bool
 
 	// FragmentAcrossChangeCipherSpec causes the implementation to fragment
 	// the Finished (or NextProto) message around the ChangeCipherSpec
@@ -1249,7 +1254,8 @@ type ProtocolBugs struct {
 	SendInitialRecordVersion uint16
 
 	// MaxPacketLength, if non-zero, is the maximum acceptable size for a
-	// packet.
+	// packet. The shim will also be expected to maximally fill packets in the
+	// handshake up to this limit.
 	MaxPacketLength int
 
 	// SendCipherSuite, if non-zero, is the cipher suite value that the
@@ -1274,12 +1280,25 @@ type ProtocolBugs struct {
 	// immediately after ChangeCipherSpec.
 	AlertAfterChangeCipherSpec alert
 
-	// TimeoutSchedule is the schedule of packet drops and simulated
-	// timeouts for before each handshake leg from the peer.
-	TimeoutSchedule []time.Duration
+	// AppDataBeforeTLS13KeyChange, if not nil, causes application data to
+	// be sent immediately before the final key change in (D)TLS 1.3.
+	AppDataBeforeTLS13KeyChange []byte
+
+	// UnencryptedEncryptedExtensions, if true, causes the server to send
+	// EncryptedExtensions unencrypted, delaying the first key change.
+	UnencryptedEncryptedExtensions bool
 
 	// PacketAdaptor is the packetAdaptor to use to simulate timeouts.
 	PacketAdaptor *packetAdaptor
+
+	// WriteFlightDTLS, if not nil, overrides the default behavior for writing
+	// the flight in DTLS. See DTLSController for details.
+	WriteFlightDTLS func(c *DTLSController, prev, received, next []DTLSMessage)
+
+	// ACKFlightDTLS, if not nil, overrides the default behavior for
+	// acknowledging the final flight (of either the handshake or a
+	// post-handshake transaction) in DTLS. See DTLSController for details.
+	ACKFlightDTLS func(c *DTLSController, prev, received []DTLSMessage)
 
 	// MockQUICTransport is the mockQUICTransport used when testing
 	// QUIC interfaces.
@@ -1852,8 +1871,10 @@ type ProtocolBugs struct {
 	MaxReceivePlaintext int
 
 	// ExpectPackedEncryptedHandshake, if non-zero, requires that the peer maximally
-	// pack their encrypted handshake messages, fitting at most the
-	// specified number of plaintext bytes per record.
+	// pack their encrypted handshake messages, fitting at most the specified number
+	// of bytes per record. In TLS, the limit counts plaintext bytes. In DTLS, it
+	// counts packet size and checks both that fragments are packed into records and
+	// records are packed into packets.
 	ExpectPackedEncryptedHandshake int
 
 	// SendTicketLifetime, if non-zero, is the ticket lifetime to send in
@@ -1993,13 +2014,18 @@ type ProtocolBugs struct {
 	// session ID in the ServerHello.
 	DTLS13EchoSessionID bool
 
-	// DTLSUsePlaintextRecord header, if true, has DTLS connections never
-	// use the DTLS 1.3 record header.
+	// DTLSUsePlaintextRecord header, if true, has DTLS 1.3 connections to use
+	// the DTLS 1.2 record header once the handshake completes. The bug is not
+	// activated during the handshake so that the handshake can complete first.
 	DTLSUsePlaintextRecordHeader bool
 
 	// DTLS13RecordHeaderSetCIDBit, if true, sets the Connection ID bit in
 	// the DTLS 1.3 record header.
 	DTLS13RecordHeaderSetCIDBit bool
+
+	// ACKEveryRecord sends an ACK record immediately on response to each
+	// handshake record received.
+	ACKEveryRecord bool
 
 	// EncryptSessionTicketKey, if non-nil, is the ticket key to use when
 	// encrypting tickets.
@@ -2242,13 +2268,6 @@ func (c *Credential) signatureAlgorithms() []signatureAlgorithm {
 		return c.SignatureAlgorithms
 	}
 	return supportedSignatureAlgorithms
-}
-
-// A TLS record.
-type record struct {
-	contentType  recordType
-	major, minor uint8
-	payload      []byte
 }
 
 type handshakeMessage interface {

@@ -11,6 +11,7 @@
 
 #include <immintrin.h>
 
+#include "xnnpack/common.h"
 #include "xnnpack/gemm.h"
 #include "xnnpack/intrinsics-polyfill.h"
 #include "xnnpack/math.h"
@@ -24,7 +25,7 @@ void xnn_qd8_f16_qc8w_gemm_minmax_ukernel_7x8c8__avx256skx(
     const int8_t* restrict a,
     size_t a_stride,
     const void* restrict w,
-    void* restrict c,
+    xnn_float16* restrict c,
     size_t cm_stride,
     size_t cn_stride,
     const union xnn_f16_minmax_params params[restrict XNN_MIN_ELEMENTS(1)],
@@ -78,6 +79,11 @@ void xnn_qd8_f16_qc8w_gemm_minmax_ukernel_7x8c8__avx256skx(
     a6 = a5;
     c6 = c5;
   }
+
+  const __m256 vmin = _mm256_cvtph_ps(_mm_set1_epi16(*(const uint16_t*) &params->scalar.min));
+  const __m256 vmax = _mm256_cvtph_ps(_mm_set1_epi16(*(const uint16_t*) &params->scalar.max));
+  XNN_FORCE_REALIZATION(vmin);
+  XNN_FORCE_REALIZATION(vmax);
 
   do {
     const __m128i vinit0 = _mm_cvtsi32_si128(((const int*) w)[0]);
@@ -261,7 +267,6 @@ void xnn_qd8_f16_qc8w_gemm_minmax_ukernel_7x8c8__avx256skx(
     vout5x01234567 = _mm256_fmadd_ps(vout5x01234567, vfilter_output_scale01234567, vbias01234567);
     vout6x01234567 = _mm256_fmadd_ps(vout6x01234567, vfilter_output_scale01234567, vbias01234567);
 
-    const __m256 vmin = _mm256_load_ps(params->avx.min);
     vout0x01234567 = _mm256_max_ps(vout0x01234567, vmin);
     vout1x01234567 = _mm256_max_ps(vout1x01234567, vmin);
     vout2x01234567 = _mm256_max_ps(vout2x01234567, vmin);
@@ -270,7 +275,6 @@ void xnn_qd8_f16_qc8w_gemm_minmax_ukernel_7x8c8__avx256skx(
     vout5x01234567 = _mm256_max_ps(vout5x01234567, vmin);
     vout6x01234567 = _mm256_max_ps(vout6x01234567, vmin);
 
-    const __m256 vmax = _mm256_load_ps(params->avx.max);
     vout0x01234567 = _mm256_min_ps(vout0x01234567, vmax);
     vout1x01234567 = _mm256_min_ps(vout1x01234567, vmax);
     vout2x01234567 = _mm256_min_ps(vout2x01234567, vmax);

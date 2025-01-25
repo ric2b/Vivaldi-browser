@@ -50,9 +50,12 @@ update_target("//extensions/browser:browser_sources") {
     "//vivaldi/extensions/vivaldi_extensions_guest_view.cc",
     "//vivaldi/extensions/vivaldi_extension_prefs.cc",
     "//vivaldi/extensions/api/guest_view/vivaldi_web_view_guest.cpp",
+    "//vivaldi/extensions/api/guest_view/parent_tab_user_data.cpp",
+    "//vivaldi/extensions/api/guest_view/parent_tab_user_data.h",
   ]
   deps += [
     "//chrome/common:mojo_bindings",
+    "//components/language_detection/content/common:common",
     "//components/sharing_message/proto",
     "//components/translate/content/browser",
     "//third_party/blink/public:blink_headers",

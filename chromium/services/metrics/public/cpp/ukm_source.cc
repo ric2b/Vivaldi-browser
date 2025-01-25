@@ -83,9 +83,12 @@ AndroidActivityType ToProtobufActivityType(int32_t type) {
       return AndroidActivityType::WEB_APP;
     case 4:
       return AndroidActivityType::WEB_APK;
+    case 5:
+      return AndroidActivityType::PRE_FIRST_TAB;
+    case 6:
+      return AndroidActivityType::AUTH_TAB;
     default:
-      NOTREACHED_IN_MIGRATION();
-      return AndroidActivityType::TABBED;
+      NOTREACHED();
   }
 }
 

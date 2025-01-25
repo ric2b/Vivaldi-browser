@@ -104,10 +104,6 @@ class VivaldiTranslateClient
       const translate::LanguageDetectionDetails& details) override;
 
 #if BUILDFLAG(IS_ANDROID)
-  std::unique_ptr<infobars::InfoBar> CreateInfoBar(
-      std::unique_ptr<translate::TranslateInfoBarDelegate> delegate)
-      const override;
-
   // Trigger a manual translation when the necessary state (e.g. source
   // language) is ready.
   void ManualTranslateWhenReady();

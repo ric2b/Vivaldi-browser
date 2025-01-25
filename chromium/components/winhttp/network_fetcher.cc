@@ -12,9 +12,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/check.h"
 #include "base/check_op.h"
-#include "base/compiler_specific.h"
+#include "base/containers/span.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -239,7 +238,7 @@ void NetworkFetcher::ContinueFetch(
       return HRESULTFromLastError();
     }
 
-    SetProxyForRequest(request_handle_.get(), winhttp_proxy_info);
+    SetProxyForRequest(request_handle_.get(), std::move(winhttp_proxy_info));
 
     const auto winhttp_callback = ::WinHttpSetStatusCallback(
         request_handle_.get(), &NetworkFetcher::WinHttpStatusCallback,
@@ -268,9 +267,9 @@ void NetworkFetcher::ContinueFetch(
       additional_headers.insert({"Content-Type", content_type_});
     }
 
-    for (const auto& header : additional_headers) {
-      const auto raw_header = base::SysUTF8ToWide(
-          base::StrCat({header.first, ": ", header.second, "\r\n"}));
+    for (const auto& [name, value] : additional_headers) {
+      const std::wstring raw_header =
+          base::SysUTF8ToWide(base::StrCat({name, ": ", value, "\r\n"}));
       if (!::WinHttpAddRequestHeaders(
               request_handle_.get(), raw_header.c_str(), raw_header.size(),
               WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE)) {
@@ -455,8 +454,7 @@ bool NetworkFetcher::WriteDataToFileBlocking() {
     }
   }
 
-  if (UNSAFE_TODO(file_.WriteAtCurrentPos(&read_buffer_.front(),
-                                          read_buffer_.size())) == -1) {
+  if (!file_.WriteAtCurrentPosAndCheck(base::as_byte_span(read_buffer_))) {
     net_error_ = HRESULTFromLastError();
     file_.Close();
     base::DeleteFile(file_path_);

@@ -2,10 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
+#include <cctype>
 #include <fstream>
-#include <ostream>
+#include <iostream>
+#include <memory>
+#include <set>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "third_party/protobuf/src/google/protobuf/compiler/importer.h"

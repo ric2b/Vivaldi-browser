@@ -71,6 +71,7 @@
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_network_connection_tracker.h"
 #include "services/network/test/test_url_loader_factory.h"
+#include "services/on_device_model/public/cpp/features.h"
 
 namespace optimization_guide {
 
@@ -206,6 +207,7 @@ class OptimizationGuideKeyedServiceBrowserTest
          {features::kOptimizationGuideModelExecution, {}},
          {features::internal::kComposeSettingsVisibility, {}},
          {features::internal::kWallpaperSearchSettingsVisibility, {}},
+         {on_device_model::features::kUseFakeChromeML, {}},
          {features::kLogOnDeviceMetricsOnStartup,
           {
               {"on_device_startup_metric_delay", "0"},
@@ -360,14 +362,11 @@ class OptimizationGuideKeyedServiceBrowserTest
   }
 
   std::unique_ptr<ModelQualityLogEntry> GetModelQualityLogEntryForCompose() {
-    std::unique_ptr<proto::LogAiDataRequest> log_ai_data_request(
-        new proto::LogAiDataRequest());
-    proto::ComposeLoggingData compose_logging_data;
-    *(log_ai_data_request->mutable_compose()) = compose_logging_data;
-
-    return std::make_unique<ModelQualityLogEntry>(
-        std::move(log_ai_data_request),
+    auto log_entry = std::make_unique<ModelQualityLogEntry>(
         service()->GetModelQualityLogsUploaderService()->GetWeakPtr());
+    *log_entry->log_ai_data_request()->mutable_compose() =
+        proto::ComposeLoggingData();
+    return log_entry;
   }
 
   GURL url_with_hints() { return url_with_hints_; }
@@ -1159,9 +1158,6 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
 
   histogram_tester()->ExpectTotalCount(
       "OptimizationGuide.ModelExecution.OnDeviceModelPerformanceClass", 1);
-  histogram_tester()->ExpectBucketCount(
-      "OptimizationGuide.ModelExecution.OnDeviceModelPerformanceClass",
-      OnDeviceModelPerformanceClass::kServiceCrash, 0);
 }
 
 // Creating multiple profiles isn't supported easily on ash and android.
@@ -1552,11 +1548,8 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
       histogram_tester()->GetAllSamples(
           "OptimizationGuide.ModelQualityLogsUploaderService.UploadStatus."
           "Compose"),
-      ElementsAre(
-          base::Bucket(
-              ModelQualityLogsUploadStatus::kDisabledDueToEnterprisePolicy, 1),
-          base::Bucket(ModelQualityLogsUploadStatus::kFeatureNotEnabledForUser,
-                       1)));
+      ElementsAre(base::Bucket(
+          ModelQualityLogsUploadStatus::kDisabledDueToEnterprisePolicy, 2)));
 }
 
 IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
@@ -1642,11 +1635,8 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
       histogram_tester()->GetAllSamples(
           "OptimizationGuide.ModelQualityLogsUploaderService.UploadStatus."
           "Compose"),
-      ElementsAre(
-          base::Bucket(
-              ModelQualityLogsUploadStatus::kDisabledDueToEnterprisePolicy, 1),
-          base::Bucket(ModelQualityLogsUploadStatus::kFeatureNotEnabledForUser,
-                       1)));
+      ElementsAre(base::Bucket(
+          ModelQualityLogsUploadStatus::kDisabledDueToEnterprisePolicy, 2)));
 }
 
 IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
@@ -1748,18 +1738,6 @@ IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
   SetIsDogfoodClient(true);
 
   EXPECT_TRUE(service()->ShouldFeatureBeCurrentlyAllowedForFeedback(
-      proto::LogAiDataRequest::FeatureCase::kCompose));
-}
-
-IN_PROC_BROWSER_TEST_F(OptimizationGuideKeyedServiceBrowserTest,
-                       FeedbackIsDisabledWhenFeatureIsDisabled_Dogfood) {
-  // Note: Unlike the tests above, do not enable the feature; leave it in the
-  // default state.
-  SetEnterprisePolicy(policy::key::kHelpMeWriteSettings,
-                      ModelExecutionEnterprisePolicyValue::kDisable);
-  SetIsDogfoodClient(true);
-
-  EXPECT_FALSE(service()->ShouldFeatureBeCurrentlyAllowedForFeedback(
       proto::LogAiDataRequest::FeatureCase::kCompose));
 }
 

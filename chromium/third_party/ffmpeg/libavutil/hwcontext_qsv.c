@@ -36,6 +36,7 @@
 #include "hwcontext_d3d11va.h"
 #endif
 #if CONFIG_DXVA2
+#include <initguid.h>
 #include "hwcontext_dxva2.h"
 #endif
 
@@ -838,7 +839,7 @@ static int qsv_d3d11_update_config(void *ctx, mfxHDL handle, mfxConfig cfg)
     IDXGIDevice *pDXGIDevice = NULL;
     HRESULT hr;
     ID3D11Device *device = handle;
-    mfxVariant impl_value;
+    mfxVariant impl_value = {0};
 
     hr = ID3D11Device_QueryInterface(device, &IID_IDXGIDevice, (void**)&pDXGIDevice);
     if (SUCCEEDED(hr)) {
@@ -904,13 +905,15 @@ static int qsv_d3d9_update_config(void *ctx, mfxHDL handle, mfxConfig cfg)
 #if CONFIG_DXVA2
     mfxStatus sts;
     IDirect3DDeviceManager9* devmgr = handle;
-    IDirect3DDevice9Ex *device = NULL;
+    IDirect3DDevice9 *device = NULL;
+    IDirect3DDevice9Ex *device_ex = NULL;
     HANDLE device_handle = 0;
     IDirect3D9Ex *d3d9ex = NULL;
+    IDirect3D9 *d3d9 = NULL;
     LUID luid;
     D3DDEVICE_CREATION_PARAMETERS params;
     HRESULT hr;
-    mfxVariant impl_value;
+    mfxVariant impl_value = {0};
 
     hr = IDirect3DDeviceManager9_OpenDeviceHandle(devmgr, &device_handle);
     if (FAILED(hr)) {
@@ -924,18 +927,31 @@ static int qsv_d3d9_update_config(void *ctx, mfxHDL handle, mfxConfig cfg)
         IDirect3DDeviceManager9_CloseDeviceHandle(devmgr, device_handle);
         goto fail;
     }
-
-    hr = IDirect3DDevice9Ex_GetCreationParameters(device, &params);
+    hr = IDirect3DDevice9_QueryInterface(device, &IID_IDirect3DDevice9Ex, (void **)&device_ex);
+    IDirect3DDevice9_Release(device);
     if (FAILED(hr)) {
-        av_log(ctx, AV_LOG_ERROR, "Error IDirect3DDevice9_GetCreationParameters %d\n", hr);
-        IDirect3DDevice9Ex_Release(device);
+        av_log(ctx, AV_LOG_ERROR, "Error IDirect3DDevice9_QueryInterface %d\n", hr);
         goto unlock;
     }
 
-    hr = IDirect3DDevice9Ex_GetDirect3D(device, &d3d9ex);
+    hr = IDirect3DDevice9Ex_GetCreationParameters(device_ex, &params);
     if (FAILED(hr)) {
-        av_log(ctx, AV_LOG_ERROR, "Error IDirect3DDevice9Ex_GetAdapterLUID %d\n", hr);
-        IDirect3DDevice9Ex_Release(device);
+        av_log(ctx, AV_LOG_ERROR, "Error IDirect3DDevice9_GetCreationParameters %d\n", hr);
+        IDirect3DDevice9Ex_Release(device_ex);
+        goto unlock;
+    }
+
+    hr = IDirect3DDevice9Ex_GetDirect3D(device_ex, &d3d9);
+    if (FAILED(hr)) {
+        av_log(ctx, AV_LOG_ERROR, "Error IDirect3DDevice9Ex_GetDirect3D %d\n", hr);
+        IDirect3DDevice9Ex_Release(device_ex);
+        goto unlock;
+    }
+    hr = IDirect3D9_QueryInterface(d3d9, &IID_IDirect3D9Ex, (void **)&d3d9ex);
+    IDirect3D9_Release(d3d9);
+    if (FAILED(hr)) {
+        av_log(ctx, AV_LOG_ERROR, "Error IDirect3D9_QueryInterface3D %d\n", hr);
+        IDirect3DDevice9Ex_Release(device_ex);
         goto unlock;
     }
 
@@ -959,7 +975,7 @@ static int qsv_d3d9_update_config(void *ctx, mfxHDL handle, mfxConfig cfg)
 
 release:
     IDirect3D9Ex_Release(d3d9ex);
-    IDirect3DDevice9Ex_Release(device);
+    IDirect3DDevice9Ex_Release(device_ex);
 
 unlock:
     IDirect3DDeviceManager9_UnlockDevice(devmgr, device_handle, FALSE);
@@ -979,7 +995,7 @@ static int qsv_va_update_config(void *ctx, mfxHDL handle, mfxConfig cfg)
     VADisplayAttribute attr = {
         .type = VADisplayPCIID,
     };
-    mfxVariant impl_value;
+    mfxVariant impl_value = {0};
 
     vas = vaGetDisplayAttributes(dpy, &attr, 1);
     if (vas == VA_STATUS_SUCCESS && attr.flags != VA_DISPLAY_ATTRIB_NOT_SUPPORTED) {
@@ -1020,7 +1036,7 @@ static int qsv_new_mfx_loader(void *ctx,
     mfxStatus sts;
     mfxLoader loader = NULL;
     mfxConfig cfg;
-    mfxVariant impl_value;
+    mfxVariant impl_value = {0};
 
     *ploader = NULL;
     loader = MFXLoad();
@@ -1519,8 +1535,9 @@ static int qsv_frames_derive_from(AVHWFramesContext *dst_ctx,
     case AV_HWDEVICE_TYPE_D3D11VA:
         {
             D3D11_TEXTURE2D_DESC texDesc;
+            AVD3D11VAFramesContext *dst_hwctx;
             dst_ctx->initial_pool_size = src_ctx->initial_pool_size;
-            AVD3D11VAFramesContext *dst_hwctx = dst_ctx->hwctx;
+            dst_hwctx = dst_ctx->hwctx;
             dst_hwctx->texture_infos = av_calloc(src_hwctx->nb_surfaces,
                                                  sizeof(*dst_hwctx->texture_infos));
             if (!dst_hwctx->texture_infos)
@@ -1532,8 +1549,11 @@ static int qsv_frames_derive_from(AVHWFramesContext *dst_ctx,
                 dst_hwctx->texture_infos[i].texture = (ID3D11Texture2D*)pair->first;
                 dst_hwctx->texture_infos[i].index = pair->second == (mfxMemId)MFX_INFINITE ? (intptr_t)0 : (intptr_t)pair->second;
             }
-            ID3D11Texture2D_GetDesc(dst_hwctx->texture_infos[0].texture, &texDesc);
-            dst_hwctx->BindFlags = texDesc.BindFlags;
+            if (src_hwctx->nb_surfaces) {
+                ID3D11Texture2D_GetDesc(dst_hwctx->texture_infos[0].texture, &texDesc);
+                dst_hwctx->BindFlags = texDesc.BindFlags;
+            } else
+                dst_hwctx->BindFlags = qsv_get_d3d11va_bind_flags(src_hwctx->frame_type);
         }
         break;
 #endif
@@ -2552,8 +2572,8 @@ static int qsv_device_create(AVHWDeviceContext *ctx, const char *device,
             // used on recent Intel hardware.  Set options to the VAAPI device
             // creation so that we should pick a usable setup by default if
             // possible, even when multiple devices and drivers are available.
-            av_dict_set(&child_device_opts, "kernel_driver", "i915", 0);
-            av_dict_set(&child_device_opts, "driver",        "iHD",  0);
+            av_dict_set(&child_device_opts, "vendor_id", "0x8086", 0);
+            av_dict_set(&child_device_opts, "driver",    "iHD",    0);
         }
         break;
 #endif

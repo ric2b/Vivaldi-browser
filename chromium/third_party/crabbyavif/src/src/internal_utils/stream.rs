@@ -137,6 +137,11 @@ impl IStream<'_> {
         Ok(&self.data[offset_start..offset_start + size])
     }
 
+    pub fn get_immutable_vec(&self, size: usize) -> AvifResult<Vec<u8>> {
+        self.check(size)?;
+        Ok(self.data[self.offset..self.offset + size].to_vec())
+    }
+
     fn get_vec(&mut self, size: usize) -> AvifResult<Vec<u8>> {
         Ok(self.get_slice(size)?.to_vec())
     }

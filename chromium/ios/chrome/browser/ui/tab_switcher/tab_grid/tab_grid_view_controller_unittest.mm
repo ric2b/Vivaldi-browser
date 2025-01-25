@@ -49,21 +49,19 @@ class TabGridViewControllerTest : public PlatformTest,
   TabGridViewControllerTest() {
     if (GetParam()) {
       feature_list_.InitWithFeatures(
-          /*enabled_features=*/{kTabGroupsInGrid, kTabGroupsIPad,
-                                kModernTabStrip, kTabGroupSync},
+          /*enabled_features=*/{kTabGroupsIPad, kModernTabStrip, kTabGroupSync},
           /*disabled_features=*/{});
     } else {
       feature_list_.InitWithFeatures(
           /*enabled_features=*/{},
-          /*disabled_features=*/{kTabGroupsInGrid, kTabGroupsIPad,
-                                 kModernTabStrip, kTabGroupSync});
+          /*disabled_features=*/{kTabGroupsIPad, kModernTabStrip,
+                                 kTabGroupSync});
     }
     InitializeViewController(TabGridPageConfiguration::kAllPagesEnabled);
 
-    browser_state_ = TestChromeBrowserState::Builder().Build();
+    profile_ = TestProfileIOS::Builder().Build();
     browser_ = std::make_unique<TestBrowser>(
-        browser_state_.get(),
-        std::make_unique<TabGridFakeWebStateListDelegate>());
+        profile_.get(), std::make_unique<TabGridFakeWebStateListDelegate>());
     SnapshotBrowserAgent::CreateForBrowser(browser_.get());
   }
   ~TabGridViewControllerTest() override {}
@@ -117,7 +115,7 @@ class TabGridViewControllerTest : public PlatformTest,
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   base::UserActionTester user_action_tester_;
   TabGridViewController* view_controller_;
-  std::unique_ptr<TestChromeBrowserState> browser_state_;
+  std::unique_ptr<TestProfileIOS> profile_;
   std::unique_ptr<TestBrowser> browser_;
   GridContainerViewController* regular_grid_;
   GridContainerViewController* incognito_grid_;

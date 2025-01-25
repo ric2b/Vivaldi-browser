@@ -52,11 +52,13 @@ static struct {
     [13] = {7680*4320*120u, 7680, 240, 800},
 };
 
-int ff_dovi_configure(DOVIContext *s, AVCodecContext *avctx)
+int ff_dovi_configure_ext(DOVIContext *s, AVCodecParameters *codecpar,
+                          const AVDOVIMetadata *metadata,
+                          enum AVDOVICompression compression,
+                          int strict_std_compliance)
 {
     AVDOVIDecoderConfigurationRecord *cfg;
     const AVDOVIRpuDataHeader *hdr = NULL;
-    const AVFrameSideData *sd;
     int dv_profile, dv_level, bl_compat_id = -1;
     size_t cfg_size;
     uint64_t pps;
@@ -64,31 +66,45 @@ int ff_dovi_configure(DOVIContext *s, AVCodecContext *avctx)
     if (!s->enable)
         goto skip;
 
-    sd = av_frame_side_data_get(avctx->decoded_side_data,
-                                avctx->nb_decoded_side_data, AV_FRAME_DATA_DOVI_METADATA);
-
-    if (sd)
-        hdr = av_dovi_get_header((const AVDOVIMetadata *) sd->data);
+    if (metadata)
+        hdr = av_dovi_get_header(metadata);
 
     if (s->enable == FF_DOVI_AUTOMATIC && !hdr)
         goto skip;
 
-    switch (avctx->codec_id) {
+    if (compression == AV_DOVI_COMPRESSION_RESERVED ||
+        compression > AV_DOVI_COMPRESSION_EXTENDED)
+        return AVERROR(EINVAL);
+
+    switch (codecpar->codec_id) {
     case AV_CODEC_ID_AV1:  dv_profile = 10; break;
     case AV_CODEC_ID_H264: dv_profile = 9;  break;
-    case AV_CODEC_ID_HEVC: dv_profile = hdr ? ff_dovi_guess_profile_hevc(hdr) : 8; break;
+    case AV_CODEC_ID_HEVC:
+        if (hdr) {
+            dv_profile = ff_dovi_guess_profile_hevc(hdr);
+            break;
+        }
+
+        /* This is likely to be proprietary IPTPQc2 */
+        if (codecpar->color_space == AVCOL_SPC_IPT_C2 ||
+            (codecpar->color_space == AVCOL_SPC_UNSPECIFIED &&
+             codecpar->color_trc == AVCOL_TRC_UNSPECIFIED))
+            dv_profile = 5;
+        else
+            dv_profile = 8;
+        break;
     default:
         /* No other encoder should be calling this! */
         av_assert0(0);
         return AVERROR_BUG;
     }
 
-    if (avctx->strict_std_compliance > FF_COMPLIANCE_UNOFFICIAL) {
+    if (strict_std_compliance > FF_COMPLIANCE_UNOFFICIAL) {
         if (dv_profile == 9) {
-            if (avctx->pix_fmt != AV_PIX_FMT_YUV420P)
+            if (codecpar->format != AV_PIX_FMT_YUV420P)
                 dv_profile = 0;
         } else {
-            if (avctx->pix_fmt != AV_PIX_FMT_YUV420P10)
+            if (codecpar->format != AV_PIX_FMT_YUV420P10)
                 dv_profile = 0;
         }
     }
@@ -115,17 +131,17 @@ int ff_dovi_configure(DOVIContext *s, AVCodecContext *avctx)
         }
         /* fall through */
     case 8: /* HEVC (or AV1) with BL compatibility */
-        if (avctx->colorspace == AVCOL_SPC_BT2020_NCL &&
-            avctx->color_primaries == AVCOL_PRI_BT2020 &&
-            avctx->color_trc == AVCOL_TRC_SMPTE2084) {
+        if (codecpar->color_space == AVCOL_SPC_BT2020_NCL &&
+            codecpar->color_primaries == AVCOL_PRI_BT2020 &&
+            codecpar->color_trc == AVCOL_TRC_SMPTE2084) {
             bl_compat_id = 1;
-        } else if (avctx->colorspace == AVCOL_SPC_BT2020_NCL &&
-                   avctx->color_primaries == AVCOL_PRI_BT2020 &&
-                   avctx->color_trc == AVCOL_TRC_ARIB_STD_B67) {
+        } else if (codecpar->color_space == AVCOL_SPC_BT2020_NCL &&
+                   codecpar->color_primaries == AVCOL_PRI_BT2020 &&
+                   codecpar->color_trc == AVCOL_TRC_ARIB_STD_B67) {
             bl_compat_id = 4;
-        } else if (avctx->colorspace == AVCOL_SPC_BT709 &&
-                   avctx->color_primaries == AVCOL_PRI_BT709 &&
-                   avctx->color_trc == AVCOL_TRC_BT709) {
+        } else if (codecpar->color_space == AVCOL_SPC_BT709 &&
+                   codecpar->color_primaries == AVCOL_PRI_BT709 &&
+                   codecpar->color_trc == AVCOL_TRC_BT709) {
             bl_compat_id = 2;
         }
     }
@@ -140,9 +156,28 @@ int ff_dovi_configure(DOVIContext *s, AVCodecContext *avctx)
         goto skip;
     }
 
-    pps = avctx->width * avctx->height;
-    if (avctx->framerate.num) {
-        pps = pps * avctx->framerate.num / avctx->framerate.den;
+    if (compression != AV_DOVI_COMPRESSION_NONE) {
+        if (dv_profile < 8 && strict_std_compliance > FF_COMPLIANCE_UNOFFICIAL) {
+            av_log(s->logctx, AV_LOG_ERROR, "Dolby Vision metadata compression "
+                   "is not permitted for profiles 7 and earlier. (dv_profile: %d, "
+                   "compression: %d)\n", dv_profile, compression);
+            return AVERROR(EINVAL);
+        } else if (compression == AV_DOVI_COMPRESSION_EXTENDED &&
+                   strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL) {
+            av_log(s->logctx, AV_LOG_ERROR, "Dolby Vision extended metadata "
+                   "compression is experimental and not supported by "
+                   "devices.");
+            return AVERROR(EINVAL);
+        } else if (dv_profile == 8) {
+            av_log(s->logctx, AV_LOG_WARNING, "Dolby Vision metadata compression "
+                   "for profile 8 is known to be unsupported by many devices, "
+                   "use with caution.\n");
+        }
+    }
+
+    pps = codecpar->width * codecpar->height;
+    if (codecpar->framerate.num) {
+        pps = pps * codecpar->framerate.num / codecpar->framerate.den;
     } else {
         pps *= 25; /* sanity fallback */
     }
@@ -151,7 +186,7 @@ int ff_dovi_configure(DOVIContext *s, AVCodecContext *avctx)
     for (int i = 1; i < FF_ARRAY_ELEMS(dv_levels); i++) {
         if (pps > dv_levels[i].pps)
             continue;
-        if (avctx->width > dv_levels[i].width)
+        if (codecpar->width > dv_levels[i].width)
             continue;
         /* In theory, we should also test the bitrate when known, and
          * distinguish between main and high tier. In practice, just ignore
@@ -162,14 +197,14 @@ int ff_dovi_configure(DOVIContext *s, AVCodecContext *avctx)
     }
 
     if (!dv_level) {
-        if (avctx->strict_std_compliance >= FF_COMPLIANCE_STRICT) {
+        if (strict_std_compliance >= FF_COMPLIANCE_STRICT) {
             av_log(s->logctx, AV_LOG_ERROR, "Coded PPS (%"PRIu64") and width (%d) "
-                   "exceed Dolby Vision limitations\n", pps, avctx->width);
+                   "exceed Dolby Vision limitations\n", pps, codecpar->width);
             return AVERROR(EINVAL);
         } else {
             av_log(s->logctx, AV_LOG_WARNING, "Coded PPS (%"PRIu64") and width (%d) "
                    "exceed Dolby Vision limitations. Ignoring, resulting file "
-                   "may be non-conforming.\n", pps, avctx->width);
+                   "may be non-conforming.\n", pps, codecpar->width);
             dv_level = FF_ARRAY_ELEMS(dv_levels) - 1;
         }
     }
@@ -178,7 +213,8 @@ int ff_dovi_configure(DOVIContext *s, AVCodecContext *avctx)
     if (!cfg)
         return AVERROR(ENOMEM);
 
-    if (!av_packet_side_data_add(&avctx->coded_side_data, &avctx->nb_coded_side_data,
+    if (!av_packet_side_data_add(&codecpar->coded_side_data,
+                                 &codecpar->nb_coded_side_data,
                                  AV_PKT_DATA_DOVI_CONF, cfg, cfg_size, 0)) {
         av_free(cfg);
         return AVERROR(ENOMEM);
@@ -192,6 +228,7 @@ int ff_dovi_configure(DOVIContext *s, AVCodecContext *avctx)
     cfg->el_present_flag = 0;
     cfg->bl_present_flag = 1;
     cfg->dv_bl_signal_compatibility_id = bl_compat_id;
+    cfg->dv_md_compression = compression;
 
     s->cfg = *cfg;
     return 0;
@@ -199,6 +236,94 @@ int ff_dovi_configure(DOVIContext *s, AVCodecContext *avctx)
 skip:
     s->cfg = (AVDOVIDecoderConfigurationRecord) {0};
     return 0;
+}
+
+int ff_dovi_configure(DOVIContext *s, AVCodecContext *avctx)
+{
+    int ret;
+    const AVFrameSideData *sd;
+    const AVDOVIMetadata *metadata = NULL;
+    AVCodecParameters *codecpar = avcodec_parameters_alloc();
+    if (!codecpar)
+        return AVERROR(ENOMEM);
+
+    ret = avcodec_parameters_from_context(codecpar, avctx);
+    if (ret < 0)
+        goto fail;
+
+    sd = av_frame_side_data_get(avctx->decoded_side_data,
+                                avctx->nb_decoded_side_data,
+                                AV_FRAME_DATA_DOVI_METADATA);
+    if (sd)
+        metadata = (const AVDOVIMetadata *) sd->data;
+
+    /* Current encoders cannot handle metadata compression during encoding */
+    ret = ff_dovi_configure_ext(s, codecpar, metadata, AV_DOVI_COMPRESSION_NONE,
+                                avctx->strict_std_compliance);
+    if (ret < 0)
+        goto fail;
+
+    ret = avcodec_parameters_to_context(avctx, codecpar);
+
+fail:
+    avcodec_parameters_free(&codecpar);
+    return ret;
+}
+
+/* Compares only the static DM metadata parts of AVDOVIColorMetadata (excluding
+ * dm_metadata_id and scene_refresh_flag) */
+static int cmp_dm_level0(const AVDOVIColorMetadata *dm1,
+                         const AVDOVIColorMetadata *dm2)
+{
+    int ret;
+    for (int i = 0; i < FF_ARRAY_ELEMS(dm1->ycc_to_rgb_matrix); i++) {
+        if ((ret = av_cmp_q(dm1->ycc_to_rgb_matrix[i], dm2->ycc_to_rgb_matrix[i])))
+            return ret;
+    }
+
+    for (int i = 0; i < FF_ARRAY_ELEMS(dm1->ycc_to_rgb_offset); i++) {
+        if ((ret = av_cmp_q(dm1->ycc_to_rgb_offset[i], dm2->ycc_to_rgb_offset[i])))
+            return ret;
+    }
+
+    for (int i = 0; i < FF_ARRAY_ELEMS(dm1->rgb_to_lms_matrix); i++) {
+        if ((ret = av_cmp_q(dm1->rgb_to_lms_matrix[i], dm2->rgb_to_lms_matrix[i])))
+            return ret;
+    }
+
+    return memcmp(&dm1->signal_eotf, &dm2->signal_eotf,
+                  sizeof(AVDOVIColorMetadata) -offsetof(AVDOVIColorMetadata, signal_eotf));
+}
+
+/* Tries to re-use the static ext blocks. May reorder `ext->dm_static` */
+static int try_reuse_ext(DOVIExt *ext, const AVDOVIMetadata *metadata)
+{
+    int i, j, idx = 0;
+
+    for (i = 0; i < metadata->num_ext_blocks; i++) {
+        const AVDOVIDmData *dm = av_dovi_get_ext(metadata, i);
+        if (!ff_dovi_rpu_extension_is_static(dm->level))
+            continue;
+
+        /* Find the first matching ext block and move it to [idx] */
+        for (j = idx; j < ext->num_static; j++) {
+            if (!memcmp(&ext->dm_static[j], dm, sizeof(*dm))) {
+                if (j != idx)
+                    FFSWAP(AVDOVIDmData, ext->dm_static[j], ext->dm_static[idx]);
+                idx++;
+                break;
+            }
+        }
+
+        if (j == ext->num_static) {
+            /* Found no matching ext block */
+            return 0;
+        }
+    }
+
+    /* If idx is less than ext->num_static, then there are extra unmatched
+     * ext blocks inside ext->dm_static */
+    return idx == ext->num_static;
 }
 
 static inline void put_ue_coef(PutBitContext *pb, const AVDOVIRpuDataHeader *hdr,
@@ -276,7 +401,7 @@ static void generate_ext_v1(PutBitContext *pb, const AVDOVIDmData *dm)
         put_bits(pb, 12, dm->l2.trim_power);
         put_bits(pb, 12, dm->l2.trim_chroma_weight);
         put_bits(pb, 12, dm->l2.trim_saturation_gain);
-        put_bits(pb, 13, dm->l2.ms_weight + 8192);
+        put_sbits(pb, 13, dm->l2.ms_weight);
         break;
     case 4:
         put_bits(pb, 12, dm->l4.anchor_pq);
@@ -374,7 +499,7 @@ static void generate_ext_v2(PutBitContext *pb, const AVDOVIDmData *dm)
         put_bits(pb, 12, dm->l8.trim_power);
         put_bits(pb, 12, dm->l8.trim_chroma_weight);
         put_bits(pb, 12, dm->l8.trim_saturation_gain);
-        put_bits(pb, 12, dm->l8.ms_weight + 8192);
+        put_bits(pb, 12, dm->l8.ms_weight);
         if (ext_block_length < 12)
             break;
         put_bits(pb, 12, dm->l8.target_mid_contrast);
@@ -435,15 +560,16 @@ static void generate_ext_v2(PutBitContext *pb, const AVDOVIDmData *dm)
 }
 
 int ff_dovi_rpu_generate(DOVIContext *s, const AVDOVIMetadata *metadata,
-                         uint8_t **out_rpu, int *out_size)
+                         int flags, uint8_t **out_rpu, int *out_size)
 {
     PutBitContext *pb = &(PutBitContext){0};
     const AVDOVIRpuDataHeader *hdr;
     const AVDOVIDataMapping *mapping;
     const AVDOVIColorMetadata *color;
-    int vdr_dm_metadata_changed, vdr_rpu_id, use_prev_vdr_rpu, profile,
-        buffer_size, rpu_size, pad, zero_run;
+    int vdr_dm_metadata_present, vdr_rpu_id, use_prev_vdr_rpu, profile,
+        buffer_size, rpu_size, pad, zero_run, dm_compression;
     int num_ext_blocks_v1, num_ext_blocks_v2;
+    int dv_md_compression = s->cfg.dv_md_compression;
     uint32_t crc;
     uint8_t *dst;
     if (!metadata) {
@@ -457,37 +583,80 @@ int ff_dovi_rpu_generate(DOVIContext *s, const AVDOVIMetadata *metadata,
     color = av_dovi_get_color(metadata);
     av_assert0(s->cfg.dv_profile);
 
+    if (!(flags & FF_DOVI_COMPRESS_RPU))
+        dv_md_compression = AV_DOVI_COMPRESSION_NONE;
+    else if (dv_md_compression == AV_DOVI_COMPRESSION_RESERVED)
+        return AVERROR(EINVAL);
+
     if (hdr->rpu_type != 2) {
         av_log(s->logctx, AV_LOG_ERROR, "Unhandled RPU type %"PRIu8"\n",
                hdr->rpu_type);
         return AVERROR_INVALIDDATA;
     }
 
-    vdr_rpu_id = -1;
-    for (int i = 0; i <= DOVI_MAX_DM_ID; i++) {
-        if (s->vdr[i] && !memcmp(&s->vdr[i]->mapping, mapping, sizeof(*mapping))) {
-            vdr_rpu_id = i;
-            break;
-        } else if (vdr_rpu_id < 0 && (!s->vdr[i] || i == DOVI_MAX_DM_ID)) {
-            vdr_rpu_id = i;
-        }
-    }
+    if (!(flags & FF_DOVI_COMPRESS_RPU))
+        dv_md_compression = AV_DOVI_COMPRESSION_NONE;
+
+    vdr_rpu_id = mapping->vdr_rpu_id;
+    use_prev_vdr_rpu = 0;
 
     if (!s->vdr[vdr_rpu_id]) {
-        s->vdr[vdr_rpu_id] = ff_refstruct_allocz(sizeof(DOVIVdr));
+        s->vdr[vdr_rpu_id] = ff_refstruct_allocz(sizeof(AVDOVIDataMapping));
         if (!s->vdr[vdr_rpu_id])
             return AVERROR(ENOMEM);
     }
 
-    if (!s->vdr[color->dm_metadata_id]) {
-        s->vdr[color->dm_metadata_id] = ff_refstruct_allocz(sizeof(DOVIVdr));
-        if (!s->vdr[color->dm_metadata_id])
+    switch (dv_md_compression) {
+    case AV_DOVI_COMPRESSION_LIMITED:
+        /* Limited metadata compression requires vdr_rpi_id == 0 */
+        if (vdr_rpu_id != 0)
+            break;
+        /* fall through */
+    case AV_DOVI_COMPRESSION_EXTENDED:
+        if (s->vdr[vdr_rpu_id])
+            use_prev_vdr_rpu = !memcmp(s->vdr[vdr_rpu_id], mapping, sizeof(*mapping));
+        break;
+    case AV_DOVI_COMPRESSION_RESERVED:
+        return AVERROR(EINVAL);
+    }
+
+    if (s->cfg.dv_md_compression != AV_DOVI_COMPRESSION_EXTENDED) {
+        /* Flush VDRs to avoid leaking old state; maintaining multiple VDR
+         * references requires extended compression */
+        for (int i = 0; i <= DOVI_MAX_DM_ID; i++) {
+            if (i != vdr_rpu_id)
+                ff_refstruct_unref(&s->vdr[i]);
+        }
+    }
+
+    if (metadata->num_ext_blocks && !s->ext_blocks) {
+        s->ext_blocks = ff_refstruct_allocz(sizeof(*s->ext_blocks));
+        if (!s->ext_blocks)
             return AVERROR(ENOMEM);
+    }
+
+    vdr_dm_metadata_present = memcmp(color, &ff_dovi_color_default, sizeof(*color));
+    if (metadata->num_ext_blocks)
+        vdr_dm_metadata_present = 1;
+
+    if (vdr_dm_metadata_present && !s->dm) {
+        s->dm = ff_refstruct_allocz(sizeof(AVDOVIColorMetadata));
+        if (!s->dm)
+            return AVERROR(ENOMEM);
+    }
+
+    dm_compression = 0;
+    if (dv_md_compression != AV_DOVI_COMPRESSION_NONE) {
+        if (!cmp_dm_level0(s->dm, color) && try_reuse_ext(s->ext_blocks, metadata))
+            dm_compression = 1;
     }
 
     num_ext_blocks_v1 = num_ext_blocks_v2 = 0;
     for (int i = 0; i < metadata->num_ext_blocks; i++) {
         const AVDOVIDmData *dm = av_dovi_get_ext(metadata, i);
+        if (dm_compression && ff_dovi_rpu_extension_is_static(dm->level))
+            continue;
+
         switch (dm->level) {
         case 1:
         case 2:
@@ -512,9 +681,6 @@ int ff_dovi_rpu_generate(DOVIContext *s, const AVDOVIMetadata *metadata,
         }
     }
 
-    vdr_dm_metadata_changed = !s->color || memcmp(s->color, color, sizeof(*color));
-    use_prev_vdr_rpu = !memcmp(&s->vdr[vdr_rpu_id]->mapping, mapping, sizeof(*mapping));
-
     buffer_size = 12 /* vdr seq info */ + 5 /* CRC32 + terminator */;
     buffer_size += num_ext_blocks_v1 * 13;
     buffer_size += num_ext_blocks_v2 * 28;
@@ -529,7 +695,7 @@ int ff_dovi_rpu_generate(DOVIContext *s, const AVDOVIMetadata *metadata,
             }
         }
     }
-    if (vdr_dm_metadata_changed)
+    if (vdr_dm_metadata_present)
         buffer_size += 67;
 
     av_fast_padded_malloc(&s->rpu_buf, &s->rpu_buf_sz, buffer_size);
@@ -550,20 +716,21 @@ int ff_dovi_rpu_generate(DOVIContext *s, const AVDOVIMetadata *metadata,
     put_bits(pb, 2, hdr->vdr_rpu_normalized_idc);
     put_bits(pb, 1, hdr->bl_video_full_range_flag);
     if ((hdr->rpu_format & 0x700) == 0) {
+        int ext_mapping_idc = (hdr->ext_mapping_idc_5_7 << 5) | hdr->ext_mapping_idc_0_4;
         set_ue_golomb(pb, hdr->bl_bit_depth - 8);
-        set_ue_golomb(pb, hdr->el_bit_depth - 8);
+        set_ue_golomb(pb, (ext_mapping_idc << 8) | (hdr->el_bit_depth - 8));
         set_ue_golomb(pb, hdr->vdr_bit_depth - 8);
         put_bits(pb, 1, hdr->spatial_resampling_filter_flag);
-        put_bits(pb, 3, 0); /* reserved_zero_3bits */
+        put_bits(pb, 3, dm_compression);
         put_bits(pb, 1, hdr->el_spatial_resampling_filter_flag);
         put_bits(pb, 1, hdr->disable_residual_flag);
     }
     s->header = *hdr;
 
-    put_bits(pb, 1, vdr_dm_metadata_changed);
+    put_bits(pb, 1, vdr_dm_metadata_present);
     put_bits(pb, 1, use_prev_vdr_rpu);
     set_ue_golomb(pb, vdr_rpu_id);
-    s->mapping = &s->vdr[vdr_rpu_id]->mapping;
+    s->mapping = s->vdr[vdr_rpu_id];
 
     profile = s->cfg.dv_profile ? s->cfg.dv_profile : ff_dovi_guess_profile_hevc(hdr);
 
@@ -629,46 +796,75 @@ int ff_dovi_rpu_generate(DOVIContext *s, const AVDOVIMetadata *metadata,
             }
         }
 
-        memcpy(&s->vdr[vdr_rpu_id]->mapping, mapping, sizeof(*mapping));
+        memcpy(s->vdr[vdr_rpu_id], mapping, sizeof(*mapping));
     }
 
-    if (vdr_dm_metadata_changed) {
+    if (vdr_dm_metadata_present) {
+        DOVIExt *ext = s->ext_blocks;
         const int denom = profile == 4 ? (1 << 30) : (1 << 28);
         set_ue_golomb(pb, color->dm_metadata_id); /* affected_dm_id */
         set_ue_golomb(pb, color->dm_metadata_id); /* current_dm_id */
         set_ue_golomb(pb, color->scene_refresh_flag);
-        for (int i = 0; i < 9; i++)
-            put_sbits(pb, 16, av_q2den(color->ycc_to_rgb_matrix[i], 1 << 13));
-        for (int i = 0; i < 3; i++)
-            put_bits32(pb, av_q2den(color->ycc_to_rgb_offset[i], denom));
-        for (int i = 0; i < 9; i++)
-            put_sbits(pb, 16, av_q2den(color->rgb_to_lms_matrix[i], 1 << 14));
-        put_bits(pb, 16, color->signal_eotf);
-        put_bits(pb, 16, color->signal_eotf_param0);
-        put_bits(pb, 16, color->signal_eotf_param1);
-        put_bits32(pb, color->signal_eotf_param2);
-        put_bits(pb, 5, color->signal_bit_depth);
-        put_bits(pb, 2, color->signal_color_space);
-        put_bits(pb, 2, color->signal_chroma_format);
-        put_bits(pb, 2, color->signal_full_range_flag);
-        put_bits(pb, 12, color->source_min_pq);
-        put_bits(pb, 12, color->source_max_pq);
-        put_bits(pb, 10, color->source_diagonal);
+        if (!dm_compression) {
+            for (int i = 0; i < 9; i++)
+                put_sbits(pb, 16, av_q2den(color->ycc_to_rgb_matrix[i], 1 << 13));
+            for (int i = 0; i < 3; i++)
+                put_bits32(pb, av_q2den(color->ycc_to_rgb_offset[i], denom));
+            for (int i = 0; i < 9; i++)
+                put_sbits(pb, 16, av_q2den(color->rgb_to_lms_matrix[i], 1 << 14));
+            put_bits(pb, 16, color->signal_eotf);
+            put_bits(pb, 16, color->signal_eotf_param0);
+            put_bits(pb, 16, color->signal_eotf_param1);
+            put_bits32(pb, color->signal_eotf_param2);
+            put_bits(pb, 5, color->signal_bit_depth);
+            put_bits(pb, 2, color->signal_color_space);
+            put_bits(pb, 2, color->signal_chroma_format);
+            put_bits(pb, 2, color->signal_full_range_flag);
+            put_bits(pb, 12, color->source_min_pq);
+            put_bits(pb, 12, color->source_max_pq);
+            put_bits(pb, 10, color->source_diagonal);
+        }
 
-        memcpy(&s->vdr[color->dm_metadata_id]->color, color, sizeof(*color));
-        s->color = &s->vdr[color->dm_metadata_id]->color;
-    }
+        memcpy(s->dm, color, sizeof(*color));
+        s->color = s->dm;
 
-    set_ue_golomb(pb, num_ext_blocks_v1);
-    align_put_bits(pb);
-    for (int i = 0; i < metadata->num_ext_blocks; i++)
-        generate_ext_v1(pb, av_dovi_get_ext(metadata, i));
-
-    if (num_ext_blocks_v2) {
-        set_ue_golomb(pb, num_ext_blocks_v2);
+        /* Extension blocks */
+        set_ue_golomb(pb, num_ext_blocks_v1);
         align_put_bits(pb);
-        for (int i = 0; i < metadata->num_ext_blocks; i++)
-            generate_ext_v2(pb, av_dovi_get_ext(metadata, i));
+        for (int i = 0; i < metadata->num_ext_blocks; i++) {
+            const AVDOVIDmData *dm = av_dovi_get_ext(metadata, i);
+            if (dm_compression && ff_dovi_rpu_extension_is_static(dm->level))
+                continue;
+            generate_ext_v1(pb, dm);
+        }
+
+        if (num_ext_blocks_v2) {
+            set_ue_golomb(pb, num_ext_blocks_v2);
+            align_put_bits(pb);
+            for (int i = 0; i < metadata->num_ext_blocks; i++) {
+                const AVDOVIDmData *dm = av_dovi_get_ext(metadata, i);
+                if (dm_compression && ff_dovi_rpu_extension_is_static(dm->level))
+                    continue;
+                generate_ext_v2(pb, av_dovi_get_ext(metadata, i));
+            }
+        }
+
+        if (ext) {
+            size_t ext_sz = FFMIN(sizeof(AVDOVIDmData), metadata->ext_block_size);
+            ext->num_dynamic = 0;
+            if (!dm_compression)
+                ext->num_static = 0;
+            for (int i = 0; i < metadata->num_ext_blocks; i++) {
+                const AVDOVIDmData *dm = av_dovi_get_ext(metadata, i);
+                if (!ff_dovi_rpu_extension_is_static(dm->level))
+                    memcpy(&ext->dm_dynamic[ext->num_dynamic++], dm, ext_sz);
+                else if (!dm_compression)
+                    memcpy(&ext->dm_static[ext->num_static++], dm, ext_sz);
+            }
+        }
+    } else {
+        s->color = &ff_dovi_color_default;
+        ff_refstruct_unref(&s->ext_blocks);
     }
 
     flush_put_bits(pb);
@@ -679,9 +875,7 @@ int ff_dovi_rpu_generate(DOVIContext *s, const AVDOVIMetadata *metadata,
     flush_put_bits(pb);
 
     rpu_size = put_bytes_output(pb);
-    switch (s->cfg.dv_profile) {
-    case 10:
-        /* AV1 uses T.35 OBU with EMDF header */
+    if (flags & FF_DOVI_WRAP_T35) {
         *out_rpu = av_malloc(rpu_size + 15);
         if (!*out_rpu)
             return AVERROR(ENOMEM);
@@ -708,10 +902,8 @@ int ff_dovi_rpu_generate(DOVIContext *s, const AVDOVIMetadata *metadata,
         flush_put_bits(pb);
         *out_size = put_bytes_output(pb);
         return 0;
-
-    case 5:
-    case 8:
-        *out_rpu = dst = av_malloc(1 + rpu_size * 3 / 2); /* worst case */
+    } else if (flags & FF_DOVI_WRAP_NAL) {
+        *out_rpu = dst = av_malloc(4 + rpu_size * 3 / 2); /* worst case */
         if (!*out_rpu)
             return AVERROR(ENOMEM);
         *dst++ = 25; /* NAL prefix */
@@ -734,10 +926,12 @@ int ff_dovi_rpu_generate(DOVIContext *s, const AVDOVIMetadata *metadata,
         }
         *out_size = dst - *out_rpu;
         return 0;
-
-    default:
-        /* Should be unreachable */
-        av_assert0(0);
-        return AVERROR_BUG;
+    } else {
+        /* Return intermediate buffer directly */
+        *out_rpu = s->rpu_buf;
+        *out_size = rpu_size;
+        s->rpu_buf = NULL;
+        s->rpu_buf_sz = 0;
+        return 0;
     }
 }

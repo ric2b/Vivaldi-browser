@@ -199,36 +199,9 @@ std::u16string GetAdditionalA11yMessage(
       return l10n_util::GetStringUTF16(
           IDS_ACC_REMOVE_SUGGESTION_FOCUSED_PREFIX);
     default:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
   return std::u16string();
-}
-
-std::optional<std::u16string> GetAdditionalText(
-    const SuggestionAnswer::ImageLine& line) {
-  if (line.additional_text()) {
-    const auto additional_text = line.additional_text()->text();
-    if (!additional_text.empty()) {
-      return additional_text;
-    }
-  }
-  return std::nullopt;
-}
-
-std::u16string ImageLineToString16(const SuggestionAnswer::ImageLine& line) {
-  std::vector<std::u16string> text;
-  for (const auto& text_field : line.text_fields()) {
-    text.push_back(text_field.text());
-  }
-  const auto& additional_text = GetAdditionalText(line);
-  if (additional_text) {
-    text.push_back(additional_text.value());
-  }
-  // TODO(crbug.com/40149768): Use placeholders or a l10n-friendly way to
-  // construct this string instead of concatenation. This currently only happens
-  // for stock ticker symbols.
-  return base::JoinString(text, u" ");
 }
 
 bool MatchHasSideTypeAndRenderType(
@@ -246,7 +219,8 @@ bool MatchHasSideTypeAndRenderType(
 std::vector<searchbox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
     const AutocompleteResult& result,
     bookmarks::BookmarkModel* bookmark_model,
-    const omnibox::GroupConfigMap& suggestion_groups_map) {
+    const omnibox::GroupConfigMap& suggestion_groups_map,
+    const TemplateURLService* turl_service) {
   std::vector<searchbox::mojom::AutocompleteMatchPtr> matches;
   int line = 0;
   for (const AutocompleteMatch& match : result) {
@@ -294,9 +268,15 @@ std::vector<searchbox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
         match.suggestion_group_id.value_or(omnibox::GROUP_INVALID);
     const bool is_bookmarked =
         bookmark_model->IsBookmarked(match.destination_url);
+    // For starter pack suggestions, use template url to generate proper vector
+    // icon.
+    const TemplateURL* turl = match.associated_keyword
+                                  ? turl_service->GetTemplateURLForKeyword(
+                                        match.associated_keyword->keyword)
+                                  : nullptr;
     mojom_match->icon_url =
         SearchboxHandler::AutocompleteMatchVectorIconToResourceName(
-            match.GetVectorIcon(is_bookmarked));
+            match.GetVectorIcon(is_bookmarked, turl));
     mojom_match->image_dominant_color = match.image_dominant_color;
     mojom_match->image_url = match.image_url.spec();
     mojom_match->fill_into_edit = match.fill_into_edit;
@@ -306,8 +286,7 @@ std::vector<searchbox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
         match.swap_contents_and_description;
     mojom_match->type = AutocompleteMatchType::ToString(match.type);
     mojom_match->supports_deletion = match.SupportsDeletion();
-    if (omnibox_feature_configs::SuggestionAnswerMigration::Get().enabled &&
-        match.answer_template.has_value()) {
+    if (match.answer_template.has_value()) {
       const omnibox::AnswerData& answer_data =
           match.answer_template->answers(0);
       const omnibox::FormattedString& headline = answer_data.headline();
@@ -332,17 +311,6 @@ std::vector<searchbox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
               : base::JoinString({match.contents, headline_substr}, u" "),
           subhead_text);
       mojom_match->image_url = answer_data.image().url();
-      mojom_match->is_weather_answer_suggestion =
-          match.answer_type == omnibox::ANSWER_TYPE_WEATHER;
-    } else if (match.answer.has_value()) {
-      const auto& additional_text =
-          GetAdditionalText(match.answer->first_line());
-      mojom_match->answer = searchbox::mojom::SuggestionAnswer::New(
-          additional_text ? base::JoinString(
-                                {match.contents, additional_text.value()}, u" ")
-                          : match.contents,
-          ImageLineToString16(match.answer->second_line()));
-      mojom_match->image_url = match.ImageUrl().spec();
       mojom_match->is_weather_answer_suggestion =
           match.answer_type == omnibox::ANSWER_TYPE_WEATHER;
     }
@@ -408,7 +376,7 @@ std::string GetBase64UrlVariations(Profile* profile) {
 base::flat_map<int32_t, searchbox::mojom::SuggestionGroupPtr>
 CreateSuggestionGroupsMap(
     const AutocompleteResult& result,
-    PrefService* prefs,
+    const PrefService* prefs,
     const omnibox::GroupConfigMap& suggestion_groups_map) {
   base::flat_map<int32_t, searchbox::mojom::SuggestionGroupPtr> result_map;
   for (const auto& pair : suggestion_groups_map) {
@@ -436,12 +404,13 @@ searchbox::mojom::AutocompleteResultPtr CreateAutocompleteResult(
     const std::u16string& input,
     const AutocompleteResult& result,
     bookmarks::BookmarkModel* bookmark_model,
-    PrefService* prefs) {
+    const PrefService* prefs,
+    const TemplateURLService* turl_service) {
   return searchbox::mojom::AutocompleteResult::New(
       input,
       CreateSuggestionGroupsMap(result, prefs, result.suggestion_groups_map()),
       CreateAutocompleteMatches(result, bookmark_model,
-                                result.suggestion_groups_map()));
+                                result.suggestion_groups_map(), turl_service));
 }
 
 }  // namespace
@@ -461,6 +430,7 @@ void SearchboxHandler::SetupWebUIDataSource(content::WebUIDataSource* source,
   // The lens searchboxes overrides this to true to adjust various color and
   // layout options.
   source->AddBoolean("isLensSearchbox", false);
+  source->AddBoolean("queryAutocompleteOnEmptyInput", false);
 
   static constexpr webui::LocalizedString kStrings[] = {
       {"hideSuggestions", IDS_TOOLTIP_HEADER_HIDE_SUGGESTIONS_BUTTON},
@@ -498,9 +468,6 @@ void SearchboxHandler::SetupWebUIDataSource(content::WebUIDataSource* source,
   source->AddBoolean("searchboxVoiceSearch", enable_voice_search);
   source->AddBoolean("searchboxLensSearch", enable_lens_search);
   source->AddString("searchboxLensVariations", GetBase64UrlVariations(profile));
-  source->AddBoolean(
-      "searchboxLensDirectUpload",
-      base::FeatureList::IsEnabled(ntp_features::kNtpLensDirectUpload));
   source->AddBoolean(
       "searchboxCr23Theming",
       base::FeatureList::IsEnabled(ntp_features::kRealboxCr23Theming));
@@ -663,12 +630,10 @@ std::string SearchboxHandler::ActionVectorIconToResourceName(
       icon.name == omnibox::kStarActiveChromeRefreshIcon.name) {
     return kStarActiveIconResourceName;
   }
-  NOTREACHED_IN_MIGRATION()
-      << "Every vector icon returned by OmniboxAction::GetVectorIcon "
-         "must have an equivalent SVG resource for the NTP Realbox. "
-         "icon.name: '"
-      << icon.name << "'";
-  return "";
+  NOTREACHED() << "Every vector icon returned by OmniboxAction::GetVectorIcon "
+                  "must have an equivalent SVG resource for the NTP Realbox. "
+                  "icon.name: '"
+               << icon.name << "'";
 }
 
 SearchboxHandler::SearchboxHandler(
@@ -692,12 +657,12 @@ void SearchboxHandler::OnResultChanged(AutocompleteController* controller,
   if (metrics_reporter_ && !metrics_reporter_->HasLocalMark("ResultChanged")) {
     metrics_reporter_->Mark("ResultChanged");
   }
-
   page_->AutocompleteResultChanged(CreateAutocompleteResult(
       autocomplete_controller()->input().text(),
       autocomplete_controller()->result(),
       BookmarkModelFactory::GetForBrowserContext(profile_),
-      profile_->GetPrefs()));
+      profile_->GetPrefs(),
+      omnibox_controller()->client()->GetTemplateURLService()));
 
   // The owned OmniboxController does not observe the AutocompleteController.
   // Notify the prerender here to start preloading if the results are ready.

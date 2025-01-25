@@ -100,7 +100,10 @@ class VivaldiSpatialNavigationController::ScrollListener
 VivaldiSpatialNavigationController::VivaldiSpatialNavigationController(
   content::RenderFrame* render_frame)
   : content::RenderFrameObserver(render_frame),
-    render_frame_(render_frame) {}
+    render_frame_(render_frame) {
+      scroll_listener_ = blink::MakeGarbageCollected<ScrollListener>(this,
+        GetDocumentFromRenderFrame());
+    }
 
 VivaldiSpatialNavigationController::~VivaldiSpatialNavigationController() {}
 
@@ -166,7 +169,8 @@ void VivaldiSpatialNavigationController::HideIndicator() {
     return;
   }
   blink::Node* indicator_node = indicator;
-  const blink::ComputedStyle* style = indicator_node->GetComputedStyle();
+  const blink::ComputedStyle* style =
+      indicator_node->GetComputedStyleForElementOrLayoutObject();
   if (style) {
     blink::ComputedStyleBuilder builder(*style);
     builder.SetVisibility(blink::EVisibility::kHidden);
@@ -222,17 +226,20 @@ VivaldiSpatialNavigationController::ScrollTypeFromSpatnavDirection(
   using vivaldi::mojom::ScrollType;
   using vivaldi::mojom::SpatnavDirection;
 
-  ScrollType scroll_type;
-  if (direction == SpatnavDirection::kUp) {
-    scroll_type = ScrollType::kUp;
-  } else if (direction == SpatnavDirection::kLeft) {
-    scroll_type = ScrollType::kLeft;
-  } else if (direction == SpatnavDirection::kDown) {
-    scroll_type = ScrollType::kDown;
-  } else {
-    scroll_type = ScrollType::kRight;
+  switch(direction) {
+  case SpatnavDirection::kUp:
+    return ScrollType::kUp;
+  case SpatnavDirection::kLeft:
+    return ScrollType::kLeft;
+  case SpatnavDirection::kDown:
+    return ScrollType::kDown;
+  case SpatnavDirection::kRight:
+    return ScrollType::kRight;
+  // This case mimics previous implementation
+  // Not sure the kNone case is reachable.
+  case SpatnavDirection::kNone:
+    return ScrollType::kRight;
   }
-  return scroll_type;
 }
 
 void VivaldiSpatialNavigationController::Scroll(
@@ -240,7 +247,8 @@ void VivaldiSpatialNavigationController::Scroll(
     int scroll_amount) {
   using ScrollType = ::vivaldi::mojom::ScrollType;
 
-  blink::Element* scroll_container = GetScrollContainerForCurrentElement();
+  blink::Element* scroll_container =
+	  GetDocumentFromRenderFrame()->ScrollingElementNoLayout();
   if (!scroll_container) {
     return;
   }
@@ -581,8 +589,9 @@ void VivaldiSpatialNavigationController::UpdateIndicator(bool resize,
   blink::Node* indicator_node = indicator_;
 
   const blink::ComputedStyle* indicator_style =
-      indicator_node->IsElementNode() ? indicator_node->GetComputedStyle()
-                                      : nullptr;
+      indicator_node->IsElementNode()
+          ? indicator_node->GetComputedStyleForElementOrLayoutObject()
+          : nullptr;
   if (!indicator_style) {
     return;
   }
@@ -596,8 +605,8 @@ void VivaldiSpatialNavigationController::UpdateIndicator(bool resize,
   // is set to fixed.
   while (container_node->parentElement()) {
     blink::PhysicalRect cnr = container_node->BoundingBox();
-    if (container_node->GetComputedStyle()->GetPosition() ==
-        blink::EPosition::kFixed) {
+    if (container_node->GetComputedStyleForElementOrLayoutObject()
+            ->GetPosition() == blink::EPosition::kFixed) {
       xoffset -= cnr.X().ToDouble() * effective_zoom;
       yoffset -= cnr.Y().ToDouble() * effective_zoom;
     }
@@ -618,7 +627,8 @@ void VivaldiSpatialNavigationController::UpdateIndicator(bool resize,
   }
 
 
-  blink::ComputedStyleBuilder builder(*(indicator_node->GetComputedStyle()));
+  blink::ComputedStyleBuilder builder(
+      *(indicator_node->GetComputedStyleForElementOrLayoutObject()));
 
   // When updating because of scrolling we already have the right size,
   // so we use this to skip some work.

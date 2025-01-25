@@ -7,7 +7,6 @@
 #include <mutex>  // NOLINT
 #include <string>
 
-#include "absl/strings/str_join.h"
 #include "cast/protocol/castv2/receiver_schema_data.h"
 #include "cast/protocol/castv2/streaming_schema_data.h"
 #include "third_party/valijson/src/include/valijson/adapters/jsoncpp_adapter.hpp"
@@ -18,6 +17,7 @@
 #include "util/json/json_serialization.h"
 #include "util/osp_logging.h"
 #include "util/std_util.h"
+#include "util/string_util.h"
 #include "util/stringprintf.h"
 
 namespace openscreen::cast {
@@ -28,7 +28,8 @@ std::vector<Error> MapErrors(const valijson::ValidationResults& results) {
   std::vector<Error> errors;
   errors.reserve(results.numErrors());
   for (const auto& result : results) {
-    const std::string context = absl::StrJoin(result.context, ", ");
+    const std::string context =
+        string_util::Join(result.context.cbegin(), result.context.cend(), ", ");
     errors.emplace_back(Error::Code::kJsonParseError,
                         StringPrintf("Node: %s, Message: %s", context.c_str(),
                                      result.description.c_str()));

@@ -5,18 +5,16 @@
 <translation id="1456207338570705181">Dotknij, aby wyszukać to funkcja, która jest dostępna tylko wtedy, gdy jako domyślna wyszukiwarka w Vivaldi ustawione jest Google. Wysyła słowo i wraz z jego kontekstem do wyszukiwarki Google. Możesz ją wyłączyć przechodząc do <ph name="BEGIN_LINK" />ustawień<ph name="END_LINK" /> przeglądarki.</translation>
 <translation id="1598449788754183301">Przełącz normalne/prywatne karty</translation>
 <translation id="1644574205037202324">Historia</translation>
-<translation id="17513872634828108">Otwarte karty</translation>
 <translation id="1829244130665387512">Znajdź na stronie</translation>
 <translation id="1910514478706885609">Otwórz w nowej grupie kart</translation>
 <translation id="1925021887439448749">Wprowadź własny adres strony</translation>
 <translation id="2038563949887743358">Włącz opcję „Żądanie wersji na komputer”</translation>
-<translation id="2139186145475833000">Dodaj do ekranu głównego</translation>
 <translation id="2149973817440762519">Edytuj zakładkę</translation>
 <translation id="2306442503286132111">Zakładka została zapisana w folderze <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Wygląd</translation>
 <translation id="2501278716633472235">Przejdź wstecz</translation>
 <translation id="2633278372998075009">Karty prywatne</translation>
-<translation id="272026394418727548">Strona główna Vivaldi</translation>
+<translation id="272026394418727548">Strona domowa Vivaldi</translation>
 <translation id="2951071800649516099">Dodaj strony do listy do przeczytania, aby przeczytać je później</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> zakładka}
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">Aktualny język urządzenia</translation>
 <translation id="4167670741834902166">Nowa prywatna karta</translation>
 <translation id="4195643157523330669">Otwórz w nowej karcie</translation>
+<translation id="4225895483398857530">Skrót na pasku narzędzi</translation>
 <translation id="4243710787042215766">Otwórz w karcie prywatnej</translation>
 <translation id="4304713468139749426">Menedżer haseł</translation>
 <translation id="451872707440238414">Szukaj w zakładkach</translation>
@@ -74,6 +73,7 @@ Aby dostosować wyszukiwane hasło, przyciśnij przez chwilę i zaznacz interesu
 <translation id="8560602726703398413">Znajdź swoją listę stron do przeczytania w zakładkach</translation>
 <translation id="85991616550051997">Przejdź do strony głównej</translation>
 <translation id="8820817407110198400">Zakładki</translation>
+<translation id="9042893549633094279">Prywatność i bezpieczeństwo</translation>
 <translation id="9063523880881406963">Wyłącz opcję „Żądanie wersji na komputer”</translation>
 <translation id="9080642952018487277">Przejdź do trybu prywatnego</translation>
 <translation id="96681097142096641">Pokazać uproszczoną stronę?</translation>

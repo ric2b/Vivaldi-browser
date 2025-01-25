@@ -26,11 +26,11 @@ enum CrlVersion {
 };
 
 // Verifies the CRL is signed by a trusted CRL authority at the time the CRL
-// was issued. Verifies the signature of |tbs_crl| is valid based on the
-// certificate and signature in |crl|. The validity of |tbs_crl| is verified
-// at |time|. The validity period of the CRL is adjusted to be the earliest
+// was issued. Verifies the signature of `tbs_crl` is valid based on the
+// certificate and signature in `crl`. The validity of `tbs_crl` is verified
+// at `time`. The validity period of the CRL is adjusted to be the earliest
 // of the issuer certificate chain's expiration and the CRL's expiration and
-// the result is stored in |overall_not_after|.
+// the result is stored in `overall_not_after`.
 bool VerifyCRL(const proto::Crl& crl,
                const proto::TbsCrl& tbs_crl,
                const DateTime& time,
@@ -65,7 +65,7 @@ bool VerifyCRL(const proto::Crl& crl,
 
   // Set CRL expiry to the earliest of the cert chain expiry and CRL expiry
   // (excluding trust anchor).  No intermediates are provided above, so this
-  // just amounts to |signer_cert| vs. |not_after_seconds|.
+  // just amounts to `signer_cert` vs. `not_after_seconds`.
   *overall_not_after = not_after;
   ErrorOr<DateTime> maybe_not_after = target_cert->GetNotAfterTime();
   if (!maybe_not_after) {

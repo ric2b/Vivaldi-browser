@@ -17,13 +17,22 @@ The changes are relative to the previous release, unless the baseline is specifi
   draft.
 * Ignore gain maps with unsupported metadata. Handle gain maps with
   writer_version > 0 correctly.
-  The combination of settings enableParsingGainMapMetadata=false with
-  enableDecodingGainMap=true is no longer allowed and returns an invalid argument
-  error.
-  The `gainMapPresent` field is now only populated if enableParsingGainMapMetadata
-  is true.
+  Simplify gain map API: remove the enableParsingGainMapMetadata setting, now gain
+  map metadata is always parsed if present and if this feature is compiled in.
+  Replace enableDecodingGainMap and ignoreColorAndAlpha with a bit field to choose
+  image content to decode. Remove gainMapPresent: users can check if
+  decoder->image->gainMap != NULL instead.
 * Write an empty HandlerBox name field instead of "libavif" (saves 7 bytes).
-* Update svt.cmd/svt.sh/LocalSvt.cmake: v2.2.0
+* Update aom.cmd/LocalAom.cmake: v3.10.0
+* Update avm.cmd: research-v8.0.0
+* Update dav1d.cmd/dav1d_android.sh/LocalDav1d.cmake: 1.5.0
+* Update libjpeg.cmd/LocalJpeg.cmake: v3.0.4
+* Update libxml2.cmd/LocalLibXml2.cmake: v2.13.4
+* Update svt.cmd/svt.sh/LocalSvt.cmake: v2.2.1
+* Change experimental gainmap API: remove avifGainMapMetadata and
+  avifGainMapMetadataDouble structs.
+* Add avif(Un)SignedFraction structs and avifDoubleTo(Un)SignedFraction
+  utility functions.
 
 ## [1.1.1] - 2024-07-30
 

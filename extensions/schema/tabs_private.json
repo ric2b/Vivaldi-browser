@@ -257,6 +257,47 @@
         "enum": ["delete", "dismiss"]
       },
       {
+        "id": "SendTabToSelfTargetType",
+        "type": "string",
+        "enum": ["phone", "tablet", "desktop"]
+      },
+      {
+        "id": "SendTabToSelfTarget",
+        "type": "object",
+        "description" :  "Information of a target device (another Vivaldi instance).",
+        "properties": {
+           "guid": {
+              "type": "string",
+              "description": "Unique identifier."
+            },
+            "name": {
+              "type": "string",
+              "description": "Name of the device"
+            },
+            "type": {
+              "$ref": "SendTabToSelfTargetType",
+              "description": "The device type. Can be used to pick a proper icon."
+            }
+        }
+      },
+      {
+        "id": "SendTabToSelfTargets",
+        "type": "object",
+        "description" : "Information of all target devices",
+        "properties": {
+           "valid": {
+              "type": "boolean",
+              "description": "Tells if sub system is ready or not."
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "$ref": "SendTabToSelfTarget"
+              }
+            }
+        }
+      },
+      {
         "id": "SendTabToSelfEntry",
         "type": "object",
         "description" :  "Url received from another Vivaldi instance.",
@@ -602,10 +643,55 @@
         }
       },
       {
+        "name": "getSendTabToSelfTargets",
+        "type": "function",
+        "description": "Fetch current targets with information that can be used to make a menu.",
+        "parameters": [
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "$ref": "SendTabToSelfTargets"
+            }
+          ]
+        }
+      },
+      {
+        "name": "sendSendTabToSelfTarget",
+        "type": "function",
+        "description": "Send url and title to target that matches with the guid.",
+        "parameters": [
+          {
+            "name": "url",
+            "type": "string"
+          },
+          {
+            "name": "title",
+            "type": "string"
+          },
+          {
+            "name": "guid",
+            "type": "string"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
+      },
+      {
         "name": "getSendTabToSelfEntries",
         "type": "function",
         "description": "Fetch current entries that have been shared to us.",
-        "parameters": [],
+        "parameters": [
+           {
+              "name": "silent",
+              "type": "boolean",
+              "description": "Allow operation to mute error message if it is called too early on startup."
+           }
+        ],
         "returns_async": {
           "name": "callback",
           "parameters": [

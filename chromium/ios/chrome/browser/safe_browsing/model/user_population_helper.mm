@@ -16,7 +16,7 @@
 
 safe_browsing::ChromeUserPopulation GetUserPopulationForProfile(
     ProfileIOS* profile) {
-  syncer::SyncService* sync = SyncServiceFactory::GetForBrowserState(profile);
+  syncer::SyncService* sync = SyncServiceFactory::GetForProfile(profile);
   bool is_history_sync_active =
       sync && !sync->IsLocalSyncEnabled() &&
       sync->GetActiveDataTypes().Has(syncer::HISTORY_DELETE_DIRECTIVES);
@@ -31,6 +31,5 @@ safe_browsing::ChromeUserPopulation GetUserPopulationForProfile(
       /*is_under_advanced_protection=*/false,
       GetApplicationContext()->GetBrowserPolicyConnector(),
       /*num_profiles=*/std::nullopt,
-      /*num_loaded_profiles=*/std::nullopt,
-      /*num_open_profiles=*/std::nullopt);
+      /*num_loaded_profiles=*/std::nullopt);
 }

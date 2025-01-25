@@ -60,10 +60,8 @@ bool VivaldiStandardManagementPolicyProvider::MustRemainEnabled(
 
 bool VivaldiStandardManagementPolicyProvider::MustRemainDisabled(
     const Extension* extension,
-    disable_reason::DisableReason* reason,
-    std::u16string* error) const {
-  return StandardManagementPolicyProvider::MustRemainDisabled(extension, reason,
-                                                              error);
+    disable_reason::DisableReason* reason) const {
+  return StandardManagementPolicyProvider::MustRemainDisabled(extension, reason);
 }
 
 bool VivaldiStandardManagementPolicyProvider::MustRemainInstalled(

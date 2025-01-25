@@ -131,14 +131,6 @@ const UIStrings = {
    */
   hideLayerBorders: 'Hide layer borders',
   /**
-   *@description Title of a setting under the Rendering drawer that can be invoked through the Command Menu
-   */
-  showCoreWebVitalsOverlay: 'Show Core Web Vitals overlay',
-  /**
-   *@description Title of a setting under the Rendering drawer that can be invoked through the Command Menu
-   */
-  hideCoreWebVitalsOverlay: 'Hide Core Web Vitals overlay',
-  /**
    *@description Title of a setting under the Rendering category that can be invoked through the Command Menu
    */
   showFramesPerSecondFpsMeter: 'Show frames per second (FPS) meter',
@@ -312,7 +304,7 @@ const UIStrings = {
   /**
    * @description Title of a setting under the Network category that can be invoked through the Command Menu
    */
-  disableCache: 'Disable cache (while DevTools is open)',
+  disableCache: 'Disable cache while DevTools is open',
   /**
    * @description The name of a checkbox setting in the Rendering tool. This setting
    * emulates that the webpage is in auto dark mode.
@@ -323,6 +315,11 @@ const UIStrings = {
    */
   enableRemoteFileLoading:
       'Allow `DevTools` to load resources, such as source maps, from remote file paths. Disabled by default for security reasons.',
+  /**
+   * @description Tooltip text for a setting that controls the network cache. Disabling the network cache can simulate the network connections of users that are visiting a page for the first time.
+   */
+  networkCacheExplanation:
+      'Disabling the network cache will simulate a network experience similar to a first time visitor.',
 };
 const str_ = i18n.i18n.registerUIStrings('core/sdk/sdk-meta.ts', UIStrings);
 const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
@@ -346,6 +343,13 @@ Common.Settings.registerSettingExtension({
   settingName: 'automatically-ignore-list-known-third-party-scripts',
   settingType: Common.Settings.SettingType.BOOLEAN,
   defaultValue: true,
+});
+
+Common.Settings.registerSettingExtension({
+  storageType: Common.Settings.SettingStorageType.SYNCED,
+  settingName: 'skip-anonymous-scripts',
+  settingType: Common.Settings.SettingType.BOOLEAN,
+  defaultValue: false,
 });
 
 Common.Settings.registerSettingExtension({
@@ -619,24 +623,6 @@ Common.Settings.registerSettingExtension({
     {
       value: false,
       title: i18nLazyString(UIStrings.hideLayerBorders),
-    },
-  ],
-  defaultValue: false,
-});
-
-Common.Settings.registerSettingExtension({
-  category: Common.Settings.SettingCategory.RENDERING,
-  settingName: 'show-web-vitals',
-  settingType: Common.Settings.SettingType.BOOLEAN,
-  storageType: Common.Settings.SettingStorageType.SESSION,
-  options: [
-    {
-      value: true,
-      title: i18nLazyString(UIStrings.showCoreWebVitalsOverlay),
-    },
-    {
-      value: false,
-      title: i18nLazyString(UIStrings.hideCoreWebVitalsOverlay),
     },
   ],
   defaultValue: false,
@@ -1059,6 +1045,9 @@ Common.Settings.registerSettingExtension({
       title: i18nLazyString(UIStrings.enableCache),
     },
   ],
+  learnMore: {
+    tooltip: i18nLazyString(UIStrings.networkCacheExplanation),
+  },
 });
 
 Common.Settings.registerSettingExtension({

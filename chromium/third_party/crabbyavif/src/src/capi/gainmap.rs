@@ -18,66 +18,26 @@ use super::types::*;
 
 use crate::decoder::gainmap::*;
 use crate::image::YuvRange;
+use crate::internal_utils::*;
 use crate::parser::mp4box::*;
 use crate::*;
 
 pub type avifContentLightLevelInformationBox = ContentLightLevelInformation;
-
-#[repr(C)]
-#[derive(Debug, Default)]
-pub struct avifGainMapMetadata {
-    pub gainMapMinN: [i32; 3],
-    pub gainMapMinD: [u32; 3],
-    pub gainMapMaxN: [i32; 3],
-    pub gainMapMaxD: [u32; 3],
-    pub gainMapGammaN: [u32; 3],
-    pub gainMapGammaD: [u32; 3],
-    pub baseOffsetN: [i32; 3],
-    pub baseOffsetD: [u32; 3],
-    pub alternateOffsetN: [i32; 3],
-    pub alternateOffsetD: [u32; 3],
-    pub baseHdrHeadroomN: u32,
-    pub baseHdrHeadroomD: u32,
-    pub alternateHdrHeadroomN: u32,
-    pub alternateHdrHeadroomD: u32,
-    pub useBaseColorSpace: avifBool,
-}
-
-impl From<&GainMapMetadata> for avifGainMapMetadata {
-    fn from(m: &GainMapMetadata) -> Self {
-        avifGainMapMetadata {
-            gainMapMinN: [m.min[0].0, m.min[1].0, m.min[2].0],
-            gainMapMinD: [m.min[0].1, m.min[1].1, m.min[2].1],
-            gainMapMaxN: [m.max[0].0, m.max[1].0, m.max[2].0],
-            gainMapMaxD: [m.max[0].1, m.max[1].1, m.max[2].1],
-            gainMapGammaN: [m.gamma[0].0, m.gamma[1].0, m.gamma[2].0],
-            gainMapGammaD: [m.gamma[0].1, m.gamma[1].1, m.gamma[2].1],
-            baseOffsetN: [m.base_offset[0].0, m.base_offset[1].0, m.base_offset[2].0],
-            baseOffsetD: [m.base_offset[0].1, m.base_offset[1].1, m.base_offset[2].1],
-            alternateOffsetN: [
-                m.alternate_offset[0].0,
-                m.alternate_offset[1].0,
-                m.alternate_offset[2].0,
-            ],
-            alternateOffsetD: [
-                m.alternate_offset[0].1,
-                m.alternate_offset[1].1,
-                m.alternate_offset[2].1,
-            ],
-            baseHdrHeadroomN: m.base_hdr_headroom.0,
-            baseHdrHeadroomD: m.base_hdr_headroom.1,
-            alternateHdrHeadroomN: m.alternate_hdr_headroom.0,
-            alternateHdrHeadroomD: m.alternate_hdr_headroom.1,
-            useBaseColorSpace: m.use_base_color_space as avifBool,
-        }
-    }
-}
+pub type avifSignedFraction = Fraction;
+pub type avifUnsignedFraction = UFraction;
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct avifGainMap {
     pub image: *mut avifImage,
-    pub metadata: avifGainMapMetadata,
+    pub gainMapMin: [avifSignedFraction; 3],
+    pub gainMapMax: [avifSignedFraction; 3],
+    pub gainMapGamma: [avifUnsignedFraction; 3],
+    pub baseOffset: [avifSignedFraction; 3],
+    pub alternateOffset: [avifSignedFraction; 3],
+    pub baseHdrHeadroom: avifUnsignedFraction,
+    pub alternateHdrHeadroom: avifUnsignedFraction,
+    pub useBaseColorSpace: avifBool,
     pub altICC: avifRWData,
     pub altColorPrimaries: ColorPrimaries,
     pub altTransferCharacteristics: TransferCharacteristics,
@@ -92,7 +52,14 @@ impl Default for avifGainMap {
     fn default() -> Self {
         avifGainMap {
             image: std::ptr::null_mut(),
-            metadata: avifGainMapMetadata::default(),
+            gainMapMin: [Fraction(1, 1), Fraction(1, 1), Fraction(1, 1)],
+            gainMapMax: [Fraction(1, 1), Fraction(1, 1), Fraction(1, 1)],
+            gainMapGamma: [UFraction(1, 1), UFraction(1, 1), UFraction(1, 1)],
+            baseOffset: [Fraction(1, 64), Fraction(1, 64), Fraction(1, 64)],
+            alternateOffset: [Fraction(1, 64), Fraction(1, 64), Fraction(1, 64)],
+            baseHdrHeadroom: UFraction(0, 1),
+            alternateHdrHeadroom: UFraction(1, 1),
+            useBaseColorSpace: to_avifBool(false),
             altICC: avifRWData::default(),
             altColorPrimaries: ColorPrimaries::default(),
             altTransferCharacteristics: TransferCharacteristics::default(),
@@ -108,7 +75,14 @@ impl Default for avifGainMap {
 impl From<&GainMap> for avifGainMap {
     fn from(gainmap: &GainMap) -> Self {
         avifGainMap {
-            metadata: (&gainmap.metadata).into(),
+            gainMapMin: gainmap.metadata.min,
+            gainMapMax: gainmap.metadata.max,
+            gainMapGamma: gainmap.metadata.gamma,
+            baseOffset: gainmap.metadata.base_offset,
+            alternateOffset: gainmap.metadata.alternate_offset,
+            baseHdrHeadroom: gainmap.metadata.base_hdr_headroom,
+            alternateHdrHeadroom: gainmap.metadata.alternate_hdr_headroom,
+            useBaseColorSpace: gainmap.metadata.use_base_color_space as avifBool,
             altICC: (&gainmap.alt_icc).into(),
             altColorPrimaries: gainmap.alt_color_primaries,
             altTransferCharacteristics: gainmap.alt_transfer_characteristics,

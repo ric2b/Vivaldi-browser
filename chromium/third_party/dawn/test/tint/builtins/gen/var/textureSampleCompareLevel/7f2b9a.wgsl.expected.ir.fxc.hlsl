@@ -15,7 +15,7 @@ SamplerComparisonState arg_1 : register(s1, space1);
 float textureSampleCompareLevel_7f2b9a() {
   float2 arg_2 = (1.0f).xx;
   float arg_3 = 1.0f;
-  float res = arg_0.SampleCmpLevelZero(arg_1, arg_2, arg_3, (1).xx);
+  float res = arg_0.SampleCmpLevelZero(arg_1, arg_2, arg_3, (int(1)).xx);
   return res;
 }
 
@@ -38,9 +38,7 @@ VertexOutput vertex_main_inner() {
 
 vertex_main_outputs vertex_main() {
   VertexOutput v_1 = vertex_main_inner();
-  VertexOutput v_2 = v_1;
-  VertexOutput v_3 = v_1;
-  vertex_main_outputs v_4 = {v_3.prevent_dce, v_2.pos};
-  return v_4;
+  vertex_main_outputs v_2 = {v_1.prevent_dce, v_1.pos};
+  return v_2;
 }
 

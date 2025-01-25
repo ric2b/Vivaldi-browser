@@ -3,12 +3,14 @@
 // found in the LICENSE file.
 
 import * as i18n from '../../core/i18n/i18n.js';
-import type * as TraceEngine from '../../models/trace/trace.js';
+import * as Trace from '../../models/trace/trace.js';
+import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
 
-import {buildGroupStyle, buildTrackHeader} from './AppenderUtils.js';
+import {addDecorationToEvent, buildGroupStyle, buildTrackHeader, getFormattedTime} from './AppenderUtils.js';
 import {
   type CompatibilityTracksAppender,
+  type HighlightedEntryInfo,
   type TrackAppender,
   type TrackAppenderName,
   VisualLoggingTrackName,
@@ -28,21 +30,22 @@ export class AnimationsTrackAppender implements TrackAppender {
   readonly appenderName: TrackAppenderName = 'Animations';
 
   #compatibilityBuilder: CompatibilityTracksAppender;
-  #traceParsedData: Readonly<TraceEngine.Handlers.Types.TraceParseData>;
+  #parsedTrace: Readonly<Trace.Handlers.Types.ParsedTrace>;
+  #eventAppendedCallback = this.#eventAppendedCallbackFunction.bind(this);
 
-  constructor(
-      compatibilityBuilder: CompatibilityTracksAppender, traceParsedData: TraceEngine.Handlers.Types.TraceParseData) {
+  constructor(compatibilityBuilder: CompatibilityTracksAppender, parsedTrace: Trace.Handlers.Types.ParsedTrace) {
     this.#compatibilityBuilder = compatibilityBuilder;
-    this.#traceParsedData = traceParsedData;
+    this.#parsedTrace = parsedTrace;
   }
 
   appendTrackAtLevel(trackStartLevel: number, expanded?: boolean|undefined): number {
-    const animations = this.#traceParsedData.Animations.animations;
+    const animations = this.#parsedTrace.Animations.animations;
     if (animations.length === 0) {
       return trackStartLevel;
     }
     this.#appendTrackHeaderAtLevel(trackStartLevel, expanded);
-    return this.#compatibilityBuilder.appendEventsAtLevel(animations, trackStartLevel, this);
+    return this.#compatibilityBuilder.appendEventsAtLevel(
+        animations, trackStartLevel, this, this.#eventAppendedCallback);
   }
 
   #appendTrackHeaderAtLevel(currentLevel: number, expanded?: boolean): void {
@@ -53,7 +56,28 @@ export class AnimationsTrackAppender implements TrackAppender {
     this.#compatibilityBuilder.registerTrackForGroup(group, this);
   }
 
+  #eventAppendedCallbackFunction(event: Trace.Types.Events.Event, index: number): void {
+    if (event && Trace.Types.Events.isSyntheticAnimation(event)) {
+      const failures = Trace.Insights.Models.CLSCulprits.getNonCompositedFailure(event);
+      if (failures.length) {
+        addDecorationToEvent(this.#compatibilityBuilder.getFlameChartTimelineData(), index, {
+          type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE,
+        });
+      }
+    }
+  }
+
   colorForEvent(): string {
     return ThemeSupport.ThemeSupport.instance().getComputedValue('--app-color-rendering');
+  }
+
+  titleForEvent(event: Trace.Types.Events.SyntheticAnimationPair): string {
+    const {displayName} = event.args.data.beginEvent.args.data;
+    return displayName || event.name;
+  }
+
+  highlightedEntryInfo(event: Trace.Types.Events.SyntheticAnimationPair): HighlightedEntryInfo {
+    const title = this.titleForEvent(event);
+    return {title, formattedTime: getFormattedTime(event.dur)};
   }
 }

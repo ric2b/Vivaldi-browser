@@ -17,7 +17,7 @@ bool operator<(const DateTime& a, const DateTime& b);
 bool operator>(const DateTime& a, const DateTime& b);
 bool DateTimeFromSeconds(uint64_t seconds, DateTime* time);
 
-// |time| is assumed to be valid.
+// `time` is assumed to be valid.
 std::chrono::seconds DateTimeToSeconds(const DateTime& time);
 
 }  // namespace openscreen::cast

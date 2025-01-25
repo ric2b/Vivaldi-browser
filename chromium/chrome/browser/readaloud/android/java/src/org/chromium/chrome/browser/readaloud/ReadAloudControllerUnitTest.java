@@ -33,7 +33,6 @@ import android.view.WindowManager;
 import androidx.appcompat.app.AppCompatActivity;
 
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -65,7 +64,8 @@ import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
 import org.chromium.chrome.browser.device.DeviceConditions;
 import org.chromium.chrome.browser.device.ShadowDeviceConditions;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.language.AppLocaleUtils;
+import org.chromium.chrome.browser.fullscreen.FullscreenManager;
+import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider.LayoutStateObserver;
@@ -117,6 +117,7 @@ import org.chromium.url.JUnitTestGURLs;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 
 /** Unit tests for {@link ReadAloudController}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -133,11 +134,14 @@ public class ReadAloudControllerUnitTest {
     private static final GURL sTestGURL = JUnitTestGURLs.EXAMPLE_URL;
     private static final GURL sTestRedirectGURL = JUnitTestGURLs.URL_1_WITH_PATH;
     private static final long KNOWN_READABLE_TRIAL_PTR = 12345678L;
+    private static final Locale EN_US = new Locale("en", "US");
+    private static final Locale FR_FR = new Locale("fr", "FR");
 
     private MockTab mTab;
     private ReadAloudController mController;
     private ReadAloudController mController2;
     private Activity mActivity;
+    private Locale mDefaultLocale;
 
     @Rule public JniMocker mJniMocker = new JniMocker();
 
@@ -146,7 +150,7 @@ public class ReadAloudControllerUnitTest {
     private ObservableSupplierImpl<LayoutManager> mLayoutManagerSupplier;
     @Mock private Profile mMockProfile;
     @Mock private Profile mMockIncognitoProfile;
-    @Mock private ReadAloudReadabilityHooksImpl mHooksImpl;
+    @Mock private ReadAloudReadabilityHooks mHooksImpl;
     @Mock private ReadAloudPlaybackHooks mPlaybackHooks;
     @Mock private Player mPlayerCoordinator;
     @Mock private BottomSheetController mBottomSheetController;
@@ -169,6 +173,7 @@ public class ReadAloudControllerUnitTest {
     @Captor ArgumentCaptor<PlaybackArgs> mPlaybackArgsCaptor;
     @Captor ArgumentCaptor<PlaybackListener> mPlaybackListenerCaptor;
     @Captor ArgumentCaptor<LayoutStateObserver> mLayoutStateObserver;
+    @Captor ArgumentCaptor<FullscreenManager.Observer> mFullscreenObserver;
 
     @Mock private Playback mPlayback;
     @Mock private Playback.Metadata mMetadata;
@@ -179,6 +184,7 @@ public class ReadAloudControllerUnitTest {
     @Mock private SelectionPopupController mSelectionPopupController;
     @Mock private NativePage mNativePage;
     @Mock private LayoutStateProvider mLayoutStateProvider;
+    @Mock private FullscreenManager mFullscreenManager;
     private GlobalRenderFrameHostId mGlobalRenderFrameHostId = new GlobalRenderFrameHostId(1, 1);
     public UserActionTester mUserActionTester;
     private HistogramWatcher mHighlightingEnabledOnStartupHistogram;
@@ -208,6 +214,8 @@ public class ReadAloudControllerUnitTest {
 
     @Before
     public void setUp() {
+        mDefaultLocale = Locale.getDefault();
+
         MockitoAnnotations.initMocks(this);
         ShadowPostTask.setTestImpl(
                 new TestImpl() {
@@ -285,6 +293,7 @@ public class ReadAloudControllerUnitTest {
 
         mController = createController();
         verify(mLayoutStateProvider).addObserver(mLayoutStateObserver.capture());
+        verify(mFullscreenManager).addObserver(mFullscreenObserver.capture());
         when(mMetadata.languageCode()).thenReturn("en");
         when(mPlayback.getMetadata()).thenReturn(mMetadata);
         when(mWebContents.getMainFrame()).thenReturn(mRenderFrameHost);
@@ -325,13 +334,15 @@ public class ReadAloudControllerUnitTest {
                         mLayoutManagerSupplier,
                         mActivityWindowAndroid,
                         mActivityLifecycleDispatcher,
-                        mLayoutStateProviderSupplier);
+                        mLayoutStateProviderSupplier,
+                        mFullscreenManager);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         return controller;
     }
 
     @After
     public void tearDown() {
+        Locale.setDefault(mDefaultLocale);
         mUserActionTester.tearDown();
         ReadAloudFeatures.shutdown();
         mController.destroy();
@@ -352,7 +363,7 @@ public class ReadAloudControllerUnitTest {
     }
 
     @Test
-    public void testDontHidePlayerWithNoPlayback_tabSwitcherUI() {
+    public void testDontHidePlayerWithNoPlayback_tabSwitcherUi() {
         mLayoutStateObserver.getValue().onStartedShowing(LayoutType.TAB_SWITCHER);
         verify(mPlayerCoordinator, never()).hidePlayers();
 
@@ -361,13 +372,23 @@ public class ReadAloudControllerUnitTest {
     }
 
     @Test
-    public void testDontHidePlayer_nonTabSwitcherUI() {
+    public void testDontHidePlayer_nonTabSwitcherUi() {
         requestAndStartPlayback();
         mLayoutStateObserver.getValue().onStartedShowing(LayoutType.START_SURFACE);
         verify(mPlayerCoordinator, never()).hidePlayers();
 
         mLayoutStateObserver.getValue().onFinishedHiding(LayoutType.START_SURFACE);
         verify(mPlayerCoordinator, never()).restorePlayers();
+    }
+
+    @Test
+    public void testHidePlayer_FullScreen() {
+        requestAndStartPlayback();
+        mFullscreenObserver.getValue().onEnterFullscreen(mTab, new FullscreenOptions(true, true));
+        verify(mPlayerCoordinator).hidePlayers();
+
+        mFullscreenObserver.getValue().onExitFullscreen(mTab);
+        verify(mPlayerCoordinator).restorePlayers();
     }
 
     @Test
@@ -907,6 +928,23 @@ public class ReadAloudControllerUnitTest {
     }
 
     @Test
+    public void testPlayTab_playerClosedDuringLoad() {
+        // start a playback with an error
+        mController.playTab(mTab, ReadAloudController.Entrypoint.MAGIC_TOOLBAR);
+        resolvePromises();
+
+        mController.onRequestClosePlayers();
+
+        verify(mPlaybackHooks, times(1))
+                .createPlayback(Mockito.any(), mPlaybackCallbackCaptor.capture());
+        onPlaybackSuccess(mPlayback);
+        resolvePromises();
+
+        verify(mPlayerCoordinator, never())
+                .playbackReady(eq(mPlayback), eq(PlaybackListener.State.PLAYING));
+    }
+
+    @Test
     public void testPlayTab_inMultiWindow() {
         mFakeTranslateBridge.setCurrentLanguage("en");
         mTab.setGurlOverrideForTesting(new GURL("https://en.wikipedia.org/wiki/Google"));
@@ -1026,7 +1064,7 @@ public class ReadAloudControllerUnitTest {
 
     @Test
     public void testPlayTranslatedTab_tabLanguageEmpty() {
-        AppLocaleUtils.setAppLanguagePref("fr-FR");
+        Locale.setDefault(FR_FR);
 
         mFakeTranslateBridge.setIsPageTranslated(true);
         mFakeTranslateBridge.setCurrentLanguage("");
@@ -1035,6 +1073,8 @@ public class ReadAloudControllerUnitTest {
         mController.playTab(mTab, ReadAloudController.Entrypoint.MAGIC_TOOLBAR);
         resolvePromises();
 
+        // Without translate bridge reporting a language for the page, fall back to the system
+        // language.
         verify(mPlaybackHooks).createPlayback(mPlaybackArgsCaptor.capture(), any());
         assertEquals("fr", mPlaybackArgsCaptor.getValue().getLanguage());
     }
@@ -1042,7 +1082,7 @@ public class ReadAloudControllerUnitTest {
     @Test
     public void testPlayTranslatedTab_unsupportedLanguage() {
         doReturn(List.of()).when(mPlaybackHooks).getVoicesFor(anyString());
-        mFakeTranslateBridge.setCurrentLanguage("pl-PL");
+        mFakeTranslateBridge.setCurrentLanguage("zz-ZZ");
         mTab.setGurlOverrideForTesting(new GURL("https://en.wikipedia.org/wiki/Google"));
 
         mController.playTab(mTab, ReadAloudController.Entrypoint.MAGIC_TOOLBAR);
@@ -1054,7 +1094,7 @@ public class ReadAloudControllerUnitTest {
 
     @Test
     public void testPlayTranslatedTab_tabLanguageUnd() {
-        AppLocaleUtils.setAppLanguagePref("fr-FR");
+        Locale.setDefault(FR_FR);
 
         mFakeTranslateBridge.setIsPageTranslated(true);
         mFakeTranslateBridge.setCurrentLanguage("und");
@@ -1063,14 +1103,14 @@ public class ReadAloudControllerUnitTest {
         mController.playTab(mTab, ReadAloudController.Entrypoint.MAGIC_TOOLBAR);
         resolvePromises();
 
+        // Without translate bridge reporting a language for the page, fall back to the system
+        // language.
         verify(mPlaybackHooks).createPlayback(mPlaybackArgsCaptor.capture(), any());
         assertEquals("fr", mPlaybackArgsCaptor.getValue().getLanguage());
     }
 
     @Test
     public void testPlayUntranslatedTab() {
-        AppLocaleUtils.setAppLanguagePref("fr-FR");
-
         mFakeTranslateBridge.setIsPageTranslated(false);
         mFakeTranslateBridge.setCurrentLanguage("fr");
         mTab.setGurlOverrideForTesting(new GURL("https://en.wikipedia.org/wiki/Google"));
@@ -1078,6 +1118,8 @@ public class ReadAloudControllerUnitTest {
         mController.playTab(mTab, ReadAloudController.Entrypoint.MAGIC_TOOLBAR);
         resolvePromises();
 
+        // If page isn't translated, don't send a language and instead let the server decide the
+        // language.
         verify(mPlaybackHooks).createPlayback(mPlaybackArgsCaptor.capture(), any());
         assertEquals(null, mPlaybackArgsCaptor.getValue().getLanguage());
     }
@@ -2052,14 +2094,9 @@ public class ReadAloudControllerUnitTest {
 
     @Test
     @EnableFeatures(ChromeFeatureList.READALOUD_BACKGROUND_PLAYBACK)
-    public void testBackgroundPlayback_doesntCrashWhenNoPlayer() {
-        try {
-            // App is backgrounded with the screen off. Playback should continue if the flag is on.
-            setIsScreenOnAndUnlocked(false);
-            mController.onApplicationStateChange(ApplicationState.HAS_STOPPED_ACTIVITIES);
-        } catch (NullPointerException ex) {
-            Assert.fail();
-        }
+    public void testBackgroundPlayback_doesntCrashWhenNoPlayer() throws NullPointerException {
+        setIsScreenOnAndUnlocked(false);
+        mController.onApplicationStateChange(ApplicationState.HAS_STOPPED_ACTIVITIES);
     }
 
     @Test

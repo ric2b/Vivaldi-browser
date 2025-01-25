@@ -5,8 +5,13 @@
 
 #include <assert.h>
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "xnnpack/avgpool.h"
+#include "xnnpack/common.h"
 #include "xnnpack/math.h"
+#include "xnnpack/microparams.h"
 
 
 void xnn_f32_avgpool_minmax_ukernel_9x__scalar_c1(
@@ -19,7 +24,7 @@ void xnn_f32_avgpool_minmax_ukernel_9x__scalar_c1(
     float* output,
     size_t input_increment,
     size_t output_increment,
-    const union xnn_f32_scaleminmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_scaleminmax_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(output_pixels != 0);
   assert(kernel_elements != 0);

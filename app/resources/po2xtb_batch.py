@@ -23,7 +23,7 @@ filemap = {
   "vivaldi_android_chrome_strings": "android",
   "vivaldi_android_chrome_tab_ui_strings": "android-tab-ui",
   "vivaldi_android_strings": os.path.join("..", "android"),
-  "vivaldi_android_webapps_strings": "android_webapps_strings",
+  "vivaldi_android_webapps_strings": "android_webapps",
   # iOS
   "vivaldi_ios_strings": "ios_strings",
   "vivaldi_ios_native_strings": os.path.join("..", "ios"),

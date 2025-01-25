@@ -19,10 +19,10 @@ namespace openscreen::cast {
 // frames in a Cast RTP stream having the same SSRC.
 class RtpPacketizer {
  public:
-  // |payload_type| describes the type of the media content for the RTP stream
-  // from the sender having the given |sender_ssrc|.
+  // `payload_type` describes the type of the media content for the RTP stream
+  // from the sender having the given `sender_ssrc`.
   //
-  // The |max_packet_size| argument depends on the optimal over-the-wire size of
+  // The `max_packet_size` argument depends on the optimal over-the-wire size of
   // packets for the network medium being used. See discussion in rtp_defines.h
   // for further info.
   RtpPacketizer(RtpPayloadType payload_type,
@@ -35,13 +35,13 @@ class RtpPacketizer {
   // transmitted once. This method should be called in the same sequence that
   // packets will be transmitted. This also means that, if a packet needs to be
   // re-transmitted, this method should be called to generate it again. Returns
-  // the subspan of |buffer| that contains the packet. |buffer| must be at least
-  // as large as the |max_packet_size| passed to the constructor.
+  // the subspan of `buffer` that contains the packet. `buffer` must be at least
+  // as large as the `max_packet_size` passed to the constructor.
   ByteBuffer GeneratePacket(const EncryptedFrame& frame,
                             FramePacketId packet_id,
                             ByteBuffer buffer);
 
-  // Given |frame|, compute the total number of packets over which the whole
+  // Given `frame`, compute the total number of packets over which the whole
   // frame will be split-up. Returns -1 if the frame is too large and cannot be
   // packetized.
   int ComputeNumberOfPackets(const EncryptedFrame& frame) const;

@@ -60,7 +60,6 @@ typedef struct EVCDecoderConfigurationRecord {
     uint8_t  bit_depth_chroma_minus8;       // 3 bits
     uint16_t pic_width_in_luma_samples;     // 16 bits
     uint16_t pic_height_in_luma_samples;    // 16 bits
-    uint8_t  reserved;                      // 6 bits '000000'b
     uint8_t  lengthSizeMinusOne;            // 2 bits
     uint8_t  num_of_arrays;                 // 8 bits
     EVCNALUnitArray arrays[NB_ARRAYS];
@@ -208,15 +207,15 @@ static int evcc_write(AVIOContext *pb, EVCDecoderConfigurationRecord *evcc)
         if(array->numNalus == 0)
             continue;
 
-        av_log(NULL, AV_LOG_TRACE, "array_completeness[%"PRIu8"]:               %"PRIu8"\n",
+        av_log(NULL, AV_LOG_TRACE, "array_completeness[%u]:               %"PRIu8"\n",
                i, array->array_completeness);
-        av_log(NULL, AV_LOG_TRACE, "NAL_unit_type[%"PRIu8"]:                    %"PRIu8"\n",
+        av_log(NULL, AV_LOG_TRACE, "NAL_unit_type[%u]:                    %"PRIu8"\n",
                i, array->NAL_unit_type);
-        av_log(NULL, AV_LOG_TRACE, "numNalus[%"PRIu8"]:                         %"PRIu16"\n",
+        av_log(NULL, AV_LOG_TRACE, "numNalus[%u]:                         %"PRIu16"\n",
                i, array->numNalus);
         for ( unsigned j = 0; j < array->numNalus; j++)
             av_log(NULL, AV_LOG_TRACE,
-                   "nalUnitLength[%"PRIu8"][%"PRIu16"]:                 %"PRIu16"\n",
+                   "nalUnitLength[%u][%u]:                 %"PRIu16"\n",
                    i, j, array->nalUnitLength[j]);
     }
 
@@ -258,10 +257,10 @@ static int evcc_write(AVIOContext *pb, EVCDecoderConfigurationRecord *evcc)
     avio_wb16(pb, evcc->pic_height_in_luma_samples);
 
     /*
-     * bit(6) reserved = '111111'b;
-     * unsigned int(2) chromaFormat;
+     * unsigned int(6) reserved = '000000'b;
+     * unsigned int(2) lengthSizeMinusOne;
      */
-    avio_w8(pb, evcc->lengthSizeMinusOne | 0xfc);
+    avio_w8(pb, evcc->lengthSizeMinusOne & 0x3);
 
     /* unsigned int(8) numOfArrays; */
     avio_w8(pb, evcc->num_of_arrays);

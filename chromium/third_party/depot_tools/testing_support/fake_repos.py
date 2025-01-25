@@ -230,7 +230,7 @@ class FakeReposBase(object):
 
 class FakeRepos(FakeReposBase):
     """Implements populateGit()."""
-    NB_GIT_REPOS = 23
+    NB_GIT_REPOS = 24
 
     def populateGit(self):
         # Testing:
@@ -839,7 +839,11 @@ deps = {
      }],
      "dep_type": "cipd",
   },
-}""" % {
+}
+
+recursedeps = [
+  'chicken/dickens',
+]""" % {
                     'hash_2': self.git_hashes['repo_2'][1][0],
                     'hash_3': self.git_hashes['repo_3'][1][0],
                 },
@@ -872,13 +876,18 @@ deps = {
      }],
      "dep_type": "cipd",
   },
-}""" % {
+}
+
+recursedeps = [
+  'foo/chicken/dickens',
+]
+""" % {
                     'hash_2': self.git_hashes['repo_2'][1][0],
                     'hash_3': self.git_hashes['repo_3'][1][0],
                 },
             })
 
-        # gitmodules already present, test migration
+        # gitmodules already present, test migration, .git suffix
         self._commit_git(
             'repo_21',
             {
@@ -991,6 +1000,33 @@ deps = {
 """,
                 'origin': 'git/repo_23@3\n'
             })
+
+        # gitmodules already present, test migration, gclient-recursedeps
+        self._commit_git(
+            'repo_24',
+            {
+                'DEPS':
+                """
+use_relative_paths = True
+git_dependencies = "SYNC"
+deps = {
+  "bar": {
+    "url": 'https://example.googlesource.com/repo@%(hash)s',
+  },
+}
+
+recursedeps = [
+  'bar',
+]""" % {
+                    'hash': self.git_hashes['repo_2'][1][0],
+                },
+                '.gitmodules':
+                """
+[submodule "bar"]
+	path = bar
+	url = https://example.googlesource.com/repo"""
+            },
+        )  # Update `NB_GIT_REPOS` if you add more repos.
 
 
 class FakeRepoSkiaDEPS(FakeReposBase):

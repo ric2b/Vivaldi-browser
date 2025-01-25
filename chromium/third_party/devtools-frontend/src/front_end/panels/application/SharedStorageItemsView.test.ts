@@ -15,6 +15,7 @@ import {createTarget} from '../../testing/EnvironmentHelpers.js';
 import {
   describeWithMockConnection,
 } from '../../testing/MockConnection.js';
+import {getCellElementFromNodeAndColumnId, selectNodeByKey} from '../../testing/StorageItemsViewHelpers.js';
 import * as Coordinator from '../../ui/components/render_coordinator/render_coordinator.js';
 import type * as DataGrid from '../../ui/legacy/components/data_grid/data_grid.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -121,26 +122,6 @@ class SharedStorageItemsListener {
       await this.#dispatcher.once(View.SharedStorageItemsDispatcher.Events.ITEM_EDITED);
     }
   }
-}
-
-function selectNodeByKey(
-    dataGrid: DataGrid.DataGrid.DataGridImpl<Protocol.Storage.SharedStorageEntry>,
-    key: string|null): DataGrid.DataGrid.DataGridNode<Protocol.Storage.SharedStorageEntry>|null {
-  for (const node of dataGrid.rootNode().children) {
-    if (node?.data?.key === key) {
-      node.select();
-      return node;
-    }
-  }
-  return null;
-}
-
-function getCellElementFromNodeAndColumnId(
-    dataGrid: DataGrid.DataGrid.DataGridImpl<Protocol.Storage.SharedStorageEntry>,
-    node: DataGrid.DataGrid.DataGridNode<Protocol.Storage.SharedStorageEntry>, columnId: string): Element|null {
-  const column = dataGrid.columns[columnId];
-  const cellIndex = dataGrid.visibleColumnsArray.indexOf(column);
-  return node.element()?.children[cellIndex] || null;
 }
 
 describeWithMockConnection('SharedStorageItemsView', function() {
@@ -1054,14 +1035,14 @@ describeWithMockConnection('SharedStorageItemsView', function() {
     const cellElement = getCellElementFromNodeAndColumnId(view.dataGrid, selectedNode, 'key');
     assert.exists(cellElement);
 
-    // Editing a key will cause `deleteEntry()`, `setEntry()`, `getMetadata()`, and `getEntries()` to be called.
+    // Editing a key will cause `setEntry()`, `getMetadata()`, and `getEntries()` to be called.
     const editedPromise = itemsListener.waitForItemsEditedTotal(1);
     cellElement.textContent = 'key4';
     dispatchKeyDownEvent(cellElement, {key: 'Enter'});
     await raf();
     await editedPromise;
 
-    assert.isTrue(deleteEntrySpy.calledOnceWithExactly({ownerOrigin: TEST_ORIGIN, key: ''}));
+    assert.isTrue(deleteEntrySpy.notCalled);
     assert.isTrue(
         setEntrySpy.calledOnceWithExactly({ownerOrigin: TEST_ORIGIN, key: 'key4', value: '', ignoreIfPresent: false}));
     assert.isTrue(getMetadataSpy.calledThrice);
@@ -1071,7 +1052,7 @@ describeWithMockConnection('SharedStorageItemsView', function() {
 
     assert.deepEqual(view.getEntriesForTesting(), ENTRIES_NEW_KEY);
     assert.deepEqual(itemsListener.editedEvents, [
-      {columnIdentifier: 'key', oldText: '', newText: 'key4'} as View.SharedStorageItemsDispatcher.ItemEditedEvent,
+      {columnIdentifier: 'key', oldText: null, newText: 'key4'},
     ]);
 
     // Verify that the preview loads.

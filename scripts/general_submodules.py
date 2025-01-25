@@ -53,6 +53,8 @@ excluded_modules = [
   "third_party/crabbyavif/src",
   "third_party/instrumented_libs",
   "third_party/domato/src",
+  "tools/page_cycler/acid3",
+  "third_party/webdriver/pylib",
   ]
 
 def main():

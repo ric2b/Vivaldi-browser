@@ -4,24 +4,27 @@ import("//build/config/apple/swift_source_set.gni")
 
 source_set("vivaldi_onboarding") {
   sources = [
-    "vivaldi_onboarding_promo_view.h",
-    "vivaldi_onboarding_promo_view.mm",
+    "vivaldi_onboarding_agreement_view.h",
+    "vivaldi_onboarding_agreement_view.mm",
     "vivaldi_onboarding_background_view.h",
     "vivaldi_onboarding_background_view.mm",
+    "vivaldi_onboarding_promo_view.h",
+    "vivaldi_onboarding_promo_view.mm",
   ]
 
   deps = [
-    "resources:assets",
     ":vivaldi_onboarding_swift",
     "//base",
+    "//ios/chrome/common/ui/util",
     "//ui/base",
+    "resources:assets",
   ]
 
   frameworks = [
     "AVFoundation.framework",
+    "CoreMedia.framework",
     "Foundation.framework",
     "UIKit.framework",
-    "CoreMedia.framework"
   ]
 }
 
@@ -35,11 +38,11 @@ swift_source_set("vivaldi_onboarding_swift") {
     "vivaldi_onboarding_data_model.swift",
     "vivaldi_onboarding_default_browser_view.swift",
     "vivaldi_onboarding_features_view.swift",
+    "vivaldi_onboarding_omnibox_position_view.swift",
     "vivaldi_onboarding_promo_view_pure.swift",
     "vivaldi_onboarding_shadow_modifier.swift",
     "vivaldi_onboarding_start_view.swift",
     "vivaldi_onboarding_tab_style_view.swift",
-    "vivaldi_onboarding_omnibox_position_view.swift",
     "vivaldi_onboarding_view_provider.swift",
     "vivaldi_onboarding_view.swift",
   ]
@@ -60,9 +63,9 @@ swift_source_set("vivaldi_onboarding_swift") {
   ]
 
   frameworks = [
-    "Foundation.framework",
-    "UIKit.framework",
-    "SwiftUI.framework",
     "Combine.framework",
+    "Foundation.framework",
+    "SwiftUI.framework",
+    "UIKit.framework",
   ]
 }

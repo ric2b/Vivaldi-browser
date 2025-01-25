@@ -5,15 +5,23 @@ Auto-generated file. Do not edit!
   Generator: tools/update-microkernels.py
 """
 
-ALL_AVX256VNNI_MICROKERNEL_SRCS = [
-    "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-1x8c8-minmax-avx256vnni-prfm.c",
+PROD_AVX256VNNI_MICROKERNEL_SRCS = [
     "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-1x8c8-minmax-avx256vnni.c",
+    "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-8x8c8-minmax-avx256vnni.c",
+    "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-1x8c8-minmax-avx256vnni.c",
+    "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-8x8c8-minmax-avx256vnni.c",
+    "src/qd8-f16-qc8w-igemm/gen/qd8-f16-qc8w-igemm-1x8c8-minmax-avx256vnni.c",
+    "src/qd8-f16-qc8w-igemm/gen/qd8-f16-qc8w-igemm-8x8c8-minmax-avx256vnni.c",
+    "src/qs8-qu8-packw/gen/qs8-qu8-packw-x16c8-gemm-goi-avx256vnni.c",
+]
+
+NON_PROD_AVX256VNNI_MICROKERNEL_SRCS = [
+    "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-1x8c8-minmax-avx256vnni-prfm.c",
     "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-5x8c8-minmax-avx256vnni-prfm.c",
     "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-5x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-7x8c8-minmax-avx256vnni-prfm.c",
     "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-7x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-8x8c8-minmax-avx256vnni-prfm.c",
-    "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-8x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-9x8c8-minmax-avx256vnni-prfm.c",
     "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-9x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-10x8c8-minmax-avx256vnni-prfm.c",
@@ -23,13 +31,11 @@ ALL_AVX256VNNI_MICROKERNEL_SRCS = [
     "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-14x8c8-minmax-avx256vnni-prfm.c",
     "src/qd8-f16-qc4w-gemm/gen/qd8-f16-qc4w-gemm-14x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-1x8c8-minmax-avx256vnni-prfm.c",
-    "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-1x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-5x8c8-minmax-avx256vnni-prfm.c",
     "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-5x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-7x8c8-minmax-avx256vnni-prfm.c",
     "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-7x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-8x8c8-minmax-avx256vnni-prfm.c",
-    "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-8x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-9x8c8-minmax-avx256vnni-prfm.c",
     "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-9x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-10x8c8-minmax-avx256vnni-prfm.c",
@@ -39,13 +45,11 @@ ALL_AVX256VNNI_MICROKERNEL_SRCS = [
     "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-14x8c8-minmax-avx256vnni-prfm.c",
     "src/qd8-f16-qc8w-gemm/gen/qd8-f16-qc8w-gemm-14x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc8w-igemm/gen/qd8-f16-qc8w-igemm-1x8c8-minmax-avx256vnni-prfm.c",
-    "src/qd8-f16-qc8w-igemm/gen/qd8-f16-qc8w-igemm-1x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc8w-igemm/gen/qd8-f16-qc8w-igemm-5x8c8-minmax-avx256vnni-prfm.c",
     "src/qd8-f16-qc8w-igemm/gen/qd8-f16-qc8w-igemm-5x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc8w-igemm/gen/qd8-f16-qc8w-igemm-7x8c8-minmax-avx256vnni-prfm.c",
     "src/qd8-f16-qc8w-igemm/gen/qd8-f16-qc8w-igemm-7x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc8w-igemm/gen/qd8-f16-qc8w-igemm-8x8c8-minmax-avx256vnni-prfm.c",
-    "src/qd8-f16-qc8w-igemm/gen/qd8-f16-qc8w-igemm-8x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc8w-igemm/gen/qd8-f16-qc8w-igemm-9x8c8-minmax-avx256vnni-prfm.c",
     "src/qd8-f16-qc8w-igemm/gen/qd8-f16-qc8w-igemm-9x8c8-minmax-avx256vnni.c",
     "src/qd8-f16-qc8w-igemm/gen/qd8-f16-qc8w-igemm-10x8c8-minmax-avx256vnni-prfm.c",
@@ -102,6 +106,10 @@ ALL_AVX256VNNI_MICROKERNEL_SRCS = [
     "src/qd8-f32-qc8w-igemm/gen/qd8-f32-qc8w-igemm-12x8c8-minmax-avx256vnni.c",
     "src/qd8-f32-qc8w-igemm/gen/qd8-f32-qc8w-igemm-14x8c8-minmax-avx256vnni-prfm.c",
     "src/qd8-f32-qc8w-igemm/gen/qd8-f32-qc8w-igemm-14x8c8-minmax-avx256vnni.c",
+    "src/qs8-packw/gen/qs8-packw-x8c8-gemm-goi-avx256vnni-prfm.c",
+    "src/qs8-packw/gen/qs8-packw-x8c8-gemm-goi-avx256vnni.c",
+    "src/qs8-packw/gen/qs8-packw-x16c8-gemm-goi-avx256vnni-prfm.c",
+    "src/qs8-packw/gen/qs8-packw-x16c8-gemm-goi-avx256vnni.c",
     "src/qs8-qc8w-gemm/gen/qs8-qc8w-gemm-1x8c8-minmax-fp32-avx256vnni-prfm.c",
     "src/qs8-qc8w-gemm/gen/qs8-qc8w-gemm-1x8c8-minmax-fp32-avx256vnni.c",
     "src/qs8-qc8w-gemm/gen/qs8-qc8w-gemm-5x8c8-minmax-fp32-avx256vnni-prfm.c",
@@ -134,10 +142,13 @@ ALL_AVX256VNNI_MICROKERNEL_SRCS = [
     "src/qs8-qc8w-igemm/gen/qs8-qc8w-igemm-12x8c8-minmax-fp32-avx256vnni.c",
     "src/qs8-qc8w-igemm/gen/qs8-qc8w-igemm-14x8c8-minmax-fp32-avx256vnni-prfm.c",
     "src/qs8-qc8w-igemm/gen/qs8-qc8w-igemm-14x8c8-minmax-fp32-avx256vnni.c",
+    "src/qs8-qu8-packw/gen/qs8-qu8-packw-x8c8-gemm-goi-avx256vnni-prfm.c",
+    "src/qs8-qu8-packw/gen/qs8-qu8-packw-x8c8-gemm-goi-avx256vnni.c",
+    "src/qs8-qu8-packw/gen/qs8-qu8-packw-x16c8-gemm-goi-avx256vnni-prfm.c",
     "src/qs8-rsum/gen/qs8-rsum-avx256vnni-u32.c",
     "src/qs8-rsum/gen/qs8-rsum-avx256vnni-u64-acc2.c",
-    "src/qs8-rsum/gen/qs8-rsum-avx256vnni-u64.c",
     "src/qs8-rsum/gen/qs8-rsum-avx256vnni-u128-acc2.c",
     "src/qs8-rsum/gen/qs8-rsum-avx256vnni-u128-acc4.c",
-    "src/qs8-rsum/gen/qs8-rsum-avx256vnni-u128.c",
 ]
+
+ALL_AVX256VNNI_MICROKERNEL_SRCS = PROD_AVX256VNNI_MICROKERNEL_SRCS + NON_PROD_AVX256VNNI_MICROKERNEL_SRCS

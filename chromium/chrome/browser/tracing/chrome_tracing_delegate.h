@@ -46,10 +46,13 @@ class ChromeTracingDelegate : public content::TracingDelegate,
   // trace and will allow tracing to run next time.
   bool OnBackgroundTracingActive(bool requires_anonymized_data) override;
 
-  // Returns true if tracing is allowed to end. Also updates the background
-  // tracing state in prefs using BackgroundTracingStateManager when returning
-  // true. This is required to be called before stopping background tracing.
-  bool OnBackgroundTracingIdle(bool requires_anonymized_data) override;
+  // Updates the background tracing state in prefs using
+  // BackgroundTracingStateManager. This is required to be called before
+  // stopping background tracing.
+  void OnBackgroundTracingIdle() override;
+
+  // Returns true if tracing is allowed to end.
+  bool CanFinalizeTrace(bool requires_anonymized_data) override;
 
   bool ShouldSaveUnuploadedTrace() const override;
 
@@ -80,16 +83,9 @@ class ChromeTracingDelegate : public content::TracingDelegate,
   void OnBrowserAdded(Browser* browser) override;
 #endif
 
-  // The types of action that are guarded by IsActionAllowed.
-  enum class BackgroundScenarioAction {
-    kStartTracing,
-    kUploadTrace,
-  };
-
-  // Returns true if the delegate should be allowed to perform `action` for the
-  // scenario described in `config`.
-  bool IsActionAllowed(BackgroundScenarioAction action,
-                       bool requires_anonymized_data) const;
+  // Returns true if the delegate should be allowed to perform an action
+  // given `requires_anonymized_data`.
+  bool IsActionAllowed(bool requires_anonymized_data) const;
 
   bool incognito_launched_ = false;
 

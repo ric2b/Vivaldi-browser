@@ -154,8 +154,8 @@ const int kRowsHiddenByNavigationBar = 3;
 // The Browser in which notes are presented
 @property(nonatomic, assign) Browser* browser;
 
-// The user's browser state model used.
-@property(nonatomic, assign) ChromeBrowserState* browserState;
+// The user's profile used.
+@property(nonatomic, assign) ProfileIOS* profile;
 
 // The mediator that provides data for this view controller.
 @property(nonatomic, strong) NoteHomeMediator* mediator;
@@ -253,11 +253,10 @@ const int kRowsHiddenByNavigationBar = 3;
   self = [super initWithStyle:style];
   if (self) {
     _browser = browser;
-    _browserState =
-        _browser->GetBrowserState()->GetOriginalChromeBrowserState();
-    [VivaldiNotesPrefs setPrefService:_browserState->GetPrefs()];
+    _profile = _browser->GetProfile()->GetOriginalProfile();
+    [VivaldiNotesPrefs setPrefService:_profile->GetPrefs()];
     _webStateList = _browser->GetWebStateList();
-    _notes = vivaldi::NotesModelFactory::GetForBrowserState(_browserState);
+    _notes = vivaldi::NotesModelFactory::GetForProfile(_profile);
     _bridge.reset(new notes::NoteModelBridge(self, _notes));
   }
   return self;
@@ -301,7 +300,7 @@ const int kRowsHiddenByNavigationBar = 3;
   // If cache is present then reconstruct the last visited note from
   // cache.
   if (![NotePathCache
-          getNoteTopMostRowCacheWithPrefService:self.browserState
+          getNoteTopMostRowCacheWithPrefService:self.profile
                                                         ->GetPrefs()
                                               model:self.notes
                                            folderId:&cachedFolderID
@@ -487,7 +486,7 @@ const int kRowsHiddenByNavigationBar = 3;
   // Create the mediator and hook up the table view.
   self.mediator =
       [[NoteHomeMediator alloc] initWithSharedState:self.sharedState
-                                           browserState:self.browserState];
+                                            profile:self.profile];
   self.mediator.consumer = self;
   [self.mediator startMediating];
 
@@ -509,7 +508,7 @@ const int kRowsHiddenByNavigationBar = 3;
   int topMostVisibleIndexPathRow = [self topMostVisibleIndexPathRow];
   if (_rootNode) {
     [NotePathCache
-        cacheNoteTopMostRowWithPrefService:self.browserState->GetPrefs()
+        cacheNoteTopMostRowWithPrefService:self.profile->GetPrefs()
                                       folderId:_rootNode->id()
                                     topMostRow:topMostVisibleIndexPathRow];
   } else {
@@ -587,7 +586,7 @@ const int kRowsHiddenByNavigationBar = 3;
   [self.snackbarCommandsHandler
       showSnackbarMessage:note_utils_ios::MoveNotesWithToast(
                               nodes, self.notes, trashFolder,
-                              self.browserState)];
+                              self.profile)];
   [self setTableViewEditing:NO];
 }
 
@@ -596,7 +595,7 @@ const int kRowsHiddenByNavigationBar = 3;
   DCHECK_GE(nodes.size(), 1u);
   [self.snackbarCommandsHandler
       showSnackbarMessage:note_utils_ios::DeleteNotesWithToast(
-                              nodes, self.notes, self.browserState)];
+                              nodes, self.notes, self.profile)];
   [self setTableViewEditing:NO];
 }
 
@@ -669,12 +668,12 @@ const int kRowsHiddenByNavigationBar = 3;
     int64_t unusedFolderId;
     int unusedIndexPathRow;
     while ([NotePathCache
-        getNoteTopMostRowCacheWithPrefService:self.browserState->GetPrefs()
+        getNoteTopMostRowCacheWithPrefService:self.profile->GetPrefs()
                                             model:self.notes
                                          folderId:&unusedFolderId
                                        topMostRow:&unusedIndexPathRow]) {
       [NotePathCache
-          clearNoteTopMostRowCacheWithPrefService:self.browserState
+          clearNoteTopMostRowCacheWithPrefService:self.profile
                                                           ->GetPrefs()];
     }
 
@@ -701,7 +700,7 @@ const int kRowsHiddenByNavigationBar = 3;
     // Reconstruct note path cache.
     for (const vivaldi::NoteNode* node : nodes) {
       [NotePathCache
-          cacheNoteTopMostRowWithPrefService:self.browserState->GetPrefs()
+          cacheNoteTopMostRowWithPrefService:self.profile->GetPrefs()
                                         folderId:node->id()
                                       topMostRow:0];
     }
@@ -790,7 +789,7 @@ const int kRowsHiddenByNavigationBar = 3;
   [self.snackbarCommandsHandler
       showSnackbarMessage:
           note_utils_ios::UpdateNotePositionWithToast(
-              node, _rootNode, position, self.notes, self.browserState)];
+              node, _rootNode, position, self.notes, self.profile)];
 }
 
 - (BOOL)isAtTopOfNavigation {
@@ -827,7 +826,7 @@ const int kRowsHiddenByNavigationBar = 3;
   [self.snackbarCommandsHandler
       showSnackbarMessage:note_utils_ios::MoveNotesWithToast(
                               folderPicker.editedNodes, self.notes, folder,
-                              self.browserState)];
+                              self.profile)];
 
   [self setTableViewEditing:NO];
   [self.navigationController dismissViewControllerAnimated:YES completion:NULL];
@@ -878,8 +877,7 @@ const int kRowsHiddenByNavigationBar = 3;
   // again here if restoring of cache position is needed.  It is to prevent
   // crbug.com/765503.
   if ([NotePathCache
-          getNoteTopMostRowCacheWithPrefService:self.browserState
-                                                        ->GetPrefs()
+          getNoteTopMostRowCacheWithPrefService:self.profile->GetPrefs()
                                               model:self.notes
                                            folderId:&unusedFolderId
                                          topMostRow:&unusedIndexPathRow]) {
@@ -1243,12 +1241,12 @@ const int kRowsHiddenByNavigationBar = 3;
 
 // Returns whether the incognito mode is forced.
 - (BOOL)isIncognitoForced {
-  return IsIncognitoModeForced(self.browser->GetBrowserState()->GetPrefs());
+  return IsIncognitoModeForced(self.browser->GetProfile()->GetPrefs());
 }
 
 // Returns whether the incognito mode is available.
 - (BOOL)isIncognitoAvailable {
-  return !IsIncognitoModeDisabled(self.browser->GetBrowserState()->GetPrefs());
+  return !IsIncognitoModeDisabled(self.browser->GetProfile()->GetPrefs());
 }
 
 #pragma mark - Loading and Empty States
@@ -2501,7 +2499,7 @@ const int kRowsHiddenByNavigationBar = 3;
   [self.snackbarCommandsHandler showSnackbarMessage:
                     note_utils_ios::CreateNoteAtPositionWithToast(
                         base::SysUTF8ToNSString(URL.spec()), URL, _rootNode,
-                        index, self.notes, self.browserState)];
+                        index, self.notes, self.profile)];
 }
 
 #pragma mark - SettingsNavigationControllerDelegate
@@ -2622,7 +2620,8 @@ const int kRowsHiddenByNavigationBar = 3;
 /// Returns true if device is iPad and multitasking UI has
 /// enough space to show iPad side panel.
 - (BOOL)showingSidePanel {
-  return VivaldiGlobalHelpers.canShowSidePanel;
+  return [VivaldiGlobalHelpers
+              canShowSidePanelForTrait:self.traitCollection];
 }
 
 - (void)showVivaldiSync {

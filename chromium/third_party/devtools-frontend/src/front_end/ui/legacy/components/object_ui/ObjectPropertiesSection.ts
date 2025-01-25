@@ -127,7 +127,7 @@ const UIStrings = {
    * which are based on bytes and can be shown in a hexadecimal viewer.
    * Clicking on the button will display that object in the Memory inspector panel.
    */
-  revealInMemoryInpector: 'Reveal in Memory inspector panel',
+  openInMemoryInpector: 'Open in Memory inspector panel',
 };
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/components/object_ui/ObjectPropertiesSection.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -391,7 +391,7 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
     });
     memoryIcon.setAttribute('jslog', `${VisualLogging.action('open-memory-inspector').track({click: true})}`);
 
-    const revealText = i18nString(UIStrings.revealInMemoryInpector);
+    const revealText = i18nString(UIStrings.openInMemoryInpector);
     UI.Tooltip.Tooltip.install(memoryIcon, revealText);
     UI.ARIAUtils.setLabel(memoryIcon, revealText);
 
@@ -1715,7 +1715,7 @@ export class ExpandableTextPropertyValue extends ObjectPropertyValue {
     this.maxDisplayableTextLength = 10000000;
 
     const byteCount = Platform.StringUtilities.countWtf8Bytes(text);
-    const totalBytesText = Platform.NumberUtilities.bytesToString(byteCount);
+    const totalBytesText = i18n.ByteUtilities.bytesToString(byteCount);
     if (this.text.length < this.maxDisplayableTextLength) {
       this.expandElementText = i18nString(UIStrings.showMoreS, {PH1: totalBytesText});
       this.expandElement.setAttribute('data-text', this.expandElementText);

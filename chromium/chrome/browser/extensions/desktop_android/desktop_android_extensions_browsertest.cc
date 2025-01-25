@@ -11,11 +11,15 @@
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/api/declarative_net_request/rules_monitor_service.h"
 #include "extensions/browser/api/declarative_net_request/test_utils.h"
+#include "extensions/browser/embedder_user_script_loader.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/user_script_manager.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/file_util.h"
+#include "extensions/common/manifest_handlers/content_scripts_handler.h"
 #include "extensions/test/result_catcher.h"
+#include "extensions/test/test_content_script_load_waiter.h"
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 
@@ -249,6 +253,161 @@ IN_PROC_BROWSER_TEST_F(DesktopAndroidExtensionsBrowserTest,
   EXPECT_EQ(expected_url, GetActiveWebContents()->GetLastCommittedURL());
   EXPECT_EQ("This page has a title.",
             content::EvalJs(GetActiveWebContents(), "document.body.innerText"));
+}
+
+// Verifies content scripts are properly injected.
+IN_PROC_BROWSER_TEST_F(DesktopAndroidExtensionsBrowserTest,
+                       ContentScriptInjection) {
+  // An extension that injects a simple script on match.test sites.
+  static constexpr char kManifest[] =
+      R"({
+           "name": "Content Script Extension",
+           "manifest_version": 3,
+           "version": "0.1",
+           "content_scripts": [{
+             "matches": ["*://match.test/*"],
+             "js": ["content_script.js"],
+             "run_at": "document_idle"
+           }]
+         })";
+  // The script just appends a span to indicate it injected.
+  static constexpr char kContentScriptJs[] =
+      R"(let span = document.createElement('span');
+         span.textContent = 'content script injected';
+         document.body.appendChild(span);)";
+
+  TestExtensionDir test_dir;
+  test_dir.WriteManifest(kManifest);
+  test_dir.WriteFile(FILE_PATH_LITERAL("content_script.js"), kContentScriptJs);
+
+  const Extension* extension =
+      LoadExtensionFromDirectory(test_dir.UnpackedPath());
+  ASSERT_TRUE(extension);
+
+  // Verify scripts were properly parsed.
+  const UserScriptList& content_scripts =
+      ContentScriptsInfo::GetContentScripts(extension);
+  ASSERT_EQ(1u, content_scripts.size());
+
+  // Wait for scripts to load (if they haven't already).
+  UserScriptManager* user_script_manager =
+      ExtensionSystem::Get(GetBrowserContext())->user_script_manager();
+  ExtensionUserScriptLoader* user_script_loader =
+      user_script_manager->GetUserScriptLoaderForExtension(extension->id());
+  if (!user_script_loader->HasLoadedScripts()) {
+    ContentScriptLoadWaiter waiter(user_script_loader);
+    waiter.Wait();
+  }
+
+  // First, navigate to a site that *doesn't* match the extension. The script
+  // should not inject.
+  const GURL no_match_test =
+      embedded_test_server()->GetURL("no-match.test", "/title1.html");
+  EXPECT_TRUE(content::NavigateToURL(GetActiveWebContents(), no_match_test));
+  EXPECT_EQ(no_match_test, GetActiveWebContents()->GetLastCommittedURL());
+  EXPECT_EQ("This page has no title.",
+            content::EvalJs(GetActiveWebContents(), "document.body.innerText"));
+
+  // Next, navigate to a site that *does* match. The script should inject.
+  const GURL match_test =
+      embedded_test_server()->GetURL("match.test", "/title1.html");
+  EXPECT_TRUE(content::NavigateToURL(GetActiveWebContents(), match_test));
+  EXPECT_EQ(match_test, GetActiveWebContents()->GetLastCommittedURL());
+  EXPECT_EQ("This page has no title. content script injected",
+            content::EvalJs(GetActiveWebContents(), "document.body.innerText"));
+}
+
+// Tests Storage API for StorageArea.local.
+IN_PROC_BROWSER_TEST_F(DesktopAndroidExtensionsBrowserTest,
+                       StorageApiTestStorageAreaLocal) {
+  static constexpr char kManifest[] =
+      R"({
+           "name": "StorageArea.OnChanged",
+           "version": "0.1",
+           "manifest_version": 3,
+           "permissions": ["storage"],
+           "background": {"service_worker": "background.js"}
+         })";
+  static constexpr char kBackgroundJs[] =
+      R"(chrome.test.runTests([
+           function storageAreaOnChanged() {
+              var localStorageArea = chrome.storage.local;
+              chrome.test.listenOnce(localStorageArea.onChanged,
+                function(changes) {
+                  chrome.test.assertEq({key:{newValue:'value'}}, changes);
+                });
+
+              chrome.test.listenOnce(chrome.storage.onChanged,
+                function(changes, namespace) {
+                  chrome.test.assertEq({key:{newValue:'value'}}, changes);
+                  chrome.test.assertEq('local', namespace);
+                });
+
+              chrome.storage.session.onChanged.addListener(
+                function(changes, namespace) {
+                  chrome.test.notifyFail(
+                    'session.onChanged should not be called when local storage update');
+              });
+
+              localStorageArea.set({key: 'value'});
+           }
+         ]);)";
+  TestExtensionDir test_dir;
+  test_dir.WriteManifest(kManifest);
+  test_dir.WriteFile(FILE_PATH_LITERAL("background.js"), kBackgroundJs);
+
+  ResultCatcher result_catcher;
+  scoped_refptr<const Extension> extension =
+      LoadExtensionFromDirectory(test_dir.UnpackedPath());
+  ASSERT_TRUE(extension);
+  ASSERT_TRUE(result_catcher.GetNextResult()) << result_catcher.message();
+}
+
+// Tests Storage API for StorageArea.session.
+IN_PROC_BROWSER_TEST_F(DesktopAndroidExtensionsBrowserTest,
+                       StorageApiTestStorageAreaSession) {
+  static constexpr char kManifest[] =
+      R"({
+           "name": "StorageArea.OnChanged",
+           "version": "0.1",
+           "manifest_version": 3,
+           "permissions": ["storage"],
+           "background": {"service_worker": "background.js"}
+         })";
+  static constexpr char kBackgroundJs[] =
+      R"(chrome.test.runTests([
+           function storageAreaOnChanged() {
+              var sessionStorageArea = chrome.storage.session;
+
+              chrome.test.listenOnce(sessionStorageArea.onChanged,
+                function(changes) {
+                  chrome.test.assertEq({key:{newValue:'value'}}, changes);
+                });
+
+              chrome.test.listenOnce(chrome.storage.onChanged,
+                function(changes, namespace) {
+                  chrome.test.assertEq({key:{newValue:'value'}}, changes);
+                  chrome.test.assertEq('session', namespace);
+                });
+
+              chrome.storage.local.onChanged.addListener(
+                function(changes, namespace) {
+                  chrome.test.notifyFail(
+                    'local.onChanged should not be called when session storage update');
+              });
+
+              sessionStorageArea.set({key: 'value'});
+           }
+         ]);)";
+  TestExtensionDir test_dir;
+  test_dir.WriteManifest(kManifest);
+  test_dir.WriteFile(FILE_PATH_LITERAL("background.js"), kBackgroundJs);
+
+  ResultCatcher result_catcher;
+  scoped_refptr<const Extension> extension =
+      LoadExtensionFromDirectory(test_dir.UnpackedPath());
+  ASSERT_TRUE(extension);
+  ASSERT_TRUE(result_catcher.GetNextResult()) << result_catcher.message();
 }
 
 }  // namespace extensions

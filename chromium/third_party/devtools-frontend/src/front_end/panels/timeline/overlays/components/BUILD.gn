@@ -30,6 +30,7 @@ devtools_module("components") {
     "../../../../ui/components/helpers:bundle",
     "../../../../ui/components/icon_button:bundle",
     "../../../../ui/lit-html:bundle",
+    "../../../../ui/visual_logging:bundle",
   ]
 }
 
@@ -45,5 +46,17 @@ devtools_entrypoint("bundle") {
     ":*",
     "..:*",
     "../../../ui/components/docs/*",
+  ]
+}
+
+ts_library("unittests") {
+  testonly = true
+
+  sources = [ "TimespanBreakdownOverlay.test.ts" ]
+
+  deps = [
+    ":bundle",
+    "../../../../testing",
+    "../../../../ui/components/render_coordinator:bundle",
   ]
 }

@@ -265,10 +265,12 @@ void NigoriDataTypeProcessor::HasUnsyncedData(
 void NigoriDataTypeProcessor::GetAllNodesForDebugging(
     AllNodesCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(model_ready_to_sync_);
+  CHECK(bridge_);
 
   std::unique_ptr<EntityData> entity_data = bridge_->GetDataForDebugging();
   if (!entity_data) {
-    std::move(callback).Run(syncer::NIGORI, base::Value::List());
+    std::move(callback).Run(base::Value::List());
     return;
   }
 
@@ -295,7 +297,7 @@ void NigoriDataTypeProcessor::GetAllNodesForDebugging(
 
   base::Value::List all_nodes;
   all_nodes.Append(std::move(root_node));
-  std::move(callback).Run(syncer::NIGORI, std::move(all_nodes));
+  std::move(callback).Run(std::move(all_nodes));
 }
 
 void NigoriDataTypeProcessor::GetTypeEntitiesCountForDebugging(

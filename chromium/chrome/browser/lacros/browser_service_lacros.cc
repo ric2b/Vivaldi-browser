@@ -65,9 +65,9 @@
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/display/scoped_display_for_new_windows.h"
 #include "ui/platform_window/platform_window.h"
-#include "ui/views/widget/desktop_aura/desktop_window_tree_host_lacros.h"
 #include "url/gurl.h"
 
 namespace {
@@ -645,8 +645,7 @@ void BrowserServiceLacros::NewWindowWithProfile(
       incognito = true;
       break;
     case policy::IncognitoModeAvailability::kNumTypes:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
 
   display::ScopedDisplayForNewWindows scoped(target_display_id);
@@ -683,7 +682,7 @@ void BrowserServiceLacros::NewFullscreenWindowWithProfile(
   // target URL.
   Browser::CreateParams params = Browser::CreateParams::CreateForApp(
       "app_name", true, gfx::Rect(), profile, false);
-  params.initial_show_state = ui::SHOW_STATE_FULLSCREEN;
+  params.initial_show_state = ui::mojom::WindowShowState::kFullscreen;
   Browser* browser = Browser::Create(params);
   NavigateParams nav_params(browser, url,
                             ui::PageTransition::PAGE_TRANSITION_AUTO_TOPLEVEL);
@@ -727,7 +726,7 @@ void BrowserServiceLacros::NewWindowForDetachingTabWithProfile(
 
   Browser::CreateParams params = browser->create_params();
   params.user_gesture = true;
-  params.initial_show_state = ui::SHOW_STATE_DEFAULT;
+  params.initial_show_state = ui::mojom::WindowShowState::kDefault;
   Browser* new_browser = Browser::Create(params);
   CHECK(new_browser);
 
@@ -741,13 +740,6 @@ void BrowserServiceLacros::NewWindowForDetachingTabWithProfile(
   }
 
   new_browser->window()->Show();
-
-  auto* native_window = new_browser->window()->GetNativeWindow();
-  auto* dwth_platform =
-      views::DesktopWindowTreeHostLacros::From(native_window->GetHost());
-  auto* platform_window = dwth_platform->platform_window();
-  std::move(callback).Run(crosapi::mojom::CreationResult::kSuccess,
-                          platform_window->GetWindowUniqueId());
 }
 
 void BrowserServiceLacros::LaunchOrNewTabWithProfile(

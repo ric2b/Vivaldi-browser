@@ -148,7 +148,7 @@ public class PageZoomUtils {
             int seekBarValue, double defaultZoomFactor) {
         double currentZoomLevel = convertSeekBarValueToZoomLevel(seekBarValue);
         double defaultZoomLevel = convertZoomFactorToZoomLevel(defaultZoomFactor);
-        return (MathUtils.roundTwoDecimalPlaces(Math.abs(currentZoomLevel - defaultZoomLevel)))
+        return MathUtils.roundTwoDecimalPlaces(Math.abs(currentZoomLevel - defaultZoomLevel))
                 <= PageZoomUtils.DEFAULT_ZOOM_LEVEL_SNAP_RANGE;
     }
 
@@ -179,12 +179,33 @@ public class PageZoomUtils {
         return getDefaultZoomLevel(context);
     }
 
+    /**
+     * Records UMA histogram for a measure of the Page Zoom feature usage by checking if the user
+     * has any saved zoom levels or a default zoom setting, considering either as a user that has
+     * interacted with the feature. Recorded during post-native initialization.
+     *
+     * @param BrowserContextHandle The profile to check feature usage against
+     */
+    public static void recordFeatureUsage(BrowserContextHandle lastUsedRegularProfile) {
+        boolean hasAnySavedZoomLevels =
+                !HostZoomMap.getAllHostZoomLevels(lastUsedRegularProfile).isEmpty();
+
+        // The default (unset) zoom level is 0.0 (which maps to 100% by 1.2^0 = 1, see comment at
+        // top of file). We will fetch the current profile's default zoom level, and any non-zero
+        // value will be considered a user choice (non-default).
+        boolean hasDefaultZoomLevel =
+                Math.abs(getDefaultZoomLevel(lastUsedRegularProfile)) > MathUtils.EPSILON;
+
+        PageZoomUma.logFeatureUsageHistogram(hasAnySavedZoomLevels, hasDefaultZoomLevel);
+    }
+
     // Methods to interact with SharedPreferences. These do not use SharedPreferencesManager so
     // that they can be used in //components.
 
     /**
-     * Returns true if the user has set a choice for always showing the Zoom AppMenu
-     * item (set in Accessibility Settings). This setting is Chrome Android specific.
+     * Returns true if the user has set a choice for always showing the Zoom AppMenu item (set in
+     * Accessibility Settings). This setting is Chrome Android specific.
+     *
      * @return boolean
      */
     public static boolean hasUserSetShouldAlwaysShowZoomMenuItemOption() {
@@ -210,19 +231,12 @@ public class PageZoomUtils {
     /**
      * Returns true if the Zoom AppMenu item should be shown, false otherwise.
      *
-     * - If there is a current user choice set in Accessibility Settings, respect and return the
-     * user setting.
-     * - Otherwise, if there is an OS level font size set, return true.
-     * - Otherwise, return false.
+     * <p>If there is a current user choice set in Accessibility Settings, respect and return the
+     * user setting. Otherwise, return true if there is an OS level font size set.
      *
-     * This setting is Chrome Android specific.
      * @return boolean
      */
     public static boolean shouldShowZoomMenuItem() {
-        if (!ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM)) {
-            return false;
-        }
-
         // Always respect the user's choice if the user has set this in Accessibility Settings.
         if (hasUserSetShouldAlwaysShowZoomMenuItemOption()) {
             if (shouldAlwaysShowZoomMenuItem()) {
@@ -237,9 +251,15 @@ public class PageZoomUtils {
         }
 
         // The default (float) |fontScale| is 1, the default page zoom is 1.
-        // If the user has a system font scale other than the default, always show the menu item.
         boolean isUsingDefaultSystemFontScale = MathUtils.areFloatsEqual(getSystemFontScale(), 1f);
-        if (!isUsingDefaultSystemFontScale && HostZoomMap.shouldAdjustForOSLevel()) {
+
+        // If the user has a system font scale other than the default, we will show the menu item if
+        // OS-level adjustments is enabled, or, if the page zoom enhancements (fast-follow) feature
+        // is enabled (which includes a greater presence in the 3-dot menu).
+        if (!isUsingDefaultSystemFontScale
+                && (HostZoomMap.shouldAdjustForOSLevel()
+                        || ContentFeatureMap.isEnabled(
+                                ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS))) {
             PageZoomUma.logAppMenuEnabledStateHistogram(
                     PageZoomUma.AccessibilityPageZoomAppMenuEnabledState.OS_ENABLED);
             return true;
@@ -270,8 +290,10 @@ public class PageZoomUtils {
      */
     public static boolean hasUserSetIncludeOSAdjustmentOption() {
         assert ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS)
+                        && ContentFeatureMap.isEnabled(
+                                ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2)
                 : "hasUserSetIncludeOSAdjustmentOption should only be called if the flag is"
-                      + " enabled.";
+                        + " enabled.";
         return ContextUtils.getAppSharedPreferences()
                 .contains(AccessibilityConstants.PAGE_ZOOM_INCLUDE_OS_ADJUSTMENT);
     }
@@ -284,6 +306,8 @@ public class PageZoomUtils {
      */
     public static boolean shouldIncludeOSAdjustment() {
         assert ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS)
+                        && ContentFeatureMap.isEnabled(
+                                ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2)
                 : "shouldIncludeOSAdjustment should only be called if the flag is enabled.";
         return ContextUtils.getAppSharedPreferences()
                 .getBoolean(
@@ -298,6 +322,8 @@ public class PageZoomUtils {
      */
     public static void setShouldIncludeOSAdjustment(boolean newValue) {
         assert ContentFeatureMap.isEnabled(ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_ENHANCEMENTS)
+                        && ContentFeatureMap.isEnabled(
+                                ContentFeatureList.ACCESSIBILITY_PAGE_ZOOM_V2)
                 : "setShouldIncludeOSAdjustment should only be called if the flag is enabled.";
         ContextUtils.getAppSharedPreferences()
                 .edit()

@@ -135,8 +135,8 @@ public final class WebFeedMainMenuItemTest {
 
         mWebFeedMainMenuItem =
                 (WebFeedMainMenuItem)
-                        (LayoutInflater.from(mActivity)
-                                .inflate(R.layout.web_feed_main_menu_item, null));
+                        LayoutInflater.from(mActivity)
+                                .inflate(R.layout.web_feed_main_menu_item, null);
 
         LoadingView.setDisableAnimationForTest(true);
     }
@@ -201,12 +201,8 @@ public final class WebFeedMainMenuItemTest {
         assertTrue(intent.hasExtra(CreatorIntentConstants.CREATOR_URL));
         assertNotNull(intent.getExtras().getString(CreatorIntentConstants.CREATOR_URL));
         assertTrue(intent.hasExtra(CreatorIntentConstants.CREATOR_ENTRY_POINT));
-        assertNotNull(intent.getExtras().getInt(CreatorIntentConstants.CREATOR_ENTRY_POINT));
         assertTrue(intent.hasExtra(CreatorIntentConstants.CREATOR_FOLLOWING));
-        assertNotNull(
-                intent.getExtras().getBoolean(CreatorIntentConstants.CREATOR_FOLLOWING, false));
         assertTrue(intent.hasExtra(CreatorIntentConstants.CREATOR_TAB_ID));
-        assertNotNull(intent.getExtras().getInt(CreatorIntentConstants.CREATOR_TAB_ID));
     }
 
     @Test

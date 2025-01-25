@@ -20,8 +20,9 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include <fp16/fp16.h>
 #include "xnnpack.h"
+#include "xnnpack/math.h"
+#include "xnnpack/buffer.h"
 #include "replicable_random_device.h"
 
 class SoftMaxOperatorTester {
@@ -119,21 +120,20 @@ class SoftMaxOperatorTester {
     // However, the range is still narrow enough that single-precision exp doesn't overflow.
     std::uniform_real_distribution<float> f32dist(15.0f, 20.0f);
 
-    std::vector<uint16_t> input((batch_size() - 1) * input_stride() + channels() + XNN_EXTRA_BYTES / sizeof(uint16_t));
-    std::vector<uint16_t> output((batch_size() - 1) * output_stride() + channels() + XNN_EXTRA_BYTES / sizeof(uint16_t));
-    std::vector<float> output_ref(batch_size() * channels());
+    xnnpack::Buffer<xnn_float16> input((batch_size() - 1) * input_stride() + channels() + XNN_EXTRA_BYTES / sizeof(xnn_float16));
+    xnnpack::Buffer<xnn_float16> output((batch_size() - 1) * output_stride() + channels() + XNN_EXTRA_BYTES / sizeof(xnn_float16));
+    xnnpack::Buffer<float> output_ref(batch_size() * channels());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
-      std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-      std::fill(output.begin(), output.end(), UINT16_C(0x7E00) /* NaN */);
+      std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
 
       // Compute reference results.
       for (size_t i = 0; i < batch_size(); i++) {
         float sum_exp = 0.0;
         for (size_t c = 0; c < channels(); c++) {
-          sum_exp += std::exp(fp16_ieee_to_fp32_value(input[i * input_stride() + c]));
+          sum_exp += std::exp((float)input[i * input_stride() + c]);
         }
         for (size_t c = 0; c < channels(); c++) {
-          output_ref[i * channels() + c] = std::exp(fp16_ieee_to_fp32_value(input[i * input_stride() + c])) / sum_exp;
+          output_ref[i * channels() + c] = std::exp((float)input[i * input_stride() + c]) / sum_exp;
         }
       }
 
@@ -165,7 +165,7 @@ class SoftMaxOperatorTester {
       for (size_t i = 0; i < batch_size(); i++) {
         for (size_t c = 0; c < channels(); c++) {
           ASSERT_NEAR(
-              fp16_ieee_to_fp32_value(output[i * output_stride() + c]),
+              output[i * output_stride() + c],
               output_ref[i * channels() + c],
               std::max(1.0e-4f, std::abs(output_ref[i * channels() + c]) * 5.0e-3f))
             << "element " << i << " / " << batch_size() << ", channel " << c << " / " << channels();
@@ -180,12 +180,11 @@ class SoftMaxOperatorTester {
     // However, the range is still narrow enough that single-precision exp doesn't overflow.
     std::uniform_real_distribution<float> f32dist(90.0f, 100.0f);
 
-    std::vector<float> input((batch_size() - 1) * input_stride() + channels() + XNN_EXTRA_BYTES / sizeof(float));
-    std::vector<float> output((batch_size() - 1) * output_stride() + channels() + XNN_EXTRA_BYTES / sizeof(float));
-    std::vector<double> output_ref(batch_size() * channels());
+    xnnpack::Buffer<float> input((batch_size() - 1) * input_stride() + channels() + XNN_EXTRA_BYTES / sizeof(float));
+    xnnpack::Buffer<float> output((batch_size() - 1) * output_stride() + channels() + XNN_EXTRA_BYTES / sizeof(float));
+    xnnpack::Buffer<double> output_ref(batch_size() * channels());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
-      std::fill(output.begin(), output.end(), std::nanf(""));
 
       // Compute reference results.
       for (size_t i = 0; i < batch_size(); i++) {
@@ -236,12 +235,11 @@ class SoftMaxOperatorTester {
     std::uniform_int_distribution<int32_t> u8dist(
       std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
 
-    std::vector<uint8_t> input((batch_size() - 1) * input_stride() + channels());
-    std::vector<uint8_t> output((batch_size() - 1) * output_stride() + channels());
-    std::vector<float> output_ref(batch_size() * channels());
+    xnnpack::Buffer<uint8_t> input((batch_size() - 1) * input_stride() + channels());
+    xnnpack::Buffer<uint8_t> output((batch_size() - 1) * output_stride() + channels());
+    xnnpack::Buffer<float> output_ref(batch_size() * channels());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return u8dist(rng); });
-      std::fill(output.begin(), output.end(), UINT8_C(0xA5));
 
       // Compute reference results.
       for (size_t i = 0; i < batch_size(); i++) {

@@ -4,6 +4,8 @@
 
 #include "components/enterprise/obfuscation/core/download_obfuscator.h"
 
+#include "base/files/file_util.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -101,12 +103,36 @@ TEST_P(DownloadObfuscatorTest, ObfuscateAndDeobfuscateVerify) {
     }
     EXPECT_EQ(offset, obfuscated_content.size());
 
-    // Test overhead calculation.
-    auto calculated_overhead =
+    // Test overhead calculation using span.
+    auto calculated_overhead_span =
         deobfuscator.CalculateDeobfuscationOverhead(obfuscated_content);
-    ASSERT_TRUE(calculated_overhead.has_value());
-    EXPECT_EQ(calculated_overhead.value(),
+    ASSERT_TRUE(calculated_overhead_span.has_value());
+    EXPECT_EQ(calculated_overhead_span.value(),
               static_cast<int64_t>(expected_overhead));
+
+    // Test overhead calculation using file.
+    base::ScopedTempDir temp_dir;
+    ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+    base::FilePath temp_file_path = temp_dir.GetPath().AppendASCII("temp_file");
+
+    // Write obfuscated content to a temporary file.
+    std::string_view obfuscated_data(
+        reinterpret_cast<const char*>(obfuscated_content.data()),
+        obfuscated_content.size());
+    ASSERT_TRUE(base::WriteFile(temp_file_path, obfuscated_data));
+
+    base::File temp_file(temp_file_path,
+                         base::File::FLAG_OPEN | base::File::FLAG_READ);
+    ASSERT_TRUE(temp_file.IsValid());
+
+    auto calculated_overhead_file =
+        deobfuscator.CalculateDeobfuscationOverhead(temp_file);
+    ASSERT_TRUE(calculated_overhead_file.has_value());
+    EXPECT_EQ(calculated_overhead_file.value(),
+              static_cast<int64_t>(expected_overhead));
+
+    EXPECT_EQ(calculated_overhead_span.value(),
+              calculated_overhead_file.value());
   }
 }
 
@@ -163,6 +189,48 @@ TEST_F(DownloadObfuscatorEnabledTest, InvalidData) {
       obfuscator.CalculateDeobfuscationOverhead(invalid_data);
   EXPECT_FALSE(overhead_result.has_value());
   EXPECT_EQ(overhead_result.error(), Error::kDeobfuscationFailed);
+}
+
+// Test partial writes for deobfuscation.
+TEST_F(DownloadObfuscatorEnabledTest, PartialDeobfuscation) {
+  DownloadObfuscator obfuscator;
+  std::string test_data = "This is a test for partial deobfuscation.";
+  auto obfuscated = obfuscator.ObfuscateChunk(StringToVector(test_data), true);
+  ASSERT_TRUE(obfuscated.has_value());
+
+  DownloadObfuscator deobfuscator;
+  std::vector<uint8_t> deobfuscated_content;
+  size_t total_deobfuscated_size = 0;
+  size_t partial_read_size = 5;  // Read in only 5 bytes at a time
+
+  while (total_deobfuscated_size < test_data.size()) {
+    // Test that for partial writes, it reads the same obfuscated chunk.
+    auto deobfuscated_chunk = deobfuscator.GetNextDeobfuscatedChunk(
+        base::make_span(obfuscated.value()));
+    ASSERT_TRUE(deobfuscated_chunk.has_value());
+
+    size_t bytes_to_read =
+        std::min(partial_read_size, deobfuscated_chunk->size());
+    deobfuscated_content.insert(deobfuscated_content.end(),
+                                deobfuscated_chunk->begin(),
+                                deobfuscated_chunk->begin() + bytes_to_read);
+
+    total_deobfuscated_size += bytes_to_read;
+    deobfuscator.UpdateDeobfuscatedChunkPosition(bytes_to_read);
+  }
+
+  EXPECT_EQ(deobfuscated_content, StringToVector(test_data));
+  EXPECT_EQ(deobfuscator.GetNextChunkOffset(), obfuscated->size());
+
+  // Obfuscate an empty chunk to test scenarios where size is not given.
+  auto empty_obfuscated =
+      obfuscator.ObfuscateChunk(std::vector<uint8_t>(), true);
+  ASSERT_TRUE(empty_obfuscated.has_value());
+
+  auto deobfuscated_chunk = deobfuscator.GetNextDeobfuscatedChunk(
+      base::make_span(empty_obfuscated.value()));
+  ASSERT_TRUE(deobfuscated_chunk.has_value());
+  EXPECT_EQ(deobfuscated_chunk.value(), std::vector<uint8_t>());
 }
 
 }  // namespace enterprise_obfuscation

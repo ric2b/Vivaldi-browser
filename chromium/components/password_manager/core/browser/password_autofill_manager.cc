@@ -14,6 +14,7 @@
 #include "base/check.h"
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
@@ -100,9 +101,9 @@ bool HasLoadingSuggestion(base::span<const Suggestion> suggestions,
   });
 }
 
-std::string GetBackendId(const Suggestion& suggestion) {
-  return absl::holds_alternative<Suggestion::BackendId>(suggestion.payload)
-             ? suggestion.GetBackendId<Suggestion::Guid>().value()
+std::string GetGuidFromSuggestion(const Suggestion& suggestion) {
+  return absl::holds_alternative<Suggestion::Guid>(suggestion.payload)
+             ? suggestion.GetPayload<Suggestion::Guid>().value()
              : std::string();
 }
 
@@ -119,16 +120,17 @@ std::vector<Suggestion> SetUnlockLoadingState(
   return suggestions;
 }
 
-std::vector<autofill::Suggestion> PrepareLoadingStateSuggestions(
-    std::vector<autofill::Suggestion> current_suggestions,
-    const autofill::Suggestion& selected_suggestion) {
+std::vector<Suggestion> PrepareLoadingStateSuggestions(
+    std::vector<Suggestion> current_suggestions,
+    const Suggestion& selected_suggestion) {
   auto modifier_fun = [&selected_suggestion](auto& suggestion) {
+    using enum Suggestion::Acceptability;
     if (suggestion == selected_suggestion) {
+      suggestion.acceptability = kUnacceptable;
       suggestion.is_loading = IsLoading(true);
     } else {
-      suggestion.apply_deactivated_style = true;
+      suggestion.acceptability = kUnacceptableWithDeactivatedStyle;
     }
-    suggestion.is_acceptable = false;
   };
   base::ranges::for_each(current_suggestions, modifier_fun);
   return current_suggestions;
@@ -190,7 +192,9 @@ PasswordAutofillManager::GetDriver() {
 void PasswordAutofillManager::OnSuggestionsShown(
     base::span<const Suggestion> suggestions) {}
 
-void PasswordAutofillManager::OnSuggestionsHidden() {}
+void PasswordAutofillManager::OnSuggestionsHidden() {
+  metrics_util::LogPasswordDropdownHidden();
+}
 
 void PasswordAutofillManager::DidSelectSuggestion(
     const Suggestion& suggestion) {
@@ -285,7 +289,7 @@ void PasswordAutofillManager::DidAcceptSuggestion(
           password_client_->IsOffTheRecord());
       password_client_
           ->GetWebAuthnCredentialsDelegateForDriver(password_manager_driver_)
-          ->SelectPasskey(GetBackendId(suggestion),
+          ->SelectPasskey(GetGuidFromSuggestion(suggestion),
                           base::BindOnce(&PasswordAutofillManager::HidePopup,
                                          weak_ptr_factory_.GetWeakPtr()));
       // Disable all entries and set the `selected_suggestion` in loading state.
@@ -301,7 +305,7 @@ void PasswordAutofillManager::DidAcceptSuggestion(
           password_client_->IsOffTheRecord());
       password_client_
           ->GetWebAuthnCredentialsDelegateForDriver(password_manager_driver_)
-          ->LaunchWebAuthnFlow();
+          ->LaunchSecurityKeyOrHybridFlow();
       break;
     default:
       metrics_util::LogPasswordDropdownItemSelected(
@@ -328,12 +332,17 @@ void PasswordAutofillManager::DidAcceptSuggestion(
                            weak_ptr_factory_.GetWeakPtr(),
                            suggestion.main_text.value, suggestion.type);
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
         const std::u16string origin =
             base::UTF8ToUTF16(GetShownOrigin(url::Origin::Create(
                 password_manager_driver_->GetLastCommittedURL())));
+#endif
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
         message = l10n_util::GetStringFUTF16(
             IDS_PASSWORD_MANAGER_FILLING_REAUTH, origin);
+#elif BUILDFLAG(IS_CHROMEOS)
+        message = l10n_util::GetStringFUTF16(
+            IDS_PASSWORD_MANAGER_FILLING_REAUTH_CHROMEOS, origin);
 #endif
         authenticator_->AuthenticateWithMessage(
             message,
@@ -356,7 +365,7 @@ void PasswordAutofillManager::DidPerformButtonActionForSuggestion(
     const Suggestion&,
     const autofill::SuggestionButtonAction&) {
   // Button actions do currently not exist for password entries.
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 bool PasswordAutofillManager::RemoveSuggestion(const Suggestion& suggestion) {
@@ -581,7 +590,7 @@ bool PasswordAutofillManager::FillSuggestion(const std::u16string& username,
             .IsValidAndroidFacetURI();
     metrics_util::LogFilledPasswordFromAndroidApp(is_android_credential);
     password_manager_driver_->FillSuggestion(
-        username, password_and_meta_data.password_value);
+        username, password_and_meta_data.password_value, base::DoNothing());
     return true;
   }
   return false;

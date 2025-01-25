@@ -55,10 +55,10 @@ using vivaldi::kVivaldiUIScheme;
 
 ChromeOmniboxClientIOS::ChromeOmniboxClientIOS(
     WebLocationBar* location_bar,
-    ChromeBrowserState* browser_state,
+    ProfileIOS* profile,
     feature_engagement::Tracker* tracker)
     : location_bar_(location_bar),
-      browser_state_(browser_state),
+      profile_(profile),
       engagement_tracker_(tracker),
       web_state_tracker_() {
   CHECK(engagement_tracker_);
@@ -70,7 +70,7 @@ ChromeOmniboxClientIOS::~ChromeOmniboxClientIOS() {
 
 std::unique_ptr<AutocompleteProviderClient>
 ChromeOmniboxClientIOS::CreateAutocompleteProviderClient() {
-  return std::make_unique<AutocompleteProviderClientImpl>(browser_state_);
+  return std::make_unique<AutocompleteProviderClientImpl>(profile_);
 }
 
 bool ChromeOmniboxClientIOS::CurrentPageExists() const {
@@ -101,11 +101,15 @@ SessionID ChromeOmniboxClientIOS::GetSessionID() const {
 }
 
 PrefService* ChromeOmniboxClientIOS::GetPrefs() {
-  return browser_state_->GetPrefs();
+  return profile_->GetPrefs();
+}
+
+const PrefService* ChromeOmniboxClientIOS::GetPrefs() const {
+  return profile_->GetPrefs();
 }
 
 bookmarks::BookmarkModel* ChromeOmniboxClientIOS::GetBookmarkModel() {
-  return ios::BookmarkModelFactory::GetForBrowserState(browser_state_);
+  return ios::BookmarkModelFactory::GetForProfile(profile_);
 }
 
 AutocompleteControllerEmitter*
@@ -114,7 +118,7 @@ ChromeOmniboxClientIOS::GetAutocompleteControllerEmitter() {
 }
 
 TemplateURLService* ChromeOmniboxClientIOS::GetTemplateURLService() {
-  return ios::TemplateURLServiceFactory::GetForBrowserState(browser_state_);
+  return ios::TemplateURLServiceFactory::GetForProfile(profile_);
 }
 
 const AutocompleteSchemeClassifier&
@@ -123,7 +127,7 @@ ChromeOmniboxClientIOS::GetSchemeClassifier() const {
 }
 
 AutocompleteClassifier* ChromeOmniboxClientIOS::GetAutocompleteClassifier() {
-  return ios::AutocompleteClassifierFactory::GetForBrowserState(browser_state_);
+  return ios::AutocompleteClassifierFactory::GetForProfile(profile_);
 }
 
 bool ChromeOmniboxClientIOS::ShouldDefaultTypedNavigationsToHttps() const {
@@ -131,12 +135,12 @@ bool ChromeOmniboxClientIOS::ShouldDefaultTypedNavigationsToHttps() const {
 }
 
 int ChromeOmniboxClientIOS::GetHttpsPortForTesting() const {
-  return HttpsUpgradeServiceFactory::GetForBrowserState(browser_state_)
+  return HttpsUpgradeServiceFactory::GetForProfile(profile_)
       ->GetHttpsPortForTesting();
 }
 
 bool ChromeOmniboxClientIOS::IsUsingFakeHttpsForHttpsUpgradeTesting() const {
-  return HttpsUpgradeServiceFactory::GetForBrowserState(browser_state_)
+  return HttpsUpgradeServiceFactory::GetForProfile(profile_)
       ->IsUsingFakeHttpsForTesting();
 }
 
@@ -159,7 +163,7 @@ GURL ChromeOmniboxClientIOS::GetNavigationEntryURL() const {
 }
 
 metrics::OmniboxEventProto::PageClassification
-ChromeOmniboxClientIOS::GetPageClassification(bool is_prefetch) {
+ChromeOmniboxClientIOS::GetPageClassification(bool is_prefetch) const {
   return location_bar_->GetLocationBarModel()->GetPageClassification(
       is_prefetch);
 }
@@ -195,7 +199,7 @@ void ChromeOmniboxClientIOS::OnFocusChanged(OmniboxFocusState state,
   // different URL than what is prerendered.
   if (state == OMNIBOX_FOCUS_NONE) {
     PrerenderService* service =
-        PrerenderServiceFactory::GetForBrowserState(browser_state_);
+        PrerenderServiceFactory::GetForProfile(profile_);
     if (service) {
       service->CancelPrerender();
     }
@@ -206,7 +210,7 @@ void ChromeOmniboxClientIOS::OnUserPastedInOmniboxResultingInValidURL() {
   base::RecordAction(
       base::UserMetricsAction("Mobile.Omnibox.iOS.PastedValidURL"));
 
-  if (!browser_state_->IsOffTheRecord()) {
+  if (!profile_->IsOffTheRecord()) {
     default_browser::NotifyOmniboxURLCopyPaste(engagement_tracker_);
   }
 }
@@ -220,8 +224,7 @@ void ChromeOmniboxClientIOS::OnResultChanged(
     return;
   }
 
-  PrerenderService* service =
-      PrerenderServiceFactory::GetForBrowserState(browser_state_);
+  PrerenderService* service = PrerenderServiceFactory::GetForProfile(profile_);
   if (!service) {
     return;
   }
@@ -250,7 +253,7 @@ void ChromeOmniboxClientIOS::OnResultChanged(
 void ChromeOmniboxClientIOS::OnURLOpenedFromOmnibox(OmniboxLog* log) {
   // If a search was done, donate the Search In Chrome intent to the OS for
   // future Siri suggestions.
-  if (!browser_state_->IsOffTheRecord() &&
+  if (!profile_->IsOffTheRecord() &&
       (log->input_type == metrics::OmniboxInputType::QUERY ||
        log->input_type == metrics::OmniboxInputType::UNKNOWN)) {
     [IntentDonationHelper donateIntent:IntentType::kSearchInChrome];
@@ -335,8 +338,7 @@ void ChromeOmniboxClientIOS::DidFinishNavigation(
   scoped_observations_.RemoveObservation(web_state);
 
   scoped_refptr<ShortcutsBackend> shortcuts_backend =
-      ios::ShortcutsBackendFactory::GetInstance()->GetForProfile(
-          browser_state_);
+      ios::ShortcutsBackendFactory::GetForProfile(profile_);
 
   // Add the shortcut if the navigation from the omnibox was successful.
   if (!navigation_context->GetError() && shortcuts_backend &&

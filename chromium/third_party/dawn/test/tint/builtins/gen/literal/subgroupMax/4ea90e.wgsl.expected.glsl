@@ -1,21 +1,11 @@
 SKIP: INVALID
 
+<dawn>/src/tint/lang/glsl/writer/printer/printer.cc:1487 internal compiler error: TINT_UNREACHABLE unhandled core builtin: subgroupMax
+********************************************************************
+*  The tint shader compiler has encountered an unexpected error.   *
+*                                                                  *
+*  Please help us fix this issue by submitting a bug report at     *
+*  crbug.com/tint with the source program that triggered the bug.  *
+********************************************************************
 
-enable subgroups;
-
-@group(0) @binding(0) var<storage, read_write> prevent_dce : vec3<i32>;
-
-fn subgroupMax_4ea90e() -> vec3<i32> {
-  var res : vec3<i32> = subgroupMax(vec3<i32>(1i));
-  return res;
-}
-
-@compute @workgroup_size(1)
-fn compute_main() {
-  prevent_dce = subgroupMax_4ea90e();
-}
-
-Failed to generate: <dawn>/test/tint/builtins/gen/literal/subgroupMax/4ea90e.wgsl:41:8 error: GLSL backend does not support extension 'subgroups'
-enable subgroups;
-       ^^^^^^^^^
-
+tint executable returned error: signal: trace/BPT trap

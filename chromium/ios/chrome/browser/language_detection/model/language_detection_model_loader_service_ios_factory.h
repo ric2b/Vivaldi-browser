@@ -9,21 +9,23 @@
 
 #import "base/no_destructor.h"
 #import "components/keyed_service/ios/browser_state_keyed_service_factory.h"
-#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
+
+class ProfileIOS;
 
 namespace language_detection {
 class LanguageDetectionModelLoaderServiceIOS;
 }  // namespace language_detection
 
 // This is a workaround for crbug/1324530 on iOS where it is mandatory to have
-// LanguageDetectionModel scoped by BrowserState.
+// LanguageDetectionModel scoped by Profile.
 // TODO(crbug.com/40225076): remove this class once
 // LanguageDetectionModelService does this.
 class LanguageDetectionModelLoaderServiceIOSFactory
     : public BrowserStateKeyedServiceFactory {
  public:
   static language_detection::LanguageDetectionModelLoaderServiceIOS*
-  GetForBrowserState(ChromeBrowserState* browser_state);
+  GetForProfile(ProfileIOS* profile);
+
   static LanguageDetectionModelLoaderServiceIOSFactory* GetInstance();
 
   LanguageDetectionModelLoaderServiceIOSFactory(

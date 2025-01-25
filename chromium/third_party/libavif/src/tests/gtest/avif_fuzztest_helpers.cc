@@ -157,17 +157,61 @@ DecoderPtr CreateAvifDecoder(avifCodecChoice codec_choice, int max_threads,
 ImagePtr AvifImageToUniquePtr(avifImage* image) { return ImagePtr(image); }
 
 #if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
-DecoderPtr AddGainMapOptionsToDecoder(DecoderPtr decoder,
-                                      GainMapDecodeMode gain_map_decode_mode) {
-  decoder->enableParsingGainMapMetadata =
-      (gain_map_decode_mode == GainMapDecodeMode::kMetadataOnly ||
-       gain_map_decode_mode == GainMapDecodeMode::kDecode);
-  decoder->enableDecodingGainMap =
-      (gain_map_decode_mode == GainMapDecodeMode::kDecode);
-  // Do not fuzz 'ignoreColorAndAlpha' since most tests assume that if the
-  // file/buffer is successfully decoded, then the main image was decoded, which
-  // is no longer the case when this option is on.
+DecoderPtr AddGainMapOptionsToDecoder(
+    DecoderPtr decoder, avifImageContentTypeFlags image_content_to_decode) {
+  decoder->imageContentToDecode = image_content_to_decode;
   return decoder;
+}
+
+ImagePtr AddGainMapToImage(
+    ImagePtr image, ImagePtr gain_map, int32_t gain_map_min_n0,
+    int32_t gain_map_min_n1, int32_t gain_map_min_n2, uint32_t gain_map_min_d0,
+    uint32_t gain_map_min_d1, uint32_t gain_map_min_d2, int32_t gain_map_max_n0,
+    int32_t gain_map_max_n1, int32_t gain_map_max_n2, uint32_t gain_map_max_d0,
+    uint32_t gain_map_max_d1, uint32_t gain_map_max_d2,
+    uint32_t gain_map_gamma_n0, uint32_t gain_map_gamma_n1,
+    uint32_t gain_map_gamma_n2, uint32_t gain_map_gamma_d0,
+    uint32_t gain_map_gamma_d1, uint32_t gain_map_gamma_d2,
+    int32_t base_offset_n0, int32_t base_offset_n1, int32_t base_offset_n2,
+    uint32_t base_offset_d0, uint32_t base_offset_d1, uint32_t base_offset_d2,
+    int32_t alternate_offset_n0, int32_t alternate_offset_n1,
+    int32_t alternate_offset_n2, uint32_t alternate_offset_d0,
+    uint32_t alternate_offset_d1, uint32_t alternate_offset_d2,
+    uint32_t base_hdr_headroom_n, uint32_t base_hdr_headroom_d,
+    uint32_t alternate_hdr_headroom_n, uint32_t alternate_hdr_headroom_d,
+    bool use_base_color_space) {
+  image->gainMap = avifGainMapCreate();
+  image->gainMap->image = gain_map.release();
+
+  image->gainMap->gainMapMin[0] = {gain_map_min_n0, gain_map_min_d0};
+  image->gainMap->gainMapMin[1] = {gain_map_min_n1, gain_map_min_d1};
+  image->gainMap->gainMapMin[2] = {gain_map_min_n2, gain_map_min_d2};
+
+  image->gainMap->gainMapMax[0] = {gain_map_max_n0, gain_map_max_d0};
+  image->gainMap->gainMapMax[1] = {gain_map_max_n1, gain_map_max_d1};
+  image->gainMap->gainMapMax[2] = {gain_map_max_n2, gain_map_max_d2};
+
+  image->gainMap->gainMapGamma[0] = {gain_map_gamma_n0, gain_map_gamma_d0};
+  image->gainMap->gainMapGamma[1] = {gain_map_gamma_n1, gain_map_gamma_d1};
+  image->gainMap->gainMapGamma[2] = {gain_map_gamma_n2, gain_map_gamma_d2};
+
+  image->gainMap->baseOffset[0] = {base_offset_n0, base_offset_d0};
+  image->gainMap->baseOffset[1] = {base_offset_n1, base_offset_d1};
+  image->gainMap->baseOffset[2] = {base_offset_n2, base_offset_d2};
+
+  image->gainMap->alternateOffset[0] = {alternate_offset_n0,
+                                        alternate_offset_d0};
+  image->gainMap->alternateOffset[1] = {alternate_offset_n1,
+                                        alternate_offset_d1};
+  image->gainMap->alternateOffset[2] = {alternate_offset_n2,
+                                        alternate_offset_d2};
+
+  image->gainMap->baseHdrHeadroom = {base_hdr_headroom_n, base_hdr_headroom_d};
+  image->gainMap->alternateHdrHeadroom = {alternate_hdr_headroom_n,
+                                          alternate_hdr_headroom_d};
+  image->gainMap->useBaseColorSpace = use_base_color_space;
+
+  return image;
 }
 #endif
 
@@ -195,32 +239,6 @@ size_t GetNumSamples(size_t num_frames, size_t width, size_t height,
 
   return num_frames *
          (num_luma_samples + num_chroma_samples + num_alpha_samples);
-}
-
-//------------------------------------------------------------------------------
-// Environment setup
-
-namespace {
-class Environment : public ::testing::Environment {
- public:
-  Environment(const char* name, const char* value)
-      : name_(name), value_(value) {}
-  void SetUp() override {
-#ifdef _WIN32
-    _putenv_s(name_, value_);  // Defined in stdlib.h.
-#else
-    setenv(name_, value_, /*overwrite=*/1);
-#endif
-  }
-
- private:
-  const char* name_;
-  const char* value_;
-};
-}  // namespace
-
-::testing::Environment* SetEnv(const char* name, const char* value) {
-  return ::testing::AddGlobalTestEnvironment(new Environment(name, value));
 }
 
 //------------------------------------------------------------------------------

@@ -77,7 +77,8 @@ fn main() {
 
     // Generate bindings.
     let header_file = PathBuf::from(&project_root).join("wrapper.h");
-    let outfile = PathBuf::from(&project_root).join("dav1d.rs");
+    let outdir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
+    let outfile = PathBuf::from(&outdir).join("dav1d_bindgen.rs");
     let mut bindings = bindgen::Builder::default()
         .header(header_file.into_os_string().into_string().unwrap())
         .clang_args(&include_paths)
@@ -104,8 +105,4 @@ fn main() {
     bindings
         .write_to_file(outfile.as_path())
         .unwrap_or_else(|_| panic!("Couldn't write bindings for dav1d"));
-    println!(
-        "cargo:rustc-env=CRABBYAVIF_DAV1D_BINDINGS_RS={}",
-        outfile.display()
-    );
 }

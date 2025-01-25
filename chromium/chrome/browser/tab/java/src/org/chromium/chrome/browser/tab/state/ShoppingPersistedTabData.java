@@ -44,7 +44,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
@@ -83,8 +82,6 @@ public class ShoppingPersistedTabData extends PersistedTabData {
 
     @VisibleForTesting public static final long NO_PRICE_KNOWN = -1;
 
-    private static boolean sPriceTrackingWithOptimizationGuideForTesting;
-
     private static Queue<ShoppingDataRequest> sShoppingDataRequests = new ArrayDeque<>();
     private static boolean sDelayedInitFinished;
 
@@ -109,7 +106,6 @@ public class ShoppingPersistedTabData extends PersistedTabData {
         private static final OptimizationGuideBridge sOptimizationGuideBridge;
 
         static {
-            List<HintsProto.OptimizationType> optimizationTypes;
             Profile profile = ProfileManager.getLastUsedRegularProfile();
             sOptimizationGuideBridge = OptimizationGuideBridgeFactory.getForProfile(profile);
             if (sOptimizationGuideBridge != null) {
@@ -125,6 +121,7 @@ public class ShoppingPersistedTabData extends PersistedTabData {
      * Provides a deep copy of a previous {@link ShoppingPersistedTabData} for client side price
      * drop tracking. Only fields required for price drop identification are retained.
      */
+    @SuppressWarnings("UnusedVariable")
     private static class PriceDataSnapshot {
         public long priceMicros;
         public long previousPriceMicros;
@@ -1075,10 +1072,6 @@ public class ShoppingPersistedTabData extends PersistedTabData {
         return DelayedInitMethod.DELAY_RESPONSES_UNTIL_INIT;
     }
 
-    public static void enablePriceTrackingWithOptimizationGuideForTesting() {
-        sPriceTrackingWithOptimizationGuideForTesting = true;
-    }
-
     private static int getDisplayTimeMs() {
         if (FeatureList.isInitialized()) {
             return ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
@@ -1093,8 +1086,8 @@ public class ShoppingPersistedTabData extends PersistedTabData {
 
     /**
      * Returns true if there is an incoming change for the price.
+     *
      * @param productPriceUpdate incoming price update data.
-     * @return
      */
     private boolean hasPriceChange(ProductPriceUpdate productPriceUpdate) {
         if (productPriceUpdate.getNewPrice().getAmountMicros() != mPriceDropData.priceMicros) {

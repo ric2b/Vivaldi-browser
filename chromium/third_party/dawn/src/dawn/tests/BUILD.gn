@@ -274,8 +274,6 @@ source_set("native_mocks_sources") {
     "unittests/native/mocks/SamplerMock.h",
     "unittests/native/mocks/ShaderModuleMock.cpp",
     "unittests/native/mocks/ShaderModuleMock.h",
-    "unittests/native/mocks/SwapChainMock.cpp",
-    "unittests/native/mocks/SwapChainMock.h",
     "unittests/native/mocks/TextureMock.cpp",
     "unittests/native/mocks/TextureMock.h",
   ]
@@ -318,6 +316,7 @@ dawn_test("dawn_unittests") {
     "DawnNativeTest.h",
     "MockCallback.h",
     "ParamGenerator.h",
+    "StringViewMatchers.h",
     "ToggleParser.cpp",
     "ToggleParser.h",
     "unittests/AsyncTaskTests.cpp",
@@ -393,6 +392,7 @@ dawn_test("dawn_unittests") {
     "unittests/validation/ErrorScopeValidationTests.cpp",
     "unittests/validation/ExternalTextureTests.cpp",
     "unittests/validation/GetBindGroupLayoutValidationTests.cpp",
+    "unittests/validation/ImmediateDataTests.cpp",
     "unittests/validation/IndexBufferValidationTests.cpp",
     "unittests/validation/InternalUsageValidationTests.cpp",
     "unittests/validation/LabelTests.cpp",
@@ -442,7 +442,6 @@ dawn_test("dawn_unittests") {
     "unittests/wire/WireInjectBufferTests.cpp",
     "unittests/wire/WireInjectInstanceTests.cpp",
     "unittests/wire/WireInjectSurfaceTests.cpp",
-    "unittests/wire/WireInjectSwapChainTests.cpp",
     "unittests/wire/WireInjectTextureTests.cpp",
     "unittests/wire/WireInstanceTests.cpp",
     "unittests/wire/WireMemoryTransferServiceTests.cpp",
@@ -532,6 +531,7 @@ source_set("test_infra_sources") {
     "DawnTest.h",
     "MockCallback.h",
     "ParamGenerator.h",
+    "StringViewMatchers.h",
     "ToggleParser.cpp",
     "ToggleParser.h",
   ]
@@ -659,6 +659,7 @@ source_set("end2end_tests_sources") {
     "end2end/SamplerFilterAnisotropicTests.cpp",
     "end2end/SamplerTests.cpp",
     "end2end/ScissorTests.cpp",
+    "end2end/ShaderAtomicTests.cpp",
     "end2end/ShaderBuiltinPartialConstArgsErrorTests.cpp",
     "end2end/ShaderF16Tests.cpp",
     "end2end/ShaderTests.cpp",
@@ -721,8 +722,6 @@ source_set("end2end_tests_sources") {
     sources += [
       "end2end/SurfaceConfigurationValidationTests.cpp",
       "end2end/SurfaceTests.cpp",
-      "end2end/SwapChainTests.cpp",
-      "end2end/SwapChainValidationTests.cpp",
       "end2end/WindowSurfaceTests.cpp",
     ]
   }

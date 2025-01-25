@@ -11,6 +11,8 @@ import * as Coordinator from '../render_coordinator/render_coordinator.js';
 
 import * as ChromeLink from './chrome_link.js';
 
+const {html} = LitHtml;
+
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 describeWithMockConnection('ChromeLink', () => {
@@ -21,10 +23,10 @@ describeWithMockConnection('ChromeLink', () => {
     const container = document.createElement('div');
     // clang-format off
     LitHtml.render(
-      LitHtml.html`
-        <${ChromeLink.ChromeLink.ChromeLink.litTagName} .href=${'chrome://settings'}>
+      html`
+        <devtools-chrome-link .href=${'chrome://settings' as Platform.DevToolsPath.UrlString}>
           link text
-        </${ChromeLink.ChromeLink.ChromeLink.litTagName}>
+        </devtools-chrome-link>
       `,
       container, {host: this},
     );

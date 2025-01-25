@@ -11,11 +11,15 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/browser_process.h"
 #include "components/lens/lens_features.h"
+#include "net/base/url_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/lens_server_proto/lens_overlay_knowledge_intent_query.pb.h"
 #include "third_party/lens_server_proto/lens_overlay_knowledge_query.pb.h"
+#include "third_party/lens_server_proto/lens_overlay_selection_type.pb.h"
 #include "third_party/lens_server_proto/lens_overlay_stickiness_signals.pb.h"
 #include "third_party/lens_server_proto/lens_overlay_translate_stickiness_signals.pb.h"
+#include "third_party/lens_server_proto/lens_overlay_video_context_input_params.pb.h"
+#include "third_party/lens_server_proto/lens_overlay_video_params.pb.h"
 #include "third_party/omnibox_proto/search_context.pb.h"
 #include "third_party/zlib/google/compression_utils.h"
 
@@ -26,6 +30,11 @@ constexpr char kResultsRedirectBaseUrl[] = "https://www.google.com/url";
 constexpr char kLanguage[] = "en-US";
 constexpr char kPageUrl[] = "https://www.google.com";
 constexpr char kPageTitle[] = "Page Title";
+// Query parameters to send to translate API for getting supported translate
+// languages.
+inline constexpr char kCountryQueryParameter[] = "country";
+inline constexpr char kDisplayLanguageQueryParameter[] = "display_language";
+inline constexpr char kClientIdQueryParameter[] = "client";
 
 class LensOverlayUrlBuilderTest : public testing::Test {
  public:
@@ -33,13 +42,18 @@ class LensOverlayUrlBuilderTest : public testing::Test {
     g_browser_process->SetApplicationLocale(kLanguage);
     // Set all the feature params here to keep the test consistent if future
     // default values are changed.
-    feature_list_.InitAndEnableFeatureWithParameters(
-        lens::features::kLensOverlay,
-        {
-            {"results-search-url", kResultsSearchBaseUrl},
-            {"use-search-context-for-text-only-requests", "true"},
-            {"use-search-context-for-multimodal-requests", "true"},
-        });
+    feature_list_.InitWithFeaturesAndParameters(
+        {{lens::features::kLensOverlay,
+          {
+              {"results-search-url", kResultsSearchBaseUrl},
+          }},
+         {lens::features::kLensOverlayContextualSearchbox,
+          {
+              {"use-video-context-for-text-only-requests", "true"},
+              {"use-video-context-for-multimodal-requests", "true"},
+          }},
+         {lens::features::kLensOverlayTranslateLanguages, {}}},
+        /*disabled_features=*/{});
   }
 
   std::string EncodeRequestId(lens::LensOverlayRequestId* request_id) {
@@ -52,22 +66,17 @@ class LensOverlayUrlBuilderTest : public testing::Test {
     return encoded_request_id;
   }
 
-  std::string EncodeSearchContext(std::optional<GURL> page_url,
-                                  std::optional<std::string> page_title) {
-    omnibox::SearchContext search_context;
-    if (page_url.has_value()) {
-      search_context.set_webpage_url(page_url->spec());
-    }
-    if (page_title.has_value()) {
-      search_context.set_webpage_title(*page_title);
-    }
-    std::string serialized_search_context;
-    EXPECT_TRUE(search_context.SerializeToString(&serialized_search_context));
-    std::string encoded_search_context;
-    base::Base64UrlEncode(serialized_search_context,
+  std::string EncodeVideoContext(std::optional<GURL> page_url) {
+    lens::LensOverlayVideoParams video_params;
+    video_params.mutable_video_context_input_params()->set_url(
+        page_url->spec());
+    std::string serialized_video_params;
+    EXPECT_TRUE(video_params.SerializeToString(&serialized_video_params));
+    std::string encoded_video_params;
+    base::Base64UrlEncode(serialized_video_params,
                           base::Base64UrlEncodePolicy::OMIT_PADDING,
-                          &encoded_search_context);
-    return encoded_search_context;
+                          &encoded_video_params);
+    return encoded_video_params;
   }
 
  protected:
@@ -117,7 +126,7 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURL) {
                 /*page_url=*/std::nullopt,
                 /*page_title=*/std::nullopt, additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -134,26 +143,29 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLForLensTextSelection) {
                 /*page_url=*/std::nullopt,
                 /*page_title=*/std::nullopt, additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kLensTextSelection,
+                lens::LensOverlaySelectionType::SELECT_TEXT_HIGHLIGHT,
                 /*use_dark_mode=*/false),
             expected_url);
 }
 
 TEST_F(LensOverlayUrlBuilderTest,
-       BuildTextOnlySearchURLWithSearchContextFlagOff) {
+       BuildTextOnlySearchURLWithVideoContextFlagOff) {
   feature_list_.Reset();
-  feature_list_.InitAndEnableFeatureWithParameters(
-      lens::features::kLensOverlay,
-      {
-          {"results-search-url", kResultsSearchBaseUrl},
-          {"use-search-context-for-text-only-requests", "false"},
-      });
+  feature_list_.InitWithFeaturesAndParameters(
+      {{lens::features::kLensOverlay,
+        {
+            {"results-search-url", kResultsSearchBaseUrl},
+        }},
+       {lens::features::kLensOverlayContextualSearchbox,
+        {
+            {"use-video-context-for-text-only-requests", "false"},
+        }}},
+      /*disabled_features=*/{});
 
   std::string text_query = "Apples";
   std::map<std::string, std::string> additional_params;
-  std::string expected_search_context =
-      EncodeSearchContext(std::make_optional<GURL>(kPageUrl),
-                          std::make_optional<std::string>(kPageTitle));
+  std::string expected_video_context =
+      EncodeVideoContext(std::make_optional<GURL>(kPageUrl));
 
   std::string expected_url =
       base::StringPrintf("%s?source=chrome.cr.menu&q=%s&gsc=2&hl=%s&cs=0",
@@ -163,7 +175,7 @@ TEST_F(LensOverlayUrlBuilderTest,
                 text_query, std::make_optional<GURL>(kPageUrl),
                 std::make_optional<std::string>(kPageTitle), additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -171,21 +183,20 @@ TEST_F(LensOverlayUrlBuilderTest,
 TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLWithPageUrlAndTitle) {
   std::string text_query = "Apples";
   std::map<std::string, std::string> additional_params;
-  std::string expected_search_context =
-      EncodeSearchContext(std::make_optional<GURL>(kPageUrl),
-                          std::make_optional<std::string>(kPageTitle));
+  std::string expected_video_context =
+      EncodeVideoContext(std::make_optional<GURL>(kPageUrl));
 
   std::string expected_url = base::StringPrintf(
-      "%s?source=chrome.cr.menu&q=%s&gsc=2&hl=%s&cs=0&masfc=c&"
-      "mactx=%s",
+      "%s?source=chrome.cr.menu&q=%s&gsc=2&hl=%s&cs=0&"
+      "vidcip=%s",
       kResultsSearchBaseUrl, text_query.c_str(), kLanguage,
-      expected_search_context.c_str());
+      expected_video_context.c_str());
 
   EXPECT_EQ(lens::BuildTextOnlySearchURL(
                 text_query, std::make_optional<GURL>(kPageUrl),
                 std::make_optional<std::string>(kPageTitle), additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -193,42 +204,20 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLWithPageUrlAndTitle) {
 TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLWithPageUrl) {
   std::string text_query = "Apples";
   std::map<std::string, std::string> additional_params;
-  std::string expected_search_context = EncodeSearchContext(
-      std::make_optional<GURL>(kPageUrl), /*page_title=*/std::nullopt);
+  std::string expected_video_context =
+      EncodeVideoContext(std::make_optional<GURL>(kPageUrl));
 
   std::string expected_url = base::StringPrintf(
-      "%s?source=chrome.cr.menu&q=%s&gsc=2&hl=%s&cs=0&masfc=c&"
-      "mactx=%s",
+      "%s?source=chrome.cr.menu&q=%s&gsc=2&hl=%s&cs=0&"
+      "vidcip=%s",
       kResultsSearchBaseUrl, text_query.c_str(), kLanguage,
-      expected_search_context.c_str());
+      expected_video_context.c_str());
 
   EXPECT_EQ(lens::BuildTextOnlySearchURL(
                 text_query, std::make_optional<GURL>(kPageUrl),
                 /*page_title=*/std::nullopt, additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
-                /*use_dark_mode=*/false),
-            expected_url);
-}
-
-TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLWithPageTitle) {
-  std::string text_query = "Apples";
-  std::map<std::string, std::string> additional_params;
-  std::string expected_search_context = EncodeSearchContext(
-      /*page_url=*/std::nullopt, std::make_optional<std::string>(kPageTitle));
-
-  std::string expected_url = base::StringPrintf(
-      "%s?source=chrome.cr.menu&q=%s&gsc=2&hl=%s&cs=0&masfc=c&"
-      "mactx=%s",
-      kResultsSearchBaseUrl, text_query.c_str(), kLanguage,
-      expected_search_context.c_str());
-
-  EXPECT_EQ(lens::BuildTextOnlySearchURL(
-                text_query,
-                /*page_url=*/std::nullopt,
-                std::make_optional<std::string>(kPageTitle), additional_params,
-                lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -245,7 +234,7 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLEmpty) {
                 /*page_url=*/std::nullopt,
                 /*page_title=*/std::nullopt, additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -264,7 +253,7 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLPunctuation) {
                 /*page_url=*/std::nullopt,
                 /*page_title=*/std::nullopt, additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -283,7 +272,7 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURLWhitespace) {
                 /*page_url=*/std::nullopt,
                 /*page_title=*/std::nullopt, additional_params,
                 lens::LensOverlayInvocationSource::kAppMenu,
-                lens::TextOnlyQueryType::kSearchBoxQuery,
+                lens::LensOverlaySelectionType::UNKNOWN_SELECTION_TYPE,
                 /*use_dark_mode=*/false),
             expected_url);
 }
@@ -427,7 +416,7 @@ TEST_F(LensOverlayUrlBuilderTest, BuildLensSearchURLWithAdditionalParams) {
       expected_url);
 }
 
-TEST_F(LensOverlayUrlBuilderTest, BuildMultimodalSearchURLWithSearchContext) {
+TEST_F(LensOverlayUrlBuilderTest, BuildMultimodalSearchURLWithVideoContext) {
   std::string text_query = "Green Apples";
   std::map<std::string, std::string> additional_params;
   std::string escaped_text_query =
@@ -452,14 +441,13 @@ TEST_F(LensOverlayUrlBuilderTest, BuildMultimodalSearchURLWithSearchContext) {
                         base::Base64UrlEncodePolicy::OMIT_PADDING,
                         &encoded_request_id);
 
-  std::string expected_search_context =
-      EncodeSearchContext(std::make_optional<GURL>(kPageUrl),
-                          std::make_optional<std::string>(kPageTitle));
+  std::string expected_video_context =
+      EncodeVideoContext(std::make_optional<GURL>(kPageUrl));
   std::string expected_url = base::StringPrintf(
-      "%s?source=chrome.cr.menu&gsc=2&hl=%s&cs=0&masfc=c&mactx=%s&q=%s&lns_"
+      "%s?source=chrome.cr.menu&gsc=2&hl=%s&cs=0&vidcip=%s&q=%s&lns_"
       "mode=mu&lns_fp=1&gsessionid=%s&udm=24&"
       "vsrid=%s",
-      kResultsSearchBaseUrl, kLanguage, expected_search_context.c_str(),
+      kResultsSearchBaseUrl, kLanguage, expected_video_context.c_str(),
       escaped_text_query.c_str(), search_session_id.c_str(),
       encoded_request_id.c_str());
 
@@ -472,7 +460,7 @@ TEST_F(LensOverlayUrlBuilderTest, BuildMultimodalSearchURLWithSearchContext) {
             expected_url);
 }
 TEST_F(LensOverlayUrlBuilderTest,
-       BuildImageOnlySearchURLWithSearchContextDoesNotAttachContext) {
+       BuildImageOnlySearchURLWithVideoContextDoesNotAttachContext) {
   std::map<std::string, std::string> additional_params;
   uint64_t uuid = 12345;
   int sequence_id = 1;
@@ -511,14 +499,18 @@ TEST_F(LensOverlayUrlBuilderTest,
 }
 
 TEST_F(LensOverlayUrlBuilderTest,
-       BuildMultimodalSearchURLWithSearchContextFlagOff) {
+       BuildMultimodalSearchURLWithVideoContextFlagOff) {
   feature_list_.Reset();
-  feature_list_.InitAndEnableFeatureWithParameters(
-      lens::features::kLensOverlay,
-      {
-          {"results-search-url", kResultsSearchBaseUrl},
-          {"use-search-context-for-multimodal-requests", "false"},
-      });
+  feature_list_.InitWithFeaturesAndParameters(
+      {{lens::features::kLensOverlay,
+        {
+            {"results-search-url", kResultsSearchBaseUrl},
+        }},
+       {lens::features::kLensOverlayContextualSearchbox,
+        {
+            {"use-video-context-for-multimodal-requests", "false"},
+        }}},
+      /*disabled_features=*/{});
 
   std::string text_query = "Green Apples";
   std::map<std::string, std::string> additional_params;
@@ -706,6 +698,65 @@ TEST_F(LensOverlayUrlBuilderTest, GetSearchResultsUrlFromRedirectUrl) {
                          escaped_relative_search_url.c_str());
   EXPECT_EQ(lens::GetSearchResultsUrlFromRedirectUrl(GURL(initial_url)),
             GURL(search_url));
+}
+
+TEST_F(LensOverlayUrlBuilderTest, IsLensTextSelectionType) {
+  EXPECT_TRUE(IsLensTextSelectionType(lens::SELECT_TEXT_HIGHLIGHT));
+  EXPECT_TRUE(IsLensTextSelectionType(lens::SELECT_TRANSLATED_TEXT));
+  EXPECT_TRUE(IsLensTextSelectionType(lens::TRANSLATE_CHIP));
+  EXPECT_FALSE(IsLensTextSelectionType(lens::REGION_SEARCH));
+  EXPECT_FALSE(IsLensTextSelectionType(lens::TAP_ON_OBJECT));
+  EXPECT_FALSE(IsLensTextSelectionType(lens::MULTIMODAL_SEARCH));
+}
+
+TEST_F(LensOverlayUrlBuilderTest, BuildTranslateLanguagesURL) {
+  GURL endpoint_url = GURL(features::GetLensOverlayTranslateEndpointURL());
+
+  GURL translate_url_english_us = BuildTranslateLanguagesURL("US", "en");
+  GURL translate_url_english_uk = BuildTranslateLanguagesURL("UK", "en");
+  GURL translate_url_french_nocountry = BuildTranslateLanguagesURL("", "fr");
+
+  EXPECT_EQ(translate_url_english_us.GetWithEmptyPath(),
+            endpoint_url.GetWithEmptyPath());
+  EXPECT_EQ(translate_url_english_uk.GetWithEmptyPath(),
+            endpoint_url.GetWithEmptyPath());
+  EXPECT_EQ(translate_url_french_nocountry.GetWithEmptyPath(),
+            endpoint_url.GetWithEmptyPath());
+
+  std::string country_param_value;
+  net::GetValueForKeyInQuery(translate_url_english_us, kCountryQueryParameter,
+                             &country_param_value);
+  EXPECT_EQ(country_param_value, "US");
+  net::GetValueForKeyInQuery(translate_url_english_uk, kCountryQueryParameter,
+                             &country_param_value);
+  EXPECT_EQ(country_param_value, "UK");
+  net::GetValueForKeyInQuery(translate_url_french_nocountry,
+                             kCountryQueryParameter, &country_param_value);
+  EXPECT_EQ(country_param_value, "");
+
+  std::string lang_param_value;
+  net::GetValueForKeyInQuery(translate_url_english_us,
+                             kDisplayLanguageQueryParameter, &lang_param_value);
+  EXPECT_EQ(lang_param_value, "en");
+  net::GetValueForKeyInQuery(translate_url_french_nocountry,
+                             kDisplayLanguageQueryParameter, &lang_param_value);
+  EXPECT_EQ(lang_param_value, "fr");
+  net::GetValueForKeyInQuery(translate_url_english_uk,
+                             kDisplayLanguageQueryParameter, &lang_param_value);
+  EXPECT_EQ(lang_param_value, "en");
+
+  std::string client_param_value;
+  net::GetValueForKeyInQuery(translate_url_english_us, kClientIdQueryParameter,
+                             &client_param_value);
+  EXPECT_EQ(client_param_value, "lens-overlay");
+  client_param_value = "";
+  net::GetValueForKeyInQuery(translate_url_french_nocountry,
+                             kClientIdQueryParameter, &client_param_value);
+  EXPECT_EQ(client_param_value, "lens-overlay");
+  client_param_value = "";
+  net::GetValueForKeyInQuery(translate_url_english_uk, kClientIdQueryParameter,
+                             &client_param_value);
+  EXPECT_EQ(client_param_value, "lens-overlay");
 }
 
 }  // namespace lens

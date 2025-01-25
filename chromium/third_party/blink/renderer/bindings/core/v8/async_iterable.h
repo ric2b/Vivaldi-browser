@@ -49,9 +49,7 @@ class CORE_EXPORT AsyncIterationSourceBase
   // ScriptPromiseResolverBase for the return result has been created.
   //
   // [1] https://webidl.spec.whatwg.org/#asynchronous-iterator-return
-  virtual void AsyncIteratorReturn(ScriptValue value) {
-    NOTREACHED_IN_MIGRATION();
-  }
+  virtual void AsyncIteratorReturn(ScriptValue value) { NOTREACHED(); }
 
   bool HasPendingPromise() const {
     return pending_promise_resolver_ != nullptr;
@@ -88,9 +86,9 @@ class CORE_EXPORT AsyncIterationSourceBase
                                     ScriptValue value);
 
   Member<ScriptState> script_state_;
-  Member<ScriptFunction> on_settled_function_;
-  Member<ScriptFunction> on_fulfilled_function_;
-  Member<ScriptFunction> on_rejected_function_;
+  Member<CallableCommon> on_settled_function_;
+  Member<CallableCommon> on_fulfilled_function_;
+  Member<CallableCommon> on_rejected_function_;
 
   // https://webidl.spec.whatwg.org/#dfn-default-asynchronous-iterator-object
   // its 'ongoing promise', which is a Promise or null,
@@ -152,8 +150,7 @@ class PairAsyncIterationSource : public AsyncIterationSourceBase {
         return ESCreateIterResultObject(script_state, false, v8_key, v8_value);
       }
     }
-    NOTREACHED_IN_MIGRATION();
-    return v8::Local<v8::Value>();
+    NOTREACHED();
   }
 };
 

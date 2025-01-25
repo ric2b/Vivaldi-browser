@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-cronet-x86-dbg",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -41,7 +41,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-cronet-x86-dbg-10-tests",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -69,7 +69,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "android-cronet-x86-dbg",
-                "project": "chromium-m130"
+                "project": "chromium-m132"
               }
             }
           }
@@ -79,14 +79,14 @@
         {
           "bucket": "ci",
           "builder": "android-cronet-x86-dbg",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "android-cronet-x86-dbg-10-tests",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/android-cronet-x86-dbg-10-tests/targets"
@@ -99,11 +99,15 @@
   },
   "$build/siso": {
     "configs": [
-      "builder"
+      "builder",
+      "remote-link"
     ],
+    "enable_cloud_monitoring": true,
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
     "experiments": [],
+    "metrics_project": "chromium-reclient-metrics",
+    "output_local_strategy": "greedy",
     "project": "rbe-chromium-untrusted",
     "remote_jobs": 150
   },

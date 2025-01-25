@@ -66,17 +66,21 @@ class ChromeAutofillClientIOS : public AutofillClient {
   id<AutofillCommands> commands_handler() const { return commands_handler_; }
 
   // AutofillClient:
+  base::WeakPtr<AutofillClient> GetWeakPtr() override;
   version_info::Channel GetChannel() const override;
   bool IsOffTheRecord() const override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   AutofillDriverFactory& GetAutofillDriverFactory() override;
   AutofillCrowdsourcingManager* GetCrowdsourcingManager() override;
   PersonalDataManager* GetPersonalDataManager() override;
+  FieldClassificationModelHandler*
+  GetPasswordManagerFieldClassificationModelHandler() override;
   AutocompleteHistoryManager* GetAutocompleteHistoryManager() override;
   PrefService* GetPrefs() override;
   const PrefService* GetPrefs() const override;
   syncer::SyncService* GetSyncService() override;
   signin::IdentityManager* GetIdentityManager() override;
+  const signin::IdentityManager* GetIdentityManager() const override;
   FormDataImporter* GetFormDataImporter() override;
   payments::IOSChromePaymentsAutofillClient* GetPaymentsAutofillClient()
       override;
@@ -105,6 +109,9 @@ class ChromeAutofillClientIOS : public AutofillClient {
   SuggestionUiSessionId ShowAutofillSuggestions(
       const PopupOpenArgs& open_args,
       base::WeakPtr<AutofillSuggestionDelegate> delegate) override;
+  void ShowPlusAddressEmailOverrideNotification(
+      const std::string& original_email,
+      EmailOverrideUndoCallback email_override_undo_callback) override;
   void UpdateAutofillDataListValues(
       base::span<const autofill::SelectOption> datalist) override;
   void PinAutofillSuggestions() override;
@@ -169,6 +176,8 @@ class ChromeAutofillClientIOS : public AutofillClient {
   __weak UIViewController* base_view_controller_;
 
   __weak id<AutofillCommands> commands_handler_;
+
+  base::WeakPtrFactory<ChromeAutofillClientIOS> weak_ptr_factory_{this};
 };
 
 }  // namespace autofill

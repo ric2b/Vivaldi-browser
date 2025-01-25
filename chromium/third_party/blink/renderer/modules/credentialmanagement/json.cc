@@ -67,7 +67,7 @@ PublicKeyCredentialUserEntity* PublicKeyCredentialUserEntityFromJSON(
 }
 
 PublicKeyCredentialDescriptor* PublicKeyCredentialDescriptorFromJSON(
-    const std::string_view field_name,
+    std::string_view field_name,
     const PublicKeyCredentialDescriptorJSON& json,
     ExceptionState& exception_state) {
   auto* result = PublicKeyCredentialDescriptor::Create();
@@ -95,7 +95,7 @@ PublicKeyCredentialDescriptor* PublicKeyCredentialDescriptorFromJSON(
 
 VectorOf<PublicKeyCredentialDescriptor>
 PublicKeyCredentialDescriptorVectorFromJSON(
-    const std::string_view field_name,
+    std::string_view field_name,
     const VectorOf<PublicKeyCredentialDescriptorJSON> json,
     ExceptionState& exception_state) {
   VectorOf<PublicKeyCredentialDescriptor> result;
@@ -242,9 +242,7 @@ AuthenticationExtensionsClientInputsFromJSON(
 
 WTF::String WebAuthnBase64UrlEncode(DOMArrayPiece buffer) {
   // WTF::Base64URLEncode always pads, so we strip trailing '='.
-  String encoded =
-      WTF::Base64URLEncode(static_cast<const char*>(buffer.Data()),
-                           base::checked_cast<wtf_size_t>(buffer.ByteLength()));
+  String encoded = WTF::Base64URLEncode(buffer.ByteSpan());
   unsigned padding_start = encoded.length();
   for (; padding_start > 0; --padding_start) {
     if (encoded[padding_start - 1] != '=') {

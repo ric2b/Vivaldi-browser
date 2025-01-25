@@ -74,6 +74,10 @@ struct RendererPreferences {
   // Whether or not to set custom colors at all.
   bool use_custom_colors = true;
 
+  // Whether or not to use overlay scrollbar.
+  [EnableIf=is_chromeos]
+  bool use_overlay_scrollbar = false;
+
   // Set to false to not send referrers.
   bool enable_referrers = true;
 
@@ -175,15 +179,6 @@ struct RendererPreferences {
   bool selection_clipboard_buffer_available = false;
 
   array<uint16> explicitly_allowed_network_ports;
-
-  // Whether the prefixed video-specific fullscreen APIs (e.g.
-  // video.webkitEnterFullscreen() and others) are available or not.
-  // - If not set, the availability of the APIs is determined by the
-  //   PrefixedVideoFullscreen RuntimeEnabled feature.
-  // - If set, enables/disables the APIs by overriding the
-  //   PrefixedVideoFullscreen RuntimeEnabled feature.
-  // TODO(crbug.com/40352864): Remove this when the APIs are removed for good.
-  bool? prefixed_fullscreen_video_api_availability;
 
   // Vivaldi specific:
   // Maps to the Cycle focus setting in Vivaldi.

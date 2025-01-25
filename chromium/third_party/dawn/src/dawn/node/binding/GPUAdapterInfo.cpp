@@ -36,7 +36,7 @@ namespace wgpu::binding {
 // wgpu::bindings::GPUAdapterInfo
 ////////////////////////////////////////////////////////////////////////////////
 
-GPUAdapterInfo::GPUAdapterInfo(WGPUAdapterInfo info)
+GPUAdapterInfo::GPUAdapterInfo(const wgpu::AdapterInfo& info)
     : vendor_(info.vendor),
       architecture_(info.architecture),
       device_(info.device),

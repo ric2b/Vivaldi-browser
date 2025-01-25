@@ -12,7 +12,7 @@
 #import "vivaldi_account/vivaldi_account_manager.h"
 
 class Browser;
-class ChromeBrowserState;
+class ProfileIOS;
 @protocol VivaldiAccountSyncManagerConsumer;
 
 using syncer::UserSelectableType;
@@ -29,7 +29,7 @@ typedef void (^ServerRequestCompletionHandler)
     id<VivaldiAccountSyncManagerConsumer> consumer;
 
 - (instancetype)initWithBrowser:(Browser*)browser;
-- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState;
+- (instancetype)initWithProfile:(ProfileIOS*)profile;
 - (instancetype)initWithAccountManager:
       (vivaldi::VivaldiAccountManager*)vivaldiAccountManager
       syncService:(syncer::SyncService*)syncService;

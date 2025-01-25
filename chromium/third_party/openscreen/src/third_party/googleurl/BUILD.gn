@@ -17,7 +17,9 @@ if (build_with_chromium) {
     cflags = [ "-Wno-return-type" ]
 
     # Googleurl doesn't properly detect that wchar is utf32.
-    defines = [ "WCHAR_T_IS_UTF32" ]
+    if (is_linux || is_mac) {
+      defines = [ "WCHAR_T_IS_UTF32" ]
+    }
   }
 
   source_set("googleurl") {

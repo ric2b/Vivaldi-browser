@@ -271,14 +271,14 @@ class BASE_EXPORT GSL_OWNER Value {
   // Returns a value for both `Value::Type::DOUBLE` and `Value::Type::INT`,
   // converting the latter to a double.
   double GetDouble() const;
-  const std::string& GetString() const;
-  std::string& GetString();
-  const BlobStorage& GetBlob() const;
-  BlobStorage& GetBlob();
-  const Dict& GetDict() const;
-  Dict& GetDict();
-  const List& GetList() const;
-  List& GetList();
+  const std::string& GetString() const LIFETIME_BOUND;
+  std::string& GetString() LIFETIME_BOUND;
+  const BlobStorage& GetBlob() const LIFETIME_BOUND;
+  BlobStorage& GetBlob() LIFETIME_BOUND;
+  const Dict& GetDict() const LIFETIME_BOUND;
+  Dict& GetDict() LIFETIME_BOUND;
+  const List& GetList() const LIFETIME_BOUND;
+  List& GetList() LIFETIME_BOUND;
 
   // Transfers ownership of the underlying value. Similarly to `Get...()`
   // variants above, fails with a `CHECK()` on a type mismatch. After
@@ -677,13 +677,13 @@ class BASE_EXPORT GSL_OWNER Value {
 
     // Returns a reference to the first value in the container. Fails with
     // `CHECK()` if the list is empty.
-    const Value& front() const;
-    Value& front();
+    const Value& front() const LIFETIME_BOUND;
+    Value& front() LIFETIME_BOUND;
 
     // Returns a reference to the last value in the container. Fails with
     // `CHECK()` if the list is empty.
-    const Value& back() const;
-    Value& back();
+    const Value& back() const LIFETIME_BOUND;
+    Value& back() LIFETIME_BOUND;
 
     // Increase the capacity of the backing container, but does not change
     // the size. Assume all existing iterators will be invalidated.

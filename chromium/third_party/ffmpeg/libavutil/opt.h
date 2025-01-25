@@ -240,26 +240,98 @@
  * before the file is actually opened.
  */
 
+/**
+ * An option type determines:
+ * - for native access, the underlying C type of the field that an AVOption
+ *   refers to;
+ * - for foreign access, the semantics of accessing the option through this API,
+ *   e.g. which av_opt_get_*() and av_opt_set_*() functions can be called, or
+ *   what format will av_opt_get()/av_opt_set() expect/produce.
+ */
 enum AVOptionType{
+    /**
+     * Underlying C type is unsigned int.
+     */
     AV_OPT_TYPE_FLAGS = 1,
+    /**
+     * Underlying C type is int.
+     */
     AV_OPT_TYPE_INT,
+    /**
+     * Underlying C type is int64_t.
+     */
     AV_OPT_TYPE_INT64,
+    /**
+     * Underlying C type is double.
+     */
     AV_OPT_TYPE_DOUBLE,
+    /**
+     * Underlying C type is float.
+     */
     AV_OPT_TYPE_FLOAT,
+    /**
+     * Underlying C type is a uint8_t* that is either NULL or points to a C
+     * string allocated with the av_malloc() family of functions.
+     */
     AV_OPT_TYPE_STRING,
+    /**
+     * Underlying C type is AVRational.
+     */
     AV_OPT_TYPE_RATIONAL,
-    AV_OPT_TYPE_BINARY,  ///< offset must point to a pointer immediately followed by an int for the length
+    /**
+     * Underlying C type is a uint8_t* that is either NULL or points to an array
+     * allocated with the av_malloc() family of functions. The pointer is
+     * immediately followed by an int containing the array length in bytes.
+     */
+    AV_OPT_TYPE_BINARY,
+    /**
+     * Underlying C type is AVDictionary*.
+     */
     AV_OPT_TYPE_DICT,
+    /**
+     * Underlying C type is uint64_t.
+     */
     AV_OPT_TYPE_UINT64,
+    /**
+     * Special option type for declaring named constants. Does not correspond to
+     * an actual field in the object, offset must be 0.
+     */
     AV_OPT_TYPE_CONST,
-    AV_OPT_TYPE_IMAGE_SIZE, ///< offset must point to two consecutive ints
+    /**
+     * Underlying C type is two consecutive integers.
+     */
+    AV_OPT_TYPE_IMAGE_SIZE,
+    /**
+     * Underlying C type is enum AVPixelFormat.
+     */
     AV_OPT_TYPE_PIXEL_FMT,
+    /**
+     * Underlying C type is enum AVSampleFormat.
+     */
     AV_OPT_TYPE_SAMPLE_FMT,
-    AV_OPT_TYPE_VIDEO_RATE, ///< offset must point to AVRational
+    /**
+     * Underlying C type is AVRational.
+     */
+    AV_OPT_TYPE_VIDEO_RATE,
+    /**
+     * Underlying C type is int64_t.
+     */
     AV_OPT_TYPE_DURATION,
+    /**
+     * Underlying C type is uint8_t[4].
+     */
     AV_OPT_TYPE_COLOR,
+    /**
+     * Underlying C type is int.
+     */
     AV_OPT_TYPE_BOOL,
+    /**
+     * Underlying C type is AVChannelLayout.
+     */
     AV_OPT_TYPE_CHLAYOUT,
+    /**
+     * Underlying C type is unsigned int.
+     */
     AV_OPT_TYPE_UINT,
 
     /**
@@ -547,6 +619,12 @@ const AVClass *av_opt_child_class_iterate(const AVClass *parent, void **iter);
 #define AV_OPT_ALLOW_NULL (1 << 2)
 
 /**
+ * May be used with av_opt_set_array() to signal that new elements should
+ * replace the existing ones in the indicated range.
+ */
+#define AV_OPT_ARRAY_REPLACE (1 << 3)
+
+/**
  *  Allows av_opt_query_ranges and av_opt_query_ranges_default to return more than
  *  one component for certain option types.
  *  @see AVOptionRanges for details.
@@ -808,6 +886,7 @@ int av_opt_set_chlayout(void *obj, const char *name, const AVChannelLayout *layo
  */
 int av_opt_set_dict_val(void *obj, const char *name, const AVDictionary *val, int search_flags);
 
+#if FF_API_OPT_INT_LIST
 /**
  * Set a binary option to an integer list.
  *
@@ -823,6 +902,57 @@ int av_opt_set_dict_val(void *obj, const char *name, const AVDictionary *val, in
      AVERROR(EINVAL) : \
      av_opt_set_bin(obj, name, (const uint8_t *)(val), \
                     av_int_list_length(val, term) * sizeof(*(val)), flags))
+#endif
+
+/**
+ * Add, replace, or remove elements for an array option. Which of these
+ * operations is performed depends on the values of val and search_flags.
+ *
+ * @param start_elem Index of the first array element to modify; must not be
+ *                   larger than array size as returned by
+ *                   av_opt_get_array_size().
+ * @param nb_elems number of array elements to modify; when val is NULL,
+ *                 start_elem+nb_elems must not be larger than array size as
+ *                 returned by av_opt_get_array_size()
+ *
+ * @param val_type Option type corresponding to the type of val, ignored when val is
+ *                 NULL.
+ *
+ *                 The effect of this function will will be as if av_opt_setX()
+ *                 was called for each element, where X is specified by type.
+ *                 E.g. AV_OPT_TYPE_STRING corresponds to av_opt_set().
+ *
+ *                 Typically this should be the same as the scalarized type of
+ *                 the AVOption being set, but certain conversions are also
+ *                 possible - the same as those done by the corresponding
+ *                 av_opt_set*() function. E.g. any option type can be set from
+ *                 a string, numeric types can be set from int64, double, or
+ *                 rational, etc.
+ *
+ * @param val Array with nb_elems elements or NULL.
+ *
+ *            When NULL, nb_elems array elements starting at start_elem are
+ *            removed from the array. Any array elements remaining at the end
+ *            are shifted by nb_elems towards the first element in order to keep
+ *            the array contiguous.
+ *
+ *            Otherwise (val is non-NULL), the type of val must match the
+ *            underlying C type as documented for val_type.
+ *
+ *            When AV_OPT_ARRAY_REPLACE is not set in search_flags, the array is
+ *            enlarged by nb_elems, and the contents of val are inserted at
+ *            start_elem. Previously existing array elements from start_elem
+ *            onwards (if present) are shifted by nb_elems away from the first
+ *            element in order to make space for the new elements.
+ *
+ *            When AV_OPT_ARRAY_REPLACE is set in search_flags, the contents
+ *            of val replace existing array elements from start_elem to
+ *            start_elem+nb_elems (if present). New array size is
+ *            max(start_elem + nb_elems, old array size).
+ */
+int av_opt_set_array(void *obj, const char *name, int search_flags,
+                     unsigned int start_elem, unsigned int nb_elems,
+                     enum AVOptionType val_type, const void *val);
 
 /**
  * @}
@@ -872,6 +1002,46 @@ int av_opt_get_chlayout(void *obj, const char *name, int search_flags, AVChannel
  * be freed with av_dict_free() by the caller
  */
 int av_opt_get_dict_val(void *obj, const char *name, int search_flags, AVDictionary **out_val);
+
+/**
+ * For an array-type option, get the number of elements in the array.
+ */
+int av_opt_get_array_size(void *obj, const char *name, int search_flags,
+                          unsigned int *out_val);
+
+/**
+ * For an array-type option, retrieve the values of one or more array elements.
+ *
+ * @param start_elem index of the first array element to retrieve
+ * @param nb_elems number of array elements to retrieve; start_elem+nb_elems
+ *                 must not be larger than array size as returned by
+ *                 av_opt_get_array_size()
+ *
+ * @param out_type Option type corresponding to the desired output.
+ *
+ *                 The array elements produced by this function will
+ *                 will be as if av_opt_getX() was called for each element,
+ *                 where X is specified by out_type. E.g. AV_OPT_TYPE_STRING
+ *                 corresponds to av_opt_get().
+ *
+ *                 Typically this should be the same as the scalarized type of
+ *                 the AVOption being retrieved, but certain conversions are
+ *                 also possible - the same as those done by the corresponding
+ *                 av_opt_get*() function. E.g. any option type can be retrieved
+ *                 as a string, numeric types can be retrieved as int64, double,
+ *                 or rational, etc.
+ *
+ * @param out_val  Array with nb_elems members into which the output will be
+ *                 written. The array type must match the underlying C type as
+ *                 documented for out_type, and be zeroed on entry to this
+ *                 function.
+ *
+ *                 For dynamically allocated types (strings, binary, dicts,
+ *                 etc.), the result is owned and freed by the caller.
+ */
+int av_opt_get_array(void *obj, const char *name, int search_flags,
+                     unsigned int start_elem, unsigned int nb_elems,
+                     enum AVOptionType out_type, void *out_val);
 /**
  * @}
  */
@@ -901,6 +1071,7 @@ int av_opt_eval_q     (void *obj, const AVOption *o, const char *val, AVRational
  * @}
  */
 
+#if FF_API_OPT_PTR
 /**
  * Gets a pointer to the requested field in a struct.
  * This function allows accessing a struct even when its fields are moved or
@@ -908,8 +1079,12 @@ int av_opt_eval_q     (void *obj, const AVOption *o, const char *val, AVRational
  *
  * @returns a pointer to the field, it can be cast to the correct type and read
  *          or written to.
+ *
+ * @deprecated direct access to AVOption-exported fields is not supported
  */
+attribute_deprecated
 void *av_opt_ptr(const AVClass *avclass, void *obj, const char *name);
+#endif
 
 /**
  * Check if given option is set to its default value.

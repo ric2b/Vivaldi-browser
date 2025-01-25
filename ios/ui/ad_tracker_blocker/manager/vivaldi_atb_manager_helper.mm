@@ -215,7 +215,7 @@ using l10n_util::GetNSStringF;
                   createEntryWithTitle:@"hufilter"
                     stringId:IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_HUNGARIAN]
           forKey:
-   @"https://raw.githubusercontent.com/hufilter/hufilter/master/hufilter.txt"];
+   @"https://raw.githubusercontent.com/hufilter/hufilter/refs/heads/gh-pages/hufilter.txt"];
 
   [map setObject:[VivaldiATBManagerHelper
                   createEntryWithTitle:@"Icelandic ABP List"

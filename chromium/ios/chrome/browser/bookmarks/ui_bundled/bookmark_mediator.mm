@@ -249,21 +249,13 @@ using bookmarks::BookmarkNode;
   RecordModuleFreshnessSignal(ContentSuggestionsModuleType::kShortcuts);
   base::RecordAction(base::UserMetricsAction("BookmarkAdded"));
 
-  const BookmarkNode* startPageGroup =
-      vivaldi_bookmark_kit::GetStartPageNode(_bookmarkModel.get());
+  std::u16string homeFolderTitle =
+      base::SysNSStringToUTF16(
+          l10n_util::GetNSString(IDS_IOS_BOOKMARKS_DEFAULT_HOME_GROUP_TITLE));
 
-  if (!startPageGroup) {
-    // If there's no group found create a group with default title under
-    // bookmark bar node.
-    const BookmarkNode* bookmarkBarNode = _bookmarkModel->bookmark_bar_node();
-    std::u16string folderTitle =
-        base::SysNSStringToUTF16(
-            l10n_util::GetNSString(IDS_IOS_BOOKMARKS_DEFAULT_HOME_GROUP_TITLE));
-    startPageGroup = _bookmarkModel->AddFolder(
-        bookmarkBarNode, bookmarkBarNode->children().size(), folderTitle);
-    vivaldi_bookmark_kit::SetNodeSpeeddial(
-        _bookmarkModel.get(), startPageGroup, YES);
-  }
+  const BookmarkNode* startPageGroup =
+      vivaldi_bookmark_kit::GetOrCreateStartPageNode(_bookmarkModel.get(),
+                                                     homeFolderTitle);
 
   _bookmarkModel->AddNewURL(startPageGroup, startPageGroup->children().size(),
                             base::SysNSStringToUTF16(title), URL);

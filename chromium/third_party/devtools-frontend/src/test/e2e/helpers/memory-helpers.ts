@@ -296,8 +296,12 @@ export async function changeAllocationSampleViewViaDropdown(newPerspective: stri
   await dropdown.select(optionValue);
 }
 
-export async function focusTableRow(text: string) {
+export async function focusTableRowWithName(text: string) {
   const row = await waitFor(`//span[text()="${text}"]/ancestor::tr`, undefined, undefined, 'xpath');
+  await focusTableRow(row);
+}
+
+export async function focusTableRow(row: puppeteer.ElementHandle<Element>) {
   // Click in a numeric cell, to avoid accidentally clicking a link.
   const cell = await waitFor('.numeric-column', row);
   await clickElement(cell);
@@ -346,15 +350,29 @@ export async function getDistanceFromCategoryRow(text: string) {
   return await numericColumns[0].evaluate(e => parseInt(e.textContent as string, 10));
 }
 
-export async function getCountFromCategoryRow(text: string) {
+export async function getCountFromCategoryRowWithName(text: string) {
   const row = await getCategoryRow(text);
+  return await getCountFromCategoryRow(row);
+}
+
+export async function getCountFromCategoryRow(row: puppeteer.ElementHandle<Element>) {
   const countSpan = await waitFor('.objects-count', row);
   return await countSpan.evaluate(e => parseInt((e.textContent ?? '').substring(1), 10));
 }
 
-export async function getAddedCountFromComparisonRow(text: string) {
+export async function getAddedCountFromComparisonRowWithName(text: string) {
   const row = await getCategoryRow(text);
+  return await getAddedCountFromComparisonRow(row);
+}
+
+export async function getAddedCountFromComparisonRow(row: puppeteer.ElementHandle<Element>) {
   const addedCountCell = await waitFor('.addedCount-column', row);
+  const countText = await addedCountCell.evaluate(e => e.textContent ?? '');
+  return parseNumberWithSpaces(countText);
+}
+
+export async function getRemovedCountFromComparisonRow(row: puppeteer.ElementHandle<Element>) {
+  const addedCountCell = await waitFor('.removedCount-column', row);
   const countText = await addedCountCell.evaluate(e => e.textContent ?? '');
   return parseNumberWithSpaces(countText);
 }
@@ -362,7 +380,8 @@ export async function getAddedCountFromComparisonRow(text: string) {
 export async function clickOnContextMenuForRetainer(retainerName: string, menuItem: string) {
   const retainersPane = await waitFor('.retaining-paths-view');
   const element = await waitFor(`//span[text()="${retainerName}"]`, retainersPane, undefined, 'xpath');
-  await clickElement(element, {clickOptions: {button: 'right'}});
+  // Push the click right a bit further to avoid the disclosure triangle.
+  await clickElement(element, {clickOptions: {button: 'right', offset: {x: 35, y: 0}}});
   const button = await waitForAria(menuItem);
   await clickElement(button);
 }

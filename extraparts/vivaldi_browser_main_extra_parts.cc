@@ -29,6 +29,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/db/mail_client/mail_client_service_factory.h"
 #include "components/favicon/core/favicon_service.h"
+#include "components/omnibox/omnibox_service_factory.h"
 #include "components/page_actions/page_actions_service_factory.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/request_filter/request_filter_manager_factory.h"
@@ -52,7 +53,7 @@
 #include "browser/search_engines/vivaldi_search_engines_updater.h"
 #include "browser/vivaldi_runtime_feature.h"
 #include "components/browser/vivaldi_brand_select.h"
-#include "components/search_engines/search_engines_manager.h"
+#include "components/search_engines/search_engines_managers_factory.h"
 
 #include "components/datasource/vivaldi_image_store.h"
 #include "components/notes/notes_factory.h"
@@ -77,6 +78,7 @@
 #include "extensions/api/menu_content/menu_content_api.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/api/notes/notes_api.h"
+#include "extensions/api/omnibox/omnibox_private_api.h"
 #include "extensions/api/page_actions/page_actions_api.h"
 #include "extensions/api/prefs/prefs_api.h"
 #include "extensions/api/reading_list/reading_list_api.h"
@@ -137,6 +139,7 @@ void VivaldiBrowserMainExtraParts::
 #if !BUILDFLAG(IS_ANDROID)
   vivaldi::NotesModelFactory::GetInstance();
   calendar::CalendarServiceFactory::GetInstance();
+  vivaldi_omnibox::OmniboxServiceFactory::GetInstance();
   contact::ContactServiceFactory::GetInstance();
   mail_client::MailClientServiceFactory::GetInstance();
   menus::MainMenuServiceFactory::GetInstance();
@@ -185,6 +188,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::VivaldiWindowsAPI::Init();
   extensions::ZoomAPI::GetFactoryInstance();
   extensions::HistoryPrivateAPI::GetFactoryInstance();
+  extensions::OmniboxPrivateAPI::GetFactoryInstance();
   extensions::TranslateHistoryAPI::GetFactoryInstance();
 
   extensions::VivaldiRootDocumentHandlerFactory::GetInstance();
@@ -203,7 +207,7 @@ void VivaldiBrowserMainExtraParts::
 #endif
 
   VivaldiTranslateClient::LoadTranslationScript();
-  SearchEnginesManager::GetInstance();
+  SearchEnginesManagersFactory::GetInstance();
 }
 
 void VivaldiBrowserMainExtraParts::PreProfileInit() {
@@ -304,7 +308,9 @@ void VivaldiBrowserMainExtraParts::PreMainMessageLoopRun() {
   if (!cmd_line.HasSwitch(switches::kAutoTestMode))
     stats_reporter_ = vivaldi::StatsReporter::CreateInstance();
 
-  vivaldi::SearchEnginesUpdater::Update(
+  vivaldi::SearchEnginesUpdater::UpdateSearchEngines(
+      g_browser_process->shared_url_loader_factory());
+  vivaldi::SearchEnginesUpdater::UpdateSearchEnginesPrompt(
       g_browser_process->shared_url_loader_factory());
 }
 

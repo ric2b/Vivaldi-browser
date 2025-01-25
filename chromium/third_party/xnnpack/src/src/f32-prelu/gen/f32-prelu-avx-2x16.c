@@ -12,10 +12,8 @@
 #include <immintrin.h>
 
 #include "xnnpack/math.h"
-#include "xnnpack/prelu.h"
+#include "xnnpack/vbinary.h"
 
-
-static const int32_t mask_table[14] = {-1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0};
 
 void xnn_f32_prelu_ukernel__avx_2x16(
     size_t rows,
@@ -29,6 +27,8 @@ void xnn_f32_prelu_ukernel__avx_2x16(
   assert(rows != 0);
   assert(channels != 0);
   assert(channels % sizeof(float) == 0);
+
+  static const int32_t mask_table[14] = {-1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0};
 
   const float* i0 = input;
   float* o0 = output;

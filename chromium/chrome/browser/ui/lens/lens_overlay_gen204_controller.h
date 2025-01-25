@@ -6,7 +6,7 @@
 #define CHROME_BROWSER_UI_LENS_LENS_OVERLAY_GEN204_CONTROLLER_H_
 
 #include "chrome/browser/lens/core/mojom/lens.mojom.h"
-#include "chrome/browser/ui/lens/lens_overlay_invocation_source.h"
+#include "components/lens/lens_overlay_invocation_source.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 
 class Profile;
@@ -20,6 +20,49 @@ class LensOverlayGen204Controller {
 
   virtual ~LensOverlayGen204Controller();
 
+  // The different latency types that can be logged.
+  enum class LatencyType {
+    // From when the overlay was invoked to when the initial cluster info
+    // request was sent.
+    kInvocationToInitialClusterInfoRequestSent = 0,
+
+    // From when the overlay was invoked to when the initial full page
+    // objects request was sent.
+    kInvocationToInitialFullPageObjectsRequestSent = 1,
+
+    // From when the overlay was invoked to when the initial interaction
+    // request was sent.
+    kInvocationToInitialInteractionRequestSent = 2,
+
+    // From when the overlay was invoked to when the initial page content
+    // request was sent.
+    kInvocationToInitialPageContentRequestSent = 3,
+
+    // From when the overlay was invoked to when the initial partial page
+    // content request was sent.
+    kInvocationToInitialPartialPageContentRequestSent = 9,
+
+    // From when the full image request began processing to when the response
+    // was received.
+    kFullPageObjectsRequestFetchLatency = 4,
+
+    // From when the full image translate request began processing to when the
+    // response was received.
+    kFullPageTranslateRequestFetchLatency = 5,
+
+    // From when the interaction request began processing to when the response
+    // was received.
+    kInteractionRequestFetchLatency = 6,
+
+    // From when the page content upload request began processing to when the
+    // response was received.
+    kPageContentUploadLatency = 7,
+
+    // From the partial page content upload request began processing to when the
+    // response was received.
+    kPartialPageContentUploadLatency = 8,
+  };
+
   // Sets the state of the controller. Should be called once
   // per query flow, at the start, when the Lens Overlay opens.
   void OnQueryFlowStart(lens::LensOverlayInvocationSource invocation_source,
@@ -27,7 +70,12 @@ class LensOverlayGen204Controller {
                         uint64_t gen204_id);
 
   // Sends a Lens objects request latency gen204 request.
-  void SendLatencyGen204IfEnabled(int64_t latency_ms, bool is_translate_query);
+  void SendLatencyGen204IfEnabled(
+      LatencyType latency_type,
+      base::TimeDelta latency_duration,
+      std::string vit_query_param_value,
+      std::optional<base::TimeDelta> cluster_info_latency,
+      std::optional<std::string> encoded_analytics_id);
 
   // Sends a task completion gen204 request. The analytics id is the
   // latest Lens request analytics id from the query controller.

@@ -20,16 +20,19 @@ void xnn_qu8_vcvt_ukernel__ssse3_u16(
     size_t batch,
     const uint8_t* input,
     uint8_t* output,
-    const union xnn_qu8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_qu8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(uint8_t) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const __m128i vinput_zero_point = _mm_load_si128((const __m128i*) params->ssse3.input_zero_point);
-  const __m128i vmultiplier = _mm_load_si128((const __m128i*) params->ssse3.multiplier);
-  const __m128i voutput_zero_point = _mm_load_si128((const __m128i*) params->ssse3.output_zero_point);
+  const __m128i vinput_zero_point = _mm_set1_epi16(params->scalar.input_zero_point);
+  const __m128i vmultiplier = _mm_set1_epi16(-params->scalar.multiplier);
+  const __m128i voutput_zero_point = _mm_set1_epi16(params->scalar.output_zero_point);
+  XNN_FORCE_REALIZATION(vinput_zero_point);
+  XNN_FORCE_REALIZATION(vmultiplier);
+  XNN_FORCE_REALIZATION(voutput_zero_point);
   const __m128i vzero = _mm_setzero_si128();
   for (; batch >= 16 * sizeof(uint8_t); batch -= 16 * sizeof(uint8_t)) {
     const __m128i vx0 = _mm_loadu_si128((const __m128i*) input);

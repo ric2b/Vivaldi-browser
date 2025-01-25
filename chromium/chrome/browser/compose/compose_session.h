@@ -110,7 +110,9 @@ class ComposeSession
   // Requests a compose response for `input`. The result will be sent through
   // the ComposeDialog interface rather than through a callback, as it might
   // complete after the originating WebUI has been destroyed.
-  void Compose(const std::string& input, bool is_input_edited) override;
+  void Compose(const std::string& input,
+               compose::mojom::InputMode mode,
+               bool is_input_edited) override;
 
   // Requests a rewrite the last response. `style` specifies how the response
   // should be changed. An empty `style` without a tone or length requests a
@@ -171,7 +173,7 @@ class ComposeSession
 
   // Notifies the session that a new dialog is opening and starts. Saves the
   // |selected_text| for use as an initial prompt and refreshes innertext.
-  void InitializeWithText(const std::string_view selected_text);
+  void InitializeWithText(std::string_view selected_text);
 
   // If all pre-conditions are acknowledged starts refreshing page context. If
   // autocompose is enabled and has not been tried yet this session will also
@@ -354,6 +356,10 @@ class ComposeSession
   // Reason that a compose session was exited, used for quality logging.
   optimization_guide::proto::FinalStatus final_status_{
       optimization_guide::proto::FinalStatus::STATUS_UNSPECIFIED};
+  // Success status of a completed compose session, used for quality logging.
+  optimization_guide::proto::FinalModelStatus final_model_status_{
+      optimization_guide::proto::FinalModelStatus::
+          FINAL_MODEL_STATUS_UNSPECIFIED};
 
   // Tracks how long a session has been open.
   std::unique_ptr<base::ElapsedTimer> session_duration_;

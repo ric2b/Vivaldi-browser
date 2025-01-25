@@ -37,9 +37,9 @@ enum class PrivacySandboxAttestationsGatedAPI {
   kPrivateAggregation,
   kAttributionReporting,
   kSharedStorage,
-  kLocalUnpartitionedDataAccess,
+  kFencedStorageRead,
 
-  kMaxValue = kLocalUnpartitionedDataAccess,
+  kMaxValue = kFencedStorageRead,
 };
 
 // A service which acts as a intermediary between Privacy Sandbox APIs and the
@@ -55,9 +55,9 @@ class PrivacySandboxSettings : public KeyedService {
    public:
     virtual void OnTopicsDataAccessibleSinceUpdated() {}
 
-    // Fired when the First-Party Sets changes to being `enabled` as a result of
-    // the kPrivacySandboxFirstPartySets preference changing.
-    virtual void OnFirstPartySetsEnabledChanged(bool enabled) {}
+    // Fired when the Related Website Sets changes to being `enabled` as a
+    // result of the kPrivacySandboxRelatedWebsiteSets preference changing.
+    virtual void OnRelatedWebsiteSetsEnabledChanged(bool enabled) {}
   };
 
   class Delegate {
@@ -269,12 +269,12 @@ class PrivacySandboxSettings : public KeyedService {
       std::string* out_debug_message,
       bool* out_block_is_site_setting_specific) const = 0;
 
-  // Controls whether shared storage access from fenced frame is allowable for
-  // `accessing_origin` in the context of `top_frame_origin`.
+  // Controls whether fenced storage read is allowable for `accessing_origin` in
+  // the context of `top_frame_origin`.
   //
   // If provided, `console_frame` is used to log errors to the console upon
   // attestation failure.
-  virtual bool IsLocalUnpartitionedDataAccessAllowed(
+  virtual bool IsFencedStorageReadAllowed(
       const url::Origin& top_frame_origin,
       const url::Origin& accessing_origin,
       content::RenderFrameHost* console_frame) const = 0;
@@ -361,7 +361,7 @@ class PrivacySandboxSettings : public KeyedService {
   // Overrides the internal delegate for test purposes.
   virtual void SetDelegateForTesting(std::unique_ptr<Delegate> delegate) = 0;
 
-  // Source of truth for whether related websites are enabled.
+  // Source of truth for whether related website sets are enabled.
   virtual bool AreRelatedWebsiteSetsEnabled() const = 0;
 };
 

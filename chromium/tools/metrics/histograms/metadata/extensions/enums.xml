@@ -146,6 +146,8 @@ chromium-metrics-reviews@google.com.
   <int value="1048576" label="DISABLE_NOT_ALLOWLISTED"/>
   <int value="2097152" label="DISABLE_NOT_ASH_KEEPLISTED"/>
   <int value="4194304" label="DISABLE_PUBLISHED_IN_STORE_REQUIRED_BY_POLICY"/>
+  <int value="8388608" label="DISABLE_UNSUPPORTED_MANIFEST_VERSION"/>
+  <int value="16777216" label="DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION"/>
 </enum>
 
 <enum name="ExtensionEvents">
@@ -627,7 +629,7 @@ Called by update_extension_histograms.py.-->
       label="DELETED_AUTOFILL_ASSISTANT_PRIVATE_ON_STATUS_MESSAGE_CHANGED"/>
   <int value="450" label="BLUETOOTH_PRIVATE_ON_DEVICE_ADDRESS_CHANGED"/>
   <int value="451"
-      label="PASSWORDS_PRIVATE_ON_ACCOUNT_STORAGE_OPT_IN_STATE_CHANGED"/>
+      label="PASSWORDS_PRIVATE_ON_ACCOUNT_STORAGE_ENABLED_STATE_CHANGED"/>
   <int value="452"
       label="ACCESSIBILITY_PRIVATE_ON_CUSTOM_SPOKEN_FEEDBACK_TOGGLED"/>
   <int value="453"
@@ -758,6 +760,9 @@ Called by update_extension_histograms.py.-->
   <int value="558"
       label="ACCESSIBILITY_PRIVATE_ON_TOGGLE_GESTURE_INFO_FOR_SETTINGS"/>
   <int value="559" label="ACTION_ON_USER_SETTINGS_CHANGED"/>
+  <int value="560" label="TTS_ENGINE_ON_INSTALL_LANGUAGE_REQUEST"/>
+  <int value="561" label="TTS_ENGINE_ON_LANGUAGE_STATUS_REQUEST"/>
+  <int value="562" label="TTS_ENGINE_ON_UNINSTALL_LANGUAGE_REQUEST"/>
 </enum>
 
 <enum name="ExtensionForceInstalledPreInstalledDeprecatedSite">
@@ -866,7 +871,7 @@ Called by update_extension_histograms.py.-->
   <int value="84" label="TTSENGINE_SENDTTSEVENT"/>
   <int value="85" label="ACCESSIBILITY_PRIVATE_GETALERTSFORTAB"/>
   <int value="86" label="DELETED_BOOKMARKS_IMPORT"/>
-  <int value="87" label="SYNCFILESYSTEM_DELETEFILESYSTEM"/>
+  <int value="87" label="DELETED_SYNCFILESYSTEM_DELETEFILESYSTEM"/>
   <int value="88" label="DEBUGGER_SENDCOMMAND"/>
   <int value="89" label="DEBUGGER_DETACH"/>
   <int value="90" label="METRICSPRIVATE_RECORDSMALLCOUNT"/>
@@ -2274,7 +2279,7 @@ Called by update_extension_histograms.py.-->
   <int value="1440" label="DELETED_AUTOFILLASSISTANTPRIVATE_GETSTATE"/>
   <int value="1441" label="DELETED_AUTOFILLASSISTANTPRIVATE_PERFORMACTION"/>
   <int value="1442" label="DELETED_AUTOFILLASSISTANTPRIVATE_PROVIDEUSERDATA"/>
-  <int value="1443" label="PASSWORDSPRIVATE_ISOPTEDINFORACCOUNTSTORAGE"/>
+  <int value="1443" label="PASSWORDSPRIVATE_ISACCOUNTSTORAGEENABLED"/>
   <int value="1444" label="AUTOTESTPRIVATE_PINSHELFICON"/>
   <int value="1445" label="AUTOTESTPRIVATE_WAITFOROVERVIEWSTATE"/>
   <int value="1446" label="AUTOTESTPRIVATE_GETSCROLLABLESHELFINFOFORSTATE"/>
@@ -2293,7 +2298,7 @@ Called by update_extension_histograms.py.-->
   <int value="1459" label="DELETED_PASSWORDSPRIVATE_STOPPASSWORDCHECK"/>
   <int value="1460" label="PASSWORDSPRIVATE_GETPASSWORDCHECKSTATUS"/>
   <int value="1461" label="TERMINALPRIVATE_OPENVMSHELLPROCESS"/>
-  <int value="1462" label="PASSWORDSPRIVATE_OPTINFORACCOUNTSTORAGE"/>
+  <int value="1462" label="PASSWORDSPRIVATE_SETACCOUNTSTORAGEENABLED"/>
   <int value="1463" label="DELETED_CRYPTOTOKENPRIVATE_RECORDREGISTERREQUEST"/>
   <int value="1464" label="DELETED_CRYPTOTOKENPRIVATE_RECORDSIGNREQUEST"/>
   <int value="1465" label="VIRTUALKEYBOARDPRIVATE_SETWINDOWBOUNDSINSCREEN"/>
@@ -2766,6 +2771,17 @@ Called by update_extension_histograms.py.-->
   <int value="1903" label="AUTOFILLPRIVATE_DELETEALLUSERANNOTATIONSENTRIES"/>
   <int value="1904" label="EXPERIMENTALAIDATA_PRIVATE_GETAIDATA"/>
   <int value="1905" label="AUTOTESTPRIVATE_GETDEVICEEVENTLOG"/>
+  <int value="1906" label="ACCESSIBILITY_PRIVATE_UPDATEFACEGAZEBUBBLE"/>
+  <int value="1907" label="AUTOFILLPRIVATE_HASUSERANNOTATIONSENTRIES"/>
+  <int value="1908"
+      label="AUTOFILLPRIVATE_ISUSERELIGIBLEFORAUTOFILLIMPROVEMENTS"/>
+  <int value="1909"
+      label="AUTOFILLPRIVATE_PREDICTIONIMPROVEMENTSIPHFFEATUREUSED"/>
+  <int value="1910" label="AUTOFILLPRIVATE_TRIGGERANNOTATIONSBOOTSTRAPPING"/>
+  <int value="1911" label="ACCESSIBILITY_PRIVATE_ENABLEDRAGEVENTREWRITER"/>
+  <int value="1912" label="TTSENGINE_UPDATELANGUAGE"/>
+  <int value="1913" label="ODFSCONFIGPRIVATE_OPENINOFFICEAPP"/>
+  <int value="1914" label="COOKIES_GETPARTITIONKEY"/>
 </enum>
 
 <enum name="ExtensionInstallationCrxInstallError">
@@ -3147,7 +3163,8 @@ Called by update_extension_permission.py.-->
   <int value="256" label="kOdfsConfigPrivate"/>
   <int value="257" label="kChromeOSManagementAudio"/>
   <int value="258" label="kChromeOSDiagnosticsNetworkInfoForMlab"/>
-  <int value="259" label="kAIAssistantOriginTrial"/>
+  <int value="259" label="kAILanguageModelOriginTrial"/>
+  <int value="260" label="kExperimentalAiData"/>
 </enum>
 
 <enum name="ExtensionPolicyReinstallReason">
@@ -3344,11 +3361,17 @@ Called by update_extension_permission.py.-->
   <int value="3" label="Manifest Version 3 extensions only"/>
 </enum>
 
+<enum name="MessageDeliveryStage">
+  <int value="0" label="Unknown Stage"/>
+  <int value="1" label="Browser received open channel request from renderer"/>
+</enum>
+
 <enum name="MV2ExtensionState">
   <int value="0" label="Unaffected"/>
   <int value="1" label="Soft-disabled by Chrome"/>
   <int value="2" label="Re-enabled by user"/>
   <int value="3" label="Other (e.g. disabled for another reason)"/>
+  <int value="4" label="Hard-disabled by Chrome"/>
 </enum>
 
 <enum name="ReadDynamicRulesJSONStatus">

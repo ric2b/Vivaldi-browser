@@ -131,9 +131,7 @@ static_assert(SortConstants::MaxBufBytes<2>(64) <= 1664, "Unexpectedly high");
 #if (HWY_TARGET == HWY_SCALAR) ||                                   \
     (HWY_COMPILER_MSVC && !HWY_IS_DEBUG_BUILD) ||                   \
     (HWY_ARCH_ARM_V7 && HWY_IS_DEBUG_BUILD) ||                      \
-    (HWY_ARCH_ARM_A64 && HWY_COMPILER_GCC_ACTUAL && HWY_IS_ASAN) || \
-    (HWY_ARCH_ARM_A64 && HWY_COMPILER_CLANG &&                      \
-     (HWY_IS_HWASAN || HWY_IS_MSAN || HWY_IS_TSAN || HWY_IS_ASAN))
+    (HWY_ARCH_ARM_A64 && HWY_COMPILER_GCC_ACTUAL && HWY_IS_ASAN)
 #define VQSORT_ENABLED 0
 #else
 #define VQSORT_ENABLED 1
@@ -144,7 +142,7 @@ namespace HWY_NAMESPACE {
 
 // Default tag / vector width selector.
 #if HWY_TARGET == HWY_RVV
-// Use LMUL = 1/2; for SEW=64 this ends up emulated via vsetvl.
+// Use LMUL = 1/2; for SEW=64 this ends up emulated via VSETVLI.
 template <typename T>
 using SortTag = ScalableTag<T, -1>;
 #else

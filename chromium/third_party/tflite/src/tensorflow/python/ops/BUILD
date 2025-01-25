@@ -142,8 +142,6 @@ tf_gen_op_strict_wrapper_private_py(
         "//learning/brain/python/ops:__pkg__",
         "//smartass/brain/ops:__subpackages__",
         "//tensorflow/compiler/mlir/tfr:__pkg__",
-        "//tensorflow/compiler/mlir/tfr/examples/customization:__pkg__",
-        "//tensorflow/compiler/mlir/tfr/examples/pad:__pkg__",
         "//tensorflow/compiler/mlir/tfr/python/experimental:__pkg__",
         "//tensorflow/compiler/tests:__pkg__",
         "//tensorflow/contrib/opt:__pkg__",
@@ -449,7 +447,6 @@ tf_gen_op_strict_wrapper_private_py(
         "//learning/brain/google/python/ops:__pkg__",
         "//learning/brain/python/ops:__pkg__",
         "//tensorflow/compiler/mlir/tfr:__pkg__",
-        "//tensorflow/compiler/mlir/tfr/examples/mnist:__pkg__",
         "//tensorflow/compiler/tests:__pkg__",
         "//tensorflow/contrib/opt:__pkg__",
         "//tensorflow/dtensor:dtensor-internal",
@@ -463,7 +460,6 @@ tf_gen_op_strict_wrapper_private_py(
     name = "nn_ops_gen",
     visibility = [
         "//learning/brain/python/ops:__pkg__",
-        "//tensorflow/compiler/mlir/tfr/examples/mnist:__pkg__",
         "//tensorflow/compiler/tests:__pkg__",
         "//tensorflow/contrib/opt:__pkg__",
         "//tensorflow/dtensor:dtensor-internal",
@@ -1097,6 +1093,7 @@ cuda_py_strict_test(
     name = "compiled_collective_ops_gpu_test",
     size = "small",
     srcs = ["compiled_collective_ops_gpu_test.py"],
+    env = {"TF_FORCE_GPU_ALLOW_GROWTH": "true"},
     main = "compiled_collective_ops_gpu_test.py",
     python_version = "PY3",
     tags = [
@@ -3679,6 +3676,7 @@ cuda_py_strict_test(
         "//tensorflow/python/platform:test",
         "//third_party/py/numpy",
         "@absl_py//absl/testing:parameterized",
+        "@pypi_packaging//:pkg",
     ],
 )
 

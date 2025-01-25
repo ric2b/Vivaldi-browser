@@ -19,6 +19,7 @@
 #import "components/sync/service/sync_service_observer.h"
 #import "components/sync/service/sync_user_settings.h"
 #import "components/sync_device_info/local_device_info_util.h"
+#import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
@@ -39,6 +40,7 @@
 #import "ios/ui/settings/sync/vivaldi_sync_settings_view_controller.h"
 #import "ios/ui/table_view/cells/vivaldi_table_view_segmented_control_item.h"
 #import "ios/ui/table_view/cells/vivaldi_table_view_text_button_item.h"
+#import "net/base/network_change_notifier.h"
 #import "prefs/vivaldi_pref_names.h"
 #import "sync/vivaldi_sync_service_impl.h"
 #import "sync/vivaldi_sync_ui_helpers.h"
@@ -539,6 +541,15 @@ struct PendingRegistration {
   }
 }
 
+- (void)updateDeviceName:(NSString*)deviceName {
+  [self setSessionName:deviceName];
+
+  if (self.userInfoItem) {
+    self.userInfoItem.sessionName = deviceName;
+    [self updateUserInfoSection];
+  }
+}
+
 - (void)updateChosenTypes:(UserSelectableType)type isOn:(BOOL)isOn {
   if (!_syncManager)
     return;
@@ -568,6 +579,14 @@ struct PendingRegistration {
 
 #pragma mark - Private Methods
 
+- (void)updateUserInfoSection {
+  if (![self.settingsConsumer.tableViewModel
+          hasSectionForSectionIdentifier:SectionIdentifierSyncUserInfo]) {
+    return;
+  }
+  [self.settingsConsumer reloadSection:SectionIdentifierSyncUserInfo];
+}
+
 - (void)updateSyncStatusItem {
   NSString* statusText;
   int color = 0;
@@ -577,6 +596,8 @@ struct PendingRegistration {
   // Refactor this by replacing the engineData and cycleData calls with getters
   // from VivaldiAccountSyncManager. That will help avoid duplication of sync
   // and account state management in different places.
+
+  [self shouldAddSyncStatusSectionFooter:NO];
 
   if (engineData.engine_state == EngineState::FAILED) {
     statusText = l10n_util::GetNSString(IDS_VIVALDI_SYNC_FAILED);
@@ -607,7 +628,6 @@ struct PendingRegistration {
     color = kSyncStatusBlueBackgroundColor;
   } else if (engineData.engine_state == EngineState::CONFIGURATION_PENDING) {
     statusText = l10n_util::GetNSString(IDS_SYNC_ALL_SET_TEXT);
-    ;
     color = kSyncStatusBlueBackgroundColor;
   } else if (engineData.engine_state == EngineState::STARTED) {
     if (cycleData.download_updates_status == CycleStatus::SUCCESS &&
@@ -617,13 +637,22 @@ struct PendingRegistration {
       color = [self getCycleStatusColor:cycleData.commit_status];
       lastSyncDate = cycleData.cycle_start_time.ToNSDate();
     } else {
-      statusText = l10n_util::GetNSString(
-          [self getCycleStatusMessageId:cycleData.download_updates_status]);
+      statusText = l10n_util::GetNSStringF(IDS_VIVALDI_SYNC_ERROR_STATUS,
+         base::SysNSStringToUTF16(l10n_util::GetNSString(
+            [self getCycleStatusMessageId:cycleData.download_updates_status])));
       color = [self getCycleStatusColor:cycleData.download_updates_status];
+      if (!net::NetworkChangeNotifier::IsOffline() &&
+          (cycleData.download_updates_status == CycleStatus::NETWORK_ERROR ||
+          cycleData.download_updates_status == CycleStatus::SERVER_ERROR)) {
+        [self shouldAddSyncStatusSectionFooter:YES];
+      }
     }
   } else if (engineData.engine_state == EngineState::STARTING_SERVER_ERROR) {
     statusText = l10n_util::GetNSString(IDS_VIVALDI_SYNC_WAITING_SERVER_ERROR);
     color = kSyncStatusYellowBackgroundColor;
+    if (!net::NetworkChangeNotifier::IsOffline()) {
+      [self shouldAddSyncStatusSectionFooter:YES];
+    }
   } else if (engineData.engine_state == EngineState::STARTING) {
     statusText = l10n_util::GetNSString(IDS_VIVALDI_SYNC_INITIALIZING);
     color = kSyncStatusBlueBackgroundColor;
@@ -795,6 +824,34 @@ struct PendingRegistration {
   [self updateSyncStatusItem];
   [model addItem:self.syncStatusItem
       toSectionWithIdentifier:SectionIdentifierSyncStatus];
+}
+
+// The footer exists only when the sync cycle status returns either
+// NETWORK_ERROR or SERVER_ERROR to allow users to check current status of Sync.
+- (void)shouldAddSyncStatusSectionFooter:(BOOL)add {
+  TableViewModel* model = self.settingsConsumer.tableViewModel;
+
+  if (![model hasSectionForSectionIdentifier: SectionIdentifierSyncStatus]) {
+    return;
+  }
+
+  TableViewLinkHeaderFooterItem* footer =
+      [[TableViewLinkHeaderFooterItem alloc]
+          initWithType:ItemTypeSyncStatusFooter];
+  footer.forceIndents = YES;
+  footer.text =
+      l10n_util::GetNSString(IDS_VIVALDI_SYNC_ERROR_STATUS_DESCRIPTION);
+  footer.urls = @[ [[CrURL alloc] initWithGURL:GURL(vVivaldiSyncStatusUrl)] ];
+
+  if (add) {
+    [model setFooter:footer
+        forSectionWithIdentifier:SectionIdentifierSyncStatus];
+  } else {
+    [model setFooter:nil
+        forSectionWithIdentifier:SectionIdentifierSyncStatus];
+  }
+
+  [self.settingsConsumer reloadSection:SectionIdentifierSyncStatus];
 }
 
 - (void)addSyncSwitchesSection {
@@ -1219,11 +1276,15 @@ struct PendingRegistration {
   NSString* sessionName = base::SysUTF8ToNSString(
       _prefService->GetString(vivaldiprefs::kSyncSessionName));
 
-  // If sessionName is nil or empty, return client_name.
-  // This is a fallback for the users without a custom session name from iOS
-  // client.
-  if (sessionName == nil || [sessionName isEqualToString:@""]) {
-    return [self localDeviceClientName];
+  // If sessionName is empty try checking if local device name is already
+  // available. If thats also not available force calling the method to load
+  // the name and update userInfoItem.
+  if ([sessionName length] == 0) {
+    if ([[self localDeviceClientName] length] > 0) {
+      return [self localDeviceClientName];
+    } else {
+      [self geLocalDeviceClientName];
+    }
   }
 
   return sessionName;
@@ -1239,6 +1300,13 @@ struct PendingRegistration {
 
     dispatch_async(dispatch_get_main_queue(), ^{
       weakSelf.localDeviceClientName = deviceNameNSString;
+
+      // Update only if needed
+      if (weakSelf.userInfoItem &&
+          [weakSelf.userInfoItem.sessionName length] == 0) {
+        weakSelf.userInfoItem.sessionName = deviceNameNSString;
+        [weakSelf updateUserInfoSection];
+      }
     });
   });
 }

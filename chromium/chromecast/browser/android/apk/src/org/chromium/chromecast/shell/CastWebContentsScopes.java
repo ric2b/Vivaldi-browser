@@ -17,6 +17,7 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.chromecast.base.Observer;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.components.embedder_support.view.ContentViewRenderView;
+import org.chromium.content_public.browser.Visibility;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.IntentRequestTracker;
@@ -33,10 +34,17 @@ class CastWebContentsScopes {
     public static Observer<WebContents> onLayoutActivity(
             Activity activity, FrameLayout layout, @ColorInt int backgroundColor) {
         layout.setBackgroundColor(backgroundColor);
-        return onLayoutInternal(activity, layout, () -> {
-            return new ActivityWindowAndroid(activity, /* listenToActivityState= */ true,
-                    IntentRequestTracker.createFromActivity(activity));
-        }, backgroundColor);
+        return onLayoutInternal(
+                activity,
+                layout,
+                () -> {
+                    return new ActivityWindowAndroid(
+                            activity,
+                            /* listenToActivityState= */ true,
+                            IntentRequestTracker.createFromActivity(activity),
+                            /* insetObserver= */ null);
+                },
+                backgroundColor);
     }
 
     public static Observer<WebContents> onLayoutFragment(
@@ -87,7 +95,7 @@ class CastWebContentsScopes {
             WebContentsRegistry.initializeWebContents(webContents, contentView, window);
 
             // Enable display of current webContents.
-            webContents.onShow();
+            webContents.updateWebContentsVisibility(Visibility.VISIBLE);
             layout.addView(contentView, matchParent);
             // Ensure that the foreground doesn't interfere with accessibility overlays.
             layout.setForeground(null);
@@ -112,12 +120,12 @@ class CastWebContentsScopes {
             ContentView contentView = ContentView.createContentView(context, webContents);
             WebContentsRegistry.initializeWebContents(webContents, contentView, window);
             // Enable display of current webContents.
-            webContents.onShow();
+            webContents.updateWebContentsVisibility(Visibility.VISIBLE);
             return () -> {
                 if (!webContents.isDestroyed()) {
                     // WebContents can be destroyed by the app before CastWebContentsComponent
                     // unbinds, which is why we need this check.
-                    webContents.onHide();
+                    webContents.updateWebContentsVisibility(Visibility.HIDDEN);
 
                     if (webContents.getTopLevelNativeWindow() == window) {
                         webContents.setTopLevelNativeWindow(null);

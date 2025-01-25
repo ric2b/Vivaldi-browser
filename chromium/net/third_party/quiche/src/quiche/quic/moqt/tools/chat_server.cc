@@ -4,7 +4,6 @@
 
 #include "quiche/quic/moqt/tools/chat_server.h"
 
-#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -33,15 +32,17 @@ ChatServer::ChatServerSessionHandler::ChatServerSessionHandler(
     MoqtSession* session, ChatServer* server)
     : session_(session), server_(server) {
   session_->callbacks().incoming_announce_callback =
-      [&](absl::string_view track_namespace) {
-        std::cout << "Received ANNOUNCE for " << track_namespace << "\n";
-        username_ =
-            server_->strings().GetUsernameFromTrackNamespace(track_namespace);
+      [&](FullTrackName track_namespace) {
+        FullTrackName track_name = track_namespace;
+        track_name.AddElement("");
+        std::cout << "Received ANNOUNCE for " << track_namespace.ToString()
+                  << "\n";
+        username_ = server_->strings().GetUsernameFromFullTrackName(track_name);
         if (username_->empty()) {
           std::cout << "Malformed ANNOUNCE namespace\n";
           return std::nullopt;
         }
-        session_->SubscribeCurrentGroup(track_namespace, "",
+        session_->SubscribeCurrentGroup(track_name,
                                         server_->remote_track_visitor());
         server_->AddUser(*username_);
         return std::nullopt;
@@ -58,6 +59,9 @@ ChatServer::ChatServerSessionHandler::ChatServerSessionHandler(
 }
 
 ChatServer::ChatServerSessionHandler::~ChatServerSessionHandler() {
+  if (!server_->is_running_) {
+    return;
+  }
   if (username_.has_value()) {
     server_->DeleteUser(*username_);
   }
@@ -69,7 +73,8 @@ ChatServer::RemoteTrackVisitor::RemoteTrackVisitor(ChatServer* server)
 void ChatServer::RemoteTrackVisitor::OnReply(
     const moqt::FullTrackName& full_track_name,
     std::optional<absl::string_view> reason_phrase) {
-  std::cout << "Subscription to user " << full_track_name.track_namespace
+  std::cout << "Subscription to user "
+            << server_->strings().GetUsernameFromFullTrackName(full_track_name)
             << " ";
   if (reason_phrase.has_value()) {
     std::cout << "REJECTED, reason = " << *reason_phrase << "\n";
@@ -86,9 +91,8 @@ void ChatServer::RemoteTrackVisitor::OnReply(
 }
 
 void ChatServer::RemoteTrackVisitor::OnObjectFragment(
-    const moqt::FullTrackName& full_track_name, uint64_t group_sequence,
-    uint64_t object_sequence, moqt::MoqtPriority /*publisher_priority*/,
-    moqt::MoqtObjectStatus status,
+    const moqt::FullTrackName& full_track_name, moqt::FullSequence sequence,
+    moqt::MoqtPriority /*publisher_priority*/, moqt::MoqtObjectStatus status,
     moqt::MoqtForwardingPreference /*forwarding_preference*/,
     absl::string_view object, bool end_of_message) {
   if (!end_of_message) {
@@ -108,13 +112,13 @@ void ChatServer::RemoteTrackVisitor::OnObjectFragment(
     return;
   }
   if (status != MoqtObjectStatus::kNormal) {
-    it->second->AddObject(group_sequence, object_sequence, status, "");
+    it->second->AddObject(sequence, status);
     return;
   }
   if (!server_->WriteToFile(username, object)) {
     std::cout << username << ": " << object << "\n\n";
   }
-  it->second->AddObject(group_sequence, object_sequence, status, object);
+  it->second->AddObject(sequence, object);
 }
 
 ChatServer::ChatServer(std::unique_ptr<quic::ProofSource> proof_source,
@@ -122,7 +126,7 @@ ChatServer::ChatServer(std::unique_ptr<quic::ProofSource> proof_source,
     : server_(std::move(proof_source), std::move(incoming_session_callback_)),
       strings_(chat_id),
       catalog_(std::make_shared<MoqtOutgoingQueue>(
-          strings_.GetCatalogName(), MoqtForwardingPreference::kGroup)),
+          strings_.GetCatalogName(), MoqtForwardingPreference::kSubgroup)),
       remote_track_visitor_(this) {
   catalog_->AddObject(quiche::QuicheMemSlice(quiche::QuicheBuffer::Copy(
                           quiche::SimpleBufferAllocator::Get(),
@@ -142,6 +146,7 @@ ChatServer::ChatServer(std::unique_ptr<quic::ProofSource> proof_source,
 ChatServer::~ChatServer() {
   // Kill all sessions so that the callback doesn't fire when the server is
   // destroyed.
+  is_running_ = false;
   server_.quic_server().Shutdown();
 }
 
@@ -153,7 +158,7 @@ void ChatServer::AddUser(absl::string_view username) {
   // Add a local track.
   user_queues_[username] = std::make_shared<MoqtLiveRelayQueue>(
       strings_.GetFullTrackNameFromUsername(username),
-      MoqtForwardingPreference::kObject);
+      MoqtForwardingPreference::kSubgroup);
   publisher_.Add(user_queues_[username]);
 }
 
@@ -163,6 +168,7 @@ void ChatServer::DeleteUser(absl::string_view username) {
   catalog_->AddObject(quiche::QuicheMemSlice(quiche::QuicheBuffer::Copy(
                           quiche::SimpleBufferAllocator::Get(), catalog_data)),
                       /*key=*/false);
+  user_queues_[username]->RemoveAllSubscriptions();
   user_queues_.erase(username);
   publisher_.Delete(strings_.GetFullTrackNameFromUsername(username));
 }

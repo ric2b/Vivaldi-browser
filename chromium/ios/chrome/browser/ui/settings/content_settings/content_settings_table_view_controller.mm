@@ -40,6 +40,18 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/ui/settings/pagezoom/vivaldi_pagezoom_settings_coordinator.h"
+#import "ios/ui/settings/vivaldi_settings_constants.h"
+#import "prefs/vivaldi_pref_names.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+using l10n_util::GetNSString;
+// End Vivaldi
+
 namespace {
 
 // Is YES when one window has mailTo controller opened.
@@ -50,6 +62,12 @@ NSString* kMailToInstanceChanged = @"MailToInstanceChanged";
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierSettings = kSectionIdentifierEnumZero,
+
+  // Vivaldi
+  SectionIdentifierTranslateSettings,
+  SectionIdentifierPageZoom,
+  // End Vivaldi
+
   SectionIdentifierDeveloperTools,
 };
 
@@ -61,6 +79,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeSettingsDetectAddresses,
   ItemTypeSettingsDetectUnits,
   ItemTypeSettingsWebInspector,
+
+  // Vivaldi
+  ItemTypeSettingsPreferTranslatePanel,
+  ItemTypeSettingsPreferTranslatePanelFooter,
+  ItemTypeSettingsPageZoom,
+  // End Vivaldi
+
 };
 
 }  // namespace
@@ -120,6 +145,21 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (id)blockPopupsItem;
 - (id)composeEmailItem;
 
+// Vivaldi
+// PrefBackedBoolean for "Prefer Translate Panel" setting state.
+@property(nonatomic, strong, readonly)
+    PrefBackedBoolean* preferTranslatePanelEnabled;
+
+// The item related to the switch for the "Prefer Translate Panel" setting.
+@property(nonatomic, strong) TableViewSwitchItem* preferTranslatePanelItem;
+
+// The coordinator showing the view for page zoom setting
+@property(nonatomic, strong)
+    VivaldiPageZoomSettingsCoordinator* vivaldiPageZoomSettingsCoordinator;
+// The item related to the switch for the page zoom setting.
+@property(nonatomic, strong) TableViewDetailIconItem* pageZoomSettingItem;
+// End Vivaldi
+
 @end
 
 @implementation ContentSettingsTableViewController {
@@ -134,10 +174,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
     _browser = browser;
     self.title = l10n_util::GetNSString(IDS_IOS_CONTENT_SETTINGS_TITLE);
 
-    ChromeBrowserState* browserState = browser->GetBrowserState();
+    ProfileIOS* profile = browser->GetProfile();
 
     HostContentSettingsMap* settingsMap =
-        ios::HostContentSettingsMapFactory::GetForBrowserState(browserState);
+        ios::HostContentSettingsMapFactory::GetForProfile(profile);
     _disablePopupsSetting = [[ContentSettingBackedBoolean alloc]
         initWithHostContentSettingsMap:settingsMap
                              settingID:ContentSettingsType::POPUPS
@@ -145,17 +185,17 @@ typedef NS_ENUM(NSInteger, ItemType) {
     [_disablePopupsSetting setObserver:self];
 
     _linkPreviewEnabled = [[PrefBackedBoolean alloc]
-        initWithPrefService:browserState->GetPrefs()
+        initWithPrefService:profile->GetPrefs()
                    prefName:prefs::kLinkPreviewEnabled];
     [_linkPreviewEnabled setObserver:self];
 
     _detectAddressesEnabled = [[PrefBackedBoolean alloc]
-        initWithPrefService:browserState->GetPrefs()
+        initWithPrefService:profile->GetPrefs()
                    prefName:prefs::kDetectAddressesEnabled];
     [_detectAddressesEnabled setObserver:self];
 
     _detectUnitsEnabled = [[PrefBackedBoolean alloc]
-        initWithPrefService:browserState->GetPrefs()
+        initWithPrefService:profile->GetPrefs()
                    prefName:prefs::kDetectUnitsEnabled];
     [_detectUnitsEnabled setObserver:self];
 
@@ -167,10 +207,18 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
     if (web::features::IsWebInspectorSupportEnabled()) {
       _webInspectorEnabled = [[PrefBackedBoolean alloc]
-          initWithPrefService:browserState->GetPrefs()
+          initWithPrefService:profile->GetPrefs()
                      prefName:prefs::kWebInspectorEnabled];
       [_webInspectorEnabled setObserver:self];
     }
+
+    if (IsVivaldiRunning()) {
+      _preferTranslatePanelEnabled = [[PrefBackedBoolean alloc]
+          initWithPrefService:GetApplicationContext()->GetLocalState()
+                     prefName:vivaldiprefs::kVivaldiPreferTranslatePanel];
+      [_preferTranslatePanelEnabled setObserver:self];
+    } // End Vivaldi
+
   }
   return self;
 }
@@ -213,9 +261,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addSectionWithIdentifier:SectionIdentifierSettings];
   [model addItem:[self blockPopupsItem]
       toSectionWithIdentifier:SectionIdentifierSettings];
-  NSString* settingsTitle = MailtoHandlerServiceFactory::GetForBrowserState(
-                                _browser->GetBrowserState())
-                                ->SettingsTitle();
+  NSString* settingsTitle =
+      MailtoHandlerServiceFactory::GetForProfile(_browser->GetProfile())
+          ->SettingsTitle();
   // Display email settings only on one window at a time, by checking
   // if this is the current owner.
   _openedInAnotherWindowItem = nil;
@@ -230,10 +278,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
     }
   }
 
-  if (IsDiscoverFeedPreviewEnabled()) {
-    [model addItem:[self linkPreviewItem]
-        toSectionWithIdentifier:SectionIdentifierSettings];
-  }
+  [model addItem:[self linkPreviewItem]
+      toSectionWithIdentifier:SectionIdentifierSettings];
 
   self.defaultModeItem = [self defaultSiteMode];
   [model addItem:self.defaultModeItem
@@ -248,6 +294,25 @@ typedef NS_ENUM(NSInteger, ItemType) {
     [model addItem:[self detectUnitItem]
         toSectionWithIdentifier:SectionIdentifierSettings];
   }
+
+  if (IsVivaldiRunning()) {
+    [model addSectionWithIdentifier:SectionIdentifierTranslateSettings];
+
+    [model addItem:[self preferTranslatePanelItem]
+        toSectionWithIdentifier:SectionIdentifierTranslateSettings];
+    TableViewLinkHeaderFooterItem* footer =
+        [[TableViewLinkHeaderFooterItem alloc]
+            initWithType:ItemTypeSettingsPreferTranslatePanelFooter];
+    footer.text =
+        l10n_util::GetNSString(IDS_IOS_PANEL_PREFER_TRANSLATE_PANEL_FOOTER);
+    [model setFooter:footer
+        forSectionWithIdentifier:SectionIdentifierTranslateSettings];
+    self.pageZoomSettingItem = [self vivaldiPageZoomSettingItem];
+    [model addSectionWithIdentifier:SectionIdentifierPageZoom];
+    [model addItem:self.pageZoomSettingItem
+        toSectionWithIdentifier:SectionIdentifierPageZoom];
+  } // End Vivaldi
+
   if (web::features::IsWebInspectorSupportEnabled()) {
     self.webInspectorItem = [self webInspectorStateItem];
     [model addSectionWithIdentifier:SectionIdentifierDeveloperTools];
@@ -301,9 +366,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
   _composeEmailDetailItem = [[TableViewDetailIconItem alloc]
       initWithType:ItemTypeSettingsComposeEmail];
   // Use the handler's preferred title string for the compose email item.
-  NSString* settingsTitle = MailtoHandlerServiceFactory::GetForBrowserState(
-                                _browser->GetBrowserState())
-                                ->SettingsTitle();
+  NSString* settingsTitle =
+      MailtoHandlerServiceFactory::GetForProfile(_browser->GetProfile())
+          ->SettingsTitle();
   DCHECK([settingsTitle length]);
   // .detailText can display the selected mailto handling app, but the current
   // MailtoHandlerService does not expose this through its API.
@@ -322,9 +387,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
   _openedInAnotherWindowItem = [[TableViewMultiDetailTextItem alloc]
       initWithType:ItemTypeSettingsComposeEmail];
   // Use the handler's preferred title string for the compose email item.
-  NSString* settingsTitle = MailtoHandlerServiceFactory::GetForBrowserState(
-                                _browser->GetBrowserState())
-                                ->SettingsTitle();
+  NSString* settingsTitle =
+      MailtoHandlerServiceFactory::GetForProfile(_browser->GetProfile())
+          ->SettingsTitle();
   DCHECK([settingsTitle length]);
   // .detailText can display the selected mailto handling app, but the current
   // MailtoHandlerService does not expose this through its API.
@@ -425,6 +490,15 @@ typedef NS_ENUM(NSInteger, ItemType) {
                               action:@selector(detectUnitsSwitchToggled:)
                     forControlEvents:UIControlEventValueChanged];
   }
+
+  if (IsVivaldiRunning() && itemType == ItemTypeSettingsPreferTranslatePanel) {
+    TableViewSwitchCell* switchCell =
+        base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
+    [switchCell.switchView addTarget:self
+                            action:@selector(preferTranslatePanelSwitchToggled:)
+                  forControlEvents:UIControlEventValueChanged];
+  } // End Vivaldi
+
   return cell;
 }
 
@@ -441,7 +515,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     case ItemTypeSettingsBlockPopups: {
       BlockPopupsTableViewController* controller =
           [[BlockPopupsTableViewController alloc]
-              initWithBrowserState:_browser->GetBrowserState()];
+              initWithProfile:_browser->GetProfile()];
       [self configureHandlersForRootViewController:controller];
       [self.navigationController pushViewController:controller animated:YES];
       break;
@@ -451,8 +525,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
         break;
 
       UIViewController* controller =
-          MailtoHandlerServiceFactory::GetForBrowserState(
-              _browser->GetBrowserState())
+          MailtoHandlerServiceFactory::GetForProfile(_browser->GetProfile())
               ->CreateSettingsController();
       if (controller) {
         [self.navigationController pushViewController:controller animated:YES];
@@ -478,6 +551,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [self.webInspectorStateViewCoordinator start];
       break;
     }
+
+    // Vivaldi
+    case ItemTypeSettingsPageZoom: {
+      [self showVivaldiPageZoomSettings];
+      break;
+    }
+    // End Vivaldi
+
   }
   [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
@@ -511,8 +592,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
   } else if (observableBoolean == self.detectUnitsEnabled) {
     self.detectUnitsItem.on = [self.detectUnitsEnabled value];
     [self reconfigureCellsForItems:@[ self.detectUnitsItem ]];
+  } else if (IsVivaldiRunning() &&
+             observableBoolean == self.preferTranslatePanelEnabled) {
+    self.preferTranslatePanelItem.on = [self.preferTranslatePanelEnabled value];
+    [self reconfigureCellsForItems:@[ self.preferTranslatePanelItem ]];
+    // End Vivaldi
   } else {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 }
 
@@ -553,9 +639,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
   // it detects if the flow is coming back from it, based on the navigation
   // bar stack items.
   NSString* top = self.navigationController.navigationBar.topItem.title;
-  NSString* mailToTitle = MailtoHandlerServiceFactory::GetForBrowserState(
-                              _browser->GetBrowserState())
-                              ->SettingsTitle();
+  NSString* mailToTitle =
+      MailtoHandlerServiceFactory::GetForProfile(_browser->GetProfile())
+          ->SettingsTitle();
   if ([top isEqualToString:mailToTitle]) {
     openedMailTo = NO;
     [[NSNotificationCenter defaultCenter]
@@ -599,6 +685,52 @@ typedef NS_ENUM(NSInteger, ItemType) {
   _browser = nullptr;
   [self.defaultModeViewCoordinator stop];
   self.defaultModeViewCoordinator = nil;
+
+  // Vivaldi
+  [self.vivaldiPageZoomSettingsCoordinator stop];
+  self.vivaldiPageZoomSettingsCoordinator = nil;
+  // End Vivaldi
+
 }
+
+#pragma mark - Vivaldi
+- (TableViewSwitchItem*)preferTranslatePanelItem {
+  if (!_preferTranslatePanelItem) {
+    _preferTranslatePanelItem = [[TableViewSwitchItem alloc]
+        initWithType:ItemTypeSettingsPreferTranslatePanel];
+
+    _preferTranslatePanelItem.text =
+        l10n_util::GetNSString(IDS_IOS_PANEL_PREFER_TRANSLATE_PANEL);
+    _preferTranslatePanelItem.on = [self.preferTranslatePanelEnabled value];
+    _preferTranslatePanelItem.accessibilityIdentifier =
+        kSettingsPreferTranslatePanelCellId;
+  }
+  return _preferTranslatePanelItem;
+}
+
+- (void)preferTranslatePanelSwitchToggled:(UISwitch*)sender {
+  BOOL newSwitchValue = sender.isOn;
+  self.preferTranslatePanelItem.on = newSwitchValue;
+  [self.preferTranslatePanelEnabled setValue:newSwitchValue];
+}
+
+- (TableViewDetailIconItem*)vivaldiPageZoomSettingItem {
+  TableViewDetailIconItem* item =
+  [[TableViewDetailIconItem alloc]
+    initWithType:ItemTypeSettingsPageZoom];
+  item.text = l10n_util::GetNSString(IDS_IOS_PAGEZOOM_SETTING_TITLE);
+  item.iconImage = [UIImage systemImageNamed:vPageZoomIcon];
+  item.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+  return item;
+}
+
+- (void)showVivaldiPageZoomSettings {
+  _vivaldiPageZoomSettingsCoordinator =
+  [[VivaldiPageZoomSettingsCoordinator alloc]
+    initWithBaseNavigationController:self.navigationController
+                             browser:_browser];
+  [_vivaldiPageZoomSettingsCoordinator start];
+}
+// End Vivaldi
 
 @end

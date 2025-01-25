@@ -13,28 +13,22 @@
 // limitations under the License.
 
 import m from 'mithril';
-import {Time, duration, time} from '../../base/time';
 import {
   asSliceSqlId,
   SliceSqlId,
 } from '../../trace_processor/sql_utils/core_types';
 import {Anchor} from '../../widgets/anchor';
 import {Icons} from '../../base/semantic_icons';
-import {globals} from '../globals';
-import {BigintMath} from '../../base/bigint_math';
 import {getSlice, SliceDetails} from '../../trace_processor/sql_utils/slice';
 import {
   createSqlIdRefRenderer,
   sqlIdRegistry,
 } from './sql/details/sql_ref_renderer_registry';
-import {scrollTo} from '../../public/scroll_helper';
+import {AppImpl} from '../../core/app_impl';
 
 interface SliceRefAttrs {
   readonly id: SliceSqlId;
   readonly name: string;
-  readonly ts: time;
-  readonly dur: duration;
-  readonly sqlTrackId: number;
 
   // Whether clicking on the reference should change the current tab
   // to "current selection" tab in addition to updating the selection
@@ -49,34 +43,14 @@ export class SliceRef implements m.ClassComponent<SliceRefAttrs> {
       {
         icon: Icons.UpdateSelection,
         onclick: () => {
-          const track = globals.trackManager.findTrack((td) => {
-            return td.tags?.trackIds?.includes(vnode.attrs.sqlTrackId);
-          });
-          if (track === undefined) return;
-          scrollTo({
-            track: {
-              uri: track.uri,
-              expandGroup: true,
-            },
-          });
-          // Clamp duration to 1 - i.e. for instant events
-          const dur = BigintMath.max(1n, vnode.attrs.dur);
-          scrollTo({
-            time: {
-              start: vnode.attrs.ts,
-              end: Time.fromRaw(vnode.attrs.ts + dur),
-            },
-          });
-          globals.selectionManager.setLegacy(
-            {
-              kind: 'SLICE',
-              id: vnode.attrs.id,
-              trackUri: track.uri,
-              table: 'slice',
-            },
+          // TODO(primiano): the Trace object should be properly injected here.
+          AppImpl.instance.trace?.selection.selectSqlEvent(
+            'slice',
+            vnode.attrs.id,
             {
               switchToCurrentSelectionTab:
                 vnode.attrs.switchToCurrentSelectionTab,
+              scrollToSelection: true,
             },
           );
         },
@@ -90,9 +64,6 @@ export function sliceRef(slice: SliceDetails, name?: string): m.Child {
   return m(SliceRef, {
     id: slice.id,
     name: name ?? slice.name,
-    ts: slice.ts,
-    dur: slice.dur,
-    sqlTrackId: slice.trackId,
   });
 }
 

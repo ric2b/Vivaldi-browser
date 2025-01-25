@@ -42,6 +42,7 @@ class QuicStream;
 }  // namespace quic
 
 using testing::_;
+using testing::HasSubstr;
 using testing::NiceMock;
 using testing::Return;
 
@@ -178,7 +179,7 @@ class TlsServerHandshakerTest : public QuicTestWithParam<TestParams> {
   TlsServerHandshakerTest()
       : server_compressed_certs_cache_(
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
-        server_id_(kServerHostname, kServerPort, false),
+        server_id_(kServerHostname, kServerPort),
         supported_versions_({GetParam().version}) {
     SetQuicFlag(quic_disable_server_tls_resumption,
                 GetParam().disable_resumption);
@@ -509,6 +510,8 @@ TEST_P(TlsServerHandshakerTest, HandshakeWithAsyncSelectCertFailure) {
   // Check that the server didn't send any handshake messages, because it failed
   // to handshake.
   EXPECT_EQ(moved_messages_counts_.second, 0u);
+  EXPECT_EQ(server_handshaker_->extra_error_details(),
+            "select_cert_error: proof_source_handle async failure");
 }
 
 TEST_P(TlsServerHandshakerTest, HandshakeWithAsyncSelectCertAndSignature) {
@@ -632,7 +635,7 @@ TEST_P(TlsServerHandshakerTest, HostnameForCertSelectionAndComputeSignature) {
   // Client uses upper case letters in hostname. It is considered valid by
   // QuicHostnameUtils::IsValidSNI, but it should be normalized for cert
   // selection.
-  server_id_ = QuicServerId("tEsT.EXAMPLE.CoM", kServerPort, false);
+  server_id_ = QuicServerId("tEsT.EXAMPLE.CoM", kServerPort);
   InitializeServerWithFakeProofSourceHandle();
   server_handshaker_->SetupProofSourceHandle(
       /*select_cert_action=*/FakeProofSourceHandle::Action::DELEGATE_SYNC,
@@ -698,13 +701,14 @@ TEST_P(TlsServerHandshakerTest, ClientSendingBadALPN) {
   EXPECT_CALL(*client_session_, GetAlpnsToOffer())
       .WillOnce(Return(std::vector<std::string>({kTestBadClientAlpn})));
 
-  EXPECT_CALL(*server_connection_,
-              CloseConnection(QUIC_HANDSHAKE_FAILED,
-                              static_cast<QuicIetfTransportErrorCodes>(
-                                  CRYPTO_ERROR_FIRST + 120),
-                              "TLS handshake failure (ENCRYPTION_INITIAL) 120: "
-                              "no application protocol",
-                              _));
+  EXPECT_CALL(
+      *server_connection_,
+      CloseConnection(
+          QUIC_HANDSHAKE_FAILED,
+          static_cast<QuicIetfTransportErrorCodes>(CRYPTO_ERROR_FIRST + 120),
+          HasSubstr("TLS handshake failure (ENCRYPTION_INITIAL) 120: "
+                    "no application protocol"),
+          _));
 
   AdvanceHandshakeWithFakeClient();
 
@@ -737,11 +741,9 @@ TEST_P(TlsServerHandshakerTest, CustomALPNNegotiation) {
 }
 
 TEST_P(TlsServerHandshakerTest, RejectInvalidSNI) {
-  server_id_ = QuicServerId("invalid!.example.com", kServerPort, false);
+  SetQuicFlag(quic_client_allow_invalid_sni_for_test, true);
+  server_id_ = QuicServerId("invalid!.example.com", kServerPort);
   InitializeFakeClient();
-  static_cast<TlsClientHandshaker*>(
-      QuicCryptoClientStreamPeer::GetHandshaker(client_stream()))
-      ->AllowInvalidSNIForTests();
 
   // Run the handshake and expect it to fail.
   AdvanceHandshakeWithFakeClient();

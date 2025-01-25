@@ -69,7 +69,7 @@ StreamingVpxEncoder::StreamingVpxEncoder(const Parameters& params,
   config_.g_timebase.num = Clock::duration::period::num;
   config_.g_timebase.den = Clock::duration::period::den;
 
-  // |g_pass| and |g_lag_in_frames| must be "one pass" and zero, respectively,
+  // `g_pass` and `g_lag_in_frames` must be "one pass" and zero, respectively,
   // because of the way the libvpx API is used.
   config_.g_pass = VPX_RC_ONE_PASS;
   config_.g_lag_in_frames = 0;
@@ -104,7 +104,7 @@ StreamingVpxEncoder::~StreamingVpxEncoder() {
 }
 
 int StreamingVpxEncoder::GetTargetBitrate() const {
-  // Note: No need to lock the |mutex_| since this method should be called on
+  // Note: No need to lock the `mutex_` since this method should be called on
   // the same thread as SetTargetBitrate().
   return target_bitrate_;
 }
@@ -115,8 +115,8 @@ void StreamingVpxEncoder::SetTargetBitrate(int new_bitrate) {
   new_bitrate = std::max(new_bitrate, kBytesPerKilobyte);
 
   std::unique_lock<std::mutex> lock(mutex_);
-  // Only assign the new target bitrate if |target_bitrate_| has not yet been
-  // used to signal the |encode_thread_| to end.
+  // Only assign the new target bitrate if `target_bitrate_` has not yet been
+  // used to signal the `encode_thread_` to end.
   if (target_bitrate_ > 0) {
     target_bitrate_ = new_bitrate;
   }
@@ -130,7 +130,7 @@ void StreamingVpxEncoder::EncodeAndSend(
   work_unit.capture_begin_time = frame.capture_begin_time;
   work_unit.capture_end_time = frame.capture_end_time;
 
-  // TODO(jophba): The |VideoFrame| struct should provide the media timestamp,
+  // TODO(jophba): The `VideoFrame` struct should provide the media timestamp,
   // instead of this code inferring it from the reference timestamps, since: 1)
   // the video capturer's clock may tick at a different rate than the system
   // clock; and 2) to reduce jitter.
@@ -156,7 +156,7 @@ void StreamingVpxEncoder::EncodeAndSend(
 
   Clock::duration frame_duration = frame.duration;
   if (frame_duration <= Clock::duration::zero()) {
-    // The caller did not provide the frame duration in |frame|.
+    // The caller did not provide the frame duration in `frame`.
     if (reference_time == start_time_) {
       // Use the max for the first frame so libvpx will spend extra effort on
       // its quality.
@@ -248,7 +248,7 @@ void StreamingVpxEncoder::PrepareEncoder(int width,
 
   const int target_kbps = target_bitrate / kBytesPerKilobyte;
 
-  // Translate the |ideal_speed_setting_| into the VP8E_SET_CPUUSED setting and
+  // Translate the `ideal_speed_setting_` into the VP8E_SET_CPUUSED setting and
   // the minimum quantizer to use.
   int speed;
   int min_quantizer;
@@ -312,7 +312,7 @@ void StreamingVpxEncoder::PrepareEncoder(int width,
   }
 
   if (current_speed_setting_ != speed) {
-    // Pass the |speed| as a negative value to turn off VP8/9's automatic speed
+    // Pass the `speed` as a negative value to turn off VP8/9's automatic speed
     // selection logic and force the exact setting.
     const auto ctl_result =
         vpx_codec_control(&encoder_, VP8E_SET_CPUUSED, -speed);
@@ -327,7 +327,7 @@ void StreamingVpxEncoder::EncodeFrame(bool force_key_frame,
 
   // The presentation timestamp argument here is fixed to zero to force the
   // encoder to base its single-frame bandwidth calculations entirely on
-  // |frame_duration| and the target bitrate setting.
+  // `frame_duration` and the target bitrate setting.
   const vpx_codec_pts_t pts = 0;
   const vpx_enc_frame_flags_t flags = force_key_frame ? VPX_EFLAG_FORCE_KF : 0;
   const auto encode_result =

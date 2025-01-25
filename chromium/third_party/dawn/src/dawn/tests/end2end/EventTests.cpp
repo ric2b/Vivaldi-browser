@@ -45,29 +45,30 @@ using testing::Eq;
 wgpu::Device CreateExtraDevice(wgpu::Instance instance) {
     // IMPORTANT: DawnTest overrides RequestAdapter and RequestDevice and mixes
     // up the two instances. We use these to bypass the override.
-    auto* requestAdapter = reinterpret_cast<WGPUProcInstanceRequestAdapter>(
-        wgpu::GetProcAddress(nullptr, "wgpuInstanceRequestAdapter"));
-    auto* requestDevice = reinterpret_cast<WGPUProcAdapterRequestDevice>(
-        wgpu::GetProcAddress(nullptr, "wgpuAdapterRequestDevice"));
+    auto* requestAdapter = reinterpret_cast<WGPUProcInstanceRequestAdapter2>(
+        wgpu::GetProcAddress("wgpuInstanceRequestAdapter2"));
+    auto* requestDevice = reinterpret_cast<WGPUProcAdapterRequestDevice2>(
+        wgpu::GetProcAddress("wgpuAdapterRequestDevice2"));
 
     wgpu::Adapter adapter2;
-    requestAdapter(
-        instance.Get(), nullptr,
-        [](WGPURequestAdapterStatus status, WGPUAdapter adapter, const char*, void* userdata) {
-            ASSERT_EQ(status, WGPURequestAdapterStatus_Success);
-            *reinterpret_cast<wgpu::Adapter*>(userdata) = wgpu::Adapter::Acquire(adapter);
-        },
-        &adapter2);
+    requestAdapter(instance.Get(), nullptr,
+                   {nullptr, WGPUCallbackMode_AllowSpontaneous,
+                    [](WGPURequestAdapterStatus status, WGPUAdapter adapter, WGPUStringView, void*,
+                       void* result) {
+                        *reinterpret_cast<wgpu::Adapter*>(result) = wgpu::Adapter::Acquire(adapter);
+                    },
+                    nullptr, &adapter2});
     DAWN_ASSERT(adapter2);
 
     wgpu::Device device2;
-    requestDevice(
-        adapter2.Get(), nullptr,
-        [](WGPURequestDeviceStatus status, WGPUDevice device, const char*, void* userdata) {
-            ASSERT_EQ(status, WGPURequestDeviceStatus_Success);
-            *reinterpret_cast<wgpu::Device*>(userdata) = wgpu::Device::Acquire(device);
-        },
-        &device2);
+    requestDevice(adapter2.Get(), nullptr,
+                  {nullptr, WGPUCallbackMode_AllowSpontaneous,
+                   [](WGPURequestDeviceStatus status, WGPUDevice device, WGPUStringView, void*,
+                      void* result) {
+                       ASSERT_EQ(status, WGPURequestDeviceStatus_Success);
+                       *reinterpret_cast<wgpu::Device*>(result) = wgpu::Device::Acquire(device);
+                   },
+                   nullptr, &device2});
     DAWN_ASSERT(device2);
 
     return device2;
@@ -628,7 +629,7 @@ TEST_P(FutureTests, MixedSourcePolling) {
     // PopErrorScope is implemented via a signal.
     device.PushErrorScope(wgpu::ErrorFilter::Validation);
     device.PopErrorScope(wgpu::CallbackMode::AllowProcessEvents,
-                         [](wgpu::PopErrorScopeStatus, wgpu::ErrorType, const char*) {});
+                         [](wgpu::PopErrorScopeStatus, wgpu::ErrorType, wgpu::StringView) {});
 
     instance.ProcessEvents();
 }

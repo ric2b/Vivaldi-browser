@@ -2,33 +2,37 @@
 using namespace metal;
 
 #define TINT_ISOLATE_UB(VOLATILE_NAME) \
-  volatile bool VOLATILE_NAME = true; \
-  if (VOLATILE_NAME)
+  {volatile bool VOLATILE_NAME = false; if (VOLATILE_NAME) break;}
 
 kernel void tint_symbol() {
   int j = 0;
   {
     int i = 0;
-    TINT_ISOLATE_UB(tint_volatile_true) while(true) {
+    while(true) {
+      TINT_ISOLATE_UB(tint_volatile_false)
       if ((i < 2)) {
       } else {
         break;
       }
+      bool tint_continue = false;
       switch(i) {
         case 0:
         {
+          bool tint_continue_1 = false;
           switch(j) {
             case 0:
             {
-              {
-                i = as_type<int>((as_type<uint>(i) + as_type<uint>(2)));
-              }
-              continue;
+              tint_continue_1 = true;
+              break;
             }
             default:
             {
               break;
             }
+          }
+          if (tint_continue_1) {
+            tint_continue = true;
+            break;
           }
           break;
         }
@@ -36,6 +40,12 @@ kernel void tint_symbol() {
         {
           break;
         }
+      }
+      if (tint_continue) {
+        {
+          i = as_type<int>((as_type<uint>(i) + as_type<uint>(2)));
+        }
+        continue;
       }
       {
         i = as_type<int>((as_type<uint>(i) + as_type<uint>(2)));

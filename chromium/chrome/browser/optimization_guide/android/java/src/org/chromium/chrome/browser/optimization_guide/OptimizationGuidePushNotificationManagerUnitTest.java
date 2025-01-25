@@ -16,14 +16,14 @@ import androidx.test.filters.SmallTest;
 
 import com.google.protobuf.ByteString;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.FeatureList;
 import org.chromium.base.metrics.RecordHistogram;
@@ -53,6 +53,7 @@ import java.util.HashSet;
 @EnableFeatures(ChromeFeatureList.OPTIMIZATION_GUIDE_PUSH_NOTIFICATIONS)
 public class OptimizationGuidePushNotificationManagerUnitTest {
     @Rule public JniMocker mocker = new JniMocker();
+    @Rule public MockitoRule mMockitoJUnit = MockitoJUnit.rule();
 
     @Mock private Profile mProfile;
     @Mock private OptimizationGuideBridgeFactory.Natives mOptimizationGuideBridgeFactoryJniMock;
@@ -75,9 +76,6 @@ public class OptimizationGuidePushNotificationManagerUnitTest {
 
     @Before
     public void setUp() {
-        resetFeatureFlags();
-
-        MockitoAnnotations.initMocks(this);
         mocker.mock(
                 org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeFactoryJni
                         .TEST_HOOKS,
@@ -89,16 +87,6 @@ public class OptimizationGuidePushNotificationManagerUnitTest {
         ProfileManager.setLastUsedProfileForTesting(mProfile);
 
         NativeLibraryTestUtils.loadNativeLibraryNoBrowserProcess();
-    }
-
-    @After
-    public void tearDown() {
-        resetFeatureFlags();
-    }
-
-    public void resetFeatureFlags() {
-        OptimizationGuidePushNotificationManager.clearCacheForAllTypes();
-        FeatureList.setTestFeatures(null);
     }
 
     @Test
@@ -213,9 +201,12 @@ public class OptimizationGuidePushNotificationManagerUnitTest {
                 Arrays.asList(OptimizationType.LITE_PAGE, OptimizationType.LITE_VIDEO),
                 OptimizationGuidePushNotificationManager.getOptTypesWithPushNotifications());
 
-        // Flag state cannot change within the same process instance, so this  behavior does not
+        // Flag state cannot change within the same process instance, so this behavior does not
         // actually get triggered in real usage.
-        ChromeFeatureList.sOptimizationGuidePushNotifications.setForTesting(false);
+        FeatureList.TestValues testValues = new FeatureList.TestValues();
+        testValues.addFeatureFlagOverride(
+                ChromeFeatureList.OPTIMIZATION_GUIDE_PUSH_NOTIFICATIONS, false);
+        FeatureList.mergeTestValues(testValues, /* replace= */ true);
 
         // Push another notification to trigger the clear.
         OptimizationGuidePushNotificationManager.onPushNotification(NOTIFICATION_WITH_PAYLOAD);
@@ -399,7 +390,7 @@ public class OptimizationGuidePushNotificationManagerUnitTest {
     public void testCacheDecodingErrors_InvalidProtobuf() {
         OptimizationGuidePushNotificationManager.setNativeIsInitializedForTesting(false);
 
-        int startPBErrorCount =
+        int startPbErrorCount =
                 RecordHistogram.getHistogramValueCountForTesting(
                         "OptimizationGuide.PushNotifications.ReadCacheResult",
                         /* INVALID_PROTOBUF= */ 2);
@@ -422,7 +413,7 @@ public class OptimizationGuidePushNotificationManagerUnitTest {
         Assert.assertNotNull(cached);
         Assert.assertEquals(0, cached.length);
 
-        int afterPBErrorCount =
+        int afterPbErrorCount =
                 RecordHistogram.getHistogramValueCountForTesting(
                         "OptimizationGuide.PushNotifications.ReadCacheResult",
                         /* INVALID_PROTOBUF= */ 2);
@@ -430,7 +421,7 @@ public class OptimizationGuidePushNotificationManagerUnitTest {
                 RecordHistogram.getHistogramTotalCountForTesting(
                         "OptimizationGuide.PushNotifications.ReadCacheResult");
 
-        Assert.assertEquals(1, afterPBErrorCount - startPBErrorCount);
+        Assert.assertEquals(1, afterPbErrorCount - startPbErrorCount);
         Assert.assertEquals(1, afterTotalCount - startTotalCount);
     }
 

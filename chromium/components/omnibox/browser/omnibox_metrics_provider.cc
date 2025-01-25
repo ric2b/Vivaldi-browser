@@ -125,12 +125,15 @@ ClientSummarizedResultType GetClientSummarizedResultType(
            ClientSummarizedResultType::kUrl},
           {OmniboxEventProto::Suggestion::FEATURED_ENTERPRISE_SEARCH,
            ClientSummarizedResultType::kSearch},
+          {OmniboxEventProto::Suggestion::HISTORY_EMBEDDINGS_ANSWER,
+           ClientSummarizedResultType::kUrl},
 
           // Vivaldi
           {OmniboxEventProto::Suggestion::BOOKMARK_NICKNAME,
            ClientSummarizedResultType::kUrl},
           {OmniboxEventProto::Suggestion::DIRECT_MATCH,
            ClientSummarizedResultType::kUrl},
+           // End Vivaldi
       });
 
   const auto it = kResultTypesToClientSummarizedResultTypes->find(type);
@@ -262,9 +265,9 @@ void GetScoringSignalsForLogging(const OmniboxScoringSignals& scoring_signals,
 
 }  // namespace
 
-OmniboxMetricsProvider::OmniboxMetricsProvider() {}
+OmniboxMetricsProvider::OmniboxMetricsProvider() = default;
 
-OmniboxMetricsProvider::~OmniboxMetricsProvider() {}
+OmniboxMetricsProvider::~OmniboxMetricsProvider() = default;
 
 void OmniboxMetricsProvider::OnRecordingEnabled() {
   subscription_ = OmniboxEventGlobalTracker::GetInstance()->RegisterCallback(

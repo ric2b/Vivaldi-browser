@@ -216,10 +216,10 @@ slow. There are a couple approaches that can be useful to recover quickly.
 ### Kernel configuration
 
 [Kernel
-configuration](https://dev.chromium.org/chromium-os/how-tos-and-troubleshooting/kernel-configuration)
+configuration](https://www.chromium.org/chromium-os/developer-library/guides/kernel/kernel-configuration/)
 in ChromiumOS has an extra level of indirection from the normal
 .config file. So do the instructions - [see this page for more
-information](https://dev.chromium.org/chromium-os/how-tos-and-troubleshooting/kernel-configuration).
+information](https://www.chromium.org/chromium-os/developer-library/guides/kernel/kernel-configuration/).
 
 See also the [cros-kernel eclass documentation].
 

@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/views/frame/immersive_mode_controller_chromeos.h"
 
+#include "ash/wm/window_pin_util.h"
 #include "build/buildflag.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
@@ -18,6 +18,7 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window_targeter.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/paint_context.h"
 #include "ui/compositor/paint_recorder.h"
@@ -28,12 +29,6 @@
 #include "ui/views/widget/native_widget_aura.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chrome/browser/ui/lacros/window_properties.h"
-#else
-#include "chrome/browser/ui/chromeos/window_pin_util.h"
-#endif
 
 namespace {
 
@@ -79,14 +74,9 @@ void ImmersiveModeControllerChromeos::Init(BrowserView* browser_view) {
 }
 
 void ImmersiveModeControllerChromeos::SetEnabled(bool enabled) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // On Ash, state transition happens synchronously, so we can compare it
-  // against the current state. For Lacros, it will be skipped inside
-  // WaylandExtension.
   if (controller_.IsEnabled() == enabled) {
     return;
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   if (!fullscreen_observer_.IsObserving()) {
     fullscreen_observer_.Observe(browser_view_->browser()
@@ -155,11 +145,9 @@ void ImmersiveModeControllerChromeos::OnWidgetActivationChanged(
   Browser* const browser = browser_view_->browser();
   bool avoid_using_immersive_mode =
       platform_util::IsBrowserLockedFullscreen(browser);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (browser->IsLockedForOnTask()) {
     avoid_using_immersive_mode = false;
   }
-#endif
   if (avoid_using_immersive_mode) {
     return;
   }
@@ -281,9 +269,6 @@ void ImmersiveModeControllerChromeos::OnWindowPropertyChanged(
     aura::Window* window,
     const void* key,
     intptr_t old) {
-  // Lacros pinned state is controlled on Ash side and will be triggered when
-  // Lacros receives configure event.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Track locked fullscreen changes.
   if (key == chromeos::kWindowStateTypeKey) {
     auto old_type = static_cast<chromeos::WindowStateType>(old);
@@ -293,19 +278,18 @@ void ImmersiveModeControllerChromeos::OnWindowPropertyChanged(
       return;
     }
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   if (key == aura::client::kShowStateKey) {
-    ui::WindowShowState new_state =
+    ui::mojom::WindowShowState new_state =
         window->GetProperty(aura::client::kShowStateKey);
-    auto old_state = static_cast<ui::WindowShowState>(old);
+    auto old_state = static_cast<ui::mojom::WindowShowState>(old);
 
     // Make sure the browser stays up to date with the window's state. This is
     // necessary in classic Ash if the user exits fullscreen with the restore
     // button, and it's necessary in OopAsh if the window manager initiates a
     // fullscreen mode change (e.g. due to a WM shortcut).
-    if (new_state == ui::SHOW_STATE_FULLSCREEN ||
-        old_state == ui::SHOW_STATE_FULLSCREEN) {
+    if (new_state == ui::mojom::WindowShowState::kFullscreen ||
+        old_state == ui::mojom::WindowShowState::kFullscreen) {
       // If the browser view initiated this state change,
       // BrowserView::ProcessFullscreen will no-op, so this call is harmless.
       browser_view_->FullscreenStateChanging();

@@ -33,7 +33,6 @@
 #include "internal/test/fake_account_manager.h"
 #include "internal/test/fake_device_info.h"
 #include "internal/test/fake_task_runner.h"
-#include "sharing/common/fake_nearby_share_profile_info_provider.h"
 #include "sharing/common/nearby_share_enums.h"
 #include "sharing/common/nearby_share_prefs.h"
 #include "sharing/internal/api/fake_nearby_share_client.h"
@@ -59,9 +58,7 @@ const char kFakeEmptyDeviceName[] = "";
 const char kFakeFullName[] = "Barack Obama";
 const char kFakeGivenName[] = "Barack奥巴马";
 const char kFakeIconUrl[] = "https://www.google.com";
-const char kFakeIconUrl2[] = "https://www.google.com/2";
 const char kFakeIconToken[] = "token";
-const char kFakeIconToken2[] = "token2";
 const char kFakeInvalidDeviceName[] = "\xC0";
 const char kFakeTooLongDeviceName[] = "this string is 33 bytes in UTF-8!";
 const char kFakeTooLongGivenName[] = "this is a 33-byte string in utf-8";
@@ -127,14 +124,13 @@ class NearbyShareLocalDeviceDataManagerImplTest
   ~NearbyShareLocalDeviceDataManagerImplTest() override = default;
 
   void SetUp() override {
-    FakeTaskRunner::ResetPendingTasksCount();
     prefs::RegisterNearbySharingPrefs(preference_manager_);
     NearbyShareSchedulerFactory::SetFactoryForTesting(&scheduler_factory_);
-    profile_info_provider()->set_given_name(kFakeGivenName);
 
     AccountManager::Account account;
     account.id = kTestAccountId;
     account.email = kTestProfileUserName;
+    account.given_name = kFakeGivenName;
     fake_account_manager_.SetAccount(account);
   }
 
@@ -153,44 +149,16 @@ class NearbyShareLocalDeviceDataManagerImplTest
   void CreateManager() {
     manager_ = NearbyShareLocalDeviceDataManagerImpl::Factory::Create(
         &context_, preference_manager_, fake_account_manager_,
-        fake_device_info_, &nearby_client_factory_, &profile_info_provider_);
+        fake_device_info_, &nearby_client_factory_);
     manager_->AddObserver(this);
     ++num_manager_creations_;
     num_download_device_data_ = 0;
-    VerifyInitialization();
     manager_->Start();
   }
 
   void DestroyManager() {
     manager_->RemoveObserver(this);
     manager_.reset();
-  }
-
-  void DownloadDeviceData(
-      const absl::StatusOr<UpdateDeviceResponse>& response) {
-    // The scheduler requests a download of device data from the server.
-    EXPECT_EQ(client()->update_device_requests().size(),
-              num_download_device_data_);
-    device_data_scheduler()->InvokeRequestCallback();
-    Sync();
-    EXPECT_EQ(client()->update_device_requests().size(),
-              num_download_device_data_ + 1);
-    num_download_device_data_++;
-    EXPECT_TRUE(client()->list_contact_people_requests().empty());
-    EXPECT_TRUE(client()->list_public_certificates_requests().empty());
-
-    size_t num_handled_results =
-        device_data_scheduler()->handled_results().size();
-
-    client()->SetUpdateDeviceResponse(response);
-    manager_->DownloadDeviceData();
-    Sync();
-    EXPECT_EQ(client()->update_device_requests().size(),
-              num_download_device_data_ + 1);
-    num_download_device_data_++;
-    EXPECT_EQ(num_handled_results + 1,
-              device_data_scheduler()->handled_results().size());
-    EXPECT_EQ(response.ok(), device_data_scheduler()->handled_results().back());
   }
 
   void UploadContacts(const absl::StatusOr<UpdateDeviceResponse>& response) {
@@ -247,18 +215,10 @@ class NearbyShareLocalDeviceDataManagerImplTest
 
   NearbyShareLocalDeviceDataManager* manager() { return manager_.get(); }
 
-  FakeNearbyShareProfileInfoProvider* profile_info_provider() {
-    return &profile_info_provider_;
-  }
+  FakeAccountManager& fake_account_manager() { return fake_account_manager_; }
 
   const std::vector<ObserverNotification>& notifications() {
     return notifications_;
-  }
-
-  FakeNearbyShareScheduler* device_data_scheduler() {
-    return scheduler_factory_.pref_name_to_periodic_instance()
-        .at(prefs::kNearbySharingSchedulerDownloadDeviceDataName)
-        .fake_scheduler;
   }
 
   std::string GetDeviceName() const {
@@ -274,23 +234,11 @@ class NearbyShareLocalDeviceDataManagerImplTest
   }
 
   void Sync() {
-    EXPECT_TRUE(FakeTaskRunner::WaitForRunningTasksWithTimeout(
-        absl::Milliseconds(1000)));
+    EXPECT_TRUE(
+        context_.fake_task_runner()->SyncWithTimeout(absl::Milliseconds(1000)));
   }
 
  private:
-  void VerifyInitialization() {
-    // Verify device data scheduler input parameters.
-    const FakeNearbyShareSchedulerFactory::PeriodicInstance&
-        device_data_scheduler_instance =
-            scheduler_factory_.pref_name_to_periodic_instance().at(
-                prefs::kNearbySharingSchedulerDownloadDeviceDataName);
-    EXPECT_TRUE(device_data_scheduler_instance.fake_scheduler);
-    EXPECT_EQ(absl::Hours(12), device_data_scheduler_instance.request_period);
-    EXPECT_TRUE(device_data_scheduler_instance.retry_failures);
-    EXPECT_TRUE(device_data_scheduler_instance.require_connectivity);
-  }
-
   nearby::FakePreferenceManager preference_manager_;
   nearby::FakeAccountManager fake_account_manager_;
   nearby::FakeDeviceInfo fake_device_info_;
@@ -299,7 +247,6 @@ class NearbyShareLocalDeviceDataManagerImplTest
   size_t num_download_device_data_ = 0;
   std::vector<ObserverNotification> notifications_;
   FakeNearbyShareClientFactory nearby_client_factory_;
-  FakeNearbyShareProfileInfoProvider profile_info_provider_;
   FakeNearbyShareSchedulerFactory scheduler_factory_;
   std::unique_ptr<NearbyShareLocalDeviceDataManager> manager_;
 };
@@ -322,14 +269,15 @@ TEST_F(NearbyShareLocalDeviceDataManagerImplTest, DeviceId) {
 TEST_F(NearbyShareLocalDeviceDataManagerImplTest, DefaultDeviceName) {
   CreateManager();
 
-  // If given name is null, only return the device type.
-  profile_info_provider()->set_given_name(std::nullopt);
+  AccountManager::Account account = *fake_account_manager().GetCurrentAccount();
+  // Clear login account.
+  fake_account_manager().SetAccount(std::nullopt);
   EXPECT_EQ(manager()->GetDeviceName(),
             GetDeviceName());
 
   // Set given name and expect full default device name of the form
   // "<given name>'s <device type>."
-  profile_info_provider()->set_given_name(kFakeGivenName);
+  fake_account_manager().SetAccount(account);
   EXPECT_EQ(absl::Substitute(kDefaultDeviceName,
                              kFakeGivenName,
                              GetDeviceTypeName()),
@@ -337,7 +285,8 @@ TEST_F(NearbyShareLocalDeviceDataManagerImplTest, DefaultDeviceName) {
 
   // Make sure that when we use a given name that is very long we truncate
   // correctly.
-  profile_info_provider()->set_given_name(kFakeTooLongGivenName);
+  account.given_name = kFakeTooLongGivenName;
+  fake_account_manager().SetAccount(account);
   EXPECT_EQ(kNearbyShareDeviceNameMaxLength, manager()->GetDeviceName().size());
 }
 
@@ -356,7 +305,6 @@ TEST_F(NearbyShareLocalDeviceDataManagerImplTest, ValidateDeviceName) {
 TEST_F(NearbyShareLocalDeviceDataManagerImplTest, SetDeviceName) {
   CreateManager();
 
-  profile_info_provider()->set_given_name(kFakeGivenName);
   std::string expected_default_device_name =
       absl::Substitute(kDefaultDeviceName, kFakeGivenName, GetDeviceTypeName());
   EXPECT_EQ(manager()->GetDeviceName(), expected_default_device_name);
@@ -390,119 +338,6 @@ TEST_F(NearbyShareLocalDeviceDataManagerImplTest, SetDeviceName) {
   DestroyManager();
   CreateManager();
   EXPECT_EQ(manager()->GetDeviceName(), kFakeDeviceName);
-}
-
-TEST_F(NearbyShareLocalDeviceDataManagerImplTest, DownloadDeviceData_Success) {
-  CreateManager();
-  EXPECT_TRUE(notifications().empty());
-
-  DownloadDeviceData(
-      CreateResponse(kFakeFullName, kFakeIconUrl, kFakeIconToken));
-  EXPECT_EQ(manager()->GetFullName(), kFakeFullName);
-  EXPECT_EQ(manager()->GetIconUrl(), kFakeIconUrl);
-  EXPECT_EQ(notifications().size(), 1u);
-  EXPECT_EQ(ObserverNotification(/*did_device_name_change=*/false,
-                                 /*did_full_name_change=*/true,
-                                 /*did_icon_change=*/true),
-            notifications()[0]);
-
-  // Verify that the data is persisted.
-  DestroyManager();
-  CreateManager();
-  EXPECT_EQ(manager()->GetFullName(), kFakeFullName);
-  EXPECT_EQ(manager()->GetIconUrl(), kFakeIconUrl);
-}
-
-TEST_F(NearbyShareLocalDeviceDataManagerImplTest,
-       DownloadDeviceData_EmptyData) {
-  CreateManager();
-  EXPECT_TRUE(notifications().empty());
-
-  // The server returns empty strings for the full name and icon URL/token.
-  // GetFullName() and GetIconUrl() should return non-nullopt values even though
-  // they are trivial values.
-  DownloadDeviceData(CreateResponse("", "", ""));
-  EXPECT_EQ(manager()->GetFullName(), "");
-  EXPECT_EQ(manager()->GetIconUrl(), "");
-  EXPECT_EQ(notifications().size(), 0u);
-
-  // Return empty strings again. Ensure that the trivial full name and icon
-  // URL/token values are not considered changed and no notification is sent.
-  DownloadDeviceData(CreateResponse("", "", ""));
-  EXPECT_EQ(manager()->GetFullName(), "");
-  EXPECT_EQ(manager()->GetIconUrl(), "");
-  EXPECT_EQ(notifications().size(), 0u);
-
-  // Verify that the data is persisted.
-  DestroyManager();
-  CreateManager();
-  EXPECT_EQ(manager()->GetFullName(), "");
-  EXPECT_EQ(manager()->GetIconUrl(), "");
-}
-
-TEST_F(NearbyShareLocalDeviceDataManagerImplTest,
-       DownloadDeviceData_IconToken) {
-  CreateManager();
-  EXPECT_TRUE(notifications().empty());
-
-  DownloadDeviceData(
-      CreateResponse(kFakeFullName, kFakeIconUrl, kFakeIconToken));
-  EXPECT_EQ(manager()->GetFullName(), kFakeFullName);
-  EXPECT_EQ(manager()->GetIconUrl(), kFakeIconUrl);
-  EXPECT_EQ(notifications().size(), 1u);
-  EXPECT_EQ(ObserverNotification(/*did_device_name_change=*/false,
-                                 /*did_full_name_change=*/true,
-                                 /*did_icon_change=*/true),
-            notifications()[0]);
-
-  // Destroy and recreate to ensure name, URL, and token are all persisted.
-  DestroyManager();
-  CreateManager();
-
-  // The icon URL changes but the token does not; no notification sent.
-  DownloadDeviceData(
-      CreateResponse(kFakeFullName, kFakeIconUrl2, kFakeIconToken));
-  EXPECT_EQ(manager()->GetFullName(), kFakeFullName);
-  EXPECT_EQ(manager()->GetIconUrl(), kFakeIconUrl2);
-  EXPECT_EQ(notifications().size(), 1u);
-
-  // The icon token changes but the URL does not; no notification sent.
-  DestroyManager();
-  CreateManager();
-  DownloadDeviceData(
-      CreateResponse(kFakeFullName, kFakeIconUrl2, kFakeIconToken2));
-  EXPECT_EQ(manager()->GetFullName(), kFakeFullName);
-  EXPECT_EQ(manager()->GetIconUrl(), kFakeIconUrl2);
-  EXPECT_EQ(notifications().size(), 1u);
-
-  // The icon URL and token change; notification sent.
-  DestroyManager();
-  CreateManager();
-  DownloadDeviceData(
-      CreateResponse(kFakeFullName, kFakeIconUrl, kFakeIconToken));
-  EXPECT_EQ(manager()->GetFullName(), kFakeFullName);
-  EXPECT_EQ(manager()->GetIconUrl(), kFakeIconUrl);
-  EXPECT_EQ(notifications().size(), 2u);
-  EXPECT_EQ(ObserverNotification(/*did_device_name_change=*/false,
-                                 /*did_full_name_change=*/false,
-                                 /*did_icon_change=*/true),
-            notifications()[1]);
-
-  // Verify that the data is persisted.
-  DestroyManager();
-  CreateManager();
-  EXPECT_EQ(manager()->GetFullName(), kFakeFullName);
-  EXPECT_EQ(manager()->GetIconUrl(), kFakeIconUrl);
-}
-
-TEST_F(NearbyShareLocalDeviceDataManagerImplTest, DownloadDeviceData_Failure) {
-  CreateManager();
-  DownloadDeviceData(/*response=*/absl::InternalError(""));
-
-  // No full name or icon URL set because the response was null.
-  EXPECT_EQ(manager()->GetFullName(), std::string());
-  EXPECT_EQ(manager()->GetIconUrl(), std::string());
-  EXPECT_TRUE(notifications().empty());
 }
 
 TEST_F(NearbyShareLocalDeviceDataManagerImplTest, UploadContacts_Success) {

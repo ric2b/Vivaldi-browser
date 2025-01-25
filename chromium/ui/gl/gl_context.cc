@@ -16,7 +16,6 @@
 #include "base/strings/string_util.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "third_party/abseil-cpp/absl/base/attributes.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_fence.h"
 #include "ui/gl/gl_gl_api_implementation.h"
@@ -47,8 +46,8 @@ enum class MaximumGLESVersion {
 };
 #endif
 
-ABSL_CONST_INIT thread_local GLContext* current_context = nullptr;
-ABSL_CONST_INIT thread_local GLContext* current_real_context = nullptr;
+constinit thread_local GLContext* current_context = nullptr;
+constinit thread_local GLContext* current_real_context = nullptr;
 
 }  // namespace
 
@@ -251,7 +250,7 @@ void GLContext::ReinitializeDynamicBindings() {
 }
 
 void GLContext::ForceReleaseVirtuallyCurrent() {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void GLContext::DirtyVirtualContextState() {
@@ -397,8 +396,7 @@ bool GLContext::LosesAllContextsOnContextLost() {
     case kGLImplementationStubGL:
       return false;
     default:
-      NOTREACHED_IN_MIGRATION();
-      return true;
+      NOTREACHED();
   }
 }
 
@@ -414,9 +412,7 @@ void GLContext::OnContextWillDestroy() {
   DCHECK(!has_called_on_destory_);
   has_called_on_destory_ = true;
 
-  for (auto& obs : observer_list_) {
-    obs.OnGLContextWillDestroy(this);
-  }
+  observer_list_.Notify(&GLContextObserver::OnGLContextWillDestroy, this);
 }
 
 std::unique_ptr<gl::GLVersionInfo> GLContext::GenerateGLVersionInfo() {
@@ -427,9 +423,7 @@ std::unique_ptr<gl::GLVersionInfo> GLContext::GenerateGLVersionInfo() {
 void GLContext::MarkContextLost() {
   context_lost_ = true;
 
-  for (auto& obs : observer_list_) {
-    obs.OnGLContextLost(this);
-  }
+  observer_list_.Notify(&GLContextObserver::OnGLContextLost, this);
 }
 
 void GLContext::SetCurrent(GLSurface* surface) {

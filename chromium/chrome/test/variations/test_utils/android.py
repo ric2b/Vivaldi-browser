@@ -9,7 +9,7 @@ import os
 import subprocess
 import sys
 
-from pkg_resources import packaging
+import packaging
 from typing import List, Optional
 
 from chrome.test.variations.test_utils import SRC_DIR
@@ -99,8 +99,7 @@ def launch_emulator(avd_config: str,
 
   instance = avd_config.CreateInstance()
   instance.Start(writable_system=True,
-                 window=emulator_window,
-                 require_fast_start=True)
+                 window=emulator_window)
 
   _forward_port(instance.device, ports)
 

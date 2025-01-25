@@ -13,8 +13,7 @@
 #include "util/big_endian.h"
 #include "util/osp_logging.h"
 
-namespace openscreen::cast {
-namespace message_serialization {
+namespace openscreen::cast::message_serialization {
 
 namespace {
 
@@ -62,5 +61,4 @@ ErrorOr<DeserializeResult> TryDeserialize(ByteView input) {
   return result;
 }
 
-}  // namespace message_serialization
-}  // namespace openscreen::cast
+}  // namespace openscreen::cast::message_serialization

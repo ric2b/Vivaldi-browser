@@ -10,6 +10,7 @@
 
 #include "base/cancelable_callback.h"
 #include "base/check.h"
+#include "base/containers/fixed_flat_map.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_forward.h"
@@ -29,6 +30,7 @@
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/user_education/browser_user_education_interface.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -47,12 +49,14 @@
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/lens/lens_features.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/user_education/common/feature_promo_result.h"
+#include "components/user_education/common/feature_promo/feature_promo_controller.h"
+#include "components/user_education/common/feature_promo/feature_promo_result.h"
 #include "ui/actions/action_id.h"
 #include "ui/base/interaction/element_tracker.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/color/color_id.h"
@@ -178,27 +182,12 @@ using PopulateSidePanelCallback = base::OnceCallback<void(
     SidePanelEntry* entry,
     std::optional<std::unique_ptr<views::View>> content_view)>;
 
-// SidePanelContentSwappingContainer is used as the content wrapper for views
-// hosted in the side panel. This uses the SidePanelContentProxy to wait for the
-// SidePanelEntry's content view to be ready to be shown.
-class SidePanelContentSwappingContainer : public views::View {
-  METADATA_HEADER(SidePanelContentSwappingContainer, views::View)
+}  // namespace
 
+// This class uses the SidePanelContentProxy to wait for the SidePanelEntry's
+// content view to be ready to be shown.
+class SidePanelCoordinator::SidePanelEntryWaiter {
  public:
-  explicit SidePanelContentSwappingContainer(bool show_immediately_for_testing)
-      : show_immediately_for_testing_(show_immediately_for_testing) {
-    SetUseDefaultFillLayout(true);
-    SetBackground(
-        views::CreateThemedSolidBackground(kColorSidePanelBackground));
-    SetProperty(
-        views::kFlexBehaviorKey,
-        views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
-                                 views::MaximumFlexSizeRule::kUnbounded));
-    SetID(SidePanelCoordinator::kSidePanelContentWrapperViewId);
-  }
-
-  ~SidePanelContentSwappingContainer() override = default;
-
   // Calling this method cancels all previous calls to this method.
   // If the entry is destroyed while waiting, the callback is not invoked.
   void WaitForEntry(SidePanelEntry* entry, PopulateSidePanelCallback callback) {
@@ -213,7 +202,7 @@ class SidePanelContentSwappingContainer : public views::View {
       entry->CacheView(std::move(content_view));
       loading_entry_ = entry->GetWeakPtr();
       loaded_callback_.Reset(
-          base::BindOnce(&SidePanelContentSwappingContainer::RunLoadedCallback,
+          base::BindOnce(&SidePanelEntryWaiter::RunLoadedCallback,
                          base::Unretained(this), std::move(callback)));
       content_proxy->SetAvailableCallback(loaded_callback_.callback());
     }
@@ -241,18 +230,13 @@ class SidePanelContentSwappingContainer : public views::View {
   }
 
   // When true, don't delay switching panels.
-  bool show_immediately_for_testing_;
+  bool show_immediately_for_testing_ = false;
   // Tracks the entry that is loading.
   base::WeakPtr<SidePanelEntry> loading_entry_;
   // This class will load at most one entry at a time. If a new one is
   // requested, the old one is canceled automatically.
   base::CancelableOnceClosure loaded_callback_;
 };
-
-BEGIN_METADATA(SidePanelContentSwappingContainer)
-END_METADATA
-
-}  // namespace
 
 SidePanelCoordinator::SidePanelCoordinator(BrowserView* browser_view)
     : browser_view_(browser_view) {
@@ -265,20 +249,21 @@ SidePanelCoordinator::SidePanelCoordinator(BrowserView* browser_view)
   extensions_model_observation_.Observe(
       ToolbarActionsModel::Get(browser_view_->browser()->profile()));
 
-  window_registry_ = std::make_unique<SidePanelRegistry>();
+  window_registry_ =
+      std::make_unique<SidePanelRegistry>(browser_view_->browser());
 
   browser_view_->browser()->tab_strip_model()->AddObserver(this);
 
-  SidePanelUtil::PopulateGlobalEntries(browser_view->browser(),
-                                       window_registry_.get());
   browser_view_->unified_side_panel()->AddHeaderView(CreateHeader());
 
-  // Add observation for the window registry after global entries have been
-  // populated. This avoids re-entrancy during construction.
-  registry_observations_.AddObservation(window_registry_.get());
+  waiter_ = std::make_unique<SidePanelEntryWaiter>();
 }
 
 SidePanelCoordinator::~SidePanelCoordinator() = default;
+
+void SidePanelCoordinator::Init(Browser* browser) {
+  SidePanelUtil::PopulateGlobalEntries(browser, window_registry_.get());
+}
 
 void SidePanelCoordinator::TearDownPreBrowserViewDestruction() {
   extensions_model_observation_.Reset();
@@ -329,16 +314,6 @@ void SidePanelCoordinator::Show(
   Show(unique_key.value(), open_trigger, /*suppress_animations=*/false);
 }
 
-void SidePanelCoordinator::AddSidePanelViewStateObserver(
-    SidePanelViewStateObserver* observer) {
-  view_state_observers_.AddObserver(observer);
-}
-
-void SidePanelCoordinator::RemoveSidePanelViewStateObserver(
-    SidePanelViewStateObserver* observer) {
-  view_state_observers_.RemoveObserver(observer);
-}
-
 void SidePanelCoordinator::Close() {
   Close(/*suppress_animations=*/false);
 }
@@ -358,13 +333,8 @@ void SidePanelCoordinator::Toggle(
   // it should also be closed. This handles quick double clicks
   // to close the sidepanel.
   if (IsSidePanelShowing()) {
-    SidePanelContentSwappingContainer* content_wrapper =
-        static_cast<SidePanelContentSwappingContainer*>(
-            browser_view_->unified_side_panel()->GetViewByID(
-                kSidePanelContentWrapperViewId));
-
-    if (content_wrapper->loading_entry() == GetEntryForKey(key)) {
-      content_wrapper->ResetLoadingEntryIfNecessary();
+    if (waiter_->loading_entry() == GetEntryForKey(key)) {
+      waiter_->ResetLoadingEntryIfNecessary();
       Close();
       return;
     }
@@ -442,7 +412,7 @@ void SidePanelCoordinator::OpenMoreInfoMenu() {
                               header_more_info_button_->button_controller()),
                           header_more_info_button_->GetAnchorBoundsInScreen(),
                           views::MenuAnchorPosition::kTopRight,
-                          ui::MENU_SOURCE_NONE);
+                          ui::mojom::MenuSourceType::kNone);
 }
 
 std::optional<SidePanelEntry::Id> SidePanelCoordinator::GetCurrentEntryId()
@@ -488,12 +458,7 @@ bool SidePanelCoordinator::IsSidePanelEntryShowing(
 }
 
 SidePanelEntry* SidePanelCoordinator::GetLoadingEntryForTesting() const {
-  SidePanelContentSwappingContainer* content_wrapper =
-      static_cast<SidePanelContentSwappingContainer*>(
-          browser_view_->unified_side_panel()->GetViewByID(
-              kSidePanelContentWrapperViewId));
-  DCHECK(content_wrapper);
-  return content_wrapper->loading_entry();
+  return waiter_->loading_entry();
 }
 
 void SidePanelCoordinator::Show(
@@ -507,11 +472,6 @@ void SidePanelCoordinator::Show(
 
   SidePanelEntry* entry = GetEntryForUniqueKey(input);
 
-  if (browser_view_->unified_side_panel()->GetViewByID(
-          kSidePanelContentWrapperViewId) == nullptr) {
-    InitializeSidePanel();
-  }
-
   if (!IsSidePanelShowing()) {
     opened_timestamp_ = base::TimeTicks::Now();
     SidePanelUtil::RecordSidePanelOpen(open_trigger);
@@ -521,51 +481,44 @@ void SidePanelCoordinator::Show(
         ->NotifyEvent("side_panel_shown");
 
     // Close IPH for side panel if shown.
-    browser_view_->browser()->window()->CloseFeaturePromo(
-        feature_engagement::kIPHReadingListInSidePanelFeature);
-    browser_view_->browser()->window()->CloseFeaturePromo(
-        feature_engagement::kIPHPowerBookmarksSidePanelFeature);
-    browser_view_->browser()->window()->CloseFeaturePromo(
-        feature_engagement::kIPHReadingModeSidePanelFeature);
+    ClosePromoAndMaybeNotifyUsed(
+        feature_engagement::kIPHReadingListInSidePanelFeature,
+        SidePanelEntryId::kReadingList, input.key.id());
+    ClosePromoAndMaybeNotifyUsed(
+        feature_engagement::kIPHPowerBookmarksSidePanelFeature,
+        SidePanelEntryId::kBookmarks, input.key.id());
+    ClosePromoAndMaybeNotifyUsed(
+        feature_engagement::kIPHReadingModeSidePanelFeature,
+        SidePanelEntryId::kReadAnything, input.key.id());
   }
 
   SidePanelUtil::RecordSidePanelShowOrChangeEntryTrigger(open_trigger);
 
-  // If the side panel was in the process of closing, notify observers that the
-  // close was cancelled.
-  if (browser_view_->unified_side_panel()->IsClosing()) {
-    for (SidePanelViewStateObserver& view_state_observer :
-         view_state_observers_) {
-      view_state_observer.OnSidePanelCloseInterrupted();
-    }
-  }
-
-  SidePanelContentSwappingContainer* content_wrapper =
-      static_cast<SidePanelContentSwappingContainer*>(
-          browser_view_->unified_side_panel()->GetViewByID(
-              kSidePanelContentWrapperViewId));
-  DCHECK(content_wrapper);
-
   // If the side panel is already showing, cancel all loads and do nothing.
   if (current_key_ && *current_key_ == input) {
-    content_wrapper->ResetLoadingEntryIfNecessary();
+    waiter_->ResetLoadingEntryIfNecessary();
 
     // If the side panel is in the process of closing, show it instead.
-    content_wrapper->SetProperty(
-        kSidePanelContentStateKey,
-        static_cast<std::underlying_type_t<SidePanelContentState>>(
-            SidePanelContentState::kReadyToShow));
-    NotifyPinnedContainerOfActiveStateChange(entry->key(), true);
+    if (browser_view_->unified_side_panel()->state() ==
+        SidePanel::State::kClosing) {
+      browser_view_->unified_side_panel()->Open(/*animated=*/true);
+      NotifyPinnedContainerOfActiveStateChange(entry->key(), true);
+    }
     return;
   }
 
   SidePanelUtil::RecordEntryShowTriggeredMetrics(
       browser_view_->browser(), entry->key().id(), open_trigger);
 
-  content_wrapper->WaitForEntry(
+  waiter_->WaitForEntry(
       entry,
       base::BindOnce(&SidePanelCoordinator::PopulateSidePanel,
                      base::Unretained(this), suppress_animations, input));
+}
+
+base::CallbackListSubscription SidePanelCoordinator::RegisterSidePanelShown(
+    ShownCallback callback) {
+  return shown_callback_list_.Add(std::move(callback));
 }
 
 // There are 3 different contexts in which the side panel can be closed. All go
@@ -602,15 +555,8 @@ void SidePanelCoordinator::Close(bool suppress_animations) {
       entry->OnEntryWillHide(SidePanelEntryHideReason::kSidePanelClosed);
     }
   }
-  if (views::View* content_wrapper =
-          browser_view_->unified_side_panel()->GetViewByID(
-              kSidePanelContentWrapperViewId)) {
-    content_wrapper->SetProperty(
-        kSidePanelContentStateKey,
-        static_cast<std::underlying_type_t<SidePanelContentState>>(
-            suppress_animations ? SidePanelContentState::kHideImmediately
-                                : SidePanelContentState::kReadyToHide));
-  }
+  browser_view_->unified_side_panel()->Close(
+      /*animated=*/!suppress_animations);
 
   MaybeEndPinPromo(/*pinned=*/false);
 }
@@ -647,16 +593,6 @@ SidePanelEntry* SidePanelCoordinator::GetActiveContextualEntryForKey(
              : nullptr;
 }
 
-void SidePanelCoordinator::InitializeSidePanel() {
-  auto content_wrapper = std::make_unique<SidePanelContentSwappingContainer>(
-      no_delays_for_testing_);  // Set to not visible so that the side panel is
-                                // not shown until content is
-  // ready to be shown.
-  content_wrapper->SetVisible(false);
-
-  browser_view_->unified_side_panel()->AddChildView(std::move(content_wrapper));
-}
-
 void SidePanelCoordinator::PopulateSidePanel(
     bool suppress_animations,
     const UniqueKey& unique_key,
@@ -668,21 +604,15 @@ void SidePanelCoordinator::PopulateSidePanel(
       entry->GetProperty(kShouldShowTitleInSidePanelHeaderKey),
       (entry->key().id() == SidePanelEntryId::kExtension));
 
-  auto* content_wrapper = browser_view_->unified_side_panel()->GetViewByID(
-      kSidePanelContentWrapperViewId);
+  auto* content_wrapper =
+      browser_view_->unified_side_panel()->GetContentParentView();
   DCHECK(content_wrapper);
   // |content_wrapper| should have either no child views or one child view for
   // the currently hosted SidePanelEntry.
   DCHECK(content_wrapper->children().size() <= 1);
 
-  const bool opening_side_panel = !IsSidePanelShowing();
-
   content_wrapper->SetVisible(true);
-  content_wrapper->SetProperty(
-      kSidePanelContentStateKey,
-      static_cast<std::underlying_type_t<SidePanelContentState>>(
-          suppress_animations ? SidePanelContentState::kShowImmediately
-                              : SidePanelContentState::kReadyToShow));
+  browser_view_->unified_side_panel()->Open(/*animated=*/!suppress_animations);
 
   SidePanelEntry* previous_entry = current_entry_.get();
 
@@ -727,28 +657,11 @@ void SidePanelCoordinator::PopulateSidePanel(
   UpdateHeaderPinButtonState();
   header_more_info_button_->SetVisible(entry->SupportsMoreInfoButton());
 
-  // Notify the observers when the side panel is opened (made visible). However,
-  // the observers are not renotified when the side panel entry changes.
-  if (opening_side_panel) {
-    for (SidePanelViewStateObserver& view_state_observer :
-         view_state_observers_) {
-      view_state_observer.OnSidePanelDidOpen();
-    }
-  }
-
   if (base::FeatureList::IsEnabled(features::kSidePanelResizing)) {
-    const base::Value::Dict& dict =
-        browser_view_->browser()->profile()->GetPrefs()->GetDict(
-            prefs::kSidePanelIdToWidth);
-    std::string current_entry_id = SidePanelEntryIdToString(entry->key().id());
-
-    std::optional<int> default_width = dict.FindInt(current_entry_id);
-
-    if (default_width.has_value()) {
-      auto* sp = browser_view_->unified_side_panel();
-      sp->SetPanelWidth(default_width.value());
-    }
+    browser_view_->unified_side_panel()->UpdateWidthOnEntryChanged();
   }
+
+  shown_callback_list_.Notify();
 }
 
 void SidePanelCoordinator::ClearCachedEntryViews() {
@@ -846,28 +759,6 @@ std::unique_ptr<views::View> SidePanelCoordinator::CreateHeader() {
   header_close_button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
 
   return header;
-}
-
-std::optional<SidePanelCoordinator::UniqueKey>
-SidePanelCoordinator::GetNewActiveKeyOnDeregister(
-    SidePanelRegistry* deregistering_registry,
-    const SidePanelEntry::Key& key) {
-  // This function should only be called when the side panel view is shown.
-  DCHECK(IsSidePanelShowing());
-
-  // Attempt to return an entry in the following fallback order: global entry
-  // for `key` if a contextual entry is deregistered > active global entry >
-  // null.
-  if (deregistering_registry == GetActiveContextualRegistry() &&
-      window_registry_->GetEntryForKey(key)) {
-    return UniqueKey{/*tab_handle=*/std::nullopt, key};
-  }
-
-  if (window_registry_->active_entry()) {
-    return UniqueKey{/*tab_handle=*/std::nullopt,
-                     (*window_registry_->active_entry())->key()};
-  }
-  return std::nullopt;
 }
 
 std::optional<SidePanelCoordinator::UniqueKey>
@@ -975,97 +866,20 @@ void SidePanelCoordinator::MaybeEndPinPromo(bool pinned) {
   }
 
   if (pinned) {
-    browser_view_->CloseFeaturePromo(
+    browser_view_->NotifyFeaturePromoFeatureUsed(
         *pending_pin_promo_,
-        user_education::EndFeaturePromoReason::kFeatureEngaged);
+        FeaturePromoFeatureUsedAction::kClosePromoIfPresent);
     if (pending_pin_promo_ ==
         &feature_engagement::kIPHSidePanelLensOverlayPinnableFeature) {
-      browser_view_->NotifyPromoFeatureUsed(
-          feature_engagement::kIPHSidePanelLensOverlayPinnableFeature);
       browser_view_->MaybeShowFeaturePromo(
           feature_engagement::kIPHSidePanelLensOverlayPinnableFollowupFeature);
-    } else {
-      browser_view_->NotifyFeatureEngagementEvent(
-          feature_engagement::events::kSidePanelPinned);
     }
   } else {
-    browser_view_->CloseFeaturePromo(
-        *pending_pin_promo_,
-        user_education::EndFeaturePromoReason::kAbortPromo);
+    browser_view_->AbortFeaturePromo(*pending_pin_promo_);
   }
 
   pin_promo_timer_.Stop();
   pending_pin_promo_ = nullptr;
-}
-
-void SidePanelCoordinator::OnEntryRegistered(SidePanelRegistry* registry,
-                                             SidePanelEntry* entry) {
-  bool is_global_entry_showing = current_key_ && !current_key_->tab_handle &&
-                                 current_key_->key == entry->key();
-  // If `entry` is a contextual entry and the global entry with the same key is
-  // currently being shown, show the tab-scoped `entry`.
-  if (registry == GetActiveContextualRegistry() && is_global_entry_showing) {
-    Show({browser_view_->browser()->GetActiveTabInterface()->GetTabHandle(),
-          entry->key()},
-         SidePanelUtil::SidePanelOpenTrigger::kExtensionEntryRegistered,
-         /*suppress_animations=*/true);
-  }
-}
-
-void SidePanelCoordinator::OnEntryWillDeregister(SidePanelRegistry* registry,
-                                                 SidePanelEntry* entry) {
-  // Save the entry's view: if it has a cached view, retrieve it. Otherwise if
-  // the entry is shown, get it from the side panel view. This is necessary so
-  // the view can be preserved so it won't be destroyed by Close().
-  std::unique_ptr<views::View> entry_view =
-      entry->CachedView() ? entry->GetContent() : nullptr;
-
-  // Update the current entry to make sure we don't show an entry that is being
-  // removed or close the panel if the entry being deregistered is the only one
-  // that has been visible.
-  if (!browser_view_->unified_side_panel()->IsClosing() && current_key_ &&
-      (current_key_->key == entry->key())) {
-    // If a global entry is deregistered but we are currently showing a
-    // tab-scoped key, then do nothing.
-    if (registry == window_registry_.get() && current_key_->tab_handle) {
-      entry->CacheView(std::move(entry_view));
-      return;
-    }
-
-    // Fetch the entry's view from the side panel container if it is shown.
-    auto* content_wrapper = browser_view_->unified_side_panel()->GetViewByID(
-        kSidePanelContentWrapperViewId);
-    DCHECK(content_wrapper);
-    if (content_wrapper->children().size() == 1) {
-      entry_view = content_wrapper->RemoveChildViewT(
-          content_wrapper->children().front());
-      // TODO(crbug.com/40897366): Log the time elapsed between when this view
-      // is removed, to when the new active entry's view is shown. This can
-      // determine if the user will notice a flash in the side panel in between
-      // different entries being shown.
-    }
-
-    // If there is going to be any change to UI, it must be done synchronously
-    // to avoid state referring to a deregistered SidePanelEntry. Both of these
-    // control flows will result in a synchronous re-entrancy into
-    // OnViewVisibilityChanged.
-    if (std::optional<UniqueKey> active_entry =
-            GetNewActiveKeyOnDeregister(registry, entry->key())) {
-      Show(active_entry.value(),
-           SidePanelUtil::SidePanelOpenTrigger::kSidePanelEntryDeregistered,
-           /*suppress_animations=*/true);
-    } else {
-      Close(/*suppress_animations=*/true);
-    }
-  }
-
-  // Cache the deregistering entry's view. This needs to be done after Close()
-  // might be called because Close() clears all cached views.
-  entry->CacheView(std::move(entry_view));
-}
-
-void SidePanelCoordinator::OnRegistryDestroying(SidePanelRegistry* registry) {
-  registry_observations_.RemoveObservation(registry);
 }
 
 void SidePanelCoordinator::OnTabStripModelChanged(
@@ -1090,17 +904,14 @@ void SidePanelCoordinator::OnTabStripModelChanged(
   // Handle removing the previous tab's contextual registry if one exists. In
   // the event that the tab was removed for deletion, registry removal is
   // already handled by SidePanelCoordinator::OnRegistryDestroying
-  bool removed_for_deletion =
+  bool tab_removed_for_deletion =
       (change.type() == TabStripModelChange::kRemoved) &&
-      (change.GetRemove()->contents[0].remove_reason ==
-       TabStripModelChange::RemoveReason::kDeleted);
+      (change.GetRemove()->contents[0].tab_detach_reason ==
+       tabs::TabInterface::DetachReason::kDelete);
   SidePanelRegistry* old_contextual_registry = nullptr;
-  if (!removed_for_deletion && selection.old_contents) {
+  if (!tab_removed_for_deletion && selection.old_contents) {
     old_contextual_registry =
         SidePanelRegistry::GetDeprecated(selection.old_contents);
-    if (old_contextual_registry) {
-      registry_observations_.RemoveObservation(old_contextual_registry);
-    }
   }
 
   // Add the current tab's contextual registry.
@@ -1108,15 +919,6 @@ void SidePanelCoordinator::OnTabStripModelChanged(
   if (selection.new_contents) {
     new_contextual_registry =
         SidePanelRegistry::GetDeprecated(selection.new_contents);
-    // Registries are per-tab whereas this is listening to WebContents changes.
-    // During a tab-discard the WebContents changes but the tab stays the same,
-    // hence the need to check if the source is already being observed. This
-    // observer method should eventually be replaced with a tab observation
-    // method.
-    if (new_contextual_registry &&
-        !registry_observations_.IsObservingSource(new_contextual_registry)) {
-      registry_observations_.AddObservation(new_contextual_registry);
-    }
   }
 
   // Show an entry in the following fallback order: new contextual registry's
@@ -1138,9 +940,7 @@ void SidePanelCoordinator::OnTabStripModelChanged(
               current_key_->key &&
           current_key_->tab_handle) {
         auto* content_wrapper =
-            browser_view_->unified_side_panel()->GetViewByID(
-                kSidePanelContentWrapperViewId);
-        DCHECK(content_wrapper);
+            browser_view_->unified_side_panel()->GetContentParentView();
         DCHECK(content_wrapper->children().size() == 1);
         auto current_entry_view = content_wrapper->RemoveChildViewT(
             content_wrapper->children().front());
@@ -1212,13 +1012,7 @@ SidePanelEntry* SidePanelCoordinator::GetCurrentSidePanelEntryForTesting() {
 }
 
 void SidePanelCoordinator::SetNoDelaysForTesting(bool no_delays_for_testing) {
-  no_delays_for_testing_ = no_delays_for_testing;
-  if (SidePanel* side_panel = browser_view_->unified_side_panel()) {
-    if (auto* wrapper = static_cast<SidePanelContentSwappingContainer*>(
-            side_panel->GetViewByID(kSidePanelContentWrapperViewId))) {
-      wrapper->SetNoDelaysForTesting(no_delays_for_testing_);  // IN-TEST
-    }
-  }
+  waiter_->SetNoDelaysForTesting(no_delays_for_testing);  // IN-TEST
 }
 
 void SidePanelCoordinator::UpdatePanelIconAndTitle(
@@ -1285,18 +1079,12 @@ void SidePanelCoordinator::OnViewVisibilityChanged(views::View* observed_view,
   // `OnEntryWillDeregister` (triggered by calling `OnEntryHidden`) may
   // already have deleted the content container, so check that it still
   // exists.
-  if (auto* content_wrapper = browser_view_->unified_side_panel()->GetViewByID(
-          kSidePanelContentWrapperViewId)) {
-    if (!content_wrapper->children().empty()) {
-      content_wrapper->RemoveChildViewT(content_wrapper->children().front());
-    }
+  auto* content_wrapper =
+      browser_view_->unified_side_panel()->GetContentParentView();
+  if (!content_wrapper->children().empty()) {
+    content_wrapper->RemoveChildViewT(content_wrapper->children().front());
   }
   SidePanelUtil::RecordSidePanelClosed(opened_timestamp_);
-
-  for (SidePanelViewStateObserver& view_state_observer :
-       view_state_observers_) {
-    view_state_observer.OnSidePanelDidClose();
-  }
 }
 
 void SidePanelCoordinator::OnActionsChanged() {
@@ -1314,4 +1102,16 @@ SidePanelEntry* SidePanelCoordinator::GetEntryForUniqueKey(
     entry = window_registry_->GetEntryForKey(unique_key.key);
   }
   return entry;
+}
+
+void SidePanelCoordinator::ClosePromoAndMaybeNotifyUsed(
+    const base::Feature& promo_feature,
+    SidePanelEntryId promo_id,
+    SidePanelEntryId actual_id) {
+  if (promo_id == actual_id) {
+    browser_view_->NotifyFeaturePromoFeatureUsed(
+        promo_feature, FeaturePromoFeatureUsedAction::kClosePromoIfPresent);
+  } else {
+    browser_view_->AbortFeaturePromo(promo_feature);
+  }
 }

@@ -84,7 +84,7 @@ void FrameCrypto::EncryptCommon(FrameId frame_id,
   OSP_CHECK_EQ(in.size(), out.size());
 
   // Compute the AES nonce for Cast Streaming payload encryption, which is based
-  // on the |frame_id|.
+  // on the `frame_id`.
   std::array<uint8_t, 16> aes_nonce{/* zero initialized */};
   static_assert(AES_BLOCK_SIZE == sizeof(aes_nonce),
                 "AES_BLOCK_SIZE is not 16 bytes.");

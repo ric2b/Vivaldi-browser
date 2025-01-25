@@ -4,7 +4,7 @@
 
 import * as Types from '../types/types.js';
 
-import {eventIsInBounds} from './Timing.js';
+import {eventIsInBounds, microSecondsToMilliseconds} from './Timing.js';
 
 let nodeIdCount = 0;
 export const makeTraceEntryNodeId = (): TraceEntryNodeId => (++nodeIdCount) as TraceEntryNodeId;
@@ -14,27 +14,195 @@ export const makeEmptyTraceEntryTree = (): TraceEntryTree => ({
   maxDepth: 0,
 });
 
-export const makeEmptyTraceEntryNode =
-    (entry: Types.TraceEvents.TraceEventData, id: TraceEntryNodeId): TraceEntryNode => ({
-      entry,
-      id,
-      parent: null,
-      children: [],
-      depth: 0,
-    });
+export const makeEmptyTraceEntryNode = (entry: Types.Events.Event, id: TraceEntryNodeId): TraceEntryNode => ({
+  entry,
+  id,
+  parent: null,
+  children: [],
+  depth: 0,
+});
 
 export interface TraceEntryTree {
   roots: Set<TraceEntryNode>;
   maxDepth: number;
 }
 
+/** Node in the graph that defines all parent/child relationships. */
 export interface TraceEntryNode {
-  entry: Types.TraceEvents.TraceEventData;
+  entry: Types.Events.Event;
   depth: number;
   selfTime?: Types.Timing.MicroSeconds;
   id: TraceEntryNodeId;
   parent: TraceEntryNode|null;
   children: TraceEntryNode[];
+}
+
+export interface AINodeSerialized {
+  name: string;
+  dur?: number;
+  self?: number;
+  children?: AINodeSerialized[];
+  url?: string;
+  selected?: boolean;
+}
+
+/**
+ * Node in a graph simplified for AI Assistance processing. The graph mirrors the TraceEntryNode one.
+ * Huge tip of the hat to Victor Porof for prototyping this with some great work: https://crrev.com/c/5711249
+ */
+export class AINode {
+  // event: Types.Events.Event; // Set in the constructor.
+  name: string;
+  duration?: Types.Timing.MilliSeconds;
+  selfDuration?: Types.Timing.MilliSeconds;
+  id?: TraceEntryNodeId;
+  children?: AINode[];
+  url?: string;
+  selected?: boolean;
+
+  constructor(public event: Types.Events.Event) {
+    this.name = event.name;
+    this.duration = event.dur === undefined ? undefined : microSecondsToMilliseconds(event.dur);
+
+    if (Types.Events.isProfileCall(event)) {
+      this.name = event.callFrame.functionName || '(anonymous)';
+      this.url = event.callFrame.url;
+    }
+  }
+
+  // Manually handle how nodes in this tree are serialized. We'll drop serveral properties that we don't need in the JSON string.
+  // FYI: toJSON() is invoked implicitly via JSON.stringify()
+  toJSON(): AINodeSerialized {
+    return {
+      selected: this.selected,
+      name: this.name,
+      url: this.url,
+      // Round milliseconds because we don't need the precision
+      dur: this.duration === undefined ? undefined : Math.round(this.duration * 10) / 10,
+      self: this.selfDuration === undefined ? undefined : Math.round(this.selfDuration * 10) / 10,
+      children: this.children?.length ? this.children : undefined,
+    };
+  }
+
+  static #fromTraceEvent(event: Types.Events.Event): AINode {
+    return new AINode(event);
+  }
+
+  /**
+   * Builds a TraceEntryNodeForAI tree from a node and marks the selected node. Primary entrypoint from EntriesFilter
+   */
+  static fromEntryNode(selectedNode: TraceEntryNode, entryIsVisibleInTimeline: (event: Types.Events.Event) => boolean):
+      AINode {
+    /**
+     * Builds a AINode tree from a TraceEntryNode tree and marks the selected node.
+     */
+    function fromEntryNodeAndTree(node: TraceEntryNode): AINode {
+      const aiNode = AINode.#fromTraceEvent(node.entry);
+      aiNode.id = node.id;
+      if (node === selectedNode) {
+        aiNode.selected = true;
+      }
+      aiNode.selfDuration = node.selfTime === undefined ? undefined : microSecondsToMilliseconds(node.selfTime);
+      for (const child of node.children) {
+        aiNode.children ??= [];
+        aiNode.children.push(fromEntryNodeAndTree(child));
+      }
+      return aiNode;
+    }
+
+    function findTopMostVisibleAncestor(node: TraceEntryNode): TraceEntryNode {
+      const parentNodes = [node];
+      let parent = node.parent;
+      while (parent) {
+        parentNodes.unshift(parent);
+        parent = parent.parent;
+      }
+      return parentNodes.find(node => entryIsVisibleInTimeline(node.entry)) ?? node;
+    }
+
+    const topMostVisibleRoot = findTopMostVisibleAncestor(selectedNode);
+    const aiNode = fromEntryNodeAndTree(topMostVisibleRoot);
+
+    // If our root wasn't visible, this could return an array of multiple RunTasks.
+    // But with a visible root, we safely get back the exact same root, now with its descendent tree updated.
+    // Filter to ensure our tree here only has "visible" entries
+    const [filteredAiNodeRoot] = AINode.#filterRecursive([aiNode], node => {
+      if (node.event.name === 'V8.CompileCode' || node.event.name === 'UpdateCounters') {
+        return false;
+      }
+      return entryIsVisibleInTimeline(node.event);
+    });
+    return filteredAiNodeRoot;
+  }
+
+  static getSelectedNodeWithinTree(node: AINode): AINode|null {
+    if (node.selected) {
+      return node;
+    }
+    if (!node.children) {
+      return null;
+    }
+    for (const child of node.children) {
+      const returnedNode = AINode.getSelectedNodeWithinTree(child);
+      if (returnedNode) {
+        return returnedNode;
+      }
+    }
+    return null;
+  }
+
+  static #filterRecursive(list: AINode[], predicate: (node: AINode) => boolean): AINode[] {
+    let done;
+    do {
+      done = true;
+      const filtered: AINode[] = [];
+      for (const node of list) {
+        if (predicate(node)) {
+          // Keep it
+          filtered.push(node);
+        } else if (node.children) {
+          filtered.push(...node.children);
+          done = false;
+        }
+      }
+      list = filtered;
+    } while (!done);
+
+    for (const node of list) {
+      if (node.children) {
+        node.children = AINode.#filterRecursive(node.children, predicate);
+      }
+    }
+    return list;
+  }
+
+  static #removeInexpensiveNodesRecursively(
+      list: AINode[],
+      options?: {minDuration?: number, minSelf?: number, minJsDuration?: number, minJsSelf?: number}): AINode[] {
+    const minDuration = options?.minDuration ?? 0;
+    const minSelf = options?.minSelf ?? 0;
+    const minJsDuration = options?.minJsDuration ?? 0;
+    const minJsSelf = options?.minJsSelf ?? 0;
+
+    const isJS = (node: AINode): boolean => Boolean(node.url);
+    const longEnough = (node: AINode): boolean =>
+        node.duration === undefined || node.duration >= (isJS(node) ? minJsDuration : minDuration);
+    const selfLongEnough = (node: AINode): boolean =>
+        node.selfDuration === undefined || node.selfDuration >= (isJS(node) ? minJsSelf : minSelf);
+
+    return AINode.#filterRecursive(list, node => longEnough(node) && selfLongEnough(node));
+  }
+
+  // Invoked from DrJonesPerformanceAgent
+  sanitize(): void {
+    if (this.children) {
+      this.children = AINode.#removeInexpensiveNodesRecursively(this.children, {
+        minDuration: Types.Timing.MilliSeconds(1),
+        minJsDuration: Types.Timing.MilliSeconds(1),
+        minJsSelf: Types.Timing.MilliSeconds(0.1),
+      });
+    }
+  }
 }
 
 class TraceEntryNodeIdTag {
@@ -59,13 +227,13 @@ export type TraceEntryNodeId = number&TraceEntryNodeIdTag;
  *
  * Complexity: O(n), where n = number of events
  */
-export function treify(entries: Types.TraceEvents.TraceEventData[], options?: {
-  filter: {has: (name: Types.TraceEvents.KnownEventName) => boolean},
-}): {tree: TraceEntryTree, entryToNode: Map<Types.TraceEvents.TraceEventData, TraceEntryNode>} {
+export function treify(entries: Types.Events.Event[], options?: {
+  filter: {has: (name: Types.Events.Name) => boolean},
+}): {tree: TraceEntryTree, entryToNode: Map<Types.Events.Event, TraceEntryNode>} {
   // As we construct the tree, store a map of each entry to its node. This
   // means if you are iterating over a list of RendererEntry events you can
   // easily look up that node in the tree.
-  const entryToNode = new Map<Types.TraceEvents.TraceEventData, TraceEntryNode>();
+  const entryToNode = new Map<Types.Events.Event, TraceEntryNode>();
 
   const stack = [];
   // Reset the node id counter for every new renderer.
@@ -76,7 +244,7 @@ export function treify(entries: Types.TraceEvents.TraceEventData[], options?: {
     const event = entries[i];
     // If the current event should not be part of the tree, then simply proceed
     // with the next event.
-    if (options && !options.filter.has(event.name as Types.TraceEvents.KnownEventName)) {
+    if (options && !options.filter.has(event.name as Types.Events.Name)) {
       continue;
     }
 
@@ -181,10 +349,10 @@ export function treify(entries: Types.TraceEvents.TraceEventData[], options?: {
  *
  */
 export function walkTreeFromEntry(
-    entryToNode: Map<Types.TraceEvents.TraceEventData, TraceEntryNode>,
-    rootEntry: Types.TraceEvents.TraceEventData,
-    onEntryStart: (entry: Types.TraceEvents.TraceEventData) => void,
-    onEntryEnd: (entry: Types.TraceEvents.TraceEventData) => void,
+    entryToNode: Map<Types.Events.Event, TraceEntryNode>,
+    rootEntry: Types.Events.Event,
+    onEntryStart: (entry: Types.Events.Event) => void,
+    onEntryEnd: (entry: Types.Events.Event) => void,
     ): void {
   const startNode = entryToNode.get(rootEntry);
   if (!startNode) {
@@ -218,10 +386,10 @@ export function walkTreeFromEntry(
  */
 
 export function walkEntireTree(
-    entryToNode: Map<Types.TraceEvents.TraceEventData, TraceEntryNode>,
+    entryToNode: Map<Types.Events.Event, TraceEntryNode>,
     tree: TraceEntryTree,
-    onEntryStart: (entry: Types.TraceEvents.TraceEventData) => void,
-    onEntryEnd: (entry: Types.TraceEvents.TraceEventData) => void,
+    onEntryStart: (entry: Types.Events.Event) => void,
+    onEntryEnd: (entry: Types.Events.Event) => void,
     traceWindowToInclude?: Types.Timing.TraceWindowMicroSeconds,
     minDuration?: Types.Timing.MicroSeconds,
     ): void {
@@ -231,10 +399,10 @@ export function walkEntireTree(
 }
 
 function walkTreeByNode(
-    entryToNode: Map<Types.TraceEvents.TraceEventData, TraceEntryNode>,
+    entryToNode: Map<Types.Events.Event, TraceEntryNode>,
     rootNode: TraceEntryNode,
-    onEntryStart: (entry: Types.TraceEvents.TraceEventData) => void,
-    onEntryEnd: (entry: Types.TraceEvents.TraceEventData) => void,
+    onEntryStart: (entry: Types.Events.Event) => void,
+    onEntryEnd: (entry: Types.Events.Event) => void,
     traceWindowToInclude?: Types.Timing.TraceWindowMicroSeconds,
     minDuration?: Types.Timing.MicroSeconds,
     ): void {
@@ -289,8 +457,8 @@ function treeNodeIsInWindow(node: TraceEntryNode, traceWindow: Types.Timing.Trac
  * Note that this will also return true if multiple trees can be
  * built, for example if none of the events overlap with each other.
  */
-export function canBuildTreesFromEvents(events: readonly Types.TraceEvents.TraceEventData[]): boolean {
-  const stack: Types.TraceEvents.TraceEventData[] = [];
+export function canBuildTreesFromEvents(events: readonly Types.Events.Event[]): boolean {
+  const stack: Types.Events.Event[] = [];
   for (const event of events) {
     const startTime = event.ts;
     const endTime = event.ts + (event.dur ?? 0);

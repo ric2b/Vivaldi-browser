@@ -52,7 +52,7 @@ Finally, you need to tell the subtools builder to build your package.  List it
 in [`virtual/target-sdk-subtools`].
 
 After landing your changes, your package will be available in CIPD after the
-next [`build-chromeos-sdk-subtools`] run (kicked off every 30 minutes).
+next [`build-chromeos-sdk-subtools`] run (kicked off every 24 hours).
 
 [textproto format]: https://protobuf.dev/reference/protobuf/textformat-spec/
 [`subtools.proto`]: https://chromium.googlesource.com/chromiumos/config/+/HEAD/proto/chromiumos/build/api/subtools.proto

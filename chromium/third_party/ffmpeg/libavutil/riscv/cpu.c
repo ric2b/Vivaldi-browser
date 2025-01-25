@@ -58,20 +58,20 @@ int ff_get_cpu_flags_riscv(void)
     if (__riscv_hwprobe(pairs, FF_ARRAY_ELEMS(pairs), 0, NULL, 0) == 0) {
         if (pairs[0].value & RISCV_HWPROBE_BASE_BEHAVIOR_IMA)
             ret |= AV_CPU_FLAG_RVI;
-        if (pairs[1].value & RISCV_HWPROBE_IMA_FD)
-            ret |= AV_CPU_FLAG_RVF | AV_CPU_FLAG_RVD;
 #ifdef RISCV_HWPROBE_IMA_V
         if (pairs[1].value & RISCV_HWPROBE_IMA_V)
             ret |= AV_CPU_FLAG_RVV_I32 | AV_CPU_FLAG_RVV_I64
                  | AV_CPU_FLAG_RVV_F32 | AV_CPU_FLAG_RVV_F64;
 #endif
-#ifdef RISCV_HWPROBE_EXT_ZBA
-        if (pairs[1].value & RISCV_HWPROBE_EXT_ZBA)
-            ret |= AV_CPU_FLAG_RVB_ADDR;
-#endif
 #ifdef RISCV_HWPROBE_EXT_ZBB
         if (pairs[1].value & RISCV_HWPROBE_EXT_ZBB)
             ret |= AV_CPU_FLAG_RVB_BASIC;
+#if defined (RISCV_HWPROBE_EXT_ZBA) && defined (RISCV_HWPROBE_EXT_ZBS)
+        if ((pairs[1].value & RISCV_HWPROBE_EXT_ZBA) &&
+            (pairs[1].value & RISCV_HWPROBE_EXT_ZBB) &&
+            (pairs[1].value & RISCV_HWPROBE_EXT_ZBS))
+            ret |= AV_CPU_FLAG_RVB;
+#endif
 #endif
 #ifdef RISCV_HWPROBE_EXT_ZVBB
         if (pairs[1].value & RISCV_HWPROBE_EXT_ZVBB)
@@ -83,18 +83,15 @@ int ff_get_cpu_flags_riscv(void)
                 break;
             default:
         }
-    } else
-#endif
-#if HAVE_GETAUXVAL
+    }
+#elif HAVE_GETAUXVAL
     {
-        const unsigned long hwcap = getauxval(AT_HWCAP);
+        const unsigned long hwcap = ff_getauxval(AT_HWCAP);
 
         if (hwcap & HWCAP_RV('I'))
             ret |= AV_CPU_FLAG_RVI;
-        if (hwcap & HWCAP_RV('F'))
-            ret |= AV_CPU_FLAG_RVF;
-        if (hwcap & HWCAP_RV('D'))
-            ret |= AV_CPU_FLAG_RVD;
+        if (hwcap & HWCAP_RV('B'))
+            ret |= AV_CPU_FLAG_RVB_BASIC | AV_CPU_FLAG_RVB;
 
         /* The V extension implies all Zve* functional subsets */
         if (hwcap & HWCAP_RV('V'))
@@ -106,18 +103,13 @@ int ff_get_cpu_flags_riscv(void)
 #ifdef __riscv_i
     ret |= AV_CPU_FLAG_RVI;
 #endif
-#if defined (__riscv_flen) && (__riscv_flen >= 32)
-    ret |= AV_CPU_FLAG_RVF;
-#if (__riscv_flen >= 64)
-    ret |= AV_CPU_FLAG_RVD;
-#endif
-#endif
 
-#ifdef __riscv_zba
-    ret |= AV_CPU_FLAG_RVB_ADDR;
-#endif
 #ifdef __riscv_zbb
     ret |= AV_CPU_FLAG_RVB_BASIC;
+#endif
+#if defined (__riscv_b) || \
+    (defined (__riscv_zba) && defined (__riscv_zbb) && defined (__riscv_zbs))
+    ret |= AV_CPU_FLAG_RVB;
 #endif
 
     /* If RV-V is enabled statically at compile-time, check the details. */

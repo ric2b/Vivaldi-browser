@@ -22,21 +22,21 @@ void xnn_f32_vsigmoid_ukernel__scalar_rr2_lut64_p2_div_u1(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_sigmoid_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const float vmagic_bias = params->scalar_rr2_lut64_p2.magic_bias;
-  const float vminus_log2e = params->scalar_rr2_lut64_p2.minus_log2e;
+  const float vmagic_bias = 0x1.800000p17f;
+  const float vminus_log2e = -0x1.715476p0f;  
   const uint32_t vindex_mask = UINT32_C(0x3F);
-  const float vln2_hi = params->scalar_rr2_lut64_p2.ln2_hi;
-  const float vln2_lo = params->scalar_rr2_lut64_p2.ln2_lo;
-  const float vc2 = params->scalar_rr2_lut64_p2.c2;
-  const float vone = params->scalar_rr2_lut64_p2.one;
-  const float vdenorm_cutoff = params->scalar_rr2_lut64_p2.denorm_cutoff;
+  const float vln2_hi = 0x1.630000p-1f;
+  const float vln2_lo = -0x1.BD0106p-13f;
+  const float vc2 = 0x1.FFFF0Ap-2f;
+  const float vone = 1.0f;
+  const float vdenorm_cutoff = 0x1.5D589Ep+6f;
 
   do {
     const float vx = *input++;

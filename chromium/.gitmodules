@@ -14,6 +14,9 @@
 [submodule "third_party/libunwind/src"]
 	path = third_party/libunwind/src
 	url = ../../external/github.com/llvm/llvm-project/libunwind.git
+[submodule "third_party/llvm-libc/src"]
+	path = third_party/llvm-libc/src
+	url = ../../external/github.com/llvm/llvm-project/libc.git
 [submodule "docs/website"]
 	path = docs/website
 	url = ../../website.git
@@ -127,6 +130,12 @@
 [submodule "third_party/harfbuzz-ng/src"]
 	path = third_party/harfbuzz-ng/src
 	url = ../../external/github.com/harfbuzz/harfbuzz.git
+[submodule "third_party/ink/src"]
+	path = third_party/ink/src
+	url = ../../external/github.com/google/ink.git
+[submodule "third_party/ink_stroke_modeler/src"]
+	path = third_party/ink_stroke_modeler/src
+	url = ../../external/github.com/google/ink-stroke-modeler.git
 [submodule "third_party/emoji-segmenter/src"]
 	path = third_party/emoji-segmenter/src
 	url = ../../external/github.com/google/emoji-segmenter.git
@@ -162,9 +171,6 @@
 [submodule "third_party/fuzztest/src"]
 	path = third_party/fuzztest/src
 	url = ../../external/github.com/google/fuzztest.git
-[submodule "third_party/domato/src"]
-	path = third_party/domato/src
-	url = ../../external/github.com/googleprojectzero/domato.git
 [submodule "third_party/libaddressinput/src"]
 	path = third_party/libaddressinput/src
 	url = ../../external/libaddressinput.git
@@ -177,9 +183,6 @@
 [submodule "third_party/crabbyavif/src"]
 	path = third_party/crabbyavif/src
 	url = ../../external/github.com/webmproject/CrabbyAvif.git
-[submodule "third_party/libavifinfo/src"]
-	path = third_party/libavifinfo/src
-	url = ../../aomedia/libavifinfo.git
 [submodule "third_party/nearby/src"]
 	path = third_party/nearby/src
 	url = ../../external/github.com/google/nearby-connections.git
@@ -219,7 +222,7 @@
 [submodule "third_party/libsync/src"]
 	path = third_party/libsync/src
 	url = ../../aosp/platform/system/core/libsync.git
-	gclient-condition = checkout_linux
+	gclient-condition = checkout_linux or checkout_android
 [submodule "third_party/libvpx/source/libvpx"]
 	path = third_party/libvpx/source/libvpx
 	url = ../../webm/libvpx.git

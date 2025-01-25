@@ -24,7 +24,6 @@
 #include "debugd/dbus-constants.h"
 #include "dlp/dbus-constants.h"
 #include "drivefs/dbus-constants.h"
-#include "faced/dbus-constants.h"
 #include "featured/dbus-constants.h"
 #include "fusebox/dbus-constants.h"
 #include "hammerd/dbus-constants.h"
@@ -57,6 +56,7 @@
 #include "swap_management/dbus-constants.h"
 #include "update_engine/dbus-constants.h"
 #include "usbguard/dbus-constants.h"
+#include "vhost_user_starter/dbus-constants.h"
 #include "vm_applications/dbus-constants.h"
 #include "vm_cicerone/dbus-constants.h"
 #include "vm_concierge/dbus-constants.h"
@@ -172,12 +172,6 @@ const char kLivenessServiceInterface[] =
     "org.chromium.LivenessServiceInterface";
 const char kLivenessServiceCheckLivenessMethod[] = "CheckLiveness";
 
-const char kMetricsEventServiceName[] = "org.chromium.MetricsEventService";
-const char kMetricsEventServicePath[] = "/org/chromium/MetricsEventService";
-const char kMetricsEventServiceInterface[] =
-    "org.chromium.MetricsEventServiceInterface";
-const char kMetricsEventServiceChromeEventSignal[] = "ChromeEvent";
-
 const char kComponentUpdaterServiceName[] =
     "org.chromium.ComponentUpdaterService";
 const char kComponentUpdaterServicePath[] =
@@ -267,6 +261,8 @@ const char kChromeFeaturesServiceIsPeripheralDataAccessEnabledMethod[] =
     "IsPeripheralDataAccessEnabled";
 const char kChromeFeaturesServiceIsDNSProxyEnabledMethod[] =
     "IsDNSProxyEnabled";
+const char kChromeFeaturesServiceIsRootNsDnsProxyEnabledMethod[] =
+    "IsRootNsDnsProxyEnabled";
 const char kChromeFeaturesServiceIsSuspendToDiskEnabledMethod[] =
     "IsSuspendToDiskEnabled";
 

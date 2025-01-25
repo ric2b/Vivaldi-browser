@@ -7,7 +7,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "chromeos-amd64-generic-rel",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-chromiumos-archive",
@@ -43,7 +43,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "chromeos-amd64-generic-rel-tast",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-chromiumos-archive",
@@ -74,7 +74,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "chromeos-amd64-generic-rel",
-                "project": "chromium-m130"
+                "project": "chromium-m132"
               }
             }
           }
@@ -84,7 +84,7 @@
         {
           "bucket": "ci",
           "builder": "chromeos-amd64-generic-rel-tast",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -93,7 +93,8 @@
           "group": "tryserver.chromium.chromiumos"
         }
       ],
-      "retry_failed_shards": true
+      "retry_failed_shards": true,
+      "targets_spec_directory": "src/infra/config/generated/builders/ci/chromeos-amd64-generic-rel-tast/targets"
     }
   },
   "$recipe_engine/resultdb/test_presentation": {

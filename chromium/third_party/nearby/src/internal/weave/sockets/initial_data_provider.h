@@ -15,12 +15,11 @@
 #ifndef THIRD_PARTY_NEARBY_INTERNAL_WEAVE_SOCKETS_INITIAL_DATA_PROVIDER_H_
 #define THIRD_PARTY_NEARBY_INTERNAL_WEAVE_SOCKETS_INITIAL_DATA_PROVIDER_H_
 
-#include <cmath>
 #include <cstdint>
 #include <string>
 
 #include "absl/random/random.h"
-#include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
 
 namespace nearby {
 namespace weave {
@@ -36,9 +35,15 @@ class RandomDataProvider : public InitialDataProvider {
   explicit RandomDataProvider(int number_of_bytes)
       : number_of_bytes_(number_of_bytes) {}
   std::string Provide() override {
+    // We multiply by 4, because while multiplying by 8 would give us a
+    // 64-bit number, the hex string would be double the length due to two
+    // hex characters representing one byte.
+    uint32_t power = number_of_bytes_ * 4;
     uint64_t res = absl::uniform_int_distribution<uint64_t>(
-        1, pow(10, static_cast<double>(number_of_bytes_)))(prng_);
-    return absl::StrCat(res);
+        1, 1ULL << power)(prng_);
+    std::string res_str = absl::StrFormat("%0*x", number_of_bytes_, res);
+    res_str.resize(number_of_bytes_);
+    return res_str;
   }
 
  private:

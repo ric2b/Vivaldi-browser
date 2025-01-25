@@ -4,16 +4,21 @@
 
 package org.chromium.chrome.browser.ui.android.webid;
 
+import static org.junit.Assert.assertEquals;
+
+import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.view.View;
 
 import androidx.annotation.Px;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.rules.ActivityScenarioRule;
 
 import org.junit.Before;
 import org.junit.Rule;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.ParameterizedRobolectricTestRunner.Parameter;
 
@@ -30,7 +35,11 @@ import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderData;
 import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderMetadata;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.image_fetcher.ImageFetcher;
+import org.chromium.content.webid.IdentityRequestDialogDisclosureField;
 import org.chromium.ui.base.TestActivity;
+import org.chromium.ui.modaldialog.DialogDismissalCause;
+import org.chromium.ui.modaldialog.ModalDialogManager;
+import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyKey;
@@ -52,7 +61,7 @@ public class AccountSelectionJUnitTestBase {
     public ActivityScenarioRule<TestActivity> mActivityScenarioRule =
             new ActivityScenarioRule<>(TestActivity.class);
 
-    class RpContextEntry {
+    static class RpContextEntry {
         public int mValue;
         public int mTitleId;
 
@@ -62,16 +71,64 @@ public class AccountSelectionJUnitTestBase {
         }
     }
 
+    static class MockModalDialogManager extends ModalDialogManager {
+        private PropertyModel mDialogModel;
+        private @ModalDialogManager.ModalDialogType int mDialogType;
+
+        public MockModalDialogManager() {
+            super(Mockito.mock(ModalDialogManager.Presenter.class), 0);
+        }
+
+        @Override
+        public void showDialog(
+                PropertyModel model,
+                @ModalDialogManager.ModalDialogType int dialogType,
+                boolean showNext) {
+            mDialogModel = model;
+            mDialogType = dialogType;
+        }
+
+        public PropertyModel getDialogModel() {
+            return mDialogModel;
+        }
+
+        public @ModalDialogManager.ModalDialogType int getDialogType() {
+            return mDialogType;
+        }
+
+        public void simulateButtonClick(@ModalDialogProperties.ButtonType int buttonType) {
+            mDialogModel.get(ModalDialogProperties.CONTROLLER).onClick(mDialogModel, buttonType);
+        }
+
+        @Override
+        public void dismissDialog(PropertyModel model, @DialogDismissalCause int dismissalCause) {
+            assertEquals(model, mDialogModel);
+            mDialogModel
+                    .get(ModalDialogProperties.CONTROLLER)
+                    .onDismiss(mDialogModel, dismissalCause);
+            mDialogModel = null;
+            mDialogType = -1;
+        }
+    }
+
     protected static final String TEST_ERROR_CODE = "invalid_request";
     protected static final int[] RP_CONTEXTS =
             new int[] {RpContext.SIGN_IN, RpContext.SIGN_UP, RpContext.USE, RpContext.CONTINUE};
     protected static final @Px int DESIRED_AVATAR_SIZE = 100;
+    protected static final @IdentityRequestDialogDisclosureField int[] DEFAULT_DISCLOSURE_FIELDS =
+            new int[] {
+                IdentityRequestDialogDisclosureField.NAME,
+                IdentityRequestDialogDisclosureField.EMAIL,
+                IdentityRequestDialogDisclosureField.PICTURE
+            };
 
     @Mock Callback<Account> mAccountCallback;
     @Mock AccountSelectionComponent.Delegate mMockDelegate;
     @Mock ImageFetcher mMockImageFetcher;
     @Mock BottomSheetController mMockBottomSheetController;
     @Mock Tab mTab;
+    Context mContext;
+    MockModalDialogManager mMockModalDialogManager;
 
     // Constants but this test base is used by parameterized tests. These can only be initialized
     // after parameterized test runner setup.
@@ -111,6 +168,7 @@ public class AccountSelectionJUnitTestBase {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
+        mContext = ApplicationProvider.getApplicationContext();
 
         // Note that these are not actual ETLD+1 values, but this is irrelevant for the purposes of
         // this test.
@@ -199,7 +257,7 @@ public class AccountSelectionJUnitTestBase {
                                 mTestUrlPrivacyPolicy,
                                 mTestRpBrandIconUrl.getSpec()),
                         RpContext.SIGN_IN,
-                        /* request_permission= */ true,
+                        DEFAULT_DISCLOSURE_FIELDS,
                         /* has_login_status_mismatch= */ false);
 
         mNewAccountsSingleReturningAccount = Arrays.asList(mAnaAccount);
@@ -229,6 +287,7 @@ public class AccountSelectionJUnitTestBase {
                         /* bottomSheetController= */ null,
                         /* scrollOffsetSupplier= */ null,
                         mRpMode);
+        mMockModalDialogManager = new MockModalDialogManager();
         mMediator =
                 new AccountSelectionMediator(
                         mTab,
@@ -239,7 +298,9 @@ public class AccountSelectionJUnitTestBase {
                         mBottomSheetContent,
                         mMockImageFetcher,
                         DESIRED_AVATAR_SIZE,
-                        mRpMode);
+                        mRpMode,
+                        mContext,
+                        mMockModalDialogManager);
     }
 
     MVCListAdapter.ListItem buildAccountItem(Account account) {

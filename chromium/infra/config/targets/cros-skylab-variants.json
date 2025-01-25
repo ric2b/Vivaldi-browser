@@ -33,5 +33,32 @@
       "use_lkgm": true
     },
     "identifier": "VOLTEER_PUBLIC_RELEASE_LKGM"
+  },
+  "CROS_GPU_BRYA_RELEASE_LKGM": {
+    "skylab": {
+      "cros_board": "brya",
+      "dut_pool": "chrome-gpu",
+      "use_lkgm": true
+    },
+    "enabled": true,
+    "identifier": "GPU_BRYA_RELEASE_LKGM"
+  },
+  "CROS_GPU_CORSOLA_RELEASE_LKGM": {
+    "skylab": {
+      "cros_board": "corsola",
+      "dut_pool": "chrome-gpu",
+      "use_lkgm": true
+    },
+    "enabled": true,
+    "identifier": "GPU_CORSOLA_RELEASE_LKGM"
+  },
+  "CROS_GPU_SKYRIM_RELEASE_LKGM": {
+    "skylab": {
+      "cros_board": "skyrim",
+      "dut_pool": "chrome-gpu",
+      "use_lkgm": true
+    },
+    "enabled": true,
+    "identifier": "GPU_SKYRIM_RELEASE_LKGM"
   }
 }

@@ -15,7 +15,7 @@ namespace openscreen::cast {
 // parsing components share a single RtcpSession instance for data consistency.
 class RtcpSession {
  public:
-  // |start_time| should be the current time, as it is used by NtpTimeConverter
+  // `start_time` should be the current time, as it is used by NtpTimeConverter
   // to set a fixed reference point between the local Clock and current "real
   // world" wall time.
   RtcpSession(Ssrc sender_ssrc,

@@ -115,7 +115,7 @@ TEST(PacketReceiveStatsTrackerTest, WhenReceivingAllPackets) {
   EXPECT_EQ(0, report.packet_fraction_lost_numerator);
   EXPECT_EQ(0, report.cumulative_packets_lost);
 
-  // The |extended_high_sequence_number| should reflect the wraparound of the
+  // The `extended_high_sequence_number` should reflect the wraparound of the
   // 16-bit counter value.
   EXPECT_EQ(uint32_t{65542}, report.extended_high_sequence_number);
 

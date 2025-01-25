@@ -441,7 +441,6 @@ const EnumeratedHistogram = {
   NetworkPanelResponsePreviewOpened: 'DevTools.NetworkPanelResponsePreviewOpened',
   StyleTextCopied: 'DevTools.StyleTextCopied',
   SyncSetting: 'DevTools.SyncSetting',
-  ColorPickerOpenedFrom: 'DevTools.ColorPickerOpenedFrom',
   CSSPropertyDocumentation: 'DevTools.CSSPropertyDocumentation',
   SwatchActivated: 'DevTools.SwatchActivated',
   AnimationPlaybackRateChanged: 'DevTools.AnimationPlaybackRateChanged',
@@ -450,8 +449,6 @@ const EnumeratedHistogram = {
   LegacyResourceTypeFilterItemSelected: 'DevTools.LegacyResourceTypeFilterItemSelected',
   ResourceTypeFilterNumberOfSelectedChanged: 'DevTools.ResourceTypeFilterNumberOfSelectedChanged',
   ResourceTypeFilterItemSelected: 'DevTools.ResourceTypeFilterItemSelected',
-  NetworkPanelMoreFiltersNumberOfSelectedChanged: 'DevTools.NetworkPanelMoreFiltersNumberOfSelectedChanged',
-  NetworkPanelMoreFiltersItemSelected: 'DevTools.NetworkPanelMoreFiltersItemSelected',
 };
 
 /**
@@ -667,9 +664,9 @@ const InspectorFrontendHostImpl = class {
       optIn: false,
     };
     const devToolsFreestylerDogfood = {
-      enabled: (newConfig.devToolsFreestylerDogfood?.enabled && newConfig.aidaAvailability?.enabled) ?? false,
-      aidaModelId: newConfig.devToolsFreestylerDogfood?.modelId ?? '',
-      aidaTemperature: newConfig.devToolsFreestylerDogfood?.temperature ?? 0,
+      enabled: (newConfig.devToolsFreestyler?.enabled && newConfig.aidaAvailability?.enabled) ?? false,
+      aidaModelId: newConfig.devToolsFreestyler?.modelId ?? '',
+      aidaTemperature: newConfig.devToolsFreestyler?.temperature ?? 0,
       blockedByAge: newConfig.aidaAvailability?.blockedByAge ?? true,
       blockedByEnterprisePolicy: newConfig.aidaAvailability?.blockedByEnterprisePolicy ?? true,
       blockedByGeo: newConfig.aidaAvailability?.blockedByGeo ?? true,

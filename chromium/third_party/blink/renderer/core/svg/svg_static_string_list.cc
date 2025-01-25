@@ -62,7 +62,7 @@ bool SVGStaticStringList::IsAnimating() const {
 }
 
 void SVGStaticStringList::SetAnimatedValue(SVGPropertyBase*) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 SVGStringListTearOff* SVGStaticStringList::TearOff() {
@@ -72,7 +72,7 @@ SVGStringListTearOff* SVGStaticStringList::TearOff() {
 }
 
 SVGParsingError SVGStaticStringList::AttributeChanged(const String& value) {
-  ClearBaseValueNeedsSynchronization();
+  SetContentAttributeState(value.IsNull() ? kNotSet : kHasValue);
   return value_->SetValueAsString(value);
 }
 

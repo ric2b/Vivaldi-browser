@@ -28,27 +28,31 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
+import org.chromium.chrome.browser.commerce.ShoppingServiceFactoryJni;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.page_image_service.ImageServiceBridge;
 import org.chromium.chrome.browser.page_image_service.ImageServiceBridgeJni;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.ui.favicon.FaviconHelperJni;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.commerce.core.CommerceFeatureUtils;
+import org.chromium.components.commerce.core.CommerceFeatureUtilsJni;
 import org.chromium.components.commerce.core.ShoppingService;
-import org.chromium.components.favicon.LargeIconBridge;
-import org.chromium.components.favicon.LargeIconBridgeJni;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.profile_metrics.BrowserProfileType;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.components.sync.SyncFeatureMap;
 import org.chromium.ui.base.TestActivity;
 import org.chromium.url.GURL;
 
@@ -56,6 +60,7 @@ import org.chromium.url.GURL;
 @Batch(Batch.UNIT_TESTS)
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
+@EnableFeatures(SyncFeatureMap.SYNC_ENABLE_BOOKMARKS_IN_TRANSPORT_MODE)
 public class BookmarkUtilsTest {
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
     @Rule public JniMocker mJniMocker = new JniMocker();
@@ -66,13 +71,14 @@ public class BookmarkUtilsTest {
 
     @Mock private SnackbarManager mSnackbarManager;
     @Mock private Tracker mTracker;
-    @Mock private LargeIconBridge mLargeIconBridge;
-    @Mock private LargeIconBridge.Natives mLargeIconBridgeNatives;
+    @Mock private FaviconHelperJni mFaviconHelperJni;
     @Mock private ImageServiceBridge.Natives mImageServiceBridgeJni;
     @Mock private Profile mProfile;
     @Mock private Tab mTab;
     @Mock private BottomSheetController mBottomSheetController;
     @Mock private Callback<BookmarkId> mBookmarkIdCallback;
+    @Mock private CommerceFeatureUtils.Natives mCommerceFeatureUtilsJniMock;
+    @Mock private ShoppingServiceFactory.Natives mShoppingServiceFactoryJniMock;
     @Mock private ShoppingService mShoppingService;
     @Mock private IdentityServicesProvider mIdentityServicesProvider;
     @Mock private IdentityManager mIdentityManager;
@@ -90,8 +96,11 @@ public class BookmarkUtilsTest {
         ShoppingServiceFactory.setShoppingServiceForTesting(mShoppingService);
         IdentityServicesProvider.setInstanceForTests(mIdentityServicesProvider);
 
-        mJniMocker.mock(LargeIconBridgeJni.TEST_HOOKS, mLargeIconBridgeNatives);
+        mJniMocker.mock(FaviconHelperJni.TEST_HOOKS, mFaviconHelperJni);
         mJniMocker.mock(ImageServiceBridgeJni.TEST_HOOKS, mImageServiceBridgeJni);
+        mJniMocker.mock(CommerceFeatureUtilsJni.TEST_HOOKS, mCommerceFeatureUtilsJniMock);
+        mJniMocker.mock(ShoppingServiceFactoryJni.TEST_HOOKS, mShoppingServiceFactoryJniMock);
+        doReturn(mShoppingService).when(mShoppingServiceFactoryJniMock).getForProfile(any());
         doReturn(mIdentityManager).when(mIdentityServicesProvider).getIdentityManager(any());
         doReturn(mAccountInfo).when(mIdentityManager).getPrimaryAccountInfo(anyInt());
         doReturn(mProfile).when(mTab).getProfile();

@@ -234,6 +234,12 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder final
   // position if required.
   PromotionHintAggregator::NotifyPromotionHintCB CreatePromotionHintCB();
 
+  // Returns true if the MediaCodec must be reallocated due to an increase in
+  // resolution.
+  bool CodecNeedsReallocation(int new_width);
+
+  std::vector<SupportedVideoDecoderConfig> GetSupportedConfigsInternal();
+
   std::unique_ptr<MediaLog> media_log_;
 
   State state_ = State::kInitializing;
@@ -349,11 +355,13 @@ class MEDIA_GPU_EXPORT MediaCodecVideoDecoder final
   // it fails to get a codec.  This is to work around b/191966399.
   bool should_retry_codec_allocation_ = false;
 
-  // True if the created codec is software backed.
-  bool is_software_codec_ = false;
+  // Name of the MediaCodec that was created.
+  std::string codec_name_;
 
   // Enables Block Model (LinearBlock).
   const bool use_block_model_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<MediaCodecVideoDecoder> weak_factory_{this};
   base::WeakPtrFactory<MediaCodecVideoDecoder> codec_allocator_weak_factory_{

@@ -21,6 +21,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -52,6 +53,12 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
     case kBadgeTypeTranslate:
       return [self translateBadgeButton];
     case kBadgeTypeIncognito:
+
+      if (IsVivaldiRunning()) {
+        // Do not show Private tab badge.
+        return nil;
+      } // End Vivaldi
+
       return [self incognitoBadgeButton];
     case kBadgeTypeOverflow:
       return [self overflowBadgeButton];
@@ -64,18 +71,18 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
     case kBadgeTypeParcelTracking:
       return [self parcelTrackingBadgeButton];
     case kBadgeTypeNone:
-      NOTREACHED_IN_MIGRATION() << "A badge should not have kBadgeTypeNone";
-      return nil;
+      NOTREACHED() << "A badge should not have kBadgeTypeNone";
   }
 }
 
 #pragma mark - Private
 - (BadgeButton*)passwordsSaveBadgeButton {
   UIImage* image =
+#if BUILDFLAG(IS_IOS_MACCATALYST)
       CustomSymbolWithPointSize(kPasswordSymbol, kInfobarSymbolPointSize);
-#if !BUILDFLAG(IS_IOS_MACCATALYST)
-  image = CustomSymbolWithPointSize(kMulticolorPasswordSymbol,
-                                    kInfobarSymbolPointSize);
+#else
+      CustomSymbolWithPointSize(kMulticolorPasswordSymbol,
+                                kInfobarSymbolPointSize);
 #endif  // BUILDFLAG(IS_IOS_MACCATALYST)
   BadgeButton* button = [self createButtonForType:kBadgeTypePasswordSave
                                             image:image];
@@ -91,10 +98,11 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 
 - (BadgeButton*)passwordsUpdateBadgeButton {
   UIImage* image =
+#if BUILDFLAG(IS_IOS_MACCATALYST)
       CustomSymbolWithPointSize(kPasswordSymbol, kInfobarSymbolPointSize);
-#if !BUILDFLAG(IS_IOS_MACCATALYST)
-  image = CustomSymbolWithPointSize(kMulticolorPasswordSymbol,
-                                    kInfobarSymbolPointSize);
+#else
+      CustomSymbolWithPointSize(kMulticolorPasswordSymbol,
+                                kInfobarSymbolPointSize);
 #endif  // BUILDFLAG(IS_IOS_MACCATALYST)
   BadgeButton* button = [self createButtonForType:kBadgeTypePasswordUpdate
                                             image:image];
@@ -125,6 +133,13 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 - (BadgeButton*)translateBadgeButton {
   UIImage* image =
       CustomSymbolWithPointSize(kTranslateSymbol, kInfobarSymbolPointSize);
+
+  if (IsVivaldiRunning()) {
+    image =
+        [CustomSymbolWithPointSize(vOverflowTranslate, kInfobarSymbolPointSize)
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } // End Vivaldi
+
   BadgeButton* button = [self createButtonForType:kBadgeTypeTranslate
                                             image:image];
   [button addTarget:self.delegate

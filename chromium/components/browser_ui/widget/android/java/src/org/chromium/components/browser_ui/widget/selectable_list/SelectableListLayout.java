@@ -28,6 +28,7 @@ import androidx.recyclerview.widget.RecyclerView.AdapterDataObserver;
 import androidx.recyclerview.widget.RecyclerView.ItemAnimator;
 import androidx.recyclerview.widget.RecyclerView.OnScrollListener;
 
+import org.chromium.base.BuildInfo;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.components.browser_ui.widget.FadingShadow;
@@ -84,8 +85,6 @@ public class SelectableListLayout<E> extends FrameLayout
             new ObservableSupplierImpl<>();
     private final Set<Integer> mIgnoredTypesForEmptyState = new HashSet<>();
 
-    // Vivaldi
-    private boolean mIsNotes;
     public static final int TAG_SEARCH = 1;
     public static final int TAG_NORMAL = 2;
 
@@ -98,7 +97,7 @@ public class SelectableListLayout<E> extends FrameLayout
                     // At inflation, the RecyclerView is set to gone, and the loading view is
                     // visible. As long as the adapter data changes, we show the recycler view,
                     // and hide loading view.
-                    mLoadingView.hideLoadingUI();
+                    mLoadingView.hideLoadingUi();
                 }
 
                 @Override
@@ -108,7 +107,7 @@ public class SelectableListLayout<E> extends FrameLayout
                     // At inflation, the RecyclerView is set to gone, and the loading view is
                     // visible. As long as the adapter data changes, we show the recycler view,
                     // and hide loading view.
-                    mLoadingView.hideLoadingUI();
+                    mLoadingView.hideLoadingUi();
                 }
 
                 @Override
@@ -132,7 +131,7 @@ public class SelectableListLayout<E> extends FrameLayout
         mEmptyView = findViewById(R.id.empty_view);
         mEmptyViewWrapper = findViewById(R.id.empty_view_wrapper);
         mLoadingView = findViewById(R.id.loading_view);
-        mLoadingView.showLoadingUI();
+        mLoadingView.showLoadingUi();
 
         mToolbarStub = findViewById(R.id.action_bar_stub);
 
@@ -429,7 +428,7 @@ public class SelectableListLayout<E> extends FrameLayout
 
     @Override
     public void onDisplayStyleChanged(DisplayStyle newDisplayStyle) {
-        int padding = getPaddingForDisplayStyle(newDisplayStyle, getResources());
+        int padding = getPaddingForDisplayStyle(newDisplayStyle, mRecyclerView, getResources());
         mRecyclerView.setPaddingRelative(
                 padding, mRecyclerView.getPaddingTop(), padding, mRecyclerView.getPaddingBottom());
     }
@@ -453,6 +452,9 @@ public class SelectableListLayout<E> extends FrameLayout
         mEmptyView.setText(searchEmptyString);
         if (searchEmptySubheadingResId != Resources.ID_NULL) {
             mEmptyStateSubHeadingView.setText(searchEmptySubheadingResId);
+        }
+        else if (BuildConfig.IS_VIVALDI) {
+            mEmptyStateSubHeadingView.setText("");
         }
         onBackPressStateChanged();
 
@@ -479,12 +481,20 @@ public class SelectableListLayout<E> extends FrameLayout
      * @param resources The {@link Resources} used to retrieve configuration and display metrics.
      * @return The lateral padding to use for the current display style.
      */
-    public static int getPaddingForDisplayStyle(DisplayStyle displayStyle, Resources resources) {
+    public static int getPaddingForDisplayStyle(
+            DisplayStyle displayStyle, View view, Resources resources) {
         if (BuildConfig.IS_VIVALDI) return 0; // Vivaldi
+
         int padding = 0;
         if (displayStyle.horizontal == HorizontalDisplayStyle.WIDE) {
-            int screenWidthDp = resources.getConfiguration().screenWidthDp;
             float dpToPx = resources.getDisplayMetrics().density;
+            int screenWidthDp = 0;
+            if (BuildInfo.getInstance().isAutomotive && view != null) {
+                screenWidthDp = (int) (view.getMeasuredWidth() / dpToPx);
+            } else {
+                screenWidthDp = resources.getConfiguration().screenWidthDp;
+            }
+
             padding =
                     (int)
                             (((screenWidthDp - UiConfig.WIDE_DISPLAY_STYLE_MIN_WIDTH_DP) / 2.f)
@@ -507,7 +517,6 @@ public class SelectableListLayout<E> extends FrameLayout
      * view implementation. We need to check it ourselves.
      */
     private void updateEmptyViewVisibility() {
-        if (mIsNotes) return; // Vivaldi
         int visible = isListEffectivelyEmpty() ? View.VISIBLE : View.GONE;
         mEmptyView.setVisibility(visible);
         mEmptyViewWrapper.setVisibility(visible);
@@ -591,10 +600,6 @@ public class SelectableListLayout<E> extends FrameLayout
     /** Vivaldi **/
     public FadingShadowView getToolbarShadow() {
         return  mToolbarShadow;
-    }
-
-    public void setIsNotes(boolean isNotes) {
-        mIsNotes = isNotes;
     }
 
     public SelectableListToolbar<E> getToolbarForVivaldi() {

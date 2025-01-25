@@ -2,18 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../ui/components/menus/menus.js';
+
 import * as Platform from '../../../core/platform/platform.js';
-import {type LocalizedString} from '../../../core/platform/UIString.js';
+import type {LocalizedString} from '../../../core/platform/UIString.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as Dialogs from '../../../ui/components/dialogs/dialogs.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
-import * as Menus from '../../../ui/components/menus/menus.js';
+import type * as Menus from '../../../ui/components/menus/menus.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as Models from '../models/models.js';
 import type * as Actions from '../recorder-actions/recorder-actions.js';
 
 import selectButtonStyles from './selectButton.css.js';
+
+const {html, Directives: {ifDefined, classMap}} = LitHtml;
 
 export const enum Variant {
   PRIMARY = 'primary',
@@ -95,7 +99,6 @@ export class SelectMenuSelectedEvent extends Event {
 }
 
 export class SelectButton extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-select-button`;
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #props: SelectButtonProps = {
     disabled: false,
@@ -178,12 +181,12 @@ export class SelectButton extends HTMLElement {
       selectedItem: SelectButtonItem,
       ): LitHtml.TemplateResult {
     // clang-format off
-    return LitHtml.html`
-      <${Menus.Menu.MenuItem.litTagName} .value=${item.value} .selected=${
+    return html`
+      <devtools-menu-item .value=${item.value} .selected=${
       item.value === selectedItem.value
     } jslog=${VisualLogging.item(Platform.StringUtilities.toKebabCase(item.value)).track({click: true})}>
         ${item.label()}
-      </${Menus.Menu.MenuItem.litTagName}>
+      </devtools-menu-item>
     `;
     // clang-format on
   }
@@ -193,10 +196,10 @@ export class SelectButton extends HTMLElement {
       selectedItem: SelectButtonItem,
       ): LitHtml.TemplateResult {
     // clang-format off
-    return LitHtml.html`
-      <${Menus.Menu.MenuGroup.litTagName} .name=${group.name}>
+    return html`
+      <devtools-menu-group .name=${group.name}>
         ${group.items.map(item => this.#renderSelectItem(item, selectedItem))}
-      </${Menus.Menu.MenuGroup.litTagName}>
+      </devtools-menu-group>
     `;
     // clang-format on
   }
@@ -224,19 +227,17 @@ export class SelectButton extends HTMLElement {
 
     // clang-format off
     LitHtml.render(
-      LitHtml.html`
-      <div class="select-button" title=${
-        this.#getTitle(menuLabel) || LitHtml.nothing
-      }>
-      <${Menus.SelectMenu.SelectMenu.litTagName}
-          class=${LitHtml.Directives.classMap(classes)}
+      html`
+      <div class="select-button" title=${ifDefined(this.#getTitle(menuLabel))}>
+      <devtools-select-menu
+          class=${classMap(classes)}
           @selectmenuselected=${this.#handleSelectMenuSelect}
           ?disabled=${this.#props.disabled}
           .showArrow=${true}
           .sideButton=${false}
           .showSelectedItem=${true}
           .disabled=${this.#props.disabled}
-          .buttonTitle=${LitHtml.html`${menuLabel}`}
+          .buttonTitle=${() => html`${menuLabel}`}
           .position=${Dialogs.Dialog.DialogVerticalPosition.BOTTOM}
           .horizontalAlignment=${
             Dialogs.Dialog.DialogHorizontalAlignment.RIGHT
@@ -251,17 +252,17 @@ export class SelectButton extends HTMLElement {
                   this.#renderSelectItem(item, selectedItem),
                 )
           }
-        </${Menus.SelectMenu.SelectMenu.litTagName}>
+        </devtools-select-menu>
         ${
           selectedItem
-            ? LitHtml.html`
-        <${Buttons.Button.Button.litTagName}
+            ? html`
+        <devtools-button
             .disabled=${this.#props.disabled}
             .variant=${buttonVariant}
             .iconName=${selectedItem.buttonIconName}
             @click=${this.#handleClick}>
             ${this.#props.buttonLabel}
-        </${Buttons.Button.Button.litTagName}>`
+        </devtools-button>`
             : ''
         }
       </div>`,

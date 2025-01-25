@@ -10,33 +10,26 @@
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/values.h"
+#include "chromeos/ash/components/boca/proto/roster.pb.h"
 #include "chromeos/ash/components/boca/session_api/constants.h"
+#include "chromeos/ash/components/boca/session_api/session_parser.h"
 #include "google_apis/common/api_error_codes.h"
 #include "google_apis/common/base_requests.h"
 #include "third_party/protobuf/src/google/protobuf/map_field_lite.h"
-
-namespace {
-
-bool ParseResponse(std::string json) {
-  // TODO(b/358476060): Always notify success if http code is success. Align
-  // with server if there is additional data needs to be handled.
-  return true;
-}
-}  // namespace
 
 namespace ash::boca {
 
 //=================CreateSessionRequest================
 CreateSessionRequest::CreateSessionRequest(
     google_apis::RequestSender* sender,
-    std::string gaia_id,
+    ::boca::UserIdentity teacher,
     base::TimeDelta duration,
     ::boca::Session::SessionState session_state,
     CreateSessionCallback callback)
     : UrlFetchRequestBase(sender,
                           google_apis::ProgressCallback(),
                           google_apis::ProgressCallback()),
-      teacher_gaia_id_(std::move(gaia_id)),
+      teacher_(std::move(teacher)),
       duration_(duration),
       session_state_(session_state),
       url_base_(kSchoolToolsApiBaseUrl),
@@ -46,7 +39,7 @@ CreateSessionRequest ::~CreateSessionRequest() = default;
 
 GURL CreateSessionRequest::GetURL() const {
   auto url = GURL(url_base_).Resolve(base::ReplaceStringPlaceholders(
-      kCreateSessionUrlTemplate, {teacher_gaia_id_}, nullptr));
+      kCreateSessionUrlTemplate, {teacher_.gaia_id()}, nullptr));
   return url;
 }
 
@@ -73,80 +66,53 @@ bool CreateSessionRequest::GetContentData(std::string* upload_content_type,
   // protobuf-full, but chromium only include protobuf-lite.
   base::Value::Dict root;
   // Session metadata.
-  if (!teacher_gaia_id_.empty()) {
-    base::Value::Dict teacher;
-    teacher.Set("gaia_id", teacher_gaia_id_);
-    root.Set("teacher", std::move(teacher));
-  }
-  base::Value::Dict duration;
-  duration.Set("seconds", static_cast<int>(duration_.InSeconds()));
-  root.Set("duration", std::move(duration));
+  base::Value::Dict teacher;
+  teacher.Set(kGaiaId, teacher_.gaia_id());
+  teacher.Set(kFullName, teacher_.full_name());
+  teacher.Set(kEmail, teacher_.email());
 
-  root.Set("session_state", session_state_);
+  root.Set(kTeacher, std::move(teacher));
+
+  base::Value::Dict duration;
+  duration.Set(kSeconds, static_cast<int>(duration_.InSeconds()));
+  root.Set(kDuration, std::move(duration));
+
+  root.Set(kSessionState, session_state_);
+
+  // Enable access code
+  base::Value::Dict joinCode;
+  joinCode.Set(kJoinCodeEnabled, true);
+  root.Set(kJoinCode, std::move(joinCode));
 
   // Roster info
-  if (!student_groups_.empty()) {
+  if (roster_) {
     base::Value::Dict roster;
-    base::Value::Dict student_groups;
-    student_groups.Set("title", kMainStudentGroupName);
-    base::Value::List students;
-    for (const auto& student : student_groups_) {
-      base::Value::Dict item;
-      item.Set("gaia_id", student.gaia_id());
-      item.Set("email", student.email());
-      item.Set("full_name", student.full_name());
-      item.Set("photo_url", student.photo_url());
-      students.Append(std::move(item));
-    }
-    student_groups.Set("students", base::Value(std::move(students)));
-    roster.Set("student_groups", std::move(student_groups));
-
-    root.Set("roster", std::move(roster));
+    ParseRosterJsonFromProto(roster_.get(), &roster);
+    root.Set(kRoster, std::move(roster));
   }
 
   base::Value::Dict student_config;
 
   // Ontask config
-  if (on_task_config_ && on_task_config_->has_active_bundle()) {
-    base::Value::Dict bundle;
-    bundle.Set("locked", on_task_config_->active_bundle().locked());
-    base::Value::List content_configs;
-    for (const auto& content :
-         on_task_config_->active_bundle().content_configs()) {
-      base::Value::Dict item;
-      item.Set("url", content.url());
-      item.Set("title", content.title());
-      item.Set("favicon_url", content.favicon_url());
-      if (content.has_locked_navigation_options()) {
-        base::Value::Dict navigation_type;
-        navigation_type.Set(
-            "navigation_type",
-            content.locked_navigation_options().navigation_type());
-        item.Set("locked_navigation_options", std::move(navigation_type));
-      }
-      content_configs.Append(std::move(item));
-    }
-    bundle.Set("content_configs", std::move(content_configs));
-
+  if (on_task_config_) {
     base::Value::Dict on_task_config;
-    on_task_config.Set("active_bundle", std::move(bundle));
-    student_config.Set("on_task_config", std::move(on_task_config));
+    ParseOnTaskConfigJsonFromProto(on_task_config_.get(), &on_task_config);
+    student_config.Set(kOnTaskConfig, std::move(on_task_config));
   }
 
   // Caption Config
   if (captions_config_) {
     base::Value::Dict caption_config;
-    caption_config.Set("captions_enabled",
-                       captions_config_->captions_enabled());
-    caption_config.Set("translations_enabled",
-                       captions_config_->translations_enabled());
-
-    student_config.Set("captions_config", std::move(caption_config));
+    ParseCaptionConfigJsonFromProto(captions_config_.get(), &caption_config);
+    student_config.Set(kCaptionsConfig, std::move(caption_config));
   }
-  base::Value::Dict main_group_student_config;
-  main_group_student_config.Set(kMainStudentGroupName,
-                                std::move(student_config));
-  root.Set("student_group_configs", std::move(main_group_student_config));
+
+  base::Value::Dict group_student_config;
+  group_student_config.Set(kMainStudentGroupName, student_config.Clone());
+  // TODO(crbug.com/375051415): We duplicate the session config for access code
+  // student for now, this should eventually be moved to server.
+  group_student_config.Set(kAccessCodeGroupName, std::move(student_config));
+  root.Set(kStudentGroupsConfig, std::move(group_student_config));
 
   base::JSONWriter::Write(root, upload_content);
   return true;
@@ -160,7 +126,9 @@ void CreateSessionRequest::ProcessURLFetchResults(
   switch (error) {
     case google_apis::HTTP_SUCCESS:
       blocking_task_runner()->PostTaskAndReplyWithResult(
-          FROM_HERE, base::BindOnce(&ParseResponse, std::move(response_body)),
+          FROM_HERE,
+          base::BindOnce(&GetSessionProtoFromJson, std::move(response_body),
+                         /*=is_producer*/ true),
           base::BindOnce(&CreateSessionRequest::OnDataParsed,
                          weak_ptr_factory_.GetWeakPtr()));
       break;
@@ -180,9 +148,13 @@ void CreateSessionRequest::OverrideURLForTesting(std::string url) {
   url_base_ = std::move(url);
 }
 
-void CreateSessionRequest::OnDataParsed(bool success) {
-  // Notify success immediately for now.
-  std::move(callback_).Run(true);
+void CreateSessionRequest::OnDataParsed(
+    std::unique_ptr<::boca::Session> session) {
+  if (!session) {
+    std::move(callback_).Run(base::unexpected(google_apis::PARSE_ERROR));
+  } else {
+    std::move(callback_).Run(std::move(session));
+  }
   OnProcessURLFetchResultsComplete();
 }
 }  // namespace ash::boca

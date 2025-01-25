@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Touch to Search ist eine Funktion, die nur verfügbar ist, wenn Google in Vivaldi als Standardsuchmaschine festgelegt ist. Es sendet das ausgewählte Wort und die aktuelle Seite als Kontext an die Google-Suche. Sie können es in den <ph name="BEGIN_LINK" />Einstellungen<ph name="END_LINK" /> ausschalten.</translation>
 <translation id="1598449788754183301">Tabs normal/privat umschalten</translation>
 <translation id="1644574205037202324">Verlauf</translation>
-<translation id="17513872634828108">Geöffnete Tabs</translation>
 <translation id="1829244130665387512">Auf Seite suchen</translation>
 <translation id="1910514478706885609">In neuer Tabgruppe öffnen</translation>
 <translation id="1925021887439448749">Benutzerdefinierte Webadresse eingeben</translation>
 <translation id="2038563949887743358">“Desktopversion ansehen” aktivieren</translation>
-<translation id="2139186145475833000">Zum Startbildschirm hinzufügen</translation>
 <translation id="2149973817440762519">Lesezeichen bearbeiten</translation>
 <translation id="2306442503286132111">Lesezeichen wurde im Ordner <ph name="FOLDER_NAME" /> gespeichert</translation>
 <translation id="2433507940547922241">Darstellung</translation>
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">Aktuelle Gerätesprache</translation>
 <translation id="4167670741834902166">Neuer privater Tab</translation>
 <translation id="4195643157523330669">In neuem Tab öffnen</translation>
+<translation id="4225895483398857530">Symbolleistenkürzel</translation>
 <translation id="4243710787042215766">Im privaten Tab öffnen</translation>
 <translation id="4304713468139749426">Passwortverwaltung</translation>
 <translation id="451872707440238414">Lesezeichen durchsuchen</translation>
@@ -74,6 +73,7 @@ Drücken Sie lange, um Ihren Suchbegriff anzupassen. Um Ihre Suche zu verfeinern
 <translation id="8560602726703398413">Finden Sie Ihre Leseliste in den Lesezeichen</translation>
 <translation id="85991616550051997">Startseite</translation>
 <translation id="8820817407110198400">Lesezeichen</translation>
+<translation id="9042893549633094279">Datenschutz und Sicherheit</translation>
 <translation id="9063523880881406963">“Desktopversion ansehen” deaktivieren</translation>
 <translation id="9080642952018487277">In den Privatmodus wechseln</translation>
 <translation id="96681097142096641">Vereinfachte Seite ansehen?</translation>

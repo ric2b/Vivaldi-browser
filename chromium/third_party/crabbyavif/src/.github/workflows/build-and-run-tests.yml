@@ -96,3 +96,6 @@ jobs:
         cmake -S c_api_tests -B c_build_gav1
         make -C c_build_gav1
         ctest --test-dir c_build_gav1 -E conformance_tests
+
+    - name: Build and run the heic tests with heic feature enabled
+      run: cargo test --no-default-features --features heic heic

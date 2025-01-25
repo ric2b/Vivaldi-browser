@@ -32,7 +32,7 @@ class Menu_Model : public KeyedService {
   Menu_Model(const Menu_Model&) = delete;
   Menu_Model& operator=(const Menu_Model&) = delete;
 
-  void Load();
+  void Load(bool is_reset);
   bool Save();
   void LoadFinished(std::unique_ptr<MenuLoadDetails> details);
 
@@ -49,8 +49,9 @@ class Menu_Model : public KeyedService {
   bool RemoveAction(Menu_Node* root, const std::string& action);
   bool Reset(const Menu_Node* node);
   bool Reset(const std::string& menu);
+  bool ResetAll();
 
-  bool mode() const { return mode_; }
+  Mode mode() const { return mode_; }
   bool loaded() const { return loaded_; }
   bool IsValidIndex(const Menu_Node* parent, size_t index);
 
@@ -72,7 +73,7 @@ class Menu_Model : public KeyedService {
 
   std::unique_ptr<MenuLoadDetails> CreateLoadDetails(const std::string& menu,
                                                      bool is_reset);
-  std::unique_ptr<MenuLoadDetails> CreateLoadDetails(int64_t id, bool is_reset);
+  std::unique_ptr<MenuLoadDetails> CreateLoadDetails(int64_t id/*, bool is_reset*/);
   bool loaded_ = false;
   base::ObserverList<MenuModelObserver> observers_;
   const raw_ptr<content::BrowserContext> context_;

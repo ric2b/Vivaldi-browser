@@ -22,6 +22,8 @@ COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 extern const char kHistorySearchEnterprisePolicyAllowed[];
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 extern const char kProductSpecificationsEnterprisePolicyAllowed[];
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+extern const char kAutofillPredictionImprovementsEnterprisePolicyAllowed[];
 }  // namespace prefs
 
 namespace features {
@@ -35,6 +37,10 @@ COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kHistorySearchMqlsLogging);
 COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
 BASE_DECLARE_FEATURE(kProductSpecificationsMqlsLogging);
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+BASE_DECLARE_FEATURE(kFormsPredictionsMqlsLogging);
+COMPONENT_EXPORT(OPTIMIZATION_GUIDE_FEATURES)
+BASE_DECLARE_FEATURE(kFormsAnnotationsMqlsLogging);
 }  // namespace features
 
 void RegisterGenAiFeatures(PrefRegistrySimple* registry);

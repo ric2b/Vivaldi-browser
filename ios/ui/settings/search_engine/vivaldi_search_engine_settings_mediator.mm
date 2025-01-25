@@ -11,30 +11,33 @@
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/utils/observable_boolean.h"
 #import "prefs/vivaldi_pref_names.h"
 
 @interface VivaldiSearchEngineSettingsMediator () <BooleanObserver,
                                                   SearchEngineObserving> {
-  ChromeBrowserState* _browserState;  // weak
+  ProfileIOS* _profile;  // weak
   TemplateURLService* _templateURLService;  // weak
   // Bridge for TemplateURLServiceObserver.
   std::unique_ptr<SearchEngineObserverBridge> _observer;
 
   // Boolean observer for search engine nickname
   PrefBackedBoolean* _searchEngineNicknameEnabled;
+  // Boolean observer for search suggestion
+  PrefBackedBoolean* _searchSuggestionsEnabled;
 }
 @end
 
 @implementation VivaldiSearchEngineSettingsMediator
 
-- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState {
+- (instancetype)initWithProfile:(ProfileIOS*)profile {
   self = [super init];
   if (self) {
-    _browserState = browserState;
+    _profile = profile;
     _templateURLService =
-        ios::TemplateURLServiceFactory::GetForBrowserState(browserState);
+        ios::TemplateURLServiceFactory::GetForProfile(profile);
     _observer =
         std::make_unique<SearchEngineObserverBridge>(self, _templateURLService);
     _templateURLService->Load();
@@ -47,6 +50,13 @@
     [_searchEngineNicknameEnabled setObserver:self];
     [self booleanDidChange:_searchEngineNicknameEnabled];
 
+    _searchSuggestionsEnabled =
+        [[PrefBackedBoolean alloc]
+            initWithPrefService:profile->GetPrefs()
+                prefName:prefs::kSearchSuggestEnabled];
+    [_searchSuggestionsEnabled setObserver:self];
+    [self booleanDidChange:_searchSuggestionsEnabled];
+
   }
   return self;
 }
@@ -56,10 +66,14 @@
   [_searchEngineNicknameEnabled setObserver:nil];
   _searchEngineNicknameEnabled = nil;
 
+  [_searchSuggestionsEnabled stop];
+  [_searchSuggestionsEnabled setObserver:nil];
+  _searchSuggestionsEnabled = nil;
+
   // Remove observer bridges.
   _observer.reset();
 
-  _browserState = nullptr;
+  _profile = nullptr;
   _templateURLService = nullptr;
   _consumer = nil;
 }
@@ -70,6 +84,13 @@
     return YES;
   }
   return [_searchEngineNicknameEnabled value];
+}
+
+- (BOOL)searchSuggestionsEnabled {
+  if (!_searchSuggestionsEnabled) {
+    return NO;
+  }
+  return [_searchSuggestionsEnabled value];
 }
 
 - (NSString*)searchEngineNameForType:
@@ -94,6 +115,9 @@
       setPreferenceForEnableSearchEngineNickname:
           [self searchEngineNicknameEnabled]];
   [self.consumer
+      setPreferenceForEnableSearchSuggestions:
+          [self searchSuggestionsEnabled]];
+  [self.consumer
       setSearchEngineForRegularTabs:
           [self searchEngineNameForType:
                   TemplateURLService::kDefaultSearchMain]];
@@ -110,6 +134,11 @@
     [_searchEngineNicknameEnabled setValue:enabled];
 }
 
+- (void)searchSuggestionsEnabled:(BOOL)enabled {
+  if (enabled != [self searchSuggestionsEnabled])
+    [_searchSuggestionsEnabled setValue:enabled];
+}
+
 #pragma mark - BooleanObserver
 
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
@@ -117,6 +146,10 @@
     [self.consumer
          setPreferenceForEnableSearchEngineNickname:
             [self searchEngineNicknameEnabled]];
+  } else if (observableBoolean == _searchSuggestionsEnabled) {
+    [self.consumer
+        setPreferenceForEnableSearchSuggestions:
+            [self searchSuggestionsEnabled]];
   }
 }
 

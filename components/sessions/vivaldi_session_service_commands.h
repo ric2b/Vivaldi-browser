@@ -129,6 +129,14 @@ CreateRemoveVivPageActionOverrideCommand(const SessionID& tab_id,
 SESSIONS_EXPORT std::unique_ptr<SessionCommand>
 CreateVivCreateThumbnailCommand(int image_format, const char * data,
     size_t size);
+
+// Filters through the given list of commands - leaving just enough for imported
+// tabs to work.
+SESSIONS_EXPORT std::vector<std::unique_ptr<sessions::SessionCommand>>
+VivaldiFilterImportedTabsSessionCommands(
+    std::vector<std::unique_ptr<sessions::SessionCommand>> &cmds,
+    bool vivaldi_source);
+
 }  // namespace sessions
 
 #endif  // COMPONENTS_SESSIONS_VIVALDI_SESSION_SERVICE_COMMANDS_H_

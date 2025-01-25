@@ -6,6 +6,7 @@
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 
 #include "browser/menus/vivaldi_context_menu_controller.h"
+#include "ui/base/mojom/menu_source_type.mojom-shared.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -84,11 +85,11 @@ void ToolkitDelegateViews::VivaldiSetMenu(views::MenuItemView* view,
 
 void ToolkitDelegateViews::VivaldiRunMenuAt(views::Widget* parent,
                                             const gfx::Rect& rect,
-                                            ui::MenuSourceType type) {
+                                            ui::mojom::MenuSourceType type) {
   using Position = views::MenuAnchorPosition;
-  Position anchor_position =
-      (type == ui::MENU_SOURCE_TOUCH || type == ui::MENU_SOURCE_TOUCH_EDIT_MENU)
-          ? Position::kBottomCenter
-          : Position::kTopLeft;
+  Position anchor_position = (type == ui::mojom::MenuSourceType::kTouch ||
+                              type == ui::mojom::MenuSourceType::kTouchEditMenu)
+                                 ? Position::kBottomCenter
+                                 : Position::kTopLeft;
   menu_runner_->RunMenuAt(parent, nullptr, rect, anchor_position, type);
 }

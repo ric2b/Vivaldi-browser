@@ -4,8 +4,8 @@
 // LICENSE file in the root directory of this source tree.
 //
 
-#ifndef __XNNPACK_SRC_XNNPACK_SIMD_S32_SSE2_H_
-#define __XNNPACK_SRC_XNNPACK_SIMD_S32_SSE2_H_
+#ifndef __XNNPACK_SRC_XNNPACK_SIMD_S32_SSE41_H_
+#define __XNNPACK_SRC_XNNPACK_SIMD_S32_SSE41_H_
 
 #include <assert.h>
 #include <smmintrin.h>
@@ -37,6 +37,11 @@ static XNN_INLINE xnn_simd_s32_t xnn_max_s32(xnn_simd_s32_t a,
 }
 
 static XNN_INLINE xnn_simd_s32_t xnn_min_s32(xnn_simd_s32_t a,
+                                             xnn_simd_s32_t b) {
+  return _mm_min_epi32(a, b);
+}
+
+static XNN_INLINE xnn_simd_s32_t xnn_sub_s32(xnn_simd_s32_t a,
                                              xnn_simd_s32_t b) {
   return _mm_min_epi32(a, b);
 }
@@ -95,4 +100,11 @@ static XNN_INLINE void xnn_store_tail_s32(int32_t* output, xnn_simd_s32_t v,
   }
 }
 
-#endif  // __XNNPACK_SRC_XNNPACK_SIMD_S32_SSE2_H_
+// Conversion operations.
+
+static XNN_INLINE __m128
+xnn_cvt_f32_s32(xnn_simd_s32_t a) {
+  return _mm_cvtepi32_ps(a);
+}
+
+#endif  // __XNNPACK_SRC_XNNPACK_SIMD_S32_SSE41_H_

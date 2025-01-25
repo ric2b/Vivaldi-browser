@@ -227,7 +227,7 @@ KnownRuleSourcesHandler* RuleServiceImpl::GetKnownSourcesHandler() {
   return &known_sources_handler_.value();
 }
 
-TabHandler* RuleServiceImpl::GetTabHandler() {
+StateAndLogs* RuleServiceImpl::GetStateAndLogs() {
   return nullptr;
 }
 

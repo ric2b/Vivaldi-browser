@@ -8,8 +8,10 @@ import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 import * as UI from '../../legacy.js';
 
 import bezierSwatchStyles from './bezierSwatch.css.js';
-import {type CSSShadowModel} from './CSSShadowEditor.js';
+import type {CSSShadowModel} from './CSSShadowEditor.js';
 import cssShadowSwatchStyles from './cssShadowSwatch.css.js';
+
+const {html} = LitHtml;
 
 export class BezierSwatch extends HTMLSpanElement {
   private readonly iconElementInternal: IconButton.Icon.Icon;
@@ -58,7 +60,6 @@ export class BezierSwatch extends HTMLSpanElement {
 }
 
 export class CSSShadowSwatch extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`css-shadow-swatch`;
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #icon: IconButton.Icon.Icon;
   readonly #model: CSSShadowModel;
@@ -71,11 +72,10 @@ export class CSSShadowSwatch extends HTMLElement {
     ];
 
     LitHtml.render(
-        LitHtml.html`<${IconButton.Icon.Icon.litTagName} name="shadow" class="shadow-swatch-icon"></${
-            IconButton.Icon.Icon.litTagName}><slot></slot>`,
-        this.#shadow, {host: this});
+        html`<devtools-icon name="shadow" class="shadow-swatch-icon"></devtools-icon><slot></slot>`, this.#shadow,
+        {host: this});
 
-    this.#icon = this.#shadow.querySelector(IconButton.Icon.Icon.litTagName.value as string) as IconButton.Icon.Icon;
+    this.#icon = this.#shadow.querySelector('devtools-icon') as IconButton.Icon.Icon;
   }
 
   model(): CSSShadowModel {

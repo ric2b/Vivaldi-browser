@@ -2042,8 +2042,10 @@ const FFCodec ff_libvpx_vp8_encoder = {
     FF_CODEC_ENCODE_CB(vpx_encode),
     .close          = vpx_free,
     .caps_internal  = FF_CODEC_CAP_NOT_INIT_THREADSAFE |
+                      FF_CODEC_CAP_INIT_CLEANUP |
                       FF_CODEC_CAP_AUTO_THREADS,
     .p.pix_fmts     = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUVA420P, AV_PIX_FMT_NONE },
+    .color_ranges   = AVCOL_RANGE_MPEG | AVCOL_RANGE_JPEG,
     .p.priv_class   = &class_vp8,
     .defaults       = defaults,
     .p.wrapper_name = "libvpx",
@@ -2086,13 +2088,25 @@ static const enum AVPixelFormat vp9_pix_fmts_highbd[] = {
     AV_PIX_FMT_NONE
 };
 
-static av_cold void vp9_init_static(FFCodec *codec)
+static int vp9_get_supported_config(const AVCodecContext *avctx,
+                                    const AVCodec *codec,
+                                    enum AVCodecConfig config,
+                                    unsigned flags, const void **out,
+                                    int *out_num)
 {
-    vpx_codec_caps_t codec_caps = vpx_codec_get_caps(vpx_codec_vp9_cx());
-    if (codec_caps & VPX_CODEC_CAP_HIGHBITDEPTH)
-        codec->p.pix_fmts = vp9_pix_fmts_highbd;
-    else
-        codec->p.pix_fmts = vp9_pix_fmts_highcol;
+    if (config == AV_CODEC_CONFIG_PIX_FORMAT) {
+        vpx_codec_caps_t codec_caps = vpx_codec_get_caps(vpx_codec_vp9_cx());
+        if (codec_caps & VPX_CODEC_CAP_HIGHBITDEPTH) {
+            *out = vp9_pix_fmts_highbd;
+            *out_num = FF_ARRAY_ELEMS(vp9_pix_fmts_highbd) - 1;
+        } else {
+            *out = vp9_pix_fmts_highcol;
+            *out_num = FF_ARRAY_ELEMS(vp9_pix_fmts_highcol) - 1;
+        }
+        return 0;
+    }
+
+    return ff_default_get_supported_config(avctx, codec, config, flags, out, out_num);
 }
 
 static const AVClass class_vp9 = {
@@ -2115,11 +2129,13 @@ FFCodec ff_libvpx_vp9_encoder = {
     .p.wrapper_name = "libvpx",
     .priv_data_size = sizeof(VPxContext),
     .init           = vp9_init,
+    .color_ranges   = AVCOL_RANGE_MPEG | AVCOL_RANGE_JPEG,
     FF_CODEC_ENCODE_CB(vpx_encode),
     .close          = vpx_free,
     .caps_internal  = FF_CODEC_CAP_NOT_INIT_THREADSAFE |
+                      FF_CODEC_CAP_INIT_CLEANUP |
                       FF_CODEC_CAP_AUTO_THREADS,
     .defaults       = defaults,
-    .init_static_data = vp9_init_static,
+    .get_supported_config = vp9_get_supported_config,
 };
 #endif /* CONFIG_LIBVPX_VP9_ENCODER */

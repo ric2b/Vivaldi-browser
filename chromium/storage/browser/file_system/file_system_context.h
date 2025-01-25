@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/component_export.h"
+#include "base/containers/flat_set.h"
 #include "base/files/file.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
@@ -359,11 +360,9 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
   // Must be called after creating the FileSystemContext.
   void Initialize();
 
-  // The list of quota-managed storage types covered by file system backends.
-  //
-  // This is called during the constructor, before the file system backends are
-  // initialized.
-  std::vector<blink::mojom::StorageType> QuotaManagedStorageTypes();
+  // The set of quota-managed storage types covered by file system backends.
+  // This may be called before the file system backends are initialized.
+  base::flat_set<blink::mojom::StorageType> QuotaManagedStorageTypes();
 
   // Creates a new FileSystemOperation instance by getting an appropriate
   // FileSystemBackend for `url` and calling the backend's corresponding
@@ -453,7 +452,8 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
   // This map itself doesn't retain each backend's ownership; ownerships
   // of the backends are held by additional_backends_ or other scoped_ptr
   // backend fields.
-  std::map<FileSystemType, FileSystemBackend*> backend_map_;
+  std::map<FileSystemType, raw_ptr<FileSystemBackend, CtnExperimental>>
+      backend_map_;
 
   // External mount points visible in the file system context (excluding system
   // external mount points).

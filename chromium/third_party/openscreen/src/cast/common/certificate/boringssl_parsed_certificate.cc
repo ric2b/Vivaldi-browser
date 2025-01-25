@@ -38,7 +38,7 @@ const EVP_MD* MapDigestAlgorithm(DigestAlgorithm algorithm) {
 
 // static
 ErrorOr<std::unique_ptr<ParsedCertificate>> ParsedCertificate::ParseFromDER(
-    const std::vector<uint8_t>& der_cert) {
+    ByteView der_cert) {
   ErrorOr<bssl::UniquePtr<X509>> parsed =
       ImportCertificate(der_cert.data(), der_cert.size());
   if (!parsed) {
@@ -143,7 +143,7 @@ bool BoringSSLParsedCertificate::HasPolicyOid(const ByteView& oid) const {
         d2i_CERTIFICATEPOLICIES(nullptr, &in, ASN1_STRING_length(value));
 
     if (policies) {
-      // Check for |oid| in the set of policies.
+      // Check for `oid` in the set of policies.
       uint32_t policy_count = sk_POLICYINFO_num(policies);
       for (uint32_t i = 0; i < policy_count; ++i) {
         POLICYINFO* info = sk_POLICYINFO_value(policies, i);

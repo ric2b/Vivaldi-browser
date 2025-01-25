@@ -2,16 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../ui/components/linkifier/linkifier.js';
+
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
-import * as TraceEngine from '../../models/trace/trace.js';
+import * as Trace from '../../models/trace/trace.js';
 import * as DataGrid from '../../ui/components/data_grid/data_grid.js';
-import * as Linkifier from '../../ui/components/linkifier/linkifier.js';
+import type * as Linkifier from '../../ui/components/linkifier/linkifier.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as LitHtml from '../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -30,7 +34,7 @@ const UIStrings = {
    *@description Tooltip description '% of slow-path non-matches'
    */
   rejectPercentageExplanation:
-      'The percentage of non-matching nodes (Match Attempts - Match Count) that couldn\'t be quickly ruled out by the bloom filter. Lower is better.',
+      'The percentage of non-matching nodes (Match Attempts - Match Count) that couldn\'t be quickly ruled out by the bloom filter due to high selector complexity. Lower is better.',
   /**
    *@description Column name for count of elements that the engine attempted to match against a style rule
    */
@@ -79,12 +83,12 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/TimelineSelectorStatsView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-const SelectorTimingsKey = TraceEngine.Types.TraceEvents.SelectorTimingsKey;
+const SelectorTimingsKey = Trace.Types.Events.SelectorTimingsKey;
 
 export class TimelineSelectorStatsView extends UI.Widget.VBox {
   #datagrid: DataGrid.DataGridController.DataGridController;
   #selectorLocations: Map<string, Protocol.CSS.SourceRange[]>;
-  #traceParsedData: TraceEngine.Handlers.Types.TraceParseData|null = null;
+  #parsedTrace: Trace.Handlers.Types.ParsedTrace|null = null;
   /**
    * We store the last event (or array of events) that we renderered. We do
    * this because as the user zooms around the panel this view is updated,
@@ -93,16 +97,15 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
    * If the user views a single event, this will be set to that single event, but if they are viewing a range of events, this will be set to an array.
    * If it's null, that means we have not rendered yet.
    */
-  #lastStatsSourceEventOrEvents: TraceEngine.Types.TraceEvents.TraceEventUpdateLayoutTree|
-      TraceEngine.Types.TraceEvents.TraceEventUpdateLayoutTree[]|null = null;
+  #lastStatsSourceEventOrEvents: Trace.Types.Events.UpdateLayoutTree|Trace.Types.Events.UpdateLayoutTree[]|null = null;
 
-  constructor(traceParsedData: TraceEngine.Handlers.Types.TraceParseData|null) {
+  constructor(parsedTrace: Trace.Handlers.Types.ParsedTrace|null) {
     super();
 
     this.#datagrid = new DataGrid.DataGridController.DataGridController();
     this.element.setAttribute('jslog', `${VisualLogging.pane('selector-stats').track({resize: true})}`);
     this.#selectorLocations = new Map<string, Protocol.CSS.SourceRange[]>();
-    this.#traceParsedData = traceParsedData;
+    this.#parsedTrace = parsedTrace;
 
     this.#datagrid.data = {
       label: i18nString(UIStrings.selectorStats),
@@ -149,7 +152,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
         {
           id: SelectorTimingsKey.RejectPercentage as Lowercase<string>,
           title: i18nString(UIStrings.rejectPercentage),
-          titleElement: LitHtml.html`<span title=${i18nString(UIStrings.rejectPercentageExplanation)}>${
+          titleElement: html`<span title=${i18nString(UIStrings.rejectPercentageExplanation)}>${
               i18nString(UIStrings.rejectPercentage)}</span>`,
           sortable: true,
           widthWeighting: 1,
@@ -217,8 +220,8 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
     this.contentElement.appendChild(this.#datagrid);
   }
 
-  setEvent(event: TraceEngine.Types.TraceEvents.TraceEventUpdateLayoutTree): boolean {
-    if (!this.#traceParsedData) {
+  setEvent(event: Trace.Types.Events.UpdateLayoutTree): boolean {
+    if (!this.#parsedTrace) {
       return false;
     }
 
@@ -230,13 +233,13 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
 
     this.#lastStatsSourceEventOrEvents = event;
 
-    const selectorStats = this.#traceParsedData.SelectorStats.dataForUpdateLayoutEvent.get(event);
+    const selectorStats = this.#parsedTrace.SelectorStats.dataForUpdateLayoutEvent.get(event);
     if (!selectorStats) {
       this.#datagrid.data = {...this.#datagrid.data, rows: []};
       return false;
     }
 
-    const timings: TraceEngine.Types.TraceEvents.SelectorTiming[] = selectorStats.timings;
+    const timings: Trace.Types.Events.SelectorTiming[] = selectorStats.timings;
     void this.createRowsForTable(timings).then(rows => {
       this.#datagrid.data = {...this.#datagrid.data, rows};
     });
@@ -244,11 +247,11 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
     return true;
   }
 
-  setAggregatedEvents(events: TraceEngine.Types.TraceEvents.TraceEventUpdateLayoutTree[]): void {
-    const timings: TraceEngine.Types.TraceEvents.SelectorTiming[] = [];
-    const selectorMap = new Map<String, TraceEngine.Types.TraceEvents.SelectorTiming>();
+  setAggregatedEvents(events: Trace.Types.Events.UpdateLayoutTree[]): void {
+    const timings: Trace.Types.Events.SelectorTiming[] = [];
+    const selectorMap = new Map<String, Trace.Types.Events.SelectorTiming>();
 
-    if (!this.#traceParsedData) {
+    if (!this.#parsedTrace) {
       return;
     }
 
@@ -270,8 +273,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
             // This is true due to the isArray check, but without this cast TS
             // would want us to repeat the isArray() check inside this callback,
             // but we want to avoid that extra work.
-            const previousEvents =
-                this.#lastStatsSourceEventOrEvents as TraceEngine.Types.TraceEvents.TraceEventUpdateLayoutTree[];
+            const previousEvents = this.#lastStatsSourceEventOrEvents as Trace.Types.Events.UpdateLayoutTree[];
             return event === previousEvents[index];
           })) {
         return;
@@ -282,11 +284,11 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
 
     for (let i = 0; i < events.length; i++) {
       const event = events[i];
-      const selectorStats = event ? this.#traceParsedData.SelectorStats.dataForUpdateLayoutEvent.get(event) : undefined;
+      const selectorStats = event ? this.#parsedTrace.SelectorStats.dataForUpdateLayoutEvent.get(event) : undefined;
       if (!selectorStats) {
         continue;
       } else {
-        const data: TraceEngine.Types.TraceEvents.SelectorTiming[] = selectorStats.timings;
+        const data: Trace.Types.Events.SelectorTiming[] = selectorStats.timings;
         for (const timing of data) {
           const key = timing[SelectorTimingsKey.Selector] + '_' + timing[SelectorTimingsKey.StyleSheetId];
           const findTiming = selectorMap.get(key);
@@ -331,7 +333,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
     });
   }
 
-  private async createRowsForTable(timings: TraceEngine.Types.TraceEvents.SelectorTiming[]):
+  private async createRowsForTable(timings: Trace.Types.Events.SelectorTiming[]):
       Promise<DataGrid.DataGridUtils.Row[]> {
     async function toSourceFileLocation(
         cssModel: SDK.CSSModel.CSSModel, styleSheetId: Protocol.CSS.StyleSheetId, selectorText: string,
@@ -363,6 +365,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
           lineNumber: range.startLine,
           columnNumber: range.startColumn,
           linkText: i18nString(UIStrings.lineNumber, {PH1: range.startLine + 1, PH2: range.startColumn + 1}),
+          title: `${styleSheetHeader.id} line ${range.startLine + 1}:${range.startColumn + 1}`,
         } as Linkifier.Linkifier.LinkifierData;
       });
       return linkData;
@@ -390,7 +393,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
             columnId: SelectorTimingsKey.Elapsed,
             value: elapsedTimeInMs,
             renderer(): LitHtml.TemplateResult {
-              return LitHtml.html`${elapsedTimeInMs.toFixed(3)}`;
+              return html`${elapsedTimeInMs.toFixed(3)}`;
             },
           },
           {columnId: SelectorTimingsKey.MatchAttempts, value: x[SelectorTimingsKey.MatchAttempts]},
@@ -399,7 +402,7 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
             columnId: SelectorTimingsKey.RejectPercentage,
             value: rejectPercentage,
             renderer(): LitHtml.TemplateResult {
-              return LitHtml.html`${rejectPercentage.toFixed(1)}`;
+              return html`${rejectPercentage.toFixed(1)}`;
             },
           },
           {
@@ -412,25 +415,19 @@ export class TimelineSelectorStatsView extends UI.Widget.VBox {
             value: x[SelectorTimingsKey.StyleSheetId],
             renderer(): LitHtml.TemplateResult {
               if (locations === null) {
-                return LitHtml.html`<span></span>`;
+                return html`<span></span>`;
               }
               if (locations === undefined) {
-                return LitHtml.html`<span title=${i18nString(UIStrings.unableToLinkViaStyleSheetId, {
+                return html`<span title=${i18nString(UIStrings.unableToLinkViaStyleSheetId, {
                   PH1: x[SelectorTimingsKey.StyleSheetId],
                 })} aria-label=${i18nString(UIStrings.unableToLinkViaStyleSheetId, {
                   PH1: x[SelectorTimingsKey.StyleSheetId],
                 })}>${i18nString(UIStrings.unableToLink)}</span>`;
               }
-              return LitHtml.html`
+              return html`
               ${locations.map((location, itemIndex) => {
-                if (itemIndex !== locations.length - 1) {
-                  // eslint-disable-next-line rulesdir/ban_a_tags_in_lit_html
-                  return LitHtml.html`<${Linkifier.Linkifier.Linkifier.litTagName} .data=${
-                      location as Linkifier.Linkifier.LinkifierData}></${Linkifier.Linkifier.Linkifier.litTagName}>
-                    <a>, </a>`;
-                }
-                return LitHtml.html`<${Linkifier.Linkifier.Linkifier.litTagName} .data=${
-                    location as Linkifier.Linkifier.LinkifierData}></${Linkifier.Linkifier.Linkifier.litTagName}>`;
+                const divider = itemIndex !== locations.length - 1 ? ', ' : '';
+                return html`<devtools-linkifier .data=${location}></devtools-linkifier>${divider}`;
               })}
               `;
             },

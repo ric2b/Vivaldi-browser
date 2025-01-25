@@ -181,6 +181,16 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Account is uknown with an invalid token"/>
 </enum>
 
+<enum name="BatchUploadTypes">
+  <int value="0" label="Passwords"/>
+  <int value="1" label="Addresses"/>
+</enum>
+
+<enum name="BooleanBoundToTheSameKey">
+  <int value="0" label="Bound to different keys"/>
+  <int value="1" label="Bound to the same key"/>
+</enum>
+
 <enum name="BooleanGetAccountsSucceeded">
   <int value="0" label="Account fetching failed"/>
   <int value="1" label="Account fetching succeeded"/>
@@ -245,6 +255,32 @@ chromium-metrics-reviews@google.com.
   <int value="6" label="Invalid session parameters"/>
   <int value="7" label="Required credential field missing"/>
 </enum>
+
+<!-- LINT.IfChange(BoundSessionParamsReadError) -->
+
+<enum name="BoundSessionParamsReadError">
+  <int value="0" label="kNone"/>
+  <int value="1" label="kNoSessionsDict"/>
+  <int value="2" label="kSessionsDictEmpty"/>
+  <int value="3" label="kNoEncodedParams"/>
+  <int value="4" label="kBase64DecodeFailed"/>
+  <int value="5" label="kProtoParseFailed"/>
+  <int value="6" label="kSiteDoesNotMatch"/>
+  <int value="7" label="kInvalidParams"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/signin/bound_session_credentials/bound_session_params_storage.cc:BoundSessionParamsReadError) -->
+
+<!-- LINT.IfChange(BoundSessionParamsWriteError) -->
+
+<enum name="BoundSessionParamsWriteError">
+  <int value="0" label="kNone"/>
+  <int value="1" label="kParamsInvalid"/>
+  <int value="2" label="kProtoSerializeFailed"/>
+  <int value="3" label="kProtoSerializeFailedAfterCleanUp"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/signin/bound_session_credentials/bound_session_params_storage.cc:BoundSessionParamsWriteError) -->
 
 <enum name="CctAccountMismatchType">
   <int value="0" label="Signed out of both Chrome and 1P app"/>
@@ -329,6 +365,16 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Gaia cookie is missing from Add Session"/>
   <int value="3" label="Gaia cookie is restored, Infobar shown"/>
 </enum>
+
+<!-- LINT.IfChange(GaiaPage) -->
+
+<enum name="GaiaPage">
+  <int value="0" label="Other"/>
+  <int value="1" label="AccountChooser"/>
+  <int value="2" label="SignOutOptions"/>
+</enum>
+
+<!-- LINT.ThenChange(//components/signin/ios/browser/account_consistency_service.mm:GaiaPage) -->
 
 <enum name="GaiaRemoteConsentFlowResult">
   <int value="0" label="Success"/>
@@ -571,6 +617,9 @@ chromium-metrics-reviews@google.com.
   <int value="68" label="Product Specifications"/>
   <int value="69" label="Account menu failed switch"/>
   <int value="70" label="Address bubble"/>
+  <int value="71" label="CCT account mismatch notification"/>
+  <int value="72" label="Drive file picker iOS"/>
+  <int value="73" label="Share group collaboration authentification"/>
 </enum>
 
 <enum name="SigninAccountReconcilorState">
@@ -603,6 +652,8 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Failed"/>
   <int value="4" label="Cancelled"/>
   <int value="5" label="Returned null account name"/>
+  <int value="6" label="Returned after sign-in activity destroyed"/>
+  <int value="7" label="Returned and sign-in activity was not destroyed"/>
 </enum>
 
 <enum name="SigninDiceResponseHeader">
@@ -709,16 +760,6 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Reauth page failed to load"/>
   <int value="4" label="Reauth was cancelled"/>
   <int value="5" label="Unexpected server response"/>
-</enum>
-
-<enum name="SigninReauthUserAction">
-  <int value="0" label="Click confirm button"/>
-  <int value="1" label="Click next button"/>
-  <int value="2" label="Click cancel button"/>
-  <int value="3" label="Close confirmation dialog"/>
-  <int value="4" label="Close Gaia dialog"/>
-  <int value="5" label="Close Gaia tab"/>
-  <int value="6" label="Pass Gaia reauth"/>
 </enum>
 
 <enum name="SigninReconcilerOperation">
@@ -976,7 +1017,28 @@ chromium-metrics-reviews@google.com.
   <int value="22"
       label="DiceResponseHandler::Signin from sign in promo after password
              save (obsolete)"/>
+  <int value="23"
+      label="DiceWebSigninInterceptor::OnEnterpriseProfileCreationResult from
+             enterprise forced profile creation dialog"/>
+  <int value="24"
+      label="AccountsPolicyManager::RemoveUnallowedAccounts from
+             ProfileSeparationDomainExceptionList policy."/>
 </enum>
+
+<!-- LINT.IfChange(SuppressedReason) -->
+
+<enum name="SuppressedReason">
+  <int value="0" label="Account list not yet available"/>
+  <int value="1"
+      label="The user has already seen the mismatch notice a sufficient
+             number of times"/>
+  <int value="2" label="The user has dismissed the notice multiple times."/>
+  <int value="3" label="The user has recently seen the mismatch notice"/>
+  <int value="4" label="The user recently went through the FRE"/>
+  <int value="5" label="The displayed CCT is off-the-record"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/android/java/src/org/chromium/chrome/browser/customtabs/MismatchNotificationController.java:SuppressedReason) -->
 
 <enum name="SyncButtonClicked">
   <int value="0" label="Equal weighted sync opt-in button clicked"/>
@@ -1031,6 +1093,30 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="Engine Initialized With Auto Start"/>
   <int value="5" label="Restored backup of a syncing device on Android"/>
 </enum>
+
+<!-- LINT.IfChange(TokenBindingBoundTokenPrevalence) -->
+
+<enum name="TokenBindingBoundTokenPrevalence">
+  <int value="0" label="Token list is empty"/>
+  <int value="1" label="None of the tokens are bound"/>
+  <int value="2" label="Some tokens are bound, some unbound"/>
+  <int value="3" label="All tokens are bound"/>
+</enum>
+
+<!-- LINT.ThenChange(//components/signin/internal/identity_manager/mutable_profile_oauth2_token_service_delegate.cc:BoundTokenPrevalence) -->
+
+<!-- LINT.IfChange(TokenBindingGenerateAssertionResult) -->
+
+<enum name="TokenBindingGenerateAssertionResult">
+  <int value="0" label="Success"/>
+  <int value="1" label="Binding key is not registered for an account"/>
+  <int value="2" label="Failed to load the binding key"/>
+  <int value="3" label="Failed to create an unsigned assertion token"/>
+  <int value="4" label="Failed to sign an assertion token"/>
+  <int value="5" label="Failed to attach the signature to an assertion token"/>
+</enum>
+
+<!-- LINT.ThenChange(//components/signin/internal/identity_manager/token_binding_helper.h:Error) -->
 
 </enums>
 

@@ -34,6 +34,19 @@ ExtensionThrottleManager::~ExtensionThrottleManager() {
   base::AutoLock auto_lock(lock_);
   // Delete all entries.
   url_entries_.clear();
+  for (auto& observer : observers_) {
+    observer.OnExtensionThrottleManagerExit(this);
+  }
+}
+
+void ExtensionThrottleManager::AddObserver(
+    Vivaldi_ExtensionManagerObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void ExtensionThrottleManager::RemoveObserver(
+    Vivaldi_ExtensionManagerObserver* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 std::unique_ptr<blink::URLLoaderThrottle>

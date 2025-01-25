@@ -23,6 +23,11 @@ class QuicAlarmImpl : public quic::QuicAlarm {
       : quic::QuicAlarm(std::move(delegate)),
         clock_(clock),
         alarm_(std::make_unique<Alarm>(Clock::now, task_runner)) {}
+  QuicAlarmImpl(const QuicAlarmImpl&) = delete;
+  QuicAlarmImpl& operator=(const QuicAlarmImpl&) = delete;
+  QuicAlarmImpl(QuicAlarmImpl&&) noexcept = delete;
+  QuicAlarmImpl& operator=(QuicAlarmImpl&&) noexcept = delete;
+  ~QuicAlarmImpl() override = default;
 
  protected:
   void SetImpl() override {

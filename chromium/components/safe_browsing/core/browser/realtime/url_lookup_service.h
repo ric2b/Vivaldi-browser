@@ -66,7 +66,8 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
       const ClientConfiguredForTokenFetchesCallback&
           client_token_config_callback,
       bool is_off_the_record,
-      variations::VariationsService* variations_service,
+      base::RepeatingCallback<variations::VariationsService*()>
+          variations_service_getter,
       ReferrerChainProvider* referrer_chain_provider,
       WebUIDelegate* delegate);
 
@@ -88,6 +89,7 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
   std::unique_ptr<enterprise_connectors::ClientMetadata> GetClientMetadata()
       const override;
   std::string GetMetricSuffix() const override;
+  bool CanCheckUrl(const GURL& url) override;
 
 #if defined(UNIT_TEST)
   void set_bypass_probability_for_tests(
@@ -153,17 +155,14 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
   // enabled at startup.
   std::optional<base::Time> url_lookup_enabled_timestamp_ = std::nullopt;
 
-  // Unowned. For checking whether real-time checks can be enabled in a given
-  // location.
-  raw_ptr<variations::VariationsService, DanglingUntriaged> variations_;
+  // Callback used to fetch the variations service to check whether real-time
+  // checks can be enabled in a given location.
+  base::RepeatingCallback<variations::VariationsService*()>
+      variations_service_getter_;
 
   // Bypasses the check for probability when sending Protego sample pings.
   // Only for unit tests.
   bool bypass_protego_probability_for_tests_ = false;
-
-  // True if Shutdown() has already been called, or started running. This allows
-  // us to skip unnecessary calls to SendRequest().
-  bool shutting_down_ = false;
 
   friend class RealTimeUrlLookupServiceTest;
 

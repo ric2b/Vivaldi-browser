@@ -162,7 +162,7 @@ static int read_low_coeffs(AVCodecContext *avctx, int16_t *dst, int size,
             continue;
 
         nbits  = ((state + 8) >> 5) + (state ? ff_clz(state) : 32) - 24;
-        escape = av_mod_uintp2(16383, nbits);
+        escape = av_zero_extend(16383, nbits);
         cnt1   = get_unary(bc, 0, 8);
         if (cnt1 > 7) {
             rlen = get_bits(bc, 16);
@@ -231,8 +231,8 @@ static int read_high_coeffs(AVCodecContext *avctx, const uint8_t *src, int16_t *
         if (cnt1 >= length) {
             cnt1 = get_bits(bc, nbits);
         } else {
-            pfx = 14 + ((((uint64_t)(value - 14)) >> 32) & (value - 14));
-            if (pfx < 1 || pfx > 25)
+            pfx = FFMIN(value, 14);
+            if (pfx < 1)
                 return AVERROR_INVALIDDATA;
             cnt1 *= (1 << pfx) - 1;
             shbits = show_bits(bc, pfx);
@@ -269,7 +269,7 @@ static int read_high_coeffs(AVCodecContext *avctx, const uint8_t *src, int16_t *
             continue;
 
         pfx    = ((state + 8) >> 5) + (state ? ff_clz(state) : 32) - 24;
-        escape = av_mod_uintp2(16383, pfx);
+        escape = av_zero_extend(16383, pfx);
         cnt1   = get_unary(bc, 0, 8);
         if (cnt1 < 8) {
             if (pfx < 1 || pfx > 25)

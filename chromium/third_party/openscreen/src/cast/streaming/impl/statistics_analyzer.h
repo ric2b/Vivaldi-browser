@@ -12,8 +12,8 @@
 #include <vector>
 
 #include "cast/streaming/impl/clock_offset_estimator.h"
-#include "cast/streaming/public/statistics.h"
 #include "cast/streaming/impl/statistics_collector.h"
+#include "cast/streaming/public/statistics.h"
 #include "platform/api/time.h"
 #include "util/alarm.h"
 

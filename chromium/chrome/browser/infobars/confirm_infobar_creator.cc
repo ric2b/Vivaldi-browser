@@ -13,23 +13,11 @@
 #include "chrome/browser/ui/views/infobars/confirm_infobar.h"
 #endif
 
-#if !BUILDFLAG(IS_ANDROID)
-#include "app/vivaldi_apptools.h"
-#include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_list.h"
-#include "ui/infobar_container_web_proxy.h"
-#endif
-
 std::unique_ptr<infobars::InfoBar> CreateConfirmInfoBar(
     std::unique_ptr<ConfirmInfoBarDelegate> delegate) {
 #if BUILDFLAG(IS_ANDROID)
   return std::make_unique<infobars::ConfirmInfoBar>(std::move(delegate));
 #else
-  Browser* browser = BrowserList::GetInstance()->GetLastActive();
-  if (browser && browser->is_vivaldi()) {
-    return std::make_unique<vivaldi::ConfirmInfoBarWebProxy>(
-        std::move(delegate));
-  }
   return std::make_unique<ConfirmInfoBar>(std::move(delegate));
 #endif
 }

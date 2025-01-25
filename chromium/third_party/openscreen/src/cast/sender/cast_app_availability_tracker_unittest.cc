@@ -96,7 +96,7 @@ TEST_F(CastAppAvailabilityTrackerTest, UpdateAppAvailability) {
 
   tracker_.RegisterSource(source3);
 
-  // |source3| not affected.
+  // `source3` not affected.
   EXPECT_THAT(
       tracker_.UpdateAppAvailability(
           "receiverId1", "AAA", {AppAvailabilityResult::kAvailable, Now()}),
@@ -113,7 +113,7 @@ TEST_F(CastAppAvailabilityTrackerTest, UpdateAppAvailability) {
   EXPECT_TRUE(tracker_.GetAvailableReceivers(source3).empty());
 
   tracker_.RegisterSource(source1);
-  // Only |source1| is registered for this app.
+  // Only `source1` is registered for this app.
   EXPECT_THAT(
       tracker_.UpdateAppAvailability(
           "receiverId2", "AAA", {AppAvailabilityResult::kAvailable, Now()}),

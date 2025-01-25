@@ -22,6 +22,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/restore_type.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 
 AndroidLiveTabContext::AndroidLiveTabContext(TabModel* tab_model)
     : tab_model_(tab_model) {}
@@ -98,8 +99,7 @@ AndroidLiveTabContext::GetVisualDataForGroup(
 
   // Since we never return a group from GetTabGroupForTab(), this should never
   // be called.
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 const std::optional<base::Uuid>
@@ -122,7 +122,7 @@ void AndroidLiveTabContext::SetVisualDataForGroup(
   // TODO(crbug.com/40647050): ensure this never gets called (or remove
   // NOTREACHED) if we implement restoring groups for foreign session
   // windows.
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 const gfx::Rect AndroidLiveTabContext::GetRestoredBounds() const {
@@ -130,9 +130,9 @@ const gfx::Rect AndroidLiveTabContext::GetRestoredBounds() const {
   return gfx::Rect();
 }
 
-ui::WindowShowState AndroidLiveTabContext::GetRestoredState() const {
+ui::mojom::WindowShowState AndroidLiveTabContext::GetRestoredState() const {
   // Not applicable to android.
-  return ui::SHOW_STATE_NORMAL;
+  return ui::mojom::WindowShowState::kNormal;
 }
 
 std::string AndroidLiveTabContext::GetWorkspace() const {

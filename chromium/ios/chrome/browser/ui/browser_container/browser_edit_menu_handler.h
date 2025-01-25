@@ -7,6 +7,8 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/browser_container/edit_menu_builder.h"
+
 @protocol LinkToTextDelegate;
 @protocol PartialTranslateDelegate;
 @protocol SearchWithDelegate;
@@ -17,7 +19,7 @@
 
 // A handler for the Browser edit menu.
 // This class is in charge of customising the menu and executing the commands.
-@interface BrowserEditMenuHandler : NSObject
+@interface BrowserEditMenuHandler : NSObject <EditMenuBuilder>
 
 // The delegate to handle link to text button selection.
 @property(nonatomic, weak) id<LinkToTextDelegate> linkToTextDelegate;
@@ -29,9 +31,8 @@
 // The delegate to handle Search With button selection.
 @property(nonatomic, weak) id<SearchWithDelegate> searchWithDelegate;
 
-// Will be called by `BrowserContainerViewController buildMenuWithBuilder:`
-// to customize its edit menu.
-- (void)buildMenuWithBuilder:(id<UIMenuBuilder>)builder;
+// Will be called to customize edit menus.
+- (void)buildEditMenuWithBuilder:(id<UIMenuBuilder>)builder;
 
 #if defined(VIVALDI_BUILD)
 @property(nonatomic, weak) id<CopyToNoteDelegate> vivaldiCopyToNoteDelegate;

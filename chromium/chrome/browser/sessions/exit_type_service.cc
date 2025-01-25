@@ -22,12 +22,19 @@
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 
+#include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
+#include "base/functional/bind.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
+
 namespace {
 
 // Value written to prefs for ExitType::kCrashed and ExitType::kForcedShutdown.
 const char kPrefExitTypeCrashed[] = "Crashed";
 const char kPrefExitTypeNormal[] = "Normal";
 const char kPrefExitTypeForcedShutdown[] = "SessionEnded";
+const char kPrefExitTypeCrashedOnlyOnce[] = "CrashedOnlyOnce";  // Vivaldi
 
 // Converts the `kSessionExitType` pref to the corresponding EXIT_TYPE.
 ExitType SessionTypePrefValueToExitType(const std::string& value) {
@@ -184,9 +191,44 @@ ExitTypeService::ExitTypeService(Profile* profile)
       current_session_exit_type_(ExitType::kCrashed),
       waiting_for_user_to_ack_crash_(last_session_exit_type_ ==
                                      ExitType::kCrashed) {
-  // Mark the session as open.
-  profile_->GetPrefs()->SetString(prefs::kSessionExitType,
-                                  kPrefExitTypeCrashed);
+  if (vivaldi::IsVivaldiRunning()) {
+    const bool last_session_crashed =
+        last_session_exit_type_ == ExitType::kCrashed ||
+        profile_->GetPrefs()->GetString(prefs::kSessionExitType) ==
+            kPrefExitTypeCrashedOnlyOnce;
+
+    // NOTE(konrad@vivaldi.com): VB-106173 In Vivaldi sporadical crashes are
+    // "normal", that is why additional "CrashedOnlyOnce" state of the pref,
+    // shall be interpretted as such. Only if the browser crashed, and then
+    // crashed again within 10 seconds of the startup, we want to treat the exit
+    // type as an actual crash.
+    profile_->GetPrefs()->SetString(prefs::kSessionExitType,
+                                    last_session_crashed
+                                        ? kPrefExitTypeCrashed
+                                        : kPrefExitTypeCrashedOnlyOnce);
+    profile_->GetPrefs()->CommitPendingWrite();
+
+    if (base::SequencedTaskRunner::HasCurrentDefault() &&
+        last_session_crashed) {
+      const auto kOutOfCrashLoopTimeout =
+          base::Seconds(vivaldi::kVivaldiCrashLoopDetectionTimeoutInSeconds);
+      base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](ExitTypeService* service) {
+                if (service && service->profile()) {
+                  service->profile()->GetPrefs()->SetString(
+                      prefs::kSessionExitType, kPrefExitTypeCrashedOnlyOnce);
+                }
+              },
+              base::Unretained(this)),
+          kOutOfCrashLoopTimeout);
+    }
+  } else {
+    // Mark the session as open.
+    profile_->GetPrefs()->SetString(prefs::kSessionExitType,
+                                    kPrefExitTypeCrashed);
+  }
   if (waiting_for_user_to_ack_crash_)
     browser_tab_observer_ = std::make_unique<BrowserTabObserverImpl>(this);
 }

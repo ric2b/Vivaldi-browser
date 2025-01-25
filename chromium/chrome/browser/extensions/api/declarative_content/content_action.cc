@@ -11,7 +11,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
-#include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
+#include "chrome/browser/extensions/extension_action_dispatcher.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_ui_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -97,11 +97,11 @@ class ShowExtensionAction : public ContentAction {
   void Apply(const ApplyInfo& apply_info) const override {
     ExtensionAction* action =
         GetAction(apply_info.browser_context, apply_info.extension);
-    if (action) {
+    if (action) { // Vivaldi
     action->DeclarativeShow(ExtensionTabUtil::GetTabId(apply_info.tab));
-    ExtensionActionAPI::Get(apply_info.browser_context)->NotifyChange(
-        action, apply_info.tab, apply_info.browser_context);
-    }
+    ExtensionActionDispatcher::Get(apply_info.browser_context)
+        ->NotifyChange(action, apply_info.tab, apply_info.browser_context);
+    } // End Vivaldi
   }
   // The page action is already showing, so nothing needs to be done here.
   void Reapply(const ApplyInfo& apply_info) const override {}
@@ -109,8 +109,8 @@ class ShowExtensionAction : public ContentAction {
     if (ExtensionAction* action =
             GetAction(apply_info.browser_context, apply_info.extension)) {
       action->UndoDeclarativeShow(ExtensionTabUtil::GetTabId(apply_info.tab));
-      ExtensionActionAPI::Get(apply_info.browser_context)->NotifyChange(
-          action, apply_info.tab, apply_info.browser_context);
+      ExtensionActionDispatcher::Get(apply_info.browser_context)
+          ->NotifyChange(action, apply_info.tab, apply_info.browser_context);
     }
   }
 
@@ -147,8 +147,8 @@ class SetIcon : public ContentAction {
       action->DeclarativeSetIcon(ExtensionTabUtil::GetTabId(apply_info.tab),
                                  apply_info.priority,
                                  icon_);
-      ExtensionActionAPI::Get(profile)
-          ->NotifyChange(action, apply_info.tab, profile);
+      ExtensionActionDispatcher::Get(profile)->NotifyChange(
+          action, apply_info.tab, profile);
     }
   }
 
@@ -163,7 +163,7 @@ class SetIcon : public ContentAction {
           ExtensionTabUtil::GetTabId(apply_info.tab),
           apply_info.priority,
           icon_);
-      ExtensionActionAPI::Get(apply_info.browser_context)
+      ExtensionActionDispatcher::Get(apply_info.browser_context)
           ->NotifyChange(action, apply_info.tab, profile);
     }
   }

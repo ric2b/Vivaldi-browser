@@ -5,6 +5,7 @@
 #include "components/facilitated_payments/content/browser/content_facilitated_payments_driver_factory.h"
 
 #include "base/check_deref.h"
+#include "components/facilitated_payments/content/browser/security_checker.h"
 #include "components/facilitated_payments/core/browser/facilitated_payments_client.h"
 #include "components/facilitated_payments/core/features/features.h"
 #include "content/public/browser/navigation_handle.h"
@@ -37,7 +38,8 @@ ContentFacilitatedPaymentsDriverFactory::GetOrCreateForFrame(
     return *iter->second;
   }
   driver = std::make_unique<ContentFacilitatedPaymentsDriver>(
-      &*client_, optimization_guide_decider_, render_frame_host);
+      &*client_, optimization_guide_decider_, render_frame_host,
+      std::make_unique<SecurityChecker>());
   DCHECK_EQ(driver_map_.find(render_frame_host)->second.get(), driver.get());
   return *iter->second;
 }
@@ -79,45 +81,6 @@ void ContentFacilitatedPaymentsDriverFactory::DidFinishNavigation(
   }
   auto& driver = GetOrCreateForFrame(navigation_handle->GetRenderFrameHost());
   driver.DidNavigateToOrAwayFromPage();
-}
-
-void ContentFacilitatedPaymentsDriverFactory::DOMContentLoaded(
-    content::RenderFrameHost* render_frame_host) {
-  // The driver is only created for the outermost main frame as the PIX code
-  // is only expected to be present there. PIX code detection is triggered
-  // only on active frames.
-  if (render_frame_host != render_frame_host->GetOutermostMainFrame() ||
-      !render_frame_host->IsActive()) {
-    return;
-  }
-  if (!base::FeatureList::IsEnabled(kEnablePixDetectionOnDomContentLoaded)) {
-    return;
-  }
-  auto& driver = GetOrCreateForFrame(render_frame_host);
-  // Initialize PIX code detection.
-  driver.OnContentLoadedInThePrimaryMainFrame(
-      render_frame_host->GetLastCommittedURL(),
-      render_frame_host->GetPageUkmSourceId());
-}
-
-void ContentFacilitatedPaymentsDriverFactory::DidFinishLoad(
-    content::RenderFrameHost* render_frame_host,
-    const GURL& validated_url) {
-  // The driver is only created for the outermost main frame as the PIX code is
-  // only expected to be present there. PIX code detection is triggered only on
-  // active frames.
-  if (render_frame_host != render_frame_host->GetOutermostMainFrame() ||
-      !render_frame_host->IsActive()) {
-    return;
-  }
-  if (base::FeatureList::IsEnabled(kEnablePixDetectionOnDomContentLoaded) ||
-      !base::FeatureList::IsEnabled(kEnablePixDetection)) {
-    return;
-  }
-  auto& driver = GetOrCreateForFrame(render_frame_host);
-  // Initialize PIX code detection.
-  driver.OnContentLoadedInThePrimaryMainFrame(
-      validated_url, render_frame_host->GetPageUkmSourceId());
 }
 
 void ContentFacilitatedPaymentsDriverFactory::OnTextCopiedToClipboard(

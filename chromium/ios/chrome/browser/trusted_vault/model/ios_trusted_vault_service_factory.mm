@@ -17,12 +17,6 @@
 
 // static
 trusted_vault::TrustedVaultService*
-IOSTrustedVaultServiceFactory::GetForBrowserState(ProfileIOS* profile) {
-  return GetForProfile(profile);
-}
-
-// static
-trusted_vault::TrustedVaultService*
 IOSTrustedVaultServiceFactory::GetForProfile(ProfileIOS* profile) {
   return static_cast<trusted_vault::TrustedVaultService*>(
       GetInstance()->GetServiceForBrowserState(profile, true));
@@ -48,15 +42,14 @@ IOSTrustedVaultServiceFactory::~IOSTrustedVaultServiceFactory() = default;
 std::unique_ptr<KeyedService>
 IOSTrustedVaultServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
-  CHECK(!browser_state->IsOffTheRecord());
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
+  CHECK(!profile->IsOffTheRecord());
 
   return std::make_unique<trusted_vault::TrustedVaultService>(
       /*chrome_sync_security_domain_client=*/
       std::make_unique<IOSTrustedVaultClient>(
-          ChromeAccountManagerServiceFactory::GetForBrowserState(browser_state),
-          IdentityManagerFactory::GetForProfile(browser_state),
-          TrustedVaultClientBackendFactory::GetForBrowserState(browser_state),
-          browser_state->GetSharedURLLoaderFactory()));
+          ChromeAccountManagerServiceFactory::GetForProfile(profile),
+          IdentityManagerFactory::GetForProfile(profile),
+          TrustedVaultClientBackendFactory::GetForProfile(profile),
+          profile->GetSharedURLLoaderFactory()));
 }

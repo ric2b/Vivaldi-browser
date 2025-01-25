@@ -34,6 +34,8 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.segmentation_platform.ContextualPageActionController.ActionProvider;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.components.commerce.core.CommerceFeatureUtils;
+import org.chromium.components.commerce.core.CommerceFeatureUtilsJni;
 import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.components.commerce.core.ShoppingService.ProductInfo;
 import org.chromium.components.commerce.core.ShoppingService.ProductInfoCallback;
@@ -55,6 +57,8 @@ public class PriceTrackingActionProviderTest {
 
     @Mock private ShoppingService mShoppingService;
 
+    @Mock private CommerceFeatureUtils.Natives mCommerceFeatureUtilsJniMock;
+
     @Mock private BookmarkModel mBookmarkModel;
 
     @Mock private Profile mProfile;
@@ -67,6 +71,7 @@ public class PriceTrackingActionProviderTest {
 
     private void setBookmarkModelReady() {
         mJniMocker.mock(PriceTrackingUtilsJni.TEST_HOOKS, mMockPriceTrackingUtilsJni);
+        mJniMocker.mock(CommerceFeatureUtilsJni.TEST_HOOKS, mCommerceFeatureUtilsJniMock);
 
         // Setup bookmark model expectations.
         Mockito.doAnswer(
@@ -90,7 +95,7 @@ public class PriceTrackingActionProviderTest {
                         0,
                         null,
                         Optional.empty());
-        Mockito.doReturn(true).when(mShoppingService).isShoppingListEligible();
+        doReturn(true).when(mCommerceFeatureUtilsJniMock).isShoppingListEligible(anyLong());
         Mockito.doAnswer(
                         invocation -> {
                             ProductInfoCallback callback = invocation.getArgument(1);
@@ -119,8 +124,7 @@ public class PriceTrackingActionProviderTest {
         doReturn(JUnitTestGURLs.EXAMPLE_URL).when(mMockTab).getUrl();
         List<ActionProvider> providers = new ArrayList<>();
         PriceTrackingActionProvider provider =
-                new PriceTrackingActionProvider(
-                        () -> mShoppingService, () -> mBookmarkModel, () -> mProfile);
+                new PriceTrackingActionProvider(() -> mShoppingService, () -> mBookmarkModel);
         providers.add(provider);
         SignalAccumulator accumulator = new SignalAccumulator(new Handler(), mMockTab, providers);
         setIsUrlPriceTrackableResult(true);
@@ -133,8 +137,7 @@ public class PriceTrackingActionProviderTest {
         doReturn(JUnitTestGURLs.GOOGLE_URL).when(mMockTab).getUrl();
         List<ActionProvider> providers = new ArrayList<>();
         PriceTrackingActionProvider provider =
-                new PriceTrackingActionProvider(
-                        () -> mShoppingService, () -> mBookmarkModel, () -> mProfile);
+                new PriceTrackingActionProvider(() -> mShoppingService, () -> mBookmarkModel);
         providers.add(provider);
         SignalAccumulator accumulator = new SignalAccumulator(new Handler(), mMockTab, providers);
         // URL does not support price tracking.
@@ -153,8 +156,7 @@ public class PriceTrackingActionProviderTest {
         doReturn(JUnitTestGURLs.ABOUT_BLANK).when(mMockTab).getUrl();
         List<ActionProvider> providers = new ArrayList<>();
         PriceTrackingActionProvider provider =
-                new PriceTrackingActionProvider(
-                        () -> mShoppingService, () -> mBookmarkModel, () -> mProfile);
+                new PriceTrackingActionProvider(() -> mShoppingService, () -> mBookmarkModel);
         providers.add(provider);
         SignalAccumulator accumulator = new SignalAccumulator(new Handler(), mMockTab, providers);
         provider.getAction(mMockTab, accumulator);

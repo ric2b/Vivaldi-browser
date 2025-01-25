@@ -29,8 +29,12 @@ void xnn_f32_dwconv_minmax_ukernel_9p16c__fma3(
   assert(channels != 0);
   assert(output_width != 0);
 
-  const __m256 vmin = _mm256_load_ps(params->avx.min);
-  const __m256 vmax = _mm256_load_ps(params->avx.max);
+  static const int32_t mask_table[14] = {-1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0};
+
+  const __m256 vmin = _mm256_set1_ps(params->scalar.min);
+  const __m256 vmax = _mm256_set1_ps(params->scalar.max);
+  XNN_FORCE_REALIZATION(vmin);
+  XNN_FORCE_REALIZATION(vmax);
   do {
     const float* i0 = input[0];
     assert(i0 != NULL);
@@ -248,7 +252,7 @@ void xnn_f32_dwconv_minmax_ukernel_9p16c__fma3(
     if XNN_UNLIKELY(c != 0) {
       assert(c >= 1);
       assert(c <= 7);
-      const __m256i vmask = _mm256_loadu_si256((const __m256i*) &params->avx.mask_table[7 - c]);
+      const __m256i vmask = _mm256_loadu_si256((const __m256i*) &mask_table[7 - c]);
 
       __m256 vacc01234567p0 = _mm256_load_ps(w);
 

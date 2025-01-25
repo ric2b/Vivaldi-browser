@@ -252,9 +252,7 @@ void MojoVideoDecoderService::Initialize(
           mojo_cdm_service_context_->GetCdmContextRef(cdm_id.value());
     } else if (cdm_id != cdm_id_) {
       // TODO(xhwang): Replace with mojo::ReportBadMessage().
-      NOTREACHED_IN_MIGRATION() << "The caller should not switch CDM";
-      OnDecoderInitialized(DecoderStatus::Codes::kUnsupportedEncryptionMode);
-      return;
+      NOTREACHED() << "The caller should not switch CDM";
     }
   }
 
@@ -291,16 +289,28 @@ void MojoVideoDecoderService::Initialize(
 
 void MojoVideoDecoderService::Decode(mojom::DecoderBufferPtr buffer,
                                      DecodeCallback callback) {
-  DVLOG(3) << __func__ << " pts=" << buffer->timestamp.InMilliseconds();
   DCHECK(callback);
+
+  if (buffer->is_eos()) {
+    DVLOG(3) << __func__ << " EOS";
+  } else {
+    DVLOG(3) << __func__
+             << " pts=" << buffer->get_data()->timestamp.InMilliseconds();
+  }
 
   std::unique_ptr<ScopedDecodeTrace> trace_event;
   if (MediaTraceIsEnabled()) {
     // Because multiple Decode() calls may be in flight, each call needs a
     // unique trace event class to identify it. This scoped event is bound
     // into the OnDecodeDone callback to ensure the trace is always closed.
-    trace_event = std::make_unique<ScopedDecodeTrace>(
-        kDecodeTraceName, buffer->is_key_frame, buffer->timestamp);
+    //
+    // Note: We only add partial details on the DecoderBuffer to the trace. The
+    // full details will be added during OnReaderRead().
+    trace_event = buffer->is_eos()
+                      ? std::make_unique<ScopedDecodeTrace>(kDecodeTraceName)
+                      : std::make_unique<ScopedDecodeTrace>(
+                            kDecodeTraceName, buffer->get_data()->is_key_frame,
+                            buffer->get_data()->timestamp);
   }
 
   if (!decoder_) {
@@ -327,7 +337,8 @@ void MojoVideoDecoderService::Decode(mojom::DecoderBufferPtr buffer,
   mojo_decoder_buffer_reader_->ReadDecoderBuffer(
       std::move(buffer),
       base::BindOnce(&MojoVideoDecoderService::OnReaderRead, weak_this_,
-                     std::move(callback), std::move(trace_event)));
+                     mojo::GetBadMessageCallback(), std::move(callback),
+                     std::move(trace_event)));
 }
 
 void MojoVideoDecoderService::Reset(ResetCallback callback) {
@@ -367,6 +378,7 @@ void MojoVideoDecoderService::OnDecoderInitialized(DecoderStatus status) {
 }
 
 void MojoVideoDecoderService::OnReaderRead(
+    mojo::ReportBadMessageCallback bad_message_callback,
     DecodeCallback callback,
     std::unique_ptr<ScopedDecodeTrace> trace_event,
     scoped_refptr<DecoderBuffer> buffer) {
@@ -383,8 +395,15 @@ void MojoVideoDecoderService::OnReaderRead(
     return;
   }
 
+  if (buffer->end_of_stream() && buffer->next_config() &&
+      !absl::holds_alternative<VideoDecoderConfig>(*buffer->next_config())) {
+    std::move(bad_message_callback)
+        .Run("Invalid DecoderBuffer::next_config() for video.");
+    return;
+  }
+
   decoder_->Decode(
-      buffer,
+      std::move(buffer),
       base::BindOnce(&MojoVideoDecoderService::OnDecoderDecoded, weak_this_,
                      std::move(callback), std::move(trace_event)));
 }

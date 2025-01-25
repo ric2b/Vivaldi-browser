@@ -27,6 +27,7 @@
 
 #include <vector>
 
+#include "dawn/common/StringViewUtils.h"
 #include "dawn/wire/SupportedFeatures.h"
 #include "dawn/wire/WireResult.h"
 #include "dawn/wire/server/ObjectStorage.h"
@@ -61,7 +62,7 @@ WireResult Server::DoAdapterRequestDevice(Known<WGPUAdapter> adapter,
                                     deviceLostUserdata.release(), nullptr};
     desc.uncapturedErrorCallbackInfo2 = {
         nullptr,
-        [](WGPUDevice const*, WGPUErrorType type, const char* message, void*, void* userdata) {
+        [](WGPUDevice const*, WGPUErrorType type, WGPUStringView message, void*, void* userdata) {
             DeviceInfo* info = static_cast<DeviceInfo*>(userdata);
             info->server->OnUncapturedError(info->self, type, message);
         },
@@ -83,7 +84,7 @@ WireResult Server::DoAdapterRequestDevice(Known<WGPUAdapter> adapter,
 void Server::OnRequestDeviceCallback(RequestDeviceUserdata* data,
                                      WGPURequestDeviceStatus status,
                                      WGPUDevice device,
-                                     const char* message) {
+                                     WGPUStringView message) {
     ReturnAdapterRequestDeviceCallbackCmd cmd = {};
     cmd.eventManager = data->eventManager;
     cmd.future = data->future;
@@ -113,7 +114,7 @@ void Server::OnRequestDeviceCallback(RequestDeviceUserdata* data,
             device = nullptr;
 
             cmd.status = WGPURequestDeviceStatus_Error;
-            cmd.message = "Requested feature not supported.";
+            cmd.message = ToOutputStringView("Requested feature not supported.");
             SerializeCommand(cmd);
             return;
         }
@@ -122,11 +123,20 @@ void Server::OnRequestDeviceCallback(RequestDeviceUserdata* data,
     cmd.featuresCount = features.size();
     cmd.features = features.data();
 
+    // Query and report the adapter limits, including DawnExperimentalSubgroupLimits and
+    // DawnExperimentalImmediateDataLimits. Reporting to client.
     WGPUSupportedLimits limits = {};
-    // Also query the DawnExperimentalSubgroupLimits and report to client.
+
+    // Chained DawnExperimentalSubgroupLimits.
     WGPUDawnExperimentalSubgroupLimits experimentalSubgroupLimits = {};
     experimentalSubgroupLimits.chain.sType = WGPUSType_DawnExperimentalSubgroupLimits;
     limits.nextInChain = &experimentalSubgroupLimits.chain;
+
+    // Chained DawnExperimentalImmediateDataLimits.
+    WGPUDawnExperimentalImmediateDataLimits experimentalImmediateDataLimits = {};
+    experimentalImmediateDataLimits.chain.sType = WGPUSType_DawnExperimentalImmediateDataLimits;
+    experimentalSubgroupLimits.chain.next = &experimentalImmediateDataLimits.chain;
+
     mProcs.deviceGetLimits(device, &limits);
     cmd.limits = &limits;
 
@@ -134,7 +144,7 @@ void Server::OnRequestDeviceCallback(RequestDeviceUserdata* data,
     Known<WGPUDevice> reservation;
     if (FillReservation(data->deviceObjectId, device, &reservation) == WireResult::FatalError) {
         cmd.status = WGPURequestDeviceStatus_Unknown;
-        cmd.message = "Destroyed before request was fulfilled.";
+        cmd.message = ToOutputStringView("Destroyed before request was fulfilled.");
         SerializeCommand(cmd);
         return;
     }

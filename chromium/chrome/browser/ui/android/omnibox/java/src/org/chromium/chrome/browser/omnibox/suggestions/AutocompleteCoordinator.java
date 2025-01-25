@@ -43,10 +43,10 @@ import org.chromium.components.omnibox.action.OmniboxActionDelegate;
 import org.chromium.ui.AsyncViewProvider;
 import org.chromium.ui.AsyncViewStub;
 import org.chromium.ui.ViewProvider;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.LazyConstructionPropertyMcp;
-import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -120,7 +120,10 @@ public class AutocompleteCoordinator
                 new PropertyModel.Builder(SuggestionListProperties.ALL_KEYS)
                         .with(SuggestionListProperties.EMBEDDER, dropdownEmbedder)
                         .with(SuggestionListProperties.OMNIBOX_SESSION_ACTIVE, false)
-                        .with(SuggestionListProperties.DRAW_OVER_ANCHOR, false)
+                        .with(
+                                SuggestionListProperties.DRAW_OVER_ANCHOR,
+                                DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
+                                        && !forcePhoneStyleOmnibox)
                         .with(SuggestionListProperties.SUGGESTION_MODELS, listItems)
                         .build();
 
@@ -159,7 +162,7 @@ public class AutocompleteCoordinator
                 this::dropdownOverscrolledToTop);
 
         ViewProvider<SuggestionListViewHolder> viewProvider =
-                createViewProvider(context, listItems, forcePhoneStyleOmnibox);
+                createViewProvider(forcePhoneStyleOmnibox);
         viewProvider.whenLoaded(
                 (holder) -> {
                     mDropdown = holder.dropdown;
@@ -212,7 +215,7 @@ public class AutocompleteCoordinator
     }
 
     private ViewProvider<SuggestionListViewHolder> createViewProvider(
-            Context context, MVCListAdapter.ModelList modelList, boolean forcePhoneStyleOmnibox) {
+            boolean forcePhoneStyleOmnibox) {
         return new ViewProvider<SuggestionListViewHolder>() {
             private AsyncViewProvider<ViewGroup> mAsyncProvider;
             private List<Callback<SuggestionListViewHolder>> mCallbacks = new ArrayList<>();
@@ -401,7 +404,7 @@ public class AutocompleteCoordinator
 
     /** Notify the Autocomplete about Omnibox text change. */
     public void onTextChanged(String textWithoutAutocomplete) {
-        mMediator.onTextChanged(textWithoutAutocomplete, /* isOnFocusContext= */ false);
+        mMediator.onTextChanged(textWithoutAutocomplete);
     }
 
     /** Trigger autocomplete for the given query. */

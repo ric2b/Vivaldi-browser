@@ -170,7 +170,7 @@ public class RecentTabsManager
     private static int countSessionIdsRestored(Map<Integer, Boolean> sessionIdToRestoredState) {
         int count = 0;
         for (Boolean state : sessionIdToRestoredState.values()) {
-            count += (state) ? 1 : 0;
+            count += state ? 1 : 0;
         }
         return count;
     }
@@ -184,10 +184,6 @@ public class RecentTabsManager
             final int restoredCount = countSessionIdsRestored(sessionIdToRestoredState);
             RecordHistogram.recordCount1000Histogram(
                     "Tabs.RecentlyClosed.EntriesRestoredInPage." + entryType, restoredCount);
-            final int percentRestored = Math.round((restoredCount * 100.0f) / shownCount);
-            RecordHistogram.recordPercentageHistogram(
-                    "Tabs.RecentlyClosed.PercentOfEntriesRestoredInPage." + entryType,
-                    percentRestored);
         }
     }
 
@@ -253,7 +249,7 @@ public class RecentTabsManager
      * @return Most up-to-date list of foreign sessions.
      */
     public List<ForeignSession> getForeignSessions() {
-        /** Vivaldi */
+        /* Vivaldi */
         if (mVivaldiRecentTabManager != null && !mVivaldiRecentTabManager.onlyShowForeignSessions())
             return Collections.emptyList();
         return mForeignSessions;
@@ -279,7 +275,7 @@ public class RecentTabsManager
         RecordUserAction.record("MobileRecentTabManagerTabFromOtherDeviceOpened");
         RecordUserAction.record("MobileCrossDeviceTabJourney");
 
-        /** Vivaldi */
+        /* Vivaldi */
         if (mVivaldiRecentTabManager != null && mVivaldiRecentTabManager.onlyShowForeignSessions())
             mVivaldiRecentTabManager.openForeignSessionTab(tab.url.getSpec());
         else
@@ -565,6 +561,9 @@ public class RecentTabsManager
         if (mTabModel != null) return mTabModel;
 
         mTabModel = mTabModelSelector.getModelForTabId(mActiveTab.getId());
+        // Note(david@vivaldi.com): In case the tab model is null we select the normal tab model as
+        // we only use the |RecentTabsManager| in the normal tab model.
+        if (mTabModel == null) mTabModel = mTabModelSelector.getModel(false);
         assert mTabModel != null;
         return mTabModel;
     }

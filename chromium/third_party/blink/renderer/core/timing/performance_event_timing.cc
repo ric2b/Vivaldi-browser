@@ -97,6 +97,9 @@ Node* PerformanceEventTiming::target() const {
 }
 
 uint32_t PerformanceEventTiming::interactionId() const {
+  if (reporting_info_.prevent_counting_as_interaction) {
+    return 0u;
+  }
   return interaction_id_.value_or(0);
 }
 
@@ -104,8 +107,21 @@ void PerformanceEventTiming::SetInteractionId(uint32_t interaction_id) {
   interaction_id_ = interaction_id;
 }
 
-bool PerformanceEventTiming::HasKnownInteractionID() {
+bool PerformanceEventTiming::HasKnownInteractionID() const {
   return interaction_id_.has_value();
+}
+
+bool PerformanceEventTiming::HasKnownEndTime() const {
+  return reporting_info_.presentation_time.has_value() ||
+         reporting_info_.fallback_time.has_value();
+}
+
+base::TimeTicks PerformanceEventTiming::GetEndTime() const {
+  CHECK(HasKnownEndTime());
+  if (reporting_info_.fallback_time.has_value()) {
+    return reporting_info_.fallback_time.value();
+  }
+  return reporting_info_.presentation_time.value();
 }
 
 uint32_t PerformanceEventTiming::interactionOffset() const {
@@ -286,10 +302,9 @@ std::unique_ptr<TracedValue> PerformanceEventTiming::ToTracedValue(
   auto traced_value = std::make_unique<TracedValue>();
   traced_value->SetString("type", name());
   // Recalculate this as the stored duration value is rounded.
-  traced_value->SetDouble("duration", (reporting_info_.fallback_time.value_or(
-                                           reporting_info_.presentation_time) -
-                                       reporting_info_.creation_time)
-                                          .InMillisecondsF());
+  traced_value->SetDouble(
+      "duration",
+      (GetEndTime() - reporting_info_.creation_time).InMillisecondsF());
   traced_value->SetBoolean("cancelable", cancelable());
   // If int overflows occurs, the static_cast may not work correctly.
   traced_value->SetInteger("interactionId", static_cast<int>(interactionId()));
@@ -318,9 +333,13 @@ std::unique_ptr<TracedValue> PerformanceEventTiming::ToTracedValue(
       "enqueuedToMainThreadTime",
       (reporting_info_.enqueued_to_main_thread_time - origin_time)
           .InMillisecondsF());
-  traced_value->SetDouble(
-      "commitFinishTime",
-      (reporting_info_.commit_finish_time - origin_time).InMillisecondsF());
+
+  if (reporting_info_.commit_finish_time.has_value()) {
+    traced_value->SetDouble(
+        "commitFinishTime",
+        (reporting_info_.commit_finish_time.value() - origin_time)
+            .InMillisecondsF());
+  }
   return traced_value;
 }
 

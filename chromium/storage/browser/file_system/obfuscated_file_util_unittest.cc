@@ -14,6 +14,7 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -89,9 +90,7 @@ bool FileExists(const base::FilePath& path) {
 }
 
 int64_t GetLocalFileSize(const base::FilePath& path) {
-  int64_t size;
-  EXPECT_TRUE(base::GetFileSize(path, &size));
-  return size;
+  return base::GetFileSize(path).value_or(0);
 }
 
 // After a move, the dest exists and the source doesn't.
@@ -241,8 +240,7 @@ class ObfuscatedFileUtilTest : public testing::Test,
 
     quota_manager_ = base::MakeRefCounted<QuotaManager>(
         is_incognito(), data_dir_.GetPath(), quota_manager_task_runner_,
-        /*quota_change_callback=*/base::DoNothing(), storage_policy_,
-        GetQuotaSettingsFunc());
+        storage_policy_, GetQuotaSettingsFunc());
 
     quota_manager_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(

@@ -24,6 +24,7 @@ const component = new ConsoleInsight(
     {
       async *
           fetch() {
+            await new Promise(_resolve => {});
             yield {
               explanation: `## Result
 

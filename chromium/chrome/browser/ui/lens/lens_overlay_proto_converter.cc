@@ -4,8 +4,10 @@
 
 #include "chrome/browser/ui/lens/lens_overlay_proto_converter.h"
 
+#include <optional>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/types/optional_ref.h"
 #include "chrome/browser/lens/core/mojom/geometry.mojom.h"
@@ -172,16 +174,11 @@ lens::mojom::BackgroundImageDataPtr CreateBackgroundImageDataMojomFromProto(
   image_data->horizontal_padding = background_image_data.horizontal_padding();
 
   // Create vector for `background_image_data`.
-  const std::string& image_bytes = background_image_data.background_image();
-  std::vector<unsigned char> background_pixel_data(image_bytes.begin(),
-                                                   image_bytes.end());
-  image_data->background_image = std::move(background_pixel_data);
+  image_data->background_image =
+      base::as_byte_span(background_image_data.background_image());
 
   // Create vector for `text_mask`.
-  const std::string& text_mask = background_image_data.text_mask();
-  std::vector<unsigned char> mask_pixel_data(text_mask.begin(),
-                                             text_mask.end());
-  image_data->text_mask = std::move(mask_pixel_data);
+  image_data->text_mask = base::as_byte_span(background_image_data.text_mask());
 
   return image_data;
 }
@@ -202,8 +199,8 @@ lens::mojom::WordPtr CreateTranslatedWordMojomFromProto(
 lens::mojom::TranslatedLinePtr CreateTranslatedLineMojomFromProto(
     const lens::TextLayout_Line& proto_line,
     const lens::TranslationData_Line& translated_line,
+    const std::optional<lens::TranslationData_Line>& next_translated_line,
     const std::string& line_translation,
-    const gfx::Size& resized_bitmap_size,
     lens::WritingDirection writing_direction) {
   lens::mojom::TranslatedLinePtr line = lens::mojom::TranslatedLine::New();
 
@@ -224,26 +221,33 @@ lens::mojom::TranslatedLinePtr CreateTranslatedLineMojomFromProto(
     int substring_length =
         translated_proto_word.end() - translated_proto_word.start();
 
-    // If the start index of the next word is not equal to the end index of this
-    // word, it is a text separator.
-    int text_separator_index = translated_proto_word.end();
-    if (i + 1 < translated_line.word_size()) {
-      const auto& next_translated_proto_word = translated_line.word()[i + 1];
-      if (text_separator_index == next_translated_proto_word.start()) {
-        text_separator_index = -1;
-      }
-    }
-
     // We need to convert the string to a unicode string in case there are
     // multi-byte characters that we need to substring.
     icu::UnicodeString unicode_translation(line_translation.c_str());
+
+    // The separator following this word, used when concatenating selected text.
+    // This needs to be the separator to the logically next word. For
+    // bidirectional text, this separator might not be visually adjacent to the
+    // word.
+    icu::UnicodeString unicode_separator = "";
+    if (i < translated_line.word_size() - 1) {
+      const auto& next_translated_proto_word = translated_line.word()[i + 1];
+      const auto length =
+          next_translated_proto_word.start() - translated_proto_word.end();
+      unicode_separator = unicode_translation.tempSubString(
+          translated_proto_word.end(), length);
+    } else if (i == translated_line.word_size() - 1 &&
+               next_translated_line.has_value() &&
+               next_translated_line->word_size() > 0) {
+      const auto next_line_start = next_translated_line->word()[0].start();
+      const auto length = next_line_start - translated_proto_word.end();
+      unicode_separator = unicode_translation.tempSubString(
+          translated_proto_word.end(), length);
+    }
+
     const icu::UnicodeString unicode_translation_substr =
         unicode_translation.tempSubString(translated_proto_word.start(),
                                           substring_length);
-    const icu::UnicodeString unicode_separator =
-        text_separator_index > 0
-            ? unicode_translation.tempSubString(text_separator_index, 1)
-            : "";
 
     // Convert the unicode substring back into UTF-8 strings to send to WebUI.
     std::string translation;
@@ -298,12 +302,17 @@ lens::mojom::TranslatedParagraphPtr CreateTranslatedParagraphMojomFromProto(
        line_index++) {
     auto proto_line = proto_paragraph.lines()[line_index];
     auto translated_line = translation_data.line()[line_index];
+    std::optional<TranslationData_Line> next_translated_line = std::nullopt;
+    if (line_index + 1 < translation_data.line().size()) {
+      next_translated_line = translation_data.line()[line_index + 1];
+    }
     lines.push_back(CreateTranslatedLineMojomFromProto(
-        proto_line, translated_line, translation_data.translation(),
-        resized_bitmap_size, translation_data.writing_direction()));
+        proto_line, translated_line, next_translated_line,
+        translation_data.translation(), translation_data.writing_direction()));
   }
 
   paragraph->lines = std::move(lines);
+  paragraph->resized_bitmap_size = gfx::Size(resized_bitmap_size);
   paragraph->content_language = translation_data.target_language();
   paragraph->alignment = ProtoToMojo(translation_data.alignment());
   paragraph->writing_direction =

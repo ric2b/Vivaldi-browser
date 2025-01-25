@@ -43,7 +43,7 @@ import subprocess2 as subprocess
 # Shortcut.
 presubmit_canned_checks = presubmit.presubmit_canned_checks
 
-RUNNING_PY_CHECKS_TEXT = ('Running Python 3 presubmit upload checks ...\n')
+RUNNING_PY_CHECKS_TEXT = ('Running presubmit upload checks ...\n')
 
 # Access to a protected member XXX of a client class
 # pylint: disable=protected-access
@@ -621,7 +621,7 @@ class PresubmitUnittest(PresubmitTestsBase):
             presubmit.DoPostUploadExecuter(change=change,
                                            gerrit_obj=None,
                                            verbose=False))
-        expected = (r'Running Python 3 post upload checks \.\.\.\n')
+        expected = (r'Running post upload checks \.\.\.\n')
         self.assertRegexpMatches(sys.stdout.getvalue(), expected)
 
     def testDoPostUploadExecuterWarning(self):
@@ -636,7 +636,7 @@ class PresubmitUnittest(PresubmitTestsBase):
                                            gerrit_obj=None,
                                            verbose=False))
         self.assertEqual(
-            'Running Python 3 post upload checks ...\n'
+            'Running post upload checks ...\n'
             '\n'
             '** Post Upload Hook Messages **\n'
             '??\n'
@@ -654,7 +654,7 @@ class PresubmitUnittest(PresubmitTestsBase):
                                            gerrit_obj=None,
                                            verbose=False))
 
-        expected = ('Running Python 3 post upload checks \.\.\.\n'
+        expected = ('Running post upload checks \.\.\.\n'
                     '\n'
                     '\*\* Post Upload Hook Messages \*\*\n'
                     '!!\n'
@@ -894,7 +894,7 @@ def CheckChangeOnCommit(input_api, output_api):
                 RUNNING_PY_CHECKS_TEXT + 'Warning, no PRESUBMIT.py found.\n'
                 'Running default presubmit script.\n'
                 '** Presubmit ERRORS: 1 **\n!!\n\n'
-                'There were Python 3 presubmit errors.\n'
+                'There were presubmit errors.\n'
                 'Was the presubmit check useful? If not, run "git cl presubmit -v"\n'
                 'to figure out which PRESUBMIT.py was run, then run "git blame"\n'
                 'on the file to figure out who to ask for help.\n')
@@ -1096,15 +1096,6 @@ def CheckChangeOnCommit(input_api, output_api):
             upstream=options.upstream,
             end_commit=options.end_commit)
         scm.GIT.GetAllFiles.assert_called_once_with(options.root)
-
-    def testParseChange_EmptyDiffFile(self):
-        gclient_utils.FileRead.return_value = ''
-        options = mock.Mock(all_files=False,
-                            files=[],
-                            generate_diff=False,
-                            diff_file='foo.diff')
-        with self.assertRaises(presubmit.PresubmitFailure):
-            presubmit._parse_change(None, options)
 
     @mock.patch('presubmit_support.ProvidedDiffChange', mock.Mock())
     def testParseChange_ProvidedDiffFile(self):

@@ -92,16 +92,19 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "app/vivaldi_resources.h"
+#include "app/vivaldi_version_info.h"
 #include "browser/startup_vivaldi_browser.h"
+#include "browser/vivaldi_version_utils.h"
+#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/navigation_entry_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/navigation_entry.h"
-#include "vivaldi/prefs/vivaldi_gen_prefs.h"
+#include "extensions/browser/extension_system.h"
 #include "ui/base/l10n/l10n_util.h"
-
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace {
 
@@ -399,9 +402,7 @@ void StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
   if (StartupBrowserCreator::ShouldLoadProfileWithoutWindow(*command_line_)) {
     // Checking the flags this late in the launch should be redundant.
     // TODO(crbug.com/40216113): Remove by M104.
-    NOTREACHED_IN_MIGRATION();
-    base::debug::DumpWithoutCrashing();
-    return;
+    NOTREACHED();
   }
 
   const bool is_incognito_or_guest = profile_->IsOffTheRecord();
@@ -458,18 +459,19 @@ void StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
   }
 
   if (vivaldi::IsVivaldiRunning()) {
-    // Vivaldi always open the same sets of tabs even if the prev. session
-    // crashed. TODO: We may want to make it possible to override that, but in
-    // these days with webpages in processes it is less of an issue.
-    is_post_crash_launch = false;
-
-    if (!command_line_->HasSwitch(switches::kNoFirstRun)) {
-      // Using the onboarding logic to add the welcome page early enough.
-     // welcome_enabled = true;
-    }
-
     // Vivaldi does not use Chrome "what's new", make sure it's off.
     whats_new_enabled = false;
+
+    // Override is_post_crash_launch if it's post update run.
+    is_post_crash_launch =
+        is_post_crash_launch &&
+        !vivaldi::version::HasVersionChanged(profile_->GetPrefs());
+    // Block extensions when recovering from a crash-loop.
+    extensions::ExtensionService* extension_service =
+        extensions::ExtensionSystem::Get(profile_)->extension_service();
+    DCHECK(extension_service);
+    is_post_crash_launch ? extension_service->BlockAllExtensions()
+                         : extension_service->UnblockAllExtensions();
   }
 
   auto result = DetermineStartupTabs(
@@ -551,6 +553,15 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
   LaunchResult launch_result =
       tabs.empty() ? LaunchResult::kNormally : LaunchResult::kWithGivenUrls;
 
+  if (vivaldi::IsVivaldiRunning()) {
+    // Show the command line URLs if specified,
+    if ((is_incognito_or_guest || is_post_crash_launch) && !tabs.empty())
+      return {std::move(tabs), launch_result};
+
+    if (is_post_crash_launch)
+      return {{StartupTab(GURL(vivaldi::kVivaldiCrashStartPageURL))},
+              launch_result};
+  } else {
   if (whats_new_enabled && (launch_result == LaunchResult::kWithGivenUrls ||
                             is_incognito_or_guest || is_post_crash_launch)) {
     whats_new::LogStartupType(whats_new::StartupType::kIneligible);
@@ -559,14 +570,9 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
   // Only the New Tab Page or command line URLs may be shown in incognito mode.
   // A similar policy exists for crash recovery launches, to prevent getting the
   // user stuck in a crash loop.
-  if ((is_incognito_or_guest && !vivaldi::IsVivaldiRunning()) ||
-      is_post_crash_launch) {
+  if (is_incognito_or_guest || is_post_crash_launch) {
     if (!tabs.empty())
       return {std::move(tabs), launch_result};
-
-    if (vivaldi::IsVivaldiRunning())
-      return {{StartupTab(GURL(vivaldi::kVivaldiNewTabURL))},
-              launch_result};
 
     if (is_post_crash_launch) {
       tabs = provider.GetPostCrashTabs(has_incompatible_applications);
@@ -577,6 +583,7 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
     return {StartupTabs({StartupTab(GURL(chrome::kChromeUINewTabURL))}),
             launch_result};
   }
+  }  // Vivaldi
 
   // A trigger on a profile may indicate that we should show a tab which
   // offers to reset the user's settings.  When this appears, it is first, and

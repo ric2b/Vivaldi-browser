@@ -64,7 +64,7 @@ proto::TbsCrl MakeTbsCrl(uint64_t not_before,
   return tbs_crl;
 }
 
-// Pack into a CrlBundle and sign with |crl_inter_key|.  |crl_inter_der| must be
+// Pack into a CrlBundle and sign with `crl_inter_key`.  `crl_inter_der` must be
 // directly signed by a Cast CRL root CA (possibly distinct from Cast root CA).
 void PackCrlIntoFile(const std::string& filename,
                      const proto::TbsCrl& tbs_crl,
@@ -206,7 +206,7 @@ int CastMain() {
                     crl_inter_der[0], crl_inter_key.get());
   }
 
-  // NOTE: Bad |signer_cert| used for Crl (not issued by Cast CRL root).
+  // NOTE: Bad `signer_cert` used for Crl (not issued by Cast CRL root).
   {
     proto::TbsCrl tbs_crl = MakeTbsCrl(not_before.count(), not_after.count(),
                                        device_cert.get(), inter_cert.get());

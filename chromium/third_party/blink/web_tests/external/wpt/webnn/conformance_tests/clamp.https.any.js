@@ -19,14 +19,6 @@
 //
 // MLOperand clamp(MLOperand input, optional MLClampOptions options = {});
 
-
-const getClampPrecisionTolerance = (graphResources) => {
-  const toleranceValueDict = {float32: 0, float16: 0};
-  const expectedDataType =
-      getExpectedDataTypeOfSingleOutput(graphResources.expectedOutputs);
-  return {metricType: 'ULP', value: toleranceValueDict[expectedDataType]};
-};
-
 const clampTests = [
   {
     'name': 'clamp float32 0D tensor default options',
@@ -34,7 +26,7 @@ const clampTests = [
       'inputs': {
         'clampInput': {
           'data': [-9.817828178405762],
-          'descriptor': {'dimensions': [], 'dataType': 'float32'}
+          'descriptor': {shape: [], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -45,7 +37,7 @@ const clampTests = [
       'expectedOutputs': {
         'clampOutput': {
           'data': [-9.817828178405762],
-          'descriptor': {'dimensions': [], 'dataType': 'float32'}
+          'descriptor': {shape: [], dataType: 'float32'}
         }
       }
     }
@@ -65,7 +57,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [24], 'dataType': 'float32'},
+          'descriptor': {shape: [24], dataType: 'float32'},
           'constant': true
         }
       },
@@ -86,7 +78,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [24], 'dataType': 'float32'}
+          'descriptor': {shape: [24], dataType: 'float32'}
         }
       }
     }
@@ -106,7 +98,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [24], 'dataType': 'float32'}
+          'descriptor': {shape: [24], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -126,7 +118,178 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [24], 'dataType': 'float32'}
+          'descriptor': {shape: [24], dataType: 'float32'}
+        }
+      }
+    }
+  },
+  {
+    'name': 'clamp float16 1D tensor',
+    'graph': {
+      'inputs': {
+        'clampInput': {
+          'data': [NaN, -Infinity, Infinity, -64000, 64000, -2, 1, 0],
+          'descriptor': {shape: [8], dataType: 'float16'}
+        }
+      },
+      'operators': [{
+        'name': 'clamp',
+        'arguments': [{'input': 'clampInput'}, {'options': {'minValue': -2}}],
+        'outputs': 'clampOutput'
+      }],
+      'expectedOutputs': {
+        'clampOutput': {
+          'data': [NaN, -2, Infinity, -2, 64000, -2, 1, 0],
+          'descriptor': {shape: [8], dataType: 'float16'}
+        }
+      }
+    }
+  },
+  {
+    'name': 'clamp int8 1D tensor',
+    'graph': {
+      'inputs': {
+        'clampInput': {
+          'data': [-128, 127, -4, -2, 1, 0, 2, 4],
+          'descriptor': {shape: [8], dataType: 'int8'}
+        }
+      },
+      'operators': [{
+        'name': 'clamp',
+        'arguments': [
+          {'input': 'clampInput'},
+          {'options': {'minValue': -2, 'maxValue': 125}}
+        ],
+        'outputs': 'clampOutput'
+      }],
+      'expectedOutputs': {
+        'clampOutput': {
+          'data': [-2, 125, -2, -2, 1, 0, 2, 4],
+          'descriptor': {shape: [8], dataType: 'int8'}
+        }
+      }
+    }
+  },
+  {
+    'name': 'clamp uint8 1D tensor',
+    'graph': {
+      'inputs': {
+        'clampInput': {
+          'data': [255, 127, 5, 0],
+          'descriptor': {shape: [4], dataType: 'uint8'}
+        }
+      },
+      'operators': [{
+        'name': 'clamp',
+        'arguments': [
+          {'input': 'clampInput'}, {'options': {'minValue': 5, 'maxValue': 200}}
+        ],
+        'outputs': 'clampOutput'
+      }],
+      'expectedOutputs': {
+        'clampOutput': {
+          'data': [200, 127, 5, 5],
+          'descriptor': {shape: [4], dataType: 'uint8'}
+        }
+      }
+    }
+  },
+  {
+    'name': 'clamp int32 1D tensor',
+    'graph': {
+      'inputs': {
+        'clampInput': {
+          'data': [-2147483648, 2147483647, -4, -2, 1, 0, 2, 4],
+          'descriptor': {shape: [8], dataType: 'int32'}
+        }
+      },
+      'operators': [{
+        'name': 'clamp',
+        'arguments': [
+          {'input': 'clampInput'},
+          {'options': {'minValue': -2, 'maxValue': 2147483645}}
+        ],
+        'outputs': 'clampOutput'
+      }],
+      'expectedOutputs': {
+        'clampOutput': {
+          'data': [-2, 2147483645, -2, -2, 1, 0, 2, 4],
+          'descriptor': {shape: [8], dataType: 'int32'}
+        }
+      }
+    }
+  },
+  {
+    'name': 'clamp uint32 1D tensor',
+    'graph': {
+      'inputs': {
+        'clampInput': {
+          'data': [4294967295, 127, 5, 0],
+          'descriptor': {shape: [4], dataType: 'uint32'}
+        }
+      },
+      'operators': [{
+        'name': 'clamp',
+        'arguments': [
+          {'input': 'clampInput'},
+          {'options': {'minValue': 5, 'maxValue': 4294967290}}
+        ],
+        'outputs': 'clampOutput'
+      }],
+      'expectedOutputs': {
+        'clampOutput': {
+          'data': [4294967290, 127, 5, 5],
+          'descriptor': {shape: [4], dataType: 'uint32'}
+        }
+      }
+    }
+  },
+  {
+    'name': 'clamp int64 1D tensor',
+    'graph': {
+      'inputs': {
+        'clampInput': {
+          'data': [-4147483648, 4147483647, -4, -2, 1, 0, 2, 4],
+          'descriptor': {shape: [8], dataType: 'int64'}
+        }
+      },
+      'operators': [{
+        'name': 'clamp',
+        'arguments': [
+          {'input': 'clampInput'},
+          {'options': {'minValue': -2, 'maxValue': 4147483645}}
+        ],
+        'outputs': 'clampOutput'
+      }],
+      'expectedOutputs': {
+        'clampOutput': {
+          'data': [-2, 4147483645, -2, -2, 1, 0, 2, 4],
+          'descriptor': {shape: [8], dataType: 'int64'}
+        }
+      }
+    }
+  },
+  {
+    'name': 'clamp uint64 1D tensor',
+    'graph': {
+      'inputs': {
+        'clampInput': {
+          'data': [5294967295, 127, 5, 0],
+          'descriptor': {shape: [4], dataType: 'uint64'}
+        }
+      },
+      'operators': [{
+        'name': 'clamp',
+        'arguments': [
+          {'input': 'clampInput'},
+          {'options': {'minValue': 5, 'maxValue': 5294967290}}
+        ],
+        'outputs': 'clampOutput'
+      }],
+      'expectedOutputs': {
+        'clampOutput': {
+          'data': [5294967290, 127, 5, 5],
+          'descriptor': {shape: [4], dataType: 'uint64'}
         }
       }
     }
@@ -146,7 +309,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [4, 6], 'dataType': 'float32'}
+          'descriptor': {shape: [4, 6], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -166,7 +329,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [4, 6], 'dataType': 'float32'}
+          'descriptor': {shape: [4, 6], dataType: 'float32'}
         }
       }
     }
@@ -186,7 +349,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [2, 3, 4], 'dataType': 'float32'}
+          'descriptor': {shape: [2, 3, 4], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -206,7 +369,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [2, 3, 4], 'dataType': 'float32'}
+          'descriptor': {shape: [2, 3, 4], dataType: 'float32'}
         }
       }
     }
@@ -226,7 +389,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [3, 2, 2, 2], 'dataType': 'float32'}
+          'descriptor': {shape: [3, 2, 2, 2], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -246,7 +409,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [3, 2, 2, 2], 'dataType': 'float32'}
+          'descriptor': {shape: [3, 2, 2, 2], dataType: 'float32'}
         }
       }
     }
@@ -266,7 +429,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [4, 1, 1, 2, 3], 'dataType': 'float32'}
+          'descriptor': {shape: [4, 1, 1, 2, 3], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -286,7 +449,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [4, 1, 1, 2, 3], 'dataType': 'float32'}
+          'descriptor': {shape: [4, 1, 1, 2, 3], dataType: 'float32'}
         }
       }
     }
@@ -307,7 +470,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [2, 1, 4, 3], 'dataType': 'float32'}
+          'descriptor': {shape: [2, 1, 4, 3], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -343,7 +506,7 @@ const clampTests = [
             7.409400463104248,
             -1
           ],
-          'descriptor': {'dimensions': [2, 1, 4, 3], 'dataType': 'float32'}
+          'descriptor': {shape: [2, 1, 4, 3], dataType: 'float32'}
         }
       }
     }
@@ -364,7 +527,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [6, 2, 2], 'dataType': 'float32'}
+          'descriptor': {shape: [6, 2, 2], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -400,7 +563,7 @@ const clampTests = [
             7.409400463104248,
             0
           ],
-          'descriptor': {'dimensions': [6, 2, 2], 'dataType': 'float32'}
+          'descriptor': {shape: [6, 2, 2], dataType: 'float32'}
         }
       }
     }
@@ -421,7 +584,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [3, 8], 'dataType': 'float32'}
+          'descriptor': {shape: [3, 8], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -457,7 +620,7 @@ const clampTests = [
             7.409400463104248,
             1
           ],
-          'descriptor': {'dimensions': [3, 8], 'dataType': 'float32'}
+          'descriptor': {shape: [3, 8], dataType: 'float32'}
         }
       }
     }
@@ -478,7 +641,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [2, 2, 1, 2, 3], 'dataType': 'float32'}
+          'descriptor': {shape: [2, 2, 1, 2, 3], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -514,7 +677,7 @@ const clampTests = [
             -2,
             -2.123614549636841
           ],
-          'descriptor': {'dimensions': [2, 2, 1, 2, 3], 'dataType': 'float32'}
+          'descriptor': {shape: [2, 2, 1, 2, 3], dataType: 'float32'}
         }
       }
     }
@@ -535,7 +698,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [24], 'dataType': 'float32'}
+          'descriptor': {shape: [24], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -571,7 +734,7 @@ const clampTests = [
             0,
             -2.123614549636841
           ],
-          'descriptor': {'dimensions': [24], 'dataType': 'float32'}
+          'descriptor': {shape: [24], dataType: 'float32'}
         }
       }
     }
@@ -592,7 +755,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [3, 4, 2], 'dataType': 'float32'}
+          'descriptor': {shape: [3, 4, 2], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -628,7 +791,7 @@ const clampTests = [
             3,
             -2.123614549636841
           ],
-          'descriptor': {'dimensions': [3, 4, 2], 'dataType': 'float32'}
+          'descriptor': {shape: [3, 4, 2], dataType: 'float32'}
         }
       }
     }
@@ -649,7 +812,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [3, 2, 1, 1, 4], 'dataType': 'float32'}
+          'descriptor': {shape: [3, 2, 1, 1, 4], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -687,7 +850,7 @@ const clampTests = [
             -1,
             -2.123614549636841
           ],
-          'descriptor': {'dimensions': [3, 2, 1, 1, 4], 'dataType': 'float32'}
+          'descriptor': {shape: [3, 2, 1, 1, 4], dataType: 'float32'}
         }
       }
     }
@@ -708,7 +871,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [1, 4, 3, 2], 'dataType': 'float32'}
+          'descriptor': {shape: [1, 4, 3, 2], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -746,7 +909,7 @@ const clampTests = [
             0,
             -2.123614549636841
           ],
-          'descriptor': {'dimensions': [1, 4, 3, 2], 'dataType': 'float32'}
+          'descriptor': {shape: [1, 4, 3, 2], dataType: 'float32'}
         }
       }
     }
@@ -767,7 +930,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [2, 6, 2], 'dataType': 'float32'}
+          'descriptor': {shape: [2, 6, 2], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -805,7 +968,7 @@ const clampTests = [
             4,
             -2.123614549636841
           ],
-          'descriptor': {'dimensions': [2, 6, 2], 'dataType': 'float32'}
+          'descriptor': {shape: [2, 6, 2], dataType: 'float32'}
         }
       }
     }
@@ -826,7 +989,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [6, 4], 'dataType': 'float32'}
+          'descriptor': {shape: [6, 4], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -864,7 +1027,7 @@ const clampTests = [
             6,
             0
           ],
-          'descriptor': {'dimensions': [6, 4], 'dataType': 'float32'}
+          'descriptor': {shape: [6, 4], dataType: 'float32'}
         }
       }
     }
@@ -885,7 +1048,7 @@ const clampTests = [
             -2.3130595684051514, 9.549695014953613,  5.788925647735596,
             5.549378395080566,   7.409400463104248,  -2.123614549636841
           ],
-          'descriptor': {'dimensions': [24], 'dataType': 'float32'}
+          'descriptor': {shape: [24], dataType: 'float32'}
         }
       },
       'operators': [{
@@ -923,7 +1086,7 @@ const clampTests = [
             7,
             2
           ],
-          'descriptor': {'dimensions': [24], 'dataType': 'float32'}
+          'descriptor': {shape: [24], dataType: 'float32'}
         }
       }
     }
@@ -932,8 +1095,7 @@ const clampTests = [
 
 if (navigator.ml) {
   clampTests.forEach((test) => {
-    webnn_conformance_test(
-        buildGraphAndCompute, getClampPrecisionTolerance, test);
+    webnn_conformance_test(buildGraphAndCompute, getPrecisionTolerance, test);
   });
 } else {
   test(() => assert_implements(navigator.ml, 'missing navigator.ml'));

@@ -20,8 +20,6 @@
 #import "base/numerics/safe_conversions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/favicon/ios/web_favicon_driver.h"
-#import "components/feature_engagement/public/event_constants.h"
-#import "components/feature_engagement/public/tracker.h"
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/model/url_drag_drop_handler.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
@@ -132,7 +130,6 @@ const CGFloat kAutoscrollDecrementWidth = 10.0;
 
 // The size of the new tab button.
 const CGFloat kNewTabButtonWidth = 44;
-const CGFloat kNewTabButtonSpotlightViewCornerRadius = 7;
 
 // Default image insets for the new tab button. The negative value for leading
 // inset is shifting the image view to the left from the center.
@@ -200,9 +197,6 @@ const CGFloat kSymbolSize = 18;
   TabStripContainerView* _view;
   TabStripView* _tabStripView;
   UIButton* _buttonNewTab;
-  // The spotlight view contained in the new tab button, serving for the
-  // highlighted effect.
-  UIView* _buttonNewTabSpotlightView;
 
   TabStripStyle _style;
 
@@ -519,7 +513,7 @@ const CGFloat kSymbolSize = 18;
     [_layoutGuideCenter referenceView:_buttonNewTab
                             underName:kNewTabButtonGuide];
 
-    _isIncognito = _browser->GetBrowserState()->IsOffTheRecord();
+    _isIncognito = _browser->GetProfile()->IsOffTheRecord();
     // TODO(crbug.com/41247629): Rewrite layout code and convert these masks to
     // to trailing and leading margins rather than right and bottom.
     _buttonNewTab.autoresizingMask = (UIViewAutoresizingFlexibleRightMargin |
@@ -569,29 +563,11 @@ const CGFloat kSymbolSize = 18;
 
     } // End Vivaldi
 
-    _buttonNewTabSpotlightView = [[UIView alloc] init];
-    _buttonNewTabSpotlightView.hidden = YES;
-    _buttonNewTabSpotlightView.userInteractionEnabled = NO;
-    _buttonNewTabSpotlightView.layer.cornerRadius =
-        kNewTabButtonSpotlightViewCornerRadius;
-    // Position the spotlight view so that the image view is in its center.
-    // Cannot use the button's `backgroundColor` because the image view is not
-    // centered in the button by kNewTabButtonLeadingImageInset and
-    // kNewTabButtonBottomImageInset.
-    [_buttonNewTabSpotlightView
-        setFrame:CGRectMake(0, -kNewTabButtonBottomImageInset,
-                            kNewTabButtonWidth + kNewTabButtonLeadingImageInset,
-                            kTabStripHeight + kNewTabButtonBottomImageInset)];
-    // Make sure that the spotlightView is below the image to avoid changing the
-    // color of the image.
-    [_buttonNewTab insertSubview:_buttonNewTabSpotlightView
-                    belowSubview:_buttonNewTab.imageView];
-
     SetA11yLabelAndUiAutomationName(
         _buttonNewTab,
-        _isIncognito ? IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB
-                     : IDS_IOS_TOOLS_MENU_NEW_TAB,
-        _isIncognito ? @"New Incognito Tab" : @"New Tab");
+        _isIncognito ? IDS_IOS_TOOLBAR_OPEN_NEW_TAB_INCOGNITO
+                     : IDS_IOS_TOOLBAR_OPEN_NEW_TAB,
+        _isIncognito ? @"New Incognito tab" : @"New tab");
     [_buttonNewTab addTarget:self
                       action:@selector(sendNewTabCommand)
             forControlEvents:UIControlEventTouchUpInside];
@@ -672,17 +648,6 @@ const CGFloat kSymbolSize = 18;
 - (void)tabStripSizeDidChange {
   [self updateContentSizeAndRepositionViews];
   [self layoutTabStripSubviews];
-}
-
-#pragma mark - TabStripCommands
-
-- (void)setNewTabButtonOnTabStripIPHHighlighted:(BOOL)IPHHighlighted {
-  _buttonNewTab.tintColor = IPHHighlighted
-                                ? [UIColor colorNamed:kSolidWhiteColor]
-                                : [UIColor colorNamed:kGrey500Color];
-  _buttonNewTabSpotlightView.backgroundColor =
-      IPHHighlighted ? [UIColor colorNamed:kBlueColor] : nil;
-  _buttonNewTabSpotlightView.hidden = !IPHHighlighted;
 }
 
 #pragma mark - Private
@@ -856,12 +821,6 @@ const CGFloat kSymbolSize = 18;
 }
 
 - (void)sendNewTabCommand {
-  feature_engagement::Tracker* engagementTracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(
-          _browser->GetBrowserState());
-  engagementTracker->NotifyEvent(
-      feature_engagement::events::kNewTabToolbarItemUsed);
-
   CGPoint center = [_buttonNewTab.superview convertPoint:_buttonNewTab.center
                                                   toView:_buttonNewTab.window];
   OpenNewTabCommand* command =
@@ -893,7 +852,7 @@ const CGFloat kSymbolSize = 18;
                         object:nil];
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 
@@ -981,7 +940,7 @@ const CGFloat kSymbolSize = 18;
 - (void)insertNewItemAtIndex:(NSUInteger)index withURL:(const GURL&)newTabURL {
   UrlLoadParams params =
       UrlLoadParams::InNewTab(newTabURL, base::checked_cast<int>(index));
-  params.in_incognito = _browser->GetBrowserState()->IsOffTheRecord();
+  params.in_incognito = _browser->GetProfile()->IsOffTheRecord();
   UrlLoadingBrowserAgent::FromBrowser(_browser)->Load(params);
 }
 
@@ -2138,7 +2097,7 @@ const CGFloat kSymbolSize = 18;
     return NO;
 
   return [VivaldiTabSettingPrefs getUseTabStackWithPrefService:
-          _browser->GetBrowserState()->GetPrefs()];
+          _browser->GetProfile()->GetPrefs()];
 }
 
 /// This is a public method trigerred from BVC.

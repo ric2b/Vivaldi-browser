@@ -17,8 +17,8 @@
 
 void xnn_f16_vclamp_ukernel__rvvfp16arith_u8v(
     size_t batch,
-    const void* input,
-    void* output,
+    const xnn_float16* input,
+    xnn_float16* output,
     const union xnn_f16_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
@@ -29,8 +29,8 @@ void xnn_f16_vclamp_ukernel__rvvfp16arith_u8v(
   const uint16_t* i = (const uint16_t*) input;
   uint16_t* o = (uint16_t*) output;
 
-  const _Float16 vmin = params->fp16arith.min;
-  const _Float16 vmax = params->fp16arith.max;
+  const _Float16 vmin = *(const _Float16*) &params->scalar.min;
+  const _Float16 vmax = *(const _Float16*) &params->scalar.max;
 
   batch >>= XNN_LOG2_SIZEOF_HALF;
   do {

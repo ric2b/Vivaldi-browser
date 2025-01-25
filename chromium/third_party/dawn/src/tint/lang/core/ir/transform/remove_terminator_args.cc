@@ -164,12 +164,8 @@ struct State {
 }  // namespace
 
 Result<SuccessType> RemoveTerminatorArgs(Module& ir) {
-    auto result = ValidateAndDumpIfNeeded(ir, "RemoveTerminatorArgs transform",
-                                          core::ir::Capabilities{
-                                              core::ir::Capability::kAllow8BitIntegers,
-                                              core::ir::Capability::kAllowPointersInStructures,
-                                              core::ir::Capability::kAllowVectorElementPointer,
-                                          });
+    auto result =
+        ValidateAndDumpIfNeeded(ir, "core.RemoveTerminatorArgs", kRemoveTerminatorArgsCapabilities);
     if (result != Success) {
         return result;
     }

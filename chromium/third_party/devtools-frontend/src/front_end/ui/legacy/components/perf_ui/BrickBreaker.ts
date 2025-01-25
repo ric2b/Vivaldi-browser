@@ -6,7 +6,7 @@ import * as i18n from '../../../../core/i18n/i18n.js';
 import * as WindowBounds from '../../../../services/window_bounds/window_bounds.js';
 import * as ThemeSupport from '../../theme_support/theme_support.js';
 
-import {type FlameChart} from './FlameChart.js';
+import type {FlameChart} from './FlameChart.js';
 
 const UIStrings = {
   /**
@@ -108,7 +108,7 @@ const colorPallettes: ColorPalette[] = [
   },
 ];
 
-/* eslint-disable rulesdir/check_component_naming, rulesdir/custom_element_definitions_location, rulesdir/no_underscored_properties, rulesdir/ban_style_tags_in_lit_html, rulesdir/ban_a_tags_in_lit_html, rulesdir/lit_html_host_this */
+/* rulesdir/no_underscored_properties, rulesdir/ban_style_tags_in_lit_html, rulesdir/ban_a_tags_in_lit_html, rulesdir/lit_html_host_this */
 export class BrickBreaker extends HTMLElement {
   #canvas: HTMLCanvasElement;
   #ctx: CanvasRenderingContext2D;

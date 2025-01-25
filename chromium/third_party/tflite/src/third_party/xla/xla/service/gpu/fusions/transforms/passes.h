@@ -39,7 +39,7 @@ std::optional<Interval> GetIVRange(mlir::Value iv);
 
 std::unique_ptr<mlir::Pass> CreateConvertFloatNvidiaPass();
 std::optional<std::unique_ptr<mlir::Pass>> MaybeCreateConvertFloatNvidiaPass(
-    const se::CudaComputeCapability& cc, const std::string& cuda_data_dir);
+    const se::DeviceDescription& device_description);
 std::unique_ptr<mlir::Pass> CreateConvertPureCallOpsPass();
 std::unique_ptr<mlir::Pass> CreateEraseDeadFunctionsPass();
 std::unique_ptr<mlir::Pass> CreateExpandFloatOpsPass();
@@ -51,8 +51,10 @@ std::unique_ptr<mlir::Pass> CreateLowerXlaGpuToScfPass();
 std::unique_ptr<mlir::Pass> CreateLowerXlaGpuLoopsToScfPass();
 std::unique_ptr<mlir::Pass> CreateMergePointersToSameSlicePass();
 std::unique_ptr<mlir::Pass> CreateOptimizeLoopsPass();
+std::unique_ptr<mlir::Pass> CreateFuseLoopsPass();
 std::unique_ptr<mlir::Pass> CreatePeelLoopsPass();
 std::unique_ptr<mlir::Pass> CreatePropagateSliceIndicesPass();
+std::unique_ptr<mlir::Pass> CreateRewriteReductionsPass();
 std::unique_ptr<mlir::Pass> CreateSimplifyAffinePass();
 std::unique_ptr<mlir::Pass> CreateSimplifyArithPass();
 std::unique_ptr<mlir::Pass> CreateUnswitchLoopsPass();

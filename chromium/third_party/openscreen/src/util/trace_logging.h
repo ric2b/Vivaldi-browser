@@ -120,7 +120,7 @@ inline std::vector<openscreen::TraceEvent::Argument> ToArgumentArray(
 #else  // ENABLE_TRACE_LOGGING not defined
 
 namespace openscreen::internal {
-// Consumes |args| (to avoid "warn unused variable" errors at compile time), and
+// Consumes `args` (to avoid "warn unused variable" errors at compile time), and
 // provides a "void" result type in the macros below.
 template <typename... Args>
 inline void DoNothingForTracing(Args... args) {}

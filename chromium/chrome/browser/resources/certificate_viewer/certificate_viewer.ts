@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import './strings.m.js';
+import '/strings.m.js';
 import 'chrome://resources/cr_elements/cr_tab_box/cr_tab_box.js';
 import 'chrome://resources/cr_elements/cr_tree/cr_tree.js';
 import 'chrome://resources/cr_elements/cr_tree/cr_tree_item.js';
+import './constraint_list.js';
 
 import type {CrTreeElement} from 'chrome://resources/cr_elements/cr_tree/cr_tree.js';
 import type {CrTreeItemElement} from 'chrome://resources/cr_elements/cr_tree/cr_tree_item.js';
@@ -30,6 +31,19 @@ export interface TreeItemDetail {
     index?: number,
   };
   children: {[key: string|number]: CrTreeItemElement};
+}
+
+enum CertificateTrust {
+  // LINT.IfChange(CertificateTrustType)
+  CERTIFICATE_TRUST_DISTRUSTED = 0,
+  CERTIFICATE_TRUST_UNSPECIFIED = 1,
+  CERTIFICATE_TRUST_TRUSTED = 2,
+  // LINT.ThenChange(//chrome/browser/ui/webui/certificate_viewer/certificate_viewer_webui.cc:CertificateTrustType)
+}
+
+interface CertificateMetadata {
+  trust: CertificateTrust;
+  constraints: string[];
 }
 
 /**
@@ -80,6 +94,37 @@ function initialize() {
   const exportButton = document.querySelector<HTMLElement>('#export');
   assert(exportButton);
   exportButton.onclick = exportCertificate;
+
+  // TODO(crbug.com/40928765): see if we can do this instead with dialog args
+  // versus callbacks.
+  // TODO(crbug.com/40928765): add test for cert metadata after trying dialog
+  // args refactor.
+  sendWithPromise('hasCertificateMetadata').then(onHasCertificateMetadata);
+}
+
+
+function onHasCertificateMetadata(hasCertificateMetadata: boolean) {
+  if (!hasCertificateMetadata) {
+    return;
+  }
+
+  const modificationsTab =
+      document.querySelector<HTMLElement>('#modifications-tab');
+  assert(modificationsTab);
+  modificationsTab.hidden = false;
+  sendWithPromise('requestCertificateMetadata').then(onGetCertificateMetadata);
+}
+
+function onGetCertificateMetadata(certMetadata: CertificateMetadata) {
+  const trustStateSelect =
+      document.querySelector<HTMLSelectElement>('#trust-state-select');
+  assert(trustStateSelect);
+  trustStateSelect.value = certMetadata.trust.toString();
+
+  const constraintsElement = document.querySelector('constraint-list');
+  assert(constraintsElement);
+
+  constraintsElement.constraints = certMetadata.constraints;
 }
 
 /**

@@ -22,6 +22,7 @@ import org.chromium.blink.mojom.RpContext;
 import org.chromium.blink.mojom.RpMode;
 import org.chromium.chrome.browser.ui.android.webid.data.Account;
 import org.chromium.chrome.browser.ui.android.webid.data.ClientIdMetadata;
+import org.chromium.chrome.browser.ui.android.webid.data.IdentityCredentialTokenError;
 import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderData;
 import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderMetadata;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -29,6 +30,7 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
 import org.chromium.components.image_fetcher.ImageFetcher;
+import org.chromium.content.webid.IdentityRequestDialogDisclosureField;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
 
@@ -80,6 +82,17 @@ public class AccountSelectionIntegrationTestBase {
                     /* loginUrl= */ null,
                     /* supportsAddAccount= */ true);
 
+    protected static final @IdentityRequestDialogDisclosureField int[] DEFAULT_DISCLOSURE_FIELDS =
+            new int[] {
+                IdentityRequestDialogDisclosureField.NAME,
+                IdentityRequestDialogDisclosureField.EMAIL,
+                IdentityRequestDialogDisclosureField.PICTURE
+            };
+
+    protected static final String TEST_ERROR_CODE = "invalid_request";
+    protected static final IdentityCredentialTokenError TOKEN_ERROR =
+            new IdentityCredentialTokenError(TEST_ERROR_CODE, TEST_URL);
+
     AccountSelectionCoordinator mAccountSelection;
 
     @Mock AccountSelectionComponent.Delegate mMockBridge;
@@ -122,7 +135,7 @@ public class AccountSelectionIntegrationTestBase {
                         IDP_METADATA,
                         mClientIdMetadata,
                         RpContext.SIGN_IN,
-                        /* requestPermission= */ true,
+                        DEFAULT_DISCLOSURE_FIELDS,
                         /* hasLoginStatusMismatch= */ false);
         mIdpDataWithAddAccount =
                 new IdentityProviderData(
@@ -130,7 +143,7 @@ public class AccountSelectionIntegrationTestBase {
                         IDP_METADATA_WITH_ADD_ACCOUNT,
                         mClientIdMetadata,
                         RpContext.SIGN_IN,
-                        /* requestPermission= */ true,
+                        DEFAULT_DISCLOSURE_FIELDS,
                         /* hasLoginStatusMismatch= */ false);
 
         runOnUiThreadBlocking(

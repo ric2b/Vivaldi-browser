@@ -93,16 +93,16 @@ void DevtoolsConnectorAPI::CloseDevtoolsForBrowser(
     return;
   }
   content::WebContents* tabstrip_contents = nullptr;
-  Browser* browser;
+  WindowController* browser;
   int tab_index;
 
   std::vector<DevtoolsConnectorItem*>::iterator it =
       api->connector_items_.begin();
   while (it != api->connector_items_.end()) {
     if (extensions::ExtensionTabUtil::GetTabById(
-            (*it)->tab_id(), browser_context, true, &browser, nullptr,
+            (*it)->tab_id(), browser_context, true, &browser,
             &tabstrip_contents, &tab_index)) {
-      if (closing_browser == nullptr || closing_browser == browser) {
+      if (closing_browser == nullptr || closing_browser == browser->GetBrowser()) {
         DevToolsWindow* window =
             DevToolsWindow::GetInstanceForInspectedWebContents(
                 tabstrip_contents);
@@ -457,11 +457,11 @@ void UIBindingsDelegate::CloseWindow() {
   // TODO(pettern): Not very elegant, find a better way?
   content::WebContents* tabstrip_contents = NULL;
   bool include_incognito = true;
-  Browser* browser;
+  WindowController* browser;
   int tab_index;
 
   if (extensions::ExtensionTabUtil::GetTabById(
-          tab_id(), browser_context_, include_incognito, &browser, NULL,
+          tab_id(), browser_context_, include_incognito, &browser,
           &tabstrip_contents, &tab_index)) {
     VivaldiBrowserWindow* window =
         static_cast<VivaldiBrowserWindow*>(browser->window());

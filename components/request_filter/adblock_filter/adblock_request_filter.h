@@ -14,13 +14,13 @@ class RenderFrameHost;
 
 namespace adblock_filter {
 class RulesIndexManager;
-class TabHandler;
+class StateAndLogsImpl;
 class Resources;
 
 class AdBlockRequestFilter : public vivaldi::RequestFilter {
  public:
   AdBlockRequestFilter(base::WeakPtr<RulesIndexManager> rules_index_manager,
-                       base::WeakPtr<TabHandler> tab_handler,
+                       base::WeakPtr<StateAndLogsImpl> state_and_logs,
                        base::WeakPtr<Resources> resources);
   ~AdBlockRequestFilter() override;
   AdBlockRequestFilter(const AdBlockRequestFilter&) = delete;
@@ -61,7 +61,7 @@ class AdBlockRequestFilter : public vivaldi::RequestFilter {
                               std::string_view ad_domain_and_query_trigger);
 
   base::WeakPtr<RulesIndexManager> rules_index_manager_;
-  base::WeakPtr<TabHandler> tab_handler_;
+  base::WeakPtr<StateAndLogsImpl> state_and_logs_;
   base::WeakPtr<Resources> resources_;
 };
 

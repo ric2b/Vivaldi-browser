@@ -7,7 +7,20 @@ import getpass
 import re
 import pytest
 
+from .proto import trace_span_pb2
 from . import anonymization
+
+
+def test_anonymizing_filter_to_redact_info_from_msg() -> None:
+    """Test AnonymizingFilter to apply the passed anonymizer to msg."""
+    msg = trace_span_pb2.TraceSpan()
+    msg.name = "log-user-user1234"
+
+    anonymizer = anonymization.Anonymizer([(re.escape("user1234"), "<user>")])
+    f = anonymization.AnonymizingFilter(anonymizer)
+
+    filtered_msg = f(msg)
+    assert filtered_msg.name == "log-user-<user>"
 
 
 def test_default_anonymizer_to_remove_username_from_path(monkeypatch) -> None:

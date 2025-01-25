@@ -27,6 +27,9 @@
 #include "ui/base/mojom/window_show_state.mojom-forward.h"
 #include "ui/gfx/image/image.h"
 
+// Vivaldi
+#include "ui/base/mojom/window_show_state.mojom-shared.h"
+
 class GURL;
 class SkRegion;
 
@@ -628,7 +631,8 @@ class AppWindow : public content::WebContentsDelegate,
   base::OnceClosure on_update_draggable_regions_callback_for_testing_;
 
   // Vivaldi
-  ui::WindowShowState initial_state_ = ui::SHOW_STATE_NORMAL;
+  ui::mojom::WindowShowState initial_state_ =
+      ui::mojom::WindowShowState::kNormal;
 
   // Vivaldi
   // If the mouse has entered the app-window. Used for ContentsMouseEvent

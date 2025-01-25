@@ -6,13 +6,16 @@
 
 #include "browser/menus/vivaldi_bookmark_context_menu.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_controller_views.h"
+#include "components/prefs/pref_service.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/widget/widget.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi {
 
@@ -61,6 +64,11 @@ VivaldiBookmarkMenuViews::VivaldiBookmarkMenuViews(
       index++;
     }
   }
+  Profile* profile = Profile::FromBrowserContext(
+      web_contents->GetBrowserContext());
+  views::MenuController::VivaldiSetCompactLayout(
+      profile->GetPrefs()->GetBoolean(vivaldiprefs::kMenuCompact));
+  views::MenuController::VivaldiSetContextMenu(false);
 }
 
 VivaldiBookmarkMenuViews::~VivaldiBookmarkMenuViews() {

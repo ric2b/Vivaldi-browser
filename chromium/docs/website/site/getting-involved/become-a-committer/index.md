@@ -37,22 +37,17 @@ of the repo in question.
 
 ## Becoming a committer
 
-In a nutshell, contribute at least ten non-trivial patches in the [Chromium
-src](https://chromium.googlesource.com/chromium/src/) Git repository, and get
-an existing committer to nominate you. You will need at least two other
-committers to support the nomination, so getting at least three different
-people to review your patches is a good idea.  It is unfortunately not easy to
-define what a non-trivial patch is, because a one-line change might be subtle,
-and changes that touch lots of files might still be trivial. For example,
-changes that are more-or-less mechanical (e.g., renaming functions) will
-probably be considered trivial. That said, don't worry that the bar is
-impossibly high; you won't normally need a hundred CLs to find ten that
-qualify, and if you aren't certain whether your work meets the bar, just ask an
-existing committer.
+To become a committer, you must get at least ten non-trivial patches merged to
+the [Chromium src](https://chromium.googlesource.com/chromium/src/) Git
+repository, and get an existing committer to nominate you. You will need at
+least two other committers to support the nomination, so getting at least three
+different people to review your patches is a good idea.
 
-Perhaps the most important aspect of being a committer is that you will be able
-to review and approve other people's changes, so we're looking for whether we
-think you'll do a good job at that.
+We want to see sufficient evidence that you can follow Chromium best practices,
+and in situations where you're uncertain, you ask for additional guidance
+effectively. Perhaps the most important aspect of being a committer is that you
+will be able to review and approve other people's changes, so we're looking for
+whether we think you'll do a good job at that.
 
 So, in addition to actually making the code changes, you're basically
 demonstrating your
@@ -69,6 +64,29 @@ demonstrating your
     (your work should not generally have glaring flaws unless you're
     explicitly requesting feedback on an incomplete patch), and
 *   ability to write good code (last but certainly not least)
+
+### Non-trivial patches
+
+It is unfortunately not easy to define what a non-trivial patch is, because a
+one-line change might be subtle, and changes that touch lots of files might
+still be trivial. For example, changes that are more-or-less mechanical (e.g.,
+renaming functions) will probably be considered trivial. Here are some
+guidelines:
+
+* "Non-trivial" means literally "anything other than trivial"; it explicitly is
+  not the same thing as "major" or "significant". If it took you more than a
+  minute of thought, it's probably non-trivial.
+* Even a small change is non-trivial if the rationale or benefit was
+  non-trivial to arrive at.
+* Almost any change that isn't a pure comment change, symbol rename, or
+  clearly-obvious-on-its-face rewording whose effects are completely local (e.g.
+  a transforms like "a += 1" -> "++a") is a non-trivial change.
+* Don't worry that the bar is impossibly high; you won't normally need a hundred
+  CLs to find ten that qualify.
+* If you aren't certain whether your work meets the bar, ask an existing
+  committer.
+
+### Nomination process
 
 If you think you might be ready to be a committer, ask one of the reviewers
 of your CLs or another committer familiar with your work to see if they will
@@ -100,6 +118,9 @@ like "more patches" or "not enough people are familiar with this person's work."
 If the person you ask to nominate you thinks you're not ready, they should
 be able to tell you why not and what you need to do to meet the criteria.
 
+If you haven't done so already **you'll need to set up a security key on your
+account before you're added to the committer list**.
+
 Mechanically, being a committer means that you are a member of
 committers@chromium.org. It may take a few days longer after your nomination
 to actually be added to the list, but the whole process usually won't take
@@ -122,9 +143,6 @@ address to be re-nominated. To do so, send an email to accounts@chromium.org.
 
 If you have questions about this process, you can ask on community@chromium.org
 and people there will be happy to help you.
-
-Googlers can also look up the committers list
-[here](https://goto.google.com/chromium-committers).
 
 ## Other statuses
 

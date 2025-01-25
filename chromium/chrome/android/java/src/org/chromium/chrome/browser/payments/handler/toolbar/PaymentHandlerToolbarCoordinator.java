@@ -135,7 +135,8 @@ public class PaymentHandlerToolbarCoordinator implements PaymentHandlerToolbarMe
                 securityLevel,
                 mIsSmallDevice,
                 /* skipIconForNeutralState= */ false,
-                /* useUpdatedConnectionSecurityIndicators= */ false, null); // Vivaldi
+                /* useLockIconForSecureState= */ true,
+                null); // Vivaldi
     }
 
     // Implement PaymentHandlerToolbarMediatorDelegate.
@@ -166,6 +167,7 @@ public class PaymentHandlerToolbarCoordinator implements PaymentHandlerToolbarMe
                         /* ephemeralTabCoordinatorSupplier= */ null,
                         ChromePageInfoHighlight.noHighlight(),
                         null),
-                ChromePageInfoHighlight.noHighlight());
+                ChromePageInfoHighlight.noHighlight(),
+                null); // Vivaldi
     }
 }

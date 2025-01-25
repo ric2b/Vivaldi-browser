@@ -297,7 +297,6 @@ LocalFrameView::LocalFrameView(LocalFrame& frame, gfx::Rect frame_rect)
       intersection_observation_state_(kNotNeeded),
       main_thread_scrolling_reasons_(0),
       forced_layout_stack_depth_(0),
-      forced_layout_start_time_(base::TimeTicks()),
       paint_frame_count_(0),
       unique_id_(NewUniqueObjectId()),
       layout_shift_tracker_(MakeGarbageCollected<LayoutShiftTracker>(this)),
@@ -784,8 +783,6 @@ void LocalFrameView::PerformLayout() {
     }
   }
 
-  document->Fetcher()->UpdateAllImageResourcePriorities();
-
   Lifecycle().AdvanceTo(DocumentLifecycle::kAfterPerformLayout);
 
   TRACE_EVENT_END0(PERFORM_LAYOUT_TRACE_CATEGORIES,
@@ -852,25 +849,32 @@ void LocalFrameView::UpdateLayout() {
   probe::DidChangeViewport(frame_.Get());
 }
 
-void LocalFrameView::WillStartForcedLayout() {
+void LocalFrameView::WillStartForcedLayout(DocumentUpdateReason reason) {
+  if (!base::TimeTicks::IsHighResolution()) {
+    return;
+  }
+
   // UpdateLayout is re-entrant for auto-sizing and plugins. So keep
   // track of stack depth to include all the time in the top-level call.
   forced_layout_stack_depth_++;
   if (forced_layout_stack_depth_ > 1)
     return;
-  forced_layout_start_time_ = base::TimeTicks::Now();
-  if (auto* metrics_aggregator = GetUkmAggregator())
-    metrics_aggregator->BeginForcedLayout();
+  if (auto* metrics_aggregator = GetUkmAggregator()) {
+    DCHECK(!forced_layout_timer_.has_value());
+    forced_layout_timer_ =
+        metrics_aggregator->GetScopedForcedLayoutTimer(reason);
+  }
 }
 
-void LocalFrameView::DidFinishForcedLayout(DocumentUpdateReason reason) {
+void LocalFrameView::DidFinishForcedLayout() {
+  if (!base::TimeTicks::IsHighResolution()) {
+    return;
+  }
+
   CHECK_GT(forced_layout_stack_depth_, (unsigned)0);
   forced_layout_stack_depth_--;
-  if (!forced_layout_stack_depth_ && base::TimeTicks::IsHighResolution()) {
-    if (auto* metrics_aggregator = GetUkmAggregator()) {
-      metrics_aggregator->RecordForcedLayoutSample(
-          reason, forced_layout_start_time_, base::TimeTicks::Now());
-    }
+  if (!forced_layout_stack_depth_) {
+    forced_layout_timer_.reset();
   }
 }
 
@@ -1030,7 +1034,7 @@ void LocalFrameView::ForceUpdateViewportIntersections() {
   // update; but we can't wait for a lifecycle update to run them, because a
   // hidden frame won't run lifecycle updates. Force layout and run them now.
   DisallowThrottlingScope disallow_throttling(*this);
-  UpdateLifecycleToPrePaintClean(
+  UpdateAllLifecyclePhasesExceptPaint(
       DocumentUpdateReason::kIntersectionObservation);
   ComputeIntersectionsContext context;
   UpdateViewportIntersectionsForSubtree(
@@ -1682,6 +1686,7 @@ void LocalFrameView::PerformPostLayoutTasks(bool visual_viewport_size_changed) {
   Document* document = GetFrame().GetDocument();
   DCHECK(document);
 
+  document->Fetcher()->UpdateAllImageResourcePriorities();
   UpdateDocumentDraggableRegions();
   ExecutePendingStickyUpdates();
 
@@ -1931,12 +1936,6 @@ bool LocalFrameView::UpdateAllLifecyclePhasesForTest() {
   return result;
 }
 
-bool LocalFrameView::UpdateLifecycleToPrePaintClean(
-    DocumentUpdateReason reason) {
-  return GetFrame().LocalFrameRoot().View()->UpdateLifecyclePhases(
-      DocumentLifecycle::kPrePaintClean, reason);
-}
-
 bool LocalFrameView::UpdateLifecycleToCompositingInputsClean(
     DocumentUpdateReason reason) {
   return GetFrame().LocalFrameRoot().View()->UpdateLifecyclePhases(
@@ -1947,6 +1946,28 @@ bool LocalFrameView::UpdateAllLifecyclePhasesExceptPaint(
     DocumentUpdateReason reason) {
   return GetFrame().LocalFrameRoot().View()->UpdateLifecyclePhases(
       DocumentLifecycle::kPrePaintClean, reason);
+}
+
+void LocalFrameView::DryRunPaintingForPrerender() {
+  TRACE_EVENT("blink", "DryRunPaintingForPrerender");
+  CHECK(GetFrame().GetDocument()->IsPrerendering());
+  bool update_result =
+      GetFrame().LocalFrameRoot().View()->UpdateLifecyclePhases(
+          DocumentLifecycle::kPrePaintClean, DocumentUpdateReason::kPrerender);
+  if (!update_result) {
+    return;
+  }
+  if (paint_artifact_compositor_) {
+    // If `paint_artifact_compositor_` has been created, PaintArtifact might be
+    // referred in its `pending_layers`, and since creating the paint tree again
+    // may discard the old PaintArtifact, which breaks the reference
+    // relationship down, we should not build the tree again. It is very
+    // unlikely to reach here, just to avoid race conditions.
+    return;
+  }
+  std::optional<PaintController> paint_controller;
+  PaintTree(PaintBenchmarkMode::kNormal, paint_controller);
+  return;
 }
 
 void LocalFrameView::UpdateLifecyclePhasesForPrinting() {
@@ -2029,14 +2050,24 @@ bool LocalFrameView::NotifyResizeObservers() {
     if (resize_controller->SkippedObservations() &&
         !resize_controller->IsLoopLimitErrorDispatched()) {
       resize_controller->ClearObservations();
-      ErrorEvent* error = ErrorEvent::Create(
-          "ResizeObserver loop completed with undelivered notifications.",
-          CaptureSourceLocation(frame_->DomWindow()), nullptr);
-      // We're using |SanitizeScriptErrors::kDoNotSanitize| as the error is made
-      // by blink itself.
-      // TODO(yhirano): Reconsider this.
-      frame_->DomWindow()->DispatchErrorEvent(
-          error, SanitizeScriptErrors::kDoNotSanitize);
+
+      if (auto* script_state = ToScriptStateForMainWorld(frame_->DomWindow())) {
+        ScriptState::Scope scope(script_state);
+        const String message =
+            "ResizeObserver loop completed with undelivered notifications.";
+        ScriptValue value(script_state->GetIsolate(),
+                          V8String(script_state->GetIsolate(), message));
+        // TODO(pdr): We could report the source location of one of the
+        // observers which had skipped observations.
+        ErrorEvent* error = ErrorEvent::Create(message, CaptureSourceLocation(),
+                                               value, &script_state->World());
+        // We're using |SanitizeScriptErrors::kDoNotSanitize| as the error is
+        // made by blink itself.
+        // TODO(yhirano): Reconsider this.
+        frame_->DomWindow()->DispatchErrorEvent(
+            error, SanitizeScriptErrors::kDoNotSanitize);
+      }
+
       // Ensure notifications will get delivered in next cycle.
       ScheduleAnimation();
       resize_controller->SetLoopLimitErrorDispatched(true);
@@ -2645,7 +2676,7 @@ void LocalFrameView::RunPaintLifecyclePhase(PaintBenchmarkMode benchmark_mode) {
   if (AnyFrameIsPrintingOrPaintingPreview())
     return;
 
-  bool needed_update;
+  bool needed_full_update = false;
   {
     // paint_controller will be constructed when PaintTree repaints, and will
     // be destructed after PushPaintArtifactToCompositor.
@@ -2657,14 +2688,15 @@ void LocalFrameView::RunPaintLifecyclePhase(PaintBenchmarkMode benchmark_mode) {
             PaintBenchmarkMode::kForcePaintArtifactCompositorUpdate) {
       paint_artifact_compositor_->SetNeedsUpdate();
     }
-    needed_update = !paint_artifact_compositor_ ||
-                    paint_artifact_compositor_->NeedsUpdate();
+    needed_full_update = !paint_artifact_compositor_ ||
+                         paint_artifact_compositor_->NeedsUpdate() ==
+                             PaintArtifactCompositor::UpdateType::kFull;
     PushPaintArtifactToCompositor(paint_controller.has_value());
   }
 
   size_t total_animations_count = 0;
   ForAllNonThrottledLocalFrameViews(
-      [this, needed_update,
+      [this, needed_full_update,
        &total_animations_count](LocalFrameView& frame_view) {
         if (auto* scrollable_area = frame_view.GetScrollableArea())
           scrollable_area->UpdateCompositorScrollAnimations();
@@ -2687,7 +2719,7 @@ void LocalFrameView::RunPaintLifecyclePhase(PaintBenchmarkMode benchmark_mode) {
           ScriptForbiddenScope forbid_script;
           document.GetDocumentAnimations().UpdateAnimations(
               DocumentLifecycle::kPaintClean, paint_artifact_compositor_.Get(),
-              needed_update);
+              needed_full_update);
         }
         total_animations_count +=
             document.GetDocumentAnimations().GetAnimationsCount();
@@ -2706,7 +2738,7 @@ void LocalFrameView::RunPaintLifecyclePhase(PaintBenchmarkMode benchmark_mode) {
   // nodes according to the current animation state. This is mainly for
   // the running composited animations which didn't change state during
   // above UpdateAnimations() but associated with new paint property nodes.
-  if (needed_update) {
+  if (needed_full_update) {
     auto* root_layer = RootCcLayer();
     if (root_layer && root_layer->layer_tree_host()) {
       root_layer->layer_tree_host()->mutator_host()->InitClientAnimationState();
@@ -2870,7 +2902,7 @@ void LocalFrameView::PaintTree(
 
     needs_clear_repaint_flags = true;
     if (paint_artifact_compositor_) {
-      paint_artifact_compositor_->SetNeedsFullUpdateAfterPaintIfNeeded(
+      paint_artifact_compositor_->SetNeedsUpdateAfterRepaint(
           previous_artifact,
           paint_controller_persistent_data_->GetPaintArtifact());
     }
@@ -2942,10 +2974,9 @@ void LocalFrameView::PushPaintArtifactToCompositor(bool repainted) {
 
   // Skip updating property trees, pushing cc::Layers, and issuing raster
   // invalidations if possible.
-  if (!paint_artifact_compositor_->NeedsUpdate()) {
+  if (paint_artifact_compositor_->TryFastPathUpdate(
+          paint_controller_persistent_data_->GetPaintArtifact())) {
     if (repainted) {
-      paint_artifact_compositor_->UpdateRepaintedLayers(
-          paint_controller_persistent_data_->GetPaintArtifact());
       CreatePaintTimelineEvents();
     }
     // TODO(pdr): Should we clear the property tree state change bits (
@@ -3117,6 +3148,10 @@ void LocalFrameView::UpdateStyleAndLayout() {
     ScriptForbiddenScope::AllowUserAgentScript allow_script;
     did_layout = UpdateStyleAndLayoutInternal();
   }
+
+  // Update counters after layout since counters may be added during layout for
+  // generated ::scroll-markers.
+  frame_->GetDocument()->GetStyleEngine().UpdateCounters();
 
   // Second pass: run autosize until it stabilizes
   if (auto_size_info_) {
@@ -4597,7 +4632,7 @@ String LocalFrameView::MainThreadScrollingReasonsAsText() {
     const auto* compositor =
         GetFrame().LocalFrameRoot().View()->paint_artifact_compositor_.Get();
     CHECK(compositor);
-    reasons = compositor->GetMainThreadScrollingReasons(*properties->Scroll());
+    reasons = compositor->GetMainThreadRepaintReasons(*properties->Scroll());
   }
   return String(cc::MainThreadScrollingReason::AsText(reasons).c_str());
 }

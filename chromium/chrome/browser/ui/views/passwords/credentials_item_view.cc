@@ -162,6 +162,10 @@ CredentialsItemView::CredentialsItemView(
   }
 
   SetFocusBehavior(FocusBehavior::ALWAYS);
+  SetInstallFocusRingOnFocus(true);
+  // With Focus Ring on Focus there is a line around the button.
+  // We want to remove this line so setting the thickness as 0.
+  views::FocusRing::Get(this)->SetHaloThickness(0.0f);
 }
 
 CredentialsItemView::~CredentialsItemView() = default;
@@ -176,7 +180,8 @@ int CredentialsItemView::GetPreferredHeight() const {
 }
 
 void CredentialsItemView::OnPaintBackground(gfx::Canvas* canvas) {
-  if (GetState() == STATE_PRESSED || GetState() == STATE_HOVERED) {
+  if (GetState() == STATE_PRESSED || GetState() == STATE_HOVERED ||
+      HasFocus()) {
     canvas->DrawColor(
         GetColorProvider()->GetColor(ui::kColorMenuItemBackgroundSelected));
   }

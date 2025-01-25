@@ -42,12 +42,12 @@ class CastAppDiscoveryService {
 
   virtual ~CastAppDiscoveryService() = default;
 
-  // Adds an availability query for |source|. Results will be continuously
-  // returned via |callback| until the returned Subscription is destroyed by the
-  // caller.  If there are cached results available, |callback| will be invoked
-  // before this method returns.  |callback| may be invoked with an empty list
+  // Adds an availability query for `source`. Results will be continuously
+  // returned via `callback` until the returned Subscription is destroyed by the
+  // caller.  If there are cached results available, `callback` will be invoked
+  // before this method returns.  `callback` may be invoked with an empty list
   // if all receivers respond to the respective queries with "unavailable" or
-  // don't respond before a timeout.  |callback| may be invoked successively
+  // don't respond before a timeout.  `callback` may be invoked successively
   // with the same list.
   virtual Subscription StartObservingAvailability(
       const CastMediaSource& source,

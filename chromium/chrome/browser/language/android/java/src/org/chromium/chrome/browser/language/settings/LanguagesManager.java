@@ -246,9 +246,10 @@ public class LanguagesManager {
                 (item) -> {
                     // Vivaldi
                     if (BuildConfig.IS_VIVALDI) {
-                        return item.isUISupported();
-                    }
-                    return item.isUISupported() && !item.equals(currentUiLanguage);
+                        return item.isUiSupported();
+                    } // End Vivladi
+
+                    return item.isUiSupported() && !item.equals(currentUiLanguage);
                 };
         addItemsToResult(results, getUserAcceptLanguageItems(), filter);
         addItemsToResult(results, mLanguagesMap.values(), filter);
@@ -272,7 +273,7 @@ public class LanguagesManager {
         LinkedHashSet<LanguageItem> results = new LinkedHashSet<>();
         Predicate<LanguageItem> filter =
                 (item) -> {
-                    return item.isUISupported();
+                    return item.isUiSupported();
                 };
         addItemsToResult(results, mLanguagesMap.values(), filter);
         return new ArrayList<>(results);

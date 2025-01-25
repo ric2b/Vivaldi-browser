@@ -656,6 +656,32 @@
     "cmd": [
       "vpython3",
       "RECIPE_REPO[depot_tools]/gerrit_client.py",
+      "addmessage",
+      "--host",
+      "https://chromium-review.googlesource.com",
+      "--change",
+      "123",
+      "--revision",
+      "current",
+      "--message",
+      "This is a comment message",
+      "--json_file",
+      "/path/to/tmp/json"
+    ],
+    "env": {
+      "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
+    },
+    "infra_step": true,
+    "name": "gerrit add message",
+    "~followup_annotations": [
+      "@@@STEP_LOG_LINE@json.output@{}@@@",
+      "@@@STEP_LOG_END@json.output@@@"
+    ]
+  },
+  {
+    "cmd": [
+      "vpython3",
+      "RECIPE_REPO[depot_tools]/gerrit_client.py",
       "abandon",
       "--host",
       "https://chromium-review.googlesource.com",

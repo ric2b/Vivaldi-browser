@@ -28,11 +28,11 @@
 // This is an example to manually test surface code. Controls are the following, scoped to the
 // currently focused window:
 //  - W: creates a new window.
-//  - L: Latches the current swapchain, to check what happens when the window changes but not the
-//    swapchain.
+//  - L: Latches the current surface, to check what happens when the window changes but not the
+//    surface.
 //  - R: switches the rendering mode, between "The Red Triangle" and color-cycling clears that's
 //    (WARNING) likely seizure inducing.
-//  - D: cycles the divisor for the swapchain size.
+//  - D: cycles the divisor for the surface size.
 //  - P: switches present modes.
 //  - A: switches alpha modes.
 //  - F: switches formats.
@@ -58,7 +58,7 @@
 //
 //  - Resizing tests (with the triangle render mode):
 //    - Check that cycling divisors on the triangle produces lower and lower resolution triangles.
-//    - Check latching the swapchain config and resizing the window a bunch (smaller, bigger, and
+//    - Check latching the surface config and resizing the window a bunch (smaller, bigger, and
 //      diagonal aspect ratio).
 //
 //  - Config change tests:
@@ -422,7 +422,7 @@ int main(int argc, const char* argv[]) {
 
     wgpu::Future adapterFuture = instance.RequestAdapter(
         &options, wgpu::CallbackMode::WaitAnyOnly,
-        [&](wgpu::RequestAdapterStatus status, wgpu::Adapter adapterIn, const char* message) {
+        [&](wgpu::RequestAdapterStatus status, wgpu::Adapter adapterIn, wgpu::StringView message) {
             if (status != wgpu::RequestAdapterStatus::Success) {
                 dawn::ErrorLog() << "Failed to get an adapter: " << message;
                 return;
@@ -440,10 +440,17 @@ int main(int argc, const char* argv[]) {
     std::cout << "Using adapter \"" << adapterInfo.device << "\" on " << adapterInfo.backendType
               << ".\n";
 
+    wgpu::DeviceDescriptor deviceDesc;
+    deviceDesc.SetUncapturedErrorCallback(
+        [](const wgpu::Device&, wgpu::ErrorType errorType, wgpu::StringView message) {
+            dawn::ErrorLog() << errorType << " error: " << message;
+            DAWN_ASSERT(false);
+        });
+
     // Setup the device on that adapter.
     wgpu::Future deviceFuture = adapter.RequestDevice(
-        nullptr, wgpu::CallbackMode::WaitAnyOnly,
-        [&](wgpu::RequestDeviceStatus status, wgpu::Device deviceIn, const char* message) {
+        &deviceDesc, wgpu::CallbackMode::WaitAnyOnly,
+        [&](wgpu::RequestDeviceStatus status, wgpu::Device deviceIn, wgpu::StringView message) {
             if (status != wgpu::RequestDeviceStatus::Success) {
                 dawn::ErrorLog() << "Failed to get a device:" << message;
                 return;
@@ -456,30 +463,6 @@ int main(int argc, const char* argv[]) {
         return 1;
     }
 
-    device.SetUncapturedErrorCallback(
-        [](WGPUErrorType errorType, const char* message, void*) {
-            const char* errorTypeName = "";
-            switch (errorType) {
-                case WGPUErrorType_Validation:
-                    errorTypeName = "Validation";
-                    break;
-                case WGPUErrorType_OutOfMemory:
-                    errorTypeName = "Out of memory";
-                    break;
-                case WGPUErrorType_Unknown:
-                    errorTypeName = "Unknown";
-                    break;
-                case WGPUErrorType_DeviceLost:
-                    errorTypeName = "Device lost";
-                    break;
-                default:
-                    DAWN_UNREACHABLE();
-                    return;
-            }
-            dawn::ErrorLog() << errorTypeName << " error: " << message;
-            DAWN_ASSERT(false);
-        },
-        nullptr);
     queue = device.GetQueue();
 
     // Create the first window, since the example exits when there are no windows.

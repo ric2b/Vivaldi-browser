@@ -86,10 +86,10 @@ content::WebContents* GetWebContentsFromTabStrip(
     std::string* error) {
   content::WebContents* contents = nullptr;
   bool include_incognito = true;
-  Browser* browser;
+  extensions::WindowController* browser;
   int tab_index;
   extensions::ExtensionTabUtil::GetTabById(tab_id, browser_context,
-                                           include_incognito, &browser, NULL,
+                                           include_incognito, &browser,
                                            &contents, &tab_index);
   if (error && !contents) {
     *error = "Failed to find a tab with id " + std::to_string(tab_id);

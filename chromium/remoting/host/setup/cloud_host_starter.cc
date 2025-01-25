@@ -19,7 +19,7 @@
 #include "remoting/host/pin_hash.h"
 #include "remoting/host/setup/host_starter.h"
 #include "remoting/host/setup/host_starter_base.h"
-#include "remoting/proto/google/internal/remoting/cloud/v1alpha/remote_access_service.pb.h"
+#include "remoting/proto/google/remoting/cloud/v1/provisioning_service.pb.h"
 #include "remoting/proto/remoting/v1/cloud_messages.pb.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -30,12 +30,15 @@ namespace {
 using LegacyProvisionGceInstanceResponse =
     apis::v1::ProvisionGceInstanceResponse;
 using ProvisionGceInstanceResponse =
-    ::google::internal::remoting::cloud::v1alpha::ProvisionGceInstanceResponse;
+    ::google::remoting::cloud::v1::ProvisionGceInstanceResponse;
 
 // A helper class which provisions a cloud machine for Chrome Remote Desktop.
 class CloudHostStarter : public HostStarterBase {
  public:
   explicit CloudHostStarter(
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+  CloudHostStarter(
+      const std::string& api_key,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
 
   CloudHostStarter(const CloudHostStarter&) = delete;
@@ -71,6 +74,15 @@ CloudHostStarter::CloudHostStarter(
       cloud_service_client_(
           std::make_unique<CloudServiceClient>(url_loader_factory)) {}
 
+CloudHostStarter::CloudHostStarter(
+    const std::string& api_key,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
+    : HostStarterBase(url_loader_factory),
+      cloud_service_client_(
+          std::make_unique<CloudServiceClient>(api_key, url_loader_factory)) {
+  params().api_key = api_key;
+}
+
 CloudHostStarter::~CloudHostStarter() = default;
 
 void CloudHostStarter::RegisterNewHost(
@@ -86,7 +98,6 @@ void CloudHostStarter::RegisterNewHost(
   if (!params().api_key.empty()) {
     cloud_service_client_->ProvisionGceInstance(
         params().owner_email, params().name, public_key, existing_host_id(),
-        params().api_key,
         base::BindOnce(&CloudHostStarter::OnProvisionGceInstanceResponse,
                        weak_ptr_factory_.GetWeakPtr()));
   } else {
@@ -155,15 +166,21 @@ void CloudHostStarter::ApplyConfigValues(base::Value::Dict& config) {
   } else {
     config.Set(kHostTypeHintPath, kCloudHostTypeHint);
     config.Set(kRequireSessionAuthorizationPath, true);
-    config.Set(kCloudApiKeyPath, params().api_key);
   }
 }
 
 }  // namespace
 
 std::unique_ptr<HostStarter> ProvisionCloudInstance(
+    const std::string& api_key,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
-  return std::make_unique<CloudHostStarter>(url_loader_factory);
+  // TODO: joedow - Remove this bit when we no longer support the legacy
+  // provisioning code path.
+  if (api_key.empty()) {
+    return std::make_unique<CloudHostStarter>(url_loader_factory);
+  }
+
+  return std::make_unique<CloudHostStarter>(api_key, url_loader_factory);
 }
 
 }  // namespace remoting

@@ -103,7 +103,7 @@ void UpdateService::SendUninstallPing(const std::string& id,
 }
 
 void UpdateService::OnCrxStateChange(UpdateFoundCallback update_found_callback,
-                                     update_client::CrxUpdateItem item) {
+                                     const update_client::CrxUpdateItem& item) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   // Custom attributes can only be sent for NOT_UPDATED/UPDATE_FOUND events.
@@ -123,12 +123,10 @@ void UpdateService::OnCrxStateChange(UpdateFoundCallback update_found_callback,
     case update_client::ComponentState::kChecking:
     case update_client::ComponentState::kDownloadingDiff:
     case update_client::ComponentState::kDownloading:
-    case update_client::ComponentState::kDownloaded:
     case update_client::ComponentState::kUpdatingDiff:
     case update_client::ComponentState::kUpdating:
     case update_client::ComponentState::kUpdated:
     case update_client::ComponentState::kUpdateError:
-    case update_client::ComponentState::kPingOnly:
     case update_client::ComponentState::kRun:
     case update_client::ComponentState::kLastStatus:
       break;
@@ -167,8 +165,9 @@ void UpdateService::StartUpdateCheck(
 
   if (!ExtensionsBrowserClient::Get()->IsBackgroundUpdateAllowed()) {
     VLOG(1) << "UpdateService - Extension update not allowed.";
-    if (!callback.is_null())
+    if (!callback.is_null()) {
       std::move(callback).Run();
+    }
     return;
   }
 
@@ -242,24 +241,27 @@ void UpdateService::UpdateCheckComplete(InProgressUpdate update) {
     }
   }
 
-  if (!update.callback.is_null())
+  if (!update.callback.is_null()) {
     std::move(update.callback).Run();
+  }
 }
 
 void UpdateService::AddUpdateClientObserver(
     update_client::UpdateClient::Observer* observer) {
-  if (update_client_)
+  if (update_client_) {
     update_client_->AddObserver(observer);
+  }
 }
 
 void UpdateService::RemoveUpdateClientObserver(
     update_client::UpdateClient::Observer* observer) {
-  if (update_client_)
+  if (update_client_) {
     update_client_->RemoveObserver(observer);
+  }
 }
 
 base::Value::Dict UpdateService::GetExtensionOmahaAttributes(
-    update_client::CrxUpdateItem& update_item) {
+    const update_client::CrxUpdateItem& update_item) {
   base::Value::Dict attributes;
 
   for (const char* key : kOmahaAttributes) {
@@ -268,8 +270,9 @@ base::Value::Dict UpdateService::GetExtensionOmahaAttributes(
     // or does not exist.
     // Only create the attribute if it's defined in the custom update check
     // data. We want to distinguish true, false and undefined values.
-    if (iter != update_item.custom_updatecheck_data.end())
+    if (iter != update_item.custom_updatecheck_data.end()) {
       attributes.Set(key, iter->second == "true");
+    }
   }
   return attributes;
 }

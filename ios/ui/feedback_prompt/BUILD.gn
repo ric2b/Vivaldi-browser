@@ -1,0 +1,65 @@
+# Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/apple/swift_source_set.gni")
+
+source_set("vivaldi_feedback_prompt") {
+  sources = [
+    "vivaldi_feedback_view_consumer.h",
+    "vivaldi_feedback_view_coordinator.h",
+    "vivaldi_feedback_view_coordinator.mm",
+    "vivaldi_feedback_view_delegate.h",
+    "vivaldi_feedback_view_entry_point.h",
+    "vivaldi_feedback_view_mediator.h",
+    "vivaldi_feedback_view_mediator.mm",
+  ]
+
+  deps = [
+    ":vivaldi_feedback_prompt_swift",
+    "//base:i18n",
+    "//base",
+    "//components/bookmarks/browser:browser",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/common/ui/util",
+    "//ui/base",
+    "//vivaldi/ios/ui/helpers",
+    "resources:assets",
+    "resources:animation_files",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+  ]
+}
+
+swift_source_set("vivaldi_feedback_prompt_swift") {
+  bridge_header = "vivaldi_feedback_view_swift_bridge.h"
+  sources = [
+    "vivaldi_feedback_animation_view.swift",
+    "vivaldi_feedback_editor_view.swift",
+    "vivaldi_feedback_issue_constants.swift",
+    "vivaldi_feedback_issue_detail_view.swift",
+    "vivaldi_feedback_issue_row.swift",
+    "vivaldi_feedback_issue_view.swift",
+    "vivaldi_feedback_issue.swift",
+    "vivaldi_feedback_path.swift",
+    "vivaldi_feedback_view_constants.swift",
+    "vivaldi_feedback_view_provider.swift",
+    "vivaldi_feedback_view_state_type.swift",
+    "vivaldi_feedback_view_state.swift",
+    "vivaldi_feedback_view.swift",
+  ]
+
+  deps = [
+    "//vivaldi/ios/ui/helpers:helpers_swift",
+    "//vivaldi/ios/ui/lottie_swiftui:lottie_swiftui",
+    "//vivaldi/ios/ui/lottie_swiftui:lottie_objc_wrapper",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+    "SwiftUI.framework",
+  ]
+}

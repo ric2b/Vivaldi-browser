@@ -378,8 +378,8 @@ FederatedAuthRequestResultToProtocol(
       return FederatedAuthRequestIssueReasonEnum::
           MissingTransientUserActivation;
     }
-    case FederatedAuthRequestResult::kReplacedByButtonMode: {
-      return FederatedAuthRequestIssueReasonEnum::ReplacedByButtonMode;
+    case FederatedAuthRequestResult::kReplacedByActiveMode: {
+      return FederatedAuthRequestIssueReasonEnum::ReplacedByActiveMode;
     }
     case FederatedAuthRequestResult::kInvalidFieldsSpecified: {
       return FederatedAuthRequestIssueReasonEnum::InvalidFieldsSpecified;
@@ -1760,6 +1760,20 @@ std::unique_ptr<protocol::Array<protocol::String>> BuildExclusionReasons(
         protocol::Audits::CookieExclusionReasonEnum::ExcludeThirdPartyPhaseout);
   }
 
+  if (base::FeatureList::IsEnabled(net::features::kEnablePortBoundCookies) &&
+      status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_PORT_MISMATCH)) {
+    exclusion_reasons->push_back(
+        protocol::Audits::CookieExclusionReasonEnum::ExcludePortMismatch);
+  }
+
+  if (base::FeatureList::IsEnabled(net::features::kEnableSchemeBoundCookies) &&
+      status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_SCHEME_MISMATCH)) {
+    exclusion_reasons->push_back(
+        protocol::Audits::CookieExclusionReasonEnum::ExcludeSchemeMismatch);
+  }
+
   return exclusion_reasons;
 }
 
@@ -1825,6 +1839,16 @@ std::unique_ptr<protocol::Array<protocol::String>> BuildWarningReasons(
           net::CookieInclusionStatus::WARN_THIRD_PARTY_PHASEOUT)) {
     warning_reasons->push_back(
         protocol::Audits::CookieWarningReasonEnum::WarnThirdPartyPhaseout);
+  }
+
+  if (status.exemption_reason() ==
+      net::CookieInclusionStatus::ExemptionReason::k3PCDMetadata) {
+    warning_reasons->push_back(protocol::Audits::CookieWarningReasonEnum::
+                                   WarnDeprecationTrialMetadata);
+  } else if (status.exemption_reason() ==
+             net::CookieInclusionStatus::ExemptionReason::k3PCDHeuristics) {
+    warning_reasons->push_back(protocol::Audits::CookieWarningReasonEnum::
+                                   WarnThirdPartyCookieHeuristic);
   }
 
   // This warning only affects cookies when the corresponding feature is
@@ -2009,7 +2033,7 @@ void BuildAndReportBrowserInitiatedIssue(
     issue = BuildAttributionReportingIssue(
         info->details->attribution_reporting_issue_details);
   } else {
-    NOTREACHED_IN_MIGRATION() << "Unsupported type of browser-initiated issue";
+    NOTREACHED() << "Unsupported type of browser-initiated issue";
   }
   ReportBrowserInitiatedIssue(frame, issue.get());
 }

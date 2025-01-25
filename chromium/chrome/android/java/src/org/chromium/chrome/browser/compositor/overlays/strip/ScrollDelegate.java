@@ -4,39 +4,17 @@
 
 package org.chromium.chrome.browser.compositor.overlays.strip;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
-import android.util.FloatProperty;
 
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.MathUtils;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.StackScroller;
-import org.chromium.chrome.browser.layouts.animation.CompositorAnimationHandler;
-import org.chromium.chrome.browser.layouts.animation.CompositorAnimator;
 import org.chromium.ui.base.LocalizationUtils;
-
-import java.util.List;
 
 /** Delegate to manage the scrolling logic for the tab strip. */
 public class ScrollDelegate {
-    /** A property for animations to use for changing the X offset of the tab. */
-    private static final FloatProperty<ScrollDelegate> SCROLL_OFFSET =
-            new FloatProperty<>("scrollOffset") {
-                @Override
-                public void setValue(ScrollDelegate object, float value) {
-                    object.setScrollOffset(value);
-                }
-
-                @Override
-                public Float get(ScrollDelegate object) {
-                    return object.getScrollOffset();
-                }
-            };
-
     // Constants.
-    private static final int ANIM_TAB_SLIDE_OUT_MS = 250;
     private static final int SCROLL_DURATION_MS = 250;
     private static final int SCROLL_DURATION_MS_MEDIUM = 350;
     private static final int SCROLL_DURATION_MS_LONG = 450;
@@ -62,13 +40,10 @@ public class ScrollDelegate {
     private float mMinScrollOffset;
 
     /**
-     * Views may shift when we enter reorder mode. We auto-scroll during this shift to make it
-     * appear as though the reordering view has no apparent movement. When the tab strip isn't full,
-     * the attempted auto-scrolling may be "cancelled" as it is out-of-bounds of mMinScrollOffset,
-     * making it appear as though the reordering view moved away from where the user initiated the
-     * reorder. mReorderExtraMinScrollOffset is allocated to allow for auto-scrolling in this case.
+     * Additional space allocated at the start of the tab strip to allow dragging out of a tab
+     * group, if needed.
      */
-    private float mReorderExtraMinScrollOffset;
+    private float mReorderStartMargin;
 
     /**
      * Updates all internal resources and dimensions.
@@ -80,36 +55,21 @@ public class ScrollDelegate {
     }
 
     /**
-     * This is only meant to be used to support the SCROLL_OFFSET animator. Skip clamping, since
-     * some animations occur as the width of the views (and thus the minScrollOffset) is changing.
-     *
-     * @param scrollOffset The new scroll offset.
+     * @return The current scroll offset.
      */
-    @VisibleForTesting
-    void setScrollOffset(float scrollOffset) {
-        mScrollOffset = scrollOffset;
-    }
-
     float getScrollOffset() {
         return mScrollOffset;
     }
 
-    void setReorderMinScrollOffset(float reorderMinScrollOffset) {
-        mReorderExtraMinScrollOffset = reorderMinScrollOffset;
-    }
-
-    float getReorderExtraMinScrollOffset() {
-        return mReorderExtraMinScrollOffset;
-    }
-
     /**
+     * Sets the new scroll offset, and clamps to a valid value.
+     *
      * @param scrollOffset The new scroll offset.
      * @return The difference between the new and old scroll offsets, accounting for RTL.
      */
-    float setClampedScrollOffset(float scrollOffset) {
+    float setScrollOffset(float scrollOffset) {
         float oldScrollOffset = mScrollOffset;
-        mScrollOffset =
-                MathUtils.clamp(scrollOffset, mMinScrollOffset - mReorderExtraMinScrollOffset, 0);
+        mScrollOffset = MathUtils.clamp(scrollOffset, mMinScrollOffset, 0);
 
         return MathUtils.flipSignIf(
                 oldScrollOffset - mScrollOffset, LocalizationUtils.isLayoutRtl());
@@ -123,7 +83,7 @@ public class ScrollDelegate {
      */
     boolean updateScrollInProgress(long time) {
         if (mScroller.computeScrollOffset(time)) {
-            setClampedScrollOffset(mScroller.getCurrX());
+            setScrollOffset(mScroller.getCurrX());
             return true;
         }
         return false;
@@ -140,8 +100,6 @@ public class ScrollDelegate {
      * @param cachedTabWidth Ideal tab width in dp.
      * @param tabOverlapWidth Overlap width of tabs in dp.
      * @param groupTitleOverlapWidth Overlap width of group titles in dp.
-     * @param reorderStartMargin The margin added to allow reordering near the strip's start-side.
-     * @param shouldShowTrailingMargins Whether or not reorder trailing margins should be included.
      */
     void updateScrollOffsetLimits(
             StripLayoutView[] stripViews,
@@ -151,10 +109,9 @@ public class ScrollDelegate {
             float cachedTabWidth,
             float tabOverlapWidth,
             float groupTitleOverlapWidth,
-            float reorderStartMargin,
-            boolean shouldShowTrailingMargins,
             boolean showTabsAsFavIcon, // Vivaldi
             boolean showXButtonForBackgroundTabs) { // Vivaldi
+        // TODO(crbug.com/376525967): Pull overlap width from utils constant instead of passing in.
         // 1. Compute the width of the available space for all tabs.
         float stripWidth = width - leftMargin - rightMargin;
 
@@ -176,12 +133,9 @@ public class ScrollDelegate {
             }
         }
 
-        if (shouldShowTrailingMargins) {
-            totalViewWidth += reorderStartMargin;
-            for (int i = 0; i < stripViews.length; i++) {
-                if (stripViews[i] instanceof StripLayoutTab tab) {
-                    totalViewWidth += tab.getTrailingMargin();
-                }
+        for (int i = 0; i < stripViews.length; i++) {
+            if (stripViews[i] instanceof StripLayoutTab tab) {
+                totalViewWidth += tab.getTrailingMargin();
             }
         }
 
@@ -196,12 +150,41 @@ public class ScrollDelegate {
         // 3. Correct fencepost error in totalViewWidth;
         totalViewWidth = totalViewWidth + tabOverlapWidth;
 
-        // 4. Calculate the minimum scroll offset.  Round > -EPSILON to 0.
+        // 4. Calculate the minimum scroll offset.
         mMinScrollOffset = Math.min(0.f, stripWidth - totalViewWidth);
+
+        // 5. Always include the reorder start margin in the minScrollOffset calculations, so it
+        // can be scrolled offscreen, regardless of how full the rest of the strip is. If needed,
+        // round > -EPSILON to 0.
+        mMinScrollOffset -= mReorderStartMargin;
         if (mMinScrollOffset > -EPSILON) mMinScrollOffset = 0.f;
 
-        // 5. Clamp mScrollOffset to make sure it's in the valid range.
-        setClampedScrollOffset(mScrollOffset);
+        // 6. Clamp mScrollOffset to make sure it's in the valid range.
+        setScrollOffset(mScrollOffset);
+    }
+
+    /**
+     * Adjusts the scroll offset based on the change in start margin to make it appear as though the
+     * interacting tab does not move. Also adjusts the minScrollOffset accordingly (without
+     * calculating from scratch) to ensure the new scroll offset will be valid.
+     *
+     * @param newStartMargin The new reorder start margin.
+     */
+    void setReorderStartMargin(float newStartMargin) {
+        float delta = newStartMargin - mReorderStartMargin;
+        mReorderStartMargin = newStartMargin;
+
+        // Adjusts the minScrollOffset here, since the next update cycle (which accounts for the new
+        // reorderStartMargin) will not yet have run.
+        mMinScrollOffset -= delta;
+        if (mMinScrollOffset > -EPSILON) mMinScrollOffset = 0.f;
+
+        // Auto-scroll to prevent any apparent movement.
+        setScrollOffset(mScrollOffset - delta);
+    }
+
+    float getReorderStartMargin() {
+        return mReorderStartMargin;
     }
 
     /**
@@ -238,7 +221,7 @@ public class ScrollDelegate {
                     time,
                     getScrollDuration(delta));
         } else {
-            setClampedScrollOffset(mScrollOffset + delta);
+            setScrollOffset(mScrollOffset + delta);
         }
     }
 
@@ -274,74 +257,6 @@ public class ScrollDelegate {
     }
 
     /**
-     * Sets the new tab strip's start margin and auto-scrolls the required amount to make it appear
-     * as though the interacting tab does not move. Done through a CompositorAnimator to keep in
-     * sync with the other strip animations that may affect the min scroll offset. This doesn't
-     * visually scroll the strip, but instead makes it so the interacting tab appears to stay in the
-     * same place.
-     *
-     * @param animationHandler The {@link CompositorAnimationHandler}.
-     * @param resetOffset True when we are auto-scrolling when exiting reorder mode. This will clear
-     *     the additional min offset that was allocated for reorder, if any.
-     * @param numMarginsToSlide The number of margins to slide to make it appear as through the
-     *     interacting tab does not move.
-     * @param tabMarginWidth Width of a tab margin.
-     * @param startMarginDelta The change in start margin for the tab strip.
-     * @param stripStartMarginForReorder The empty space allocated at the start of the tab strip to
-     *     allow for dragging a tab past a group.
-     * @param isVisibleAreaFilled Whether or not there are enough tabs to fill the visible area on
-     *     the strip.
-     * @param animationList The list to add the animation to, or {@code null} if not animating.
-     */
-    void autoScrollForTabGroupMargins(
-            CompositorAnimationHandler animationHandler,
-            boolean resetOffset,
-            int numMarginsToSlide,
-            float tabMarginWidth,
-            float startMarginDelta,
-            float stripStartMarginForReorder,
-            boolean isVisibleAreaFilled,
-            List<Animator> animationList) {
-        float delta = (numMarginsToSlide * tabMarginWidth);
-        float startValue = mScrollOffset - startMarginDelta;
-        float endValue = startValue - delta;
-
-        // If there are not enough tabs to fill the visible area on the tab strip, then there is not
-        // enough room to auto-scroll for tab group margins. Allocate additional space to account
-        // for this. See http://crbug.com/1374918 for additional details.
-        if (!isVisibleAreaFilled) {
-            mReorderExtraMinScrollOffset = stripStartMarginForReorder + Math.abs(delta);
-        }
-
-        // Animate if needed. Otherwise, set to final value immediately.
-        if (animationList != null) {
-            Animator autoScrollAnimator =
-                    CompositorAnimator.ofFloatProperty(
-                            animationHandler,
-                            this,
-                            ScrollDelegate.SCROLL_OFFSET,
-                            startValue,
-                            endValue,
-                            ANIM_TAB_SLIDE_OUT_MS);
-            animationList.add(autoScrollAnimator);
-            if (resetOffset) {
-                autoScrollAnimator.addListener(
-                        new AnimatorListenerAdapter() {
-                            @Override
-                            public void onAnimationEnd(Animator animation) {
-                                mReorderExtraMinScrollOffset = 0.f;
-                            }
-                        });
-            }
-        } else {
-            setScrollOffset(endValue);
-            if (resetOffset) {
-                mReorderExtraMinScrollOffset = 0.f;
-            }
-        }
-    }
-
-    /**
      * @param isLeft Whether the offset from the left or right side should be returned.
      * @return The delta from the current scroll offset from the min/max scroll offset based on the
      *     requested side.
@@ -372,6 +287,15 @@ public class ScrollDelegate {
         } else {
             return SCROLL_DURATION_MS_LONG;
         }
+    }
+
+    /**
+     * Directly sets the scroll offset. This may temporarily set it to an un-clamped value.
+     *
+     * @param scrollOffset The new scroll offset.
+     */
+    void setNonClampedScrollOffsetForTesting(float scrollOffset) {
+        mScrollOffset = scrollOffset;
     }
 
     /**

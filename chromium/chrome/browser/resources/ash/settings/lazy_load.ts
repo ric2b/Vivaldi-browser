@@ -10,7 +10,7 @@
  *  - All subpages
  */
 
-import './strings.m.js';
+import '/strings.m.js';
 /** Top-level Advanced pages & About page */
 import './crostini_page/crostini_page.js';
 import './date_time_page/date_time_page.js';
@@ -189,6 +189,7 @@ export {KeyCombinationInputDialogElement} from './device_page/key_combination_in
 export {SettingsKeyboardElement} from './device_page/keyboard.js';
 export {SettingsPointersElement} from './device_page/pointers.js';
 export {SettingsPowerElement} from './device_page/power.js';
+export {setShortcutInputProviderForTesting} from './device_page/shortcut_input_mojo_interface_provider.js';
 export {SettingsStorageElement} from './device_page/storage.js';
 export {SettingsStylusElement} from './device_page/stylus.js';
 export {ContainerInfo, CROSTINI_TYPE, GuestId, GuestOsBrowserProxy, GuestOsBrowserProxyImpl, GuestOsSharedUsbDevice, PLUGIN_VM_TYPE, ShareableDevices} from './guest_os/guest_os_browser_proxy.js';
@@ -234,10 +235,11 @@ export {BluetoothBrailleDisplayUiElement} from './os_a11y_page/bluetooth_braille
 export {ChangeDictationLocaleDialog, DictationLocaleOption} from './os_a11y_page/change_dictation_locale_dialog.js';
 export {SettingsChromeVoxSubpageElement} from './os_a11y_page/chromevox_subpage.js';
 export {SettingsCursorAndTouchpadPageElement} from './os_a11y_page/cursor_and_touchpad_page.js';
+export {DisableTouchpadMode} from './os_a11y_page/disable_touchpad_constants.js';
 export {SettingsDisplayAndMagnificationSubpageElement} from './os_a11y_page/display_and_magnification_subpage.js';
 export {AddDialogPage, FaceGazeAddActionDialogElement} from './os_a11y_page/facegaze_actions_add_dialog.js';
 export {FaceGazeActionsCardElement} from './os_a11y_page/facegaze_actions_card.js';
-export {FACEGAZE_COMMAND_PAIR_ADDED_EVENT_NAME, FaceGazeCommandPair, FaceGazeUtils} from './os_a11y_page/facegaze_constants.js';
+export {AssignedKeyCombo, ComplexActions, FACEGAZE_COMMAND_PAIR_ADDED_EVENT_NAME, FaceGazeCommandPair, FaceGazeUtils, KeyCombination} from './os_a11y_page/facegaze_constants.js';
 export {FaceGazeCursorCardElement} from './os_a11y_page/facegaze_cursor_card.js';
 export {SettingsFaceGazeSubpageElement} from './os_a11y_page/facegaze_subpage.js';
 export {SettingsKeyboardAndTextInputPageElement} from './os_a11y_page/keyboard_and_text_input_page.js';
@@ -319,6 +321,7 @@ export {SettingsAccountManagerSubpageElement} from './os_people_page/account_man
 export {SettingsUsersAddUserDialogElement} from './os_people_page/add_user_dialog.js';
 export {FingerprintBrowserProxy, FingerprintBrowserProxyImpl, FingerprintInfo, FingerprintResultType} from './os_people_page/fingerprint_browser_proxy.js';
 export {SettingsFingerprintListSubpageElement} from './os_people_page/fingerprint_list_subpage.js';
+export {GraduationSettingsCardElement} from './os_people_page/graduation/graduation_settings_card.js';
 export {SettingsLockScreenElement} from './os_people_page/lock_screen_subpage.js';
 export {OsSettingsPersonalizationOptionsElement} from './os_people_page/os_personalization_options.js';
 export {OsSyncBrowserProxy, OsSyncBrowserProxyImpl, OsSyncPrefs} from './os_people_page/os_sync_browser_proxy.js';

@@ -16,8 +16,8 @@ import {AsyncLimiter} from '../base/async_limiter';
 import {searchSegment} from '../base/binary_search';
 import {assertExists, assertTrue} from '../base/logging';
 import {sqliteString} from '../base/string_utils';
-import {Time} from '../base/time';
-import {exists, Optional} from '../base/utils';
+import {Time, TimeSpan} from '../base/time';
+import {exists} from '../base/utils';
 import {ResultStepEventHandler} from '../public/search';
 import {
   ANDROID_LOGS_TRACK_KIND,
@@ -44,6 +44,7 @@ export interface SearchResults {
 export class SearchManagerImpl {
   private _searchGeneration = 0;
   private _searchText = '';
+  private _searchWindow?: TimeSpan;
   private _results?: SearchResults;
   private _resultIndex = -1;
   private _searchInProgress = false;
@@ -82,6 +83,7 @@ export class SearchManagerImpl {
     this._searchInProgress = false;
     if (text !== '') {
       this._searchInProgress = true;
+      this._searchWindow = this._timeline?.visibleWindow.toTimeSpan();
       this._limiter.schedule(async () => {
         await this.executeSearch();
         this._searchInProgress = false;
@@ -104,12 +106,11 @@ export class SearchManagerImpl {
   }
 
   private stepInternal(reverse = false) {
-    if (this._timeline === undefined) return;
+    if (this._searchWindow === undefined) return;
     if (this._results === undefined) return;
+
     const index = this._resultIndex;
-    const vizWindow = this._timeline.visibleWindow.toTimeSpan();
-    const startNs = vizWindow.start;
-    const endNs = vizWindow.end;
+    const {start: startNs, end: endNs} = this._searchWindow;
     const currentTs = this._results.tses[index];
 
     // If the value of |this._results.totalResults| is 0,
@@ -193,13 +194,14 @@ export class SearchManagerImpl {
 
   private async executeSearch() {
     const search = this._searchText;
+    const window = this._searchWindow;
     const searchLiteral = escapeSearchQuery(this._searchText);
     const generation = this._searchGeneration;
 
     const engine = this._engine;
     const trackManager = this._trackManager;
     const workspace = this._workspace;
-    if (!engine || !trackManager || !workspace) {
+    if (!engine || !trackManager || !workspace || !window) {
       return;
     }
 
@@ -286,7 +288,9 @@ export class SearchManagerImpl {
 
     const lowerSearch = search.toLowerCase();
     for (const track of workspace.flatTracks) {
-      if (track.displayName.toLowerCase().indexOf(lowerSearch) === -1) {
+      // We don't support searching for tracks that don't have a URI.
+      if (!track.uri) continue;
+      if (track.title.toLowerCase().indexOf(lowerSearch) === -1) {
         continue;
       }
       searchResults.totalResults++;
@@ -314,7 +318,7 @@ export class SearchManagerImpl {
       utid: NUM,
     });
     for (; it.valid(); it.next()) {
-      let track: Optional<string> = undefined;
+      let track: string | undefined = undefined;
 
       if (it.source === 'cpu') {
         track = trackUrisByCpu.get(it.sourceId);

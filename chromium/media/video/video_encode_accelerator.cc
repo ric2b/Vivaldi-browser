@@ -20,10 +20,6 @@ Vp9Metadata::Vp9Metadata() = default;
 Vp9Metadata::~Vp9Metadata() = default;
 Vp9Metadata::Vp9Metadata(const Vp9Metadata&) = default;
 
-Av1Metadata::Av1Metadata() = default;
-Av1Metadata::~Av1Metadata() = default;
-Av1Metadata::Av1Metadata(const Av1Metadata&) = default;
-
 BitstreamBufferMetadata::BitstreamBufferMetadata()
     : payload_size_bytes(0), key_frame(false) {}
 BitstreamBufferMetadata::BitstreamBufferMetadata(
@@ -218,14 +214,16 @@ VideoEncodeAccelerator::SupportedProfile::SupportedProfile(
     uint32_t max_framerate_denominator,
     SupportedRateControlMode rc_modes,
     const std::vector<SVCScalabilityMode>& scalability_modes,
-    const std::vector<VideoPixelFormat>& gpu_supported_pixel_formats)
+    const std::vector<VideoPixelFormat>& gpu_supported_pixel_formats,
+    bool supports_gpu_shared_images)
     : profile(profile),
       max_resolution(max_resolution),
       max_framerate_numerator(max_framerate_numerator),
       max_framerate_denominator(max_framerate_denominator),
       rate_control_modes(rc_modes),
       scalability_modes(scalability_modes),
-      gpu_supported_pixel_formats(gpu_supported_pixel_formats) {}
+      gpu_supported_pixel_formats(gpu_supported_pixel_formats),
+      supports_gpu_shared_images(supports_gpu_shared_images) {}
 
 VideoEncodeAccelerator::SupportedProfile::SupportedProfile(
     const SupportedProfile& other) = default;
@@ -258,6 +256,11 @@ bool VideoEncodeAccelerator::IsGpuFrameResizeSupported() {
 #endif
 }
 
+void VideoEncodeAccelerator::SetCommandBufferHelperCB(
+    base::RepeatingCallback<scoped_refptr<CommandBufferHelper>()>
+        get_command_buffer_helper_cb,
+    scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner) {}
+
 void VideoEncodeAccelerator::RequestEncodingParametersChange(
     const VideoBitrateAllocation& bitrate_allocation,
     uint32_t framerate,
@@ -265,6 +268,41 @@ void VideoEncodeAccelerator::RequestEncodingParametersChange(
   RequestEncodingParametersChange(
       Bitrate::ConstantBitrate(bitrate_allocation.GetSumBps()), framerate,
       size);
+}
+
+// static
+size_t VideoEncodeAccelerator::EstimateBitstreamBufferSize(
+    const Bitrate& bitrate,
+    uint32_t framerate,
+    const gfx::Size& coded_size) {
+  // Calculate how much data the frame takes without encoding.
+  // Adding 2KB just in case the frame is really small, we don't want to
+  // end up with no space for a video codec's headers.
+  // This is about 1.3Mb for 1280x720 frames.
+  size_t raw_frame_size =
+      VideoFrame::AllocationSize(PIXEL_FORMAT_I420, coded_size) + 2048;
+
+  // Estimate the expected size of an encoded chunk based on bitrate and
+  // framerate. This is capped at 30Mb, i.e. 50 Mbps at 1fps.
+  size_t expected_bitrate = 0;
+  switch (bitrate.mode()) {
+    case Bitrate::Mode::kVariable:
+      expected_bitrate = bitrate.peak_bps();
+      break;
+    case Bitrate::Mode::kConstant:
+      expected_bitrate = bitrate.target_bps();
+      break;
+    case Bitrate::Mode::kExternal:
+      break;
+  }
+  const size_t kOvershootAllowance = 5;
+  const size_t kMaxAverageBitrate = 50000000;
+  expected_bitrate =
+      std::min(expected_bitrate, kMaxAverageBitrate) * kOvershootAllowance;
+  size_t expected_chunk_size = expected_bitrate / framerate / CHAR_BIT;
+
+  // Let's be conservative and take the maximum of both methods.
+  return std::max(expected_chunk_size, raw_frame_size);
 }
 
 bool operator==(const VideoEncodeAccelerator::SupportedProfile& l,
@@ -280,10 +318,6 @@ bool operator==(const VideoEncodeAccelerator::SupportedProfile& l,
 
 bool operator==(const H264Metadata& l, const H264Metadata& r) {
   return l.temporal_idx == r.temporal_idx && l.layer_sync == r.layer_sync;
-}
-
-bool operator==(const H265Metadata& l, const H265Metadata& r) {
-  return l.temporal_idx == r.temporal_idx;
 }
 
 bool operator==(const Vp8Metadata& l, const Vp8Metadata& r) {
@@ -302,8 +336,11 @@ bool operator==(const Vp9Metadata& l, const Vp9Metadata& r) {
          l.p_diffs == r.p_diffs;
 }
 
-bool operator==(const Av1Metadata& l, const Av1Metadata& r) {
-  return l.temporal_idx == r.temporal_idx;
+bool operator==(const SVCGenericMetadata& l, const SVCGenericMetadata& r) {
+  return l.follow_svc_spec == r.follow_svc_spec &&
+         l.temporal_idx == r.temporal_idx && l.spatial_idx == r.spatial_idx &&
+         l.reference_flags == r.reference_flags &&
+         l.refresh_flags == r.refresh_flags;
 }
 
 bool operator==(const BitstreamBufferMetadata& l,
@@ -311,7 +348,7 @@ bool operator==(const BitstreamBufferMetadata& l,
   return l.payload_size_bytes == r.payload_size_bytes &&
          l.key_frame == r.key_frame && l.timestamp == r.timestamp &&
          l.vp8 == r.vp8 && l.vp9 == r.vp9 && l.h264 == r.h264 &&
-         l.av1 == r.av1 && l.h265 == r.h265;
+         l.svc_generic == r.svc_generic;
 }
 
 bool operator==(const VideoEncodeAccelerator::Config::SpatialLayer& l,

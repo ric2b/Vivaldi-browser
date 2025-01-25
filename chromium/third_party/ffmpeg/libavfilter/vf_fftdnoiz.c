@@ -24,7 +24,8 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/tx.h"
-#include "internal.h"
+
+#include "filters.h"
 #include "video.h"
 #include "window_func.h"
 

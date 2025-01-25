@@ -20,7 +20,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/blocked_content/popunder_preventer.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
@@ -30,7 +29,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
-#include "components/safe_browsing/core/browser/db/database_manager.h"
+#include "components/safe_browsing/content/browser/safe_browsing_service_interface.h"
 #include "content/public/browser/fullscreen_types.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
@@ -113,17 +112,22 @@ void RecordWebsiteStateAtApiRequest(history::HistoryLastVisitResult result,
 void CheckUrlForAllowlistAndRecordMetric(
     const GURL& url,
     history::HistoryLastVisitResult result) {
-  if (!g_browser_process->safe_browsing_service() ||
-      !g_browser_process->safe_browsing_service()->database_manager()) {
+  auto* safe_browsing_service_internal =
+      reinterpret_cast<safe_browsing::SafeBrowsingServiceInterface*>(
+          g_browser_process->safe_browsing_service());
+  if (!safe_browsing_service_internal ||
+      !safe_browsing_service_internal->database_manager()) {
     RecordWebsiteStateAtApiRequest(result, std::nullopt);
     return;
   }
-  g_browser_process->safe_browsing_service()
-      ->database_manager()
+  safe_browsing_service_internal->database_manager()
       ->CheckUrlForHighConfidenceAllowlist(
           url,
           base::BindOnce(
-              [](history::HistoryLastVisitResult result, bool on_allowlist) {
+              [](history::HistoryLastVisitResult result, bool on_allowlist,
+                 std::optional<safe_browsing::SafeBrowsingDatabaseManager::
+                                   HighConfidenceAllowlistCheckLoggingDetails>
+                     logging_details) {
                 RecordWebsiteStateAtApiRequest(result, on_allowlist);
               },
               result));

@@ -83,12 +83,6 @@ class Gpu::GpuPtrIO {
     gpu_remote_->CreateVideoEncodeAcceleratorProvider(std::move(receiver));
   }
 
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  void SetForceAllowAccessToGpu(bool enable) {
-    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-    gpu_remote_->SetForceAllowAccessToGpu(enable);
-  }
-
  private:
   void ConnectionError();
   void OnEstablishedGpuChannel(
@@ -436,15 +430,6 @@ void Gpu::OnEstablishedGpuChannel() {
   callbacks.swap(establish_callbacks_);
   for (auto&& callback : std::move(callbacks))
     std::move(callback).Run(gpu_channel_);
-}
-
-// FEATURE_FORCE_ACCESS_TO_GPU
-void Gpu::SetForceAllowAccessToGpu(bool enable) {
-  DCHECK(main_task_runner_->BelongsToCurrentThread());
-  io_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&GpuPtrIO::SetForceAllowAccessToGpu,
-                     base::Unretained(gpu_.get()), enable));
 }
 
 }  // namespace viz

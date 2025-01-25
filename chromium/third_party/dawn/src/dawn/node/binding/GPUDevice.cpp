@@ -75,13 +75,16 @@ const char* str(WGPULoggingType ty) {
 // There's something broken with Node when attempting to write more than 65536 bytes to cout.
 // Split the string up into writes of 4k chunks.
 // Likely related: https://github.com/nodejs/node/issues/12921
-void chunkedWrite(const char* msg) {
-    while (true) {
-        auto n = printf("%.4096s", msg);
-        if (n <= 0) {
-            break;
+void chunkedWrite(wgpu::StringView msg) {
+    while (msg.length != 0) {
+        int n;
+        if (msg.length > 4096) {
+            n = printf("%.4096s", msg.data);
+        } else {
+            n = printf("%.*s", static_cast<int>(msg.length), msg.data);
         }
-        msg += n;
+        msg.data += n;
+        msg.length -= n;
     }
 }
 
@@ -89,7 +92,7 @@ class OOMError : public interop::GPUOutOfMemoryError {
   public:
     explicit OOMError(std::string message) : message_(std::move(message)) {}
 
-    std::string getMessage(Napi::Env) override { return message_; };
+    std::string getMessage(Napi::Env) override { return message_; }
 
   private:
     std::string message_;
@@ -99,7 +102,7 @@ class ValidationError : public interop::GPUValidationError {
   public:
     explicit ValidationError(std::string message) : message_(std::move(message)) {}
 
-    std::string getMessage(Napi::Env) override { return message_; };
+    std::string getMessage(Napi::Env) override { return message_; }
 
   private:
     std::string message_;
@@ -109,7 +112,7 @@ class InternalError : public interop::GPUInternalError {
   public:
     explicit InternalError(std::string message) : message_(std::move(message)) {}
 
-    std::string getMessage(Napi::Env) override { return message_; };
+    std::string getMessage(Napi::Env) override { return message_; }
 
   private:
     std::string message_;
@@ -143,9 +146,9 @@ GPUDevice::GPUDevice(Napi::Env env,
       device_(device),
       async_(async),
       lost_promise_(lost_promise),
-      label_(desc.label ? desc.label : "") {
+      label_(CopyLabel(desc.label)) {
     device_.SetLoggingCallback(
-        [](WGPULoggingType type, char const* message, void* userdata) {
+        [](WGPULoggingType type, WGPUStringView message, void* userdata) {
             printf("%s:\n", str(type));
             chunkedWrite(message);
         },
@@ -167,30 +170,38 @@ GPUDevice::~GPUDevice() {
 void GPUDevice::ForceLoss(wgpu::DeviceLostReason reason, const char* message) {
     if (lost_promise_.GetState() == interop::PromiseState::Pending) {
         lost_promise_.Resolve(interop::GPUDeviceLostInfo::Create<GPUDeviceLostInfo>(
-            env_, interop::GPUDeviceLostReason::kUnknown, message));
+            env_, interop::GPUDeviceLostReason::kUnknown, std::string(message)));
     }
     device_.ForceLoss(reason, message);
 }
 
 interop::Interface<interop::GPUSupportedFeatures> GPUDevice::getFeatures(Napi::Env env) {
-    size_t count = device_.EnumerateFeatures(nullptr);
-    std::vector<wgpu::FeatureName> features(count);
-    if (count > 0) {
-        device_.EnumerateFeatures(features.data());
-    }
-    return interop::GPUSupportedFeatures::Create<GPUSupportedFeatures>(env, env,
-                                                                       std::move(features));
+    wgpu::SupportedFeatures features{};
+    device_.GetFeatures(&features);
+    return interop::GPUSupportedFeatures::Create<GPUSupportedFeatures>(env, env, features);
 }
 
 interop::Interface<interop::GPUSupportedLimits> GPUDevice::getLimits(Napi::Env env) {
     wgpu::SupportedLimits limits{};
     wgpu::DawnExperimentalSubgroupLimits subgroupLimits{};
+    wgpu::DawnExperimentalImmediateDataLimits immediateDataLimits{};
+
+    auto InsertInChain = [&](wgpu::ChainedStructOut* node) {
+        node->nextInChain = limits.nextInChain;
+        limits.nextInChain = node;
+    };
 
     // Query the subgroup limits only if subgroups feature is enabled on the device.
     // TODO(349125474): Remove deprecated ChromiumExperimentalSubgroups.
     if (device_.HasFeature(wgpu::FeatureName::Subgroups) ||
         device_.HasFeature(wgpu::FeatureName::ChromiumExperimentalSubgroups)) {
-        limits.nextInChain = &subgroupLimits;
+        InsertInChain(&subgroupLimits);
+    }
+
+    // Query the immediate data limits only if ChromiumExperimentalImmediateData feature
+    // is available on device.
+    if (device_.HasFeature(FeatureName::ChromiumExperimentalImmediateData)) {
+        InsertInChain(&subgroupLimits);
     }
 
     if (!device_.GetLimits(&limits)) {
@@ -399,8 +410,9 @@ GPUDevice::createComputePipelineAsync(Napi::Env env,
 
     device_.CreateComputePipelineAsync(
         &desc, wgpu::CallbackMode::AllowProcessEvents,
-        [ctx = std::move(ctx), label = std::string(desc.label ? desc.label : "")](
-            wgpu::CreatePipelineAsyncStatus status, wgpu::ComputePipeline pipeline, char const*) {
+        [ctx = std::move(ctx), label = CopyLabel(desc.label)](
+            wgpu::CreatePipelineAsyncStatus status, wgpu::ComputePipeline pipeline,
+            wgpu::StringView) {
             switch (status) {
                 case wgpu::CreatePipelineAsyncStatus::Success:
                     ctx->promise.Resolve(interop::GPUComputePipeline::Create<GPUComputePipeline>(
@@ -431,8 +443,9 @@ GPUDevice::createRenderPipelineAsync(Napi::Env env,
 
     device_.CreateRenderPipelineAsync(
         &desc, wgpu::CallbackMode::AllowProcessEvents,
-        [ctx = std::move(ctx), label = std::string(desc.label ? desc.label : "")](
-            wgpu::CreatePipelineAsyncStatus status, wgpu::RenderPipeline pipeline, char const*) {
+        [ctx = std::move(ctx), label = CopyLabel(desc.label)](
+            wgpu::CreatePipelineAsyncStatus status, wgpu::RenderPipeline pipeline,
+            wgpu::StringView) {
             switch (status) {
                 case wgpu::CreatePipelineAsyncStatus::Success:
                     ctx->promise.Resolve(interop::GPURenderPipeline::Create<GPURenderPipeline>(
@@ -524,7 +537,7 @@ interop::Promise<std::optional<interop::Interface<interop::GPUError>>> GPUDevice
     device_.PopErrorScope(
         wgpu::CallbackMode::AllowProcessEvents,
         [ctx = std::move(ctx)](wgpu::PopErrorScopeStatus, wgpu::ErrorType type,
-                               char const* message) {
+                               wgpu::StringView message) {
             auto env = ctx->env;
             switch (type) {
                 case wgpu::ErrorType::NoError:
@@ -532,25 +545,27 @@ interop::Promise<std::optional<interop::Interface<interop::GPUError>>> GPUDevice
                     break;
                 case wgpu::ErrorType::OutOfMemory: {
                     interop::Interface<interop::GPUError> err{
-                        interop::GPUOutOfMemoryError::Create<OOMError>(env, message)};
+                        interop::GPUOutOfMemoryError::Create<OOMError>(env, std::string(message))};
                     ctx->promise.Resolve(err);
                     break;
                 }
                 case wgpu::ErrorType::Validation: {
                     interop::Interface<interop::GPUError> err{
-                        interop::GPUValidationError::Create<ValidationError>(env, message)};
+                        interop::GPUValidationError::Create<ValidationError>(env,
+                                                                             std::string(message))};
                     ctx->promise.Resolve(err);
                     break;
                 }
                 case wgpu::ErrorType::Internal: {
                     interop::Interface<interop::GPUError> err{
-                        interop::GPUInternalError::Create<InternalError>(env, message)};
+                        interop::GPUInternalError::Create<InternalError>(env,
+                                                                         std::string(message))};
                     ctx->promise.Resolve(err);
                     break;
                 }
                 case wgpu::ErrorType::Unknown:
                 case wgpu::ErrorType::DeviceLost:
-                    ctx->promise.Reject(Errors::OperationError(env, message));
+                    ctx->promise.Reject(Errors::OperationError(env, std::string(message)));
                     break;
                 default:
                     ctx->promise.Reject(
@@ -570,7 +585,7 @@ std::string GPUDevice::getLabel(Napi::Env) {
 }
 
 void GPUDevice::setLabel(Napi::Env, std::string value) {
-    device_.SetLabel(value.c_str());
+    device_.SetLabel(std::string_view(value));
     label_ = value;
 }
 

@@ -126,7 +126,7 @@ class RtpTimeDelta : public ExpandedValueBase<int64_t, RtpTimeDelta> {
         static_cast<double>(value_) / rtp_timebase * kOneSecond.count()));
   }
 
-  // Maps the |duration| to an approximate RtpTimeDelta using the given RTP
+  // Maps the `duration` to an approximate RtpTimeDelta using the given RTP
   // timebase.  Assumes a zero-valued Duration corresponds to a zero-valued
   // RtpTimeDelta.
   template <typename Duration>
@@ -230,14 +230,14 @@ class RtpTimeTicks : public ExpandedValueBase<int64_t, RtpTimeTicks> {
 
   // Maps this RtpTimeTicks to an approximate std::chrono::duration representing
   // the amount of time since the origin point (e.g., the start of a stream)
-  // using the given |rtp_timebase|.  Assumes a zero-valued Duration corresponds
+  // using the given `rtp_timebase`.  Assumes a zero-valued Duration corresponds
   // to a zero-valued RtpTimeTicks.
   template <typename Duration>
   Duration ToTimeSinceOrigin(int rtp_timebase) const {
     return (*this - RtpTimeTicks()).ToDuration<Duration>(rtp_timebase);
   }
 
-  // Maps the |time_since_origin| to an approximate RtpTimeTicks using the given
+  // Maps the `time_since_origin` to an approximate RtpTimeTicks using the given
   // RTP timebase.  Assumes a zero-valued Duration corresponds to a zero-valued
   // RtpTimeTicks.
   template <typename Duration>

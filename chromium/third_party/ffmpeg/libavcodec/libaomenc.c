@@ -1294,7 +1294,8 @@ FF_ENABLE_DEPRECATION_WARNINGS
             const AVDOVIMetadata *metadata = (const AVDOVIMetadata *)sd->data;
             uint8_t *t35;
             int size;
-            if ((res = ff_dovi_rpu_generate(&ctx->dovi, metadata, &t35, &size)) < 0)
+            if ((res = ff_dovi_rpu_generate(&ctx->dovi, metadata, FF_DOVI_WRAP_T35,
+                                            &t35, &size)) < 0)
                 return res;
             res = aom_img_add_metadata(rawimg, OBU_METADATA_TYPE_ITUT_T35,
                                        t35, size, AOM_MIF_ANY_FRAME);
@@ -1426,16 +1427,36 @@ static const enum AVPixelFormat av1_pix_fmts_highbd_with_gray[] = {
     AV_PIX_FMT_NONE
 };
 
-static av_cold void av1_init_static(FFCodec *codec)
+static int av1_get_supported_config(const AVCodecContext *avctx,
+                                    const AVCodec *codec,
+                                    enum AVCodecConfig config,
+                                    unsigned flags, const void **out,
+                                    int *out_num)
 {
-    int supports_monochrome = aom_codec_version() >= 20001;
-    aom_codec_caps_t codec_caps = aom_codec_get_caps(aom_codec_av1_cx());
-    if (codec_caps & AOM_CODEC_CAP_HIGHBITDEPTH)
-        codec->p.pix_fmts = supports_monochrome ? av1_pix_fmts_highbd_with_gray :
-                                                  av1_pix_fmts_highbd;
-    else
-        codec->p.pix_fmts = supports_monochrome ? av1_pix_fmts_with_gray :
-                                                  av1_pix_fmts;
+    if (config == AV_CODEC_CONFIG_PIX_FORMAT) {
+        int supports_monochrome = aom_codec_version() >= 20001;
+        aom_codec_caps_t codec_caps = aom_codec_get_caps(aom_codec_av1_cx());
+        if (codec_caps & AOM_CODEC_CAP_HIGHBITDEPTH) {
+            if (supports_monochrome) {
+                *out = av1_pix_fmts_highbd_with_gray;
+                *out_num = FF_ARRAY_ELEMS(av1_pix_fmts_highbd_with_gray) - 1;
+            } else {
+                *out = av1_pix_fmts_highbd;
+                *out_num = FF_ARRAY_ELEMS(av1_pix_fmts_highbd) - 1;
+            }
+        } else {
+            if (supports_monochrome) {
+                *out = av1_pix_fmts_with_gray;
+                *out_num = FF_ARRAY_ELEMS(av1_pix_fmts_with_gray) - 1;
+            } else {
+                *out = av1_pix_fmts;
+                *out_num = FF_ARRAY_ELEMS(av1_pix_fmts) - 1;
+            }
+        }
+        return 0;
+    }
+
+    return ff_default_get_supported_config(avctx, codec, config, flags, out, out_num);
 }
 
 static av_cold int av1_init(AVCodecContext *avctx)
@@ -1547,6 +1568,7 @@ FFCodec ff_libaom_av1_encoder = {
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
                       AV_CODEC_CAP_ENCODER_RECON_FRAME |
                       AV_CODEC_CAP_OTHER_THREADS,
+    .color_ranges   = AVCOL_RANGE_MPEG | AVCOL_RANGE_JPEG,
     .p.profiles     = NULL_IF_CONFIG_SMALL(ff_av1_profiles),
     .p.priv_class   = &class_aom,
     .p.wrapper_name = "libaom",
@@ -1558,5 +1580,5 @@ FFCodec ff_libaom_av1_encoder = {
                       FF_CODEC_CAP_INIT_CLEANUP |
                       FF_CODEC_CAP_AUTO_THREADS,
     .defaults       = defaults,
-    .init_static_data = av1_init_static,
+    .get_supported_config = av1_get_supported_config,
 };

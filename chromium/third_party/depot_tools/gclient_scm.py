@@ -662,7 +662,8 @@ class GitWrapper(SCMWrapper):
     def set_config(f):
         def wrapper(*args):
             return_val = f(*args)
-            if os.path.exists(os.path.join(args[0].checkout_path, '.git')):
+            checkout_path = args[0].checkout_path
+            if os.path.exists(os.path.join(checkout_path, '.git')):
                 # The config updates to the project are stored in this list
                 # and updated consecutively after the reads. The updates
                 # are done this way because `scm.GIT.GetConfig` caches
@@ -671,13 +672,30 @@ class GitWrapper(SCMWrapper):
                 # the cache to set and unset consecutively.
                 config_updates = []
 
-                if scm.GIT.GetConfig(
-                        args[0].checkout_path,
-                        'blame.ignorerevsfile') != '.git-blame-ignore-revs':
-                    config_updates.append(
-                        ('blame.ignoreRevsFile', '.git-blame-ignore-revs'))
+                blame_ignore_revs_cfg = scm.GIT.GetConfig(
+                    checkout_path, 'blame.ignorerevsfile')
 
-                ignore_submodules = scm.GIT.GetConfig(args[0].checkout_path,
+                blame_ignore_revs_cfg_set = \
+                    blame_ignore_revs_cfg == \
+                    git_common.GIT_BLAME_IGNORE_REV_FILE
+
+                blame_ignore_revs_exists = os.path.isfile(
+                    os.path.join(checkout_path,
+                                 git_common.GIT_BLAME_IGNORE_REV_FILE))
+
+                if not blame_ignore_revs_cfg_set and blame_ignore_revs_exists:
+                    config_updates.append(
+                        ('blame.ignoreRevsFile',
+                         git_common.GIT_BLAME_IGNORE_REV_FILE))
+                elif blame_ignore_revs_cfg_set and not blame_ignore_revs_exists:
+                    # Some repos may have incorrect config set, unset this
+                    # value. Moreover, some repositories may decide to remove
+                    # git_common.GIT_BLAME_IGNORE_REV_FILE, which would break
+                    # blame without this check.
+                    # See https://crbug.com/368562244 for more details.
+                    config_updates.append(('blame.ignoreRevsFile', None))
+
+                ignore_submodules = scm.GIT.GetConfig(checkout_path,
                                                       'diff.ignoresubmodules',
                                                       None, 'local')
 
@@ -699,11 +717,11 @@ class GitWrapper(SCMWrapper):
                         gclient_utils.AddWarning(warning_message)
 
 
-                if scm.GIT.GetConfig(args[0].checkout_path,
+                if scm.GIT.GetConfig(checkout_path,
                                      'fetch.recursesubmodules') != 'off':
                     config_updates.append(('fetch.recurseSubmodules', 'off'))
 
-                if scm.GIT.GetConfig(args[0].checkout_path,
+                if scm.GIT.GetConfig(checkout_path,
                                      'push.recursesubmodules') != 'off':
                     # The default is off, but if user sets submodules.recurse to
                     # on, this becomes on too. We never want to push submodules
@@ -712,7 +730,7 @@ class GitWrapper(SCMWrapper):
                     config_updates.append(('push.recurseSubmodules', 'off'))
 
                 for update in config_updates:
-                    scm.GIT.SetConfig(args[0].checkout_path,
+                    scm.GIT.SetConfig(checkout_path,
                                       update[0],
                                       update[1],
                                       modify_all=True)
@@ -858,7 +876,8 @@ class GitWrapper(SCMWrapper):
         # See if the url has changed (the unittests use git://foo for the url,
         # let that through).
         current_url = scm.GIT.GetConfig(self.checkout_path,
-                                        f'remote.{self.remote}.url')
+                                        f'remote.{self.remote}.url',
+                                        default='')
         return_early = False
         # TODO(maruel): Delete url != 'git://foo' since it's just to make the
         # unit test pass. (and update the comment above)

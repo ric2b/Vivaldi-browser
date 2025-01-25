@@ -56,6 +56,7 @@
 #include "third_party/blink/renderer/platform/widget/input/widget_input_handler_manager.h"
 #include "third_party/blink/renderer/platform/widget/widget_base_client.h"
 #include "ui/base/ime/mojom/text_input_state.mojom-blink.h"
+#include "ui/base/mojom/menu_source_type.mojom-blink-forward.h"
 #include "ui/display/display.h"
 #include "ui/display/screen_info.h"
 #include "ui/gfx/geometry/dip_util.h"
@@ -202,7 +203,7 @@ void WidgetBase::InitializeCompositing(
     AssertAreCompatible(*this, *previous_widget);
 
     // `screen_infos` is applied to this LayerTreeView below.
-    previous_widget->DisconnectLayerTreeView(this);
+    previous_widget->DisconnectLayerTreeView(this, /*delay_release=*/false);
     CHECK(layer_tree_view_);
   } else {
     layer_tree_view_ = std::make_unique<LayerTreeView>(this, widget_scheduler_);
@@ -286,14 +287,14 @@ void WidgetBase::DidFirstVisuallyNonEmptyPaint(
   }
 }
 
-void WidgetBase::Shutdown() {
+void WidgetBase::Shutdown(bool delay_release) {
   // The |input_event_queue_| is refcounted and will live while an event is
   // being handled. This drops the connection back to this WidgetBase which
   // is being destroyed.
   if (widget_input_handler_manager_)
     widget_input_handler_manager_->ClearClient();
 
-  DisconnectLayerTreeView(nullptr);
+  DisconnectLayerTreeView(nullptr, delay_release);
 
   // The `widget_scheduler_` must be deleted last because the
   // `widget_input_handler_manager_` may request to post a task on the
@@ -305,18 +306,27 @@ void WidgetBase::Shutdown() {
   if (widget_scheduler_) {
     scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner =
         base::SingleThreadTaskRunner::GetCurrentDefault();
-    cleanup_runner->PostNonNestableTask(
-        FROM_HERE, base::BindOnce(
-                       [](scoped_refptr<scheduler::WidgetScheduler> scheduler,
-                          scoped_refptr<WidgetInputHandlerManager> manager,
-                          std::unique_ptr<LayerTreeView> view) {
-                         view.reset();
-                         manager.reset();
-                         scheduler->Shutdown();
-                       },
-                       std::move(widget_scheduler_),
-                       std::move(widget_input_handler_manager_),
-                       std::move(layer_tree_view_)));
+    base::TimeDelta task_delay(base::Seconds(0));
+    if (delay_release) {
+      CHECK(base::FeatureList::IsEnabled(
+          blink::features::kDelayLayerTreeViewDeletionOnLocalSwap));
+      task_delay =
+          features::kDelayLayerTreeViewDeletionOnLocalSwapTaskDelayParam.Get();
+    }
+    cleanup_runner->PostNonNestableDelayedTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](scoped_refptr<scheduler::WidgetScheduler> scheduler,
+               scoped_refptr<WidgetInputHandlerManager> manager,
+               std::unique_ptr<LayerTreeView> view) {
+              view.reset();
+              manager.reset();
+              scheduler->Shutdown();
+            },
+            std::move(widget_scheduler_),
+            std::move(widget_input_handler_manager_),
+            std::move(layer_tree_view_)),
+        task_delay);
   }
 
   if (widget_compositor_) {
@@ -325,7 +335,8 @@ void WidgetBase::Shutdown() {
   }
 }
 
-void WidgetBase::DisconnectLayerTreeView(WidgetBase* new_widget) {
+void WidgetBase::DisconnectLayerTreeView(WidgetBase* new_widget,
+                                         bool delay_release) {
   will_be_destroyed_ = true;
 
   if (!layer_tree_view_) {
@@ -346,10 +357,21 @@ void WidgetBase::DisconnectLayerTreeView(WidgetBase* new_widget) {
   }
 
   if (new_widget) {
-    layer_tree_view_->ReattachTo(new_widget, widget_scheduler_);
+    // Reattach to `new_widget`.
+    layer_tree_view_->ClearPreviousDelegateAndReattachIfNeeded(
+        new_widget, widget_scheduler_);
     new_widget->layer_tree_view_ = std::move(layer_tree_view_);
     layer_tree_view_ = nullptr;
+  } else if (delay_release) {
+    CHECK(base::FeatureList::IsEnabled(
+        blink::features::kDelayLayerTreeViewDeletionOnLocalSwap));
+    // Detach the LayerTreeView now without attaching it to anything else. The
+    // actual release of the LayerTreeView and its resources will happen later,
+    // see also the task posted in `Shutdown()`.
+    layer_tree_view_->ClearPreviousDelegateAndReattachIfNeeded(nullptr,
+                                                               nullptr);
   } else {
+    // Disconnect and release now.
     layer_tree_view_->Disconnect();
   }
 }
@@ -732,24 +754,6 @@ void WidgetBase::RequestNewLayerTreeFrameSink(
       viz::mojom::blink::CompositorFrameSinkClientInterfaceBase>(
       compositor_frame_sink_client.InitWithNewPipeAndPassReceiver());
 
-  static const bool gpu_channel_always_allowed =
-      base::FeatureList::IsEnabled(::features::kSharedBitmapToSharedImage);
-  if (Platform::Current()->IsGpuCompositingDisabled() &&
-      !gpu_channel_always_allowed) {
-    DCHECK(!for_web_tests);
-    widget_host_->CreateFrameSink(std::move(compositor_frame_sink_receiver),
-                                  std::move(compositor_frame_sink_client));
-    widget_host_->RegisterRenderFrameMetadataObserver(
-        std::move(render_frame_metadata_observer_client_receiver),
-        std::move(render_frame_metadata_observer_remote));
-    std::move(callback).Run(
-        std::make_unique<cc::mojo_embedder::AsyncLayerTreeFrameSink>(
-            /*context_provider=*/nullptr, /*worker_context_provider=*/nullptr,
-            /*shared_image_interface=*/nullptr, params.get()),
-        std::move(render_frame_metadata_observer));
-    return;
-  }
-
   Platform::EstablishGpuChannelCallback finish_callback =
       base::BindOnce(&WidgetBase::FinishRequestNewLayerTreeFrameSink,
                      weak_ptr_factory_.GetWeakPtr(), url,
@@ -794,10 +798,7 @@ void WidgetBase::FinishRequestNewLayerTreeFrameSink(
     return;
   }
 
-  static const bool gpu_channel_always_allowed =
-      base::FeatureList::IsEnabled(::features::kSharedBitmapToSharedImage);
-  if (Platform::Current()->IsGpuCompositingDisabled() &&
-      gpu_channel_always_allowed) {
+  if (Platform::Current()->IsGpuCompositingDisabled()) {
     widget_host_->CreateFrameSink(std::move(compositor_frame_sink_receiver),
                                   std::move(compositor_frame_sink_client));
     widget_host_->RegisterRenderFrameMetadataObserver(

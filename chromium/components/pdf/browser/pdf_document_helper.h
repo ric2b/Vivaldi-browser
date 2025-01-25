@@ -15,6 +15,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "pdf/mojom/pdf.mojom.h"
+#include "services/screen_ai/buildflags/buildflags.h"
 #include "ui/touch_selection/selection_event_type.h"
 #include "ui/touch_selection/touch_selection_controller.h"
 #include "ui/touch_selection/touch_selection_menu_runner.h"
@@ -86,8 +87,15 @@ class PDFDocumentHelper
                         const gfx::PointF& right,
                         int32_t right_height) override;
   void SetPluginCanSave(bool can_save) override;
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  void OnSearchifyStateChange(bool busy) override;
+#endif
 
-  void GetPdfBytes(pdf::mojom::PdfListener::GetPdfBytesCallback callback);
+  void GetPdfBytes(uint32_t size_limit,
+                   pdf::mojom::PdfListener::GetPdfBytesCallback callback);
+
+  void GetPageText(int32_t page_index,
+                   pdf::mojom::PdfListener::GetPageTextCallback callback);
 
  private:
   friend class content::DocumentUserData<PDFDocumentHelper>;

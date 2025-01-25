@@ -16,6 +16,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/types/expected.h"
+#include "base/types/fixed_array.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom.h"
 #include "services/webnn/webnn_context_impl.h"
@@ -76,6 +77,8 @@ class GraphImplDml final : public WebNNGraphImpl {
       const ContextProperties& context_properties,
       scoped_refptr<Adapter> adapter,
       mojom::GraphInfoPtr& graph_info,
+      base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>&
+          constant_operands,
       GraphBuilderDml& graph_builder,
       std::unordered_map<uint64_t, uint32_t>& constant_id_to_input_index_map,
       GraphBufferBindingInfo& graph_buffer_binding_info);
@@ -86,12 +89,15 @@ class GraphImplDml final : public WebNNGraphImpl {
   // method to wait for the initialization work to be completed on GPU. The
   // GraphImplDml instance will only be created and bound to the mojom receiver
   // in GraphImplDml::OnInitializationComplete method.
-  static void CreateAndBuild(scoped_refptr<Adapter> adapter,
-                             base::WeakPtr<ContextImplDml> context,
-                             mojom::GraphInfoPtr graph_info,
-                             ComputeResourceInfo compute_resource_info,
-                             WebNNContextImpl::CreateGraphImplCallback callback,
-                             bool pass_dml_execution_disable_meta_commands);
+  static void CreateAndBuild(
+      scoped_refptr<Adapter> adapter,
+      base::WeakPtr<ContextImplDml> context,
+      mojom::GraphInfoPtr graph_info,
+      ComputeResourceInfo compute_resource_info,
+      base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>
+          constant_operands,
+      WebNNContextImpl::CreateGraphImplCallback callback,
+      bool disable_dml_meta_commands_for_gpu);
 
   GraphImplDml(const GraphImplDml&) = delete;
   GraphImplDml& operator=(const GraphImplDml&) = delete;
@@ -274,7 +280,8 @@ class GraphImplDml final : public WebNNGraphImpl {
                Microsoft::WRL::ComPtr<IDMLCompiledOperator> compiled_operator,
                ComputeResourceInfo compute_resource_info,
                GraphBufferBindingInfo graph_buffer_binding_info,
-               std::unique_ptr<ComputeResources> compute_resources);
+               std::unique_ptr<ComputeResources> compute_resources,
+               std::unique_ptr<GraphResources> graph_resources);
 
   // The method compiles all DML operators into an IDMLCompiledOperator
   // which can be dispatched to GPU. Since IDMLDevice1::CompileGraph called in
@@ -283,7 +290,7 @@ class GraphImplDml final : public WebNNGraphImpl {
   // main thread to avoid blocking.
   static base::expected<Microsoft::WRL::ComPtr<IDMLCompiledOperator>, HRESULT>
   CompileOnBackgroundThread(GraphBuilderDml graph_builder,
-                            bool pass_dml_execution_disable_meta_commands);
+                            DML_EXECUTION_FLAGS flags);
 
   // After the CompileOnBackgroundThread task is completed on a background
   // thread, the OnCompilationComplete method should run back on the GPU main
@@ -303,10 +310,11 @@ class GraphImplDml final : public WebNNGraphImpl {
       scoped_refptr<Adapter> adapter,
       base::WeakPtr<ContextImplDml> context,
       WebNNContextImpl::CreateGraphImplCallback callback,
-      base::flat_map<uint64_t, mojo_base::BigBuffer> constant_id_to_buffer_map,
       std::unordered_map<uint64_t, uint32_t> constant_id_to_input_index_map,
       GraphBufferBindingInfo graph_buffer_binding_info,
       ComputeResourceInfo compute_resource_info,
+      base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>
+          constant_operands,
       base::expected<Microsoft::WRL::ComPtr<IDMLCompiledOperator>, HRESULT>
           compilation_result);
 
@@ -360,6 +368,30 @@ class GraphImplDml final : public WebNNGraphImpl {
   void ComputeImpl(
       base::flat_map<std::string, mojo_base::BigBuffer> named_inputs,
       mojom::WebNNGraph::ComputeCallback callback) override;
+
+  // Represent the input or output bindings for the graph execution.
+  struct IoBindings {
+    IoBindings(std::vector<DML_BUFFER_BINDING> buffer_bindings,
+               base::FixedArray<DML_BINDING_DESC> buffer_binding_desc);
+    ~IoBindings();
+
+    IoBindings(const IoBindings&) = delete;
+    IoBindings& operator=(const IoBindings&) = delete;
+
+    IoBindings(IoBindings&&) = delete;
+    IoBindings& operator=(IoBindings&&) = delete;
+
+    // Ensure this object remains alive because `buffer_binding_desc` contains
+    // pointers to its data.
+    std::vector<DML_BUFFER_BINDING> buffer_bindings;
+    base::FixedArray<DML_BINDING_DESC> buffer_binding_desc;
+  };
+
+  IoBindings CreateAndCacheInputBindings(
+      const base::flat_map<std::string_view, WebNNTensorImpl*>& named_inputs);
+
+  IoBindings CreateAndCacheOutputBindings(
+      const base::flat_map<std::string_view, WebNNTensorImpl*>& named_outputs);
 
   void DispatchImpl(
       const base::flat_map<std::string_view, WebNNTensorImpl*>& named_inputs,

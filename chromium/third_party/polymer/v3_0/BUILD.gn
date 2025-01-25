@@ -5,33 +5,23 @@
 import("//build/config/chromeos/ui_mode.gni")
 import("//chrome/common/features.gni")
 import("//tools/typescript/ts_library.gni")
-import("//ui/webui/resources/include_polymer.gni")
 import("//ui/webui/resources/tools/generate_grd.gni")
 import("//ui/webui/resources/tools/minify_js.gni")
 
-assert(include_polymer)
+assert(!is_android && !is_ios)
 
 js_files = [
   "iron-a11y-keys-behavior/iron-a11y-keys-behavior.js",
   "iron-a11y-keys/iron-a11y-keys.js",
   "iron-flex-layout/iron-flex-layout-classes.js",
-  "iron-icon/iron-icon.js",
-  "iron-iconset-svg/iron-iconset-svg.js",
   "iron-list/iron-list.js",
   "iron-media-query/iron-media-query.js",
   "iron-meta/iron-meta.js",
   "iron-resizable-behavior/iron-resizable-behavior.js",
   "iron-scroll-target-behavior/iron-scroll-target-behavior.js",
   "iron-scroll-threshold/iron-scroll-threshold.js",
-  "iron-selector/iron-multi-selectable.js",
-  "iron-selector/iron-selectable.js",
-  "iron-selector/iron-selection.js",
-  "iron-selector/iron-selector.js",
   "paper-behaviors/paper-ripple-mixin.js",
   "paper-ripple/paper-ripple.js",
-  "paper-spinner/paper-spinner-behavior.js",
-  "paper-spinner/paper-spinner-lite.js",
-  "paper-spinner/paper-spinner-styles.js",
 ]
 
 # Also needed on LaCros for Print Preview. Remove once CrOS Print Preview
@@ -47,6 +37,8 @@ if (is_chromeos_ash) {
     "iron-collapse/iron-collapse.js",
     "iron-dropdown/iron-dropdown.js",
     "iron-dropdown/iron-dropdown-scroll-manager.js",
+    "iron-icon/iron-icon.js",
+    "iron-iconset-svg/iron-iconset-svg.js",
     "iron-location/iron-location.js",
     "iron-location/iron-query-params.js",
     "iron-overlay-behavior/iron-focusables-helper.js",
@@ -56,6 +48,10 @@ if (is_chromeos_ash) {
     "iron-overlay-behavior/iron-scroll-manager.js",
     "iron-pages/iron-pages.js",
     "iron-range-behavior/iron-range-behavior.js",
+    "iron-selector/iron-multi-selectable.js",
+    "iron-selector/iron-selectable.js",
+    "iron-selector/iron-selection.js",
+    "iron-selector/iron-selector.js",
     "iron-test-helpers/mock-interactions.js",
     "neon-animation/animations/fade-in-animation.js",
     "neon-animation/animations/fade-out-animation.js",
@@ -65,6 +61,9 @@ if (is_chromeos_ash) {
     "neon-animation/neon-animation-behavior.js",
     "neon-animation/neon-animation-runner-behavior.js",
     "paper-progress/paper-progress.js",
+    "paper-spinner/paper-spinner-behavior.js",
+    "paper-spinner/paper-spinner-lite.js",
+    "paper-spinner/paper-spinner-styles.js",
     "paper-tooltip/paper-tooltip.js",
   ]
 }
@@ -106,14 +105,13 @@ ts_library("library") {
     # with //ui/webui/PLATFORM_OWNERS or g/chrome-webui if you think there is a
     # strong reason to use Polymer.
 
+    "//chrome/browser/resources/about_nacl:build_ts",
     "//chrome/browser/resources/access_code_cast:build_ts",
     "//chrome/browser/resources/app_service_internals:build_ts",
     "//chrome/browser/resources/bookmarks:build_ts",
     "//chrome/browser/resources/commerce/product_specifications:build_ts",
     "//chrome/browser/resources/compose:build_ts",
     "//chrome/browser/resources/discards:build_ts",
-    "//chrome/browser/resources/downloads:build_ts",
-    "//chrome/browser/resources/extensions:build_ts",
     "//chrome/browser/resources/history:build_ts",
     "//chrome/browser/resources/inline_login:build_ts",
     "//chrome/browser/resources/internals/user_education:build_ts",
@@ -133,7 +131,6 @@ ts_library("library") {
     "//chrome/browser/resources/side_panel/commerce:build_ts",
     "//chrome/browser/resources/side_panel/read_anything:build_ts",
     "//chrome/browser/resources/side_panel/shared:build_ts",
-    "//chrome/browser/resources/signin:build_ts",
     "//chrome/browser/resources/suggest_internals:build_ts",
     "//chrome/browser/resources/support_tool:build_ts",
     "//chrome/test/data/webui:build_ts",
@@ -142,8 +139,6 @@ ts_library("library") {
     "//chrome/test/data/webui/cr_components/certificate_manager:build_ts",
     "//chrome/test/data/webui/cr_components/help_bubble:build_ts",
     "//chrome/test/data/webui/cr_elements:build_ts",
-    "//chrome/test/data/webui/downloads:build_ts",
-    "//chrome/test/data/webui/extensions:build_ts",
     "//chrome/test/data/webui/history:build_ts",
     "//chrome/test/data/webui/inline_login:build_ts",
     "//chrome/test/data/webui/js:build_ts",
@@ -154,7 +149,6 @@ ts_library("library") {
     "//chrome/test/data/webui/settings:build_ts",
     "//chrome/test/data/webui/side_panel:build_ts",
     "//chrome/test/data/webui/side_panel/read_anything:build_ts",
-    "//chrome/test/data/webui/signin:build_ts",
     "//chrome/test/data/webui/support_tool:build_ts",
     "//ui/webui/resources/cr_components/certificate_manager:build_ts",
     "//ui/webui/resources/cr_components/customize_themes:build_ts",
@@ -164,17 +158,14 @@ ts_library("library") {
     "//ui/webui/resources/cr_elements:build_ts",
   ]
 
+  if (is_win) {
+    visibility += [ "//chrome/browser/resources/conflicts:build_ts" ]
+  }
+
   if (is_chromeos) {
     visibility += [
       "//chrome/browser/resources/chromeos/kerberos:build_ts",
       "//chrome/browser/resources/dlp_internals:build_ts",
-    ]
-  }
-
-  if (is_chromeos_lacros) {
-    visibility += [
-      "//chrome/browser/resources/intro:build_ts",
-      "//chrome/browser/resources/signin/profile_picker:build_ts",
     ]
   }
 
@@ -199,23 +190,14 @@ ts_library("library") {
     "components-chromium/iron-a11y-keys/iron-a11y-keys.d.ts",
     "components-chromium/iron-behaviors/iron-control-state.d.ts",
     "components-chromium/iron-flex-layout/iron-flex-layout-classes.d.ts",
-    "components-chromium/iron-icon/iron-icon.d.ts",
-    "components-chromium/iron-iconset-svg/iron-iconset-svg.d.ts",
     "components-chromium/iron-list/iron-list.d.ts",
     "components-chromium/iron-media-query/iron-media-query.d.ts",
     "components-chromium/iron-meta/iron-meta.d.ts",
     "components-chromium/iron-resizable-behavior/iron-resizable-behavior.d.ts",
     "components-chromium/iron-scroll-target-behavior/iron-scroll-target-behavior.d.ts",
     "components-chromium/iron-scroll-threshold/iron-scroll-threshold.d.ts",
-    "components-chromium/iron-selector/iron-multi-selectable.d.ts",
-    "components-chromium/iron-selector/iron-selectable.d.ts",
-    "components-chromium/iron-selector/iron-selection.d.ts",
-    "components-chromium/iron-selector/iron-selector.d.ts",
     "components-chromium/paper-behaviors/paper-ripple-mixin.d.ts",
     "components-chromium/paper-ripple/paper-ripple.d.ts",
-    "components-chromium/paper-spinner/paper-spinner-behavior.d.ts",
-    "components-chromium/paper-spinner/paper-spinner-lite.d.ts",
-    "components-chromium/paper-spinner/paper-spinner-styles.d.ts",
     "components-chromium/polymer/interfaces.d.ts",
     "components-chromium/polymer/lib/elements/array-selector.d.ts",
     "components-chromium/polymer/lib/elements/custom-style.d.ts",
@@ -280,6 +262,8 @@ ts_library("library") {
       "components-chromium/iron-collapse/iron-collapse.d.ts",
       "components-chromium/iron-dropdown/iron-dropdown.d.ts",
       "components-chromium/iron-dropdown/iron-dropdown-scroll-manager.d.ts",
+      "components-chromium/iron-icon/iron-icon.d.ts",
+      "components-chromium/iron-iconset-svg/iron-iconset-svg.d.ts",
       "components-chromium/iron-location/iron-location.d.ts",
       "components-chromium/iron-location/iron-query-params.d.ts",
       "components-chromium/iron-overlay-behavior/iron-focusables-helper.d.ts",
@@ -289,6 +273,10 @@ ts_library("library") {
       "components-chromium/iron-overlay-behavior/iron-scroll-manager.d.ts",
       "components-chromium/iron-pages/iron-pages.d.ts",
       "components-chromium/iron-range-behavior/iron-range-behavior.d.ts",
+      "components-chromium/iron-selector/iron-multi-selectable.d.ts",
+      "components-chromium/iron-selector/iron-selectable.d.ts",
+      "components-chromium/iron-selector/iron-selection.d.ts",
+      "components-chromium/iron-selector/iron-selector.d.ts",
       "components-chromium/iron-test-helpers/mock-interactions.d.ts",
       "components-chromium/neon-animation/animations/fade-in-animation.d.ts",
       "components-chromium/neon-animation/animations/fade-out-animation.d.ts",
@@ -298,6 +286,9 @@ ts_library("library") {
       "components-chromium/neon-animation/neon-animation-behavior.d.ts",
       "components-chromium/neon-animation/neon-animation-runner-behavior.d.ts",
       "components-chromium/paper-progress/paper-progress.d.ts",
+      "components-chromium/paper-spinner/paper-spinner-behavior.d.ts",
+      "components-chromium/paper-spinner/paper-spinner-lite.d.ts",
+      "components-chromium/paper-spinner/paper-spinner-styles.d.ts",
       "components-chromium/paper-tooltip/paper-tooltip.d.ts",
     ]
   }

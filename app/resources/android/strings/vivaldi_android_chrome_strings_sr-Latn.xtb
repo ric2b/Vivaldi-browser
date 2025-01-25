@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Dodirnite za pretragu je funkcija koja je dostupna samo kada je Google postavljen kao podrazumevani pretraživač u Vivaldi pregledaču. Šalje izabranu reč i trenutnu stranicu kao kontekst Google pretrazi. Možete je isključiti u <ph name="BEGIN_LINK" />Podešavanjima<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Prebacuj normalne/privatne kartice</translation>
 <translation id="1644574205037202324">Istorija</translation>
-<translation id="17513872634828108">Otvorene kartice</translation>
 <translation id="1829244130665387512">Pronađi na stranici</translation>
 <translation id="1910514478706885609">Otvori u novoj grupi kartica</translation>
 <translation id="1925021887439448749">Unesite prilagođenu veb adresu</translation>
 <translation id="2038563949887743358">Uključi zahtevanje desktop verzije sajta</translation>
-<translation id="2139186145475833000">Dodaj na početni ekran</translation>
 <translation id="2149973817440762519">Uredi obeleživač</translation>
 <translation id="2306442503286132111">Obeleživač je sačuvan u fascikli <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Izgled</translation>
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">Trenutni jezik uređaja</translation>
 <translation id="4167670741834902166">Nova privatna kartica</translation>
 <translation id="4195643157523330669">Otvori u novoj kartici</translation>
+<translation id="4225895483398857530">Prečica na alatnoj traci</translation>
 <translation id="4243710787042215766">Otvori u privatnoj kartici</translation>
 <translation id="4304713468139749426">Upravljač lozinkama</translation>
 <translation id="451872707440238414">Pretraži obeleživače</translation>
@@ -74,6 +73,7 @@ Za podešavanje termina za pretragu, dugo pritisnite da biste ga izabrali. Za pr
 <translation id="8560602726703398413">Pronađite svoju listu za čitanje u obeleživačima</translation>
 <translation id="85991616550051997">Idi na matičnu stranicu</translation>
 <translation id="8820817407110198400">Obeleživači</translation>
+<translation id="9042893549633094279">Privatnost i bezbednost</translation>
 <translation id="9063523880881406963">Isključi zahtevanje desktop verzije sajta</translation>
 <translation id="9080642952018487277">Uđi u privatni režim</translation>
 <translation id="96681097142096641">Prikazati pojednostavljenu stranicu?</translation>

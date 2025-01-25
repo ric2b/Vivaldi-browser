@@ -25,6 +25,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.ImportantFormFactors;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -37,6 +38,7 @@ import org.chromium.chrome.test.transit.hub.TabSwitcherStation;
 import org.chromium.chrome.test.transit.ntp.IncognitoNewTabPageStation;
 import org.chromium.chrome.test.transit.page.PageStation;
 import org.chromium.chrome.test.transit.page.WebPageStation;
+import org.chromium.ui.base.DeviceFormFactor;
 
 /** Public transit tests for the Hub's tab switcher panes. */
 // TODO(crbug/324919909): Migrate more tests from TabSwitcherLayoutTest to here or other test
@@ -45,6 +47,7 @@ import org.chromium.chrome.test.transit.page.WebPageStation;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @Batch(Batch.PER_CLASS)
+@ImportantFormFactors(DeviceFormFactor.TABLET)
 public class TabSwitcherPanePublicTransitTest {
     @ClassRule
     public static ChromeTabbedActivityTestRule sActivityTestRule =
@@ -62,10 +65,10 @@ public class TabSwitcherPanePublicTransitTest {
 
         PageStation page = firstPage;
         for (int i = 1; i < 10; i++) {
-            page = page.openGenericAppMenu().openNewTab();
+            page = page.openNewTabFast();
         }
         assertEquals(9, cta.getCurrentTabModel().index());
-        IncognitoNewTabPageStation incognitoNtp = page.openGenericAppMenu().openNewIncognitoTab();
+        IncognitoNewTabPageStation incognitoNtp = page.openNewIncognitoTabFast();
         assertTrue(cta.getCurrentTabModel().isIncognito());
 
         IncognitoTabSwitcherStation incognitoTabSwitcher = incognitoNtp.openIncognitoTabSwitcher();
@@ -107,8 +110,7 @@ public class TabSwitcherPanePublicTransitTest {
         WebPageStation firstPage = mInitialStateRule.startOnBlankPage();
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
 
-        IncognitoNewTabPageStation incognitoNtp =
-                firstPage.openGenericAppMenu().openNewIncognitoTab();
+        IncognitoNewTabPageStation incognitoNtp = firstPage.openNewIncognitoTabFast();
         assertTrue(cta.getCurrentTabModel().isIncognito());
 
         IncognitoTabSwitcherStation incognitoTabSwitcher = incognitoNtp.openIncognitoTabSwitcher();

@@ -41,9 +41,7 @@ void AXPlatform::RemoveModeObserver(AXModeObserver* observer) {
 }
 
 void AXPlatform::NotifyModeAdded(AXMode mode) {
-  for (auto& observer : observers_) {
-    observer.OnAXModeAdded(mode);
-  }
+  observers_.Notify(&AXModeObserver::OnAXModeAdded, mode);
 }
 
 bool AXPlatform::IsCaretBrowsingEnabled() {
@@ -80,6 +78,10 @@ bool AXPlatform::IsUiaProviderEnabled() const {
   return uia_provider_enablement_ == UiaProviderEnablement::kVariations
              ? base::FeatureList::IsEnabled(features::kUiaProvider)
              : (uia_provider_enablement_ == UiaProviderEnablement::kEnabled);
+}
+
+void AXPlatform::OnUiaProviderRequested(bool uia_provider_enabled) {
+  delegate_->OnUiaProviderRequested(uia_provider_enabled);
 }
 
 void AXPlatform::RetrieveProductStringsIfNeeded() const {

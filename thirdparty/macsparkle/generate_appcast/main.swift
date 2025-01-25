@@ -168,6 +168,9 @@ struct GenerateAppcast: ParsableCommand {
     @Flag(name: .customLong("disable-nested-code-check"), help: .hidden)
     var disableNestedCodeCheck: Bool = false
     
+    @Option(name: .customLong("delta-suffix"), help: ArgumentHelp("A filename suffix to place before the .delta extension"))
+    var deltaSuffix: String = ""
+
     static var configuration = CommandConfiguration(
         abstract: "Generate appcast from a directory of Sparkle update archives.",
         discussion: """
@@ -313,7 +316,7 @@ struct GenerateAppcast: ParsableCommand {
         }
         
         do {
-            let appcastsByFeed = try makeAppcasts(archivesSourceDir: archivesSourceDir, outputPathURL: outputPathURL, cacheDirectory: GenerateAppcast.cacheDirectory, keys: keys, versions: versions, maxVersionsPerBranchInFeed: maxVersionsPerBranchInFeed, newChannel: channel, majorVersion: majorVersion, maximumDeltas: maximumDeltas, deltaCompressionModeDescription: deltaCompression, deltaCompressionLevel: deltaCompressionLevel, disableNestedCodeCheck: disableNestedCodeCheck, downloadURLPrefix: downloadURLPrefix, releaseNotesURLPrefix: releaseNotesURLPrefix, verbose: verbose)
+            let appcastsByFeed = try makeAppcasts(archivesSourceDir: archivesSourceDir, outputPathURL: outputPathURL, cacheDirectory: GenerateAppcast.cacheDirectory, keys: keys, versions: versions, maxVersionsPerBranchInFeed: maxVersionsPerBranchInFeed, newChannel: channel, majorVersion: majorVersion, maximumDeltas: maximumDeltas, deltaCompressionModeDescription: deltaCompression, deltaCompressionLevel: deltaCompressionLevel, disableNestedCodeCheck: disableNestedCodeCheck, downloadURLPrefix: downloadURLPrefix, releaseNotesURLPrefix: releaseNotesURLPrefix, verbose: verbose, deltaSuffix: deltaSuffix)
             
             let oldFilesDirectory = archivesSourceDir.appendingPathComponent(GenerateAppcast.oldFilesDirectoryName)
             

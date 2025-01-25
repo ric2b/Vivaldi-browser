@@ -1193,9 +1193,11 @@ std::int32_t ClientProxy::GetLocalMultiplexSocketBitmask() const {
   if (NearbyFlags::GetInstance().GetBoolFlag(
           config_package_nearby::nearby_connections_feature::
               kEnableMultiplex)) {
+    std::int32_t multiplex_bitmask =
+        kBtMultiplexEnabled | kWifiLanMultiplexEnabled;
     NEARBY_LOGS(INFO) << "ClientProxy [GetLocalMultiplexSocketBitmask]: "
-                      << kBtMultiplexEnabled;
-    return kBtMultiplexEnabled;
+                      << multiplex_bitmask;
+    return multiplex_bitmask;
   }
   return 0;
 }
@@ -1251,6 +1253,16 @@ bool ClientProxy::IsMultiplexSocketSupported(absl::string_view endpoint_id,
     default:
       return false;
   }
+}
+
+bool ClientProxy::GetWebRtcNonCellular() { return webrtc_non_cellular_; }
+
+void ClientProxy::SetWebRtcNonCellular(bool webrtc_non_cellular) {
+  std::string allow_webrtc_cellular_str =
+      webrtc_non_cellular ? "disallow" : "allow";
+  NEARBY_LOGS(INFO) << "ClientProxy: client=" << GetClientId()
+                    << allow_webrtc_cellular_str << " to use mobile data.",
+      webrtc_non_cellular_ = webrtc_non_cellular;
 }
 
 std::string ClientProxy::ToString(PayloadProgressInfo::Status status) const {

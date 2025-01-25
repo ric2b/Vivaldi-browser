@@ -5,18 +5,18 @@
 #include "extensions/browser/extension_navigation_ui_data.h"
 
 #include "base/memory/ptr_util.h"
+#include "components/guest_view/buildflags/buildflags.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_GUEST_VIEW)
+#include "content/public/common/content_features.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
-#include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_finder.h"
+#include "ui/content/vivaldi_tab_check.h"
 
 namespace extensions {
 
@@ -29,6 +29,43 @@ content::GlobalRenderFrameHostId GetFrameRoutingId(
   }
 
   return host->GetGlobalId();
+}
+
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
+std::optional<ExtensionNavigationUIData::WebViewData> GetWebViewData(
+    WebViewGuest* web_view) {
+  if (!web_view) {
+    return {};
+  }
+
+  // NOTE(andre@vivaldi.com) : Fake that we are not in a webview.
+  if (VivaldiTabCheck::IsOwnedByTabStripOrDevTools(web_view->web_contents())) {
+    return {};
+  }
+
+  ExtensionNavigationUIData::WebViewData web_view_data;
+  web_view_data.web_view_instance_id = web_view->view_instance_id();
+  web_view_data.web_view_rules_registry_id = web_view->rules_registry_id();
+  return web_view_data;
+}
+#endif
+
+std::optional<ExtensionNavigationUIData::WebViewData> GetWebViewData(
+    content::NavigationHandle* navigation_handle) {
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
+  return GetWebViewData(WebViewGuest::FromNavigationHandle(navigation_handle));
+#else
+  return {};
+#endif
+}
+
+std::optional<ExtensionNavigationUIData::WebViewData> GetWebViewData(
+    content::RenderFrameHost* frame_host) {
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
+  return GetWebViewData(WebViewGuest::FromRenderFrameHost(frame_host));
+#else
+  return {};
+#endif
 }
 
 }  // namespace
@@ -53,7 +90,8 @@ ExtensionNavigationUIData::ExtensionNavigationUIData(
           ExtensionApiFrameIdMap::GetDocumentId(
               navigation_handle->GetParentFrameOrOuterDocument()),
           ExtensionApiFrameIdMap::GetFrameType(navigation_handle),
-          ExtensionApiFrameIdMap::GetDocumentLifecycle(navigation_handle)) {
+          ExtensionApiFrameIdMap::GetDocumentLifecycle(navigation_handle),
+          GetWebViewData(navigation_handle)) {
   // TODO(clamy): See if it would be possible to have just one source for the
   // FrameData that works both for navigations and subresources loads.
 }
@@ -76,7 +114,8 @@ ExtensionNavigationUIData::ExtensionNavigationUIData(
           ExtensionApiFrameIdMap::GetDocumentId(
               frame_host->GetParentOrOuterDocument()),
           ExtensionApiFrameIdMap::GetFrameType(frame_host),
-          ExtensionApiFrameIdMap::GetDocumentLifecycle(frame_host)) {}
+          ExtensionApiFrameIdMap::GetDocumentLifecycle(frame_host),
+          GetWebViewData(frame_host)) {}
 
 // static
 std::unique_ptr<ExtensionNavigationUIData>
@@ -84,6 +123,13 @@ ExtensionNavigationUIData::CreateForMainFrameNavigation(
     content::WebContents* web_contents,
     int tab_id,
     int window_id) {
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
+  // Disabled when running Vivaldi due to VB-111531
+  if (!vivaldi::IsVivaldiRunning()) {
+  CHECK(base::FeatureList::IsEnabled(features::kGuestViewMPArch) ||
+        !WebViewGuest::FromWebContents(web_contents));
+  } // End Vivaldi
+#endif
   return base::WrapUnique(new ExtensionNavigationUIData(
       web_contents, tab_id, window_id, ExtensionApiFrameIdMap::kTopFrameId,
       ExtensionApiFrameIdMap::kInvalidFrameId,
@@ -93,16 +139,15 @@ ExtensionNavigationUIData::CreateForMainFrameNavigation(
       /*document_id=*/ExtensionApiFrameIdMap::DocumentId(),
       /*parent_document_id=*/ExtensionApiFrameIdMap::DocumentId(),
       api::extension_types::FrameType::kOutermostFrame,
-      api::extension_types::DocumentLifecycle::kActive));
+      api::extension_types::DocumentLifecycle::kActive,
+      /*web_view_data=*/std::nullopt));
 }
 
 std::unique_ptr<ExtensionNavigationUIData> ExtensionNavigationUIData::DeepCopy()
     const {
   auto copy = std::make_unique<ExtensionNavigationUIData>();
   copy->frame_data_ = frame_data_;
-  copy->is_web_view_ = is_web_view_;
-  copy->web_view_instance_id_ = web_view_instance_id_;
-  copy->web_view_rules_registry_id_ = web_view_rules_registry_id_;
+  copy->web_view_data_ = web_view_data_;
   copy->parent_routing_id_ = parent_routing_id_;
   return copy;
 }
@@ -117,7 +162,8 @@ ExtensionNavigationUIData::ExtensionNavigationUIData(
     const ExtensionApiFrameIdMap::DocumentId& document_id,
     const ExtensionApiFrameIdMap::DocumentId& parent_document_id,
     api::extension_types::FrameType frame_type,
-    api::extension_types::DocumentLifecycle document_lifecycle)
+    api::extension_types::DocumentLifecycle document_lifecycle,
+    std::optional<WebViewData> web_view_data)
     : frame_data_(frame_id,
                   parent_frame_id,
                   tab_id,
@@ -126,21 +172,7 @@ ExtensionNavigationUIData::ExtensionNavigationUIData(
                   parent_document_id,
                   frame_type,
                   document_lifecycle),
-      parent_routing_id_(parent_routing_id) {
-#if BUILDFLAG(ENABLE_GUEST_VIEW)
-  WebViewGuest* web_view = WebViewGuest::FromWebContents(web_contents);
-  // NOTE(andre@vivaldi.com) : Vivaldi uses WebContents from the tabstrip in
-  // WebViewGuests and chrome.webRequest will look for webview specific filters
-  // if we identify the webcontents as webviews here.
-  Browser* browser = chrome::FindBrowserWithTab(web_contents);
-  bool id_as_webview =
-      !(vivaldi::IsVivaldiRunning() && browser && browser->is_type_normal());
-  if (web_view && id_as_webview) {
-    is_web_view_ = true;
-    web_view_instance_id_ = web_view->view_instance_id();
-    web_view_rules_registry_id_ = web_view->rules_registry_id();
-  }
-#endif
-}
+      web_view_data_(web_view_data),
+      parent_routing_id_(parent_routing_id) {}
 
 }  // namespace extensions

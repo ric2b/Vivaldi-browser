@@ -14,6 +14,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.view.View;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.test.core.app.ApplicationProvider;
 
@@ -58,10 +59,10 @@ public class MenuSheetContentUnitTest {
         }
 
         @Override
-        public int getSheetContentDescriptionStringId() {
+        public @NonNull String getSheetContentDescription(Context context) {
             // "Options menu"
             // Automatically appended: "Swipe down to close."
-            return R.string.readaloud_options_menu_description;
+            return context.getString(R.string.readaloud_options_menu_description);
         }
     }
 
@@ -81,14 +82,14 @@ public class MenuSheetContentUnitTest {
     public void testNotifySheetClosed() {
         when(mBottomSheetController.getCurrentSheetContent()).thenReturn(mContent);
         mContent.notifySheetClosed(mContent);
-        verify(mBottomSheetController).requestShowContent(mBottomSheetContent, true);
+        verify(mBottomSheetController).requestShowContent(mBottomSheetContent, false);
     }
 
     @Test
-    public void testOpenSheet() {
+    public void testOpenParent() {
         mContent.openSheet(mBottomSheetContent);
+        // Hiding self will show the parent sheet.
         verify(mBottomSheetController).hideContent(mContent, false);
-        verify(mBottomSheetController).requestShowContent(mBottomSheetContent, true);
     }
 
     @Test
@@ -155,7 +156,6 @@ public class MenuSheetContentUnitTest {
     public void testHandleBackPress() {
         mContent.handleBackPress();
         verify(mBottomSheetController).hideContent(mContent, false);
-        verify(mBottomSheetController).requestShowContent(mBottomSheetContent, true);
     }
 
     @Test

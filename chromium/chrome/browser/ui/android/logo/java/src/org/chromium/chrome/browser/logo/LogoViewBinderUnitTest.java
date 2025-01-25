@@ -76,12 +76,12 @@ public class LogoViewBinderUnitTest {
         public final CallbackHelper hideLoadingCallback = new CallbackHelper();
 
         @Override
-        public void onShowLoadingUIComplete() {
+        public void onShowLoadingUiComplete() {
             showLoadingCallback.notifyCalled();
         }
 
         @Override
-        public void onHideLoadingUIComplete() {
+        public void onHideLoadingUiComplete() {
             hideLoadingCallback.notifyCalled();
         }
     }
@@ -103,7 +103,6 @@ public class LogoViewBinderUnitTest {
                         /* context= */ null,
                         /* logoClickedCallback= */ null,
                         mLogoModel,
-                        /* shouldFetchDoodle= */ true,
                         /* onLogoAvailableCallback= */ null,
                         /* visibilityObserver= */ null,
                         /* defaultGoogleLogo= */ null);

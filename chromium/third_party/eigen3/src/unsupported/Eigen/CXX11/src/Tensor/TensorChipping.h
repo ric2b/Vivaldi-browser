@@ -177,7 +177,7 @@ struct TensorEvaluator<const TensorChippingOp<DimId, ArgType>, Device> {
     // Check if chipping is effectively inner or outer: products of dimensions
     // before or after the chipped dimension is `1`.
     Index after_chipped_dim_product = 1;
-    for (int i = m_dim.actualDim() + 1; i < NumInputDims; ++i) {
+    for (int i = static_cast<int>(m_dim.actualDim()) + 1; i < NumInputDims; ++i) {
       after_chipped_dim_product *= input_dims[i];
     }
 

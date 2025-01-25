@@ -215,7 +215,10 @@ void av1_pick_filter_level(const YV12_BUFFER_CONFIG *sd, AV1_COMP *cpi,
   int disable_filter_rt_screen = 0;
   (void)sd;
 
-  lf->sharpness_level = 0;
+  // Enable loop filter sharpness only for allintra encoding mode,
+  // as frames do not have to serve as references to others
+  lf->sharpness_level =
+      cpi->oxcf.mode == ALLINTRA ? cpi->oxcf.algo_cfg.sharpness : 0;
 
   if (cpi->oxcf.tune_cfg.content == AOM_CONTENT_SCREEN &&
       cpi->oxcf.q_cfg.aq_mode == CYCLIC_REFRESH_AQ &&

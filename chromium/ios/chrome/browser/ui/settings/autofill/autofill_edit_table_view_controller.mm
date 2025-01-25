@@ -40,6 +40,14 @@
                                  navigationDelegate:self];
   [self setShouldHideDoneButton:YES];
   [self updateUIForEditState];
+
+  if (@available(iOS 17, *)) {
+    NSArray<UITrait>* traits =
+        TraitCollectionSetForTraits(@[ UITraitVerticalSizeClass.class ]);
+    [self registerForTraitChanges:traits
+                       withAction:@selector
+                       (hideFormInputAccessoryViewOnTraitChange)];
+  }
 }
 
 - (void)viewDidAppear:(BOOL)animated {
@@ -59,11 +67,16 @@
               object:nil];
 }
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
+  if (@available(iOS 17, *)) {
+    return;
+  }
 
-  self.formInputAccessoryView.hidden = IsCompactHeight(self);
+  [self hideFormInputAccessoryViewOnTraitChange];
 }
+#endif
 
 #pragma mark - SettingsRootTableViewController
 
@@ -131,8 +144,7 @@
 
 - (void)fromInputAccessoryViewDidTapOmniboxTypingShield:
     (FormInputAccessoryView*)sender {
-  NOTREACHED_IN_MIGRATION()
-      << "The typing shield should only be present on web";
+  NOTREACHED() << "The typing shield should only be present on web";
 }
 
 #pragma mark - Helper methods
@@ -193,8 +205,7 @@
 }
 
 - (BOOL)isItemAtIndexPathTextEditCell:(NSIndexPath*)cellPath {
-  NOTREACHED_IN_MIGRATION();
-  return YES;
+  NOTREACHED();
 }
 
 - (void)moveToAnotherTextFieldWithOffset:(NSInteger)offset {
@@ -230,6 +241,12 @@
       nextPath && [[self.tableView cellForRowAtIndexPath:nextPath]
                       isKindOfClass:TableViewTextEditCell.class];
   self.formInputAccessoryView.nextButton.enabled = isValidNextPath;
+}
+
+// Hides the `formInputAccessoryView` when the UITraitVerticalSizeClass changes
+// on device and the height is deemed to be compact.
+- (void)hideFormInputAccessoryViewOnTraitChange {
+  self.formInputAccessoryView.hidden = IsCompactHeight(self);
 }
 
 #pragma mark - Keyboard handling

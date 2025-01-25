@@ -58,7 +58,7 @@
 #include "net/test/key_util.h"
 #include "net/test/revocation_builder.h"
 #include "net/test/test_data_directory.h"
-#include "net/third_party/quiche/src/quiche/spdy/core/spdy_frame_builder.h"
+#include "net/third_party/quiche/src/quiche/http2/core/spdy_frame_builder.h"
 #include "third_party/boringssl/src/pki/extended_key_usage.h"
 #include "url/origin.h"
 
@@ -437,6 +437,9 @@ bool EmbeddedTestServer::GenerateCertAndKey() {
       root->SetBasicConstraints(/*is_ca=*/true, /*path_len=*/-1);
       root->SetKeyUsages(
           {bssl::KEY_USAGE_BIT_KEY_CERT_SIGN, bssl::KEY_USAGE_BIT_CRL_SIGN});
+      if (!cert_config_.root_dns_names.empty()) {
+        root->SetSubjectAltNames(cert_config_.root_dns_names, {});
+      }
       break;
   }
 
@@ -459,7 +462,7 @@ bool EmbeddedTestServer::GenerateCertAndKey() {
   std::vector<GURL> leaf_ocsp_urls;
 
   leaf->SetValidity(now - base::Days(1), now + base::Days(20));
-  leaf->SetBasicConstraints(/*is_ca=*/false, /*path_len=*/-1);
+  leaf->SetBasicConstraints(/*is_ca=*/cert_config_.leaf_is_ca, /*path_len=*/-1);
   leaf->SetExtendedKeyUsages({bssl::der::Input(bssl::kServerAuth)});
 
   if (!cert_config_.policy_oids.empty()) {

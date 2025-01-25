@@ -28,10 +28,11 @@ bool IsCreatedByExtension(const TemplateURL* template_url) {
 
 namespace vivaldi {
 
-std::string VivaldiGetPositionSuffix(const TemplateURL* template_url) {
-  return syncer::ClientTagHash::FromUnhashed(syncer::SEARCH_ENGINES,
-                                             template_url->sync_guid())
-      .value();
+syncer::UniquePosition::Suffix VivaldiGetPositionSuffix(
+    const TemplateURL* template_url) {
+  return syncer::UniquePosition::GenerateSuffix(
+      syncer::ClientTagHash::FromUnhashed(syncer::SEARCH_ENGINES,
+                                          template_url->sync_guid()));
 }
 
 const char* VivaldiGetDefaultProviderGuidPrefForType(

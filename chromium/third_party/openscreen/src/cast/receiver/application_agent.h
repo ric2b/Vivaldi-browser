@@ -56,11 +56,11 @@ class ApplicationAgent final
     // must not mutate while the Application is registered.
     virtual const std::vector<std::string>& GetAppIds() const = 0;
 
-    // Launches the application and returns true if successful. |app_id| is the
-    // specific ID that was used to launch the app, and |app_params| is a
+    // Launches the application and returns true if successful. `app_id` is the
+    // specific ID that was used to launch the app, and `app_params` is a
     // pass-through for any arbitrary app-specfic structure (or null if not
     // provided). If the Application wishes to send/receive messages, it uses
-    // the provided |message_port| and must call MessagePort::SetClient() before
+    // the provided `message_port` and must call MessagePort::SetClient() before
     // any flow will occur.
     virtual bool Launch(const std::string& app_id,
                         const Json::Value& app_params,
@@ -89,13 +89,13 @@ class ApplicationAgent final
   // into this agent and any running Applications.
   CastSocket::Client* cast_socket_client() { return &router_; }
 
-  // Registers an Application for launching by this agent. |app| must outlive
+  // Registers an Application for launching by this agent. `app` must outlive
   // this ApplicationAgent, or until UnregisterApplication() is called.
   void RegisterApplication(Application* app,
                            bool auto_launch_for_idle_screen = false);
   void UnregisterApplication(Application* app);
 
-  // Stops the given |app| if it is the one currently running. This is used by
+  // Stops the given `app` if it is the one currently running. This is used by
   // applications that encounter "exit" conditions where they need to STOP
   // (e.g., due to timeout of user activity, end of media playback, or fatal
   // errors).
@@ -120,7 +120,7 @@ class ApplicationAgent final
   void OnClose(CastSocket* socket) final;
   void OnError(CastSocket* socket, const Error& error) final;
 
-  // OnMessage() delegates to these to take action for each |request|. Each of
+  // OnMessage() delegates to these to take action for each `request`. Each of
   // these returns a non-empty response message if a reply should be sent back
   // to the requestor.
   Json::Value HandlePing();
@@ -131,8 +131,8 @@ class ApplicationAgent final
   Json::Value HandleInvalidCommand(const Json::Value& request);
 
   // Stops the currently-running Application and attempts to launch the
-  // Application referred to by |app_id|. If this fails, the "idle screen"
-  // Application will be automatically launched as a failure fall-back. |socket|
+  // Application referred to by `app_id`. If this fails, the "idle screen"
+  // Application will be automatically launched as a failure fall-back. `socket`
   // is non-null only when the application switch was caused by a remote LAUNCH
   // request.
   Error SwitchToApplication(std::string app_id,
@@ -142,7 +142,7 @@ class ApplicationAgent final
   // Stops the currently-running Application and launches the "idle screen."
   void GoIdle();
 
-  // Populates the given |message| object with the RECEIVER_STATUS fields,
+  // Populates the given `message` object with the RECEIVER_STATUS fields,
   // reflecting the currently-launched app (if any), and a fake volume level
   // status.
   void PopulateReceiverStatus(Json::Value* message);

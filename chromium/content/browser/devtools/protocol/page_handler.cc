@@ -103,39 +103,40 @@ constexpr char kErrorNotAttached[] = "Not attached to a page";
 constexpr char kErrorInactivePage[] = "Not attached to an active page";
 
 using BitmapEncoder =
-    base::RepeatingCallback<bool(const SkBitmap& bitmap,
-                                 std::vector<uint8_t>& output)>;
+    base::RepeatingCallback<std::optional<std::vector<uint8_t>>(
+        const SkBitmap& bitmap)>;
 
-bool EncodeBitmapAsPngSlow(const SkBitmap& bitmap,
-                           std::vector<uint8_t>& output) {
+std::optional<std::vector<uint8_t>> EncodeBitmapAsPngSlow(
+    const SkBitmap& bitmap) {
   TRACE_EVENT0("devtools", "EncodeBitmapAsPngSlow");
-  return gfx::PNGCodec::EncodeBGRASkBitmap(bitmap, false, &output);
+  return gfx::PNGCodec::EncodeBGRASkBitmap(bitmap,
+                                           /*discard_transparency=*/false);
 }
 
-bool EncodeBitmapAsPngFast(const SkBitmap& bitmap,
-                           std::vector<uint8_t>& output) {
+std::optional<std::vector<uint8_t>> EncodeBitmapAsPngFast(
+    const SkBitmap& bitmap) {
   TRACE_EVENT0("devtools", "EncodeBitmapAsPngFast");
-  return gfx::PNGCodec::FastEncodeBGRASkBitmap(bitmap, false, &output);
+  return gfx::PNGCodec::FastEncodeBGRASkBitmap(bitmap,
+                                               /*discard_transparency=*/false);
 }
 
-bool EncodeBitmapAsJpeg(int quality,
-                        const SkBitmap& bitmap,
-                        std::vector<uint8_t>& output) {
+std::optional<std::vector<uint8_t>> EncodeBitmapAsJpeg(int quality,
+                                                       const SkBitmap& bitmap) {
   TRACE_EVENT0("devtools", "EncodeBitmapAsJpeg");
-  return gfx::JPEGCodec::Encode(bitmap, quality, &output);
+  return gfx::JPEGCodec::Encode(bitmap, quality);
 }
 
-bool EncodeBitmapAsWebp(int quality,
-                        const SkBitmap& bitmap,
-                        std::vector<uint8_t>& output) {
+std::optional<std::vector<uint8_t>> EncodeBitmapAsWebp(int quality,
+                                                       const SkBitmap& bitmap) {
   TRACE_EVENT0("devtools", "EncodeBitmapAsWebp");
-  return gfx::WebpCodec::Encode(bitmap, quality, &output);
+  return gfx::WebpCodec::Encode(bitmap, quality);
 }
 
 absl::variant<protocol::Response, BitmapEncoder>
 GetEncoder(const std::string& format, int quality, bool optimize_for_speed) {
-  if (quality < 0 || quality > 100)
+  if (quality < 0 || quality > 100) {
     quality = kDefaultScreenshotQuality;
+  }
 
   if (format == protocol::Page::CaptureScreenshot::FormatEnum::Png) {
     return base::BindRepeating(optimize_for_speed ? EncodeBitmapAsPngFast
@@ -448,6 +449,23 @@ void GotManifest(protocol::Maybe<std::string> manifest_id,
 }
 
 }  // namespace
+
+struct PageHandler::PendingScreenshotRequest {
+  PendingScreenshotRequest(base::ScopedClosureRunner capturer_handle,
+                           PageHandler::BitmapEncoder encoder,
+                           std::unique_ptr<CaptureScreenshotCallback> callback)
+      : capturer_handle(std::move(capturer_handle)),
+        encoder(std::move(encoder)),
+        callback(std::move(callback)) {}
+
+  base::ScopedClosureRunner capturer_handle;
+  PageHandler::BitmapEncoder encoder;
+  std::unique_ptr<CaptureScreenshotCallback> callback;
+  blink::DeviceEmulationParams original_emulation_params;
+  std::optional<blink::web_pref::WebPreferences> original_web_prefs;
+  gfx::Size original_view_size;
+  gfx::Size requested_image_size;
+};
 
 PageHandler::PageHandler(EmulationHandler* emulation_handler,
                          BrowserHandler* browser_handler,
@@ -940,7 +958,7 @@ void PageHandler::OnDownloadUpdated(download::DownloadItem* item) {
       state = Page::DownloadProgress::StateEnum::Canceled;
       break;
     case download::DownloadItem::MAX_DOWNLOAD_STATE:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
   frontend_->DownloadProgress(item->GetGuid(), item->GetTotalBytes(),
                               item->GetReceivedBytes(), state);
@@ -1137,19 +1155,29 @@ void PageHandler::CaptureScreenshot(
     return;
   }
 
+  base::ScopedClosureRunner capturer_handle;
+  if (auto* wc = WebContents::FromRenderFrameHost(host_)) {
+    // Tell page it needs to produce frames even if it doesn't want to (e.g. is
+    // not currently visible).
+    capturer_handle =
+        wc->IncrementCapturerCount(gfx::Size(), /*stay_hidden=*/true,
+                                   /*stay_awake=*/true, /*is_activity=*/false);
+  }
+
+  auto pending_request = std::make_unique<PendingScreenshotRequest>(
+      std::move(capturer_handle), std::move(absl::get<BitmapEncoder>(encoder)),
+      std::move(callback));
+
   // We don't support clip/emulation when capturing from window, bail out.
   if (!from_surface.value_or(true)) {
     if (!is_trusted_) {
-      callback->sendFailure(
+      pending_request->callback->sendFailure(
           Response::ServerError("Only screenshots from surface are allowed."));
       return;
     }
     widget_host->GetSnapshotFromBrowser(
         base::BindOnce(&PageHandler::ScreenshotCaptured,
-                       weak_factory_.GetWeakPtr(), std::move(callback),
-                       std::move(absl::get<BitmapEncoder>(encoder)),
-                       gfx::Size(), gfx::Size(), blink::DeviceEmulationParams(),
-                       std::nullopt),
+                       weak_factory_.GetWeakPtr(), std::move(pending_request)),
         false);
     return;
   }
@@ -1157,16 +1185,19 @@ void PageHandler::CaptureScreenshot(
   // Welcome to the neural net of capturing screenshot while emulating device
   // metrics!
   bool emulation_enabled = emulation_handler_->device_emulation_enabled();
-  blink::DeviceEmulationParams original_params =
+  pending_request->original_emulation_params =
       emulation_handler_->GetDeviceEmulationParams();
+  const blink::DeviceEmulationParams& original_params =
+      pending_request->original_emulation_params;
   blink::DeviceEmulationParams modified_params = original_params;
 
   // Capture original view size if we know we are going to destroy it. We use
   // it in ScreenshotCaptured to restore.
-  gfx::Size original_view_size =
+  const gfx::Size original_view_size =
       emulation_enabled || clip.has_value()
           ? widget_host->GetView()->GetViewBounds().size()
           : gfx::Size();
+  pending_request->original_view_size = original_view_size;
   gfx::Size emulated_view_size = modified_params.view_size;
 
   double dpfactor = 1;
@@ -1210,13 +1241,13 @@ void PageHandler::CaptureScreenshot(
     modified_params.viewport_offset.Scale(widget_host_device_scale_factor);
   }
 
-  std::optional<blink::web_pref::WebPreferences> maybe_original_web_prefs;
   if (capture_beyond_viewport.value_or(false)) {
-    blink::web_pref::WebPreferences original_web_prefs =
+    pending_request->original_web_prefs =
         host_->render_view_host()->GetDelegate()->GetOrCreateWebPreferences();
-    maybe_original_web_prefs = original_web_prefs;
-
+    const blink::web_pref::WebPreferences& original_web_prefs =
+        *pending_request->original_web_prefs;
     blink::web_pref::WebPreferences modified_web_prefs = original_web_prefs;
+
     // Hiding scrollbar is needed to avoid scrollbar artefacts on the
     // screenshot. Details: https://crbug.com/1003629.
     modified_web_prefs.hide_scrollbars = true;
@@ -1247,26 +1278,21 @@ void PageHandler::CaptureScreenshot(
     widget_host->GetView()->SetSize(
         gfx::ScaleToFlooredSize(emulated_view_size, dpfactor));
   }
-  gfx::Size requested_image_size = gfx::Size();
   if (emulation_enabled || clip.has_value()) {
-    if (clip.has_value()) {
-      requested_image_size = gfx::Size(clip->GetWidth(), clip->GetHeight());
-    } else {
-      requested_image_size = emulated_view_size;
-    }
+    const gfx::Size requested_image_size =
+        clip.has_value() ? gfx::Size(clip->GetWidth(), clip->GetHeight())
+                         : emulated_view_size;
     double scale = widget_host_device_scale_factor * dpfactor;
     if (clip.has_value()) {
       scale *= clip->GetScale();
     }
-    requested_image_size = gfx::ScaleToRoundedSize(requested_image_size, scale);
+    pending_request->requested_image_size =
+        gfx::ScaleToRoundedSize(requested_image_size, scale);
   }
 
   widget_host->GetSnapshotFromBrowser(
       base::BindOnce(&PageHandler::ScreenshotCaptured,
-                     weak_factory_.GetWeakPtr(), std::move(callback),
-                     std::move(absl::get<BitmapEncoder>(encoder)),
-                     original_view_size, requested_image_size, original_params,
-                     maybe_original_web_prefs),
+                     weak_factory_.GetWeakPtr(), std::move(pending_request)),
       true);
 }
 
@@ -1479,10 +1505,8 @@ void PageHandler::ScreencastFrameCaptured(
       FROM_HERE, {base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(
           [](const SkBitmap& bitmap,
-             BitmapEncoder encoder) -> std::vector<uint8_t> {
-            std::vector<uint8_t> result;
-            encoder.Run(bitmap, result);
-            return result;
+             BitmapEncoder encoder) -> std::optional<std::vector<uint8_t>> {
+            return encoder.Run(bitmap);
           },
           bitmap, screencast_encoder_),
       base::BindOnce(&PageHandler::ScreencastFrameEncoded,
@@ -1491,57 +1515,58 @@ void PageHandler::ScreencastFrameCaptured(
 
 void PageHandler::ScreencastFrameEncoded(
     std::unique_ptr<Page::ScreencastFrameMetadata> page_metadata,
-    std::vector<uint8_t> data) {
-  if (data.empty()) {
+    std::optional<std::vector<uint8_t>> data) {
+  if (!data) {
     --frames_in_flight_;
     return;  // Encode failed.
   }
 
-  frontend_->ScreencastFrame(Binary::fromVector(std::move(data)),
+  frontend_->ScreencastFrame(Binary::fromVector(std::move(data).value()),
                              std::move(page_metadata), session_id_);
 }
 
 void PageHandler::ScreenshotCaptured(
-    std::unique_ptr<CaptureScreenshotCallback> callback,
-    BitmapEncoder encoder,
-    const gfx::Size& original_view_size,
-    const gfx::Size& requested_image_size,
-    const blink::DeviceEmulationParams& original_emulation_params,
-    const std::optional<blink::web_pref::WebPreferences>&
-        maybe_original_web_prefs,
+    std::unique_ptr<PendingScreenshotRequest> request,
     const gfx::Image& image) {
-  if (original_view_size.width()) {
+  if (request->original_view_size.width()) {
     RenderWidgetHostImpl* widget_host = host_->GetRenderWidgetHost();
-    widget_host->GetView()->SetSize(original_view_size);
-    emulation_handler_->SetDeviceEmulationParams(original_emulation_params);
+    widget_host->GetView()->SetSize(request->original_view_size);
+    emulation_handler_->SetDeviceEmulationParams(
+        request->original_emulation_params);
   }
 
-  if (maybe_original_web_prefs) {
+  if (request->original_web_prefs) {
     host_->render_view_host()->GetDelegate()->SetWebPreferences(
-        maybe_original_web_prefs.value());
+        *request->original_web_prefs);
   }
 
   if (image.IsEmpty()) {
-    callback->sendFailure(
+    request->callback->sendFailure(
         Response::ServerError("Unable to capture screenshot"));
     return;
   }
 
-  std::vector<uint8_t> encoded_bitmap;
+  std::optional<std::vector<uint8_t>> encoded_bitmap;
   const SkBitmap& bitmap = *image.ToSkBitmap();
 
-  if (!requested_image_size.IsEmpty() &&
-      (image.Width() != requested_image_size.width() ||
-       image.Height() != requested_image_size.height())) {
+  if (!request->requested_image_size.IsEmpty() &&
+      (image.Width() != request->requested_image_size.width() ||
+       image.Height() != request->requested_image_size.height())) {
     SkBitmap cropped = SkBitmapOperations::CreateTiledBitmap(
-        bitmap, 0, 0, requested_image_size.width(),
-        requested_image_size.height());
-    encoder.Run(cropped, encoded_bitmap);
+        bitmap, 0, 0, request->requested_image_size.width(),
+        request->requested_image_size.height());
+    encoded_bitmap = request->encoder.Run(cropped);
   } else {
-    encoder.Run(bitmap, encoded_bitmap);
+    encoded_bitmap = request->encoder.Run(bitmap);
+  }
+
+  if (encoded_bitmap) {
+    request->callback->sendSuccess(
+        Binary::fromVector(std::move(encoded_bitmap).value()));
+    return;
   }
   // TODO(caseq): send failure if we fail to encode?
-  callback->sendSuccess(Binary::fromVector(std::move(encoded_bitmap)));
+  request->callback->sendSuccess(Binary());
 }
 
 Response PageHandler::StopLoading() {
@@ -1744,8 +1769,7 @@ Page::BackForwardCacheNotRestoredReason NotRestoredReasonToProtocol(
     case Reason::kBlocklistedFeatures:
       // Blocklisted features should be handled separately and be broken down
       // into sub reasons.
-      NOTREACHED_IN_MIGRATION();
-      return Page::BackForwardCacheNotRestoredReasonEnum::Unknown;
+      NOTREACHED();
     case Reason::kUnknown:
       return Page::BackForwardCacheNotRestoredReasonEnum::Unknown;
   }
@@ -1853,8 +1877,7 @@ Page::BackForwardCacheNotRestoredReason BlocklistedFeatureToProtocol(
       return Page::BackForwardCacheNotRestoredReasonEnum::IndexedDBEvent;
     case WebSchedulerTrackedFeature::kDummy:
       // This is a test only reason and should never be called.
-      NOTREACHED_IN_MIGRATION();
-      return Page::BackForwardCacheNotRestoredReasonEnum::Dummy;
+      NOTREACHED();
     case WebSchedulerTrackedFeature::
         kJsNetworkRequestReceivedCacheControlNoStoreResource:
       return Page::BackForwardCacheNotRestoredReasonEnum::
@@ -1895,11 +1918,9 @@ DisableForRenderFrameHostReasonToProtocol(
     BackForwardCache::DisabledReason reason) {
   switch (reason.source) {
     case BackForwardCache::DisabledSource::kLegacy:
-      NOTREACHED_IN_MIGRATION();
-      return Page::BackForwardCacheNotRestoredReasonEnum::Unknown;
+      NOTREACHED();
     case BackForwardCache::DisabledSource::kTesting:
-      NOTREACHED_IN_MIGRATION();
-      return Page::BackForwardCacheNotRestoredReasonEnum::Unknown;
+      NOTREACHED();
     case BackForwardCache::DisabledSource::kContent:
       switch (
           static_cast<BackForwardCacheDisable::DisabledReasonId>(reason.id)) {
@@ -1981,6 +2002,9 @@ DisableForRenderFrameHostReasonToProtocol(
         case back_forward_cache::DisabledReasonId::kRequestedByWebViewClient:
           return Page::BackForwardCacheNotRestoredReasonEnum::
               RequestedByWebViewClient;
+        case back_forward_cache::DisabledReasonId::kPostMessageByWebViewClient:
+          return Page::BackForwardCacheNotRestoredReasonEnum::
+              PostMessageByWebViewClient;
       }
   }
 }
@@ -2046,8 +2070,7 @@ Page::BackForwardCacheNotRestoredReasonType MapNotRestoredReasonToType(
     case Reason::kUnknown:
       return Page::BackForwardCacheNotRestoredReasonTypeEnum::SupportPending;
     case Reason::kBlocklistedFeatures:
-      NOTREACHED_IN_MIGRATION();
-      return Page::BackForwardCacheNotRestoredReasonTypeEnum::PageSupportNeeded;
+      NOTREACHED();
   }
 }
 

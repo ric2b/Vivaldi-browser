@@ -158,12 +158,11 @@ class TabStatsTracker : public TabStripModelObserver,
   void OnResume() override;
 
   // resource_coordinator::TabLifecycleObserver:
-  void OnDiscardedStateChange(content::WebContents* contents,
-                              ::mojom::LifecycleUnitDiscardReason reason,
-                              bool is_discarded) override;
-
-  void OnAutoDiscardableStateChange(content::WebContents* contents,
-                                    bool is_auto_discardable) override;
+  void OnTabLifecycleStateChange(
+      content::WebContents* contents,
+      mojom::LifecycleUnitState previous_state,
+      mojom::LifecycleUnitState new_state,
+      std::optional<LifecycleUnitDiscardReason> discard_reason) override;
 
   // Functions to call to start tracking a new tab.
   void OnInitialOrInsertedTab(content::WebContents* web_contents);
@@ -235,15 +234,17 @@ class TabStatsTracker::UmaStatsReportingDelegate {
   static const char kWindowWidthHistogramName[];
 
   // The names of the histograms that record daily discard/reload counts caused
-  // by external/urgent/proactive/suggested events.
+  // for each discard reason.
   static const char kDailyDiscardsExternalHistogramName[];
   static const char kDailyDiscardsUrgentHistogramName[];
   static const char kDailyDiscardsProactiveHistogramName[];
   static const char kDailyDiscardsSuggestedHistogramName[];
+  static const char kDailyDiscardsFrozenWithGrowingMemoryHistogramName[];
   static const char kDailyReloadsExternalHistogramName[];
   static const char kDailyReloadsUrgentHistogramName[];
   static const char kDailyReloadsProactiveHistogramName[];
   static const char kDailyReloadsSuggestedHistogramName[];
+  static const char kDailyReloadsFrozenWithGrowingMemoryHistogramName[];
 
   // The names of the histograms that record duplicate tab data.
   static const char kTabDuplicateCountSingleWindowHistogramName[];

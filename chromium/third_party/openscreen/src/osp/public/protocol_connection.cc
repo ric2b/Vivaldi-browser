@@ -6,8 +6,10 @@
 
 namespace openscreen::osp {
 
-ProtocolConnection::ProtocolConnection() = default;
+ProtocolConnection::Observer::Observer() = default;
+ProtocolConnection::Observer::~Observer() = default;
 
+ProtocolConnection::ProtocolConnection() = default;
 ProtocolConnection::~ProtocolConnection() = default;
 
 void ProtocolConnection::SetObserver(Observer* observer) {

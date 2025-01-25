@@ -8,10 +8,10 @@
 WebsiteDarkModeTabHelper::~WebsiteDarkModeTabHelper() = default;
 
 WebsiteDarkModeTabHelper::WebsiteDarkModeTabHelper(web::WebState* web_state)
-    : browser_state_(
-          ChromeBrowserState::FromBrowserState(web_state->GetBrowserState())),
+    : profile_(
+          ProfileIOS::FromBrowserState(web_state->GetBrowserState())),
 website_dark_mode_agent_([[WebsiteDarkModeAgent alloc]
-          initWithPrefService:browser_state_->GetPrefs()
+          initWithPrefService:profile_->GetPrefs()
                      webState:web_state]) {
   web_state->AddObserver(this);
 }

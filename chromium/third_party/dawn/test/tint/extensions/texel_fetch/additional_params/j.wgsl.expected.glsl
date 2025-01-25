@@ -1,17 +1,15 @@
-SKIP: INVALID
+#version 310 es
+precision highp float;
+precision highp int;
 
-
-enable chromium_experimental_framebuffer_fetch;
-
-@fragment
-fn f(@location(0) a : vec4f, @interpolate(flat) @location(1) b : vec4f, @color(0) fbf : vec4f) {
-  g(a.x, b.y, fbf.x);
+layout(location = 0) in vec4 f_loc0_Input;
+layout(location = 1) flat in vec4 f_loc1_Input;
+in vec4 f_Input;
+void g(float a, float b, float c) {
 }
-
-fn g(a : f32, b : f32, c : f32) {
+void f_inner(vec4 a, vec4 b, vec4 fbf) {
+  g(a[0u], b[1u], fbf[0u]);
 }
-
-Failed to generate: <dawn>/test/tint/extensions/texel_fetch/additional_params/j.wgsl:1:8 error: GLSL backend does not support extension 'chromium_experimental_framebuffer_fetch'
-enable chromium_experimental_framebuffer_fetch;
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
+void main() {
+  f_inner(f_loc0_Input, f_loc1_Input, f_Input);
+}

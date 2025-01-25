@@ -19,11 +19,13 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "quiche/quic/core/frames/quic_ack_frequency_frame.h"
+#include "quiche/quic/core/frames/quic_reset_stream_at_frame.h"
 #include "quiche/quic/core/frames/quic_window_update_frame.h"
 #include "quiche/quic/core/quic_connection.h"
 #include "quiche/quic/core/quic_connection_context.h"
 #include "quiche/quic/core/quic_error_codes.h"
 #include "quiche/quic/core/quic_flow_controller.h"
+#include "quiche/quic/core/quic_stream.h"
 #include "quiche/quic/core/quic_stream_priority.h"
 #include "quiche/quic/core/quic_types.h"
 #include "quiche/quic/core/quic_utils.h"
@@ -170,6 +172,13 @@ void QuicSession::Initialize() {
   connection_->SetSessionNotifier(this);
   connection_->SetDataProducer(this);
   connection_->SetUnackedMapInitialCapacity();
+  if (perspective_ == Perspective::IS_CLIENT) {
+    if (config_.HasClientSentConnectionOption(kCHP1, perspective_)) {
+      config_.SetDiscardLengthToSend(kDefaultMaxPacketSize);
+    } else if (config_.HasClientSentConnectionOption(kCHP2, perspective_)) {
+      config_.SetDiscardLengthToSend(kDefaultMaxPacketSize * 2);
+    }
+  }
   connection_->SetFromConfig(config_);
   if (perspective_ == Perspective::IS_CLIENT) {
     if (config_.HasClientRequestedIndependentOption(kAFFE, perspective_) &&
@@ -371,7 +380,22 @@ void QuicSession::OnStopSendingFrame(const QuicStopSendingFrame& frame) {
     return;
   }
 
-  QuicStream* stream = GetOrCreateStream(stream_id);
+  QuicStream* stream = nullptr;
+  if (enable_stop_sending_for_zombie_streams_) {
+    stream = GetStream(stream_id);
+    if (stream != nullptr) {
+      if (stream->IsZombie()) {
+        QUIC_RELOADABLE_FLAG_COUNT_N(
+            quic_deliver_stop_sending_to_zombie_streams, 1, 3);
+      } else {
+        QUIC_RELOADABLE_FLAG_COUNT_N(
+            quic_deliver_stop_sending_to_zombie_streams, 2, 3);
+      }
+      stream->OnStopSending(frame.error());
+      return;
+    }
+  }
+  stream = GetOrCreateStream(stream_id);
   if (!stream) {
     // Errors are handled by GetOrCreateStream.
     return;
@@ -424,6 +448,21 @@ void QuicSession::PendingStreamOnRstStream(const QuicRstStreamFrame& frame) {
   ClosePendingStream(stream_id);
 }
 
+void QuicSession::PendingStreamOnResetStreamAt(
+    const QuicResetStreamAtFrame& frame) {
+  QUICHE_DCHECK(VersionUsesHttp3(transport_version()));
+  QuicStreamId stream_id = frame.stream_id;
+
+  PendingStream* pending = GetOrCreatePendingStream(stream_id);
+
+  if (!pending) {
+    HandleRstOnValidNonexistentStream(frame.ToRstStream());
+    return;
+  }
+
+  pending->OnResetStreamAtFrame(frame);
+}
+
 void QuicSession::OnRstStream(const QuicRstStreamFrame& frame) {
   QuicStreamId stream_id = frame.stream_id;
   if (stream_id == QuicUtils::GetInvalidStreamId(transport_version())) {
@@ -459,6 +498,40 @@ void QuicSession::OnRstStream(const QuicRstStreamFrame& frame) {
     return;  // Errors are handled by GetOrCreateStream.
   }
   stream->OnStreamReset(frame);
+}
+
+void QuicSession::OnResetStreamAt(const QuicResetStreamAtFrame& frame) {
+  QUICHE_DCHECK(VersionHasIetfQuicFrames(transport_version()));
+  QuicStreamId stream_id = frame.stream_id;
+  if (stream_id == QuicUtils::GetInvalidStreamId(transport_version())) {
+    connection()->CloseConnection(
+        QUIC_INVALID_STREAM_ID, "Received data for an invalid stream",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
+    return;
+  }
+
+  if (VersionHasIetfQuicFrames(transport_version()) &&
+      QuicUtils::GetStreamType(stream_id, perspective(),
+                               IsIncomingStream(stream_id),
+                               version()) == WRITE_UNIDIRECTIONAL) {
+    connection()->CloseConnection(
+        QUIC_INVALID_STREAM_ID, "Received RESET_STREAM for a write-only stream",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
+    return;
+  }
+
+  if (ShouldProcessFrameByPendingStream(RESET_STREAM_AT_FRAME, stream_id)) {
+    PendingStreamOnResetStreamAt(frame);
+    return;
+  }
+
+  QuicStream* stream = GetOrCreateStream(stream_id);
+
+  if (!stream) {
+    HandleRstOnValidNonexistentStream(frame.ToRstStream());
+    return;  // Errors are handled by GetOrCreateStream.
+  }
+  stream->OnResetStreamAtFrame(frame);
 }
 
 void QuicSession::OnGoAway(const QuicGoAwayFrame& /*frame*/) {
@@ -569,6 +642,8 @@ void QuicSession::OnPathDegrading() {
 }
 
 void QuicSession::OnForwardProgressMadeAfterPathDegrading() {}
+
+void QuicSession::OnForwardProgressMadeAfterFlowLabelChange() {}
 
 bool QuicSession::AllowSelfAddressChange() const { return false; }
 
@@ -1781,6 +1856,12 @@ void QuicSession::OnTlsHandshakeComplete() {
       << ENDPOINT << "Handshake completes without parameter negotiation.";
   connection()->mutable_stats().handshake_completion_time =
       connection()->clock()->ApproximateNow();
+  if (connection()->ShouldFixTimeouts(config_)) {
+    QUIC_RELOADABLE_FLAG_COUNT_N(quic_fix_timeouts, 2, 2);
+    // Handshake complete, set handshake timeout to Infinite.
+    connection()->SetNetworkTimeouts(QuicTime::Delta::Infinite(),
+                                     config_.IdleNetworkTimeout());
+  }
   if (connection()->version().UsesTls() &&
       perspective_ == Perspective::IS_SERVER) {
     // Server sends HANDSHAKE_DONE to signal confirmation of the handshake

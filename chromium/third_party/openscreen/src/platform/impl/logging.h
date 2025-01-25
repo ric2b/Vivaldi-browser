@@ -11,7 +11,7 @@
 
 namespace openscreen {
 
-// Append logging output to a named FIFO having the given |filename|. If the
+// Append logging output to a named FIFO having the given `filename`. If the
 // file does not exist, an attempt is made to auto-create it. If unsuccessful,
 // abort the program. If this is never called, logging continues to output to
 // the default destination (stderr).

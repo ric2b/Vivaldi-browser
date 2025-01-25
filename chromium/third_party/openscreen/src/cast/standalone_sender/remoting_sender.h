@@ -50,7 +50,7 @@ class RemotingSender {
   void OnPlaybackRateMessage(const RpcMessage& message);
 
   // The messenger is the only caller of OnInitializeMessage, so there are no
-  // lifetime concerns. However, if this class outlives |messenger_|, it will
+  // lifetime concerns. However, if this class outlives `messenger_`, it will
   // no longer receive initialization messages.
   RpcMessenger& messenger_;
 

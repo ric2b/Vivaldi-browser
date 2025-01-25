@@ -40,7 +40,6 @@
 #include "avfilter.h"
 #include "filters.h"
 #include "formats.h"
-#include "internal.h"
 #include "video.h"
 
 #define INPUT_MAIN     0
@@ -681,6 +680,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx  = inlink->dst;
     AVFilterLink *outlink = ctx->outputs[0];
+    FilterLink      *outl = ff_filter_link(outlink);
     FieldMatchContext *fm = ctx->priv;
     int combs[] = { -1, -1, -1, -1, -1 };
     int order, field, i, match, interlaced_frame, sc = 0, ret = 0;
@@ -753,7 +753,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     /* scene change check */
     if (fm->combmatch == COMBMATCH_SC) {
-        if (fm->lastn == outlink->frame_count_in - 1) {
+        if (fm->lastn == outl->frame_count_in - 1) {
             if (fm->lastscdiff > fm->scthresh)
                 sc = 1;
         } else if (luma_abs_diff(fm->prv, fm->src) > fm->scthresh) {
@@ -761,7 +761,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
 
         if (!sc) {
-            fm->lastn = outlink->frame_count_in;
+            fm->lastn = outl->frame_count_in;
             fm->lastscdiff = luma_abs_diff(fm->src, fm->nxt);
             sc = fm->lastscdiff > fm->scthresh;
         }
@@ -831,7 +831,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
     if (interlaced_frame) {
         dst->flags |= AV_FRAME_FLAG_INTERLACED;
         av_log(ctx, AV_LOG_WARNING, "Frame #%"PRId64" at %s is still interlaced\n",
-               outlink->frame_count_in, av_ts2timestr(in->pts, &inlink->time_base));
+               outl->frame_count_in, av_ts2timestr(in->pts, &inlink->time_base));
 #if FF_API_INTERLACED_FRAME
 FF_DISABLE_DEPRECATION_WARNINGS
         dst->top_field_first = field;
@@ -908,9 +908,11 @@ static int activate(AVFilterContext *ctx)
     }
 }
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    FieldMatchContext *fm = ctx->priv;
+    const FieldMatchContext *fm = ctx->priv;
 
     static const enum AVPixelFormat pix_fmts[] = {
         AV_PIX_FMT_YUV444P,  AV_PIX_FMT_YUV422P,  AV_PIX_FMT_YUV420P,
@@ -939,17 +941,17 @@ static int query_formats(AVFilterContext *ctx)
     if (!fmts_list)
         return AVERROR(ENOMEM);
     if (!fm->ppsrc) {
-        return ff_set_common_formats(ctx, fmts_list);
+        return ff_set_common_formats2(ctx, cfg_in, cfg_out, fmts_list);
     }
 
-    if ((ret = ff_formats_ref(fmts_list, &ctx->inputs[INPUT_MAIN]->outcfg.formats)) < 0)
+    if ((ret = ff_formats_ref(fmts_list, &cfg_in[INPUT_MAIN]->formats)) < 0)
         return ret;
     fmts_list = ff_make_format_list(unproc_pix_fmts);
     if (!fmts_list)
         return AVERROR(ENOMEM);
-    if ((ret = ff_formats_ref(fmts_list, &ctx->outputs[0]->incfg.formats)) < 0)
+    if ((ret = ff_formats_ref(fmts_list, &cfg_out[0]->formats)) < 0)
         return ret;
-    if ((ret = ff_formats_ref(fmts_list, &ctx->inputs[INPUT_CLEANSRC]->outcfg.formats)) < 0)
+    if ((ret = ff_formats_ref(fmts_list, &cfg_in[INPUT_CLEANSRC]->formats)) < 0)
         return ret;
     return 0;
 }
@@ -1046,16 +1048,18 @@ static av_cold void fieldmatch_uninit(AVFilterContext *ctx)
 
 static int config_output(AVFilterLink *outlink)
 {
+    FilterLink     *outl  = ff_filter_link(outlink);
     AVFilterContext *ctx  = outlink->src;
     FieldMatchContext *fm = ctx->priv;
     const AVFilterLink *inlink =
         ctx->inputs[fm->ppsrc ? INPUT_CLEANSRC : INPUT_MAIN];
+    FilterLink *inl = ff_filter_link(ctx->inputs[fm->ppsrc ? INPUT_CLEANSRC : INPUT_MAIN]);
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
 
     fm->bpc = (desc->comp[0].depth + 7) / 8;
     outlink->time_base = inlink->time_base;
     outlink->sample_aspect_ratio = inlink->sample_aspect_ratio;
-    outlink->frame_rate = inlink->frame_rate;
+    outl->frame_rate = inl->frame_rate;
     outlink->w = inlink->w;
     outlink->h = inlink->h;
     return 0;
@@ -1078,7 +1082,7 @@ const AVFilter ff_vf_fieldmatch = {
     .uninit         = fieldmatch_uninit,
     .inputs         = NULL,
     FILTER_OUTPUTS(fieldmatch_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .priv_class     = &fieldmatch_class,
     .flags          = AVFILTER_FLAG_DYNAMIC_INPUTS,
 };

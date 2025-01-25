@@ -126,9 +126,7 @@ class Array : public PlainObjectBase<Array<Scalar_, Rows_, Cols_, Options_, MaxR
       : Base(internal::constructor_without_unaligned_array_assert()){EIGEN_INITIALIZE_COEFFS_IF_THAT_OPTION_IS_ENABLED}
 #endif
 
-        EIGEN_DEVICE_FUNC Array(Array && other) EIGEN_NOEXCEPT_IF(std::is_nothrow_move_constructible<Scalar>::value)
-      : Base(std::move(other)) {
-  }
+        EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr Array(Array && other) = default;
   EIGEN_DEVICE_FUNC Array& operator=(Array&& other) EIGEN_NOEXCEPT_IF(std::is_nothrow_move_assignable<Scalar>::value) {
     Base::operator=(std::move(other));
     return *this;
@@ -232,7 +230,7 @@ class Array : public PlainObjectBase<Array<Scalar_, Rows_, Cols_, Options_, MaxR
   }
 
   /** Copy constructor */
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Array(const Array& other) : Base(other) {}
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr Array(const Array& other) = default;
 
  private:
   struct PrivateType {};

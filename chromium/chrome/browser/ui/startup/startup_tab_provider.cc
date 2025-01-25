@@ -15,16 +15,12 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
-#include "components/custom_handlers/protocol_handler.h"
-#include "components/custom_handlers/protocol_handler_registry.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profile_resetter/triggered_profile_resetter.h"
 #include "chrome/browser/profile_resetter/triggered_profile_resetter_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/shell_integration.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_util.h"
@@ -74,6 +70,11 @@
 #include "app/vivaldi_resources.h"
 #include "browser/vivaldi_runtime_feature.h"
 #include "base/strings/escape.h"
+#include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
+#include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/shell_integration.h"
+#include "components/custom_handlers/protocol_handler.h"
+#include "components/custom_handlers/protocol_handler_registry.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -205,15 +206,17 @@ StartupTabs StartupTabProviderImpl::GetPreferencesTabs(
         StartupBrowserCreator::GetSessionStartupPref(command_line, profile);
     if (pref.type == SessionStartupPref::VIVALDI_HOMEPAGE) {
       StartupTabs tabs;
-      GURL url(
-          profile->GetPrefs()->GetString(vivaldiprefs::kHomepage));
+      GURL url(profile->GetPrefs()->GetString(vivaldiprefs::kHomepage));
+      if (profile->IsIncognitoProfile() && !IsURLAllowedInIncognito(url)) {
+        return tabs;
+      }
       tabs.push_back(StartupTab(url));
       return tabs;
     }
   }
   return GetPreferencesTabsForState(
       StartupBrowserCreator::GetSessionStartupPref(command_line, profile),
-      ProfileHasOtherTabbedBrowser(profile));
+      ProfileHasOtherTabbedBrowser(profile), profile);
 }
 
 StartupTabs StartupTabProviderImpl::GetNewTabPageTabs(
@@ -329,11 +332,16 @@ StartupTabs StartupTabProviderImpl::GetPinnedTabsForState(
 // static
 StartupTabs StartupTabProviderImpl::GetPreferencesTabsForState(
     const SessionStartupPref& pref,
-    bool profile_has_other_tabbed_browser) {
+    bool profile_has_other_tabbed_browser, Profile* profile /* Vivaldi */) {
   StartupTabs tabs;
   if (pref.ShouldOpenUrls() && !pref.urls.empty() &&
       !profile_has_other_tabbed_browser) {
     for (const auto& url : pref.urls) {
+      if (profile && profile->IsIncognitoProfile() && // Vivaldi
+          !IsURLAllowedInIncognito(url)) {
+        continue;
+      } // End Vivaldi
+
       tabs.emplace_back(url, pref.type == SessionStartupPref::LAST_AND_URLS
                                  ? StartupTab::Type::kFromLastAndUrlsStartupPref
                                  : StartupTab::Type::kNormal);

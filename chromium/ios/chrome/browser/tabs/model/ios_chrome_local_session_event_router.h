@@ -46,7 +46,7 @@ class IOSChromeLocalSessionEventRouter
   void Stop() override;
 
  private:
-  // Observer implementation for each browser state.
+  // Observer implementation for each profile.
   class Observer : public WebStateListObserver, public web::WebStateObserver {
    public:
     explicit Observer(IOSChromeLocalSessionEventRouter* session_router);
@@ -88,6 +88,9 @@ class IOSChromeLocalSessionEventRouter
 
   // Called on observation of a change in `web_state`.
   void OnWebStateChange(web::WebState* web_state);
+
+  // Called when a `web_state` is closed.
+  void OnWebStateClosed();
 
   // Observation registrar for the associated browser list; owns an instance
   // of IOSChromeLocalSessionEventRouter::Observer.

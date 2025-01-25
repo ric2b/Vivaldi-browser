@@ -10,9 +10,10 @@
 <translation id="1801827354178857021">Период</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MБ/сек</translation>
 <translation id="1830179671306812954">{HOURS, plural, =1 {1 час и } one {# час и } other {# часа и }}</translation>
-<translation id="1859234291848436338">Посока на писане</translation>
+<translation id="1859234291848436338">Посока на писане</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> ТБ/сек</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> MБ</translation>
+<translation id="3240426699337459095">Препратката е копирана</translation>
 <translation id="3291688615589870984">{DAYS, plural, =1 {1 ден} one {# ден} other {# дни}}</translation>
 <translation id="335581015389089642">Реч</translation>
 <translation id="3600566671520689681">{DAYS, plural, =1 {още 1 ден} one {още # ден} other {още # дни}}</translation>

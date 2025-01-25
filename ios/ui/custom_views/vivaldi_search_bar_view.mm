@@ -83,4 +83,8 @@ UIEdgeInsets searchBarPadding = UIEdgeInsetsMake(8, 12, 8, 12);
   [_searchBar setPlaceholder:placeholder];
 }
 
+- (void)setSearchText:(NSString*)searchTerms {
+  _searchBar.text = searchTerms;
+}
+
 @end

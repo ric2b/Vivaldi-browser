@@ -143,7 +143,7 @@ bool IsSizesAtLeast(const std::vector<gfx::Size>& sizes, int min_size) {
   return check_size;
 }
 
-std::u16string SanitizeMediaTitle(const std::u16string title) {
+std::u16string SanitizeMediaTitle(const std::u16string& title) {
   std::u16string out;
   base::TrimString(title, u" ", &out);
   return out;
@@ -928,8 +928,7 @@ void MediaSessionImpl::OnSuspendInternal(SuspendType suspend_type,
               MediaSessionSuspendedSource::kSystemPermanent);
           break;
         case State::ACTIVE:
-          NOTREACHED_IN_MIGRATION();
-          break;
+          NOTREACHED();
       }
       break;
     case SuspendType::kContent:
@@ -1102,15 +1101,6 @@ MediaSessionImpl::GetMediaSessionInfoSync() {
   info->audio_video_states = GetMediaAudioVideoStates();
   info->is_controllable = IsControllable();
 
-  // If the browser context is off the record then it should be sensitive.
-  // This is used as a proxy to hide the metadata from sensitive surfaces such
-  // as the lock screen.
-  // TODO(crbug.com/40282278): Remove this field once the new feature to hide
-  // metadata from sensitive profiles is launched.
-  info->is_sensitive =
-      web_contents()->GetBrowserContext()->IsOffTheRecord() &&
-      !base::FeatureList::IsEnabled(media::kHideIncognitoMediaMetadata);
-
   info->picture_in_picture_state =
       web_contents()->HasPictureInPictureVideo() ||
               web_contents()->HasPictureInPictureDocument()
@@ -1197,8 +1187,7 @@ void MediaSessionImpl::FinishSystemAudioFocusRequest(
       case AudioFocusType::kAmbient:
       case AudioFocusType::kGainTransient:
         // MediaSessionImpl does not use |kGainTransient| or |kAmbient|.
-        NOTREACHED_IN_MIGRATION();
-        break;
+        NOTREACHED();
       case AudioFocusType::kGainTransientMayDuck:
         // The focus request failed, we should suspend any players that have
         // the same audio focus type.

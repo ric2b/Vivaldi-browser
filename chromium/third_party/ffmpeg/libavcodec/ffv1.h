@@ -44,6 +44,8 @@
 #define CONTEXT_SIZE 32
 
 #define MAX_QUANT_TABLES 8
+#define MAX_QUANT_TABLE_SIZE 256
+#define MAX_QUANT_TABLE_MASK (MAX_QUANT_TABLE_SIZE - 1)
 #define MAX_CONTEXT_INPUTS 5
 
 #define AC_GOLOMB_RICE          0
@@ -59,22 +61,54 @@ typedef struct VlcState {
 } VlcState;
 
 typedef struct PlaneContext {
-    int16_t quant_table[MAX_CONTEXT_INPUTS][256];
     int quant_table_index;
     int context_count;
     uint8_t (*state)[CONTEXT_SIZE];
     VlcState *vlc_state;
-    uint8_t interlace_bit_state[2];
 } PlaneContext;
 
 #define MAX_SLICES 1024
 
+typedef struct FFV1SliceContext {
+    int16_t *sample_buffer;
+    int32_t *sample_buffer32;
+
+    int slice_width;
+    int slice_height;
+    int slice_x;
+    int slice_y;
+    int sx, sy;
+
+    int run_index;
+    int slice_coding_mode;
+    int slice_rct_by_coef;
+    int slice_rct_ry_coef;
+
+    // RefStruct reference, array of MAX_PLANES elements
+    PlaneContext *plane;
+    PutBitContext pb;
+    RangeCoder c;
+
+    int ac_byte_count;                   ///< number of bytes used for AC coding
+
+    union {
+        // decoder-only
+        struct {
+            int slice_reset_contexts;
+            int slice_damaged;
+        };
+
+        // encoder-only
+        struct {
+            uint64_t rc_stat[256][2];
+            uint64_t (*rc_stat2[MAX_QUANT_TABLES])[32][2];
+        };
+    };
+} FFV1SliceContext;
+
 typedef struct FFV1Context {
     AVClass *class;
     AVCodecContext *avctx;
-    RangeCoder c;
-    GetBitContext gb;
-    PutBitContext pb;
     uint64_t rc_stat[256][2];
     uint64_t (*rc_stat2[MAX_QUANT_TABLES])[32][2];
     int version;
@@ -87,31 +121,24 @@ typedef struct FFV1Context {
     int64_t picture_number;
     int key_frame;
     ProgressFrame picture, last_picture;
-    struct FFV1Context *fsrc;
+    uint32_t crcref;
 
-    AVFrame *cur;
     const AVFrame *cur_enc_frame;
     int plane_count;
     int ac;                              ///< 1=range coder <-> 0=golomb rice
-    int ac_byte_count;                   ///< number of bytes used for AC coding
-    PlaneContext plane[MAX_PLANES];
-    int16_t quant_table[MAX_CONTEXT_INPUTS][256];
-    int16_t quant_tables[MAX_QUANT_TABLES][MAX_CONTEXT_INPUTS][256];
+    int16_t quant_tables[MAX_QUANT_TABLES][MAX_CONTEXT_INPUTS][MAX_QUANT_TABLE_SIZE];
     int context_count[MAX_QUANT_TABLES];
     uint8_t state_transition[256];
     uint8_t (*initial_states[MAX_QUANT_TABLES])[32];
-    int run_index;
     int colorspace;
-    int16_t *sample_buffer;
-    int32_t *sample_buffer32;
 
     int use32bit;
 
     int ec;
     int intra;
-    int slice_damaged;
     int key_frame_ok;
     int context_model;
+    int qtable;
 
     int bits_per_raw_sample;
     int packed_at_lsb;
@@ -119,28 +146,36 @@ typedef struct FFV1Context {
     int gob_count;
     int quant_table_count;
 
-    struct FFV1Context *slice_context[MAX_SLICES];
     int slice_count;
     int max_slice_count;
     int num_v_slices;
     int num_h_slices;
-    int slice_width;
-    int slice_height;
-    int slice_x;
-    int slice_y;
-    int slice_reset_contexts;
-    int slice_coding_mode;
-    int slice_rct_by_coef;
-    int slice_rct_ry_coef;
+
+    FFV1SliceContext *slices;
+    /* RefStruct object, per-slice damage flags shared between frame threads.
+     *
+     * After a frame thread marks some slice as finished with
+     * ff_progress_frame_report(), the corresponding array element must not be
+     * accessed by this thread anymore, as from then on it is owned by the next
+     * thread.
+     */
+    uint8_t          *slice_damaged;
+    /* Frame damage flag, used to delay announcing progress, since ER is
+     * applied after all the slices are decoded.
+     * NOT shared between frame threads.
+     */
+    uint8_t           frame_damaged;
 } FFV1Context;
 
 int ff_ffv1_common_init(AVCodecContext *avctx);
-int ff_ffv1_init_slice_state(const FFV1Context *f, FFV1Context *fs);
+int ff_ffv1_init_slice_state(const FFV1Context *f, FFV1SliceContext *sc);
 int ff_ffv1_init_slices_state(FFV1Context *f);
 int ff_ffv1_init_slice_contexts(FFV1Context *f);
+PlaneContext *ff_ffv1_planes_alloc(void);
 int ff_ffv1_allocate_initial_states(FFV1Context *f);
-void ff_ffv1_clear_slice_state(const FFV1Context *f, FFV1Context *fs);
+void ff_ffv1_clear_slice_state(const FFV1Context *f, FFV1SliceContext *sc);
 int ff_ffv1_close(AVCodecContext *avctx);
+int ff_need_new_slices(int width, int num_h_slices, int chroma_shift);
 
 static av_always_inline int fold(int diff, int bits)
 {

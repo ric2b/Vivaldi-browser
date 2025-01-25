@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit;
 /** Manages the scheduling of Safety Hub fetch jobs. */
 public class SafetyHubFetchService implements SigninManager.SignInStateObserver, Destroyable {
     interface Observer {
-        void compromisedPasswordCountChanged();
+        void passwordCountsChanged();
 
         void updateStatusChanged();
     }
@@ -52,6 +52,20 @@ public class SafetyHubFetchService implements SigninManager.SignInStateObserver,
     private @Nullable UpdateStatusProvider.UpdateStatus mUpdateStatus;
     private final ObserverList<Observer> mObservers = new ObserverList<>();
     private final SigninManager mSigninManager;
+
+    /**
+     * These booleans indicate if the specific type of credentials count has returned. They are used
+     * so the callback of `fetchCredentialsCount` call is only ran once.
+     */
+    private boolean mBreachedCredentialsCountFetched;
+    private boolean mWeakCredentialsCountFetched;
+    private boolean mReusedCredentialsCountFetched;
+
+    /**
+     * Indicates if any of the credential counts has returned with an error. Used when running the
+     * `fetchCredentialsCount` callback to indicate if a rescheduled is needed.
+     */
+    private boolean mCredentialCountError;
 
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     SafetyHubFetchService(Profile profile) {
@@ -119,7 +133,12 @@ public class SafetyHubFetchService implements SigninManager.SignInStateObserver,
 
     /** Schedules the next fetch job to run after a delay. */
     private void scheduleNextFetchJob() {
-        long nextFetchDelayMs = TimeUnit.DAYS.toMillis(SAFETY_HUB_JOB_INTERVAL_IN_DAYS);
+        int nextFetchDelayInDays =
+                ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
+                        ChromeFeatureList.SAFETY_HUB,
+                        "background-password-check-interval-in-days",
+                        SAFETY_HUB_JOB_INTERVAL_IN_DAYS);
+        long nextFetchDelayMs = TimeUnit.DAYS.toMillis(nextFetchDelayInDays);
 
         // Cancel existing job if it wasn't already stopped.
         cancelFetchJob();
@@ -140,16 +159,32 @@ public class SafetyHubFetchService implements SigninManager.SignInStateObserver,
     }
 
     /**
-     * Makes a call to GMSCore to fetch the latest leaked credentials count for the currently
-     * syncing profile.
+     * Triggers several calls to GMSCore to fetch the latest leaked, weak and reused credentials
+     * counts for the currently signed-in profile. `onFinishedCallback` is triggered when all calls
+     * to GMSCore have returned.
      */
-    void fetchBreachedCredentialsCount(Callback<Boolean> onFinishedCallback) {
+    void fetchCredentialsCount(Callback<Boolean> onFinishedCallback) {
         if (!checkConditions()) {
             onFinishedCallback.onResult(/* needsReschedule= */ false);
             cancelFetchJob();
             return;
         }
 
+        mCredentialCountError = false;
+        mBreachedCredentialsCountFetched = false;
+        mWeakCredentialsCountFetched = false;
+        mReusedCredentialsCountFetched = false;
+
+        fetchBreachedCredentialsCount(onFinishedCallback);
+        fetchWeakCredentialsCount(onFinishedCallback);
+        fetchReusedCredentialsCount(onFinishedCallback);
+    }
+
+    /**
+     * Makes a call to GMSCore to fetch the latest leaked credentials count for the currently
+     * signed-in profile.
+     */
+    private void fetchBreachedCredentialsCount(Callback<Boolean> onFinishedCallback) {
         PasswordManagerHelper passwordManagerHelper = PasswordManagerHelper.getForProfile(mProfile);
         PrefService prefService = UserPrefs.get(mProfile);
 
@@ -157,15 +192,87 @@ public class SafetyHubFetchService implements SigninManager.SignInStateObserver,
                 PasswordCheckReferrer.SAFETY_CHECK,
                 SafetyHubUtils.getAccountEmail(mProfile),
                 count -> {
+                    mBreachedCredentialsCountFetched = true;
                     prefService.setInteger(Pref.BREACHED_CREDENTIALS_COUNT, count);
-                    notifyCompromisedPasswordCountChanged();
-
-                    onFinishedCallback.onResult(/* needsReschedule= */ false);
-                    scheduleNextFetchJob();
+                    onFetchCredentialsFinished(onFinishedCallback);
                 },
                 error -> {
-                    onFinishedCallback.onResult(/* needsReschedule= */ true);
+                    mBreachedCredentialsCountFetched = true;
+                    mCredentialCountError = true;
+                    onFetchCredentialsFinished(onFinishedCallback);
                 });
+    }
+
+    /**
+     * Makes a call to GMSCore to fetch the latest weak credentials count for the currently
+     * signed-in profile.
+     */
+    private void fetchWeakCredentialsCount(Callback<Boolean> onFinishedCallback) {
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.SAFETY_HUB_WEAK_AND_REUSED_PASSWORDS)) {
+            mWeakCredentialsCountFetched = true;
+            onFetchCredentialsFinished(onFinishedCallback);
+            return;
+        }
+
+        PasswordManagerHelper passwordManagerHelper = PasswordManagerHelper.getForProfile(mProfile);
+        PrefService prefService = UserPrefs.get(mProfile);
+
+        passwordManagerHelper.getWeakCredentialsCount(
+                PasswordCheckReferrer.SAFETY_CHECK,
+                SafetyHubUtils.getAccountEmail(mProfile),
+                count -> {
+                    mWeakCredentialsCountFetched = true;
+                    prefService.setInteger(Pref.WEAK_CREDENTIALS_COUNT, count);
+                    onFetchCredentialsFinished(onFinishedCallback);
+                },
+                error -> {
+                    mWeakCredentialsCountFetched = true;
+                    mCredentialCountError = true;
+                    onFetchCredentialsFinished(onFinishedCallback);
+                });
+    }
+
+    /**
+     * Makes a call to GMSCore to fetch the latest reused credentials count for the currently
+     * signed-in profile.
+     */
+    private void fetchReusedCredentialsCount(Callback<Boolean> onFinishedCallback) {
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.SAFETY_HUB_WEAK_AND_REUSED_PASSWORDS)) {
+            mReusedCredentialsCountFetched = true;
+            onFetchCredentialsFinished(onFinishedCallback);
+            return;
+        }
+
+        PasswordManagerHelper passwordManagerHelper = PasswordManagerHelper.getForProfile(mProfile);
+        PrefService prefService = UserPrefs.get(mProfile);
+
+        passwordManagerHelper.getReusedCredentialsCount(
+                PasswordCheckReferrer.SAFETY_CHECK,
+                SafetyHubUtils.getAccountEmail(mProfile),
+                count -> {
+                    mReusedCredentialsCountFetched = true;
+                    prefService.setInteger(Pref.REUSED_CREDENTIALS_COUNT, count);
+                    onFetchCredentialsFinished(onFinishedCallback);
+                },
+                error -> {
+                    mReusedCredentialsCountFetched = true;
+                    mCredentialCountError = true;
+                    onFetchCredentialsFinished(onFinishedCallback);
+                });
+    }
+
+    private void onFetchCredentialsFinished(Callback<Boolean> onFinishedCallback) {
+        if (!mBreachedCredentialsCountFetched
+                || !mWeakCredentialsCountFetched
+                || !mReusedCredentialsCountFetched) {
+            return;
+        }
+
+        notifyPasswordCountsChanged();
+        onFinishedCallback.onResult(/* needsReschedule= */ mCredentialCountError);
+        if (!mCredentialCountError) {
+            scheduleNextFetchJob();
+        }
     }
 
     /**
@@ -179,14 +286,16 @@ public class SafetyHubFetchService implements SigninManager.SignInStateObserver,
             // Clean up account specific prefs.
             PrefService prefService = UserPrefs.get(mProfile);
             prefService.clearPref(Pref.BREACHED_CREDENTIALS_COUNT);
+            prefService.clearPref(Pref.WEAK_CREDENTIALS_COUNT);
+            prefService.clearPref(Pref.REUSED_CREDENTIALS_COUNT);
 
             cancelFetchJob();
         }
     }
 
-    private void notifyCompromisedPasswordCountChanged() {
+    private void notifyPasswordCountsChanged() {
         for (Observer observer : mObservers) {
-            observer.compromisedPasswordCountChanged();
+            observer.passwordCountsChanged();
         }
     }
 

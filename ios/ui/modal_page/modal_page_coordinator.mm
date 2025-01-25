@@ -77,7 +77,7 @@
 - (WKWebView*)newWebViewDisplayingModalPage {
   // Create web view.
   WKWebView* webView = web::BuildWKWebView(self.viewController.view.bounds,
-                                           self.browser->GetBrowserState());
+                                           self.browser->GetProfile());
   webView.navigationDelegate = self;
 
   // Loads terms of service into the web view.

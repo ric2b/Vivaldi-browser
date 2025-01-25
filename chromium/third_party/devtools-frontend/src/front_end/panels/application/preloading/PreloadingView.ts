@@ -2,15 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as Common from '../../../core/common/common.js';
+import '../../../ui/components/split_view/split_view.js';
+
+import * as Common from '../../../core/common/common.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
 import {assertNotNullOrUndefined} from '../../../core/platform/platform.js';
 import * as SDK from '../../../core/sdk/sdk.js';
 import * as Protocol from '../../../generated/protocol.js';
 import * as Bindings from '../../../models/bindings/bindings.js';
+import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import type * as DataGrid from '../../../ui/components/data_grid/data_grid.js';
-import * as SplitView from '../../../ui/components/split_view/split_view.js';
+import type * as SplitView from '../../../ui/components/split_view/split_view.js';
 // eslint-disable-next-line rulesdir/es_modules_import
 import emptyWidgetStyles from '../../../ui/legacy/emptyWidget.css.js';
 import * as UI from '../../../ui/legacy/legacy.js';
@@ -21,6 +24,8 @@ import * as PreloadingComponents from './components/components.js';
 import type * as PreloadingHelper from './helper/helper.js';
 import preloadingViewStyles from './preloadingView.css.js';
 import preloadingViewDropDownStyles from './preloadingViewDropDown.css.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -72,6 +77,10 @@ const UIStrings = {
    *@description Text in grid and details: Preloading failed.
    */
   statusFailure: 'Failure',
+  /**
+   *@description Text to pretty print a file
+   */
+  prettyPrint: 'Pretty print',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/application/preloading/PreloadingView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -179,6 +188,8 @@ export class PreloadingRuleSetView extends UI.Widget.VBox {
   private readonly ruleSetGrid = new PreloadingComponents.RuleSetGrid.RuleSetGrid();
   private readonly ruleSetDetails = new PreloadingComponents.RuleSetDetailsView.RuleSetDetailsView();
 
+  private shouldPrettyPrint = Common.Settings.Settings.instance().moduleSetting('auto-pretty-print-minified').get();
+
   constructor(model: SDK.PreloadingModel.PreloadingModel) {
     super(/* isWebComponent */ true, /* delegatesFocus */ false);
 
@@ -209,9 +220,16 @@ export class PreloadingRuleSetView extends UI.Widget.VBox {
     this.warningsView.show(this.warningsContainer);
 
     this.ruleSetGrid.addEventListener('cellfocused', this.onRuleSetsGridCellFocused.bind(this));
+
+    const onPrettyPrintToggle = (): void => {
+      this.shouldPrettyPrint = !this.shouldPrettyPrint;
+      this.updateRuleSetDetails();
+    };
+
+    // clang-format off
     LitHtml.render(
-        LitHtml.html`
-        <${SplitView.SplitView.SplitView.litTagName} .horizontal=${true} style="--min-sidebar-size: 0px">
+        html`
+        <devtools-split-view .horizontal=${true} style="--min-sidebar-size: max(100vh-200px, 0px)">
           <div slot="main" class="overflow-auto" style="height: 100%">
             ${this.ruleSetGrid}
           </div>
@@ -219,8 +237,21 @@ export class PreloadingRuleSetView extends UI.Widget.VBox {
           jslog=${VisualLogging.section('rule-set-details')}>
             ${this.ruleSetDetails}
           </div>
-        </${SplitView.SplitView.SplitView.litTagName}>`,
+        </devtools-split-view>
+        <div class="pretty-print-button" style="border-top: 1px solid var(--sys-color-divider)">
+        <devtools-button
+          .iconName=${'brackets'}
+          .toggledIconName=${'brackets'}
+          .toggled=${this.shouldPrettyPrint}
+          .toggleType=${Buttons.Button.ToggleType.PRIMARY}
+          .title=${i18nString(UIStrings.prettyPrint)}
+          .variant=${Buttons.Button.Variant.ICON_TOGGLE}
+          .size=${Buttons.Button.Size.REGULAR}
+          @click=${onPrettyPrintToggle}
+          jslog=${VisualLogging.action().track({click: true}).context('preloading-status-panel-pretty-print')}></devtools-button>
+        </div>`,
         this.contentElement, {host: this});
+    // clang-format on
     this.hsplit = this.contentElement.querySelector('devtools-split-view') as SplitView.SplitView.SplitView;
   }
 
@@ -249,6 +280,7 @@ export class PreloadingRuleSetView extends UI.Widget.VBox {
   private updateRuleSetDetails(): void {
     const id = this.focusedRuleSetId;
     const ruleSet = id === null ? null : this.model.getRuleSetById(id);
+    this.ruleSetDetails.shouldPrettyPrint = this.shouldPrettyPrint;
     this.ruleSetDetails.data = ruleSet;
 
     if (ruleSet === null) {
@@ -280,7 +312,7 @@ export class PreloadingRuleSetView extends UI.Widget.VBox {
     this.render();
   }
 
-  getInfobarContainerForTest(): HTMLDivElement {
+  getInfobarContainerForTest(): HTMLElement {
     return this.warningsView.contentElement;
   }
 
@@ -345,15 +377,15 @@ export class PreloadingAttemptView extends UI.Widget.VBox {
 
     this.preloadingGrid.addEventListener('cellfocused', this.onPreloadingGridCellFocused.bind(this));
     LitHtml.render(
-        LitHtml.html`
-        <${SplitView.SplitView.SplitView.litTagName} .horizontal=${true} style="--min-sidebar-size: 0px">
+        html`
+        <devtools-split-view .horizontal=${true} style="--min-sidebar-size: 0px">
           <div slot="main" class="overflow-auto" style="height: 100%">
             ${this.preloadingGrid}
           </div>
           <div slot="sidebar" class="overflow-auto" style="height: 100%">
             ${this.preloadingDetails}
           </div>
-        </${SplitView.SplitView.SplitView.litTagName}>`,
+        </devtools-split-view>`,
         vbox.contentElement, {host: this});
 
     vbox.show(this.contentElement);

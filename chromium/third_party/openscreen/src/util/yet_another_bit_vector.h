@@ -27,7 +27,7 @@ class YetAnotherBitVector {
   // Constructs an empty bit vector.
   YetAnotherBitVector();
 
-  // Constructs a bit vector having the given |size| and all bits set/cleared.
+  // Constructs a bit vector having the given `size` and all bits set/cleared.
   YetAnotherBitVector(int size, Fill fill);
 
   ~YetAnotherBitVector();
@@ -42,23 +42,23 @@ class YetAnotherBitVector {
 
   int size() const { return size_; }
 
-  // Query/Set/Clear a single bit at the given |pos|.
+  // Query/Set/Clear a single bit at the given `pos`.
   bool IsSet(int pos) const;
   void Set(int pos);
   void Clear(int pos);
 
-  // Resize the bit vector and set/clear all the bits according to |fill|.
+  // Resize the bit vector and set/clear all the bits according to `fill`.
   void Resize(int new_size, Fill fill);
 
   // Sets/Clears all bits.
   void SetAll();
   void ClearAll();
 
-  // Shift all bits right by some number of |steps|, zero-padding the leftmost
-  // bits. |steps| must be between zero and |size()|.
+  // Shift all bits right by some number of `steps`, zero-padding the leftmost
+  // bits. `steps` must be between zero and `size()`.
   void ShiftRight(int steps);
 
-  // Returns the position of the first bit set, or |size()| if no bits are set.
+  // Returns the position of the first bit set, or `size()` if no bits are set.
   int FindFirstSet() const;
 
   // Returns how many of the bits are set in the range [begin, end).
@@ -67,19 +67,19 @@ class YetAnotherBitVector {
  private:
   bool using_array_storage() const { return size_ > kBitsPerInteger; }
 
-  // Returns the number of integers required to store |size_| bits.
+  // Returns the number of integers required to store `size_` bits.
   int array_size() const {
     // The math here is: CEIL(size_ ÷ kBitsPerInteger).
     return (size_ + kBitsPerInteger - 1) / kBitsPerInteger;
   }
 
   // Helper to create array storage (only if necessary) and initialize all the
-  // bits based on the given |fill|. Precondition: Any prior heap-allocated
+  // bits based on the given `fill`. Precondition: Any prior heap-allocated
   // array storage has already been deallocated.
   void InitializeForNewSize(int new_size, Fill fill);
 
   // Helper to find the integer that contains the bit at the given position, and
-  // updates |pos| to the offset of the bit within the integer.
+  // updates `pos` to the offset of the bit within the integer.
   const uint64_t* Select(int* pos) const;
 
   // Total number of bits.

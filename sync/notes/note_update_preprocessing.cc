@@ -6,6 +6,7 @@
 
 #include <array>
 
+#include "base/base64.h"
 #include "base/containers/span.h"
 #include "base/hash/sha1.h"
 #include "base/logging.h"
@@ -15,6 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/uuid.h"
+#include "components/sync/base/data_type.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "sync/vivaldi_hash_util.h"
@@ -68,18 +70,38 @@ std::string InferGuidForLegacyNote(
   return guid;
 }
 
+// Legacy method to calculate unique position suffix for the notes which did
+// not have client tag hash.
+UniquePosition::Suffix GenerateUniquePositionSuffixForNote(
+    const std::string& originator_cache_guid,
+    const std::string& originator_client_item_id) {
+  // Blank PB with just the field in it has termination symbol,
+  // handy for delimiter.
+  sync_pb::EntitySpecifics serialized_type;
+  AddDefaultFieldValue(NOTES, &serialized_type);
+  std::string hash_input;
+  serialized_type.AppendToString(&hash_input);
+  hash_input.append(originator_cache_guid + originator_client_item_id);
+  UniquePosition::Suffix suffix;
+  std::string suffix_str =
+      base::Base64Encode(base::SHA1Hash(base::as_byte_span(hash_input)));
+  CHECK_EQ(suffix.size(), suffix_str.size());
+  base::ranges::copy(suffix_str, suffix.begin());
+  return suffix;
+}
+
 sync_pb::UniquePosition GetUniquePositionFromSyncEntity(
     const sync_pb::SyncEntity& update_entity) {
   if (update_entity.has_unique_position()) {
     return update_entity.unique_position();
   }
 
-  std::string suffix;
+  syncer::UniquePosition::Suffix suffix;
   if (update_entity.has_originator_cache_guid() &&
       update_entity.has_originator_client_item_id()) {
-    suffix =
-        GenerateSyncableNotesHash(update_entity.originator_cache_guid(),
-                                  update_entity.originator_client_item_id());
+    suffix = GenerateUniquePositionSuffixForNote(
+        update_entity.originator_cache_guid(),
+        update_entity.originator_client_item_id());
   } else {
     suffix = UniquePosition::RandomSuffix();
   }

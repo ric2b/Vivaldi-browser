@@ -10,7 +10,7 @@ import 'chrome://resources/polymer/v3_0/paper-progress/paper-progress.js';
 import './firmware_shared.css.js';
 import './firmware_shared_fonts.css.js';
 import './firmware_update.mojom-webui.js';
-import './strings.m.js';
+import '/strings.m.js';
 
 import {I18nMixin, I18nMixinInterface} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
 import {assert} from 'chrome://resources/js/assert.js';
@@ -305,7 +305,7 @@ export class FirmwareUpdateDialogElement extends FirmwareUpdateDialogElementBase
 
   createDialogContentObj(state: UpdateState): DialogContent {
     assert(this.update);
-    const {deviceName, deviceVersion} = this.update;
+    const {deviceName, deviceVersion, needsReboot} = this.update;
     const {percentage} = this.installationProgress;
 
     const dialogContent = new Map<UpdateState, DialogContent>([
@@ -335,17 +335,25 @@ export class FirmwareUpdateDialogElement extends FirmwareUpdateDialogElementBase
           footer: '',
         },
       ],
-      [
-        UpdateState.kSuccess,
-        {
-          title: this.i18n('deviceUpToDate', mojoString16ToString(deviceName)),
-          body: this.i18n(
-              'hasBeenUpdated', mojoString16ToString(deviceName),
-              deviceVersion),
-          footer: '',
-        },
-      ],
     ]);
+
+    if (needsReboot) {
+      dialogContent.set(UpdateState.kSuccess, {
+        title: this.i18n(
+            'deviceReadyToInstallUpdate', mojoString16ToString(deviceName)),
+        body: this.i18n(
+            'deviceNeedsReboot', mojoString16ToString(deviceName),
+            deviceVersion),
+        footer: '',
+      });
+    } else {
+      dialogContent.set(UpdateState.kSuccess, {
+        title: this.i18n('deviceUpToDate', mojoString16ToString(deviceName)),
+        body: this.i18n(
+            'hasBeenUpdated', mojoString16ToString(deviceName), deviceVersion),
+        footer: '',
+      });
+    }
 
     assert(dialogContent.has(state));
     return dialogContent.get(state) as DialogContent;

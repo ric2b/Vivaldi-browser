@@ -27,7 +27,6 @@
 #include "platform/base/interface_info.h"
 #include "platform/impl/task_runner.h"
 #include "util/scoped_wake_lock.h"
-#include "util/serial_delete_ptr.h"
 
 namespace Json {
 class Value;
@@ -74,7 +73,7 @@ class LoopingFileCastAgent final
  public:
   using ShutdownCallback = std::function<void()>;
 
-  // |shutdown_callback| is invoked after normal shutdown, whether initiated
+  // `shutdown_callback` is invoked after normal shutdown, whether initiated
   // sender- or receiver-side; or, for any fatal error.
   LoopingFileCastAgent(TaskRunner& task_runner,
                        std::unique_ptr<TrustStore> cast_trust_store,
@@ -121,12 +120,12 @@ class LoopingFileCastAgent final
   // requested. Otherwise, the workflow is aborted and Shutdown() is called.
   void HandleReceiverStatus(const Json::Value& status);
 
-  // Called by the |connection_handler_| after message routing to the Cast
-  // Receiver's Mirroring App has been established (if |success| is true).
+  // Called by the `connection_handler_` after message routing to the Cast
+  // Receiver's Mirroring App has been established (if `success` is true).
   void OnRemoteMessagingOpened(bool success);
 
-  // Called by the |connection_handler_| after message routing to the Cast
-  // Receiver platform has been established (if |success| is true).
+  // Called by the `connection_handler_` after message routing to the Cast
+  // Receiver platform has been established (if `success` is true).
   void OnReceiverMessagingOpened(bool success);
 
   // Once we have a connection to the receiver we need to create and start
@@ -168,7 +167,7 @@ class LoopingFileCastAgent final
 
   // Initialized by Connect().
   std::optional<ConnectionSettings> connection_settings_;
-  SerialDeletePtr<ScopedWakeLock> wake_lock_;
+  ScopedWakeLockPtr wake_lock_;
 
   // If non-empty, this is the sessionId associated with the Cast Receiver
   // application that this LoopingFileCastAgent launched.
@@ -191,7 +190,7 @@ class LoopingFileCastAgent final
   std::unique_ptr<RemotingSender> remoting_sender_;
 
   // Set when remoting is successfully negotiated. However, remoting streams
-  // won't start until |is_ready_for_remoting_| is true.
+  // won't start until `is_ready_for_remoting_` is true.
   std::unique_ptr<SenderSession::ConfiguredSenders> current_negotiation_;
 
   // Set to true once we have gotten news that the mirroring application has

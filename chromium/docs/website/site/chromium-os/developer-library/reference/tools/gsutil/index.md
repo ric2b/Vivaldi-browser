@@ -46,11 +46,11 @@ directions for you to follow.
 ```
 
 When it finishes, credentials are copied into a subdirectory that you will need
-to copy out of.
+to symlink to.
 
 ```bash
 # NB: If this fails, replace "*" with your e-mail address.
-(outside) $ cp ~/.config/gcloud/legacy_credentials/*/.boto ~/.boto
+(outside) $ ln -s ~/.config/gcloud/legacy_credentials/*/.boto ~/.boto
 ```
 
 > **Note**: The gcloud tool suggests to set `PROJECT_ID`, but for our purposes,

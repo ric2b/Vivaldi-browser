@@ -108,6 +108,7 @@ cc_library(
     visibility = [
         "//chrome/chromeos/assistant/data_migration/lib:__pkg__",
         "//connections:__pkg__",
+        "//connections:partners",
         "//connections/implementation/fuzzers:__pkg__",
         "//connections/implementation/mediums/multiplex:__pkg__",
         "//sharing:__subpackages__",
@@ -135,6 +136,7 @@ cc_library(
         "//internal/platform/implementation:comm",
         "//internal/platform/implementation:platform",
         "//internal/platform/implementation:types",
+        "//internal/platform/implementation:wifi_utils",
         "//internal/proto/analytics:connections_log_cc_proto",
         "//proto:connections_enums_cc_proto",
         "@com_google_absl//absl/base:core_headers",
@@ -460,6 +462,7 @@ cc_test(
         ":internal_test",
         "//connections:core_types",
         "//connections/implementation/mediums",
+        "//internal/platform:base",
         "//internal/platform:test_util",
         "//internal/platform:types",
         "//internal/platform/implementation/g3",  # build_cleaner: keep

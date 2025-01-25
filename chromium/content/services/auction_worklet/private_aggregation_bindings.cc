@@ -111,6 +111,19 @@ constexpr auto kBaseValueNames =
         {"participating-ig-count",
          mojom::BaseValue::kParticipatingInterestGroupCount},
         {"average-code-fetch-time", mojom::BaseValue::kAverageCodeFetchTime},
+        {"percent-scripts-timeout", mojom::BaseValue::kPercentScriptsTimeout},
+        {"percent-igs-cumulative-timeout",
+         mojom::BaseValue::kPercentInterestGroupsCumulativeTimeout},
+        {"cumulative-buyer-time", mojom::BaseValue::kCumulativeBuyerTime},
+        {"regular-igs-count", mojom::BaseValue::kRegularInterestGroupsUsed},
+        {"percent-regular-ig-count-quota-used",
+         mojom::BaseValue::kPercentRegularInterestGroupQuotaUsed},
+        {"negative-igs-count", mojom::BaseValue::kNegativeInterestGroupsUsed},
+        {"percent-negative-ig-count-quota-used",
+         mojom::BaseValue::kPercentNegativeInterestGroupQuotaUsed},
+        {"ig-storage-used", mojom::BaseValue::kInterestGroupStorageUsed},
+        {"percent-ig-storage-quota-used",
+         mojom::BaseValue::kPercentInterestGroupStorageQuotaUsed},
     });
 
 // Converts base value string to corresponding mojom enum.

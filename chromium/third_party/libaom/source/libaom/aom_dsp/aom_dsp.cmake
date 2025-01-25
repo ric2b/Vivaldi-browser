@@ -47,8 +47,7 @@ list(APPEND AOM_DSP_COMMON_SOURCES
             "${AOM_ROOT}/aom_dsp/x86/convolve_common_intrin.h")
 
 list(APPEND AOM_DSP_COMMON_ASM_SSE2
-            "${AOM_ROOT}/aom_dsp/x86/intrapred_asm_sse2.asm"
-            "${AOM_ROOT}/aom_dsp/x86/inv_wht_sse2.asm")
+            "${AOM_ROOT}/aom_dsp/x86/intrapred_asm_sse2.asm")
 if(CONFIG_AV1_HIGHBITDEPTH)
   list(APPEND AOM_DSP_COMMON_ASM_SSE2
               "${AOM_ROOT}/aom_dsp/x86/aom_high_subpixel_8t_sse2.asm"
@@ -168,12 +167,6 @@ if(CONFIG_AV1_ENCODER)
               "${AOM_ROOT}/aom_dsp/fft.c"
               "${AOM_ROOT}/aom_dsp/fft_common.h"
               "${AOM_ROOT}/aom_dsp/fwd_txfm.c"
-              "${AOM_ROOT}/aom_dsp/grain_table.c"
-              "${AOM_ROOT}/aom_dsp/grain_table.h"
-              "${AOM_ROOT}/aom_dsp/noise_model.c"
-              "${AOM_ROOT}/aom_dsp/noise_model.h"
-              "${AOM_ROOT}/aom_dsp/noise_util.c"
-              "${AOM_ROOT}/aom_dsp/noise_util.h"
               "${AOM_ROOT}/aom_dsp/psnr.c"
               "${AOM_ROOT}/aom_dsp/psnr.h"
               "${AOM_ROOT}/aom_dsp/quantize.c"
@@ -188,15 +181,22 @@ if(CONFIG_AV1_ENCODER)
               "${AOM_ROOT}/aom_dsp/variance.c"
               "${AOM_ROOT}/aom_dsp/variance.h")
 
-  # Flow estimation library
+  # Flow estimation library and grain/noise table/model.
   if(NOT CONFIG_REALTIME_ONLY)
-    list(APPEND AOM_DSP_ENCODER_SOURCES "${AOM_ROOT}/aom_dsp/pyramid.c"
+    list(APPEND AOM_DSP_ENCODER_SOURCES
+                "${AOM_ROOT}/aom_dsp/pyramid.c"
                 "${AOM_ROOT}/aom_dsp/binary_codes_writer.c"
                 "${AOM_ROOT}/aom_dsp/binary_codes_writer.h"
                 "${AOM_ROOT}/aom_dsp/flow_estimation/corner_detect.c"
                 "${AOM_ROOT}/aom_dsp/flow_estimation/corner_match.c"
                 "${AOM_ROOT}/aom_dsp/flow_estimation/disflow.c"
                 "${AOM_ROOT}/aom_dsp/flow_estimation/flow_estimation.c"
+                "${AOM_ROOT}/aom_dsp/grain_table.c"
+                "${AOM_ROOT}/aom_dsp/grain_table.h"
+                "${AOM_ROOT}/aom_dsp/noise_model.c"
+                "${AOM_ROOT}/aom_dsp/noise_model.h"
+                "${AOM_ROOT}/aom_dsp/noise_util.c"
+                "${AOM_ROOT}/aom_dsp/noise_util.h"
                 "${AOM_ROOT}/aom_dsp/flow_estimation/ransac.c")
 
     list(APPEND AOM_DSP_ENCODER_INTRIN_SSE4_1

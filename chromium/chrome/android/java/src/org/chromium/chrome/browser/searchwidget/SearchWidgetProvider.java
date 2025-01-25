@@ -129,14 +129,13 @@ public class SearchWidgetProvider extends AppWidgetProvider {
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     public static PendingIntent createIntent(Context context, boolean startVoiceSearch) {
-        SearchActivityClient client = new SearchActivityClientImpl();
+        SearchActivityClient client =
+                new SearchActivityClientImpl(context, IntentOrigin.SEARCH_WIDGET);
         // Launch the SearchActivity.
         Intent searchIntent =
-                client.createIntent(
-                        context,
-                        IntentOrigin.SEARCH_WIDGET,
-                        null,
-                        startVoiceSearch ? SearchType.VOICE : SearchType.TEXT);
+                client.newIntentBuilder()
+                        .setSearchType(startVoiceSearch ? SearchType.VOICE : SearchType.TEXT)
+                        .build();
 
         searchIntent.putExtra(EXTRA_FROM_SEARCH_WIDGET, true);
 
@@ -162,7 +161,6 @@ public class SearchWidgetProvider extends AppWidgetProvider {
             RemoteViews views =
                     createWidgetViews(
                             delegate.getContext(),
-                            id,
                             prefs.searchEngineName,
                             prefs.voiceSearchAvailable);
             delegate.updateAppWidget(id, views);
@@ -170,7 +168,7 @@ public class SearchWidgetProvider extends AppWidgetProvider {
     }
 
     private static RemoteViews createWidgetViews(
-            Context context, int id, String engineName, boolean isVoiceSearchAvailable) {
+            Context context, String engineName, boolean isVoiceSearchAvailable) {
         RemoteViews views =
                 new RemoteViews(context.getPackageName(), R.layout.search_widget_template);
 

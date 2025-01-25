@@ -89,11 +89,11 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
     }
   } else {
     content::WebContents* contents = nullptr;
-    Browser* browser;
+    WindowController* browser;
     int tab_index;
 
     if (extensions::ExtensionTabUtil::GetTabById(tab_id, browser_context(),
-                                                 true, &browser, NULL,
+                                                 true, &browser,
                                                  &contents, &tab_index)) {
       DevToolsWindow* window =
           DevToolsWindow::GetInstanceForInspectedWebContents(contents);

@@ -17,6 +17,8 @@ class QuicAlarmFactoryImpl : public quic::QuicAlarmFactory {
   QuicAlarmFactoryImpl(TaskRunner& task_runner, const quic::QuicClock* clock);
   QuicAlarmFactoryImpl(const QuicAlarmFactoryImpl&) = delete;
   QuicAlarmFactoryImpl& operator=(const QuicAlarmFactoryImpl&) = delete;
+  QuicAlarmFactoryImpl(QuicAlarmFactoryImpl&&) noexcept = delete;
+  QuicAlarmFactoryImpl& operator=(QuicAlarmFactoryImpl&&) noexcept = delete;
   ~QuicAlarmFactoryImpl() override;
 
   // quic::QuicAlarmFactory overrides.

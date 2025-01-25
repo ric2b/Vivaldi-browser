@@ -388,20 +388,31 @@ TEST_F(FocusControllerTestWithIframes,
 }
 
 TEST_F(FocusControllerTest, ScrollMarkersAreFocusable) {
-  GetDocument().body()->setInnerHTML(
-      "<style>"
-      "#scroller { overflow: scroll; scroll-marker-group: after; }"
-      "#scroller::scroll-marker-group { display: block; }"
-      "#scroller div::scroll-marker { content: ''; }"
-      "#scroller div::scroll-marker:focus { opacity: 0.5; }"
-      "</style>"
-      "<input id='pre-input' />"
-      "<div id='scroller'>"
-      "  <div></div>"
-      "  <div></div>"
-      "  <div></div>"
-      "</div>"
-      "<input id='post-input' />");
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #scroller {
+        overflow-y: scroll;
+        width: 200px;
+        height: 200px;
+        scroll-marker-group: after;
+        &::scroll-marker-group {
+          display: block;
+          height: 100px;
+        }
+        div { height: 200px; }
+        div::scroll-marker { content: '-'; }
+        div::scroll-marker:focus { opacity: 0.5; }
+      }
+    </style>
+    <input id="pre-input">
+    <div id="scroller">
+      <div>X</div>
+      <div>Y</div>
+      <div>Z</div>
+    </div>
+    <input id="post-input">
+  )HTML");
+
   UpdateAllLifecyclePhasesForTest();
   Element* scroller = GetElementById("scroller");
   Element* pre_input = GetElementById("pre-input");
@@ -424,21 +435,23 @@ TEST_F(FocusControllerTest, ScrollMarkersAreFocusable) {
       scroller->lastElementChild()->GetPseudoElement(kPseudoIdScrollMarker);
   ASSERT_TRUE(last_scroll_marker);
 
+  EXPECT_EQ(scroller, GetFocusController().FindFocusableElementAfter(
+                          *pre_input, mojom::blink::FocusType::kForward));
   EXPECT_EQ(first_scroll_marker,
             GetFocusController().FindFocusableElementAfter(
-                *pre_input, mojom::blink::FocusType::kForward));
+                *scroller, mojom::blink::FocusType::kForward));
   EXPECT_EQ(post_input,
             GetFocusController().FindFocusableElementAfter(
                 *first_scroll_marker, mojom::blink::FocusType::kForward));
 
-  EXPECT_EQ(pre_input,
+  EXPECT_EQ(pre_input, GetFocusController().FindFocusableElementAfter(
+                           *scroller, mojom::blink::FocusType::kBackward));
+  EXPECT_EQ(scroller,
             GetFocusController().FindFocusableElementAfter(
                 *first_scroll_marker, mojom::blink::FocusType::kBackward));
-  EXPECT_EQ(last_scroll_marker,
+  EXPECT_EQ(first_scroll_marker,
             GetFocusController().FindFocusableElementAfter(
                 *post_input, mojom::blink::FocusType::kBackward));
-
-  second_scroll_marker->Focus();
 
   second_scroll_marker->Focus();
   GetFocusController().SetActive(true);
@@ -450,18 +463,83 @@ TEST_F(FocusControllerTest, ScrollMarkersAreFocusable) {
   EXPECT_EQ(0.5, style->Opacity());
 
   // Focusgroup restores last focused element.
+  EXPECT_EQ(scroller, GetFocusController().FindFocusableElementAfter(
+                          *pre_input, mojom::blink::FocusType::kForward));
   EXPECT_EQ(second_scroll_marker,
             GetFocusController().FindFocusableElementAfter(
-                *pre_input, mojom::blink::FocusType::kForward));
+                *scroller, mojom::blink::FocusType::kForward));
   EXPECT_EQ(second_scroll_marker,
             GetFocusController().FindFocusableElementAfter(
                 *post_input, mojom::blink::FocusType::kBackward));
   EXPECT_EQ(post_input,
             GetFocusController().FindFocusableElementAfter(
                 *second_scroll_marker, mojom::blink::FocusType::kForward));
-  EXPECT_EQ(pre_input,
+  EXPECT_EQ(scroller,
             GetFocusController().FindFocusableElementAfter(
                 *second_scroll_marker, mojom::blink::FocusType::kBackward));
+}
+
+TEST_F(FocusControllerTest, ScrollButtonsAreFocusable) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #scroller {
+        overflow: scroll;
+        width: 200px;
+        height: 200px;
+        &::scroll-next-button, &::scroll-prev-button { content: "-" }
+        &::scroll-next-button:focus,&::scroll-prev-button:focus { opacity: 0.5 }
+      }
+      #spacer { width: 400px; height: 400px; }
+    </style>
+    <input id="pre-input">
+    <div id="scroller">
+      <div id="spacer"></div>
+    </div>
+    <input id='post-input'>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+  Element* scroller = GetElementById("scroller");
+  Element* pre_input = GetElementById("pre-input");
+  Element* post_input = GetElementById("post-input");
+
+  PseudoElement* scroll_button_next =
+      scroller->GetPseudoElement(kPseudoIdScrollNextButton);
+  ASSERT_TRUE(scroll_button_next);
+  PseudoElement* scroll_button_prev =
+      scroller->GetPseudoElement(kPseudoIdScrollPrevButton);
+  ASSERT_TRUE(scroll_button_prev);
+
+  EXPECT_EQ(scroller, GetFocusController().FindFocusableElementAfter(
+                          *pre_input, mojom::blink::FocusType::kForward));
+  EXPECT_EQ(scroll_button_prev,
+            GetFocusController().FindFocusableElementAfter(
+                *scroller, mojom::blink::FocusType::kForward));
+  EXPECT_EQ(scroll_button_next,
+            GetFocusController().FindFocusableElementAfter(
+                *scroll_button_prev, mojom::blink::FocusType::kForward));
+  EXPECT_EQ(post_input,
+            GetFocusController().FindFocusableElementAfter(
+                *scroll_button_next, mojom::blink::FocusType::kForward));
+
+  EXPECT_EQ(pre_input, GetFocusController().FindFocusableElementAfter(
+                           *scroller, mojom::blink::FocusType::kBackward));
+  EXPECT_EQ(scroller,
+            GetFocusController().FindFocusableElementAfter(
+                *scroll_button_prev, mojom::blink::FocusType::kBackward));
+  EXPECT_EQ(scroll_button_prev,
+            GetFocusController().FindFocusableElementAfter(
+                *scroll_button_next, mojom::blink::FocusType::kBackward));
+  EXPECT_EQ(scroll_button_next,
+            GetFocusController().FindFocusableElementAfter(
+                *post_input, mojom::blink::FocusType::kBackward));
+
+  scroll_button_prev->Focus();
+  GetFocusController().SetActive(true);
+  GetFocusController().SetFocused(true);
+
+  const ComputedStyle* style = scroll_button_prev->GetComputedStyle();
+  EXPECT_TRUE(scroll_button_prev->IsFocused());
+  EXPECT_EQ(0.5, style->Opacity());
 }
 
 }  // namespace blink

@@ -29,6 +29,8 @@ class QuicConnectionImpl final : public QuicConnection,
                      const quic::QuicClock& clock);
   QuicConnectionImpl(const QuicConnectionImpl&) = delete;
   QuicConnectionImpl& operator=(const QuicConnectionImpl&) = delete;
+  QuicConnectionImpl(QuicConnectionImpl&&) noexcept = delete;
+  QuicConnectionImpl& operator=(QuicConnectionImpl&&) noexcept = delete;
   ~QuicConnectionImpl() override;
 
   // QuicConnection overrides.

@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.bookmarks;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.res.Resources;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnAttachStateChangeListener;
@@ -28,8 +27,8 @@ import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkListEntry.ViewType;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
-import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
@@ -44,7 +43,8 @@ import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListLayout;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar.SearchDelegate;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
-import org.chromium.components.favicon.LargeIconBridge;
+import org.chromium.components.commerce.core.CommerceFeatureUtils;
+import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.components.image_fetcher.ImageFetcher;
 import org.chromium.components.image_fetcher.ImageFetcherConfig;
 import org.chromium.components.image_fetcher.ImageFetcherFactory;
@@ -78,7 +78,7 @@ public class BookmarkManagerCoordinator
                 }
             };
 
-    private final class DragAndCancelAdapter extends DragReorderableRecyclerViewAdapter {
+    private static final class DragAndCancelAdapter extends DragReorderableRecyclerViewAdapter {
         DragAndCancelAdapter(Context context, ModelList modelList) {
             super(context, modelList);
         }
@@ -154,8 +154,9 @@ public class BookmarkManagerCoordinator
         mMainView = (ViewGroup) LayoutInflater.from(context).inflate(R.layout.bookmark_main, null);
         mBookmarkModel = BookmarkModel.getForProfile(profile);
         mBookmarkOpener = new BookmarkOpener(mBookmarkModel, context, openBookmarkComponentName);
-        if (ShoppingFeatures.isShoppingListEligible(profile)) {
-            ShoppingServiceFactory.getForProfile(profile).scheduleSavedProductUpdate();
+        ShoppingService service = ShoppingServiceFactory.getForProfile(profile);
+        if (CommerceFeatureUtils.isShoppingListEligible(service)) {
+            service.scheduleSavedProductUpdate();
         }
         mBookmarkUiPrefs = bookmarkUiPrefs;
 
@@ -185,7 +186,8 @@ public class BookmarkManagerCoordinator
                         context,
                         mBookmarkModel,
                         snackbarManager,
-                        IdentityServicesProvider.get().getIdentityManager(profile));
+                        IdentityServicesProvider.get()
+                                .getIdentityManager(profile.getOriginalProfile()));
 
         // Using OneshotSupplier as an alternative to a 2-step initialization process.
         OneshotSupplierImpl<BookmarkDelegate> bookmarkDelegateSupplier =
@@ -208,10 +210,6 @@ public class BookmarkManagerCoordinator
                         () -> IncognitoUtils.isIncognitoModeEnabled(profile));
         mSelectableListLayout.configureWideDisplayStyle();
 
-        LargeIconBridge largeIconBridge = new LargeIconBridge(mProfile);
-        largeIconBridge.createCache(computeCacheMaxSize());
-
-        Resources res = context.getResources();
         final @BookmarkRowDisplayPref int displayPref =
                 mBookmarkUiPrefs.getBookmarkRowDisplayPref();
         BookmarkImageFetcher bookmarkImageFetcher =
@@ -220,10 +218,7 @@ public class BookmarkManagerCoordinator
                         context,
                         mBookmarkModel,
                         mImageFetcher,
-                        largeIconBridge,
-                        BookmarkUtils.getRoundedIconGenerator(context, displayPref),
-                        BookmarkUtils.getImageIconSize(res, displayPref),
-                        BookmarkUtils.getFaviconDisplaySize(res));
+                        BookmarkUtils.getRoundedIconGenerator(context, displayPref));
 
         BookmarkUndoController bookmarkUndoController =
                 new BookmarkUndoController(context, mBookmarkModel, snackbarManager);
@@ -238,7 +233,6 @@ public class BookmarkManagerCoordinator
                         mSelectionDelegate,
                         mRecyclerView,
                         dragReorderableRecyclerViewAdapter,
-                        largeIconBridge,
                         isDialogUi,
                         mBackPressStateSupplier,
                         mProfile,
@@ -269,6 +263,12 @@ public class BookmarkManagerCoordinator
                 ViewType.SYNC_PROMO,
                 this::buildLegacyPromoView,
                 BookmarkManagerViewBinder::bindLegacyPromoView);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.UNO_PHASE_2_FOLLOW_UP)) {
+            dragReorderableRecyclerViewAdapter.registerType(
+                    ViewType.BATCH_UPLOAD_CARD,
+                    this::buildBatchUploadCardView,
+                    BookmarkManagerViewBinder::bindBatchUploadCardView);
+        }
         dragReorderableRecyclerViewAdapter.registerType(
                 ViewType.SECTION_HEADER,
                 this::buildSectionHeaderView,
@@ -311,7 +311,6 @@ public class BookmarkManagerCoordinator
             VivaldiBookmarkPanelDelegate dialogDelegate) {
         this(context, openBookmarkComponentName, isDialogUi, snackbarManager, profile,
                 bookmarkUiPrefs);
-        setToolbarDialogDelegate(dialogDelegate);
     }
 
     // Public API implementation.
@@ -420,6 +419,12 @@ public class BookmarkManagerCoordinator
     }
 
     @VisibleForTesting
+    View buildBatchUploadCardView(ViewGroup parent) {
+        // The signin_settings_card_view is used for Batch Upload Cards.
+        return inflate(parent, R.layout.signin_settings_card_view);
+    }
+
+    @VisibleForTesting
     View buildSectionHeaderView(ViewGroup parent) {
         return inflate(
                 parent,
@@ -516,9 +521,6 @@ public class BookmarkManagerCoordinator
     public String getCurrentUrl() { return mMediator.getCurrentUrl(); }
     public BookmarkId getCurrentFolder() { return mMediator.getCurrentFolder(); }
     public void clearSelection() { }
-    public void setToolbarDialogDelegate(VivaldiBookmarkPanelDelegate bookmarkPanelDelegate) {
-        mBookmarkToolbarCoordinator.setBookmarkPanelDelegate(bookmarkPanelDelegate);
-    }
     public void setBookmarksPageObserver(VivaldiBookmarksPageObserver observer) {
         mMediator.setBookmarksPageObserver(observer);
     }

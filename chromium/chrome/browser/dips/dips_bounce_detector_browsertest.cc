@@ -32,12 +32,14 @@
 #include "base/test/simple_test_clock.h"
 #include "base/test/test_future.h"
 #include "base/test/test_timeouts.h"
+#include "base/time/clock.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/dips/dips_redirect_info.h"
 #include "chrome/browser/dips/dips_service.h"
+#include "chrome/browser/dips/dips_service_impl.h"
 #include "chrome/browser/dips/dips_storage.h"
 #include "chrome/browser/dips/dips_test_utils.h"
 #include "chrome/browser/dips/dips_utils.h"
@@ -51,6 +53,7 @@
 #include "chrome/test/base/platform_browser_test.h"
 #include "components/content_settings/common/content_settings_manager.mojom.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/network_session_configurator/common/network_switches.h"
@@ -78,6 +81,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/fenced_frame_test_util.h"
 #include "content/public/test/prerender_test_util.h"
+#include "content/public/test/render_frame_host_test_support.h"
 #include "content/public/test/test_devtools_protocol_client.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -383,6 +387,7 @@ class DIPSBounceDetectorBrowserTest
 
   void SetUpOnMainThread() override {
     prerender_test_helper_.RegisterServerRequestMonitor(embedded_test_server());
+    net::test_server::RegisterDefaultHandlers(embedded_test_server());
     ASSERT_TRUE(embedded_test_server()->Start());
     host_resolver()->AddRule("*", "127.0.0.1");
     SetUpDIPSWebContentsObserver();
@@ -1593,12 +1598,18 @@ class RedirectHeuristicBrowserTest : public PlatformBrowserTest {
   void SimulateMouseClick() {
     SimulateMouseClickAndWait(GetActiveWebContents());
   }
+
+  void SimulateWebAuthnAssertion() {
+    content::WebAuthnAssertionRequestSucceeded(
+        GetActiveWebContents()->GetPrimaryMainFrame());
+  }
 };
 
 // Tests the conditions for recording RedirectHeuristic_CookieAccess2 and
 // RedirectHeuristic_CookieAccessThirdParty2 UKM events.
+// TODO(crbug.com/369920781): Flaky
 IN_PROC_BROWSER_TEST_F(RedirectHeuristicBrowserTest,
-                       RecordsRedirectHeuristicCookieAccessEvent) {
+                       DISABLED_RecordsRedirectHeuristicCookieAccessEvent) {
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   WebContents* web_contents = GetActiveWebContents();
 
@@ -1876,6 +1887,7 @@ struct RedirectHeuristicFlags {
   bool write_redirect_grants = false;
   bool require_aba_flow = true;
   bool require_current_interaction = true;
+  bool user_activation_interaction = true;
 };
 
 // chrome/browser/ui/browser.h (for changing profile prefs) is not available on
@@ -2039,6 +2051,96 @@ IN_PROC_BROWSER_TEST_P(
                 : CONTENT_SETTING_BLOCK);
 }
 
+IN_PROC_BROWSER_TEST_P(RedirectHeuristicGrantTest,
+                       CreatesRedirectHeuristicGrantsWithWebAuthnInteractions) {
+  WebContents* web_contents = GetActiveWebContents();
+  auto cookie_settings = CookieSettingsFactory::GetForProfile(
+      Profile::FromBrowserContext(web_contents->GetBrowserContext()));
+
+  // Initialize first party URL and two trackers.
+  GURL first_party_url =
+      embedded_test_server()->GetURL("a.test", "/title1.html");
+  GURL past_interaction_url =
+      embedded_test_server()->GetURL("b.test", "/title1.html");
+  GURL current_interaction_url =
+      embedded_test_server()->GetURL("c.test", "/title1.html");
+
+  // Record a past web authentication interaction on `past_interaction_url`.
+  ASSERT_TRUE(content::NavigateToURL(web_contents, past_interaction_url));
+  SimulateWebAuthnAssertion();
+
+  // Start redirect chain on `first_party_url` with an interaction that simulate
+  // a user starting the authentication process
+  ASSERT_TRUE(content::NavigateToURL(web_contents, first_party_url));
+  SimulateMouseClick();
+
+  // Navigate through 'past_interaction_url', 'current_interaction_url' with a
+  // web authentication interaction, and back to 'first_party_url'
+  ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
+      web_contents, past_interaction_url));
+  ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
+      web_contents, current_interaction_url));
+  SimulateWebAuthnAssertion();
+  ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
+      web_contents, first_party_url));
+  EndRedirectChain();
+
+  // Wait on async tasks for the grants to be created.
+  WaitOnStorage(GetDipsService(web_contents));
+
+  // Expect some cookie grants on `first_party_url` based on flags and criteria.
+  EXPECT_EQ(cookie_settings->GetCookieSetting(
+                past_interaction_url, net::SiteForCookies(), first_party_url,
+                net::CookieSettingOverrides(), nullptr),
+            (GetParam().write_redirect_grants &&
+             !GetParam().require_current_interaction)
+                ? CONTENT_SETTING_ALLOW
+                : CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(cookie_settings->GetCookieSetting(
+                current_interaction_url, net::SiteForCookies(), first_party_url,
+                net::CookieSettingOverrides(), nullptr),
+            (GetParam().write_redirect_grants && !GetParam().require_aba_flow)
+                ? CONTENT_SETTING_ALLOW
+                : CONTENT_SETTING_BLOCK);
+}
+
+IN_PROC_BROWSER_TEST_F(DIPSBounceDetectorBrowserTest,
+                       RedirectInfoHttpStatusPersistence) {
+  WebContents* const web_contents = GetActiveWebContents();
+
+  // The "final" URL will not have any server redirects.
+  GURL final_url = embedded_test_server()->GetURL("/echo");
+  // The "302" and "303" URLs will have a server redirect to the final URL,
+  // giving a 302 and 303 HTTP response code status, respectively.
+  GURL redirect_303 = embedded_test_server()->GetURL("/server-redirect-303?" +
+                                                     final_url.spec());
+  GURL redirect_302 = embedded_test_server()->GetURL("/server-redirect-302?" +
+                                                     final_url.spec());
+  // The "301" URL will give a 301 response code and redirect to the "302" URL.
+  GURL redirect_301 = embedded_test_server()->GetURL("/server-redirect-301?" +
+                                                     redirect_302.spec());
+
+  // Navigate to a URL that will give a 301 redirect to another URL that will
+  // give a 302 redirect, before settling on a third URL.
+  ASSERT_TRUE(content::NavigateToURL(web_contents, redirect_301, final_url));
+
+  // Do client redirect to a URL that gives a 303 redirect.
+  ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
+      web_contents, redirect_303, final_url));
+
+  RedirectChainDetector* wco =
+      RedirectChainDetector::FromWebContents(web_contents);
+  const DIPSRedirectContext& context = wco->CommittedRedirectContext();
+
+  ASSERT_EQ(context.size(), 4u);
+
+  EXPECT_EQ(context[0].response_code, 301);
+  EXPECT_EQ(context[1].response_code, 302);
+  // The client redirect does not have an explicit HTTP response status.
+  EXPECT_EQ(context[2].response_code, 0);
+  EXPECT_EQ(context[3].response_code, 303);
+}
+
 const RedirectHeuristicFlags kRedirectHeuristicTestCases[] = {
     {
         .write_redirect_grants = false,
@@ -2057,6 +2159,12 @@ const RedirectHeuristicFlags kRedirectHeuristicTestCases[] = {
         .write_redirect_grants = true,
         .require_aba_flow = true,
         .require_current_interaction = false,
+    },
+    {
+        .write_redirect_grants = true,
+        .require_aba_flow = false,
+        .require_current_interaction = false,
+        .user_activation_interaction = false,
     },
 };
 
@@ -4042,7 +4150,7 @@ IN_PROC_BROWSER_TEST_P(DIPSBounceDetectorBFCacheTest, LateCookieAccessTest) {
 
   const DIPSRedirectContext& context = wco->CommittedRedirectContext();
   ASSERT_EQ(context.size(), 1u);
-  const DIPSRedirectInfo& redirect = context.AtForTesting(0);
+  const DIPSRedirectInfo& redirect = context[0];
   EXPECT_EQ(redirect.url.url, bounce_url);
   // A request to /favicon.ico may cause a cookie read in addition to the write
   // we explicitly performed.
@@ -4153,7 +4261,7 @@ IN_PROC_BROWSER_TEST_P(DIPSBounceDetectorBFCacheTest, LateInteractionTest) {
 
   const DIPSRedirectContext& context = wco->CommittedRedirectContext();
   ASSERT_EQ(context.size(), 1u);
-  const DIPSRedirectInfo& redirect = context.AtForTesting(0);
+  const DIPSRedirectInfo& redirect = context[0];
   EXPECT_EQ(redirect.url.url, bounce_url);
   EXPECT_THAT(redirect.has_sticky_activation, true);
 }

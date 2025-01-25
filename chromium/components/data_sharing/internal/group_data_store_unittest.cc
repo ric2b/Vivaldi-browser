@@ -30,10 +30,21 @@ class GroupDataStoreTest : public testing::Test {
 
   ~GroupDataStoreTest() override = default;
 
-  void MimicRestart() {
+  void TearDown() override {
+    // This is needed to ensure that `temp_dir_` outlives any write tasks on DB
+    // sequence.
+    base::RunLoop run_loop;
+    store_->SetShutdownCallbackForTesting(run_loop.QuitClosure());
     store_ = nullptr;
-    // Wait for shutdown tasks completion.
-    task_environment_.RunUntilIdle();
+    run_loop.Run();
+  }
+
+  void MimicRestart() {
+    base::RunLoop run_loop;
+    store_->SetShutdownCallbackForTesting(run_loop.QuitClosure());
+
+    store_ = nullptr;
+    run_loop.Run();
 
     InitStoreAndWaitForDBLoading();
   }
@@ -44,18 +55,13 @@ class GroupDataStoreTest : public testing::Test {
   void InitStoreAndWaitForDBLoading() {
     base::RunLoop run_loop;
     store_ = std::make_unique<GroupDataStore>(
-        GetDBPath(), base::BindLambdaForTesting(
+        temp_dir_.GetPath(), base::BindLambdaForTesting(
                          [&run_loop](GroupDataStore::DBInitStatus status) {
                            EXPECT_EQ(status,
                                      GroupDataStore::DBInitStatus::kSuccess);
                            run_loop.Quit();
                          }));
     run_loop.Run();
-  }
-
-  base::FilePath GetDBPath() const {
-    return temp_dir_.GetPath().Append(
-        base::FilePath(FILE_PATH_LITERAL("db_file")));
   }
 
   base::test::TaskEnvironment task_environment_;

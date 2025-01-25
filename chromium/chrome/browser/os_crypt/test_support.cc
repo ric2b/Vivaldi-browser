@@ -13,6 +13,7 @@
 #include "chrome/install_static/install_modes.h"
 #include "chrome/installer/util/install_service_work_item.h"
 #include "chrome/installer/util/util_constants.h"
+#include "chrome/windows_services/service_program/test_support/scoped_log_grabber.h"
 
 namespace os_crypt {
 
@@ -75,17 +76,20 @@ FakeInstallDetails::FakeInstallDetails()
   set_system_level(true);
 }
 
-std::optional<base::ScopedClosureRunner> InstallService() {
+std::optional<base::ScopedClosureRunner> InstallService(
+    const ScopedLogGrabber& log_grabber) {
   base::FilePath exe_dir;
   base::PathService::Get(base::DIR_EXE, &exe_dir);
   base::CommandLine service_cmd(
       exe_dir.Append(installer::kElevationServiceExe));
   service_cmd.AppendSwitch(
       elevation_service::switches::kElevatorClsIdForTestingSwitch);
+  log_grabber.AddLoggingSwitches(service_cmd);
   installer::InstallServiceWorkItem install_service_work_item(
       install_static::GetElevationServiceName(),
-      install_static::GetElevationServiceDisplayName(), SERVICE_DEMAND_START,
-      service_cmd, base::CommandLine(base::CommandLine::NO_PROGRAM),
+      install_static::GetElevationServiceDisplayName(), /*description=*/{},
+      SERVICE_DEMAND_START, service_cmd,
+      base::CommandLine(base::CommandLine::NO_PROGRAM),
       install_static::GetClientStateKeyPath(),
       {install_static::GetElevatorClsid()}, {install_static::GetElevatorIid()});
   install_service_work_item.set_best_effort(true);

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <functional>
 #include <iterator>
+#include <limits>
 
 #include "base/containers/fixed_flat_map.h"
 #include "base/containers/flat_tree.h"
@@ -143,8 +144,8 @@ bool VirtualDisplayUtilWin::IsAPIAvailable() {
   return DisplayDriverController::IsDriverInstalled();
 }
 
-int64_t VirtualDisplayUtilWin::AddDisplay(uint8_t id,
-                                          const DisplayParams& display_params) {
+int64_t VirtualDisplayUtilWin::AddDisplay(const DisplayParams& display_params) {
+  uint8_t id = SynthesizeInternalDisplayId();
   if (virtual_displays_.find(id) != virtual_displays_.end()) {
     LOG(ERROR) << "Duplicate virtual display ID added: " << id;
     return kInvalidDisplayId;
@@ -261,6 +262,10 @@ void VirtualDisplayUtilWin::StartWaiting() {
   CHECK(!run_loop_);
   run_loop_ = std::make_unique<base::RunLoop>();
   if (virtual_displays_.size() != current_config_.requested_configs().size()) {
+    // While waiting for displays, also periodically ensure they are in extended
+    // mode, so they they will become detected as new displays.
+    ensure_extended_timer_.Start(FROM_HERE, base::Seconds(1), this,
+                                 &VirtualDisplayUtilWin::EnsureExtendMode);
     run_loop_->Run();
   }
   run_loop_.reset();
@@ -268,7 +273,47 @@ void VirtualDisplayUtilWin::StartWaiting() {
 
 void VirtualDisplayUtilWin::StopWaiting() {
   CHECK(run_loop_);
+  ensure_extended_timer_.Stop();
   run_loop_->Quit();
+}
+
+void VirtualDisplayUtilWin::EnsureExtendMode() {
+  if (current_config_.requested_configs().size() < 1) {
+    // Don't set the topology if no displays were requested.
+    return;
+  }
+  UINT32 path_array_size, mode_array_size = 0;
+  GetDisplayConfigBufferSizes(QDC_ALL_PATHS, &path_array_size,
+                              &mode_array_size);
+  std::vector<DISPLAYCONFIG_PATH_INFO> paths(path_array_size);
+  std::vector<DISPLAYCONFIG_MODE_INFO> modes(mode_array_size);
+  DISPLAYCONFIG_TOPOLOGY_ID topology;
+  LONG ret =
+      QueryDisplayConfig(QDC_DATABASE_CURRENT, &path_array_size, paths.data(),
+                         &mode_array_size, modes.data(), &topology);
+  if (ret != ERROR_SUCCESS) {
+    LOG(ERROR) << "QueryDisplayConfig failed: " << ret;
+    return;
+  }
+  if (topology == DISPLAYCONFIG_TOPOLOGY_EXTEND) {
+    ensure_extended_timer_.Stop();
+    return;
+  }
+  ret =
+      SetDisplayConfig(0, nullptr, 0, nullptr, SDC_TOPOLOGY_EXTEND | SDC_APPLY);
+  if (ret == ERROR_SUCCESS) {
+    ensure_extended_timer_.Stop();
+    return;
+  }
+  LOG(ERROR) << "SetDisplayConfig failed: " << ret;
+}
+
+// static
+uint8_t VirtualDisplayUtilWin::SynthesizeInternalDisplayId() {
+  static uint8_t synthesized_display_id = 0;
+  CHECK_LT(synthesized_display_id, std::numeric_limits<uint8_t>::max())
+      << "All synthesized display IDs in use.";
+  return synthesized_display_id++;
 }
 
 // static

@@ -137,25 +137,26 @@ void CFGAS_GEGraphics::RestoreGraphState() {
 }
 
 void CFGAS_GEGraphics::SetLineCap(CFX_GraphStateData::LineCap lineCap) {
-  m_info.graphState.m_LineCap = lineCap;
+  m_info.graphState.set_line_cap(lineCap);
 }
 
-void CFGAS_GEGraphics::SetLineDash(float dashPhase,
-                                   pdfium::span<const float> dashArray) {
-  DCHECK(!dashArray.empty());
-  float scale = m_info.isActOnDash ? m_info.graphState.m_LineWidth : 1.0;
-  m_info.graphState.m_DashPhase = dashPhase;
-  m_info.graphState.m_DashArray.resize(dashArray.size());
-  for (size_t i = 0; i < dashArray.size(); ++i)
-    m_info.graphState.m_DashArray[i] = dashArray[i] * scale;
+void CFGAS_GEGraphics::SetLineDash(std::vector<float> dash_array) {
+  // For `dash_array` to be empty, call SetSolidLineDash() instead.
+  CHECK(!dash_array.empty());
+  const float scale = m_info.isActOnDash ? m_info.graphState.line_width() : 1.0;
+  for (float& f : dash_array) {
+    f *= scale;
+  }
+  m_info.graphState.set_dash_array(std::move(dash_array));
+  m_info.graphState.set_dash_phase(0);
 }
 
 void CFGAS_GEGraphics::SetSolidLineDash() {
-  m_info.graphState.m_DashArray.clear();
+  m_info.graphState.set_dash_array({});
 }
 
 void CFGAS_GEGraphics::SetLineWidth(float lineWidth) {
-  m_info.graphState.m_LineWidth = lineWidth;
+  m_info.graphState.set_line_width(lineWidth);
 }
 
 void CFGAS_GEGraphics::EnableActOnDash() {

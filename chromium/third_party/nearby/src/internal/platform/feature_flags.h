@@ -71,17 +71,22 @@ class FeatureFlags {
     // DiscoverPeripheralTracker flow.
     bool enable_invoking_legacy_device_discovered_cb = false;
 
+    // Enable 1. safe-to-disconnect check 2. reserved 3. auto-reconnect 4.
+    // auto-resume 5. non-distance-constraint-recovery 6. payload_ack
     std::int32_t min_nc_version_supports_safe_to_disconnect = 1;
     std::int32_t min_nc_version_supports_auto_reconnect = 3;
-    absl::Duration auto_reconnect_retry_delay_millis = absl::Milliseconds(5000);
-    absl::Duration auto_reconnect_timeout_millis = absl::Milliseconds(30000);
-    std::int32_t auto_reconnect_retry_attempts = 3;
-    absl::Duration auto_reconnect_skip_duplicated_endpoint_duration =
+    absl::Duration safe_to_disconnect_reconnect_retry_delay_millis =
         absl::Milliseconds(4000);
+    absl::Duration safe_to_disconnect_reconnect_timeout_millis =
+        absl::Milliseconds(15000);
+    std::int32_t safe_to_disconnect_reconnect_retry_attempts = 3;
+    absl::Duration
+        safe_to_disconnect_reconnect_skip_duplicated_endpoint_duration =
+            absl::Milliseconds(2000);
     // Android code won't be able to launch "payload_received_ack" feature for
     // in near future, so change "payload_received_ack" version from "2" to "5"
     // after auto-reconnect and auto-resume.
-    std::int32_t min_nc_version_supports_payload_received_ack = 5;
+    std::int32_t min_nc_version_supports_payload_received_ack = 6;
     // If the other part doesn't ack the safe_to_disconnect request, the
     // initiator will end the connection in 30s.
     absl::Duration safe_to_disconnect_ack_delay_millis =
@@ -112,6 +117,7 @@ class FeatureFlags {
     // from triggering an OutOfMemory error.
     std::uint32_t connection_max_frame_length = 1048576;
     std::uint32_t blocking_queue_stream_queue_capacity = 10;
+    bool support_web_rtc_non_cellular_medium = false;
   };
 
   static const FeatureFlags& GetInstance() {

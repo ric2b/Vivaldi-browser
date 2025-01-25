@@ -31,6 +31,11 @@ class NetworkServiceManager final {
       std::unique_ptr<ProtocolConnectionClient> connection_client,
       std::unique_ptr<ProtocolConnectionServer> connection_server);
 
+  NetworkServiceManager(const NetworkServiceManager&) = delete;
+  NetworkServiceManager& operator=(const NetworkServiceManager&) = delete;
+  NetworkServiceManager(NetworkServiceManager&&) noexcept = default;
+  NetworkServiceManager& operator=(NetworkServiceManager&&) noexcept = default;
+
   // Returns the singleton instance of the NetworkServiceManager previously
   // created by Create().
   static NetworkServiceManager* Get();
@@ -62,7 +67,6 @@ class NetworkServiceManager final {
       std::unique_ptr<ServicePublisher> service_publisher,
       std::unique_ptr<ProtocolConnectionClient> connection_client,
       std::unique_ptr<ProtocolConnectionServer> connection_server);
-
   ~NetworkServiceManager();
 
   std::unique_ptr<ServiceListener> service_listener_;

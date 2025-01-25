@@ -10,6 +10,7 @@
 #include "core/fxcrt/check.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
 #include "core/fxge/dib/fx_dib.h"
+#include "public/cpp/fpdf_scopers.h"
 #include "public/fpdf_progressive.h"
 #include "testing/embedder_test.h"
 #include "testing/embedder_test_constants.h"
@@ -236,70 +237,67 @@ TEST_F(FPDFProgressiveRenderEmbedderTest, RenderWithoutPause) {
   // Test rendering of page content using progressive render APIs
   // without pausing the rendering.
   ASSERT_TRUE(OpenDocument("annotation_stamp_with_ap.pdf"));
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
   FakePause pause(false);
-  EXPECT_TRUE(StartRenderPage(page, &pause));
-  ScopedFPDFBitmap bitmap = FinishRenderPage(page);
+  EXPECT_TRUE(StartRenderPage(page.get(), &pause));
+  ScopedFPDFBitmap bitmap = FinishRenderPage(page.get());
   CompareBitmap(bitmap.get(), 595, 842,
                 AnnotationStampWithApBaseContentChecksum());
-  UnloadPage(page);
 }
 
 TEST_F(FPDFProgressiveRenderEmbedderTest, RenderWithPause) {
   // Test rendering of page content using progressive render APIs
   // with pause in rendering.
   ASSERT_TRUE(OpenDocument("annotation_stamp_with_ap.pdf"));
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
   FakePause pause(true);
-  bool render_done = StartRenderPage(page, &pause);
+  bool render_done = StartRenderPage(page.get(), &pause);
   EXPECT_FALSE(render_done);
 
   while (!render_done) {
-    render_done = ContinueRenderPage(page, &pause);
+    render_done = ContinueRenderPage(page.get(), &pause);
   }
-  ScopedFPDFBitmap bitmap = FinishRenderPage(page);
+  ScopedFPDFBitmap bitmap = FinishRenderPage(page.get());
   CompareBitmap(bitmap.get(), 595, 842,
                 AnnotationStampWithApBaseContentChecksum());
-  UnloadPage(page);
 }
 
 TEST_F(FPDFProgressiveRenderEmbedderTest, RenderAnnotWithPause) {
   // Test rendering of the page with annotations using progressive render APIs
   // with pause in rendering.
   ASSERT_TRUE(OpenDocument("annotation_stamp_with_ap.pdf"));
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
   FakePause pause(true);
-  bool render_done = StartRenderPageWithFlags(page, &pause, FPDF_ANNOT);
+  bool render_done = StartRenderPageWithFlags(page.get(), &pause, FPDF_ANNOT);
   EXPECT_FALSE(render_done);
 
   while (!render_done) {
-    render_done = ContinueRenderPage(page, &pause);
+    render_done = ContinueRenderPage(page.get(), &pause);
   }
-  ScopedFPDFBitmap bitmap = FinishRenderPage(page);
+  ScopedFPDFBitmap bitmap = FinishRenderPage(page.get());
   CompareBitmap(bitmap.get(), 595, 842,
                 pdfium::AnnotationStampWithApChecksum());
-  UnloadPage(page);
 }
 
 TEST_F(FPDFProgressiveRenderEmbedderTest, RenderFormsWithPause) {
   // Test rendering of the page with forms using progressive render APIs
   // with pause in rendering.
   ASSERT_TRUE(OpenDocument("text_form.pdf"));
-  FPDF_PAGE page = LoadPage(0);
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
   FakePause pause(true);
-  bool render_done = StartRenderPage(page, &pause);
+  bool render_done = StartRenderPage(page.get(), &pause);
   EXPECT_FALSE(render_done);
 
   while (!render_done) {
-    render_done = ContinueRenderPage(page, &pause);
+    render_done = ContinueRenderPage(page.get(), &pause);
   }
-  ScopedFPDFBitmap bitmap = FinishRenderPageWithForms(page, form_handle());
+  ScopedFPDFBitmap bitmap =
+      FinishRenderPageWithForms(page.get(), form_handle());
   CompareBitmap(bitmap.get(), 300, 300, pdfium::TextFormChecksum());
-  UnloadPage(page);
 }
 
 void FPDFProgressiveRenderEmbedderTest::VerifyRenderingWithColorScheme(
@@ -312,14 +310,13 @@ void FPDFProgressiveRenderEmbedderTest::VerifyRenderingWithColorScheme(
     const char* md5) {
   ASSERT_TRUE(document());
 
-  FPDF_PAGE page = LoadPage(page_num);
+  ScopedEmbedderTestPage page = LoadScopedPage(page_num);
   ASSERT_TRUE(page);
 
   ScopedFPDFBitmap bitmap = RenderPageWithForcedColorScheme(
-      page, form_handle(), flags, color_scheme, background_color);
+      page.get(), form_handle(), flags, color_scheme, background_color);
   ASSERT_TRUE(bitmap);
   CompareBitmap(bitmap.get(), bitmap_width, bitmap_height, md5);
-  UnloadPage(page);
 }
 
 TEST_F(FPDFProgressiveRenderEmbedderTest, RenderTextWithColorScheme) {
@@ -381,6 +378,51 @@ TEST_F(FPDFProgressiveRenderEmbedderTest,
   VerifyRenderingWithColorScheme(/*page_num=*/0, FPDF_CONVERT_FILL_TO_STROKE,
                                  &color_scheme, kBlack, 200, 300,
                                  rectangles_checksum);
+}
+
+TEST_F(FPDFProgressiveRenderEmbedderTest, RenderPathObjectUsability) {
+  // Test rendering of paths with one of the page objects active vs. inactive.
+  const char* all_rectangles_used_checksum = []() {
+    if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
+      return "b4e411a6b5ffa59a50efede2efece597";
+    }
+    return "0a90de37f52127619c3dfb642b5fa2fe";
+  }();
+  const char* one_rectangle_inactive_checksum = []() {
+    if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
+      return "cf5bb4e61609162c03f4c8a6d9791230";
+    }
+    return "0481e8936b35ac9484b51a0966ab4ab6";
+  }();
+
+  ASSERT_TRUE(OpenDocument("rectangles.pdf"));
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ASSERT_TRUE(page);
+
+  // Check rendering result before modifications.
+  {
+    ScopedFPDFBitmap bitmap = RenderPage(page.get());
+    CompareBitmap(bitmap.get(), 200, 300, all_rectangles_used_checksum);
+  }
+
+  ASSERT_EQ(FPDFPage_CountObjects(page.get()), 8);
+  FPDF_PAGEOBJECT page_obj = FPDFPage_GetObject(page.get(), 4);
+  ASSERT_TRUE(page_obj);
+
+  // Check rendering result after a page object is made inactive.
+  // Contents do not need to be regenerated to observe an effect.
+  ASSERT_TRUE(FPDFPageObj_SetIsActive(page_obj, /*active=*/false));
+  {
+    ScopedFPDFBitmap bitmap = RenderPage(page.get());
+    CompareBitmap(bitmap.get(), 200, 300, one_rectangle_inactive_checksum);
+  }
+
+  // Check rendering result after the same page object is active again.
+  ASSERT_TRUE(FPDFPageObj_SetIsActive(page_obj, /*active=*/true));
+  {
+    ScopedFPDFBitmap bitmap = RenderPage(page.get());
+    CompareBitmap(bitmap.get(), 200, 300, all_rectangles_used_checksum);
+  }
 }
 
 TEST_F(FPDFProgressiveRenderEmbedderTest, RenderHighlightWithColorScheme) {
@@ -453,14 +495,14 @@ TEST_F(FPDFProgressiveRenderEmbedderTest, RenderInkWithColorScheme) {
   const char* content_with_ink_checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-      return "cddb7472b064782b2866aa3dc87ca73e";
+      return "0b9e2044a71465ed8af639527c3cc94a";
 #elif BUILDFLAG(IS_APPLE)
-      return "0ef02da77fc1e08455148ecadd257e06";
+      return "62c1dddb6440dd8180abf51d986141e4";
 #else
-      return "bd9d457356dba5fcf33ec9afdaefcab8";
+      return "32678124d0789c09aa61028de3a8cbcf";
 #endif
     }
-    return "797bce7dc6c50ee86b095405df9fe5aa";
+    return "546c99e50c4f2c66fc7ac02e1a834e57";
   }();
 
   ASSERT_TRUE(OpenDocument("annotation_ink_multiple.pdf"));
@@ -475,17 +517,17 @@ TEST_F(FPDFProgressiveRenderEmbedderTest, RenderStampWithColorScheme) {
   const char* content_with_stamp_checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
 #if BUILDFLAG(IS_WIN)
-      return "c35d1256f6684da13023a0e74622c885";
+      return "7e4d84b094fc44094e647803572ae49a";
 #elif BUILDFLAG(IS_APPLE)
-      return "bb302d8808633fede3b6e2e39ac8aaa7";
+      return "f1f1288805d1afd93397c2f24080b741";
 #else
-      return "1bd68054628cf193b399a16638ecb5f9";
+      return "4e42fb3e87ff8276a549d7a755997766";
 #endif
     }
 #if BUILDFLAG(IS_APPLE)
-    return "8170c539e95f22f14eb8f266a5f1bbed";
+    return "ed794dc3e110ddb60aab788bd3d63598";
 #else
-    return "d1fd087e59d4dcebf47b56570bdb8c22";
+    return "f61b2f70101073cc9e8905e16e3923ed";
 #endif
   }();
 

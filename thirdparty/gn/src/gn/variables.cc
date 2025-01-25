@@ -437,9 +437,21 @@ const char kAllDependentConfigs_Help[] =
   This addition happens in a second phase once a target and all of its
   dependencies have been resolved. Therefore, a target will not see these
   force-added configs in their "configs" variable while the script is running,
-  and they can not be removed. As a result, this capability should generally
-  only be used to add defines and include directories necessary to compile a
-  target's headers.
+  and they can not be removed.
+
+  Use of all_dependent_configs should be avoided when possible.
+
+  If your target has include_dirs and defines needed by targets that depend on
+  it, the correct solution is to add those settings to public_configs and those
+  targets choose whether to forward them up the dependency tree by whether they
+  depend on your target via public_deps or not.
+
+  There are two recommended uses of this feature:
+
+   1. Legacy cases that can't easily be updated to use the proper public deps
+      and configs.
+   2. Additional linker flag that need to be set on the final linked target
+      regardless of whether the dependency path is public or private.
 
   See also "public_configs".
 )" COMMON_ORDERING_HELP;

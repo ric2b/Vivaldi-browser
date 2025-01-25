@@ -10,12 +10,9 @@ namespace syncer {
 }
 
 @class VivaldiSyncCoordinator;
-@protocol ApplicationCommands;
 
 // Delegate for VivaldiSyncCoordinator.
 @protocol VivaldiSyncCoordinatorDelegate <NSObject>
-
-@property(nonatomic, weak) id<ApplicationCommands> applicationCommandsHandler;
 
 // Called when the view controller is removed from its parent.
 - (void)vivaldiSyncCoordinatorWasRemoved:

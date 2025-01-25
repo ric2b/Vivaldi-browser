@@ -19,11 +19,11 @@ namespace openscreen::osp {
 class QuicAgentCertificate final : public AgentCertificate {
  public:
   QuicAgentCertificate();
-  ~QuicAgentCertificate() override;
   QuicAgentCertificate(const QuicAgentCertificate&) = delete;
   QuicAgentCertificate& operator=(const QuicAgentCertificate&) = delete;
   QuicAgentCertificate(QuicAgentCertificate&&) noexcept = delete;
   QuicAgentCertificate& operator=(QuicAgentCertificate&&) noexcept = delete;
+  ~QuicAgentCertificate() override;
 
   // AgentCertificate overrides.
   bool LoadAgentCertificate(std::string_view filename) override;

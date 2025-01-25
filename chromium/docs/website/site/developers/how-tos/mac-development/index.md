@@ -21,10 +21,6 @@ Resources for developers new to the Mac platform:
 *   [From C++ to
             Objective-C](http://ktd.club.fr/programmation/fichiers/cpp-objc-en.pdf)
             by Pierre Chatelier is a free online book introducing Objective C.
-*   [Objective-C Development in
-            Chrome](https://docs.google.com/a/chromium.org/document/d/1HDxOA0TD97e8MhS__7KBSAJRzKWyi0hqVTc13WSHFqc/edit?usp=sharing)
-            by krstnmnlsn is a collection of basic information about working
-            with Objective C in Chrome along with pitfalls to avoid.
 *   [Intro to Chrome Mac
             Development](https://docs.google.com/presentation/d/1H8UOJmSJFQl3hgzDAjmObYTqHDTF98hj_ENpVydJ4OE/edit?usp=sharing)
             is a shorter summary of things specific to Chrome + Mac, with links

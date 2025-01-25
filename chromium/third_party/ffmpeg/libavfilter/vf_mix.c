@@ -27,8 +27,8 @@
 #include "libavutil/pixdesc.h"
 
 #include "avfilter.h"
+#include "filters.h"
 #include "formats.h"
-#include "internal.h"
 #include "framesync.h"
 #include "video.h"
 
@@ -64,7 +64,9 @@ typedef struct MixContext {
     FFFrameSync fs;
 } MixContext;
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
     unsigned reject_flags = AV_PIX_FMT_FLAG_BITSTREAM |
                             AV_PIX_FMT_FLAG_HWACCEL   |
@@ -76,7 +78,8 @@ static int query_formats(AVFilterContext *ctx)
     else
         accept_flags |= AV_PIX_FMT_FLAG_BE;
 
-    return ff_set_common_formats(ctx, ff_formats_pixdesc_filter(accept_flags, reject_flags));
+    return ff_set_common_formats2(ctx, cfg_in, cfg_out,
+                                  ff_formats_pixdesc_filter(accept_flags, reject_flags));
 }
 
 static int parse_weights(AVFilterContext *ctx)
@@ -316,7 +319,8 @@ static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     MixContext *s = ctx->priv;
-    AVRational frame_rate = ctx->inputs[0]->frame_rate;
+    FilterLink *il = ff_filter_link(ctx->inputs[0]);
+    FilterLink *ol = ff_filter_link(outlink);
     AVRational sar = ctx->inputs[0]->sample_aspect_ratio;
     AVFilterLink *inlink = ctx->inputs[0];
     int height = ctx->inputs[0]->h;
@@ -366,7 +370,7 @@ static int config_output(AVFilterLink *outlink)
 
     outlink->w          = width;
     outlink->h          = height;
-    outlink->frame_rate = frame_rate;
+    ol->frame_rate     = il->frame_rate;
     outlink->sample_aspect_ratio = sar;
 
     if ((ret = ff_framesync_init(&s->fs, ctx, s->nb_inputs)) < 0)
@@ -461,7 +465,7 @@ const AVFilter ff_vf_mix = {
     .priv_size     = sizeof(MixContext),
     .priv_class    = &mix_class,
     FILTER_OUTPUTS(outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .init          = init,
     .uninit        = uninit,
     .activate      = activate,
@@ -546,7 +550,7 @@ const AVFilter ff_vf_tmix = {
     .priv_class    = &tmix_class,
     FILTER_OUTPUTS(outputs),
     FILTER_INPUTS(inputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .init          = init,
     .uninit        = uninit,
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,

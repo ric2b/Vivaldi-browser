@@ -10,14 +10,15 @@
 #include "base/ranges/algorithm.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/local_tab_group_listener.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "components/saved_tab_groups/features.h"
-#include "components/saved_tab_groups/saved_tab_group_model.h"
-#include "components/saved_tab_groups/tab_group_sync_service.h"
+#include "components/saved_tab_groups/internal/saved_tab_group_model.h"
+#include "components/saved_tab_groups/public/features.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/tab_groups/tab_group_id.h"
 
 namespace content {
@@ -66,7 +67,7 @@ void SavedTabGroupModelListener::OnTabGroupAdded(
   auto group_and_tab_guid_mapping = CreateSavedTabGroupAndTabMapping(group_id);
 
   SavedTabGroup copy_group = group_and_tab_guid_mapping.first;
-  std::map<tabs::TabModel*, base::Uuid>& tab_guid_mapping =
+  std::map<tabs::TabInterface*, base::Uuid>& tab_guid_mapping =
       group_and_tab_guid_mapping.second;
   service_->AddGroup(std::move(copy_group));
 
@@ -80,11 +81,11 @@ void SavedTabGroupModelListener::OnTabGroupWillBeRemoved(
     return;
   }
 
-  if (!tab_groups::IsTabGroupsSaveV2Enabled()) {
+  if (!local_tab_group_listeners_.contains(group_id)) {
     return;
   }
 
-  DisconnectLocalTabGroup(group_id);
+  DisconnectLocalTabGroup(group_id, ClosingSource::kDeletedByUser);
 }
 
 void SavedTabGroupModelListener::OnTabGroupChanged(
@@ -129,16 +130,16 @@ void SavedTabGroupModelListener::OnTabGroupChanged(
 
 void SavedTabGroupModelListener::TabGroupedStateChanged(
     std::optional<tab_groups::TabGroupId> new_local_group_id,
-    tabs::TabModel* tab,
+    tabs::TabInterface* tab,
     int index) {
   // Remove `contents` from its current saved group, if it's in one.
   for (auto& [local_group_id, listener] : local_tab_group_listeners_) {
     if (local_group_id != new_local_group_id) {
-      if (listener.MaybeRemoveWebContentsFromLocal(tab->contents()) ==
+      if (listener.MaybeRemoveWebContentsFromLocal(tab->GetContents()) ==
           LocalTabGroupListener::Liveness::kGroupDeleted) {
         // If this emptied the group, the saved group was removed, so we must
         // stop listening to `local_group_id`.
-        DisconnectLocalTabGroup(local_group_id);
+        DisconnectLocalTabGroup(local_group_id, ClosingSource::kUnknown);
         // Not only did we find our old group, we also concurrently modified the
         // data structure we're iterating over. Abort, abort.
         break;
@@ -154,8 +155,7 @@ void SavedTabGroupModelListener::TabGroupedStateChanged(
     const Browser* const browser = SavedTabGroupUtils::GetBrowserWithTabGroupId(
         new_local_group_id.value());
     CHECK(browser);
-    listener.AddWebContentsFromLocal(tab->contents(),
-                                     browser->tab_strip_model(), index);
+    listener.AddTabFromLocal(tab, browser->tab_strip_model(), index);
   }
 }
 
@@ -164,27 +164,6 @@ void SavedTabGroupModelListener::OnTabStripModelChanged(
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
   switch (change.type()) {
-    case TabStripModelChange::kReplaced: {
-      std::optional<tab_groups::TabGroupId> local_id =
-          tab_strip_model->GetTabGroupForTab(change.GetReplace()->index);
-
-      // Do nothing if the tab is no longer in a group.
-      if (!local_id.has_value()) {
-        return;
-      }
-
-      // Do nothing if the tab is not part of a saved group.
-      if (!local_tab_group_listeners_.contains(local_id.value())) {
-        return;
-      }
-
-      LocalTabGroupListener& local_tab_group_listener =
-          local_tab_group_listeners_.at(local_id.value());
-
-      local_tab_group_listener.OnReplaceWebContents(
-          change.GetReplace()->old_contents, change.GetReplace()->new_contents);
-      return;
-    }
     case TabStripModelChange::kMoved: {
       std::optional<tab_groups::TabGroupId> local_id =
           tab_strip_model->GetTabGroupForTab(change.GetMove()->to_index);
@@ -210,6 +189,7 @@ void SavedTabGroupModelListener::OnTabStripModelChanged(
     }
     case TabStripModelChange::kSelectionOnly:
     case TabStripModelChange::kInserted:
+    case TabStripModelChange::kReplaced:
     case TabStripModelChange::kRemoved: {
       return;
     }
@@ -226,7 +206,7 @@ void SavedTabGroupModelListener::WillCloseAllTabs(
   for (const tab_groups::TabGroupId& group_id :
        tab_strip_model->group_model()->ListTabGroups()) {
     if (base::Contains(local_tab_group_listeners_, group_id)) {
-      DisconnectLocalTabGroup(group_id);
+      DisconnectLocalTabGroup(group_id, ClosingSource::kCloseAllTabs);
     }
   }
 }
@@ -238,7 +218,7 @@ bool SavedTabGroupModelListener::IsTrackingLocalTabGroup(
 
 void SavedTabGroupModelListener::ConnectToLocalTabGroup(
     const SavedTabGroup& saved_tab_group,
-    std::map<tabs::TabModel*, base::Uuid> tab_guid_mapping) {
+    std::map<tabs::TabInterface*, base::Uuid> tab_guid_mapping) {
   const tab_groups::TabGroupId local_group_id =
       saved_tab_group.local_group_id().value();
 
@@ -249,21 +229,9 @@ void SavedTabGroupModelListener::ConnectToLocalTabGroup(
       SavedTabGroupUtils::GetTabGroupWithId(local_group_id)->tab_count();
   CHECK_EQ(local_group_size, tab_guid_mapping.size());
 
-  std::map<content::WebContents*, base::Uuid> contents_guid_mapping;
-  std::transform(
-      tab_guid_mapping.begin(), tab_guid_mapping.end(),
-      std::inserter(contents_guid_mapping, contents_guid_mapping.end()),
-      [](const std::pair<tabs::TabModel*, base::Uuid>& pair) {
-        // Transform the TabModel* to WebContents*
-        content::WebContents* web_contents = pair.first->contents();
-
-        // Return a pair with the transformed key and the same UUID value
-        return std::make_pair(web_contents, pair.second);
-      });
-
   auto [iterator, success] = local_tab_group_listeners_.try_emplace(
       local_group_id, local_group_id, saved_tab_group.saved_guid(), service_,
-      contents_guid_mapping);
+      tab_guid_mapping);
   CHECK(success);
 }
 
@@ -298,8 +266,9 @@ void SavedTabGroupModelListener::ResumeLocalObservation() {
 }
 
 void SavedTabGroupModelListener::DisconnectLocalTabGroup(
-    tab_groups::TabGroupId tab_group_id) {
-  service_->RemoveLocalTabGroupMapping(tab_group_id);
+    tab_groups::TabGroupId tab_group_id,
+    ClosingSource closing_source) {
+  service_->RemoveLocalTabGroupMapping(tab_group_id, closing_source);
   local_tab_group_listeners_.erase(tab_group_id);
 }
 
@@ -310,7 +279,7 @@ void SavedTabGroupModelListener::RemoveLocalGroupFromSync(
   }
 
   local_tab_group_listeners_.at(local_group_id).GroupRemovedFromSync();
-  DisconnectLocalTabGroup(local_group_id);
+  DisconnectLocalTabGroup(local_group_id, ClosingSource::kDeletedFromSync);
 }
 
 void SavedTabGroupModelListener::UpdateLocalGroupFromSync(
@@ -321,7 +290,7 @@ void SavedTabGroupModelListener::UpdateLocalGroupFromSync(
 
   if (local_tab_group_listeners_.at(local_group_id).UpdateFromSync() ==
       LocalTabGroupListener::Liveness::kGroupDeleted) {
-    DisconnectLocalTabGroup(local_group_id);
+    DisconnectLocalTabGroup(local_group_id, ClosingSource::kDeletedFromSync);
   }
 }
 
@@ -341,7 +310,7 @@ void SavedTabGroupModelListener::OnBrowserRemoved(Browser* browser) {
   browser->tab_strip_model()->RemoveObserver(this);
 }
 
-std::pair<SavedTabGroup, std::map<tabs::TabModel*, base::Uuid>>
+std::pair<SavedTabGroup, std::map<tabs::TabInterface*, base::Uuid>>
 SavedTabGroupModelListener::CreateSavedTabGroupAndTabMapping(
     const tab_groups::TabGroupId& group_id) {
   Browser* browser =
@@ -361,14 +330,14 @@ SavedTabGroupModelListener::CreateSavedTabGroupAndTabMapping(
           profile_));
 
   const gfx::Range tab_range = tab_group->ListTabs();
-  std::map<tabs::TabModel*, base::Uuid> tab_guid_mapping;
+  std::map<tabs::TabInterface*, base::Uuid> tab_guid_mapping;
   for (auto i = tab_range.start(); i < tab_range.end(); ++i) {
-    tabs::TabModel* tab = tab_strip_model->GetTabAtIndex(i);
+    tabs::TabInterface* tab = tab_strip_model->GetTabAtIndex(i);
     CHECK(tab);
 
     tab_groups::SavedTabGroupTab saved_tab_group_tab =
         tab_groups::SavedTabGroupUtils::CreateSavedTabGroupTabFromWebContents(
-            tab->contents(), saved_tab_group.saved_guid());
+            tab->GetContents(), saved_tab_group.saved_guid());
 
     tab_guid_mapping.emplace(tab, saved_tab_group_tab.saved_tab_guid());
     saved_tab_group.AddTabLocally(std::move(saved_tab_group_tab));

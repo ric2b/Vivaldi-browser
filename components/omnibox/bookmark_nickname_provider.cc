@@ -137,7 +137,7 @@ std::pair<int, int> BookmarkNicknameProvider::CalculateBookmarkMatchRelevance(
 
   const GURL& url(bookmark_match.node->GetTitledUrlNodeUrl());
 
-  const int kBaseBookmarkNicknameScore = 1450;
+  const int kBaseBookmarkNicknameScore = 1460;
   const int kMaxBookmarkScore = 1599;
   const double kBookmarkScoreRange =
       static_cast<double>(kMaxBookmarkScore - kBaseBookmarkNicknameScore);

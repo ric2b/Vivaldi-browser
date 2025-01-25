@@ -7,9 +7,9 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <variant>
 
-#include "base/feature_list.h"
 #include "base/memory/scoped_refptr.h"
 #include "components/invalidation/invalidation_listener.h"
 #include "components/invalidation/public/invalidation_service.h"
@@ -30,11 +30,9 @@ class SharedURLLoaderFactory;
 
 namespace invalidation {
 
-// Turns on invalidations with direct messages by substituting
-// InvalidationService with InvalidationListener.
-BASE_DECLARE_FEATURE(kInvalidationsWithDirectMessages);
-
 class IdentityProvider;
+
+bool IsInvalidationListenerSupported(std::string_view project_number);
 
 std::variant<std::unique_ptr<InvalidationService>,
              std::unique_ptr<InvalidationListener>>
@@ -44,7 +42,6 @@ CreateInvalidationServiceOrListener(
     instance_id::InstanceIDDriver* instance_id_driver,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     PrefService* pref_service,
-    std::string sender_id,
     std::string project_number,
     std::string log_prefix);
 

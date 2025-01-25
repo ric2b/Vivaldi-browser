@@ -42,6 +42,7 @@ extern const char kVivaldiNewTabURL[];
 extern const char kVivaldiIncognitoURL[];
 extern const char kVivaldiGuestSessionURL[];
 extern const char kVivaldiMailURL[];
+extern const char kVivaldiCrashStartPageURL[];
 
 extern const char kVivaldiReservedApiError[];
 
@@ -62,6 +63,7 @@ extern const char kWindowExtDataKey[];
 extern const char kSparkleAutoInstallSettingName[];
 extern const char kSparkleLastCheckTimeSettingName[];
 
+inline constexpr int kVivaldiCrashLoopDetectionTimeoutInSeconds = 10;
 }  // namespace vivaldi
 
 #endif  // APP_VIVALDI_CONSTANTS_H_

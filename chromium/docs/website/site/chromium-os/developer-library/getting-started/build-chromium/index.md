@@ -65,7 +65,9 @@ longer necessary. You can edit the cached arguments by editing
 chromium/src$ gn args out_${SDK_BOARD}/Release
 ```
 
-TODO(jhawkins): Link out to a guide on build configurations.
+More information regarding build configurations can be found <a
+href="https://chromium.googlesource.com/website/+/HEAD/site/developers/gn-build-configuration/index.md"
+target="_blank">here</a>.
 
 ## Building Chrome
 

@@ -17,30 +17,6 @@ namespace Eigen {
 
 namespace internal {
 
-// helper function for dot(). The problem is that if we put that in the body of dot(), then upon calling dot
-// with mismatched types, the compiler emits errors about failing to instantiate cwiseProduct BEFORE
-// looking at the static assertions. Thus this is a trick to get better compile errors.
-template <typename T, typename U,
-          bool NeedToTranspose = T::IsVectorAtCompileTime && U::IsVectorAtCompileTime &&
-                                 ((int(T::RowsAtCompileTime) == 1 && int(U::ColsAtCompileTime) == 1) ||
-                                  (int(T::ColsAtCompileTime) == 1 && int(U::RowsAtCompileTime) == 1))>
-struct dot_nocheck {
-  typedef scalar_conj_product_op<typename traits<T>::Scalar, typename traits<U>::Scalar> conj_prod;
-  typedef typename conj_prod::result_type ResScalar;
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE static ResScalar run(const MatrixBase<T>& a, const MatrixBase<U>& b) {
-    return a.template binaryExpr<conj_prod>(b).sum();
-  }
-};
-
-template <typename T, typename U>
-struct dot_nocheck<T, U, true> {
-  typedef scalar_conj_product_op<typename traits<T>::Scalar, typename traits<U>::Scalar> conj_prod;
-  typedef typename conj_prod::result_type ResScalar;
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE static ResScalar run(const MatrixBase<T>& a, const MatrixBase<U>& b) {
-    return a.transpose().template binaryExpr<conj_prod>(b).sum();
-  }
-};
-
 template <typename Derived, typename Scalar = typename traits<Derived>::Scalar>
 struct squared_norm_impl {
   using Real = typename NumTraits<Scalar>::Real;
@@ -74,18 +50,7 @@ EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
     typename ScalarBinaryOpTraits<typename internal::traits<Derived>::Scalar,
                                   typename internal::traits<OtherDerived>::Scalar>::ReturnType
     MatrixBase<Derived>::dot(const MatrixBase<OtherDerived>& other) const {
-  EIGEN_STATIC_ASSERT_VECTOR_ONLY(Derived)
-  EIGEN_STATIC_ASSERT_VECTOR_ONLY(OtherDerived)
-  EIGEN_STATIC_ASSERT_SAME_VECTOR_SIZE(Derived, OtherDerived)
-#if !(defined(EIGEN_NO_STATIC_ASSERT) && defined(EIGEN_NO_DEBUG))
-  EIGEN_CHECK_BINARY_COMPATIBILIY(
-      Eigen::internal::scalar_conj_product_op<Scalar EIGEN_COMMA typename OtherDerived::Scalar>, Scalar,
-      typename OtherDerived::Scalar);
-#endif
-
-  eigen_assert(size() == other.size());
-
-  return internal::dot_nocheck<Derived, OtherDerived>::run(*this, other);
+  return internal::dot_impl<Derived, OtherDerived>::run(derived(), other.derived());
 }
 
 //---------- implementation of L2 norm and related functions ----------

@@ -18,6 +18,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
@@ -76,16 +77,13 @@ namespace {
 
 using ::base::ASCIIToUTF16;
 using ::base::UTF16ToASCII;
+using ::base::test::RunClosure;
 using ::testing::_;
 using ::testing::AssertionResult;
 using ::testing::MockFunction;
 using ::testing::Sequence;
 using ::testing::UnorderedElementsAre;
 using ::testing::UnorderedElementsAreArray;
-
-ACTION_P(InvokeClosure, closure) {
-  closure.Run();
-}
 
 // Default JavaScript code used to submit the forms.
 const char kDocumentClickHandlerSubmitJS[] =
@@ -894,7 +892,7 @@ IN_PROC_BROWSER_TEST_F(AutofillTestPrerendering, DeferWhilePrerendering) {
   EXPECT_CALL(on_forms_seen.check_point, Call).InSequence(on_forms_seen.seq);
   EXPECT_CALL(*mock, OnFormsSeen)
       .InSequence(on_forms_seen.seq)
-      .WillOnce(InvokeClosure(on_forms_seen.run_loop.QuitClosure()));
+      .WillOnce(RunClosure(on_forms_seen.run_loop.QuitClosure()));
 
   struct {
     Sequence seq;
@@ -908,8 +906,7 @@ IN_PROC_BROWSER_TEST_F(AutofillTestPrerendering, DeferWhilePrerendering) {
       .InSequence(on_focus_on_form_field_impl.seq);
   EXPECT_CALL(*mock, OnFocusOnFormFieldImpl)
       .InSequence(on_focus_on_form_field_impl.seq)
-      .WillOnce(
-          InvokeClosure(on_focus_on_form_field_impl.run_loop.QuitClosure()));
+      .WillOnce(RunClosure(on_focus_on_form_field_impl.run_loop.QuitClosure()));
 
   // During prerendering, no events should be fired by AutofillAgent.
   ASSERT_TRUE(content::ExecJs(rfh,
@@ -923,143 +920,6 @@ IN_PROC_BROWSER_TEST_F(AutofillTestPrerendering, DeferWhilePrerendering) {
   EXPECT_EQ(prerender_helper().GetRequestCount(prerender_url), 1);
   on_forms_seen.run_loop.Run();
   on_focus_on_form_field_impl.run_loop.Run();
-}
-
-// Test fixture for testing that that appropriate form submission events are
-// fired in BrowserAutofillManager.
-class AutofillTestFormSubmission : public InProcessBrowserTest {
- protected:
-  class MockAutofillManager : public BrowserAutofillManager {
-   public:
-    explicit MockAutofillManager(ContentAutofillDriver* driver)
-        : BrowserAutofillManager(driver, "en-US") {}
-    MOCK_METHOD(void,
-                OnFormSubmittedImpl,
-                (const FormData&, bool, mojom::SubmissionSource),
-                (override));
-  };
-
-  AutofillTestFormSubmission() = default;
-
-  void SetUpOnMainThread() override {
-    InProcessBrowserTest::SetUpOnMainThread();
-    SetUpServer();
-    NavigateToPage("/form.html");
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    // Slower test bots (chromeos, debug, etc) are flaky
-    // due to slower loading interacting with deferred commits.
-    command_line->AppendSwitch(blink::switches::kAllowPreCommitInput);
-  }
-
-  void ExecuteScript(const std::string& js) {
-    // Simulate a mouse click to submit the form because form submissions not
-    // triggered by user gestures are ignored.
-    std::string onclick_js = "document.onclick = function() { " + js + "; };";
-    ASSERT_TRUE(content::ExecJs(web_contents(), onclick_js));
-    content::SimulateMouseClick(web_contents(), 0,
-                                blink::WebMouseEvent::Button::kLeft);
-  }
-
-  content::WebContents* web_contents() {
-    return browser()->tab_strip_model()->GetActiveWebContents();
-  }
-
-  MockAutofillManager* autofill_manager() {
-    return autofill_manager(web_contents()->GetPrimaryMainFrame());
-  }
-
-  MockAutofillManager* autofill_manager(content::RenderFrameHost* rfh) {
-    return autofill_manager_injector_[rfh];
-  }
-
- private:
-  void SetUpServer() {
-    embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
-        &AutofillTestFormSubmission::HandleRequest, base::Unretained(this)));
-    ASSERT_TRUE(embedded_test_server()->Start());
-  }
-
-  std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
-      const net::test_server::HttpRequest& request) {
-    GURL absolute_url = embedded_test_server()->GetURL(request.relative_url);
-    std::string content;
-    if (absolute_url.path() == "/form.html") {
-      content = get_form_html();
-    } else if (absolute_url.path() == "/success.html") {
-      content = "<html><body>Happy times!";
-    } else {
-      return nullptr;
-    }
-
-    auto http_response =
-        std::make_unique<net::test_server::BasicHttpResponse>();
-    http_response->set_code(net::HTTP_OK);
-    http_response->set_content_type("text/html");
-    http_response->set_content(content);
-    return http_response;
-  }
-
-  virtual std::string get_form_html() const {
-    return "<html><body>"
-           "<form id='form' method='POST' action='/success.html'>"
-           "Name: <input type='text' id='name'><br>"
-           "Address: <input type='text' id='address'><br>"
-           "City: <input type='text' id='city'><br>"
-           "ZIP: <input type='text' id='zip'><br>"
-           "State: <select id='state'>"
-           "  <option value='CA'>CA</option>"
-           "  <option value='WA'>WA</option>"
-           "</select><br>"
-           "</form>";
-  }
-
-  void NavigateToPage(const std::string& filename) {
-    GURL url = embedded_test_server()->GetURL(filename);
-    NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
-    ui_test_utils::NavigateToURL(&params);
-  }
-
-  test::AutofillBrowserTestEnvironment autofill_test_environment_;
-  TestAutofillManagerInjector<MockAutofillManager> autofill_manager_injector_;
-};
-
-// Tests that user-triggered submission triggers a submission event in
-// BrowserAutofillManager.
-IN_PROC_BROWSER_TEST_F(AutofillTestFormSubmission, Submission) {
-  base::RunLoop run_loop;
-  EXPECT_CALL(
-      *autofill_manager(),
-      OnFormSubmittedImpl(_, _, mojom::SubmissionSource::FORM_SUBMISSION))
-      .WillRepeatedly(InvokeClosure(run_loop.QuitClosure()));
-  ExecuteScript(
-      "document.getElementById('name').value = 'Sarah';"
-      "document.getElementById('name').select();"
-      "document.getElementById('form').submit();");
-  run_loop.Run();
-}
-
-// Tests that non-link-click, renderer-initiated navigation triggers a
-// submission event in BrowserAutofillManager.
-IN_PROC_BROWSER_TEST_F(AutofillTestFormSubmission, ProbableSubmission) {
-  base::RunLoop run_loop;
-  EXPECT_CALL(*autofill_manager(),
-              OnFormSubmittedImpl(
-                  _, _, mojom::SubmissionSource::PROBABLY_FORM_SUBMITTED))
-      .WillRepeatedly(InvokeClosure(run_loop.QuitClosure()));
-  // Add a delay before navigating away to avoid race conditions. This is
-  // appropriate since we're faking user interaction here.
-  ExecuteScript(
-      "document.getElementById('name').focus();"
-      "document.getElementById('name').value = 'Sarah';"
-      "document.getElementById('name').select();"
-      "document.getElementById('state').selectedIndex = 1;"
-      "document.getElementById('zip').focus();"
-      "document.getElementById('name').select();"
-      "setTimeout(function() { window.location.assign('/success.html'); }, "
-      "50);");
-  run_loop.Run();
 }
 
 }  // namespace

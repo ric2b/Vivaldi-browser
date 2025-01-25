@@ -84,12 +84,9 @@ static AOM_FORCE_INLINE int16x8_t horizontal_filter_8x1_f8(const uint8x16_t in,
   return vreinterpretq_s16_u16(res);
 }
 
-static AOM_FORCE_INLINE int16x8_t horizontal_filter_4x1_f1(const uint8x16_t in,
-                                                           int sx) {
+static AOM_FORCE_INLINE int16x8_t
+horizontal_filter_4x1_f1_beta0(const uint8x16_t in, int16x8_t f_s16) {
   const int32x4_t add_const = vdupq_n_s32(1 << (8 + FILTER_BITS - 1));
-
-  int16x8_t f_s16 =
-      vld1q_s16((int16_t *)(av1_warped_filter + (sx >> WARPEDDIFF_PREC_BITS)));
 
   int8x16_t f_s8 = vcombine_s8(vmovn_s16(f_s16), vmovn_s16(f_s16));
 
@@ -110,12 +107,16 @@ static AOM_FORCE_INLINE int16x8_t horizontal_filter_4x1_f1(const uint8x16_t in,
   return vreinterpretq_s16_u16(res);
 }
 
-static AOM_FORCE_INLINE int16x8_t horizontal_filter_8x1_f1(const uint8x16_t in,
+static AOM_FORCE_INLINE int16x8_t horizontal_filter_4x1_f1(const uint8x16_t in,
                                                            int sx) {
-  const int32x4_t add_const = vdupq_n_s32(1 << (8 + FILTER_BITS - 1));
-
   int16x8_t f_s16 =
       vld1q_s16((int16_t *)(av1_warped_filter + (sx >> WARPEDDIFF_PREC_BITS)));
+  return horizontal_filter_4x1_f1_beta0(in, f_s16);
+}
+
+static AOM_FORCE_INLINE int16x8_t
+horizontal_filter_8x1_f1_beta0(const uint8x16_t in, int16x8_t f_s16) {
+  const int32x4_t add_const = vdupq_n_s32(1 << (8 + FILTER_BITS - 1));
 
   int8x16_t f_s8 = vcombine_s8(vmovn_s16(f_s16), vmovn_s16(f_s16));
 
@@ -140,6 +141,13 @@ static AOM_FORCE_INLINE int16x8_t horizontal_filter_8x1_f1(const uint8x16_t in,
   uint16x8_t res = vcombine_u16(vqrshrun_n_s32(m0123, ROUND0_BITS),
                                 vqrshrun_n_s32(m4567, ROUND0_BITS));
   return vreinterpretq_s16_u16(res);
+}
+
+static AOM_FORCE_INLINE int16x8_t horizontal_filter_8x1_f1(const uint8x16_t in,
+                                                           int sx) {
+  int16x8_t f_s16 =
+      vld1q_s16((int16_t *)(av1_warped_filter + (sx >> WARPEDDIFF_PREC_BITS)));
+  return horizontal_filter_8x1_f1_beta0(in, f_s16);
 }
 
 static AOM_FORCE_INLINE void vertical_filter_4x1_f1(const int16x8_t *src,

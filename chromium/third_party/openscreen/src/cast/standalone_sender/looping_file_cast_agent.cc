@@ -396,7 +396,7 @@ void LoopingFileCastAgent::Shutdown() {
 
   if (platform_remote_connection_) {
     const VirtualConnection connection = *platform_remote_connection_;
-    // Reset |platform_remote_connection_| because ConnectionNamespaceHandler
+    // Reset `platform_remote_connection_` because ConnectionNamespaceHandler
     // may call-back into OnReceiverMessagingOpened().
     platform_remote_connection_.reset();
     connection_handler_.CloseRemoteConnection(connection);
@@ -404,7 +404,7 @@ void LoopingFileCastAgent::Shutdown() {
 
   if (remote_connection_) {
     const VirtualConnection connection = *remote_connection_;
-    // Reset |remote_connection_| because ConnectionNamespaceHandler may
+    // Reset `remote_connection_` because ConnectionNamespaceHandler may
     // call-back into OnRemoteMessagingOpened().
     remote_connection_.reset();
     connection_handler_.CloseRemoteConnection(connection);

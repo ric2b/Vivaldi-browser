@@ -647,14 +647,14 @@ class SSOAuthenticatorTest(unittest.TestCase):
         self.assertFalse(self.sso.is_applicable())
 
     def testParseConfigOK(self):
-        parsed = self.sso._parse_config(
-            textwrap.dedent(f'''
-        somekey=a value with = in it
-        novalue=
-        http.proxy=localhost:12345
-        http.cookiefile={self._input_dir/'cookiefile.txt'}
-        include.path={self._input_dir/'gitconfig'}
-        ''').strip())
+        test_config = {
+            'somekey': 'a value with = in it',
+            'novalue': '',
+            'http.proxy': 'localhost:12345',
+            'http.cookiefile': str(self._input_dir / 'cookiefile.txt'),
+            'include.path': str(self._input_dir / 'gitconfig'),
+        }
+        parsed = self.sso._parse_config(test_config)
         self.assertDictEqual(parsed.headers, {
             'Authorization': 'Basic REALLY_COOL_TOKEN',
         })

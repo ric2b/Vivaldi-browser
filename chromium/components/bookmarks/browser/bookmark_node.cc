@@ -167,7 +167,11 @@ bool BookmarkPermanentNode::IsTypeVisibleWhenEmpty(Type type) {
       // Managed node.
       return false;
     case BookmarkNode::BOOKMARK_BAR:
+#if defined(VIVALDI_BUILD) && BUILDFLAG(IS_ANDROID)
+      return true;
+#else
       return is_desktop;
+#endif
     case BookmarkNode::OTHER_NODE:
       return is_desktop || base::FeatureList::IsEnabled(
                                kAllBookmarksBaselineFolderVisibility);

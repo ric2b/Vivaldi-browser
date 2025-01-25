@@ -18,17 +18,11 @@ BASE_FEATURE(kAutoApproveSharedPasswordUpdatesFromSameSender,
 BASE_FEATURE(kAutofillPasswordUserPerceptionSurvey,
              "AutofillPasswordUserPerceptionSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
+// Disabled by default.
+BASE_FEATURE(kWebAuthnUsePasskeyFromAnotherDeviceInContextMenu,
+             "WebAuthnUsePasskeyFromAnotherDeviceInContextMenu",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-
-#if BUILDFLAG(IS_WIN)
-BASE_FEATURE(kAuthenticateUsingUserConsentVerifierInteropApi,
-             "AuthenticateUsingUserConsentVerifierInteropApi",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kAuthenticateUsingUserConsentVerifierApi,
-             "AuthenticateUsingUserConsentVerifierApi",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
 
 BASE_FEATURE(kBiometricTouchToFill,
              "BiometricTouchToFill",
@@ -59,9 +53,20 @@ BASE_FEATURE(kFillOnAccountSelect,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_IOS)
+BASE_FEATURE(kIosCleanupHangingPasswordFormExtractionRequests,
+             "IosCleanupHangingPasswordFormExtractionRequests",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<int> kIosPasswordFormExtractionRequestsTimeoutMs = {
+    &kIosCleanupHangingPasswordFormExtractionRequests,
+    /*name=*/"period-ms", /*default_value=*/250};
+
 BASE_FEATURE(kIosDetectUsernameInUff,
              "IosSaveUsernameInUff",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kIOSPasswordBottomSheetV2,
+             "IOSPasswordBottomSheetV2",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kIOSProactivePasswordGenerationBottomSheet,
              "kIOSProactivePasswordGenerationBottomSheet",
@@ -72,6 +77,14 @@ BASE_FEATURE(kLocalStateEnterprisePasswordHashes,
              "LocalStateEnterprisePasswordHashes",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kPasswordFormGroupedAffiliations,
+             "PasswordFormGroupedAffiliations",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPasswordFormClientsideClassifier,
+             "PasswordFormClientsideClassifier",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)  // Desktop
 
 BASE_FEATURE(kPasswordGenerationChunking,
@@ -80,7 +93,7 @@ BASE_FEATURE(kPasswordGenerationChunking,
 
 BASE_FEATURE(kPasswordGenerationSoftNudge,
              "PasswordGenerationSoftNudge",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #endif
 
@@ -90,6 +103,10 @@ BASE_FEATURE(kPasswordManagerLogToTerminal,
 
 BASE_FEATURE(kPasswordManualFallbackAvailable,
              "PasswordManualFallbackAvailable",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kReuseDetectionBasedOnPasswordHashes,
+             "ReuseDetectionBasedOnPasswordHashes",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
@@ -102,11 +119,17 @@ BASE_FEATURE(kRestartToGainAccessToKeychain,
 #endif
 #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
 BASE_FEATURE(kScreenlockReauthPromoCard,
              "ScreenlockReauthPromoCard",
              base::FEATURE_DISABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+BASE_FEATURE(kBiometricsAuthForPwdFill,
+             "BiometricsAuthForPwdFill",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 BASE_FEATURE(kSkipUndecryptablePasswords,
              "SkipUndecryptablePasswords",
@@ -126,28 +149,21 @@ BASE_FEATURE(kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning,
              "UnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kBiometricAuthIdentityCheck,
+             "BiometricAuthIdentityCheck",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kClearLoginDatabaseForAllMigratedUPMUsers,
              "ClearLoginDatabaseForAllMigratedUPMUsers",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kDropLoginDbRenameForUpmSyncingUsers,
+             "DropLoginDbRenameForUpmSyncingUsers",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 BASE_FEATURE(kUsernameFirstFlowFallbackCrowdsourcing,
              "UsernameFirstFlowFallbackCrowdsourcing",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kUsernameFirstFlowStoreSeveralValues,
-             "UsernameFirstFlowStoreSeveralValues",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-extern const base::FeatureParam<int> kMaxSingleUsernameFieldsToStore{
-    &kUsernameFirstFlowStoreSeveralValues, /*name=*/"max_elements",
-    /*default_value=*/10};
-
-BASE_FEATURE(kUsernameFirstFlowWithIntermediateValues,
-             "UsernameFirstFlowWithIntermediateValues",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-extern const base::FeatureParam<int> kSingleUsernameTimeToLive{
-    &kUsernameFirstFlowWithIntermediateValues, /*name=*/"ttl",
-    /*default_value=*/5};
 
 BASE_FEATURE(kUsernameFirstFlowWithIntermediateValuesPredictions,
              "UsernameFirstFlowWithIntermediateValuesPredictions",
@@ -167,6 +183,14 @@ BASE_FEATURE(kUseNewEncryptionMethod,
 
 BASE_FEATURE(kEncryptAllPasswordsWithOSCryptAsync,
              "EncryptAllPasswordsWithOSCryptAsync",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kMarkAllCredentialsAsLeaked,
+             "MarkAllCredentialsAsLeaked",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kImprovedPasswordChangeService,
+             "ImprovedPasswordChangeService",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace password_manager::features

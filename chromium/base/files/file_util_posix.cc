@@ -376,7 +376,7 @@ bool DoDeleteFile(const FilePath& path, bool recursive) {
 
 #if BUILDFLAG(IS_ANDROID)
   if (path.IsContentUri()) {
-    return DeleteContentUri(path);
+    return internal::DeleteContentUri(path);
   }
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -596,7 +596,7 @@ bool PathExists(const FilePath& path) {
   ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::MAY_BLOCK);
 #if BUILDFLAG(IS_ANDROID)
   if (path.IsContentUri()) {
-    return ContentUriExists(path);
+    return internal::ContentUriExists(path);
   }
 #endif
   return access(path.value().c_str(), F_OK) == 0;
@@ -700,6 +700,14 @@ std::optional<FilePath> ReadSymbolicLinkAbsolute(const FilePath& symlink_path) {
 bool GetPosixFilePermissions(const FilePath& path, int* mode) {
   ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::MAY_BLOCK);
   DCHECK(mode);
+
+#if BUILDFLAG(IS_ANDROID)
+  // Stat() for content URIs only implements dir bit currently, so fail for
+  // GetPosixFilePermissions() until permissions are implemented.
+  if (path.IsContentUri()) {
+    return false;
+  }
+#endif
 
   stat_wrapper_t file_info;
   // Uses stat(), because on symbolic link, lstat() does not return valid
@@ -982,31 +990,9 @@ bool IsLink(const FilePath& file_path) {
 
 bool GetFileInfo(const FilePath& file_path, File::Info* results) {
   stat_wrapper_t file_info;
-#if BUILDFLAG(IS_ANDROID)
-  if (file_path.IsContentUri()) {
-    File file = OpenContentUri(file_path, File::FLAG_OPEN | File::FLAG_READ);
-    if (!file.IsValid()) {
-      return false;
-    }
-    bool success = file.GetInfo(results);
-    // Fstat on a virtual content-uri will get size=0 and last_modified=now.
-    // Fix size, and set last_modified=0 to at least make it stable.
-    if (success && results->size == 0) {
-      int64_t size = GetContentUriFileSize(file_path);
-      if (size >= 0) {
-        results->size = size;
-        results->last_modified = Time();
-      }
-    }
-    return success;
-  } else {
-#endif  // BUILDFLAG(IS_ANDROID)
-    if (File::Stat(file_path, &file_info) != 0) {
-      return false;
-    }
-#if BUILDFLAG(IS_ANDROID)
+  if (File::Stat(file_path, &file_info) != 0) {
+    return false;
   }
-#endif  // BUILDFLAG(IS_ANDROID)
 
   results->FromStat(file_info);
   return true;
@@ -1350,16 +1336,7 @@ bool GetShmemTempDir(bool executable, FilePath* path) {
 // Mac has its own implementation, this is for all other Posix systems.
 bool CopyFile(const FilePath& from_path, const FilePath& to_path) {
   ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::MAY_BLOCK);
-  File infile;
-#if BUILDFLAG(IS_ANDROID)
-  if (from_path.IsContentUri()) {
-    infile = OpenContentUri(from_path, File::FLAG_OPEN | File::FLAG_READ);
-  } else {
-    infile = File(from_path, File::FLAG_OPEN | File::FLAG_READ);
-  }
-#else
-  infile = File(from_path, File::FLAG_OPEN | File::FLAG_READ);
-#endif
+  File infile(from_path, File::FLAG_OPEN | File::FLAG_READ);
   if (!infile.IsValid()) {
     return false;
   }

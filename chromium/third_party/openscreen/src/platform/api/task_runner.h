@@ -34,7 +34,7 @@ class TaskRunner {
   }
 
   // Takes any callable target (function, lambda-expression, std::bind result,
-  // etc.) that should be run no sooner than |delay| time from now. Note that
+  // etc.) that should be run no sooner than `delay` time from now. Note that
   // the Task might run after an additional delay, especially under heavier
   // system load. There is no deadline concept.
   template <typename Functor>

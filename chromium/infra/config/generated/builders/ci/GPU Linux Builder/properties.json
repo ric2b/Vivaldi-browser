@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "GPU Linux Builder",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-gpu-archive",
@@ -38,7 +38,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Linux Release (NVIDIA)",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-gpu-archive",
@@ -62,7 +62,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "GPU Linux Builder",
-                "project": "chromium-m130"
+                "project": "chromium-m132"
               }
             }
           }
@@ -72,14 +72,14 @@
         {
           "bucket": "ci",
           "builder": "GPU Linux Builder",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "Linux Release (NVIDIA)",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -87,7 +87,8 @@
           "builder": "linux-rel",
           "group": "tryserver.chromium.linux"
         }
-      ]
+      ],
+      "targets_spec_directory": "src/infra/config/generated/builders/ci/GPU Linux Builder/targets"
     }
   },
   "$build/reclient": {

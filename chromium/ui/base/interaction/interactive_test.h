@@ -91,10 +91,11 @@ class InteractiveTestApi {
   // such as SetMustBeVisibleAtStart(), SetTransitionOnlyOnEvent(),
   // SetContext(), etc.
   //
-  // Note that `SelectMenuItem()` and `SelectDropdownItem()` are not outside of
-  // interactive tests (e.g. interactive_ui_tests); the exception is
-  // `SelectDropdownItem()` with the default `input_type`, which
-  // programmatically sets the value rather than using the actual drop-down.
+  // Note that `ActivateSurface()`, `SelectMenuItem()` and
+  // `SelectDropdownItem()` are not outside of interactive tests (e.g.
+  // interactive_ui_tests); the exception is `SelectDropdownItem()` with the
+  // default `input_type`, which programmatically sets the value rather than
+  // using the actual drop-down.
   [[nodiscard]] StepBuilder PressButton(
       ElementSpecifier button,
       InputType input_type = InputType::kDontCare);
@@ -141,6 +142,12 @@ class InteractiveTestApi {
   // ```
   template <typename... Args>
   [[nodiscard]] static StepBuilder Log(Args... args);
+
+  // Dumps all of the elements in the current UI tree in all contexts.
+  [[nodiscard]] StepBuilder DumpElements();
+
+  // Dumps all of the elements in the current UI tree in the current context.
+  [[nodiscard]] StepBuilder DumpElementsInContext();
 
   // Does an action at this point in the test sequence.
   template <typename A>

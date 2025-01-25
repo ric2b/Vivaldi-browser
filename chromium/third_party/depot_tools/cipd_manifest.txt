@@ -34,10 +34,10 @@ $VerifiedPlatform windows-arm64
 infra/tools/luci/vpython3/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # LUCI editor
-infra/tools/luci/led/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
+infra/tools/luci/led/${platform} git_revision:26a4eddc87d48a9d8901396e3ce027f090b5108e
 
 # LUCI config generator
-infra/tools/luci/lucicfg/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
+infra/tools/luci/lucicfg/${platform} git_revision:f1e7e75db759fe58faa35f1f331087e71da7f9a9
 
 # Mac toolchain installer
 infra/tools/mac_toolchain/${os=mac}-${arch} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
@@ -46,7 +46,7 @@ infra/tools/mac_toolchain/${os=mac}-${arch} git_revision:b1f414539ac10cc67a02508
 infra/tools/prpc/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
 
 # LUCI authentication command line tool
-infra/tools/luci-auth/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102
+infra/tools/luci-auth/${platform} git_revision:78b3b3ca47e64b3280a5dd5b83c23ce89f04d328
 
 # LUCI Git credential helper
 infra/tools/luci/git-credential-luci/${platform} git_revision:b1f414539ac10cc67a0250890a38712cc06cf102

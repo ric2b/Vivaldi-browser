@@ -14,15 +14,11 @@ class GpuHostImpl;
 // GpuClient's task runner.
 class GpuClientDelegate {
  public:
-  virtual ~GpuClientDelegate() {}
+  virtual ~GpuClientDelegate() = default;
 
   // Returns the current instance of GpuHostImpl. If GPU service is not running,
   // tries to launch it. If the launch is unsuccessful, returns nullptr.
   virtual GpuHostImpl* EnsureGpuHost() = 0;
-
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  virtual void SetForceAllowAccessToGpu(bool enable) = 0;
-
 };
 
 }  // namespace viz

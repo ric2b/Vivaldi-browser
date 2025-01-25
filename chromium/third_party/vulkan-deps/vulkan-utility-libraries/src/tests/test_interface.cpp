@@ -44,11 +44,13 @@ TEST(test_vk_dispatch_table, cpp_interface) {
 
     vkuInitInstanceDispatchTable(instance, &instance_dispatch_table, local_vkGetInstanceProcAddr);
 
-    ASSERT_EQ(instance_dispatch_table.GetInstanceProcAddr, local_vkGetInstanceProcAddr);
+    ASSERT_EQ(reinterpret_cast<PFN_vkVoidFunction>(instance_dispatch_table.GetInstanceProcAddr),
+              reinterpret_cast<PFN_vkVoidFunction>(local_vkGetInstanceProcAddr));
 
     VkDevice device{};
 
     vkuInitDeviceDispatchTable(device, &device_dispatch_table, local_vkGetDeviceProcAddr);
 
-    ASSERT_EQ(device_dispatch_table.GetDeviceProcAddr, local_vkGetDeviceProcAddr);
+    ASSERT_EQ(reinterpret_cast<PFN_vkVoidFunction>(device_dispatch_table.GetDeviceProcAddr),
+              reinterpret_cast<PFN_vkVoidFunction>(local_vkGetDeviceProcAddr));
 }

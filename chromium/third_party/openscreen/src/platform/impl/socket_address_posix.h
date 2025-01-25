@@ -34,7 +34,7 @@ class SocketAddressPosix {
   IPAddress::Version version() const { return endpoint_.address.version(); }
   IPEndpoint endpoint() const { return endpoint_; }
 
-  // Recomputes |endpoint_| if |internal_address_| is written to directly, e.g.
+  // Recomputes `endpoint_` if `internal_address_` is written to directly, e.g.
   // by a system call.
   void RecomputeEndpoint();
 

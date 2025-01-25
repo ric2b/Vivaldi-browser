@@ -9,7 +9,7 @@
 #define BROWSER_MENUS_VIVALDI_EXTENSIONS_MENU_CONTROLLER_H_
 
 #include "chrome/browser/extensions/menu_manager.h"
-#include "ui/base/models/simple_menu_model.h"
+#include "ui/menus/simple_menu_model.h"
 
 namespace extensions {
 class ContextMenuMatcher;

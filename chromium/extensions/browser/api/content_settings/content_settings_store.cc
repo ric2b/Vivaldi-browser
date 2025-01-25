@@ -147,15 +147,14 @@ void ContentSettingsStore::SetExtensionContentSetting(
     ContentSettingsType type,
     ContentSetting setting,
     ChromeSettingScope scope) {
-  if (primary_pattern.GetScheme() ==
-      ContentSettingsPattern::SCHEME_CHROMEEXTENSION) {
+  if (primary_pattern.Matches(GURL("chrome-extension://" + ext_id))) {
     content_settings_uma_util::RecordContentSettingsHistogram(
-        "Extensions.ContentSettings.PrimaryPatternChromeExtensionScheme", type);
+        "Extensions.ContentSettings.PrimaryPatternMatchesExtensionOrigin",
+        type);
   }
-  if (secondary_pattern.GetScheme() ==
-      ContentSettingsPattern::SCHEME_CHROMEEXTENSION) {
+  if (secondary_pattern.Matches(GURL("chrome-extension://" + ext_id))) {
     content_settings_uma_util::RecordContentSettingsHistogram(
-        "Extensions.ContentSettings.SecondaryPatternChromeExtensionScheme",
+        "Extensions.ContentSettings.SecondaryPatternMatchesExtensionOrigin",
         type);
   }
 
@@ -311,8 +310,7 @@ const OriginValueMap* ContentSettingsStore::GetValueMap(
       return &entry->settings;
     case ChromeSettingScope::kRegularOnly:
       // TODO(bauerb): Implement regular-only content settings.
-      NOTREACHED_IN_MIGRATION();
-      return nullptr;
+      NOTREACHED();
     case ChromeSettingScope::kIncognitoPersistent:
       return &entry->incognito_persistent_settings;
     case ChromeSettingScope::kIncognitoSessionOnly:
@@ -321,8 +319,7 @@ const OriginValueMap* ContentSettingsStore::GetValueMap(
       break;
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 void ContentSettingsStore::ClearContentSettingsForExtension(

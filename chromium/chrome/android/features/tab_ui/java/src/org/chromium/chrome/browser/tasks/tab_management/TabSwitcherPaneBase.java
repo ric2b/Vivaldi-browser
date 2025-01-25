@@ -46,6 +46,7 @@ import org.chromium.chrome.browser.hub.HubFieldTrial;
 import org.chromium.chrome.browser.hub.HubLayoutAnimationListener;
 import org.chromium.chrome.browser.hub.HubLayoutAnimatorProvider;
 import org.chromium.chrome.browser.hub.HubLayoutConstants;
+import org.chromium.chrome.browser.hub.HubUtils;
 import org.chromium.chrome.browser.hub.LoadHint;
 import org.chromium.chrome.browser.hub.Pane;
 import org.chromium.chrome.browser.hub.PaneHubController;
@@ -57,15 +58,17 @@ import org.chromium.chrome.browser.tab_ui.RecyclerViewPosition;
 import org.chromium.chrome.browser.tab_ui.TabSwitcher;
 import org.chromium.chrome.browser.tab_ui.TabSwitcherCustomViewManager;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
-import org.chromium.chrome.browser.user_education.IPHCommand;
-import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
+import org.chromium.chrome.browser.user_education.IphCommand;
+import org.chromium.chrome.browser.user_education.IphCommandBuilder;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController.MenuOrKeyboardActionHandler;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.List;
@@ -91,6 +94,7 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcher, TabSwitc
     protected final ObservableSupplierImpl<Boolean> mHairlineVisibilitySupplier =
             new ObservableSupplierImpl<>();
     protected final UserEducationHelper mUserEducationHelper;
+    protected final ObservableSupplier<EdgeToEdgeController> mEdgeToEdgeSupplier;
     private final ObservableSupplierImpl<Boolean> mIsVisibleSupplier =
             new ObservableSupplierImpl<>();
     private final ObservableSupplierImpl<Boolean> mIsAnimatingSupplier =
@@ -137,10 +141,19 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcher, TabSwitc
                 @Override
                 public void beforeStart() {
                     mIsAnimatingSupplier.set(true);
+                    if (OmniboxFeatures.sAndroidHubSearch.isEnabled()
+                            && mPaneHubController != null) {
+                        mPaneHubController.setSearchBoxBackgroundProperties(/* shouldShow= */ true);
+                    }
                 }
 
                 @Override
                 public void afterEnd() {
+                    if (OmniboxFeatures.sAndroidHubSearch.isEnabled()
+                            && mPaneHubController != null) {
+                        mPaneHubController.setSearchBoxBackgroundProperties(
+                                /* shouldShow= */ false);
+                    }
                     mIsAnimatingSupplier.set(false);
                 }
             };
@@ -157,6 +170,7 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcher, TabSwitc
      * @param isIncognito Whether the pane is incognito.
      * @param onToolbarAlphaChange Observer to notify when alpha changes during animations.
      * @param userEducationHelper Used for showing IPHs.
+     * @param edgeToEdgeSupplier Supplier to the {@link EdgeToEdgeController} instance.
      */
     TabSwitcherPaneBase(
             @NonNull Context context,
@@ -164,7 +178,8 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcher, TabSwitc
             @NonNull TabSwitcherPaneCoordinatorFactory factory,
             boolean isIncognito,
             @NonNull DoubleConsumer onToolbarAlphaChange,
-            @NonNull UserEducationHelper userEducationHelper) {
+            @NonNull UserEducationHelper userEducationHelper,
+            @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier) {
         mProfileProviderSupplier = profileProviderSupplier;
         mFactory = factory;
         mIsIncognito = isIncognito;
@@ -175,6 +190,7 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcher, TabSwitc
         mIsAnimatingSupplier.set(false);
         mOnToolbarAlphaChange = onToolbarAlphaChange;
         mUserEducationHelper = userEducationHelper;
+        mEdgeToEdgeSupplier = edgeToEdgeSupplier;
     }
 
     @Override
@@ -348,6 +364,16 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcher, TabSwitc
                             VivaldiHubPaneHostView.getTabSwitcherAnimationRect(hubContainerView);
 
                     int leftOffset = 0;
+                    int searchBoxHeight =
+                            OmniboxFeatures.sAndroidHubSearch.isEnabled()
+                                    ? HubUtils.getSearchBoxHeight(
+                                            hubContainerView,
+                                            R.id.hub_toolbar,
+                                            R.id.toolbar_action_container)
+                                    : 0;
+                    // Account for the hub's search box container height.
+                    recyclerViewRect.offset(0, -searchBoxHeight);
+                    recyclerViewRect.bottom += searchBoxHeight;
                     if (isShrink) {
                         initialRect = recyclerViewRect;
                         finalRect = coordinator.getTabThumbnailRect(tabId);
@@ -461,17 +487,6 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcher, TabSwitc
             return;
         }
         coordinator.showQuickDeleteAnimation(onAnimationEnd, tabs);
-    }
-
-    @Override
-    public void showCloseAllTabsAnimation(Runnable closeTabs) {
-        @Nullable
-        TabSwitcherPaneCoordinator coordinator = mTabSwitcherPaneCoordinatorSupplier.get();
-        if (coordinator == null) {
-            closeTabs.run();
-        } else {
-            coordinator.showCloseAllTabsAnimation(closeTabs);
-        }
     }
 
     @Override
@@ -595,7 +610,8 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcher, TabSwitc
                         this::onTabClick,
                         mHairlineVisibilitySupplier::set,
                         mIsIncognito,
-                        getOnTabGroupCreationRunnable());
+                        getOnTabGroupCreationRunnable(),
+                        mEdgeToEdgeSupplier);
         mTabSwitcherPaneCoordinatorSupplier.set(coordinator);
         mTabSwitcherCustomViewManager.setDelegate(
                 coordinator.getTabSwitcherCustomViewManagerDelegate());
@@ -701,15 +717,15 @@ public abstract class TabSwitcherPaneBase implements Pane, TabSwitcher, TabSwitc
 
         if (getIsAnimatingSupplier().get()) return;
 
-        IPHCommand command =
-                new IPHCommandBuilder(
+        IphCommand command =
+                new IphCommandBuilder(
                                 getRootView().getResources(),
                                 FeatureConstants.TAB_SWITCHER_FLOATING_ACTION_BUTTON,
                                 R.string.iph_tab_switcher_floating_action_button,
                                 R.string.iph_tab_switcher_floating_action_button)
                         .setAnchorView(anchorView)
                         .build();
-        mUserEducationHelper.requestShowIPH(command);
+        mUserEducationHelper.requestShowIph(command);
     }
 
     void softCleanupForTesting() {

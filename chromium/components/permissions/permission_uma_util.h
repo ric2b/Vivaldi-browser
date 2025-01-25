@@ -76,7 +76,7 @@ enum class RequestTypeForUma {
   PERMISSION_FLASH = 12,
   PERMISSION_MEDIASTREAM_MIC = 13,
   PERMISSION_MEDIASTREAM_CAMERA = 14,
-  PERMISSION_ACCESSIBILITY_EVENTS = 15,
+  // PERMISSION_ACCESSIBILITY_EVENTS = 15,  // Removed in M131.
   // PERMISSION_CLIPBOARD_READ = 16, // Replaced by
   // PERMISSION_CLIPBOARD_READ_WRITE in M81.
   // PERMISSION_SECURITY_KEY_ATTESTATION = 17,
@@ -703,8 +703,6 @@ class PermissionUmaUtil {
       bool did_click_manage,
       bool did_click_learn_more);
 
-  static void RecordInfobarDetailsExpanded(bool expanded);
-
   static void RecordCrowdDenyDelayedPushNotification(base::TimeDelta delay);
 
   static void RecordCrowdDenyVersionAtAbuseCheckTime(
@@ -739,6 +737,12 @@ class PermissionUmaUtil {
                                     content::BrowserContext* browser_context,
                                     content::WebContents* web_contents,
                                     const GURL& requesting_origin);
+
+  static void RecordPermissionUsageNotificationShown(
+      bool is_allowlisted,
+      int suspicious_score,
+      content::BrowserContext* browser_context,
+      const GURL& requesting_origin);
 
   static void RecordTimeElapsedBetweenGrantAndUse(
       ContentSettingsType type,
@@ -851,6 +855,12 @@ class PermissionUmaUtil {
       content::WebContents* web_contents,
       content::BrowserContext* browser_context);
 
+  // Records `TimeDelta` between two consecutive indicators of the same
+  // `RequestTypeForUma`.
+  static void RecordPermissionIndicatorElapsedTimeSinceLastUsage(
+      RequestTypeForUma request_type,
+      base::TimeDelta time_delta);
+
   // A scoped class that will check the current resolved content setting on
   // construction and report a revocation metric accordingly if the revocation
   // condition is met (from ALLOW to something else).
@@ -886,8 +896,8 @@ class PermissionUmaUtil {
  private:
   friend class PermissionUmaUtilTest;
 
-  // Records UMA and UKM metrics for ContentSettingsTypes that have user facing
-  // permission prompts. The passed in `permission` must be such that
+  // Records UMA and UKM metrics for ContentSettingsTypes that have user
+  // facing permission prompts. The passed in `permission` must be such that
   // PermissionUtil::IsPermission(permission) returns true.
   // web_contents may be null when for recording non-prompt actions.
   static void RecordPermissionAction(

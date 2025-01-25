@@ -11,6 +11,7 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/constants/personalization_entry_point.h"
+#include "ash/constants/web_app_id_constants.h"
 #include "ash/public/cpp/locale_update_controller.h"
 #include "ash/public/cpp/login_types.h"
 #include "ash/public/cpp/new_window_delegate.h"
@@ -34,7 +35,6 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
-#include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/eol/eol_incentive_util.h"
 #include "chrome/browser/ash/login/help_app_launcher.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
@@ -62,7 +62,6 @@
 #include "chrome/browser/ui/webui/ash/multidevice_setup/multidevice_setup_dialog.h"
 #include "chrome/browser/ui/webui/ash/set_time/set_time_dialog.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -200,8 +199,7 @@ ash::ManagementDeviceMode GetManagementDeviceMode(
       return ash::ManagementDeviceMode::kChromeEducation;
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return ash::ManagementDeviceMode::kOther;
+  NOTREACHED();
 }
 
 }  // namespace
@@ -569,13 +567,6 @@ void SystemTrayClientImpl::ShowEnterpriseInfo() {
   }
 
   // Otherwise show enterprise management info page.
-  if (crosapi::browser_util::IsLacrosEnabled()) {
-    crosapi::BrowserManager::Get()->SwitchToTab(
-        GURL(chrome::kChromeUIManagementURL),
-        /*path_behavior=*/NavigateParams::RESPECT);
-    return;
-  }
-
   chrome::ScopedTabbedBrowserDisplayer displayer(
       ProfileManager::GetActiveUserProfile());
   chrome::ShowEnterpriseManagementPageInTabbedBrowser(displayer.browser());
@@ -767,7 +758,7 @@ void SystemTrayClientImpl::ShowCalendarEvent(
   final_event_url = official_url;
 
   // Check calendar web app installation.
-  if (!IsAppInstalled(web_app::kGoogleCalendarAppId)) {
+  if (!IsAppInstalled(ash::kGoogleCalendarAppId)) {
     OpenInBrowser(official_url);
     return;
   }
@@ -782,8 +773,8 @@ void SystemTrayClientImpl::ShowCalendarEvent(
   }
 
   // Launch web app.
-  proxy->LaunchAppWithUrl(web_app::kGoogleCalendarAppId, ui::EF_NONE,
-                          official_url, apps::LaunchSource::kFromShelf);
+  proxy->LaunchAppWithUrl(ash::kGoogleCalendarAppId, ui::EF_NONE, official_url,
+                          apps::LaunchSource::kFromShelf);
   opened_pwa = true;
 }
 
@@ -874,7 +865,7 @@ void SystemTrayClientImpl::ShowYouTubeMusicPremiumPage() {
   const GURL official_url(chrome::kYoutubeMusicPremiumURL);
 
   // Check YouTube Music web app installation.
-  if (!IsAppInstalled(web_app::kYoutubeMusicAppId)) {
+  if (!IsAppInstalled(ash::kYoutubeMusicAppId)) {
     OpenInBrowser(official_url);
     return;
   }
@@ -889,7 +880,7 @@ void SystemTrayClientImpl::ShowYouTubeMusicPremiumPage() {
 
   // Launch web app.
   proxy->LaunchAppWithUrl(
-      web_app::kYoutubeMusicAppId, ui::EF_NONE, official_url,
+      ash::kYoutubeMusicAppId, ui::EF_NONE, official_url,
       apps::LaunchSource::kFromFocusMode, /*window_info=*/nullptr,
       base::BindOnce(
           [](const GURL& url, apps::LaunchResult&& result) {

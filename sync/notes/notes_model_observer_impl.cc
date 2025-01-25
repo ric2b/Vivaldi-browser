@@ -9,7 +9,6 @@
 #include "base/check.h"
 #include "base/no_destructor.h"
 #include "components/notes/note_node.h"
-#include "components/sync/base/hash_util.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
 #include "components/sync/protocol/entity_metadata.pb.h"
@@ -410,8 +409,9 @@ syncer::UniquePosition NotesModelObserverImpl::ComputePosition(
   CHECK_LT(index, parent.children().size());
 
   const vivaldi::NoteNode* node = parent.children()[index].get();
-  const std::string suffix = syncer::GenerateUniquePositionSuffix(
-      SyncedNoteTracker::GetClientTagHashFromUuid(node->uuid()));
+  const syncer::UniquePosition::Suffix suffix =
+      syncer::UniquePosition::GenerateSuffix(
+          SyncedNoteTracker::GetClientTagHashFromUuid(node->uuid()));
 
   const SyncedNoteTrackerEntity* predecessor_entity = nullptr;
   const SyncedNoteTrackerEntity* successor_entity = nullptr;
@@ -510,8 +510,8 @@ syncer::UniquePosition NotesModelObserverImpl::UpdateUniquePositionForNode(
   const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForNoteNode(node);
   CHECK(entity);
-  const std::string suffix =
-      syncer::GenerateUniquePositionSuffix(entity->GetClientTagHash());
+  const syncer::UniquePosition::Suffix suffix =
+      syncer::UniquePosition::GenerateSuffix(entity->GetClientTagHash());
   const base::Time modification_time = base::Time::Now();
 
   syncer::UniquePosition new_unique_position;

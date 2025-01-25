@@ -9,6 +9,7 @@
 
 #include "chrome/browser/ui/webui/ash/settings/pages/multidevice/multidevice_section.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
@@ -754,9 +755,17 @@ void MultiDeviceSection::AddLoadTimeData(
       l10n_util::GetStringFUTF16(
           IDS_SETTINGS_MULTIDEVICE_PERMISSIONS_SETUP_DIALOG_NOTIFICATION_ACCESS_PROHIBITED_SUMMARY,
           GetHelpUrlWithBoard(phonehub::kPhoneHubLearnMoreLink)));
+  html_source->AddString(
+      "authPrompt",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_IN_SESSION_AUTH_ORIGIN_NAME_PROMPT,
+          l10n_util::GetStringUTF16(
+              IDS_SETTINGS_IN_SESSION_AUTH_ORIGIN_NAME_PROMPT_LOCATION)));
 
   html_source->AddBoolean("isCrossDeviceFeatureSuiteEnabled",
                           features::IsCrossDeviceFeatureSuiteAllowed());
+  html_source->AddBoolean("isAuthPanelEnabled",
+                          ash::features::IsUseAuthPanelInSessionEnabled());
 
   // We still need to register strings even if Nearby Share is not supported.
   // For example, the HTML is always built but only displayed if Nearby Share is
@@ -770,28 +779,14 @@ void MultiDeviceSection::AddLoadTimeData(
   html_source->AddBoolean("isEcheAppEnabled", features::IsEcheSWAEnabled());
   OnEnableScreenLockChanged();
   OnScreenLockStatusChanged();
-  html_source->AddBoolean("isOnePageOnboardingEnabled",
-                          base::FeatureList::IsEnabled(
-                              ::features::kNearbySharingOnePageOnboarding));
   html_source->AddBoolean(
       "isSmartLockSignInRemoved",
       base::FeatureList::IsEnabled(features::kSmartLockSignInRemoved));
 
-  if (base::FeatureList::IsEnabled(features::kPhoneHubAppStreamingBetaBadge)) {
-    html_source->AddString(
-        "multidevicePhoneHubAppsItemTitle",
-        l10n_util::GetStringUTF16(
-            IDS_SETTINGS_MULTIDEVICE_PHONE_HUB_APPS_SECTION_BETA_TITLE));
-  } else {
-    html_source->AddString(
-        "multidevicePhoneHubAppsItemTitle",
-        l10n_util::GetStringUTF16(
-            IDS_SETTINGS_MULTIDEVICE_PHONE_HUB_APPS_SECTION_TITLE));
-  }
-
-  html_source->AddBoolean(
-      "isFastPairSoftwareScanningSupportEnabled",
-      ash::features::IsFastPairSoftwareScanningSupportEnabled());
+  html_source->AddString(
+      "multidevicePhoneHubAppsItemTitle",
+      l10n_util::GetStringUTF16(
+          IDS_SETTINGS_MULTIDEVICE_PHONE_HUB_APPS_SECTION_TITLE));
 
   html_source->AddBoolean("isQuickShareV2Enabled",
                           chromeos::features::IsQuickShareV2Enabled());

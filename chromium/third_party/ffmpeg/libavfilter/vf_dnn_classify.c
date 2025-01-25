@@ -26,7 +26,6 @@
 #include "libavutil/opt.h"
 #include "filters.h"
 #include "dnn_filter_common.h"
-#include "internal.h"
 #include "video.h"
 #include "libavutil/time.h"
 #include "libavutil/avstring.h"
@@ -56,7 +55,7 @@ static const AVOption dnn_classify_options[] = {
     { NULL }
 };
 
-AVFILTER_DNN_DEFINE_CLASS(dnn_classify);
+AVFILTER_DNN_DEFINE_CLASS(dnn_classify, DNN_OV);
 
 static int dnn_classify_post_proc(AVFrame *frame, DNNData *output, uint32_t bbox_index, AVFilterContext *filter_ctx)
 {

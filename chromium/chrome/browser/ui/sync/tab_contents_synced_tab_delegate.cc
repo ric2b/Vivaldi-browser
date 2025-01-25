@@ -21,6 +21,7 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/apps/app_service/web_contents_app_id_utils.h"
+#include "extensions/api/guest_view/parent_tab_user_data.h"
 #endif
 
 using content::NavigationEntry;
@@ -140,6 +141,14 @@ TabContentsSyncedTabDelegate::GetBlockedNavigations() const {
 
 bool TabContentsSyncedTabDelegate::ShouldSync(
     sync_sessions::SyncSessionsClient* sessions_client) {
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  // note(ondrej@vivaldi): VB-112369 - don't sync web-widgets
+  if (!::vivaldi::ParentTabUserData::ShouldSync(web_contents_)) {
+    return false;
+  }
+#endif
+
   if (sessions_client->GetSyncedWindowDelegatesGetter()->FindById(
           GetWindowId()) == nullptr) {
     return false;

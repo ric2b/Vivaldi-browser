@@ -17,7 +17,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_encode_options.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_async_blob_creator.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_2d_layer_bridge.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_dispatcher.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
@@ -41,8 +40,7 @@ void CanvasRenderingContextHost::RecordCanvasSizeToUMA() {
 
   switch (host_type_) {
     case HostType::kNone:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
     case HostType::kCanvasHost:
       UMA_HISTOGRAM_CUSTOM_COUNTS("Blink.Canvas.SqrtNumberOfPixels",
                                   std::sqrt(Size().Area64()), 1, 5000, 100);
@@ -171,11 +169,13 @@ void CanvasRenderingContextHost::CreateCanvasResourceProviderWebGL() {
     // If LowLatency is enabled, we need a resource that is able to perform well
     // in such mode. It will first try a PassThrough provider and, if that is
     // not possible, it will try a SharedImage with the appropriate flags.
-    if ((RenderingContext() && RenderingContext()->UsingSwapChain()) ||
-        (SharedGpuContext::MaySupportImageChromium() &&
-         (RuntimeEnabledFeatures::WebGLImageChromiumEnabled() ||
-          base::FeatureList::IsEnabled(
-              features::kLowLatencyWebGLImageChromium)))) {
+    bool using_swapchain =
+        RenderingContext() && RenderingContext()->UsingSwapChain();
+    bool using_webgl_image_chromium =
+        SharedGpuContext::MaySupportImageChromium() &&
+        (RuntimeEnabledFeatures::WebGLImageChromiumEnabled() ||
+         base::FeatureList::IsEnabled(features::kLowLatencyWebGLImageChromium));
+    if (using_swapchain || using_webgl_image_chromium) {
       // If either SwapChain is enabled or WebGLImage mode is enabled, we can
       // try a passthrough provider.
       DCHECK(LowLatencyEnabled());
@@ -190,10 +190,7 @@ void CanvasRenderingContextHost::CreateCanvasResourceProviderWebGL() {
       // usage scanout (overlay).
       gpu::SharedImageUsageSet shared_image_usage_flags =
           gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
-      if (SharedGpuContext::MaySupportImageChromium() &&
-          (RuntimeEnabledFeatures::WebGLImageChromiumEnabled() ||
-           base::FeatureList::IsEnabled(
-               features::kLowLatencyWebGLImageChromium))) {
+      if (using_webgl_image_chromium) {
         shared_image_usage_flags |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
         shared_image_usage_flags |=
             gpu::SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE;

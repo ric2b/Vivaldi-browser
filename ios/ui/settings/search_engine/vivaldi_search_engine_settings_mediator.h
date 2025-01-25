@@ -7,14 +7,14 @@
 
 #import "ios/ui/settings/search_engine/vivaldi_search_engine_settings_view_controller.h"
 
-class ChromeBrowserState;
+class ProfileIOS;
 @protocol VivaldiSearchEngineSettingsConsumer;
 
 // The mediator for search engine settings.
 @interface VivaldiSearchEngineSettingsMediator: NSObject
                             <VivaldiSearchEngineSettingsViewControllerDelegate>
 
-- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState
+- (instancetype)initWithProfile:(ProfileIOS*)profile
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;

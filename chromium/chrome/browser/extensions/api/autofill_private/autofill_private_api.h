@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_EXTENSIONS_API_AUTOFILL_PRIVATE_AUTOFILL_PRIVATE_API_H_
 
 #include "components/prefs/pref_service.h"
+#include "components/user_annotations/user_annotations_types.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_function_histogram_value.h"
 
@@ -400,6 +401,75 @@ class AutofillPrivateGetUserAnnotationsEntriesFunction
 
   // ExtensionFunction overrides.
   ResponseAction Run() override;
+
+ private:
+  void OnEntriesRetrieved(user_annotations::UserAnnotationsEntries results);
+};
+
+class AutofillPrivateHasUserAnnotationsEntriesFunction
+    : public ExtensionFunction {
+ public:
+  AutofillPrivateHasUserAnnotationsEntriesFunction() = default;
+  AutofillPrivateHasUserAnnotationsEntriesFunction(
+      const AutofillPrivateHasUserAnnotationsEntriesFunction&) = delete;
+  AutofillPrivateHasUserAnnotationsEntriesFunction& operator=(
+      const AutofillPrivateHasUserAnnotationsEntriesFunction&) = delete;
+  DECLARE_EXTENSION_FUNCTION("autofillPrivate.hasUserAnnotationsEntries",
+                             AUTOFILLPRIVATE_HASUSERANNOTATIONSENTRIES)
+
+ protected:
+  ~AutofillPrivateHasUserAnnotationsEntriesFunction() override = default;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+
+ private:
+  void OnEntriesRetrieved(user_annotations::UserAnnotationsEntries results);
+};
+
+class AutofillPrivateTriggerAnnotationsBootstrappingFunction
+    : public ExtensionFunction {
+ public:
+  AutofillPrivateTriggerAnnotationsBootstrappingFunction() = default;
+  AutofillPrivateTriggerAnnotationsBootstrappingFunction(
+      const AutofillPrivateTriggerAnnotationsBootstrappingFunction&) = delete;
+  AutofillPrivateTriggerAnnotationsBootstrappingFunction& operator=(
+      const AutofillPrivateTriggerAnnotationsBootstrappingFunction&) = delete;
+  DECLARE_EXTENSION_FUNCTION("autofillPrivate.triggerAnnotationsBootstrapping",
+                             AUTOFILLPRIVATE_TRIGGERANNOTATIONSBOOTSTRAPPING)
+
+ protected:
+  ~AutofillPrivateTriggerAnnotationsBootstrappingFunction() override = default;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+
+ private:
+  void OnBootstrappingComplete(
+      user_annotations::UserAnnotationsExecutionResult result);
+  void MaybeShowIPH();
+};
+
+class AutofillPrivateIsUserEligibleForAutofillImprovementsFunction
+    : public ExtensionFunction {
+ public:
+  AutofillPrivateIsUserEligibleForAutofillImprovementsFunction() = default;
+  AutofillPrivateIsUserEligibleForAutofillImprovementsFunction(
+      const AutofillPrivateIsUserEligibleForAutofillImprovementsFunction&) =
+      delete;
+  AutofillPrivateIsUserEligibleForAutofillImprovementsFunction& operator=(
+      const AutofillPrivateIsUserEligibleForAutofillImprovementsFunction&) =
+      delete;
+  DECLARE_EXTENSION_FUNCTION(
+      "autofillPrivate.isUserEligibleForAutofillImprovements",
+      AUTOFILLPRIVATE_ISUSERELIGIBLEFORAUTOFILLIMPROVEMENTS)
+
+ protected:
+  ~AutofillPrivateIsUserEligibleForAutofillImprovementsFunction() override =
+      default;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
 };
 
 class AutofillPrivateDeleteUserAnnotationsEntryFunction
@@ -418,6 +488,9 @@ class AutofillPrivateDeleteUserAnnotationsEntryFunction
 
   // ExtensionFunction overrides.
   ResponseAction Run() override;
+
+ private:
+  void OnEntryDeleted();
 };
 
 class AutofillPrivateDeleteAllUserAnnotationsEntriesFunction
@@ -433,6 +506,31 @@ class AutofillPrivateDeleteAllUserAnnotationsEntriesFunction
 
  protected:
   ~AutofillPrivateDeleteAllUserAnnotationsEntriesFunction() override = default;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+
+ private:
+  void OnAllEntriesDeleted();
+};
+
+class AutofillPrivatePredictionImprovementsIphFeatureUsedFunction
+    : public ExtensionFunction {
+ public:
+  AutofillPrivatePredictionImprovementsIphFeatureUsedFunction() = default;
+  AutofillPrivatePredictionImprovementsIphFeatureUsedFunction(
+      const AutofillPrivatePredictionImprovementsIphFeatureUsedFunction&) =
+      delete;
+  AutofillPrivatePredictionImprovementsIphFeatureUsedFunction& operator=(
+      const AutofillPrivatePredictionImprovementsIphFeatureUsedFunction&) =
+      delete;
+  DECLARE_EXTENSION_FUNCTION(
+      "autofillPrivate.predictionImprovementsIphFeatureUsed",
+      AUTOFILLPRIVATE_PREDICTIONIMPROVEMENTSIPHFFEATUREUSED)
+
+ protected:
+  ~AutofillPrivatePredictionImprovementsIphFeatureUsedFunction() override =
+      default;
 
   // ExtensionFunction overrides.
   ResponseAction Run() override;

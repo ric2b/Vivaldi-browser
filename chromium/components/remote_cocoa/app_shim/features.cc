@@ -15,4 +15,16 @@ namespace remote_cocoa::features {
 BASE_FEATURE(kImmersiveFullscreenSpaceSwitchMitigation,
              "ImmersiveFullscreenSpaceSwitchMitigation",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// When enabled the overlay windows become visible, allowing for visual
+// debugging of their position on screen.
+BASE_FEATURE(kImmersiveFullscreenOverlayWindowDebug,
+             "ImmersiveFullscreenOverlayWindowDebug",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// The close, minimize and maximize (traffic lights) buttons are always visible.
+// kImmersiveFullscreenTabs must be enabled for this feature to have an effect.
+BASE_FEATURE(kFullscreenAlwaysShowTrafficLights,
+             "FullscreenAlwaysShowTrafficLights",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 }  // namespace remote_cocoa::features

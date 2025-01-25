@@ -23,10 +23,17 @@ use std::ops::Range;
 
 // Some HEIF fractional fields can be negative, hence Fraction and UFraction.
 // The denominator is always unsigned.
+
+/// cbindgen:field-names=[n,d]
 #[derive(Clone, Copy, Debug, Default)]
+#[repr(C)]
 pub struct Fraction(pub i32, pub u32);
+
+/// cbindgen:field-names=[n,d]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[repr(C)]
 pub struct UFraction(pub u32, pub u32);
+
 // 'clap' fractions do not follow this pattern: both numerators and denominators
 // are used as i32, but they are signalled as u32 according to the specification
 // as of 2024. This may be fixed in later versions of the specification, see
@@ -154,6 +161,8 @@ conversion_function!(isize_from_i32, isize, i32);
 #[cfg(feature = "capi")]
 conversion_function!(isize_from_u32, isize, u32);
 conversion_function!(isize_from_usize, isize, usize);
+#[cfg(feature = "android_mediacodec")]
+conversion_function!(i32_from_usize, i32, usize);
 
 macro_rules! clamp_function {
     ($func:ident, $type:ty) => {

@@ -53,13 +53,17 @@ void CredentialMetrics::RecordWebAuthnConditionalUiCall() {
 
   conditional_ui_timing_reported_ = true;
 
-  base::TimeDelta delta =
-      base::TimeTicks::Now() - document->GetTiming().DomContentLoadedEventEnd();
+  int64_t delta_ms = 0;
+  if (!document->GetTiming().DomContentLoadedEventEnd().is_null()) {
+    base::TimeDelta delta = base::TimeTicks::Now() -
+                            document->GetTiming().DomContentLoadedEventEnd();
+    delta_ms = delta.InMilliseconds();
+  }
 
   ukm::builders::WebAuthn_ConditionalUiGetCall(
       document->domWindow()->UkmSourceID())
-      .SetTimeSinceDomContentLoaded(delta.InMilliseconds())
-      .Record(ukm::UkmRecorder::Get());
+      .SetTimeSinceDomContentLoaded(delta_ms)
+      .Record(document->UkmRecorder());
 }
 
 }  // namespace blink

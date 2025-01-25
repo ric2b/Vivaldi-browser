@@ -129,6 +129,7 @@
 <translation id="5528053674512161860">Kan pagina niet laden omdat de UI-module voor ontwikkelaars (dev_ui) niet is geïnstalleerd</translation>
 <translation id="5574202486608032840"><ph name="IDS_SHORT_PRODUCT_OS_NAME" />-systeem</translation>
 <translation id="5583640892426849032">Backspace</translation>
+<translation id="5606865426897221650">Tab</translation>
 <translation id="5613020302032141669">Pijl-links</translation>
 <translation id="5633029987065897167">Leeg</translation>
 <translation id="5754277640426581776">{MINUTES,plural, =1{1 min.}other{# min.}}</translation>
@@ -144,7 +145,7 @@
 <translation id="6007284015834422026">Extensie vastgezet</translation>
 <translation id="6040143037577758943">Sluiten</translation>
 <translation id="6117103120090651229">Middelste knop</translation>
-<translation id="6129953537138746214">Spatie</translation>
+<translation id="6129953537138746214">Spatiebalk</translation>
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
 <translation id="6237461503717005873"><ph name="ROW_NAME" /> is geselecteerd.</translation>
@@ -200,7 +201,6 @@
 <translation id="8179976553408161302">Enter</translation>
 <translation id="8210608804940886430">Pagina omlaag</translation>
 <translation id="822964464349305906"><ph name="TYPE_1" />, <ph name="TYPE_2" /></translation>
-<translation id="8245914219290430011">Tab</translation>
 <translation id="8259556432390118667">Hex-kleurwaarde</translation>
 <translation id="8328145009876646418">Linkerzijde</translation>
 <translation id="8331626408530291785">Omhoog bladeren</translation>
@@ -218,12 +218,14 @@
 <translation id="8841375032071747811">Knop Terug</translation>
 <translation id="8867568208303837180">Verzenden...</translation>
 <translation id="8876215549894133151">Indeling:</translation>
-<translation id="8901569739625249689"><ph name="QUANTITY" />  KB</translation>
+<translation id="8901569739625249689"><ph name="QUANTITY" /> KB</translation>
 <translation id="8927924178504495502">{HOURS,plural, =1{1 uur geleden}other{# uur geleden}}</translation>
 <translation id="8996630695507351249">Zorg dat <ph name="TARGET_DEVICE_NAME" /> is verbonden met internet.</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 sec.}other{# sec.}}</translation>
 <translation id="9059834730836941392">Melding samenvouwen</translation>
 <translation id="9170848237812810038">&amp;Ongedaan maken</translation>
+<translation id="9195990613383871904">Morgen</translation>
+<translation id="928628199082367701">Super</translation>
 <translation id="932327136139879170">Homepage</translation>
 <translation id="944069440740578670">Ongelezen meldingen</translation>
 <translation id="966963601246348639">{SECONDS,plural, =1{1 seconde geleden}other{# seconden geleden}}</translation>

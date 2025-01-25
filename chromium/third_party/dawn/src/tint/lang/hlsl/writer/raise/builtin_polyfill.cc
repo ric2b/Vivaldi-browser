@@ -104,6 +104,8 @@ struct State {
                     case core::BuiltinFn::kCountOneBits:
                     case core::BuiltinFn::kDot4I8Packed:
                     case core::BuiltinFn::kDot4U8Packed:
+                    case core::BuiltinFn::kFrexp:
+                    case core::BuiltinFn::kModf:
                     case core::BuiltinFn::kPack2X16Float:
                     case core::BuiltinFn::kPack2X16Snorm:
                     case core::BuiltinFn::kPack2X16Unorm:
@@ -122,6 +124,8 @@ struct State {
                     case core::BuiltinFn::kSubgroupShuffleXor:
                     case core::BuiltinFn::kSubgroupShuffleUp:
                     case core::BuiltinFn::kSubgroupShuffleDown:
+                    case core::BuiltinFn::kSubgroupInclusiveAdd:
+                    case core::BuiltinFn::kSubgroupInclusiveMul:
                     case core::BuiltinFn::kTextureDimensions:
                     case core::BuiltinFn::kTextureGather:
                     case core::BuiltinFn::kTextureGatherCompare:
@@ -224,6 +228,12 @@ struct State {
                 case core::BuiltinFn::kDot4U8Packed:
                     Dot4U8Packed(call);
                     break;
+                case core::BuiltinFn::kFrexp:
+                    Frexp(call);
+                    break;
+                case core::BuiltinFn::kModf:
+                    Modf(call);
+                    break;
                 case core::BuiltinFn::kPack2X16Float:
                     Pack2x16Float(call);
                     break;
@@ -269,6 +279,10 @@ struct State {
                 case core::BuiltinFn::kSubgroupShuffleUp:
                 case core::BuiltinFn::kSubgroupShuffleDown:
                     SubgroupShuffle(call);
+                    break;
+                case core::BuiltinFn::kSubgroupInclusiveAdd:
+                case core::BuiltinFn::kSubgroupInclusiveMul:
+                    SubgroupInclusive(call);
                     break;
                 case core::BuiltinFn::kTextureDimensions:
                     TextureDimensions(call);
@@ -450,8 +464,7 @@ struct State {
         b.InsertBefore(call, [&] {
             auto* original_value = b.Var(ty.ptr(function, type));
             original_value->SetInitializer(b.Zero(type));
-
-            auto* val = b.Negation(type, args[1]);
+            auto* val = b.Subtract(type, b.Zero(type), args[1]);
             b.Call<hlsl::ir::BuiltinCall>(ty.void_(), BuiltinFn::kInterlockedAdd, args[0], val,
                                           original_value);
             b.LoadWithResult(call->DetachResult(), original_value)->Result(0);
@@ -525,7 +538,7 @@ struct State {
         b.InsertBefore(call, [&] {
             args.Push(b.Call(type, core::BuiltinFn::kFloor, val)->Result(0));
             args.Push(b.Call(type, core::BuiltinFn::kCeil, val)->Result(0));
-            args.Push(b.LessThan(ty.match_width(ty.bool_(), type), val, b.Zero(type))->Result(0));
+            args.Push(b.LessThan(ty.MatchWidth(ty.bool_(), type), val, b.Zero(type))->Result(0));
         });
         auto* trunc = b.ir.CreateInstruction<hlsl::ir::Ternary>(call->DetachResult(), args);
         trunc->InsertBefore(call);
@@ -682,8 +695,8 @@ struct State {
                 auto* src = b.FunctionParam("src", src_type);
                 f->SetParams({src});
                 b.Append(f->Block(), [&] {
-                    const core::type::Type* uint_ty = ty.match_width(ty.u32(), src_type);
-                    const core::type::Type* float_ty = ty.match_width(ty.f32(), src_type);
+                    const core::type::Type* uint_ty = ty.MatchWidth(ty.u32(), src_type);
+                    const core::type::Type* float_ty = ty.MatchWidth(ty.f32(), src_type);
 
                     core::ir::Instruction* v = nullptr;
                     tint::Switch(
@@ -749,17 +762,16 @@ struct State {
     // The HLSL `sign` method always returns an `int` result (scalar or vector). In WGSL the result
     // is expected to be the same type as the argument. This injects a cast to the expected WGSL
     // result type after the call to `hlsl.sign`.
+    core::ir::Instruction* BuildSign(core::ir::Value* value) {
+        const auto* result_ty = ty.MatchWidth(ty.i32(), value->Type());
+        auto* sign = b.Call<hlsl::ir::BuiltinCall>(result_ty, hlsl::BuiltinFn::kSign, value);
+        return b.Convert(value->Type(), sign);
+    }
+
     void Sign(core::ir::BuiltinCall* call) {
         b.InsertBefore(call, [&] {
-            const core::type::Type* result_ty = ty.i32();
-            if (auto* vec = call->Result(0)->Type()->As<core::type::Vector>()) {
-                result_ty = ty.vec(result_ty, vec->Width());
-            }
-
-            auto* sign =
-                b.Call<hlsl::ir::BuiltinCall>(result_ty, hlsl::BuiltinFn::kSign, call->Args()[0]);
-
-            b.ConvertWithResult(call->DetachResult(), sign);
+            auto* sign = BuildSign(call->Args()[0]);
+            sign->SetResults(Vector{call->DetachResult()});
         });
         call->Destroy();
     }
@@ -897,10 +909,7 @@ struct State {
             query_size += 1;
         }
 
-        const core::type::Type* query_ty = ty.u32();
-        if (query_size > 1) {
-            query_ty = ty.vec(query_ty, query_size);
-        }
+        auto* query_ty = ty.MatchWidth(ty.u32(), query_size);
 
         b.InsertBefore(call, [&] {
             Vector<core::ir::Value*, 5> args;
@@ -923,7 +932,7 @@ struct State {
                                                       tex, args);
             query = b.Load(query);
             if (!swizzle.IsEmpty()) {
-                query = b.Swizzle(ty.vec2<u32>(), query, swizzle);
+                query = b.Swizzle(ty.MatchWidth(ty.u32(), swizzle.Length()), query, swizzle);
             }
             call->Result(0)->ReplaceAllUsesWith(query->Result(0));
         });
@@ -1253,8 +1262,14 @@ struct State {
                     TINT_UNREACHABLE();
             }
 
-            b.MemberCallWithResult<hlsl::ir::MemberBuiltinCall>(
-                call->DetachResult(), hlsl::BuiltinFn::kSample, tex, params);
+            core::ir::Instruction* result = b.MemberCall<hlsl::ir::MemberBuiltinCall>(
+                ty.vec4<f32>(), hlsl::BuiltinFn::kSample, tex, params);
+            if (tex_type->Is<core::type::DepthTexture>()) {
+                // Swizzle x from vec4 result for depth textures
+                TINT_ASSERT(call->Result(0)->Type()->Is<core::type::F32>());
+                result = b.Swizzle(ty.f32(), result, {0});
+            }
+            result->SetResults(Vector{call->DetachResult()});
         });
         call->Destroy();
     }
@@ -1479,8 +1494,14 @@ struct State {
                     TINT_UNREACHABLE();
             }
 
-            b.MemberCallWithResult<hlsl::ir::MemberBuiltinCall>(
-                call->DetachResult(), hlsl::BuiltinFn::kSampleLevel, tex, params);
+            core::ir::Instruction* result = b.MemberCall<hlsl::ir::MemberBuiltinCall>(
+                ty.vec4<f32>(), hlsl::BuiltinFn::kSampleLevel, tex, params);
+            if (tex_type->Is<core::type::DepthTexture>()) {
+                // Swizzle x from vec4 result for depth textures
+                TINT_ASSERT(call->Result(0)->Type()->Is<core::type::F32>());
+                result = b.Swizzle(ty.f32(), result, {0});
+            }
+            result->SetResults(Vector{call->DetachResult()});
         });
         call->Destroy();
     }
@@ -1745,8 +1766,46 @@ struct State {
         call->Destroy();
     }
 
+    void Frexp(core::ir::CoreBuiltinCall* call) {
+        auto arg = call->Args()[0];
+        b.InsertBefore(call, [&] {
+            auto* arg_ty = arg->Type();
+            auto* arg_i32_ty = ty.MatchWidth(ty.i32(), arg_ty);
+            // Note: WGSL's frexp expects an i32 for exp, but HLSL expects f32 (same type as first
+            // arg), so we use a temp f32 var that we convert to i32 later.
+            auto* exp_out = b.Var(ty.ptr<function>(arg_ty));
+            // HLSL frexp writes exponent part to second out param, and returns the fraction
+            // (mantissa) part.
+            core::ir::Instruction* fract = b.Call<hlsl::ir::BuiltinCall>(
+                arg_ty, hlsl::BuiltinFn::kFrexp, arg, b.Load(exp_out));
+            // The returned fraction is always positive, but for WGSL, we want it to keep the sign
+            // of the input value.
+            auto* arg_sign = BuildSign(arg);
+            fract = b.Multiply(arg_ty, arg_sign, fract);
+            // Replace the call with new result struct
+            b.ConstructWithResult(call->DetachResult(), fract,
+                                  b.Convert(arg_i32_ty, b.Load(exp_out)));
+        });
+        call->Destroy();
+    }
+
+    void Modf(core::ir::CoreBuiltinCall* call) {
+        auto arg = call->Args()[0];
+        b.InsertBefore(call, [&] {
+            auto* arg_ty = arg->Type();
+            auto* whole = b.Var(ty.ptr<function>(arg_ty));
+            // HLSL modf writes whole (integer) part to second out param, and returns the fractional
+            // part.
+            auto* call_result =
+                b.Call<hlsl::ir::BuiltinCall>(arg_ty, hlsl::BuiltinFn::kModf, arg, b.Load(whole));
+            // Replace the call with new result struct
+            b.ConstructWithResult(call->DetachResult(), call_result, b.Load(whole));
+        });
+        call->Destroy();
+    }
+
     void QuantizeToF16(core::ir::CoreBuiltinCall* call) {
-        auto* u32_type = ty.match_width(ty.u32(), call->Result(0)->Type());
+        auto* u32_type = ty.MatchWidth(ty.u32(), call->Result(0)->Type());
         b.InsertBefore(call, [&] {
             auto* inner = b.Call<hlsl::ir::BuiltinCall>(u32_type, hlsl::BuiltinFn::kF32Tof16,
                                                         call->Args()[0]);
@@ -1765,7 +1824,7 @@ struct State {
         auto* arg_type = arg->Type()->UnwrapRef();
         if (arg_type->IsSignedIntegerScalarOrVector()) {
             auto* result_ty = call->Result(0)->Type();
-            auto* u32_type = ty.match_width(ty.u32(), result_ty);
+            auto* u32_type = ty.MatchWidth(ty.u32(), result_ty);
             b.InsertBefore(call, [&] {
                 core::ir::Value* val = arg;
                 // Bitcast of literal int vectors fails in DXC so extract arg to a var. See
@@ -1817,18 +1876,63 @@ struct State {
         });
         call->Destroy();
     }
+
+    // The following subgroup builtin functions are translated to HLSL as follows:
+    // +-----------------------+----------------------+
+    // |        WGSL           |       HLSL           |
+    // +-----------------------+----------------------+
+    // | subgroupInclusiveAdd  | WavePrefixSum(x) + x |
+    // | subgroupInclusiveMul  | WavePrefixMul(x) * x |
+    // +-----------------------+----------------------+
+    void SubgroupInclusive(core::ir::CoreBuiltinCall* call) {
+        TINT_ASSERT(call->Args().Length() == 1);
+        b.InsertBefore(call, [&] {
+            auto builtin_sel = core::BuiltinFn::kNone;
+
+            switch (call->Func()) {
+                case core::BuiltinFn::kSubgroupInclusiveAdd:
+                    builtin_sel = core::BuiltinFn::kSubgroupExclusiveAdd;
+                    break;
+                case core::BuiltinFn::kSubgroupInclusiveMul:
+                    builtin_sel = core::BuiltinFn::kSubgroupExclusiveMul;
+                    break;
+                default:
+                    TINT_UNREACHABLE();
+            }
+
+            auto* arg1 = call->Args()[0];
+            auto call_type = arg1->Type();
+            auto* exclusive_call = b.Call<core::ir::CoreBuiltinCall>(call_type, builtin_sel, arg1);
+
+            core::ir::Instruction* inst = nullptr;
+            switch (call->Func()) {
+                case core::BuiltinFn::kSubgroupInclusiveAdd:
+                    inst = b.Add(call_type, exclusive_call, arg1);
+                    break;
+                case core::BuiltinFn::kSubgroupInclusiveMul:
+                    inst = b.Multiply(call_type, exclusive_call, arg1);
+                    break;
+                default:
+                    TINT_UNREACHABLE();
+            }
+            call->Result(0)->ReplaceAllUsesWith(inst->Result(0));
+        });
+        call->Destroy();
+    }
 };
 
 }  // namespace
 
 Result<SuccessType> BuiltinPolyfill(core::ir::Module& ir) {
-    auto result = ValidateAndDumpIfNeeded(ir, "BuiltinPolyfill transform");
+    auto result = ValidateAndDumpIfNeeded(ir, "hlsl.BuiltinPolyfill",
+                                          core::ir::Capabilities{
+                                              core::ir::Capability::kAllowClipDistancesOnF32,
+                                          });
     if (result != Success) {
         return result.Failure();
     }
 
     State{ir}.Process();
-
     return Success;
 }
 

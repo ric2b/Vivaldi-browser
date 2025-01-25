@@ -17,10 +17,8 @@ extern NSString* vResetOverflowMenuActions;
 /// the app. If we don't reset old data app will not show new list,
 /// new order, and worst can crash when menu or customization
 /// is triggerred.
-bool ShouldResetOverflowMenuDestinations();
 bool ShouldResetOverflowMenuActions();
 
-void SetOverflowMenuDestinationsResetComplete();
 void SetOverflowMenuActionsResetComplete();
 
 #endif  // IOS_UI_VIVALDI_OVERFLOW_MENU_VIVALDI_OVERFLOW_MENU_UTIL_H_

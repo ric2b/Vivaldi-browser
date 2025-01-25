@@ -5,12 +5,32 @@
 package org.chromium.chrome.browser.browser_controls;
 
 import androidx.annotation.ColorInt;
+import androidx.annotation.IntDef;
 
 import org.chromium.cc.input.BrowserControlsOffsetTagsInfo;
 import org.chromium.cc.input.BrowserControlsState;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+
 /** An interface for retrieving and monitoring browser controls state. */
 public interface BrowserControlsStateProvider {
+    /**
+     * The possible positions of the control container, which contains the browsing mode toolbar.
+     */
+    @IntDef({ControlsPosition.TOP, ControlsPosition.BOTTOM, ControlsPosition.NONE})
+    @Retention(RetentionPolicy.SOURCE)
+    @interface ControlsPosition {
+        /** Controls are top-anchored. */
+        int TOP = 0;
+
+        /** Controls are bottom-anchored. */
+        int BOTTOM = 1;
+
+        /** Controls are not present, eg NoTouchActivity. */
+        int NONE = 2;
+    }
+
     /** An observer to be notified of browser controls changes */
     interface Observer {
         /**
@@ -65,6 +85,9 @@ public interface BrowserControlsStateProvider {
 
         /** Called when the background color of the controls container changes. */
         default void onBottomControlsBackgroundColorChanged(@ColorInt int color) {}
+
+        /** Called when the current position of the control container changes. */
+        default void onControlsPositionChanged(@ControlsPosition int controlsPosition) {}
     }
 
     /**
@@ -127,6 +150,13 @@ public interface BrowserControlsStateProvider {
     boolean shouldAnimateBrowserControlsHeightChanges();
 
     /**
+     * @return Whether or not the browser should update it's property models with new offsets when
+     *     the controls' constraints change. This only needs to be done sometimes when BCIV is
+     *     enabled, to avoid seeing controls jumping/flickering.
+     */
+    boolean shouldUpdateOffsetsWhenConstraintsChange();
+
+    /**
      * @return The offset of the controls from the bottom of the screen.
      */
     int getBottomControlOffset();
@@ -149,4 +179,11 @@ public interface BrowserControlsStateProvider {
 
     /** Returns the View visibility of the controls container. */
     int getAndroidControlsVisibility();
+
+    /**
+     * Get the current position of the controls, one of {@link ControlsPosition}. This value can
+     * change at runtime; changes can be observed with {@link Observer#onControlsPositionChanged}
+     */
+    @ControlsPosition
+    int getControlsPosition();
 }

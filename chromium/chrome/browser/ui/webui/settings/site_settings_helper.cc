@@ -81,6 +81,7 @@
 #include "extensions/common/constants.h"
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/features_generated.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/origin.h"
@@ -189,7 +190,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::PASSWORD_PROTECTION, nullptr},
     {ContentSettingsType::MEDIA_ENGAGEMENT, nullptr},
     {ContentSettingsType::CLIENT_HINTS, nullptr},
-    {ContentSettingsType::ACCESSIBILITY_EVENTS, nullptr},
+    {ContentSettingsType::DEPRECATED_ACCESSIBILITY_EVENTS, nullptr},
     {ContentSettingsType::CLIPBOARD_SANITIZED_WRITE, nullptr},
     {ContentSettingsType::BACKGROUND_FETCH, nullptr},
     {ContentSettingsType::INTENT_PICKER_DISPLAY, nullptr},
@@ -244,6 +245,8 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::TOP_LEVEL_TPCD_ORIGIN_TRIAL, nullptr},
     {ContentSettingsType::DISPLAY_MEDIA_SYSTEM_AUDIO, nullptr},
     {ContentSettingsType::STORAGE_ACCESS_HEADER_ORIGIN_TRIAL, nullptr},
+    // TODO(crbug.com/368266658): Implement the UI for Direct Sockets PNA.
+    {ContentSettingsType::DIRECT_SOCKETS_PRIVATE_NETWORK_ACCESS, nullptr},
 };
 
 static_assert(
@@ -258,6 +261,25 @@ struct SiteSettingSourceStringMapping {
   SiteSettingSource source;
   const char* source_str;
 };
+
+// Determines whether an IWA-specific `content_setting` should be shown for a
+// particular `origin`.
+bool ShouldShowIwaContentSettingForOrigin(Profile* profile,
+                                          std::string_view origin,
+                                          ContentSettingsType content_setting) {
+  // Show for non-origin-specific lists, IWAs, and non-default values.
+  if (origin.empty() || GURL(origin).SchemeIs(chrome::kIsolatedAppScheme)) {
+    return true;
+  }
+  if (!profile) {
+    return false;
+  }
+  SiteSettingSource source;
+  GetContentSettingForOrigin(
+      profile, HostContentSettingsMapFactory::GetForProfile(profile),
+      GURL(origin), content_setting, &source);
+  return source != SiteSettingSource::kDefault;
+}
 
 // Retrieves the corresponding string, according to the following precedence
 // order from highest to lowest priority:
@@ -331,8 +353,7 @@ SiteSettingSource CalculateSiteSettingSource(
     return SiteSettingSource::kPreference;
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return SiteSettingSource::kPreference;
+  NOTREACHED();
 }
 
 bool IsFromWebUIAllowlistSource(const ContentSettingPatternSource& pattern) {
@@ -533,9 +554,8 @@ std::string_view ContentSettingsTypeToGroupName(ContentSettingsType type) {
     }
   }
 
-  NOTREACHED_IN_MIGRATION() << static_cast<int32_t>(type)
-                            << " is not a recognized content settings type.";
-  return std::string_view();
+  NOTREACHED() << static_cast<int32_t>(type)
+               << " is not a recognized content settings type.";
 }
 
 std::vector<ContentSettingsType> GetVisiblePermissionCategories(
@@ -555,6 +575,7 @@ std::vector<ContentSettingsType> GetVisiblePermissionCategories(
       ContentSettingsType::IDLE_DETECTION,
       ContentSettingsType::IMAGES,
       ContentSettingsType::JAVASCRIPT,
+      ContentSettingsType::JAVASCRIPT_OPTIMIZER,
       ContentSettingsType::LOCAL_FONTS,
       ContentSettingsType::MEDIASTREAM_CAMERA,
       ContentSettingsType::MEDIASTREAM_MIC,
@@ -616,10 +637,6 @@ std::vector<ContentSettingsType> GetVisiblePermissionCategories(
       base_types->push_back(ContentSettingsType::AUTO_PICTURE_IN_PICTURE);
     }
 
-    if (base::FeatureList::IsEnabled(blink::features::kWebPrinting)) {
-      base_types->push_back(ContentSettingsType::WEB_PRINTING);
-    }
-
     if (base::FeatureList::IsEnabled(blink::features::kSpeakerSelection)) {
       base_types->push_back(ContentSettingsType::SPEAKER_SELECTION);
     }
@@ -631,7 +648,8 @@ std::vector<ContentSettingsType> GetVisiblePermissionCategories(
       base_types->push_back(ContentSettingsType::CAPTURED_SURFACE_CONTROL);
     }
 
-    if (base::FeatureList::IsEnabled(features::kKeyboardAndPointerLockPrompt)) {
+    if (base::FeatureList::IsEnabled(
+            permissions::features::kKeyboardAndPointerLockPrompt)) {
       base_types->push_back(ContentSettingsType::KEYBOARD_LOCK);
       base_types->push_back(ContentSettingsType::POINTER_LOCK);
     }
@@ -652,20 +670,19 @@ std::vector<ContentSettingsType> GetVisiblePermissionCategories(
   // The permission categories below are only shown for certain origins.
   std::vector<ContentSettingsType> types_for_origin = *base_types;
   if (base::FeatureList::IsEnabled(
-          features::kAutomaticFullscreenContentSetting)) {
-    // Show for non-origin-specific lists, IWAs, and non-default values.
-    if (origin.empty() || GURL(origin).SchemeIs(chrome::kIsolatedAppScheme)) {
-      types_for_origin.push_back(ContentSettingsType::AUTOMATIC_FULLSCREEN);
-    } else if (profile) {
-      SiteSettingSource source;
-      GetContentSettingForOrigin(
-          profile, HostContentSettingsMapFactory::GetForProfile(profile),
-          GURL(origin), ContentSettingsType::AUTOMATIC_FULLSCREEN, &source);
-      if (source != SiteSettingSource::kDefault) {
-        types_for_origin.push_back(ContentSettingsType::AUTOMATIC_FULLSCREEN);
-      }
-    }
+          features::kAutomaticFullscreenContentSetting) &&
+      ShouldShowIwaContentSettingForOrigin(
+          profile, origin, ContentSettingsType::AUTOMATIC_FULLSCREEN)) {
+    types_for_origin.push_back(ContentSettingsType::AUTOMATIC_FULLSCREEN);
   }
+
+#if BUILDFLAG(IS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(blink::features::kWebPrinting) &&
+      ShouldShowIwaContentSettingForOrigin(profile, origin,
+                                           ContentSettingsType::WEB_PRINTING)) {
+    types_for_origin.push_back(ContentSettingsType::WEB_PRINTING);
+  }
+#endif
 
   return types_for_origin;
 }
@@ -693,8 +710,7 @@ std::string SiteSettingSourceToString(const SiteSettingSource source) {
     case SiteSettingSource::kPreference:
       return "preference";
     case SiteSettingSource::kNumSources:
-      NOTREACHED_IN_MIGRATION();
-      return "";
+      NOTREACHED();
   }
 }
 
@@ -720,8 +736,7 @@ SiteSettingSource ProviderTypeToSiteSettingsSource(
     case ProviderType::kNotificationAndroidProvider:
     case ProviderType::kProviderForTests:
     case ProviderType::kOtherProviderForTests:
-      NOTREACHED_IN_MIGRATION();
-      return SiteSettingSource::kPreference;
+      NOTREACHED();
   }
 }
 
@@ -745,8 +760,7 @@ std::string ProviderToDefaultSettingSourceString(const ProviderType provider) {
     case ProviderType::kNotificationAndroidProvider:
     case ProviderType::kProviderForTests:
     case ProviderType::kOtherProviderForTests:
-      NOTREACHED_IN_MIGRATION();
-      return "preference";
+      NOTREACHED();
   }
 }
 
@@ -1248,7 +1262,7 @@ ContentSetting GetContentSettingForOrigin(Profile* profile,
       result = profile->GetPermissionController()
                    ->GetPermissionResultForOriginWithoutContext(
                        permissions::PermissionUtil::
-                           ContentSettingTypeToPermissionType(content_type),
+                           ContentSettingsTypeToPermissionType(content_type),
                        url::Origin::Create(origin));
     } else {
       permissions::PermissionDecisionAutoBlocker* auto_blocker =

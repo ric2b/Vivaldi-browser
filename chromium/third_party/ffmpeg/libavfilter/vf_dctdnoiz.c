@@ -33,7 +33,8 @@
 #include "libavutil/mem.h"
 #include "libavutil/mem_internal.h"
 #include "libavutil/opt.h"
-#include "internal.h"
+
+#include "filters.h"
 #include "video.h"
 
 static const char *const var_names[] = { "c", NULL };

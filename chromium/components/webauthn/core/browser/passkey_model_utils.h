@@ -26,6 +26,9 @@ namespace webauthn::passkey_model_utils {
 std::vector<sync_pb::WebauthnCredentialSpecifics> FilterShadowedCredentials(
     base::span<const sync_pb::WebauthnCredentialSpecifics> passkeys);
 
+// Returns whether the passkey is of the expected format.
+bool IsPasskeyValid(const sync_pb::WebauthnCredentialSpecifics& passkey);
+
 // Generates a passkey for the given RP ID and user. `trusted_vault_key` must be
 // the security domain secret of the `hw_protected` domain. Returns a passkey
 // sync entity with the sealed `encrypted` member set, and the unsealed private
@@ -61,11 +64,11 @@ bool EncryptWebauthnCredentialSpecificsData(
 // https://w3c.github.io/webauthn/#authenticator-data.
 std::vector<uint8_t> MakeAuthenticatorDataForAssertion(std::string_view rp_id);
 
-// Returns the WebAuthn authenticator data for the GPM authenticator.
+// Returns the WebAuthn attestation object for the GPM authenticator.
 // For attestation signatures, the authenticator MUST set the AT flag and
 // include the attestedCredentialData. See
 // https://w3c.github.io/webauthn/#authenticator-data.
-std::vector<uint8_t> MakeAuthenticatorDataForCreation(
+std::vector<uint8_t> MakeAttestationObjectForCreation(
     std::string_view rp_id,
     base::span<const uint8_t> credential_id,
     base::span<const uint8_t> public_key_spki_der);

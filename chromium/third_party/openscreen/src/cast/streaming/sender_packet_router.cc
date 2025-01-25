@@ -138,7 +138,7 @@ void SenderPacketRouter::ScheduleNextBurst() {
     }
     if (next_send_time <= earliest_allowed_burst_time) {
       next_burst_time = earliest_allowed_burst_time;
-      // No need to continue, since |next_burst_time| cannot become any earlier.
+      // No need to continue, since `next_burst_time` cannot become any earlier.
       break;
     }
     next_burst_time = next_send_time;

@@ -46,7 +46,7 @@ const viewportHeight = 720;
 const windowWidth = viewportWidth + 50;
 const windowHeight = viewportHeight + 200;
 
-const headless = !TestConfig.debug;
+const headless = !TestConfig.debug || TestConfig.headless;
 // CDP commands in e2e and interaction should not generally take
 // more than 20 seconds.
 const protocolTimeout = TestConfig.debug ? 0 : 20_000;
@@ -63,34 +63,6 @@ let targetTab: TargetTab;
 
 const envChromeFeatures = process.env['CHROME_FEATURES'];
 
-export async function watchForHang<T>(
-    currentTest: string|undefined, stepFn: (currentTest: string|undefined) => Promise<T>): Promise<T> {
-  const stepName = stepFn.name || stepFn.toString();
-  const stackTrace = new Error().stack;
-  function logTime(label: string) {
-    const end = performance.now();
-    console.error(`\n${stepName} ${label} ${end - start}ms\nTrace: ${stackTrace}\nTest: ${currentTest}\n`);
-  }
-  let tripped = false;
-  const timerId = setTimeout(() => {
-    logTime('takes at least');
-    tripped = true;
-  }, 10000);
-  const start = performance.now();
-  try {
-    const result = await stepFn(currentTest);
-    if (tripped) {
-      logTime('succeded after');
-    }
-    return result;
-  } catch (err) {
-    logTime('errored after');
-    throw err;
-  } finally {
-    clearTimeout(timerId);
-  }
-}
-
 function launchChrome() {
   // Use port 0 to request any free port.
   const enabledFeatures = [
@@ -104,9 +76,9 @@ function launchChrome() {
   ];
 
   const disabledFeatures = [
-    'DeferRendererTasksAfterInput',  // crbug.com/361078921
-    'PMProcessPriorityPolicy',       // crbug.com/361252079
-    'RenderDocument',                // crbug.com/361519377
+    'DeferRendererTasksAfterInput',                // crbug.com/361078921
+    'PMProcessPriorityPolicy',                     // crbug.com/361252079
+    'MojoChannelAssociatedSendUsesRunOrPostTask',  // crbug.com/376228320
   ];
   const launchArgs = [
     '--remote-allow-origins=*',
@@ -121,15 +93,17 @@ function launchChrome() {
     '--enable-blink-features=CSSContainerQueries,HighlightInheritance',  // TODO(crbug.com/1218390) Remove globally enabled flags and conditionally enable them
     '--disable-blink-features=WebAssemblyJSPromiseIntegration',  // TODO(crbug.com/325123665) Remove once heap snapshots work again with JSPI
     `--disable-features=${disabledFeatures.join(',')}`,
-    '--disable-field-trial-config',
   ];
+  const executablePath = TestConfig.chromeBinary;
   const opts: puppeteer.LaunchOptions&puppeteer.BrowserLaunchArgumentOptions&puppeteer.BrowserConnectOptions = {
     headless,
-    executablePath: TestConfig.chromeBinary,
+    executablePath,
     dumpio: !headless || Boolean(process.env['LUCI_CONTEXT']),
     slowMo: envSlowMo,
     protocolTimeout,
   };
+
+  TestConfig.configureChrome(executablePath);
 
   // Always set the default viewport because setting only the window size for
   // headful mode would result in much smaller actual viewport.
@@ -195,24 +169,24 @@ export async function unregisterAllServiceWorkers() {
   });
 }
 
-export async function setupPages(currentTest: string|undefined) {
+export async function setupPages() {
   const {frontend} = getBrowserAndPages();
-  await watchForHang(currentTest, () => throttleCPUIfRequired(frontend));
-  await watchForHang(currentTest, () => delayPromisesIfRequired(frontend));
+  await throttleCPUIfRequired(frontend);
+  await delayPromisesIfRequired(frontend);
 }
 
-export async function resetPages(currentTest: string|undefined) {
+export async function resetPages() {
   const {frontend, target} = getBrowserAndPages();
 
-  await watchForHang(currentTest, () => target.bringToFront());
-  await watchForHang(currentTest, () => targetTab.reset());
-  await watchForHang(currentTest, () => frontend.bringToFront());
+  await target.bringToFront();
+  await targetTab.reset();
+  await frontend.bringToFront();
 
   if (TestConfig.serverType === 'hosted-mode') {
-    await watchForHang(currentTest, () => frontendTab.reset());
+    await frontendTab.reset();
   } else if (TestConfig.serverType === 'component-docs') {
     // Reset the frontend back to an empty page for the component docs server.
-    await watchForHang(currentTest, () => loadEmptyPageAndWaitForContent(frontend));
+    await loadEmptyPageAndWaitForContent(frontend);
   }
 }
 

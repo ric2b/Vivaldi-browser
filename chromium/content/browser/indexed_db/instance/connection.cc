@@ -139,7 +139,7 @@ void Connection::AbortTransactionAndTearDownOnError(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   TRACE_EVENT1("IndexedDB", "Database::Abort(error)", "txn.id",
                transaction->id());
-  leveldb::Status status = transaction->Abort(error);
+  Status status = transaction->Abort(error);
   if (!status.ok()) {
     bucket_context_handle_->OnDatabaseError(status, {});
   }
@@ -295,8 +295,9 @@ void Connection::GetAll(int64_t transaction_id,
                         int64_t object_store_id,
                         int64_t index_id,
                         const IndexedDBKeyRange& key_range,
-                        bool key_only,
+                        blink::mojom::IDBGetAllResultType result_type,
                         int64_t max_count,
+                        blink::mojom::IDBCursorDirection direction,
                         blink::mojom::IDBDatabase::GetAllCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -337,9 +338,7 @@ void Connection::GetAll(int64_t transaction_id,
 
   transaction->ScheduleTask(database_->CreateGetAllOperation(
       object_store_id, index_id, std::make_unique<IndexedDBKeyRange>(key_range),
-      key_only ? indexed_db::CursorType::kKeyOnly
-               : indexed_db::CursorType::kKeyAndValue,
-      max_count, std::move(callback), transaction));
+      result_type, max_count, direction, std::move(callback), transaction));
 }
 
 void Connection::SetIndexKeys(
@@ -749,6 +748,11 @@ void Connection::UpdatePriority(int new_priority) {
     transaction->OnSchedulingPriorityUpdated(new_priority);
   }
 
+  // Null after `AbortTransactionsAndClose()`.
+  if (bucket_context()) {
+    bucket_context()->OnConnectionPriorityUpdated();
+  }
+
   // TODO(crbug.com/359623664): consider reordering transactions already in the
   // queue. For now the priority change will only impact where new transactions
   // are placed (whether they skip past the existing ones).
@@ -785,7 +789,7 @@ std::unique_ptr<DatabaseCallbacks> Connection::AbortTransactionsAndClose(
   // Finish up any transaction, in case there were any running.
   DatabaseError error(blink::mojom::IDBException::kUnknownError,
                       "Connection is closing.");
-  leveldb::Status status;
+  Status status;
   switch (error_handling) {
     case CloseErrorHandling::kReturnOnFirstError:
       status = AbortAllTransactions(error);
@@ -807,16 +811,16 @@ std::unique_ptr<DatabaseCallbacks> Connection::AbortTransactionsAndClose(
   return callbacks;
 }
 
-leveldb::Status Connection::AbortAllTransactionsAndIgnoreErrors(
+Status Connection::AbortAllTransactionsAndIgnoreErrors(
     const DatabaseError& error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  leveldb::Status last_error;
+  Status last_error;
   for (const auto& pair : transactions_) {
     auto& transaction = pair.second;
     if (transaction->state() != Transaction::FINISHED) {
       TRACE_EVENT1("IndexedDB", "Database::Abort(error)", "transaction.id",
                    transaction->id());
-      leveldb::Status status = transaction->Abort(error);
+      Status status = transaction->Abort(error);
       if (!status.ok()) {
         last_error = status;
       }
@@ -825,20 +829,20 @@ leveldb::Status Connection::AbortAllTransactionsAndIgnoreErrors(
   return last_error;
 }
 
-leveldb::Status Connection::AbortAllTransactions(const DatabaseError& error) {
+Status Connection::AbortAllTransactions(const DatabaseError& error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   for (const auto& pair : transactions_) {
     auto& transaction = pair.second;
     if (transaction->state() != Transaction::FINISHED) {
       TRACE_EVENT1("IndexedDB", "Database::Abort(error)", "transaction.id",
                    transaction->id());
-      leveldb::Status status = transaction->Abort(error);
+      Status status = transaction->Abort(error);
       if (!status.ok()) {
         return status;
       }
     }
   }
-  return leveldb::Status::OK();
+  return Status::OK();
 }
 
 // static

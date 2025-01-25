@@ -8,13 +8,13 @@
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_item.h"
 #import "ios/most_visited_sites/vivaldi_most_visited_sites_consumer.h"
 
-class ChromeBrowserState;
+class ProfileIOS;
 
 @interface VivaldiMostVisitedSitesManager : NSObject
 
 @property(nonatomic, weak) id<VivaldiMostVisitedSitesConsumer> consumer;
 
-- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithProfile:(ProfileIOS*)profile NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
 - (void)start;

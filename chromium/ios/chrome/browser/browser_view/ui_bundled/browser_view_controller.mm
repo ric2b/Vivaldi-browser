@@ -8,6 +8,9 @@
 #import "base/apple/foundation_util.h"
 #import "base/ios/ios_util.h"
 #import "base/memory/raw_ptr.h"
+#import "base/metrics/histogram_functions.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/task/sequenced_task_runner.h"
 #import "components/enterprise/idle/idle_pref_names.h"
@@ -25,6 +28,8 @@
 #import "ios/chrome/browser/discover_feed/model/feed_constants.h"
 #import "ios/chrome/browser/find_in_page/model/util.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_util.h"
+#import "ios/chrome/browser/incognito_reauth/ui_bundled/features.h"
+#import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_constants.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_view.h"
 #import "ios/chrome/browser/intents/intents_donation_helper.h"
@@ -266,7 +271,6 @@ const double kDelayForRatingPrompt = 10.0;
   // The coordinator that shows the bookmarking UI after the user taps the star
   // button.
   BookmarksCoordinator* _bookmarksCoordinator;
-
 
   // Toolbar state that broadcasts changes to min and max heights.
   ToolbarUIState* _toolbarUIState;
@@ -1161,10 +1165,21 @@ const double kDelayForRatingPrompt = 10.0;
         initWithTarget:self action:@selector(handleStickyViewTap)];
     [vivaldiStickyToolbarView addGestureRecognizer:tapGesture];
     tapGesture.numberOfTapsRequired = 1;
+
+    self.view.backgroundColor = [UIColor colorNamed:kBackgroundColor];
   } else {
   self.view.backgroundColor = [UIColor colorNamed:kBackgroundColor];
   } // End Vivaldi
 
+  if (@available(iOS 17, *)) {
+    NSArray<UITrait>* traits = TraitCollectionSetForTraits(nil);
+    __weak __typeof(self) weakSelf = self;
+    UITraitChangeHandler handler = ^(id<UITraitEnvironment> traitEnvironment,
+                                     UITraitCollection* previousCollection) {
+      [weakSelf updateUIOnTraitChange:previousCollection];
+    };
+    [self registerForTraitChanges:traits withHandler:handler];
+  }
 }
 
 - (void)viewSafeAreaInsetsDidChange {
@@ -1180,6 +1195,13 @@ const double kDelayForRatingPrompt = 10.0;
   if (self.tabStripView) {
     [self showTabStripView:self.tabStripView];
   }
+
+  if (IsVivaldiRunning() && !self.isNTP) {
+    // We already respect safe area for NTP. So, adjust only browser
+    // content view here.
+    [self updateContentAreaFrame];
+  } // End Vivaldi
+
 }
 
 - (void)viewDidLayoutSubviews {
@@ -1319,138 +1341,15 @@ const double kDelayForRatingPrompt = 10.0;
   }
 }
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-
-  if (@available(iOS 17.0, *)) {
-    if (base::FeatureList::IsEnabled(kEnableTraitCollectionWorkAround)) {
-      [self updateTraitsIfNeeded];
-    }
-  }
-
-  // After `-shutdown` is called, profile is invalid and will cause a
-  // crash.
-  if (_isShutdown) {
+  if (@available(iOS 17, *)) {
     return;
   }
-
-  // Vivaldi: We will not do anything if only device interface mode (dark/light)
-  // changed.
-  BOOL hasUserInterfaceStyleChanged =
-    [previousTraitCollection
-     hasDifferentColorAppearanceComparedToTraitCollection:self.traitCollection];
-  if (hasUserInterfaceStyleChanged) {
-    [self updateWebsiteAppearance];
-    [self updateUIElementsWithThemeColor];
-    return;
-  } else {
-    if (self.isNTP) {
-      [self.browserContainerViewController
-           setOverrideTraitCollection:nil
-               forChildViewController:self.browserContainerViewController];
-    }
-  }
-  // End Vivaldi
-
-  if (self.traitCollection.horizontalSizeClass ==
-          previousTraitCollection.horizontalSizeClass &&
-      self.traitCollection.verticalSizeClass ==
-          previousTraitCollection.verticalSizeClass) {
-    return;
-  }
-
-  if (IsVivaldiRunning()) {
-    [self didUpdateTabSettings];
-  } // End Vivaldi
-
-  self.fullscreenController->BrowserTraitCollectionChangedBegin();
-
-  // TODO(crbug.com/41198852): - traitCollectionDidChange: is not always
-  // forwarded because in some cases the presented view controller isn't a child
-  // of the BVC in the view controller hierarchy (some intervening object isn't
-  // a view controller).
-  [self.presentedViewController
-      traitCollectionDidChange:previousTraitCollection];
-
-  if (self.currentWebState) {
-    UIEdgeInsets contentPadding =
-        self.currentWebState->GetWebViewProxy().contentInset;
-    contentPadding.bottom = AlignValueToPixel(
-        self.footerFullscreenProgress * [self secondaryToolbarHeightWithInset]);
-    self.currentWebState->GetWebViewProxy().contentInset = contentPadding;
-  }
-
-  // Toolbar state must be updated before `updateFootersForFullscreenProgress`
-  // as the later uses the insets from fullscreen model.
-  [self updateToolbarState];
-
-  // Change the height of the secondary toolbar to show/hide it.
-  self.secondaryToolbarHeightConstraint.constant =
-      [self secondaryToolbarHeightWithInset];
-  [self updateFootersForFullscreenProgress:self.footerFullscreenProgress];
-
-  // If the device's size class has changed from RegularXRegular to another and
-  // vice-versa, the find bar should switch between regular mode and compact
-  // mode accordingly. Hide the findbar here and it will be reshown in [self
-  // updateToobar];
-  if (ShouldShowCompactToolbar(previousTraitCollection) !=
-      ShouldShowCompactToolbar(self)) {
-    if (!IsNativeFindInPageAvailable()) {
-      [self.findInPageCommandsHandler hideFindUI];
-    }
-    [self.textZoomHandler hideTextZoomUI];
-  }
-
-  // Update the toolbar visibility.
-  // TODO(crbug.com/40842406): Remove this and let
-  // `PrimaryToolbarViewController` or `ToolbarCoordinator` call the update ?
-  [self.toolbarCoordinator updateToolbar];
-
-  // Update the tab strip visibility.
-  if (self.tabStripView) {
-
-    if (IsVivaldiRunning()) {
-      // Note: (prio@vivaldi.com) On first run any event that triggers trait
-      // collection change method could lead the tab strip to show over
-      // onboarding flow. Skip updating the tab strip when first run is in
-      // progress.
-      if (!IsFirstRun()) {
-        [self showTabStripView:self.tabStripView];
-        [self.tabStripView layoutSubviews];
-      }
-
-      [self.legacyTabStripCoordinator hideTabStrip:![self canShowTabStrip]];
-      [self addConstraintsToPrimaryToolbar];
-      if (![VivaldiGlobalHelpers isDeviceTablet]) {
-        [self updateForFullscreenProgress:
-            self.fullscreenController->GetProgress()];
-      }
-    } else {
-    [self showTabStripView:self.tabStripView];
-    [self.tabStripView layoutSubviews];
-    const bool canShowTabStrip = IsRegularXRegularSizeClass(self);
-    if (IsModernTabStripOrRaccoonEnabled()) {
-      [self.tabStripCoordinator hideTabStrip:!canShowTabStrip];
-    } else {
-      [self.legacyTabStripCoordinator hideTabStrip:!canShowTabStrip];
-    }
-    _fakeStatusBarView.hidden = !canShowTabStrip;
-    [self addConstraintsToPrimaryToolbar];
-    } // End Vivaldi
-
-    // If tabstrip is coming back due to a window resize or screen rotation,
-    // reset the full screen controller to adjust the tabstrip position.
-    if (ShouldShowCompactToolbar(previousTraitCollection) &&
-        !ShouldShowCompactToolbar(self)) {
-      [self
-          updateForFullscreenProgress:self.fullscreenController->GetProgress()];
-    }
-  }
-
-  [self setNeedsStatusBarAppearanceUpdate];
-
-  self.fullscreenController->BrowserTraitCollectionChangedEnd();
+  [self updateUIOnTraitChange:previousTraitCollection];
 }
+#endif
 
 - (void)viewWillTransitionToSize:(CGSize)size
        withTransitionCoordinator:
@@ -1691,7 +1590,7 @@ const double kDelayForRatingPrompt = 10.0;
   [_fakeStatusBarView setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
   if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
     if (IsModernTabStripOrRaccoonEnabled()) {
-      _fakeStatusBarView.backgroundColor = [TabStripHelper backgroundColor];
+      _fakeStatusBarView.backgroundColor = TabStripHelper.backgroundColor;
       // Force the UserInterfaceStyle update in incognito.
       _fakeStatusBarView.overrideUserInterfaceStyle =
           _isOffTheRecord ? UIUserInterfaceStyleDark
@@ -1755,7 +1654,8 @@ const double kDelayForRatingPrompt = 10.0;
   if (IsVivaldiRunning() && primaryToolbar != topmostHeader) {
     BOOL splitToolbarMode = IsSplitToolbarMode(self);
     BOOL bottomOmniboxEnabled = [self isBottomOmniboxEnabled];
-    BOOL canShowSidePanel = [VivaldiGlobalHelpers canShowSidePanel];
+    BOOL canShowSidePanel =
+        [VivaldiGlobalHelpers canShowSidePanelForTrait:self.traitCollection];
     if (canShowSidePanel || !splitToolbarMode || bottomOmniboxEnabled) {
       return height;
     } else {
@@ -2193,6 +2093,137 @@ const double kDelayForRatingPrompt = 10.0;
     webState->GetNavigationManager()->LoadIfNecessary();
   }
   return webState->GetView();
+}
+
+// Notifies or modifies BVC owned UI elements when a UITrait has been changed.
+- (void)updateUIOnTraitChange:(UITraitCollection*)previousTraitCollection {
+  if (@available(iOS 17.0, *)) {
+    if (base::FeatureList::IsEnabled(kEnableTraitCollectionWorkAround)) {
+      [self updateTraitsIfNeeded];
+    }
+  }
+
+  // After `-shutdown` is called, profile is invalid and will cause a
+  // crash.
+  if (_isShutdown) {
+    return;
+  }
+
+  // Vivaldi: We will not do anything if only device interface mode (dark/light)
+  // changed.
+  BOOL hasUserInterfaceStyleChanged =
+    [previousTraitCollection
+     hasDifferentColorAppearanceComparedToTraitCollection:self.traitCollection];
+  if (hasUserInterfaceStyleChanged) {
+    [self updateWebsiteAppearance];
+    [self updateUIElementsWithThemeColor];
+  } else {
+    if (self.isNTP) {
+      [self.browserContainerViewController
+           setOverrideTraitCollection:nil
+               forChildViewController:self.browserContainerViewController];
+    }
+  }
+  // End Vivaldi
+
+  if (self.traitCollection.horizontalSizeClass ==
+          previousTraitCollection.horizontalSizeClass &&
+      self.traitCollection.verticalSizeClass ==
+          previousTraitCollection.verticalSizeClass) {
+    return;
+  }
+
+  if (IsVivaldiRunning()) {
+    [self didUpdateTabSettings];
+  } // End Vivaldi
+
+  self.fullscreenController->BrowserTraitCollectionChangedBegin();
+
+  // TODO(crbug.com/41198852): - traitCollectionDidChange: is not always
+  // forwarded because in some cases the presented view controller isn't a child
+  // of the BVC in the view controller hierarchy (some intervening object isn't
+  // a view controller).
+  [self.presentedViewController
+      traitCollectionDidChange:previousTraitCollection];
+
+  if (self.currentWebState) {
+    UIEdgeInsets contentPadding =
+        self.currentWebState->GetWebViewProxy().contentInset;
+    contentPadding.bottom = AlignValueToPixel(
+        self.footerFullscreenProgress * [self secondaryToolbarHeightWithInset]);
+    self.currentWebState->GetWebViewProxy().contentInset = contentPadding;
+  }
+
+  // Toolbar state must be updated before `updateFootersForFullscreenProgress`
+  // as the later uses the insets from fullscreen model.
+  [self updateToolbarState];
+
+  // Change the height of the secondary toolbar to show/hide it.
+  self.secondaryToolbarHeightConstraint.constant =
+      [self secondaryToolbarHeightWithInset];
+  [self updateFootersForFullscreenProgress:self.footerFullscreenProgress];
+
+  // If the device's size class has changed from RegularXRegular to another and
+  // vice-versa, the find bar should switch between regular mode and compact
+  // mode accordingly. Hide the findbar here and it will be reshown in [self
+  // updateToobar];
+  if (ShouldShowCompactToolbar(previousTraitCollection) !=
+      ShouldShowCompactToolbar(self)) {
+    if (!IsNativeFindInPageAvailable()) {
+      [self.findInPageCommandsHandler hideFindUI];
+    }
+    [self.textZoomHandler hideTextZoomUI];
+  }
+
+  // Update the toolbar visibility.
+  // TODO(crbug.com/40842406): Remove this and let
+  // `PrimaryToolbarViewController` or `ToolbarCoordinator` call the update ?
+  [self.toolbarCoordinator updateToolbar];
+
+  // Update the tab strip visibility.
+  if (self.tabStripView) {
+    if (IsVivaldiRunning()) {
+      // Note: (prio@vivaldi.com) On first run any event that triggers trait
+      // collection change method could lead the tab strip to show over
+      // onboarding flow. Skip updating the tab strip when first run is in
+      // progress.
+      if (!IsFirstRun()) {
+        [self showTabStripView:self.tabStripView];
+        [self.tabStripView layoutSubviews];
+      }
+
+      [self.legacyTabStripCoordinator hideTabStrip:![self canShowTabStrip]];
+      [self addConstraintsToPrimaryToolbar];
+      if (![VivaldiGlobalHelpers isDeviceTablet]) {
+        [self updateForFullscreenProgress:
+            self.fullscreenController->GetProgress()];
+      }
+    } else { // Vivaldi
+    [self showTabStripView:self.tabStripView];
+    [self.tabStripView layoutSubviews];
+    const bool canShowTabStrip = IsRegularXRegularSizeClass(self);
+
+    if (IsModernTabStripOrRaccoonEnabled()) {
+      [self.tabStripCoordinator hideTabStrip:!canShowTabStrip];
+    } else {
+      [self.legacyTabStripCoordinator hideTabStrip:!canShowTabStrip];
+    }
+    _fakeStatusBarView.hidden = !canShowTabStrip;
+    } // End Vivaldi
+
+    [self addConstraintsToPrimaryToolbar];
+    // If tabstrip is coming back due to a window resize or screen rotation,
+    // reset the full screen controller to adjust the tabstrip position.
+    if (ShouldShowCompactToolbar(previousTraitCollection) &&
+        !ShouldShowCompactToolbar(self)) {
+      [self
+          updateForFullscreenProgress:self.fullscreenController->GetProgress()];
+    }
+  }
+
+  [self setNeedsStatusBarAppearanceUpdate];
+
+  self.fullscreenController->BrowserTraitCollectionChangedEnd();
 }
 
 #pragma mark - Private Methods: Tap handling
@@ -2865,6 +2896,14 @@ const double kDelayForRatingPrompt = 10.0;
     [strongSelf executeAndClearForegroundTabWasAddedCompletionBlock:YES];
   };
 
+  // Skip animation if animations are disabled (e.g. new search action from
+  // toolbar).
+  if (!UIView.areAnimationsEnabled) {
+    [toolbarSnapshot removeFromSuperview];
+    commonCompletion();
+    return;
+  }
+
   CGPoint origin = [self lastTapPoint];
 
   CGRect frame = [self.contentArea convertRect:self.view.bounds
@@ -2902,10 +2941,40 @@ const double kDelayForRatingPrompt = 10.0;
       __weak __typeof(self) weakSelf = self;
       [self.blockingView.tabSwitcherButton
                  addAction:[UIAction actionWithHandler:^(UIAction* action) {
+                   if (IsIOSSoftLockEnabled()) {
+                     base::UmaHistogramEnumeration(
+                         kIncognitoLockOverlayInteractionHistogram,
+                         IncognitoLockOverlayInteraction::
+                             kSeeOtherTabsButtonClicked);
+                     base::RecordAction(base::UserMetricsAction(
+                         "IOS.IncognitoLock.Overlay.SeeOtherTabs"));
+                   }
                    [weakSelf.applicationCommandsHandler
                        displayTabGridInMode:TabGridOpeningMode::kRegular];
                  }]
           forControlEvents:UIControlEventTouchUpInside];
+
+      if (IsIOSSoftLockEnabled()) {
+        base::WeakPtr<WebStateList> webStateList = _webStateList;
+        id<IncognitoReauthCommands> reauthHandler = self.reauthHandler;
+        [self.blockingView.exitIncognitoButton
+                   addAction:[UIAction actionWithHandler:^(UIAction* action) {
+                     if (IsIOSSoftLockEnabled()) {
+                       base::UmaHistogramEnumeration(
+                           kIncognitoLockOverlayInteractionHistogram,
+                           IncognitoLockOverlayInteraction::
+                               kCloseIncognitoTabsButtonClicked);
+                       base::RecordAction(base::UserMetricsAction(
+                           "IOS.IncognitoLock.Overlay.CloseIncognitoTabs"));
+                     }
+                     if (webStateList) {
+                       CloseAllWebStates(*(webStateList),
+                                         WebStateList::CLOSE_USER_ACTION);
+                     }
+                     [reauthHandler manualAuthenticationOverride];
+                   }]
+            forControlEvents:UIControlEventTouchUpInside];
+      }
     }
 
     [self.view addSubview:self.blockingView];
@@ -2940,6 +3009,20 @@ const double kDelayForRatingPrompt = 10.0;
   }
 }
 
+- (void)setItemsRequireAuthentication:(BOOL)require
+                withPrimaryButtonText:(NSString*)text
+                   accessibilityLabel:(NSString*)accessibilityLabel {
+  [self setItemsRequireAuthentication:require];
+  if (require) {
+    [self.blockingView setAuthenticateButtonText:text
+                              accessibilityLabel:accessibilityLabel];
+  } else {
+    // No primary button text or accessibility label should be set when
+    // authentication is not required.
+    CHECK(!text);
+    CHECK(!accessibilityLabel);
+  }
+}
 #pragma mark - UIGestureRecognizerDelegate
 
 // Always return yes, as this tap should work with various recognizers,
@@ -3208,15 +3291,15 @@ const double kDelayForRatingPrompt = 10.0;
 }
 
 - (void)startObservingTabSettingChange {
-  if (!self.browserState)
+  if (!self.profile)
     return;
 
-  if (!self.browserState->GetPrefs())
+  if (!self.profile->GetPrefs())
     return;
 
   _tabBarEnabled =
       [[PrefBackedBoolean alloc]
-          initWithPrefService:self.browserState->GetPrefs()
+          initWithPrefService:self.profile->GetPrefs()
                      prefName:vivaldiprefs::kVivaldiDesktopTabsEnabled];
   [_tabBarEnabled setObserver:self];
   // Initialize to the correct value.
@@ -3224,16 +3307,16 @@ const double kDelayForRatingPrompt = 10.0;
 }
 
 - (void)startObservingWebsiteAppearanceAndAccentColorChange {
-  if (!self.browserState)
+  if (!self.profile)
     return;
 
-  if (!self.browserState->GetPrefs())
+  if (!self.profile->GetPrefs())
     return;
 
   // Dynamic accent color toggle
   _dynamicAccentColorEnabled =
       [[PrefBackedBoolean alloc]
-          initWithPrefService:self.browserState->GetPrefs()
+          initWithPrefService:self.profile->GetPrefs()
                      prefName:vivaldiprefs::kVivaldiDynamicAccentColorEnabled];
   [_dynamicAccentColorEnabled setObserver:self];
   [self booleanDidChange:_dynamicAccentColorEnabled];
@@ -3241,7 +3324,7 @@ const double kDelayForRatingPrompt = 10.0;
   // Remove previous observer before adding
   _prefChangeRegistrar.RemoveAll();
   // Custom accent color
-  _prefChangeRegistrar.Init(self.browserState->GetPrefs());
+  _prefChangeRegistrar.Init(self.profile->GetPrefs());
   _prefObserverBridge.reset(new PrefObserverBridge(self));
 
   _prefObserverBridge->ObserveChangesForPreference(
@@ -3252,7 +3335,7 @@ const double kDelayForRatingPrompt = 10.0;
       vivaldiprefs::kVivaldiWebsiteAppearanceStyle, &_prefChangeRegistrar);
 
   [VivaldiAppearanceSettingPrefs
-      setPrefService:self.browserState->GetPrefs()];
+      setPrefService:self.profile->GetPrefs()];
 }
 
 #pragma mark - Actions that triggers webstate and parent UI updates.
@@ -3446,7 +3529,6 @@ const double kDelayForRatingPrompt = 10.0;
             !IsSplitToolbarMode(self);
   }
 }
-// End Vivaldi
 
 - (void)openWhatsNewTab {
   GURL url;
@@ -3461,7 +3543,7 @@ const double kDelayForRatingPrompt = 10.0;
 }
 
 - (void)openNewTabWithSearchText:(NSString*)searchText {
-  if (!self.browserState || [searchText length] == 0)
+  if (!self.profile || [searchText length] == 0)
     return;
 
   GURL url;
@@ -3469,7 +3551,7 @@ const double kDelayForRatingPrompt = 10.0;
   params.web_params.transition_type = ui::PAGE_TRANSITION_TYPED;
 
   TemplateURLService* templateURLService =
-      ios::TemplateURLServiceFactory::GetForBrowserState(self.browserState);
+      ios::TemplateURLServiceFactory::GetForProfile(self.profile);
 
   TemplateURLService::DefaultSearchType type = _isOffTheRecord ?
     TemplateURLService::kDefaultSearchPrivate :
@@ -3531,7 +3613,12 @@ const double kDelayForRatingPrompt = 10.0;
   [self.vivaldiStickyToolbarView setTintColor:[self steadyViewTintColor]];
   self.tabStripContainer.backgroundColor = [self accentColor];
   _fakeStatusBarView.backgroundColor = [self fakeStatusBarViewColor];
-  _secondaryToolbarAccentColorContainer.backgroundColor = [self accentColor];
+  if (self.isBottomOmniboxEnabled) {
+    _secondaryToolbarAccentColorContainer.backgroundColor = [self accentColor];
+  } else {
+    _secondaryToolbarAccentColorContainer.backgroundColor =
+        [UIColor colorNamed:kBackgroundColor];
+  }
   [self setNeedsStatusBarAppearanceUpdate];
 }
 
@@ -3786,6 +3873,15 @@ const double kDelayForRatingPrompt = 10.0;
       == UIUserInterfaceStyleLight;
 }
 
+// Make the content area respect safe area insets.
+- (void)updateContentAreaFrame {
+  CGRect contentAreaFrame = self.contentArea.frame;
+  contentAreaFrame.origin.x = self.rootSafeAreaInsets.left;
+  contentAreaFrame.size.width = CGRectGetWidth([self view].bounds) -
+      self.rootSafeAreaInsets.left - self.rootSafeAreaInsets.right;
+  self.contentArea.frame = contentAreaFrame;
+}
+
 #pragma mark - LocationBarSteadyViewConsumer
 - (void)updateLocationText:(NSString*)text clipTail:(BOOL)clipTail {
   // No op.
@@ -3817,6 +3913,14 @@ const double kDelayForRatingPrompt = 10.0;
   // no op.
 }
 
+- (void)attemptShowingLensOverlayIPH {
+  // No op.
+}
+
+- (void)recordLensOverlayAvailability {
+  // No op.
+}
+
 #pragma mark - Boolean Observer
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
   if (observableBoolean == _bottomOmniboxEnabled ||
@@ -3840,5 +3944,6 @@ const double kDelayForRatingPrompt = 10.0;
 - (void)didFinishSideSwipeNavigation {
   [self updateUIElementsWithThemeColor];
 }
+// End Vivaldi
 
 @end

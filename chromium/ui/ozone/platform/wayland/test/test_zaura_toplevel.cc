@@ -48,36 +48,22 @@ void SetOrigin(struct wl_client* client,
   NOTIMPLEMENTED_LOG_ONCE();
 }
 
-void SetRestoreInfo(struct wl_client* client,
-                    struct wl_resource* resource,
-                    int32_t restore_session_id,
-                    int32_t restore_window_id) {
-  NOTREACHED_IN_MIGRATION();
-}
-
 void SetSystemModal(struct wl_client* client, struct wl_resource* resource) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void UnsetSystemModal(struct wl_client* client, struct wl_resource* resource) {
   NOTIMPLEMENTED_LOG_ONCE();
 }
 
-void SetRestoreInfoWithWindowIdSource(struct wl_client* client,
-                                      struct wl_resource* resource,
-                                      int32_t restore_session_id,
-                                      const char* restore_window_id_source) {
-  NOTREACHED_IN_MIGRATION();
-}
-
 void SetDecoration(struct wl_client* client,
                    struct wl_resource* resource,
                    uint32_t type) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void SetFloat(struct wl_client* client, struct wl_resource* resource) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void UnSetFloat(struct wl_client* client, struct wl_resource* resource) {
@@ -208,10 +194,10 @@ const struct zaura_toplevel_interface kTestZAuraToplevelImpl = {
     &SurfaceSubmissionInPixelCoordinates,
     &SetSupportsScreenCoordinates,
     &SetWindowBounds,
-    &SetRestoreInfo,
+    nullptr,
     &SetSystemModal,
     &UnsetSystemModal,
-    &SetRestoreInfoWithWindowIdSource,
+    nullptr,
     &SetDecoration,
     &DestroyResource,
     &SetFloat,

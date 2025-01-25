@@ -20,13 +20,13 @@
 
 namespace openscreen {
 
-// Generates a new RSA key pair with bit width |key_bits|.
+// Generates a new RSA key pair with bit width `key_bits`.
 bssl::UniquePtr<EVP_PKEY> GenerateRsaKeyPair(int key_bits = 2048);
 
-// Creates a new X509 certificate having the given |name| and |duration| until
-// expiration, and based on the given |key_pair|.  If |issuer| and |issuer_key|
+// Creates a new X509 certificate having the given `name` and `duration` until
+// expiration, and based on the given `key_pair`.  If `issuer` and `issuer_key`
 // are provided, they are used to set the issuer information, otherwise it will
-// be self-signed.  |make_ca| determines whether additional extensions are added
+// be self-signed.  `make_ca` determines whether additional extensions are added
 // to make it a valid certificate authority cert.
 ErrorOr<bssl::UniquePtr<X509>> CreateSelfSignedX509Certificate(
     std::string_view name,

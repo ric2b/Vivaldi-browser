@@ -439,8 +439,6 @@ void av1_loop_restoration_filter_frame_init(AV1LrStruct *lr_ctxt,
                                             YV12_BUFFER_CONFIG *frame,
                                             struct AV1Common *cm,
                                             int optimized_lr, int num_planes);
-void av1_loop_restoration_copy_planes(AV1LrStruct *loop_rest_ctxt,
-                                      struct AV1Common *cm, int num_planes);
 void av1_foreach_rest_unit_in_row(
     RestorationTileLimits *limits, int plane_w,
     rest_unit_visitor_t on_rest_unit, int row_number, int unit_size,

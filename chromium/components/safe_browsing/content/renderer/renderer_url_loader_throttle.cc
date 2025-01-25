@@ -112,6 +112,9 @@ void RendererURLLoaderThrottle::WillRedirectRequest(
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   BindExtensionWebRequestReporterPipeIfDetached();
 
+  // NOTE(andre@vivaldi.com) : This was added as we got a lot of reports
+  // indicating a broken connection here. See VB-110785.
+  if (extension_web_request_reporter_) {
   // Send redirected request data to the browser if request originated from an
   // extension and the redirected url is HTTP/HTTPS scheme only.
   if (!origin_extension_id_.empty() &&
@@ -123,6 +126,7 @@ void RendererURLLoaderThrottle::WillRedirectRequest(
             ? mojom::WebRequestContactInitiatorType::kContentScript
             : mojom::WebRequestContactInitiatorType::kExtension);
   }
+  } // added by Vivaldi.
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   if (!url_checker_) {

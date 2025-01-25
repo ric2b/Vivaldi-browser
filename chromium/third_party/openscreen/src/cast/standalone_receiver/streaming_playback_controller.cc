@@ -71,7 +71,7 @@ void StreamingPlaybackController::OnRemotingNegotiated(
   remoting_receiver_->SendInitializeMessage(
       [this, receivers = negotiation.receivers](AudioCodec audio_codec,
                                                 VideoCodec video_codec) {
-        // The configurations in |negotiation| do not have the actual codecs,
+        // The configurations in `negotiation` do not have the actual codecs,
         // only REMOTE_AUDIO and REMOTE_VIDEO. Once we receive the
         // initialization callback method, we can override with the actual
         // codecs here.

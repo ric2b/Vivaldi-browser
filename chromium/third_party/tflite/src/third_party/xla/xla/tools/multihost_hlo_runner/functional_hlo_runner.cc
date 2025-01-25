@@ -38,10 +38,12 @@ limitations under the License.
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "xla/client/executable_build_options.h"
-#include "xla/client/xla_computation.h"
+#include "xla/hlo/builder/xla_computation.h"
 #include "xla/hlo/ir/hlo_input_output_alias_config.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/hlo/ir/hlo_sharding.h"
+#include "xla/hlo/parser/hlo_parser.h"
+#include "xla/hlo/pass/hlo_pass_pipeline.h"
 #include "xla/layout.h"
 #include "xla/literal.h"
 #include "xla/literal_util.h"
@@ -56,8 +58,6 @@ limitations under the License.
 #include "xla/service/computation_placer.h"
 #include "xla/service/hlo.pb.h"
 #include "xla/service/hlo_module_config.h"
-#include "xla/service/hlo_parser.h"
-#include "xla/service/hlo_pass_pipeline.h"
 #include "xla/shape_util.h"
 #include "xla/status_macros.h"
 #include "xla/tests/test_utils.h"
@@ -306,8 +306,12 @@ absl::StatusOr<CompileOptions> FunctionalHloRunner::CreateCompileOptions(
   build_options.set_process_index(task_id);
   build_options.set_process_count(num_nodes);
   build_options.set_key_value_store(kv_store);
-  if (raw_options.spmd_mode == SpmdMode::kUseSpmdPartitioning) {
+  if (raw_options.spmd_mode == SpmdMode::kUseSpmdPartitioning ||
+      raw_options.spmd_mode == SpmdMode::kUseShardyPartitioning) {
     build_options.set_use_spmd_partitioning(true);
+    if (raw_options.spmd_mode == SpmdMode::kUseShardyPartitioning) {
+      build_options.set_use_shardy_partitioner(true);
+    }
   }
   if (!build_options.has_device_assignment() &&
       !raw_options.num_slices.has_value()) {
@@ -400,6 +404,8 @@ FunctionalHloRunner::CreateExecutableBuildOptionsFromExecutionOptions(
   build_options.set_num_partitions(execution_options.num_partitions());
   build_options.set_use_spmd_partitioning(
       execution_options.use_spmd_partitioning());
+  build_options.set_use_shardy_partitioner(
+      execution_options.use_shardy_partitioner());
   build_options.set_use_auto_spmd_partitioning(
       execution_options.use_auto_spmd_partitioning());
   build_options.set_deduplicate_hlo(execution_options.deduplicate_hlo());
@@ -816,14 +822,13 @@ FunctionalHloRunner::Run(PjRtClient& client, PjRtLoadedExecutable* executable,
         flattened_arguments.insert({device_id, std::move(flattened_argument)});
       }
       return CopyArgumentsToDevice(client, executable, flattened_arguments,
-                                   running_options.log_input_output(),
+                                   running_options,
                                    /*flattened_arguments=*/true);
     }
     // If the per-device argument is not a single tuple, we ignore the
     // flatten_tupled_arguments parameter and assume the provided arguments have
     // already been flattened.
-    return CopyArgumentsToDevice(client, executable, arguments,
-                                 running_options.log_input_output(),
+    return CopyArgumentsToDevice(client, executable, arguments, running_options,
                                  /*flattened_arguments=*/false);
   };
   return RunInternal(client, executable, create_argument_buffers_on_device,
@@ -1158,14 +1163,13 @@ FunctionalHloRunner::CreateArgumentsOnDevice(
   }
 
   if (kUseSharedInputs) {
-    return CopyArgumentsToDevice(
-        client, executable, per_device_argument_literals,
-        running_options.log_input_output(), flatten_arguments,
-        /*clone_device0_arguments=*/true);
+    return CopyArgumentsToDevice(client, executable,
+                                 per_device_argument_literals, running_options,
+                                 flatten_arguments,
+                                 /*clone_device0_arguments=*/true);
   }
   return CopyArgumentsToDevice(client, executable, per_device_argument_literals,
-                               running_options.log_input_output(),
-                               flatten_arguments);
+                               running_options, flatten_arguments);
 }
 
 absl::StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
@@ -1255,8 +1259,10 @@ FunctionalHloRunner::CreateUninitializedArgumentsOnDevice(
 absl::StatusOr<std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>>
 FunctionalHloRunner::CopyArgumentsToDevice(
     PjRtClient& client, const PjRtLoadedExecutable* executable,
-    const PerDeviceLiteralVecType& arguments, bool log_input,
-    bool flattened_arguments, bool clone_device0_arguments) {
+    const PerDeviceLiteralVecType& arguments,
+    const RunningOptions& running_options, bool flattened_arguments,
+    bool clone_device0_arguments) {
+  const bool log_input = running_options.log_input_output();
   absl::Span<PjRtDevice* const> addressable_devices =
       executable->addressable_devices();
   size_t num_addressable_devices = addressable_devices.size();
@@ -1295,20 +1301,22 @@ FunctionalHloRunner::CopyArgumentsToDevice(
     TF_RET_CHECK(!shape.IsTuple()) << "Param tuple without flattened_arguments";
     return non_tuple_memory_space(shape);
   };
-  auto buffer_from_host_literal = [&client, &argument_memory_space](
-                                      const HloModule* module,
-                                      PjRtDevice* device, int arg_i,
-                                      const Literal& literal)
+  auto buffer_from_host_literal =
+      [&client, &argument_memory_space, &running_options](
+          const HloModule* module, PjRtDevice* device, int arg_i,
+          const Literal& literal)
       -> absl::StatusOr<std::unique_ptr<PjRtBuffer>> {
+    const Layout* layout = nullptr;
+    if (running_options.use_argument_host_layout &&
+        literal.shape().has_layout()) {
+      layout = &literal.shape().layout();
+    }
     if (client.memory_spaces().empty()) {
-      return client.BufferFromHostLiteral(
-          literal, device,
-          literal.shape().has_layout() ? &literal.shape().layout() : nullptr);
+      return client.BufferFromHostLiteral(literal, device, layout);
     }
     TF_ASSIGN_OR_RETURN(PjRtMemorySpace * memory_space,
                         argument_memory_space(module, device, arg_i));
-    return client.BufferFromHostLiteral(literal, memory_space,
-                                        /* device_layout */ nullptr);
+    return client.BufferFromHostLiteral(literal, memory_space, layout);
   };
 
   absl::Span<const PjRtLoadedExecutable::LogicalDeviceIds>

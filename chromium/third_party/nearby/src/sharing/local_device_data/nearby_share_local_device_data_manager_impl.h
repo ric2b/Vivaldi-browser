@@ -51,16 +51,14 @@ class NearbyShareLocalDeviceDataManagerImpl
         Context* context,
         nearby::sharing::api::PreferenceManager& preference_manager,
         AccountManager& account_manager, nearby::DeviceInfo& device_info,
-        nearby::sharing::api::SharingRpcClientFactory* rpc_client_factory,
-        NearbyShareProfileInfoProvider* profile_info_provider);
+        nearby::sharing::api::SharingRpcClientFactory* rpc_client_factory);
     static void SetFactoryForTesting(Factory* test_factory);
 
    protected:
     virtual ~Factory();
     virtual std::unique_ptr<NearbyShareLocalDeviceDataManager> CreateInstance(
         Context* context,
-        nearby::sharing::api::SharingRpcClientFactory* rpc_client_factory,
-        NearbyShareProfileInfoProvider* profile_info_provider) = 0;
+        nearby::sharing::api::SharingRpcClientFactory* rpc_client_factory) = 0;
 
    private:
     static Factory* test_factory_;
@@ -73,27 +71,19 @@ class NearbyShareLocalDeviceDataManagerImpl
       Context* context,
       nearby::sharing::api::PreferenceManager& preference_manager,
       AccountManager& account_manager, nearby::DeviceInfo& device_info,
-      nearby::sharing::api::SharingRpcClientFactory* rpc_client_factory,
-      NearbyShareProfileInfoProvider* profile_info_provider);
+      nearby::sharing::api::SharingRpcClientFactory* rpc_client_factory);
 
   // NearbyShareLocalDeviceDataManager:
   std::string GetId() override;
   std::string GetDeviceName() const override;
-  std::optional<std::string> GetFullName() const override;
-  std::optional<std::string> GetIconUrl() const override;
   DeviceNameValidationResult ValidateDeviceName(
       absl::string_view name) override;
   DeviceNameValidationResult SetDeviceName(absl::string_view name) override;
-  void DownloadDeviceData() override;
   void UploadContacts(std::vector<nearby::sharing::proto::Contact> contacts,
                       UploadCompleteCallback callback) override;
   void UploadCertificates(
       std::vector<nearby::sharing::proto::PublicCertificate> certificates,
       UploadCompleteCallback callback) override;
-  void OnStart() override;
-  void OnStop() override;
-
-  std::optional<std::string> GetIconToken() const;
 
   // Creates a default device name of the form "<given name>'s <device type>."
   // For example, "Josh's Chromebook." If a given name cannot be found, returns
@@ -101,17 +91,11 @@ class NearbyShareLocalDeviceDataManagerImpl
   // will be truncated, for example "Mi...'s Chromebook."
   std::string GetDefaultDeviceName() const;
 
-  void HandleUpdateDeviceResponse(
-      const std::optional<nearby::sharing::proto::UpdateDeviceResponse>&
-          response);
-
   nearby::sharing::api::PreferenceManager& preference_manager_;
   AccountManager& account_manager_;
   nearby::DeviceInfo& device_info_;
-  NearbyShareProfileInfoProvider* const profile_info_provider_;
   std::unique_ptr<nearby::sharing::api::SharingRpcClient> nearby_share_client_;
   const std::string device_id_;
-  std::unique_ptr<NearbyShareScheduler> download_device_data_scheduler_;
   std::unique_ptr<TaskRunner> executor_;
 };
 

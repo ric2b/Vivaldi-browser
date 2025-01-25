@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <limits>
 #include <vector>
 
 #include "avif/avif.h"
@@ -50,9 +51,8 @@ DecoderPtr CreateAvifDecoder(avifCodecChoice codec_choice, int max_threads,
                              uint32_t image_count_limit,
                              avifStrictFlags strict_flags);
 #if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
-enum class GainMapDecodeMode { kDontDecode, kMetadataOnly, kDecode };
-DecoderPtr AddGainMapOptionsToDecoder(DecoderPtr decoder,
-                                      GainMapDecodeMode gain_map_decode_mode);
+DecoderPtr AddGainMapOptionsToDecoder(
+    DecoderPtr decoder, avifImageContentTypeFlags image_content_to_decode);
 #endif
 
 //------------------------------------------------------------------------------
@@ -169,6 +169,63 @@ inline auto ArbitraryAvifAnim() {
   return fuzztest::OneOf(ArbitraryAvifAnim8b(), ArbitraryAvifAnim16b());
 }
 
+#if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
+// TODO: Try StructOf<Metadata>(StructOf<uint32_t[3]>())?
+ImagePtr AddGainMapToImage(
+    ImagePtr image, ImagePtr gain_map, int32_t gain_map_min_n0,
+    int32_t gain_map_min_n1, int32_t gain_map_min_n2, uint32_t gain_map_min_d0,
+    uint32_t gain_map_min_d1, uint32_t gain_map_min_d2, int32_t gain_map_max_n0,
+    int32_t gain_map_max_n1, int32_t gain_map_max_n2, uint32_t gain_map_max_d0,
+    uint32_t gain_map_max_d1, uint32_t gain_map_max_d2,
+    uint32_t gain_map_gamma_n0, uint32_t gain_map_gamma_n1,
+    uint32_t gain_map_gamma_n2, uint32_t gain_map_gamma_d0,
+    uint32_t gain_map_gamma_d1, uint32_t gain_map_gamma_d2,
+    int32_t base_offset_n0, int32_t base_offset_n1, int32_t base_offset_n2,
+    uint32_t base_offset_d0, uint32_t base_offset_d1, uint32_t base_offset_d2,
+    int32_t alternate_offset_n0, int32_t alternate_offset_n1,
+    int32_t alternate_offset_n2, uint32_t alternate_offset_d0,
+    uint32_t alternate_offset_d1, uint32_t alternate_offset_d2,
+    uint32_t base_hdr_headroom_n, uint32_t base_hdr_headroom_d,
+    uint32_t alternate_hdr_headroom_n, uint32_t alternate_hdr_headroom_d,
+    bool use_base_color_space);
+
+inline auto ArbitraryAvifImageWithGainMap() {
+  return fuzztest::Map(
+      AddGainMapToImage, ArbitraryAvifImage(), ArbitraryAvifImage(),
+      fuzztest::Arbitrary<int32_t>(), fuzztest::Arbitrary<int32_t>(),
+      fuzztest::Arbitrary<int32_t>(),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::Arbitrary<int32_t>(), fuzztest::Arbitrary<int32_t>(),
+      fuzztest::Arbitrary<int32_t>(),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::Arbitrary<int32_t>(), fuzztest::Arbitrary<int32_t>(),
+      fuzztest::Arbitrary<int32_t>(),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::Arbitrary<int32_t>(), fuzztest::Arbitrary<int32_t>(),
+      fuzztest::Arbitrary<int32_t>(),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::Arbitrary<uint32_t>(),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::Arbitrary<uint32_t>(),
+      fuzztest::InRange<uint32_t>(1, std::numeric_limits<uint32_t>::max()),
+      fuzztest::Arbitrary<bool>());
+}
+#endif
+
 // Generator for an arbitrary EncoderPtr.
 inline auto ArbitraryAvifEncoder() {
   const auto codec_choice = fuzztest::ElementOf<avifCodecChoice>(
@@ -223,13 +280,18 @@ inline auto ArbitraryBaseAvifDecoder() {
 
 #if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
 // Generator for an arbitrary DecoderPtr with base options and gain map
-// options fuzzed, with the exception of 'ignoreColorAndAlpha' (because it would
-// break most tests' assumptions).
+// options fuzzed.
 inline auto ArbitraryAvifDecoderWithGainMapOptions() {
+  // Always decode at least color+alpha, since most tests
+  // assume that if the file/buffer is successfully decoded.
   return fuzztest::Map(AddGainMapOptionsToDecoder, ArbitraryBaseAvifDecoder(),
-                       fuzztest::ElementOf({GainMapDecodeMode::kDontDecode,
-                                            GainMapDecodeMode::kMetadataOnly,
-                                            GainMapDecodeMode::kDecode}));
+                       fuzztest::ElementOf<avifImageContentTypeFlags>({
+                         AVIF_IMAGE_CONTENT_COLOR_AND_ALPHA
+#if defined(AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP)
+                         , AVIF_IMAGE_CONTENT_COLOR_AND_ALPHA |
+                               AVIF_IMAGE_CONTENT_GAIN_MAP
+#endif
+                       }));
 }
 
 // Generator for an arbitrary DecoderPtr.
@@ -240,16 +302,6 @@ inline auto ArbitraryAvifDecoder() {
 // Generator for an arbitrary DecoderPtr.
 inline auto ArbitraryAvifDecoder() { return ArbitraryBaseAvifDecoder(); }
 #endif  // AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP
-
-//------------------------------------------------------------------------------
-// Environment setup
-
-// Sets the environment variable 'name' to the 'value' during the setup step.
-::testing::Environment* SetEnv(const char* name, const char* value);
-
-inline ::testing::Environment* SetStackLimitTo512x1024Bytes() {
-  return SetEnv("FUZZTEST_STACK_LIMIT", "524288");
-}
 
 //------------------------------------------------------------------------------
 

@@ -30,6 +30,12 @@
 
 namespace media_router {
 
+bool AccessCodeCastUIConfig::IsWebUIEnabled(
+    content::BrowserContext* browser_context) {
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  return media_router::GetAccessCodeCastEnabledPref(profile);
+}
+
 AccessCodeCastUI::AccessCodeCastUI(content::WebUI* web_ui)
     : MojoWebDialogUI(web_ui) {
   content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(

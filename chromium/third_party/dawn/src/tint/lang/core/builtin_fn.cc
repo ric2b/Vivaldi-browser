@@ -426,11 +426,17 @@ BuiltinFn ParseBuiltinFn(std::string_view name) {
     if (name == "subgroupAdd") {
         return BuiltinFn::kSubgroupAdd;
     }
+    if (name == "subgroupInclusiveAdd") {
+        return BuiltinFn::kSubgroupInclusiveAdd;
+    }
     if (name == "subgroupExclusiveAdd") {
         return BuiltinFn::kSubgroupExclusiveAdd;
     }
     if (name == "subgroupMul") {
         return BuiltinFn::kSubgroupMul;
+    }
+    if (name == "subgroupInclusiveMul") {
+        return BuiltinFn::kSubgroupInclusiveMul;
     }
     if (name == "subgroupExclusiveMul") {
         return BuiltinFn::kSubgroupExclusiveMul;
@@ -733,10 +739,14 @@ const char* str(BuiltinFn i) {
             return "subgroupShuffleDown";
         case BuiltinFn::kSubgroupAdd:
             return "subgroupAdd";
+        case BuiltinFn::kSubgroupInclusiveAdd:
+            return "subgroupInclusiveAdd";
         case BuiltinFn::kSubgroupExclusiveAdd:
             return "subgroupExclusiveAdd";
         case BuiltinFn::kSubgroupMul:
             return "subgroupMul";
+        case BuiltinFn::kSubgroupInclusiveMul:
+            return "subgroupInclusiveMul";
         case BuiltinFn::kSubgroupExclusiveMul:
             return "subgroupExclusiveMul";
         case BuiltinFn::kSubgroupAnd:
@@ -829,6 +839,39 @@ bool IsPacked4x8IntegerDotProductBuiltin(BuiltinFn f) {
            f == BuiltinFn::kPack4XI8 || f == BuiltinFn::kPack4XU8 ||
            f == BuiltinFn::kPack4XI8Clamp || f == BuiltinFn::kPack4XU8Clamp ||
            f == BuiltinFn::kUnpack4XI8 || f == BuiltinFn::kUnpack4XU8;
+}
+
+bool IsSubgroup(BuiltinFn f) {
+    switch (f) {
+        case BuiltinFn::kSubgroupBallot:
+        case BuiltinFn::kSubgroupElect:
+        case BuiltinFn::kSubgroupBroadcast:
+        case BuiltinFn::kSubgroupBroadcastFirst:
+        case BuiltinFn::kSubgroupShuffle:
+        case BuiltinFn::kSubgroupShuffleXor:
+        case BuiltinFn::kSubgroupShuffleUp:
+        case BuiltinFn::kSubgroupShuffleDown:
+        case BuiltinFn::kSubgroupAdd:
+        case BuiltinFn::kSubgroupInclusiveAdd:
+        case BuiltinFn::kSubgroupExclusiveAdd:
+        case BuiltinFn::kSubgroupMul:
+        case BuiltinFn::kSubgroupInclusiveMul:
+        case BuiltinFn::kSubgroupExclusiveMul:
+        case BuiltinFn::kSubgroupAnd:
+        case BuiltinFn::kSubgroupOr:
+        case BuiltinFn::kSubgroupXor:
+        case BuiltinFn::kSubgroupMin:
+        case BuiltinFn::kSubgroupMax:
+        case BuiltinFn::kSubgroupAll:
+        case BuiltinFn::kSubgroupAny:
+        case BuiltinFn::kQuadBroadcast:
+        case BuiltinFn::kQuadSwapX:
+        case BuiltinFn::kQuadSwapY:
+        case BuiltinFn::kQuadSwapDiagonal:
+            return true;
+        default:
+            return false;
+    }
 }
 
 bool HasSideEffects(BuiltinFn f) {

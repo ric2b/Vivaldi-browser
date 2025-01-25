@@ -437,6 +437,11 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   // blocking user's access to the background web content.
   bool modal_context_menu = true;
 
+  // Whether the safe-area-insets should be changed dynamically based on
+  // browser controls shown ratio. This value is used in web settings only
+  // when feature DynamicSafeAreaInsets is enabled.
+  bool dynamic_safe_area_insets_enabled = false;
+
   // Vivaldi specific preferences:
   // Maps to the Cycle focus setting in Vivaldi.
   bool allow_tab_cycle_from_webpage_into_ui = false;
@@ -444,7 +449,7 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   bool allow_access_keys = true;
 
   bool vivaldi_show_context_menu_on_double_click = false;
-  // end vivaldi specific
+  // End Vivaldi specific
 
   // We try to keep the default values the same as the default values in
   // chrome, except for the cases where it would require lots of extra work for

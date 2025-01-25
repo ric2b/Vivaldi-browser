@@ -13,6 +13,9 @@ inline constexpr char kSaneBackendsPfuDlcId[] = "sane-backends-pfu";
 // ID of the sane-backends-extras DLC.
 inline constexpr char kSaneBackendsExtrasDlcId[] = "sane-backends-extras-dlc";
 
+// ID of the sane-backends-canon DLC.
+inline constexpr char kSaneBackendsCanonDlcId[] = "sane-backends-canon";
+
 }  // namespace lorgnette
 
 #endif  // SYSTEM_API_CONSTANTS_LORGNETTE_DLC_H_

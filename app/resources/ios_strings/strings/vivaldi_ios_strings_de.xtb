@@ -2,24 +2,27 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="de">
 <translation id="1063263220330818888">Private Suche</translation>
+<translation id="1097355661841455597">Wir würden gerne Ihre Meinung hören.</translation>
 <translation id="1137850887415122856">Touch ID, Face ID oder einen Passcode einrichten, um private Tabs zu sperren.</translation>
 <translation id="1310184829257917508">Nachfragen zum Öffnen von Links aus anderen Apps im privaten Modus</translation>
-<translation id="1512201558627495343">Neuer privater Tab</translation>
 <translation id="207677936531967364">Neue private Tab Seite</translation>
+<translation id="2418705169960294134">Neuer privater Tab</translation>
 <translation id="2899836479226240291">Du kannst Links in Vivaldi automatisch öffnen, indem du es zu deiner Standard-Browser-App machst.</translation>
-<translation id="3365529507898144230">In Fotos speichern</translation>
+<translation id="3463990832590571933">In neuem privaten Tab öffnen</translation>
 <translation id="3473652525653758699">Neues privates Fenster</translation>
 <translation id="3501504415290398157"><ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> verwenden, um private Tabs zu entsperren.</translation>
 <translation id="3692650606013198282">Privat öffnen</translation>
-<translation id="3709782636417497984">In neuem privaten Tab öffnen</translation>
 <translation id="3981599532037327317">${url} privat öffnen</translation>
 <translation id="398477389655464998">Link zum Hervorheben kopieren</translation>
-<translation id="4620246317052452550">Gelesene Seiten</translation>
+<translation id="4026745073321351206">🙄 Ein Problem entdeckt?</translation>
 <translation id="4755216899422789286">URLs in Vivaldi öffnen</translation>
+<translation id="5431239785743546285">Gelesene Seiten</translation>
 <translation id="6233792867654386826">Öffnet eingegebene URLs in Vivaldi.</translation>
 <translation id="6827597288286078054">Private Suche</translation>
 <translation id="7307970171564921489">Private Tabs mit <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> entsperren</translation>
 <translation id="7347289093190902150">Privat öffnen?</translation>
 <translation id="7549299604720382000">Neuer privater Tab</translation>
+<translation id="7920949005883349320">Datenschutz und Sicherheit</translation>
+<translation id="8031932676440435547">In Fotos speichern</translation>
 <translation id="8326104954595890674">Neuer privater Tab</translation>
 </translationbundle>

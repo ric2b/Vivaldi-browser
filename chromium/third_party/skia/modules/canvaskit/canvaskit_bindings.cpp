@@ -91,8 +91,8 @@
 #include "include/gpu/ganesh/GrTypes.h"
 #include "include/gpu/ganesh/gl/GrGLBackendSurface.h"
 #include "include/gpu/ganesh/gl/GrGLDirectContext.h"
-#include "include/gpu/ganesh/gl/GrGLMakeWebGLInterface.h"
 #include "include/gpu/ganesh/gl/GrGLInterface.h"
+#include "include/gpu/ganesh/gl/GrGLMakeWebGLInterface.h"
 #include "include/gpu/ganesh/gl/GrGLTypes.h"
 #include "src/gpu/RefCntedCallback.h"
 #include "src/gpu/ganesh/GrProxyProvider.h"
@@ -1425,6 +1425,12 @@ EMSCRIPTEN_BINDINGS(Skia) {
             }
             self.getDeviceClipBounds(outputRect);
         }))
+
+        .function("_quickReject", optional_override([](const SkCanvas& self, WASMPointerF32 fPtr)->bool {
+          const SkRect* rect = reinterpret_cast<const SkRect*>(fPtr);
+          return self.quickReject(*rect);
+        }))
+
         // 4x4 matrix functions
         // Just like with getTotalMatrix, we allocate the buffer for the 16 floats to go in from
         // interface.js, so it can also free them when its done.
@@ -1465,9 +1471,10 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("rotate", select_overload<void (SkScalar, SkScalar, SkScalar)>(&SkCanvas::rotate))
         .function("save", &SkCanvas::save)
         .function("_saveLayer", optional_override([](SkCanvas& self, const SkPaint* p, WASMPointerF32 fPtr,
-                                                     const SkImageFilter* backdrop, SkCanvas::SaveLayerFlags flags)->int {
+                                                     const SkImageFilter* backdrop, SkCanvas::SaveLayerFlags flags,
+                                                     SkTileMode backdropFilterTileMode)->int {
             SkRect* bounds = reinterpret_cast<SkRect*>(fPtr);
-            return self.saveLayer(SkCanvas::SaveLayerRec(bounds, p, backdrop, flags));
+            return self.saveLayer(SkCanvas::SaveLayerRec(bounds, p, backdrop, backdropFilterTileMode, nullptr, flags));
         }), allow_raw_pointers())
         .function("saveLayerPaint", optional_override([](SkCanvas& self, const SkPaint p)->int {
             return self.saveLayer(SkCanvas::SaveLayerRec(nullptr, &p, 0));

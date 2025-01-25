@@ -300,7 +300,7 @@ IDBObjectStore* IDBDatabase::createObjectStore(
 IDBTransaction* IDBDatabase::transaction(
     ScriptState* script_state,
     const V8UnionStringOrStringSequence* store_names,
-    const String& mode_string,
+    const V8IDBTransactionMode& v8_mode,
     const IDBTransactionOptions* options,
     ExceptionState& exception_state) {
   TRACE_EVENT0("IndexedDB", "IDBDatabase::transaction");
@@ -355,11 +355,12 @@ IDBTransaction* IDBDatabase::transaction(
     object_store_ids.push_back(object_store_id);
   }
 
-  mojom::IDBTransactionMode mode = IDBTransaction::StringToMode(mode_string);
-  if (mode != mojom::IDBTransactionMode::ReadOnly &&
-      mode != mojom::IDBTransactionMode::ReadWrite) {
+  mojom::blink::IDBTransactionMode mode =
+      IDBTransaction::EnumToMode(v8_mode.AsEnum());
+  if (mode != mojom::blink::IDBTransactionMode::ReadOnly &&
+      mode != mojom::blink::IDBTransactionMode::ReadWrite) {
     exception_state.ThrowTypeError(
-        "The mode provided ('" + mode_string +
+        "The mode provided ('" + v8_mode.AsString() +
         "') is not one of 'readonly' or 'readwrite'.");
     return nullptr;
   }
@@ -601,8 +602,9 @@ void IDBDatabase::GetAll(int64_t transaction_id,
                          int64_t object_store_id,
                          int64_t index_id,
                          const IDBKeyRange* key_range,
+                         mojom::blink::IDBGetAllResultType result_type,
                          int64_t max_count,
-                         bool key_only,
+                         mojom::blink::IDBCursorDirection direction,
                          IDBRequest* request) {
   IDBCursor::ResetCursorPrefetchCaches(transaction_id, nullptr);
 
@@ -610,9 +612,9 @@ void IDBDatabase::GetAll(int64_t transaction_id,
       mojom::blink::IDBKeyRange::From(key_range);
   database_remote_->GetAll(
       transaction_id, object_store_id, index_id, std::move(key_range_ptr),
-      key_only, max_count,
+      result_type, max_count, direction,
       WTF::BindOnce(&IDBRequest::OnGetAll, WrapWeakPersistent(request),
-                    key_only));
+                    result_type));
 }
 
 void IDBDatabase::SetIndexKeys(int64_t transaction_id,
@@ -740,6 +742,7 @@ void IDBDatabase::OnSchedulerLifecycleStateChanged(
   if (new_priority == scheduling_priority_) {
     return;
   }
+  scheduling_priority_ = new_priority;
   if (database_remote_) {
     database_remote_->UpdatePriority(scheduling_priority_);
   }

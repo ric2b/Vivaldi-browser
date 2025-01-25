@@ -174,4 +174,15 @@ enum class GrSyncCpu : bool {
     kYes = true,
 };
 
+enum class GrMarkFrameBoundary : bool {
+    kNo = false,
+    kYes = true,
+};
+
+struct GrSubmitInfo {
+    GrSyncCpu fSync = GrSyncCpu::kNo;
+    GrMarkFrameBoundary fMarkBoundary = GrMarkFrameBoundary::kNo;
+    uint64_t fFrameID = 0;
+};
+
 #endif

@@ -13,7 +13,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
-import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -38,7 +37,6 @@ import java.util.List;
 class TabListRecyclerView extends RecyclerView
         implements TabListMediator.TabGridAccessibilityHelper, RunOnNextLayout {
     private boolean mBlockTouchInput;
-    private ImageView mShadowImageView;
     // Null unless item animations are disabled.
     @Nullable private RecyclerView.ItemAnimator mDisabledAnimatorHolder;
 
@@ -100,13 +98,13 @@ class TabListRecyclerView extends RecyclerView
     }
 
     void setupCustomItemAnimator() {
-        if (!ChromeFeatureList.sGtsCloseTabAnimation.isEnabled()) return;
-
-        if (mTabListItemAnimator == null) {
-            boolean removeEmphasizedAccelerate =
-                    ChromeFeatureList.sGtsCloseTabAnimationRemoveEmphasizedAccelerate.getValue();
-            mTabListItemAnimator = new TabListItemAnimator(removeEmphasizedAccelerate);
-            setItemAnimator(mTabListItemAnimator);
+        // Kill switch is defaulted to enabled and can be shut off to false via config if issues are
+        // discovered.
+        if (ChromeFeatureList.sGtsCloseTabAnimationKillSwitch.isEnabled()) {
+            if (mTabListItemAnimator == null) {
+                mTabListItemAnimator = new TabListItemAnimator();
+                setItemAnimator(mTabListItemAnimator);
+            }
         }
     }
 

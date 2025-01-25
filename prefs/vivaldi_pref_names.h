@@ -124,7 +124,19 @@ extern const char kVivaldiStartpagePortraitImage[];
 extern const char kVivaldiStartpageLandscapeImage[];
 // Preloaded selected wallpaper name
 extern const char kVivaldiStartupWallpaper[];
+// Start page reopen with item
+extern const char kVivaldiStartPageOpenWithItem[];
+// Start page last visited group
+extern const char kVivaldiStartPageLastVisitedGroup[];
 
+// Panels
+// Settings for opening panel instead of dialog for partial translate
+// from webpage.
+extern const char kVivaldiPreferTranslatePanel[];
+// Content Settings
+// Global page zoom value
+extern const char kVivaldiPageZoomLevel[];
+extern const char kGlobalPageZoomEnabled[];
 #endif
 
 #if BUILDFLAG(IS_ANDROID)

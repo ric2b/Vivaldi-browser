@@ -25,7 +25,7 @@
 #include "libavutil/opt.h"
 #include "audio.h"
 #include "avfilter.h"
-#include "internal.h"
+#include "filters.h"
 
 #define BINS 32768
 

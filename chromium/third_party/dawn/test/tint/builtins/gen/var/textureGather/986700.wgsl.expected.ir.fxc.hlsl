@@ -14,7 +14,7 @@ Texture2D<uint4> arg_1 : register(t1, space1);
 SamplerState arg_2 : register(s2, space1);
 uint4 textureGather_986700() {
   float2 arg_3 = (1.0f).xx;
-  uint4 res = arg_1.GatherGreen(arg_2, arg_3, (1).xx);
+  uint4 res = arg_1.GatherGreen(arg_2, arg_3, (int(1)).xx);
   return res;
 }
 
@@ -37,9 +37,7 @@ VertexOutput vertex_main_inner() {
 
 vertex_main_outputs vertex_main() {
   VertexOutput v_1 = vertex_main_inner();
-  VertexOutput v_2 = v_1;
-  VertexOutput v_3 = v_1;
-  vertex_main_outputs v_4 = {v_3.prevent_dce, v_2.pos};
-  return v_4;
+  vertex_main_outputs v_2 = {v_1.prevent_dce, v_1.pos};
+  return v_2;
 }
 

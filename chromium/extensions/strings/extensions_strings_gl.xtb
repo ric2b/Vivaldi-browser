@@ -19,13 +19,11 @@
 <translation id="3115238746683532089">Produto descoñecido <ph name="PRODUCT_ID" /> do provedor <ph name="VENDOR_ID" /> (número de serie <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3144135466825225871">Non se puido substituír o ficheiro crx. Comproba se se está utilizando o ficheiro.</translation>
 <translation id="3163201441334626963">Produto descoñecido <ph name="PRODUCT_ID" /> do provedor <ph name="VENDOR_ID" /></translation>
-<translation id="3369521687965833290">Non se pode descomprimir a extensión. Para descomprimir unha extensión de xeito seguro, debe haber unha ruta ao directorio do teu perfil que empece pola letra dunha unidade e non conteña unha unión, un punto de montaxe ou unha ligazón simbólica. Non existe ningunha ruta deste tipo para o teu perfil.</translation>
 <translation id="3393440416772303020"><ph name="PRODUCT_NAME" /> (número de serie <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3466070586188012397"><ph name="PRODUCT_NAME" /> do provedor <ph name="VENDOR_ID" /> (número de serie <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3561217442734750519">O valor de entrada da clave privada debe ser unha ruta válida.</translation>
 <translation id="388442998277590542">Non se puido cargar a páxina de opcións "<ph name="OPTIONS_PAGE" />".</translation>
 <translation id="3984413272403535372">Erro ao asinar a extensión.</translation>
-<translation id="4115165561519362854">O administrador deste dispositivo require que <ph name="EXTENSION_NAME" /> teña como mínimo a versión <ph name="EXTENSION_VERSION" />. Non se pode activar ata que se actualice a esa versión ou a unha superior.</translation>
 <translation id="4233778200880751280">Non se puido cargar a páxina de información <ph name="ABOUT_PAGE" />.</translation>
 <translation id="471800408830181311">Erro ao emitir a clave privada.</translation>
 <translation id="4811956658694082538">Non se puido instalar o paquete porque se produciu un fallo no proceso de execución dunha utilidade. Proba a reiniciar Chrome e téntao de novo.</translation>
@@ -39,7 +37,6 @@
 <translation id="5972529113578162692">O administrador deste equipo necesita que se instale <ph name="EXTENSION_NAME" />. Non se pode instalar.</translation>
 <translation id="6027032947578871493">Produto descoñecido <ph name="PRODUCT_ID" /> de <ph name="VENDOR_NAME" /> (número de serie <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="6068932090455285721"><ph name="PRODUCT_NAME" /> do provedor <ph name="VENDOR_ID" /></translation>
-<translation id="6143635259298204954">Non se pode descomprimir a extensión. Para descomprimir unha extensión de xeito seguro, debe haber unha ruta ao directorio do teu perfil que non conteña ningunha ligazón simbólica. Non existe ningunha ruta deste tipo para o teu perfil.</translation>
 <translation id="6322279351188361895">Non se puido ler a clave privada.</translation>
 <translation id="6391538222494443604">Debe existir o directorio de entrada.</translation>
 <translation id="641087317769093025">Erro ao descomprimir a extensión</translation>

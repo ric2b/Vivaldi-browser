@@ -683,4 +683,5 @@ message ProbeSsfcComponentsResponse {
   repeated Tcpc tcpc = 13;
   repeated InputDevice touchscreen = 14;
   repeated Camera camera = 15;
+  repeated Edid display_panel = 16;
 }

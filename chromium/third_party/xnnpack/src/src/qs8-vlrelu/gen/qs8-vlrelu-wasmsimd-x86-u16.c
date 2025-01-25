@@ -19,17 +19,19 @@ void xnn_qs8_vlrelu_ukernel__wasmsimd_x86_u16(
     size_t batch,
     const int8_t* input,
     int8_t* output,
-    const union xnn_qs8_lrelu_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_qs8_lrelu_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(int8_t) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const v128_t vinput_zero_point = wasm_v128_load64_splat(params->wasmsimd_x86.input_zero_point);
-  const v128_t vmultiplier_diff = wasm_v128_load64_splat(params->wasmsimd_x86.multiplier_diff);
-  const v128_t vmultiplier_base = wasm_v128_load64_splat(params->wasmsimd_x86.multiplier_base);
-  const v128_t voutput_zero_point = wasm_v128_load64_splat(params->wasmsimd_x86.output_zero_point);
+  const v128_t vinput_zero_point = wasm_v128_load16_splat(&params->scalar.input_zero_point);
+  const v128_t vmultiplier_diff = wasm_i16x8_splat(-params->scalar.negative_multiplier ^ -params->scalar.positive_multiplier);
+  const v128_t vmultiplier_base = wasm_i16x8_splat(-params->scalar.negative_multiplier);
+  const v128_t voutput_zero_point = wasm_v128_load16_splat(&params->scalar.output_zero_point);
+  XNN_FORCE_REALIZATION(vinput_zero_point);
+  XNN_FORCE_REALIZATION(voutput_zero_point);
   for (; batch >= 16 * sizeof(int8_t); batch -= 16 * sizeof(int8_t)) {
     v128_t vacc0 = wasm_i16x8_load8x8(input);
     v128_t vacc1 = wasm_i16x8_load8x8(input + 8);

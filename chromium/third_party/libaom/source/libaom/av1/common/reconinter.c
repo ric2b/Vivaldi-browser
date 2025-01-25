@@ -68,6 +68,10 @@ void av1_init_warp_params(InterPredParams *inter_pred_params,
   if (allow_warp(mi, warp_types, &xd->global_motion[mi->ref_frame[ref]], 0,
                  inter_pred_params->scale_factors,
                  &inter_pred_params->warp_params)) {
+#if CONFIG_REALTIME_ONLY && !CONFIG_AV1_DECODER
+    aom_internal_error(xd->error_info, AOM_CODEC_UNSUP_FEATURE,
+                       "Warped motion is disabled in realtime only build.");
+#endif  // CONFIG_REALTIME_ONLY && !CONFIG_AV1_DECODER
     inter_pred_params->mode = WARP_PRED;
   }
 }
@@ -103,6 +107,7 @@ void av1_make_inter_predictor(const uint8_t *src, int src_stride, uint8_t *dst,
                     inter_pred_params->interp_filter_params);
 #endif
   }
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
   // TODO(jingning): av1_warp_plane() can be further cleaned up.
   else if (inter_pred_params->mode == WARP_PRED) {
     av1_warp_plane(
@@ -115,7 +120,9 @@ void av1_make_inter_predictor(const uint8_t *src, int src_stride, uint8_t *dst,
         inter_pred_params->block_width, inter_pred_params->block_height,
         dst_stride, inter_pred_params->subsampling_x,
         inter_pred_params->subsampling_y, &inter_pred_params->conv_params);
-  } else {
+  }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
+  else {
     assert(0 && "Unsupported inter_pred_params->mode");
   }
 }
@@ -832,10 +839,12 @@ int av1_skip_u4x4_pred_in_obmc(BLOCK_SIZE bsize,
   }
 }
 
+#if CONFIG_AV1_DECODER
 static void modify_neighbor_predictor_for_obmc(MB_MODE_INFO *mbmi) {
   mbmi->ref_frame[1] = NONE_FRAME;
   mbmi->interinter_comp.type = COMPOUND_AVERAGE;
 }
+#endif  // CONFIG_AV1_DECODER
 
 struct obmc_inter_pred_ctxt {
   uint8_t **adjacent;
@@ -969,6 +978,7 @@ void av1_setup_obmc_dst_bufs(MACROBLOCKD *xd, uint8_t **dst_buf1,
   }
 }
 
+#if CONFIG_AV1_DECODER
 void av1_setup_build_prediction_by_above_pred(
     MACROBLOCKD *xd, int rel_mi_col, uint8_t above_mi_width,
     MB_MODE_INFO *above_mbmi, struct build_prediction_ctxt *ctxt,
@@ -1046,6 +1056,7 @@ void av1_setup_build_prediction_by_left_pred(MACROBLOCKD *xd, int rel_mi_row,
       ctxt->mb_to_far_edge +
       GET_MV_SUBPEL((xd->height - rel_mi_row - left_mi_height) * MI_SIZE);
 }
+#endif  // CONFIG_AV1_DECODER
 
 static inline void combine_interintra(
     INTERINTRA_MODE mode, int8_t use_wedge_interintra, int8_t wedge_index,

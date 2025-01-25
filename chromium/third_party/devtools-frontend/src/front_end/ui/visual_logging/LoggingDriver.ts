@@ -8,7 +8,7 @@ import * as Coordinator from '../components/render_coordinator/render_coordinato
 
 import {processForDebugging, processStartLoggingForDebugging} from './Debugging.js';
 import {getDomState, visibleOverlap} from './DomState.js';
-import {type Loggable} from './Loggable.js';
+import type {Loggable} from './Loggable.js';
 import {getLoggingConfig} from './LoggingConfig.js';
 import {logChange, logClick, logDrag, logHover, logImpressions, logKeyDown, logResize} from './LoggingEvents.js';
 import {getLoggingState, getOrCreateLoggingState, type LoggingState} from './LoggingState.js';
@@ -83,7 +83,7 @@ export async function addDocument(document: Document): Promise<void> {
 }
 
 export async function stopLogging(): Promise<void> {
-  await keyboardLogThrottler.process?.();
+  await keyboardLogThrottler.schedule(async () => {}, Common.Throttler.Scheduling.AS_SOON_AS_POSSIBLE);
   logging = false;
   unregisterAllLoggables();
   for (const document of documents) {
@@ -215,15 +215,15 @@ async function process(): Promise<void> {
           if (!(event instanceof InputEvent)) {
             return;
           }
-          if (loggingState.lastInputEventType && loggingState.lastInputEventType !== event.inputType) {
+          if (loggingState.pendingChangeContext && loggingState.pendingChangeContext !== event.inputType) {
             void logPendingChange(element);
           }
-          loggingState.lastInputEventType = event.inputType;
+          loggingState.pendingChangeContext = event.inputType;
           pendingChange.add(element);
         }, {capture: true});
         element.addEventListener('change', () => logPendingChange(element), {capture: true});
         element.addEventListener('focusout', () => {
-          if (loggingState.lastInputEventType) {
+          if (loggingState.pendingChangeContext) {
             void logPendingChange(element);
           }
         }, {capture: true});
@@ -301,8 +301,11 @@ function logPendingChange(element: Element): void {
   if (!loggingState) {
     return;
   }
+  if (['checkbox', 'radio'].includes((element as HTMLInputElement).type)) {
+    loggingState.pendingChangeContext = (element as HTMLInputElement).checked ? 'on' : 'off';
+  }
   void logChange(element);
-  delete loggingState.lastInputEventType;
+  delete loggingState.pendingChangeContext;
   pendingChange.delete(element);
 }
 

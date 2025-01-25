@@ -87,6 +87,7 @@ struct Frame {
     std::vector<SqlSource> args;
     uint32_t nested_macro_count;
     std::unordered_set<std::string> seen_variables;
+    std::unordered_set<std::string> expanded_variables;
   };
   enum VariableHandling { kLookup, kLookupOrIgnore, kIgnore };
 
@@ -138,7 +139,7 @@ extern "C" struct PreprocessorGrammarApplyList {
 SqliteTokenizer::Token GrammarTokenToTokenizerToken(
     const PreprocessorGrammarToken& token) {
   return SqliteTokenizer::Token{std::string_view(token.ptr, token.n),
-                                SqliteTokenType::TK_ILLEGAL};
+                                TK_ILLEGAL};
 }
 
 base::Status ErrorAtToken(const SqliteTokenizer& tokenizer,
@@ -190,9 +191,10 @@ void ExecuteSqlMacro(State* state,
     };
     return;
   }
+  // TODO(lalitm): switch back to kLookup once we have proper parser support.
   state->stack.emplace_back(
-      Frame::Rewrite{frame.tokenizer, frame.rewriter, name, rp}, Frame::kLookup,
-      state, sql_macro->sql);
+      Frame::Rewrite{frame.tokenizer, frame.rewriter, name, rp},
+      Frame::kLookupOrIgnore, state, sql_macro->sql);
   auto& macro_frame = state->stack.back();
   for (uint32_t i = 0; i < sql_macro->args.size(); ++i) {
     macro_frame.owned_substituitions.Insert(sql_macro->args[i],
@@ -216,12 +218,22 @@ void ExecuteStringify(State* state,
     };
     return;
   }
-  bool can_stringify =
+  bool can_stringify_outer =
       macro.seen_variables.empty() ||
       (stringify.ignore_table && macro.seen_variables.size() == 1 &&
        macro.seen_variables.count("table"));
-  if (!can_stringify) {
+  if (!can_stringify_outer) {
     RewriteIntrinsicMacro(frame, name, rp);
+    return;
+  }
+  if (!macro.expanded_variables.empty()) {
+    state->stack.emplace_back(
+        Frame::Rewrite{frame.tokenizer, frame.rewriter, name, rp},
+        Frame::kIgnore, state,
+        SqlSource::FromTraceProcessorImplementation(macro.name + "!(" +
+                                                    macro.args[0].sql() + ")"));
+    auto& expand_frame = state->stack.back();
+    expand_frame.substituitions = frame.substituitions;
     return;
   }
   auto res = SqlSource::FromTraceProcessorImplementation(
@@ -309,7 +321,9 @@ extern "C" void OnPreprocessorVariable(State* state,
   auto& frame = state->stack.back();
   if (frame.active_macro) {
     std::string name(var->ptr + 1, var->n - 1);
-    if (!frame.substituitions->Find(name)) {
+    if (frame.substituitions->Find(name)) {
+      frame.active_macro->expanded_variables.insert(name);
+    } else {
       frame.active_macro->seen_variables.insert(name);
     }
     return;
@@ -366,7 +380,7 @@ extern "C" void OnPreprocessorMacroId(State* state,
     impl = sql_macro;
   }
   invocation.active_macro =
-      Frame::ActiveMacro{std::move(name), impl, {}, 0, {}};
+      Frame::ActiveMacro{std::move(name), impl, {}, 0, {}, {}};
 }
 
 extern "C" void OnPreprocessorMacroArg(State* state,
@@ -454,19 +468,20 @@ bool PerfettoSqlPreprocessor::NextStatement() {
 
   // Skip through any number of semi-colons (representing empty statements).
   SqliteTokenizer::Token tok = global_tokenizer_.NextNonWhitespace();
-  while (tok.token_type == SqliteTokenType::TK_SEMI) {
+  while (tok.token_type == TK_SEMI) {
     tok = global_tokenizer_.NextNonWhitespace();
   }
 
   // If we still see a terminal token at this point, we must have hit EOF.
   if (tok.IsTerminal()) {
-    PERFETTO_DCHECK(tok.token_type != SqliteTokenType::TK_SEMI);
+    PERFETTO_DCHECK(tok.token_type != TK_SEMI);
     return false;
   }
 
   SqlSource stmt =
       global_tokenizer_.Substr(tok, global_tokenizer_.NextTerminal(),
                                SqliteTokenizer::EndToken::kInclusive);
+
   State s{{}, *macros_, {}};
   s.stack.emplace_back(Frame::Root(), Frame::kIgnore, &s, std::move(stmt));
   for (;;) {
@@ -477,25 +492,25 @@ bool PerfettoSqlPreprocessor::NextStatement() {
     if (t.str.empty()) {
       token_type = frame->seen_semicolon ? 0 : PPTK_SEMI;
       frame->seen_semicolon = true;
-    } else if (t.token_type == SqliteTokenType::TK_SEMI) {
+    } else if (t.token_type == TK_SEMI) {
       token_type = PPTK_SEMI;
       frame->seen_semicolon = true;
-    } else if (t.token_type == SqliteTokenType::TK_ILLEGAL) {
+    } else if (t.token_type == TK_ILLEGAL) {
       if (t.str.size() == 1 && t.str[0] == '!') {
         token_type = PPTK_EXCLAIM;
       } else {
         status_ = ErrorAtToken(tk, t, "illegal token");
         return false;
       }
-    } else if (t.token_type == SqliteTokenType::TK_ID) {
+    } else if (t.token_type == TK_ID) {
       token_type = PPTK_ID;
-    } else if (t.token_type == SqliteTokenType::TK_LP) {
+    } else if (t.token_type == TK_LP) {
       token_type = PPTK_LP;
-    } else if (t.token_type == SqliteTokenType::TK_RP) {
+    } else if (t.token_type == TK_RP) {
       token_type = PPTK_RP;
-    } else if (t.token_type == SqliteTokenType::TK_COMMA) {
+    } else if (t.token_type == TK_COMMA) {
       token_type = PPTK_COMMA;
-    } else if (t.token_type == SqliteTokenType::TK_VARIABLE) {
+    } else if (t.token_type == TK_VARIABLE) {
       token_type = PPTK_VARIABLE;
     } else {
       token_type = PPTK_OPAQUE;

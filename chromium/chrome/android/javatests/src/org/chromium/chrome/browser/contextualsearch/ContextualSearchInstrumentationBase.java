@@ -29,13 +29,11 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Rule;
-import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
@@ -61,6 +59,7 @@ import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.content_public.browser.SelectAroundCaretResult;
 import org.chromium.content_public.browser.SelectionClient;
 import org.chromium.content_public.browser.SelectionPopupController;
+import org.chromium.content_public.browser.Visibility;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestSelectionPopupController;
@@ -81,10 +80,6 @@ public class ContextualSearchInstrumentationBase {
     @Rule
     public final BlankCTATabInitialStateRule mInitialStateRule =
             new BlankCTATabInitialStateRule(sActivityTestRule, false);
-
-    @Rule public JniMocker mocker = new JniMocker();
-
-    @Mock ContextualSearchManager.Natives mContextualSearchManagerJniMock;
 
     // --------------------------------------------------------------------------------------------
 
@@ -107,7 +102,8 @@ public class ContextualSearchInstrumentationBase {
                     null,
                     true,
                     null,
-                    sActivityTestRule.getActivity().getEdgeToEdgeControllerSupplierForTesting());
+                    sActivityTestRule.getActivity().getEdgeToEdgeControllerSupplierForTesting(),
+                    /* desktopWindowStateManager= */ null);
         }
 
         @Override
@@ -254,7 +250,7 @@ public class ContextualSearchInstrumentationBase {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     mContextualSearchManager.getGestureStateListener().onTouchDown();
-                    mContextualSearchManager.onShowUnhandledTapUIIfNeeded(0, 0);
+                    mContextualSearchManager.onShowUnhandledTapUiIfNeeded(0, 0);
                 });
     }
 
@@ -262,7 +258,7 @@ public class ContextualSearchInstrumentationBase {
     protected void mockTapEmptySpace() {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    mContextualSearchManager.onShowUnhandledTapUIIfNeeded(0, 0);
+                    mContextualSearchManager.onShowUnhandledTapUiIfNeeded(0, 0);
                     mContextualSearchClient.onSelectionEvent(
                             SelectionEventType.SELECTION_HANDLES_CLEARED, 0, 0);
                 });
@@ -828,7 +824,7 @@ public class ContextualSearchInstrumentationBase {
         Assert.assertTrue(isWebContentsVisible());
     }
 
-    /** Asserts that the Panel's WebContents.onShow() method was never called. */
+    /** Asserts that the Panel's WebContents was never shown. */
     protected void assertNeverCalledWebContentsOnShow() {
         Assert.assertFalse(mFakeServer.didEverCallWebContentsOnShow());
     }
@@ -992,7 +988,7 @@ public class ContextualSearchInstrumentationBase {
     protected void assertLoadedLowPriorityInvalidUrl() {
         String message =
                 "Expected a low priority invalid search request URL, but got "
-                        + (String.valueOf(mFakeServer.getLoadedUrl()));
+                        + String.valueOf(mFakeServer.getLoadedUrl());
         Assert.assertTrue(
                 message,
                 mFakeServer.getLoadedUrl() != null
@@ -1125,7 +1121,6 @@ public class ContextualSearchInstrumentationBase {
      *
      * @param initialState The initial state of the panel at the beginning of an operation that
      *     should not change the panel state.
-     * @throws InterruptedException
      */
     protected void assertPanelStillInState(final @PanelState int initialState)
             throws InterruptedException {
@@ -1177,7 +1172,7 @@ public class ContextualSearchInstrumentationBase {
         // refinement from nearby taps. The double-tap timeout is sufficiently
         // short that this shouldn't conflict with tap refinement by the user.
         int doubleTapTimeout = ViewConfiguration.getDoubleTapTimeout();
-        Thread.sleep(doubleTapTimeout * DOUBLE_TAP_DELAY_MULTIPLIER);
+        Thread.sleep(doubleTapTimeout * ((long) DOUBLE_TAP_DELAY_MULTIPLIER));
     }
 
     /**
@@ -1284,7 +1279,7 @@ public class ContextualSearchInstrumentationBase {
                 () -> {
                     mPanel.notifyBarTouched(0);
                     if (mFakeServer.getContentsObserver() != null) {
-                        mFakeServer.getContentsObserver().wasShown();
+                        mFakeServer.getContentsObserver().onVisibilityChanged(Visibility.VISIBLE);
                     }
                     mPanel.animatePanelToState(
                             PanelState.EXPANDED,

@@ -638,6 +638,11 @@ patch is inline or attached per mail.
 You can check @url{https://patchwork.ffmpeg.org}, if your patch does not show up, its mime type
 likely was wrong.
 
+@subheading How to setup git send-email?
+
+Please see @url{https://git-send-email.io/}.
+For gmail additionally see @url{https://shallowsky.com/blog/tech/email/gmail-app-passwds.html}.
+
 @subheading Sending patches from email clients
 Using @code{git send-email} might not be desirable for everyone. The
 following trick allows to send patches via email clients in a safe
@@ -682,7 +687,7 @@ number) in @file{libavcodec/version.h} or @file{libavformat/version.h}?
 Did you register it in @file{allcodecs.c} or @file{allformats.c}?
 
 @item
-Did you add the AVCodecID to @file{avcodec.h}?
+Did you add the AVCodecID to @file{codec_id.h}?
 When adding new codec IDs, also add an entry to the codec descriptor
 list in @file{libavcodec/codec_desc.c}.
 
@@ -697,7 +702,7 @@ already being compiled by some other rule, like a raw demuxer.
 
 @item
 Did you add an entry to the table of supported formats or codecs in
-@file{doc/general.texi}?
+@file{doc/general_contents.texi}?
 
 @item
 Did you add an entry in the Changelog?
@@ -820,7 +825,7 @@ filters, bitstream filters, parsers. If its not possible to do that, add
 an explanation why to your patchset, its ok to not test if theres a reason.
 
 @item
-If you added YASM code please check that things still work with --disable-yasm.
+If you added NASM code please check that things still work with --disable-x86asm.
 
 @item
 Test your code with valgrind and or Address Sanitizer to ensure it's free

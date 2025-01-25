@@ -32,6 +32,7 @@ using l10n_util::GetNSString;
     UINavigationController* historyController;
     UINavigationController* bookmarkController;
     UINavigationController* readinglistController;
+    UINavigationController* translateController;
     UIView* pageSwitcherBackgroundView;
     NSLayoutConstraint* positionConstraint;
 }
@@ -107,7 +108,8 @@ using l10n_util::GetNSString;
                 [UIImage imageNamed:vPanelBookmarks],
                 [UIImage imageNamed:vPanelReadingList],
                 [UIImage imageNamed:vPanelHistory],
-                [UIImage imageNamed:vPanelNotes]]];
+                [UIImage imageNamed:vPanelNotes],
+                [UIImage imageNamed:vPanelTranslate]]];
   [segmentedControl addTarget:self action:@selector(segmentTapped:)
                  forControlEvents:UIControlEventValueChanged];
   self.segmentControl = segmentedControl;
@@ -134,16 +136,19 @@ using l10n_util::GetNSString;
   Setup controllers
  */
 - (void)setupControllers:(NoteNavigationController*)nvc
-  withBookmarkController:(UINavigationController*)bvc
-  andReadinglistController:(UINavigationController*)rvc
-    andHistoryController:(UINavigationController*)hc {
-    noteNavigationController = nvc;
-    bookmarkController = bvc;
-    readinglistController = rvc;
-    historyController = hc;
-    nvc.navigationBar.prefersLargeTitles = NO;
-    bvc.navigationBar.prefersLargeTitles = NO;
-    hc.navigationBar.prefersLargeTitles = NO;
+      withBookmarkController:(UINavigationController*)bvc
+          andReadinglistController:(UINavigationController*)rvc
+              andHistoryController:(UINavigationController*)hc
+                  andTranslateController:(UINavigationController*)tc {
+  noteNavigationController = nvc;
+  bookmarkController = bvc;
+  readinglistController = rvc;
+  historyController = hc;
+  translateController = tc;
+  nvc.navigationBar.prefersLargeTitles = NO;
+  bvc.navigationBar.prefersLargeTitles = NO;
+  hc.navigationBar.prefersLargeTitles = NO;
+  tc.navigationBar.prefersLargeTitles = NO;
 }
 
 - (void)setIndexForControl:(int)index {
@@ -161,6 +166,9 @@ using l10n_util::GetNSString;
       case PanelPage::HistoryPage:
           uv = historyController;
             break;
+      case PanelPage::TranslatePage:
+          uv = translateController;
+            break;
     }
     [self.pageController setViewControllers:@[uv]
                 direction:UIPageViewControllerNavigationDirectionForward
@@ -169,35 +177,36 @@ using l10n_util::GetNSString;
 }
 
 - (void)segmentTapped:(UISegmentedControl*)sender {
-    if (!sender || sender.selectedSegmentIndex < 0
-        || sender.selectedSegmentIndex > 3)
-        return;
-    UINavigationController* navController = nil;
-    navController = self.pageController.viewControllers.firstObject;
-    if (navController) {
-      UIViewController* vc = [navController visibleViewController];
-        if ([vc isKindOfClass:[UISearchController class]]) {
-            [navController dismissViewControllerAnimated:YES completion:^{
-                ((UISearchController*)vc).active = NO;
-                int index = sender.selectedSegmentIndex;
-                [self setIndexForControl:index];
-            }];
-            return;
-        }
-    }
+  if (!sender || sender.selectedSegmentIndex < 0
+      || sender.selectedSegmentIndex > 4)
+      return;
+  UINavigationController* navController = nil;
+  navController = self.pageController.viewControllers.firstObject;
+  if (navController) {
+    UIViewController* vc = [navController visibleViewController];
+      if ([vc isKindOfClass:[UISearchController class]]) {
+          [navController dismissViewControllerAnimated:YES completion:^{
+              ((UISearchController*)vc).active = NO;
+              int index = sender.selectedSegmentIndex;
+              [self setIndexForControl:index];
+          }];
+          return;
+      }
+  }
 
-    int index = sender.selectedSegmentIndex;
-    [self setIndexForControl:index];
+  int index = sender.selectedSegmentIndex;
+  [self setIndexForControl:index];
 }
 
 - (void)panelDismissed {
-    [self.pageController.view removeFromSuperview];
-    [self.pageController removeFromParentViewController];
-    self.pageController = nil;
-    bookmarkController = nil;
-    readinglistController = nil;
-    noteNavigationController = nil;
-    historyController = nil;
+  [self.pageController.view removeFromSuperview];
+  [self.pageController removeFromParentViewController];
+  self.pageController = nil;
+  bookmarkController = nil;
+  readinglistController = nil;
+  noteNavigationController = nil;
+  historyController = nil;
+  translateController = nil;
 }
 
 @end

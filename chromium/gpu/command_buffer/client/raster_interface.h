@@ -57,15 +57,12 @@ class RasterInterface : public InterfaceBase {
   // This function will not perform any color conversion during the copy.
   virtual void CopySharedImage(const gpu::Mailbox& source_mailbox,
                                const gpu::Mailbox& dest_mailbox,
-                               GLenum dest_target,
                                GLint xoffset,
                                GLint yoffset,
                                GLint x,
                                GLint y,
                                GLsizei width,
-                               GLsizei height,
-                               GLboolean unpack_flip_y,
-                               GLboolean unpack_premultiply_alpha) = 0;
+                               GLsizei height) = 0;
 
   // Asynchronously writes pixels from caller-owned memory inside
   // |src_sk_pixmap| into |dest_mailbox|.
@@ -84,30 +81,6 @@ class RasterInterface : public InterfaceBase {
   // pixels. For color space conversions (if needed), perform a CopySharedImage.
   virtual void WritePixelsYUV(const gpu::Mailbox& dest_mailbox,
                               const SkYUVAPixmaps& src_yuv_pixmap) = 0;
-
-  // Copy `yuva_plane_mailboxes` to `dest_mailbox`. The color space for the
-  // source of the copy is split into `planes_yuv_color_space` which converts
-  // into full range RGB, and `planes_rgb_color_space` which an RGB color space.
-  // If `planes_rgb_color_space` is nullptr, then disable conversion to
-  // `dest_mailbox`'s color space.
-  virtual void ConvertYUVAMailboxesToRGB(
-      const gpu::Mailbox& dest_mailbox,
-      GLint src_x,
-      GLint src_y,
-      GLsizei width,
-      GLsizei height,
-      SkYUVColorSpace planes_yuv_color_space,
-      const SkColorSpace* planes_rgb_color_space,
-      SkYUVAInfo::PlaneConfig plane_config,
-      SkYUVAInfo::Subsampling subsampling,
-      const gpu::Mailbox yuva_plane_mailboxes[]) = 0;
-
-  virtual void ConvertRGBAToYUVAMailboxes(
-      SkYUVColorSpace planes_yuv_color_space,
-      SkYUVAInfo::PlaneConfig plane_config,
-      SkYUVAInfo::Subsampling subsampling,
-      const gpu::Mailbox yuva_plane_mailboxes[],
-      const gpu::Mailbox& source_mailbox) = 0;
 
   // OOP-Raster
 

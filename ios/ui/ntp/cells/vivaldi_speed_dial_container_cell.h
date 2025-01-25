@@ -5,6 +5,7 @@
 
 #import <UIKit/UIKit.h>
 
+#import "components/direct_match/direct_match_service.h"
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_container_delegate.h"
@@ -25,6 +26,7 @@
 - (void)configureWith:(NSArray*)speedDials
                parent:(VivaldiSpeedDialItem*)parent
         faviconLoader:(FaviconLoader*)faviconLoader
+   directMatchService:(direct_match::DirectMatchService*)directMatchService
           layoutStyle:(VivaldiStartPageLayoutStyle)style
          layoutColumn:(VivaldiStartPageLayoutColumn)column
          showAddGroup:(BOOL)showAddGroup

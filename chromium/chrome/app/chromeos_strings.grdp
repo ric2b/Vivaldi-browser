@@ -64,6 +64,15 @@
   <message name="IDS_MULTIDEVICE_SETUP_PASSWORD_PAGE_WRONG_PASSWORD_LABEL" desc="Message displayed in the multi-device setup flow when the user has entered an incorrect password.">
     Wrong password
   </message>
+  <message name="IDS_MULTIDEVICE_SETUP_PASSWORD_PAGE_HEADER_FOR_PIN" desc="Header for the first page in the multi-device setup flow for PIN only users; the page displays a field in which the user must enter their PIN to continue.">
+    Enter your PIN
+  </message>
+  <message name="IDS_MULTIDEVICE_SETUP_PASSWORD_PAGE_ENTER_PIN_LABEL" desc="Default text in the field for user to enter their PIN.">
+    PIN
+  </message>
+  <message name="IDS_MULTIDEVICE_SETUP_PASSWORD_PAGE_WRONG_PIN_LABEL" desc="Message displayed in the multi-device setup flow for PIN only users; when the user has entered an incorrect PIN.">
+    Wrong PIN
+  </message>
   <message name="IDS_MULTIDEVICE_SETUP_BACK_LABEL" desc="Label for button to navigate back in MultiDevice setup workflow.">
     Back
   </message>
@@ -1644,14 +1653,23 @@
   <message name="IDS_DISCOVER_PIN_SETUP_TITLE1_CHILD" desc="A title of the dialog that starts 'PIN-unlock' setup process, and asks user to type their pin, when a child account is in use.">
     Choose a PIN
   </message>
+  <message name="IDS_DISCOVER_PIN_SETUP_PIN_AS_MAIN_FACTOR_TITLE" desc="A title of the dialog asking the user to set up a PIN as the main factor for signing in.">
+    Set a PIN to make it easier to sign in
+  </message>
   <message name="IDS_DISCOVER_PIN_SETUP_SUBTITLE1" desc="A sub-title of the dialog that starts 'PIN-unlock' setup process. Subtitle explains to the user how this feature can be configured.">
     Use a number (PIN) instead of a password to unlock your device. To set your PIN later, go to Settings.
   </message>
   <message name="IDS_DISCOVER_PIN_SETUP_SUBTITLE1_CHILD" desc="A sub-title of the dialog that starts 'PIN-unlock' setup process, when a child account is in use. Subtitle explains to the user how this feature can be configured.">
     Your child can use a number (PIN) instead of a password to unlock this device. To set a PIN later, go to Settings.
   </message>
+  <message name="IDS_DISCOVER_PIN_SETUP_PIN_AS_MAIN_FACTOR_SUBTITLE" desc="A sub-title of the dialog asking the user to set up a PIN as the main factor for signing in.">
+    Instead of entering your Google Account password to sign in, you can create a PIN for this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
+  </message>
   <message name="IDS_DISCOVER_PIN_SETUP_SKIP" desc="A label on the button that interrupts current setup flow.">
     Skip
+  </message>
+  <message name="IDS_DISCOVER_PIN_SETUP_PIN_AS_MAIN_FACTOR_SKIP" desc="A label on the button of the PIN setup screen allowing the user to use a password instead of a PIN">
+    Use password instead
   </message>
   <message name="IDS_DISCOVER_PIN_SETUP_TITLE2" desc="A title of the dialog that continues 'PIN-unlock' setup process, and asks user to type their pin again for verification.">
     Type your PIN again
@@ -1682,6 +1700,21 @@
   </message>
   <message name="IDS_DISCOVER_PIN_SETUP_DONE" desc="Label for the done button on the success screen in 'PIN-unlock' setup dialog.">
     Done
+  </message>
+  <message name="IDS_DISCOVER_PIN_RESET_TITLE" desc="A title of the dialog asking the user to reset their PIN">
+    Reset your PIN
+  </message>
+  <message name="IDS_DISCOVER_PIN_RESET_SUBTITLE" desc="A subtitle of the dialog asking the user to reset their PIN">
+    You can use this PIN to sign in to your device
+  </message>
+  <message name="IDS_DISCOVER_PIN_RESET_SUBTITLE_CHILD" desc="A subtitle of the dialog asking the user to reset their PIN">
+    Your child can use this PIN to sign in to their device
+  </message>
+  <message name="IDS_DISCOVER_PIN_RESET_DONE_TITLE" desc="A title of the dialog that is shown to the user when their PIN has been updated during recovery.">
+    Your PIN has been updated
+  </message>
+  <message name="IDS_DISCOVER_PIN_RESET_DONE_TITLE_CHILD" desc="A title of the dialog that is shown to the user's child when their PIN has been updated during recovery.">
+    Your child’s PIN has been updated
   </message>
   <message name="IDS_APP_START_PREPARING_PROFILE_MESSAGE" desc="Message displayed while preparing profile in which the app will be run.">
     Preparing app profile...
@@ -1886,11 +1919,17 @@
   <message name="IDS_OFFLINE_LOGIN_PASSWORD" desc="Password field text on the offline login screen. Note: should be the same as the one used on the Gaia sign-in page.">
     Enter your password
   </message>
+  <message name="IDS_OFFLINE_LOGIN_PIN" desc="PIN field placeholder text on the offline login screen.">
+    Enter your PIN
+  </message>
   <message name="IDS_OFFLINE_LOGIN_INVALID_EMAIL" desc="Alert message about invalid email on the offline login screen. Note: should be the same as the one used on the Gaia sign-in page.">
     Please enter a valid email address
   </message>
   <message name="IDS_OFFLINE_LOGIN_INVALID_PASSWORD" desc="Alert message about mismatching email and password on the device">
     The email and password you entered don't match
+  </message>
+  <message name="IDS_OFFLINE_LOGIN_INVALID_PIN" desc="Alert message about mismatching email and PIN on the device">
+    The email and PIN you entered don't match
   </message>
   <message name="IDS_OFFLINE_LOGIN_NEXT_BUTTON_TEXT" desc="Text shown on next button during offline signin flow dialog. Note: should be the same as the one used on the Gaia sign-in page.">
     Next
@@ -5399,6 +5438,9 @@
   <message name="IDS_BRUSCHETTA_INSTALLER_GENERIC_DLC_ERROR_MESSAGE" desc="Generic message for the installer when Bruschetta fails to install.">
     Sorry, something went wrong installing DLC dependencies. Please try rebooting and if the issue persists file feedback with #bruschetta in the description. Error code is <ph name="ERROR">$1<ex>kUnknown</ex></ph>.
   </message>
+  <message name="IDS_BRUSCHETTA_INSTALLER_UNINSTALLABLE_ERROR_MESSAGE" desc="Generic message for the installer when Bruschetta fails to install.">
+    Unfortunately this machine does not meet requirements for installing Bruschetta. Error code is <ph name="ERROR">$1<ex>kUnknown</ex></ph>.
+  </message>
   <message name="IDS_BRUSCHETTA_INSTALLER_ERROR_CLEANUP_MESSAGE" desc="More detailed message for the installer when Bruschetta fails to install and the cleaning up the incomplete install also failed.">
     Sorry, something went wrong. Please file feedback with #bruschetta in the description. Error code is <ph name="ERROR">$1<ex>kUnknown</ex></ph>. Cleaning up failed, you may need to do so manually.
   </message>
@@ -6874,12 +6916,9 @@ Your <ph name="DEVICE_TYPE">{0}<ex>Chromebook</ex></ph> will be locked now.
     Dictation sends your voice to Google to allow voice typing in any text field.
   </message>
 
-   <!-- Strings for OsUrlHandler applications -->
+   <!-- Strings for OsFlags -->
   <message name="IDS_OS_FLAGS_APP_NAME" translateable="false" desc="Name for the system flags app.">
     Flags
-  </message>
-  <message name="IDS_OS_URL_HANDLER_APP_NAME" translateable="false" desc="Name for a hidden app which shows os:// and chrome:// system pages in an app">
-    ChromeOS-URLs
   </message>
 
   <!-- Theme Selection -->
@@ -7584,6 +7623,6 @@ Your <ph name="DEVICE_TYPE">{0}<ex>Chromebook</ex></ph> will be locked now.
 
   <!-- Mall app -->
   <message name="IDS_MALL_APP_NAME" desc="Name of a system app which can be used to find and install apps and games">
-    Get Apps and Games
+    Apps &amp; games
   </message>
 </grit-part>

@@ -44,7 +44,7 @@ import * as ARIAUtils from './ARIAUtils.js';
 import {ContextMenu} from './ContextMenu.js';
 import {GlassPane, PointerEventsBehavior} from './GlassPane.js';
 import {bindCheckbox} from './SettingsUI.js';
-import {type Suggestion} from './SuggestBox.js';
+import type {Suggestion} from './SuggestBox.js';
 import {Events as TextPromptEvents, TextPrompt} from './TextPrompt.js';
 import toolbarStyles from './toolbar.css.legacy.js';
 import {Tooltip} from './Tooltip.js';
@@ -593,10 +593,6 @@ export class ToolbarButton extends ToolbarItem<ToolbarButton.EventTypes> {
     this.element.focus();
   }
 
-  pressed(pressed: boolean): void {
-    this.button.pressed = pressed;
-  }
-
   checked(checked: boolean): void {
     this.button.checked = checked;
   }
@@ -927,6 +923,7 @@ export class ToolbarFilter extends ToolbarInput {
 
     const filterIcon = IconButton.Icon.create('filter');
     this.element.prepend(filterIcon);
+    this.element.classList.add('toolbar-filter');
   }
 }
 
@@ -954,7 +951,6 @@ export class ToolbarToggle extends ToolbarButton {
     this.setToggleType(Buttons.Button.ToggleType.PRIMARY);
     this.toggled(false);
 
-    this.setPressed(false);
     if (jslogContext) {
       this.element.setAttribute('jslog', `${VisualLogging.toggle().track({click: true}).context(jslogContext)}`);
     }
@@ -963,17 +959,12 @@ export class ToolbarToggle extends ToolbarButton {
     }
   }
 
-  setPressed(pressed: boolean): void {
-    this.pressed(pressed);
-  }
-
   setToggleOnClick(toggleOnClick: boolean): void {
     this.toggleOnClick(toggleOnClick);
   }
 
   setToggled(toggled: boolean): void {
     this.toggled(toggled);
-    this.setPressed(toggled);
   }
 
   setChecked(checked: boolean): void {
@@ -997,7 +988,9 @@ export class ToolbarToggle extends ToolbarButton {
 export class ToolbarMenuButton extends ToolbarCombobox {
   private readonly contextMenuHandler: (arg0: ContextMenu) => void;
   private readonly useSoftMenu: boolean;
-  private triggerTimeout?: number;
+  private triggerTimeoutId?: number;
+  #triggerDelay: number = 200;
+
   constructor(
       contextMenuHandler: (arg0: ContextMenu) => void, isIconDropdown?: boolean, useSoftMenu?: boolean,
       jslogContext?: string, iconName?: string) {
@@ -1010,19 +1003,26 @@ export class ToolbarMenuButton extends ToolbarCombobox {
     ARIAUtils.markAsMenuButton(this.element);
   }
 
+  setTriggerDelay(x: number): void {
+    this.#triggerDelay = x;
+  }
+
   override mouseDown(event: MouseEvent): void {
+    if (!this.enabled) {
+      return;
+    }
     if (event.buttons !== 1) {
       super.mouseDown(event);
       return;
     }
 
-    if (!this.triggerTimeout) {
-      this.triggerTimeout = window.setTimeout(this.trigger.bind(this, event), 200);
+    if (!this.triggerTimeoutId) {
+      this.triggerTimeoutId = window.setTimeout(this.trigger.bind(this, event), this.#triggerDelay);
     }
   }
 
   private trigger(event: Event): void {
-    delete this.triggerTimeout;
+    delete this.triggerTimeoutId;
 
     const contextMenu = new ContextMenu(event, {
       useSoftMenu: this.useSoftMenu,
@@ -1038,8 +1038,8 @@ export class ToolbarMenuButton extends ToolbarCombobox {
   }
 
   override clicked(event: Event): void {
-    if (this.triggerTimeout) {
-      clearTimeout(this.triggerTimeout);
+    if (this.triggerTimeoutId) {
+      clearTimeout(this.triggerTimeoutId);
     }
     this.trigger(event);
   }

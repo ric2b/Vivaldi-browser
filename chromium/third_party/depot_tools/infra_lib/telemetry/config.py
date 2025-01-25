@@ -13,6 +13,9 @@ import time
 from typing import Literal
 import uuid
 
+DEFAULT_CONFIG_FILE = Path(Path.home(),
+                           '.config/chrome_infra/telemetry/telemetry.cfg')
+
 ROOT_SECTION_KEY = "root"
 NOTICE_COUNTDOWN_KEY = "notice_countdown"
 ENABLED_KEY = "enabled"

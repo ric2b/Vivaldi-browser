@@ -136,6 +136,45 @@ impl From<avifResult> for AvifError {
     }
 }
 
+impl avifResult {
+    pub fn to_usize(&self) -> usize {
+        match self {
+            Self::Ok => 0,
+            Self::UnknownError => 1,
+            Self::InvalidFtyp => 2,
+            Self::NoContent => 3,
+            Self::NoYuvFormatSelected => 4,
+            Self::ReformatFailed => 5,
+            Self::UnsupportedDepth => 6,
+            Self::EncodeColorFailed => 7,
+            Self::EncodeAlphaFailed => 8,
+            Self::BmffParseFailed => 9,
+            Self::MissingImageItem => 10,
+            Self::DecodeColorFailed => 11,
+            Self::DecodeAlphaFailed => 12,
+            Self::ColorAlphaSizeMismatch => 13,
+            Self::IspeSizeMismatch => 14,
+            Self::NoCodecAvailable => 15,
+            Self::NoImagesRemaining => 16,
+            Self::InvalidExifPayload => 17,
+            Self::InvalidImageGrid => 18,
+            Self::InvalidCodecSpecificOption => 19,
+            Self::TruncatedData => 20,
+            Self::IoNotSet => 21,
+            Self::IoError => 22,
+            Self::WaitingOnIo => 23,
+            Self::InvalidArgument => 24,
+            Self::NotImplemented => 25,
+            Self::OutOfMemory => 26,
+            Self::CannotChangeSetting => 27,
+            Self::IncompatibleImage => 28,
+            Self::EncodeGainMapFailed => 29,
+            Self::DecodeGainMapFailed => 30,
+            Self::InvalidToneMappedImage => 31,
+        }
+    }
+}
+
 pub type avifBool = c_int;
 pub const AVIF_TRUE: c_int = 1;
 pub const AVIF_FALSE: c_int = 0;
@@ -147,6 +186,13 @@ pub const AVIF_STRICT_ALPHA_ISPE_REQUIRED: u32 = 1 << 2;
 pub const AVIF_STRICT_ENABLED: u32 =
     AVIF_STRICT_PIXI_REQUIRED | AVIF_STRICT_CLAP_VALID | AVIF_STRICT_ALPHA_ISPE_REQUIRED;
 pub type avifStrictFlags = u32;
+
+pub const AVIF_IMAGE_CONTENT_NONE: u32 = 0;
+pub const AVIF_IMAGE_CONTENT_COLOR_AND_ALPHA: u32 = 1 << 0 | 1 << 1;
+pub const AVIF_IMAGE_CONTENT_GAIN_MAP: u32 = 1 << 2;
+pub const AVIF_IMAGE_CONTENT_ALL: u32 =
+    AVIF_IMAGE_CONTENT_COLOR_AND_ALPHA | AVIF_IMAGE_CONTENT_GAIN_MAP;
+pub type avifImageContentTypeFlags = u32;
 
 #[repr(C)]
 pub struct avifDecoderData {}
@@ -229,10 +275,47 @@ pub fn to_avifResult<T>(res: &AvifResult<T>) -> avifResult {
     }
 }
 
+const RESULT_TO_STRING: &[&str] = &[
+    "Ok\0",
+    "Unknown Error\0",
+    "Invalid ftyp\0",
+    "No content\0",
+    "No YUV format selected\0",
+    "Reformat failed\0",
+    "Unsupported depth\0",
+    "Encoding of color planes failed\0",
+    "Encoding of alpha plane failed\0",
+    "BMFF parsing failed\0",
+    "Missing or empty image item\0",
+    "Decoding of color planes failed\0",
+    "Decoding of alpha plane failed\0",
+    "Color and alpha planes size mismatch\0",
+    "Plane sizes don't match ispe values\0",
+    "No codec available\0",
+    "No images remaining\0",
+    "Invalid Exif payload\0",
+    "Invalid image grid\0",
+    "Invalid codec-specific option\0",
+    "Truncated data\0",
+    "IO not set\0",
+    "IO Error\0",
+    "Waiting on IO\0",
+    "Invalid argument\0",
+    "Not implemented\0",
+    "Out of memory\0",
+    "Cannot change some setting during encoding\0",
+    "The image is incompatible with already encoded images\0",
+    "Encoding of gain map planes failed\0",
+    "Decoding of gain map planes failed\0",
+    "Invalid tone mapped image item\0",
+];
+
 #[no_mangle]
-pub unsafe extern "C" fn crabby_avifResultToString(_res: avifResult) -> *const c_char {
-    // TODO: implement this function.
-    std::ptr::null()
+pub unsafe extern "C" fn crabby_avifResultToString(res: avifResult) -> *const c_char {
+    unsafe {
+        std::ffi::CStr::from_bytes_with_nul_unchecked(RESULT_TO_STRING[res.to_usize()].as_bytes())
+            .as_ptr() as *const _
+    }
 }
 
 pub type avifCropRect = CropRect;

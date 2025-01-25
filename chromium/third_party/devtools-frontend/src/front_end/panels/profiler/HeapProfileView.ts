@@ -14,7 +14,7 @@ import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import {Events, HeapTimelineOverview, type IdsRangeChangedEvent, type Samples} from './HeapTimelineOverview.js';
-import {type Formatter, type ProfileDataGridNode} from './ProfileDataGrid.js';
+import type {Formatter, ProfileDataGridNode} from './ProfileDataGrid.js';
 import {ProfileFlameChartDataProvider} from './ProfileFlameChartDataProvider.js';
 import {ProfileEvents, type ProfileHeader, ProfileType} from './ProfileHeader.js';
 import {ProfileView, WritableProfileHeader} from './ProfileView.js';
@@ -164,7 +164,7 @@ export class HeapProfileView extends ProfileView implements UI.SearchableView.Se
   onIdsRangeChanged(event: Common.EventTarget.EventTargetEvent<IdsRangeChangedEvent>): void {
     const {minId, maxId} = event.data;
     this.selectedSizeText.setText(
-        i18nString(UIStrings.selectedSizeS, {PH1: Platform.NumberUtilities.bytesToString(event.data.size)}));
+        i18nString(UIStrings.selectedSizeS, {PH1: i18n.ByteUtilities.bytesToString(event.data.size)}));
     this.setSelectionRange(minId, maxId);
   }
 
@@ -688,8 +688,8 @@ export class HeapFlameChartDataProvider extends ProfileFlameChartDataProvider {
       entryInfo.push({title, value});
     }
     pushEntryInfoRow(i18nString(UIStrings.name), UI.UIUtils.beautifyFunctionName(node.functionName));
-    pushEntryInfoRow(i18nString(UIStrings.selfSize), Platform.NumberUtilities.bytesToString(node.self));
-    pushEntryInfoRow(i18nString(UIStrings.totalSize), Platform.NumberUtilities.bytesToString(node.total));
+    pushEntryInfoRow(i18nString(UIStrings.selfSize), i18n.ByteUtilities.bytesToString(node.self));
+    pushEntryInfoRow(i18nString(UIStrings.totalSize), i18n.ByteUtilities.bytesToString(node.total));
     const linkifier = new Components.Linkifier.Linkifier();
     const link = linkifier.maybeLinkifyConsoleCallFrame(
         this.heapProfilerModel ? this.heapProfilerModel.target() : null, node.callFrame);

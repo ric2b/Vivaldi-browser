@@ -220,7 +220,7 @@ using vivaldi::IsVivaldiRunning;
                           [handler openURLInNewTab:[OpenNewTabCommand
                                                        commandWithIncognito:NO]];
                         }];
-    if (IsIncognitoModeForced(self.browser->GetBrowserState()->GetPrefs())) {
+    if (IsIncognitoModeForced(self.browser->GetProfile()->GetPrefs())) {
       action.attributes = UIMenuElementAttributesDisabled;
     }
     return action;
@@ -235,7 +235,7 @@ using vivaldi::IsVivaldiRunning;
                         [handler openURLInNewTab:[OpenNewTabCommand
                                                      commandWithIncognito:NO]];
                       }];
-  if (IsIncognitoModeForced(self.browser->GetBrowserState()->GetPrefs())) {
+  if (IsIncognitoModeForced(self.browser->GetProfile()->GetPrefs())) {
     action.attributes = UIMenuElementAttributesDisabled;
   }
   return action;
@@ -255,7 +255,7 @@ using vivaldi::IsVivaldiRunning;
                           [handler openURLInNewTab:
                               [OpenNewTabCommand commandWithIncognito:YES]];
                         }];
-    if (IsIncognitoModeDisabled(self.browser->GetBrowserState()->GetPrefs())) {
+    if (IsIncognitoModeDisabled(self.browser->GetProfile()->GetPrefs())) {
       action.attributes = UIMenuElementAttributesDisabled;
     }
     return action;
@@ -271,7 +271,7 @@ using vivaldi::IsVivaldiRunning;
                         [handler openURLInNewTab:[OpenNewTabCommand
                                                      commandWithIncognito:YES]];
                       }];
-  if (IsIncognitoModeDisabled(self.browser->GetBrowserState()->GetPrefs())) {
+  if (IsIncognitoModeDisabled(self.browser->GetProfile()->GetPrefs())) {
     action.attributes = UIMenuElementAttributesDisabled;
   }
   return action;
@@ -411,7 +411,7 @@ using vivaldi::IsVivaldiRunning;
                     [handler openURLInNewTab:command];
                   }];
 
-    if (IsIncognitoModeForced(self.browser->GetBrowserState()->GetPrefs())) {
+    if (IsIncognitoModeForced(self.browser->GetProfile()->GetPrefs())) {
       action.attributes = UIMenuElementAttributesDisabled;
     }
 
@@ -432,7 +432,7 @@ using vivaldi::IsVivaldiRunning;
                   }];
                 }];
 
-  if (IsIncognitoModeForced(self.browser->GetBrowserState()->GetPrefs())) {
+  if (IsIncognitoModeForced(self.browser->GetProfile()->GetPrefs())) {
     action.attributes = UIMenuElementAttributesDisabled;
   }
 
@@ -456,7 +456,7 @@ using vivaldi::IsVivaldiRunning;
                           [handler openURLInNewTab:command];
                         }];
 
-    if (IsIncognitoModeDisabled(self.browser->GetBrowserState()->GetPrefs())) {
+    if (IsIncognitoModeDisabled(self.browser->GetProfile()->GetPrefs())) {
       action.attributes = UIMenuElementAttributesDisabled;
     }
 
@@ -478,7 +478,7 @@ using vivaldi::IsVivaldiRunning;
                         }];
                       }];
 
-  if (IsIncognitoModeDisabled(self.browser->GetBrowserState()->GetPrefs())) {
+  if (IsIncognitoModeDisabled(self.browser->GetProfile()->GetPrefs())) {
     action.attributes = UIMenuElementAttributesDisabled;
   }
 
@@ -496,8 +496,8 @@ using vivaldi::IsVivaldiRunning;
         __typeof(weakSelf) strongSelf = weakSelf;
 
         TemplateURLService* templateURLService =
-            ios::TemplateURLServiceFactory::GetForBrowserState(
-                strongSelf.browser->GetBrowserState());
+            ios::TemplateURLServiceFactory::GetForProfile(
+                strongSelf.browser->GetProfile());
 
         UIImage* image = [optionalImage.value().ToUIImage() copy];
 
@@ -611,6 +611,18 @@ using vivaldi::IsVivaldiRunning;
                            ClipboardRecentContent::GetInstance()
                                ->GetRecentTextFromClipboard(
                                    base::BindOnce(clipboardAction));
+                         }];
+}
+
+- (UIAction*)actionToOpenAIMenu {
+  id<ApplicationCommands> handler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), ApplicationCommands);
+  return [self actionWithTitle:@"Open AI menu"
+                         image:DefaultSymbolWithPointSize(
+                                   kMagicStackSymbol, kSymbolActionPointSize)
+                          type:MenuActionType::AIPrototyping
+                         block:^{
+                           [handler openAIMenu];
                          }];
 }
 

@@ -26,7 +26,6 @@ import android.view.Window;
 import android.view.WindowManager;
 
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 
 import org.jni_zero.CalledByNative;
@@ -77,7 +76,7 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
     private KeyboardVisibilityDelegate mKeyboardVisibilityDelegate =
             KeyboardVisibilityDelegate.getInstance();
 
-    private InsetObserver mInsetObserver;
+    private @Nullable InsetObserver mInsetObserver;
 
     // Native pointer to the c++ WindowAndroid object.
     private long mNativeWindowAndroid;
@@ -149,13 +148,16 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
     /** An interface to notify listeners of the changes in activity state. */
     public interface ActivityStateObserver {
         /** Called when the activity goes into paused state. */
-        void onActivityPaused();
+        default void onActivityPaused() {}
 
         /** Called when the activity goes into resumed state. */
-        void onActivityResumed();
+        default void onActivityResumed() {}
+
+        /** Called when the activity goes into stopped state. */
+        default void onActivityStopped() {}
 
         /** Called when the activity goes into destroyed state. */
-        void onActivityDestroyed();
+        default void onActivityDestroyed() {}
     }
 
     private ObserverList<ActivityStateObserver> mActivityStateObservers = new ObserverList<>();
@@ -189,9 +191,11 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
         this(context, DisplayAndroid.getNonMultiDisplay(context));
     }
 
-    protected WindowAndroid(Context context, IntentRequestTracker tracker) {
+    protected WindowAndroid(
+            Context context, IntentRequestTracker tracker, InsetObserver insetObserver) {
         this(context, DisplayAndroid.getNonMultiDisplay(context));
         mIntentRequestTracker = (IntentRequestTrackerImpl) tracker;
+        mInsetObserver = insetObserver;
     }
 
     /**
@@ -220,8 +224,7 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
         // Because of crbug.com/756180, many devices report true for isScreenWideColorGamut in
         // 8.0.0, even when they don't actually support wide color gamut.
         // TODO(boliu): Observe configuration changes to update the value of isScreenWideColorGamut.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                && !Build.VERSION.RELEASE.equals("8.0.0")
+        if (!Build.VERSION.RELEASE.equals("8.0.0")
                 && ContextUtils.activityFromContext(context) != null) {
             Configuration configuration = context.getResources().getConfiguration();
             boolean isScreenWideColorGamut = configuration.isScreenWideColorGamut();
@@ -537,11 +540,12 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
     }
 
     /**
-     * For window instances associated with an activity, notifies any listeners
-     * that the activity has been stopped.
+     * For window instances associated with an activity, notifies any listeners that the activity
+     * has been stopped.
      */
     protected void onActivityStopped() {
         if (mNativeWindowAndroid == 0) return;
+        for (ActivityStateObserver observer : mActivityStateObservers) observer.onActivityStopped();
         WindowAndroidJni.get().onActivityStopped(mNativeWindowAndroid, WindowAndroid.this);
     }
 
@@ -784,14 +788,6 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
 
     /** Returns the {@link InsetObserver} for the root view of the activity or null. */
     public InsetObserver getInsetObserver() {
-        if (mInsetObserver == null) {
-            Window window = getWindow();
-            if (window == null) return null;
-
-            mInsetObserver =
-                    new InsetObserver(
-                            new ImmutableWeakReference<>(window.getDecorView().getRootView()));
-        }
         return mInsetObserver;
     }
 
@@ -936,7 +932,6 @@ public class WindowAndroid implements AndroidPermissionDelegate, DisplayAndroidO
         recomputeSupportedRefreshRates();
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     @CalledByNative
     public void setWideColorEnabled(boolean enabled) {
         // Although this API was added in Android O, it was buggy.

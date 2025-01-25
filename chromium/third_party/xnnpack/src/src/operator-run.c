@@ -7,6 +7,7 @@
 // LICENSE file in the root directory of this source tree.
 
 #include <assert.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -21,6 +22,7 @@
 #include "xnnpack/microfnptr.h"
 #include "xnnpack/microkernel-type.h"
 #include "xnnpack/microparams.h"
+#include "xnnpack/microparams-init.h"
 #include "xnnpack/operator-type.h"
 #include "xnnpack/operator.h"
 #include "xnnpack/packq.h"
@@ -42,8 +44,7 @@ void xnn_compute_transposec_2d(
       ld_input,
       ld_output,
       tile_i,
-      tile_j,
-      &context->params);
+      tile_j);
 }
 
 void xnn_compute_transposec_3d(
@@ -67,8 +68,7 @@ void xnn_compute_transposec_3d(
       ld_input,
       ld_output,
       tile_j,
-      tile_k,
-      &context->params);
+      tile_k);
 }
 
 void xnn_compute_transposec_4d(
@@ -93,8 +93,7 @@ void xnn_compute_transposec_4d(
       ld_input,
       ld_output,
       tile_k,
-      tile_l,
-      &context->params);
+      tile_l);
 }
 
 void xnn_compute_transposec_5d(
@@ -120,8 +119,7 @@ void xnn_compute_transposec_5d(
       ld_input,
       ld_output,
       tile_l,
-      tile_m,
-      &context->params);
+      tile_m);
 }
 
 void xnn_compute_transposec_6d(
@@ -150,8 +148,7 @@ void xnn_compute_transposec_6d(
       ld_input,
       ld_output,
       tile_m,
-      tile_n,
-      &context->params);
+      tile_n);
 }
 
 void xnn_compute_transposev_2d(
@@ -530,41 +527,6 @@ void xnn_compute_qp8gemm(
     size_t nr_block_size) {
   xnn_compute_hmp_qp8gemm(context, XNN_UARCH_DEFAULT, mr_block_start,
                           nr_block_start, mr_block_size, nr_block_size);
-}
-
-void xnn_compute_hmp_dqgemm_bl(
-    const struct gemm_context context[restrict XNN_MIN_ELEMENTS(1)],
-    uint32_t uarch_index,
-    size_t mr_block_start,
-    size_t nr_block_start,
-    size_t mr_block_size,
-    size_t nr_block_size)
-{
-  const size_t a_stride  = context->a_stride;
-  const size_t cm_stride = context->cm_stride;
-
-  context->dq_bl_ukernel.function[uarch_index](
-      mr_block_size,
-      nr_block_size,
-      context->k_scaled,
-      (const void*) ((uintptr_t) context->a + mr_block_start * a_stride),
-      a_stride,
-      (const void*) ((uintptr_t) context->packed_w + nr_block_start * context->w_stride),
-      (void*) ((uintptr_t) context->c + mr_block_start * cm_stride + (nr_block_start << context->log2_csize)),
-      cm_stride,
-      context->cn_stride,
-      context->fused_params,
-     (const void*) ((uintptr_t) &context->quantization_params[mr_block_start]));
-}
-
-void xnn_compute_dqgemm_bl(
-    const struct gemm_context context[restrict XNN_MIN_ELEMENTS(1)],
-    size_t mr_block_start,
-    size_t nr_block_start,
-    size_t mr_block_size,
-    size_t nr_block_size)
-{
-  return xnn_compute_hmp_dqgemm_bl(context, /*uarch_index=*/0, mr_block_start, nr_block_start, mr_block_size, nr_block_size);
 }
 
 void xnn_compute_spmm(
@@ -1455,93 +1417,6 @@ void xnn_compute_pixelwise_average_pooling_multipass_with_thread(
     &context->params);
 }
 
-void xnn_compute_global_average_pooling_nwc_unipass(
-    const struct global_average_pooling_nwc_context context[restrict XNN_MIN_ELEMENTS(1)],
-    size_t batch_index)
-{
-  const void* input =
-    (const void*) ((uintptr_t) context->input + batch_index * context->input_batch_stride);
-  void* output =
-    (void*) ((uintptr_t) context->output + batch_index * context->output_batch_stride);
-
-  context->unipass_ukernel(
-    context->input_elements,
-    context->channels,
-    input,
-    context->input_pixel_stride,
-    context->zero,
-    output,
-    &context->params);
-}
-
-void xnn_compute_global_average_pooling_nwc_multipass(
-    const struct global_average_pooling_nwc_context context[restrict XNN_MIN_ELEMENTS(1)],
-    size_t batch_index)
-{
-  const void* input =
-    (const void*) ((uintptr_t) context->input + batch_index * context->input_batch_stride);
-  void* output =
-    (void*) ((uintptr_t) context->output + batch_index * context->output_batch_stride);
-  void* multipass_buffer =
-    (void*) ((uintptr_t) context->multipass_buffer + batch_index * context->multipass_batch_stride);
-
-  assert(context->multipass_buffer != NULL);
-
-  context->multipass_ukernel(
-    context->input_elements,
-    context->channels,
-    input,
-    context->input_pixel_stride,
-    context->zero,
-    multipass_buffer,
-    output,
-    &context->params);
-}
-
-void xnn_compute_global_average_pooling_nwc_multipass_with_thread(
-    const struct global_average_pooling_nwc_context context[restrict XNN_MIN_ELEMENTS(1)],
-    size_t thread_index,
-    size_t batch_index)
-{
-  const void* input =
-    (const void*) ((uintptr_t) context->input + batch_index * context->input_batch_stride);
-  void* output =
-    (void*) ((uintptr_t) context->output + batch_index * context->output_batch_stride);
-  void* multipass_buffer =
-    (void*) ((uintptr_t) context->multipass_buffer + thread_index * context->multipass_batch_stride);
-
-  assert(context->multipass_buffer != NULL);
-
-  context->multipass_ukernel(
-    context->input_elements,
-    context->channels,
-    input,
-    context->input_pixel_stride,
-    context->zero,
-    multipass_buffer,
-    output,
-    &context->params);
-}
-
-void xnn_compute_global_average_pooling_ncw(
-    const struct global_average_pooling_ncw_context context[restrict XNN_MIN_ELEMENTS(1)],
-    size_t batch_index,
-    size_t channels_start,
-    size_t channels_slice)
-{
-  const void* input = (const void*) ((uintptr_t) context->input +
-    channels_start * context->input_channel_stride + batch_index * context->input_batch_stride);
-  void* output = (void*) ((uintptr_t) context->output +
-    channels_start * context->output_channel_stride + batch_index * context->output_batch_stride);
-
-  context->ukernel(
-    context->input_elements,
-    channels_slice,
-    input,
-    output,
-    &context->params);
-}
-
 void xnn_compute_resize_bilinear_indirection(
     const struct resize_bilinear_nhwc_indirection_init_context context[restrict XNN_MIN_ELEMENTS(1)],
     size_t output_y_start,
@@ -1556,7 +1431,7 @@ void xnn_compute_resize_bilinear_indirection(
     context->input_height, context->input_width,
     context->output_height, context->output_width,
     context->input,
-    /*indirection_buffer==*/(const void**) ((uintptr_t) buffer + context->packed_weight_size),
+    /*indirection_buffer==*/(const void**) ((uintptr_t) buffer + context->indirect_input_offset),
     /*packed_weights=*/(void*) buffer,
     context->align_corners, context->tensorflow_legacy_mode);
 }
@@ -1598,19 +1473,6 @@ void xnn_compute_resize_bilinear_chw(
     context->packed_weights,
     output,
     context->input_channel_stride);
-}
-
-void xnn_compute_prelu(
-    const struct prelu_context context[restrict XNN_MIN_ELEMENTS(1)],
-    size_t batch_start,
-    size_t batch_range)
-{
-  const size_t x_stride = context->x_stride;
-  const size_t y_stride = context->y_stride;
-  const void* x = (const void*) ((uintptr_t) context->x + x_stride * batch_start);
-  void* y = (void*) ((uintptr_t) context->y + y_stride * batch_start);
-
-  context->ukernel(batch_range, context->n, x, x_stride, context->w, y, y_stride);
 }
 
 void xnn_compute_pad_5d(
@@ -2226,10 +2088,32 @@ void xnn_compute_contiguous_reduce(
   }
   // Convert to output datatype if accumulation type != output type.
   if (context->workspace) {
-    const void* workspace_ptr = (void*) ((uintptr_t) context->workspace + workspace_offset);
+    void* workspace_ptr = (void*) ((uintptr_t) context->workspace + workspace_offset);
     output_ptr = (void*) ((uintptr_t) context->output + output_offset);
-    context->cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr,
-                         output_ptr, &context->cvt_params);
+
+    if (context->s32_f32_cvt_ukernel) {
+      struct xnn_s32_f32_cvt_params s32_f32_cvt_params;
+      s32_f32_cvt_params.scalar.zero_point = context->params.qs8_mean.scalar.num_elements * (int32_t) context->params.qs8_mean.scalar.input_zero_point;
+      context->s32_f32_cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr,
+                                   workspace_ptr, (union xnn_unary_uparams*) &s32_f32_cvt_params);
+      struct xnn_f32_qs8_cvt_params cvt_params;
+      cvt_params.scalar.scale = context->params.qs8_mean.scalar.scale;
+      cvt_params.scalar.output_zero_point = context->params.qs8_mean.scalar.output_zero_point;
+      context->cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr,
+                           output_ptr, (union xnn_unary_uparams*) &cvt_params);
+    } else if (context->u32_f32_cvt_ukernel) {
+      struct xnn_u32_f32_cvt_params u32_f32_cvt_params;
+      u32_f32_cvt_params.scalar.zero_point = context->params.qu8_mean.scalar.num_elements * (int32_t) context->params.qu8_mean.scalar.input_zero_point;
+      context->u32_f32_cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr,
+                                   workspace_ptr, (union xnn_unary_uparams*) &u32_f32_cvt_params);
+      struct xnn_f32_qu8_cvt_params cvt_params;
+      cvt_params.scalar.scale = context->params.qu8_mean.scalar.scale;
+      cvt_params.scalar.output_zero_point = context->params.qu8_mean.scalar.output_zero_point;
+      context->cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr,
+                           output_ptr, (union xnn_unary_uparams*) &cvt_params);
+    } else {
+      context->cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr, output_ptr, /*params=*/NULL);
+    }
   }
 }
 
@@ -2287,10 +2171,32 @@ void xnn_compute_discontiguous_reduce(
   }
   // Convert to output datatype if accumulation type != output type.
   if (context->workspace) {
-    const void* workspace_ptr = (void*) ((uintptr_t) context->workspace + workspace_offset);
+    void* workspace_ptr = (void*) ((uintptr_t) context->workspace + workspace_offset);
     output_ptr = (void*) ((uintptr_t) context->output + output_offset);
-    context->cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr,
-                         output_ptr, &context->cvt_params);
+
+    if (context->s32_f32_cvt_ukernel) {
+      struct xnn_s32_f32_cvt_params s32_f32_cvt_params;
+      s32_f32_cvt_params.scalar.zero_point = context->params.qs8_mean.scalar.num_elements * (int32_t) context->params.qs8_mean.scalar.input_zero_point;
+      context->s32_f32_cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr,
+                                   workspace_ptr, (union xnn_unary_uparams*) &s32_f32_cvt_params);
+      struct xnn_f32_qs8_cvt_params cvt_params;
+      cvt_params.scalar.scale = context->params.qs8_mean.scalar.scale;
+      cvt_params.scalar.output_zero_point = context->params.qs8_mean.scalar.output_zero_point;
+      context->cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr,
+                           output_ptr, (union xnn_unary_uparams*) &cvt_params);
+    } else if (context->u32_f32_cvt_ukernel) {
+      struct xnn_u32_f32_cvt_params u32_f32_cvt_params;
+      u32_f32_cvt_params.scalar.zero_point = context->params.qu8_mean.scalar.num_elements * (int32_t) context->params.qu8_mean.scalar.input_zero_point;
+      context->u32_f32_cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr,
+                                   workspace_ptr, (union xnn_unary_uparams*) &u32_f32_cvt_params);
+      struct xnn_f32_qu8_cvt_params cvt_params;
+      cvt_params.scalar.scale = context->params.qu8_mean.scalar.scale;
+      cvt_params.scalar.output_zero_point = context->params.qu8_mean.scalar.output_zero_point;
+      context->cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr,
+                           output_ptr, (union xnn_unary_uparams*) &cvt_params);
+    } else {
+      context->cvt_ukernel(context->accumulation_element_size * output2_block_size, workspace_ptr, output_ptr, /*params=*/NULL);
+    }
   }
 }
 
@@ -2315,14 +2221,15 @@ void xnn_compute_f16_qd8_convert(
   const void* input = (const void*) ((uintptr_t) context->x + x_stride * batch_index);
   void* output = (void*) ((uintptr_t) context->y + y_stride * batch_index);
 
-  uint16_t minmax[2];
+  xnn_float16 minmax[2];
   context->rminmax_ukernel(n, input, minmax, &context->params);
-  uint16_t f16_scale;
+  xnn_float16 f16_scale;
   context->quantization_params[batch_index] = xnn_f16_qd8_asymmetric_quantization_params(minmax[0], minmax[1], &f16_scale);
 
-  union xnn_f16_qs8_cvt_params params;
-  context->init_params(&params, f16_scale, context->quantization_params[batch_index].zero_point, INT8_MIN, INT8_MAX);
-  context->convert_ukernel(n, input, output, &params);
+  struct xnn_f16_qs8_cvt_params params;
+  params.scalar.scale = f16_scale;
+  params.scalar.output_zero_point = context->quantization_params[batch_index].zero_point;
+  context->convert_ukernel(n, input, output, (union xnn_unary_uparams*) &params);
 }
 
 void xnn_compute_f32_qd8_convert(
@@ -2339,9 +2246,23 @@ void xnn_compute_f32_qd8_convert(
   context->rminmax_ukernel(n, input, minmax, &context->params);
   context->quantization_params[batch_index] = xnn_f32_qd8_asymmetric_quantization_params(minmax[0], minmax[1]);
 
-  union xnn_f32_qs8_cvt_params params;
-  context->init_params(&params, 1.0f / context->quantization_params[batch_index].inv_scale, context->quantization_params[batch_index].zero_point, INT8_MIN, INT8_MAX);
-  context->convert_ukernel(n, input, output, &params);
+  struct xnn_f32_qs8_cvt_params params;
+  params.scalar.scale = 1.0f / context->quantization_params[batch_index].inv_scale;
+  params.scalar.output_zero_point = context->quantization_params[batch_index].zero_point;
+  context->convert_ukernel(n, input, output, (union xnn_unary_uparams*) &params);
+}
+
+void xnn_compute_x32_pack_lh(
+    const struct x32_pack_lh_context context[restrict XNN_MIN_ELEMENTS(1)],
+    size_t m_idx_start, size_t tile) {
+  const float* lhs = (const float*)((const char*)context->lhs +
+                                    m_idx_start * context->lhs_stride);
+  const size_t offset = context->k * m_idx_start;
+  float* lhs_packed = context->lhs_packed + offset;
+
+  context->pack_lh_ukernel(/*m=*/tile, context->k, context->mr, context->kr,
+                         context->sr, 0, (const uint32_t*) lhs, context->lhs_stride,
+                         (uint32_t*) lhs_packed);
 }
 
 void xnn_compute_f32_qp8_convert(

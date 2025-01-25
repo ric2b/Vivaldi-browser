@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/download/download_item_warning_data.h"
 #include "chrome/browser/safe_browsing/chrome_ping_manager_factory.h"
@@ -102,6 +103,7 @@ class SafeBrowsingServiceTest : public testing::Test {
                                                      /*web_contents=*/nullptr);
     EXPECT_CALL(download_item_, GetDangerType())
         .WillRepeatedly(Return(download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST));
+    EXPECT_CALL(download_item_, IsDangerous()).WillRepeatedly(Return(true));
     EXPECT_CALL(download_item_, GetURL())
         .WillRepeatedly(ReturnRef(download_url_));
 
@@ -213,6 +215,7 @@ class SafeBrowsingServiceTest : public testing::Test {
 };
 
 TEST_F(SafeBrowsingServiceTest, SendDownloadReport_Success) {
+  base::HistogramTester histogram_tester;
   SetUpDownload();
   SetExtendedReportingPrefForTests(profile_->GetPrefs(), true);
 
@@ -240,16 +243,20 @@ TEST_F(SafeBrowsingServiceTest, SendDownloadReport_Success) {
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
           &test_url_loader_factory));
 
-  EXPECT_TRUE(sb_service_->SendDownloadReport(
+  sb_service_->SendDownloadReport(
       &download_item_,
       ClientSafeBrowsingReportRequest::DANGEROUS_DOWNLOAD_OPENED,
       /*did_proceed=*/true,
-      /*show_download_in_folder=*/true));
+      /*show_download_in_folder=*/true);
+  histogram_tester.ExpectUniqueSample(
+      "SafeBrowsing.ClientSafeBrowsingReport.SendDownloadReportResult",
+      PingManager::ReportThreatDetailsResult::SUCCESS, 1);
 }
 
 TEST_F(
     SafeBrowsingServiceTest,
     SendDownloadReport_NoDownloadWarningActionWhenExtendedReportingDisabled) {
+  base::HistogramTester histogram_tester;
   SetUpDownload();
   SetExtendedReportingPrefForTests(profile_->GetPrefs(), false);
 
@@ -267,11 +274,14 @@ TEST_F(
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
           &test_url_loader_factory));
 
-  EXPECT_TRUE(sb_service_->SendDownloadReport(
+  sb_service_->SendDownloadReport(
       &download_item_,
-      ClientSafeBrowsingReportRequest::DANGEROUS_DOWNLOAD_OPENED,
+      ClientSafeBrowsingReportRequest::DANGEROUS_DOWNLOAD_RECOVERY,
       /*did_proceed=*/true,
-      /*show_download_in_folder=*/true));
+      /*show_download_in_folder=*/true);
+  histogram_tester.ExpectUniqueSample(
+      "SafeBrowsing.ClientSafeBrowsingReport.SendDownloadReportResult",
+      PingManager::ReportThreatDetailsResult::SUCCESS, 1);
 }
 
 TEST_F(SafeBrowsingServiceTest,

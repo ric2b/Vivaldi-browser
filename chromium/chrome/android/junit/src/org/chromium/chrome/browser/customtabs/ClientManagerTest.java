@@ -45,7 +45,6 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.browserservices.verification.ChromeOriginVerifier;
-import org.chromium.chrome.browser.browserservices.verification.ChromeOriginVerifierFactoryImpl;
 import org.chromium.chrome.browser.browserservices.verification.ChromeOriginVerifierJni;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
@@ -120,6 +119,7 @@ public class ClientManagerTest {
                 .when(mChromeBrowserInitializer)
                 .runNowOrAfterFullBrowserStarted(Mockito.any());
 
+        ChromeBrowserInitializer.setForTesting(mChromeBrowserInitializer);
         ProfileManager.setLastUsedProfileForTesting(mProfile);
 
         RequestThrottler.purgeAllEntriesForTesting();
@@ -129,11 +129,7 @@ public class ClientManagerTest {
                 PACKAGE_NAME,
                 mUid);
 
-        mClientManager =
-                new ClientManager(
-                        new ChromeOriginVerifierFactoryImpl(),
-                        mInstalledAppProviderWrapper,
-                        mChromeBrowserInitializer);
+        mClientManager = new ClientManager(mInstalledAppProviderWrapper);
 
         ChromeOriginVerifier.clearCachedVerificationsForTesting();
         UmaRecorderHolder.resetForTesting();

@@ -42,15 +42,21 @@ class RulesIndex : public content::RenderProcessHostObserver {
 
   enum ModifierCategory { kBlockedRequest, kAllowedRequest, kHeadersReceived };
 
+  struct RuleAndSource {
+    raw_ptr<const flat::RequestFilterRule> rule;
+    uint32_t source_id;
+  };
+
   struct ActivationResult {
     enum { MATCH, PARENT, ALWAYS_PASS } type = MATCH;
-    const flat::RequestFilterRule* rule = nullptr;
+
+    std::optional<RuleAndSource> rule_and_source;
 
     std::optional<flat::Decision> GetDecision() {
       if (type == ALWAYS_PASS)
         return flat::Decision_PASS;
-      if (rule)
-        return rule->decision();
+      if (rule_and_source)
+        return rule_and_source->rule->decision();
       return std::nullopt;
     }
   };
@@ -58,8 +64,8 @@ class RulesIndex : public content::RenderProcessHostObserver {
       base::flat_map<flat::ActivationType, ActivationResult>;
 
   struct FoundModifiers {
-    std::map<std::string, const flat::RequestFilterRule*> value_with_decision;
-    const flat::RequestFilterRule* pass_all_rule = nullptr;
+    std::map<std::string, RuleAndSource> value_with_decision;
+    std::optional<RuleAndSource> pass_all_rule;
     bool found_modify_rules = false;
   };
 
@@ -94,7 +100,7 @@ class RulesIndex : public content::RenderProcessHostObserver {
       std::optional<GURL> url = std::nullopt,
       std::optional<url::Origin> document_origin = std::nullopt);
 
-  const flat::RequestFilterRule* FindMatchingBeforeRequestRule(
+  std::optional<RuleAndSource> FindMatchingBeforeRequestRule(
       const GURL& url,
       const url::Origin& document_origin,
       flat::ResourceType resource_type,

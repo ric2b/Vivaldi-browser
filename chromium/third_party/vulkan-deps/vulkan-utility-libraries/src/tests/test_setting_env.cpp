@@ -33,7 +33,7 @@ TEST(test_layer_setting_env, EnvVar_TrimNone) {
     VkResult result_count_a =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting_a", VKU_LAYER_SETTING_TYPE_BOOL32, &value_count_a, nullptr);
     EXPECT_EQ(VK_SUCCESS, result_count_a);
-    EXPECT_EQ(2, value_count_a);
+    EXPECT_EQ(2u, value_count_a);
 
     std::vector<VkBool32> values_a(static_cast<std::size_t>(value_count_a));
     VkResult result_complete_a =
@@ -41,7 +41,7 @@ TEST(test_layer_setting_env, EnvVar_TrimNone) {
     EXPECT_EQ(VK_SUCCESS, result_complete_a);
     EXPECT_EQ(VK_TRUE, values_a[0]);
     EXPECT_EQ(VK_FALSE, values_a[1]);
-    EXPECT_EQ(2, value_count_a);
+    EXPECT_EQ(2u, value_count_a);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -58,7 +58,7 @@ TEST(test_layer_setting_env, EnvVar_TrimVendor) {
     VkResult result_count_b =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting_b", VKU_LAYER_SETTING_TYPE_BOOL32, &value_count_b, nullptr);
     EXPECT_EQ(VK_SUCCESS, result_count_b);
-    EXPECT_EQ(2, value_count_b);
+    EXPECT_EQ(2u, value_count_b);
 
     std::vector<VkBool32> values_b(static_cast<std::size_t>(value_count_b));
     VkResult result_complete_b =
@@ -66,7 +66,7 @@ TEST(test_layer_setting_env, EnvVar_TrimVendor) {
     EXPECT_EQ(VK_SUCCESS, result_complete_b);
     EXPECT_EQ(VK_TRUE, values_b[0]);
     EXPECT_EQ(VK_FALSE, values_b[1]);
-    EXPECT_EQ(2, value_count_b);
+    EXPECT_EQ(2u, value_count_b);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -83,7 +83,7 @@ TEST(test_layer_setting_env, EnvVar_TrimNamespace) {
     VkResult result_count_c =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting_c", VKU_LAYER_SETTING_TYPE_BOOL32, &value_count_c, nullptr);
     EXPECT_EQ(VK_SUCCESS, result_count_c);
-    EXPECT_EQ(2, value_count_c);
+    EXPECT_EQ(2u, value_count_c);
 
     std::vector<VkBool32> values_c(static_cast<std::size_t>(value_count_c));
     VkResult result_complete_c =
@@ -91,7 +91,7 @@ TEST(test_layer_setting_env, EnvVar_TrimNamespace) {
     EXPECT_EQ(VK_SUCCESS, result_complete_c);
     EXPECT_EQ(VK_TRUE, values_c[0]);
     EXPECT_EQ(VK_FALSE, values_c[1]);
-    EXPECT_EQ(2, value_count_c);
+    EXPECT_EQ(2u, value_count_c);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -110,7 +110,7 @@ TEST(test_layer_setting_env, EnvVar_TrimNamespace_OveriddenPrefix) {
     VkResult result_count_c =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting_c", VKU_LAYER_SETTING_TYPE_BOOL32, &value_count_c, nullptr);
     EXPECT_EQ(VK_SUCCESS, result_count_c);
-    EXPECT_EQ(2, value_count_c);
+    EXPECT_EQ(2u, value_count_c);
 
     std::vector<VkBool32> values_c(static_cast<std::size_t>(value_count_c));
     VkResult result_complete_c =
@@ -118,7 +118,7 @@ TEST(test_layer_setting_env, EnvVar_TrimNamespace_OveriddenPrefix) {
     EXPECT_EQ(VK_SUCCESS, result_complete_c);
     EXPECT_EQ(VK_TRUE, values_c[0]);
     EXPECT_EQ(VK_FALSE, values_c[1]);
-    EXPECT_EQ(2, value_count_c);
+    EXPECT_EQ(2u, value_count_c);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -135,7 +135,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Bool) {
     VkResult result_count =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_BOOL32, &value_count, nullptr);
     EXPECT_EQ(VK_SUCCESS, result_count);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     std::vector<VkBool32> values(static_cast<uint32_t>(value_count));
 
@@ -145,7 +145,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Bool) {
     EXPECT_EQ(VK_INCOMPLETE, result_incomplete);
     EXPECT_EQ(VK_TRUE, values[0]);
     EXPECT_EQ(VK_FALSE, values[1]);
-    EXPECT_EQ(1, value_count);
+    EXPECT_EQ(1u, value_count);
 
     value_count = 2;
     VkResult result_complete =
@@ -153,7 +153,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Bool) {
     EXPECT_EQ(VK_SUCCESS, result_complete);
     EXPECT_EQ(VK_TRUE, values[0]);
     EXPECT_EQ(VK_FALSE, values[1]);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -170,7 +170,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Int32) {
     VkResult result_count =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_INT32, &value_count, nullptr);
     EXPECT_EQ(VK_SUCCESS, result_count);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     std::vector<std::int32_t> values(static_cast<uint32_t>(value_count));
 
@@ -180,7 +180,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Int32) {
     EXPECT_EQ(VK_INCOMPLETE, result_incomplete);
     EXPECT_EQ(76, values[0]);
     EXPECT_EQ(0, values[1]);
-    EXPECT_EQ(1, value_count);
+    EXPECT_EQ(1u, value_count);
 
     value_count = 2;
     VkResult result_complete =
@@ -188,7 +188,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Int32) {
     EXPECT_EQ(VK_SUCCESS, result_complete);
     EXPECT_EQ(76, values[0]);
     EXPECT_EQ(-82, values[1]);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -205,7 +205,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Int64) {
     VkResult result_count =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_INT64, &value_count, nullptr);
     EXPECT_EQ(VK_SUCCESS, result_count);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     std::vector<std::int64_t> values(static_cast<uint32_t>(value_count));
 
@@ -215,7 +215,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Int64) {
     EXPECT_EQ(VK_INCOMPLETE, result_incomplete);
     EXPECT_EQ(76, values[0]);
     EXPECT_EQ(0, values[1]);
-    EXPECT_EQ(1, value_count);
+    EXPECT_EQ(1u, value_count);
 
     value_count = 2;
     VkResult result_complete =
@@ -223,7 +223,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Int64) {
     EXPECT_EQ(VK_SUCCESS, result_complete);
     EXPECT_EQ(76, values[0]);
     EXPECT_EQ(-82, values[1]);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -240,7 +240,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Uint32) {
     VkResult result_count =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_UINT32, &value_count, nullptr);
     EXPECT_EQ(VK_SUCCESS, result_count);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     std::vector<std::uint32_t> values(static_cast<uint32_t>(value_count));
 
@@ -248,17 +248,17 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Uint32) {
     VkResult result_incomplete =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_UINT32, &value_count, &values[0]);
     EXPECT_EQ(VK_INCOMPLETE, result_incomplete);
-    EXPECT_EQ(76, values[0]);
-    EXPECT_EQ(0, values[1]);
-    EXPECT_EQ(1, value_count);
+    EXPECT_EQ(76u, values[0]);
+    EXPECT_EQ(0u, values[1]);
+    EXPECT_EQ(1u, value_count);
 
     value_count = 2;
     VkResult result_complete =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_UINT32, &value_count, &values[0]);
     EXPECT_EQ(VK_SUCCESS, result_complete);
-    EXPECT_EQ(76, values[0]);
-    EXPECT_EQ(82, values[1]);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(76u, values[0]);
+    EXPECT_EQ(82u, values[1]);
+    EXPECT_EQ(2u, value_count);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -275,7 +275,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Uint64) {
     VkResult result_count =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_UINT64, &value_count, nullptr);
     EXPECT_EQ(VK_SUCCESS, result_count);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     std::vector<std::uint64_t> values(static_cast<uint32_t>(value_count));
 
@@ -285,7 +285,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Uint64) {
     EXPECT_EQ(VK_INCOMPLETE, result_incomplete);
     EXPECT_EQ(76, values[0]);
     EXPECT_EQ(0, values[1]);
-    EXPECT_EQ(1, value_count);
+    EXPECT_EQ(1u, value_count);
 
     value_count = 2;
     VkResult result_complete =
@@ -293,7 +293,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Uint64) {
     EXPECT_EQ(VK_SUCCESS, result_complete);
     EXPECT_EQ(76, values[0]);
     EXPECT_EQ(82, values[1]);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -310,7 +310,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Float) {
     VkResult result_count =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_FLOAT32, &value_count, nullptr);
     EXPECT_EQ(VK_SUCCESS, result_count);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     std::vector<float> values(static_cast<uint32_t>(value_count));
 
@@ -319,7 +319,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Float) {
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_FLOAT32, &value_count, &values[0]);
     EXPECT_EQ(VK_INCOMPLETE, result_incomplete);
     EXPECT_TRUE(std::abs(values[0] - 76.1f) <= 0.0001f);
-    EXPECT_EQ(1, value_count);
+    EXPECT_EQ(1u, value_count);
 
     value_count = 2;
     VkResult result_complete =
@@ -327,7 +327,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Float) {
     EXPECT_EQ(VK_SUCCESS, result_complete);
     EXPECT_TRUE(std::abs(values[0] - 76.1f) <= 0.0001f);
     EXPECT_TRUE(std::abs(values[1] - -82.5f) <= 0.0001f);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -344,7 +344,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Double) {
     VkResult result_count =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_FLOAT64, &value_count, nullptr);
     EXPECT_EQ(VK_SUCCESS, result_count);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     std::vector<double> values(static_cast<uint32_t>(value_count));
 
@@ -353,7 +353,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Double) {
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_FLOAT64, &value_count, &values[0]);
     EXPECT_EQ(VK_INCOMPLETE, result_incomplete);
     EXPECT_TRUE(std::abs(values[0] - 76.1) <= 0.0001);
-    EXPECT_EQ(1, value_count);
+    EXPECT_EQ(1u, value_count);
 
     value_count = 2;
     VkResult result_complete =
@@ -361,7 +361,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Double) {
     EXPECT_EQ(VK_SUCCESS, result_complete);
     EXPECT_TRUE(std::abs(values[0] - 76.1) <= 0.0001);
     EXPECT_TRUE(std::abs(values[1] - -82.5) <= 0.0001);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -378,7 +378,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Frameset) {
     VkResult result_count =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_FRAMESET, &value_count, nullptr);
     EXPECT_EQ(VK_SUCCESS, result_count);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     std::vector<VkuFrameset> values(static_cast<uint32_t>(value_count));
 
@@ -386,22 +386,22 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_Frameset) {
     VkResult result_incomplete =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_FRAMESET, &value_count, &values[0]);
     EXPECT_EQ(VK_INCOMPLETE, result_incomplete);
-    EXPECT_EQ(76, values[0].first);
-    EXPECT_EQ(100, values[0].count);
-    EXPECT_EQ(10, values[0].step);
-    EXPECT_EQ(1, value_count);
+    EXPECT_EQ(76u, values[0].first);
+    EXPECT_EQ(100u, values[0].count);
+    EXPECT_EQ(10u, values[0].step);
+    EXPECT_EQ(1u, value_count);
 
     value_count = 2;
     VkResult result_complete =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_FRAMESET, &value_count, &values[0]);
     EXPECT_EQ(VK_SUCCESS, result_complete);
-    EXPECT_EQ(76, values[0].first);
-    EXPECT_EQ(100, values[0].count);
-    EXPECT_EQ(10, values[0].step);
-    EXPECT_EQ(1, values[1].first);
-    EXPECT_EQ(100, values[1].count);
-    EXPECT_EQ(1, values[1].step);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(76u, values[0].first);
+    EXPECT_EQ(100u, values[0].count);
+    EXPECT_EQ(10u, values[0].step);
+    EXPECT_EQ(1u, values[1].first);
+    EXPECT_EQ(100u, values[1].count);
+    EXPECT_EQ(1u, values[1].step);
+    EXPECT_EQ(2u, value_count);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 }
@@ -418,7 +418,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_String) {
     VkResult result_count =
         vkuGetLayerSettingValues(layerSettingSet, "my_setting", VKU_LAYER_SETTING_TYPE_STRING, &value_count, nullptr);
     EXPECT_EQ(VK_SUCCESS, result_count);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     std::vector<const char*> values(static_cast<uint32_t>(value_count));
 
@@ -428,7 +428,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_String) {
     EXPECT_EQ(VK_INCOMPLETE, result_incomplete);
     EXPECT_STREQ("VALUE_A", values[0]);
     EXPECT_STREQ(nullptr, values[1]);
-    EXPECT_EQ(1, value_count);
+    EXPECT_EQ(1u, value_count);
 
     value_count = 2;
     VkResult result_complete =
@@ -436,7 +436,7 @@ TEST(test_layer_setting_env, vkuGetLayerSettingValues_String) {
     EXPECT_EQ(VK_SUCCESS, result_complete);
     EXPECT_STREQ("VALUE_A", values[0]);
     EXPECT_STREQ("VALUE_B", values[1]);
-    EXPECT_EQ(2, value_count);
+    EXPECT_EQ(2u, value_count);
 
     vkuDestroyLayerSettingSet(layerSettingSet, nullptr);
 

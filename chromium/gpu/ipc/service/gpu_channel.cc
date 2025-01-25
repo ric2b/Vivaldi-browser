@@ -224,6 +224,14 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelMessageFilter
       const std::vector<gpu::SyncToken>& sync_token_dependencies,
       uint64_t release_count,
       CopyToGpuMemoryBufferAsyncCallback callback) override;
+  void CopyNativeGmbToSharedMemorySync(
+      gfx::GpuMemoryBufferHandle buffer_handle,
+      base::UnsafeSharedMemoryRegion shared_memory,
+      CopyNativeGmbToSharedMemorySyncCallback callback) override;
+  void CopyNativeGmbToSharedMemoryAsync(
+      gfx::GpuMemoryBufferHandle buffer_handle,
+      base::UnsafeSharedMemoryRegion shared_memory,
+      CopyNativeGmbToSharedMemoryAsyncCallback callback) override;
 #endif  // BUILDFLAG(IS_WIN)
   void WaitForTokenInRange(int32_t routing_id,
                            int32_t start,
@@ -706,6 +714,24 @@ void GpuChannelMessageFilter::CopyToGpuMemoryBufferAsync(
   scheduler_->ScheduleTask(Scheduler::Task(it->second, std::move(run_on_main),
                                            sync_token_dependencies, release));
 }
+
+void GpuChannelMessageFilter::CopyNativeGmbToSharedMemorySync(
+    gfx::GpuMemoryBufferHandle buffer_handle,
+    base::UnsafeSharedMemoryRegion shared_memory,
+    CopyNativeGmbToSharedMemorySyncCallback callback) {
+  std::move(callback).Run(
+      gpu_memory_buffer_factory_->FillSharedMemoryRegionWithBufferContents(
+          std::move(buffer_handle), std::move(shared_memory)));
+}
+
+void GpuChannelMessageFilter::CopyNativeGmbToSharedMemoryAsync(
+    gfx::GpuMemoryBufferHandle buffer_handle,
+    base::UnsafeSharedMemoryRegion shared_memory,
+    CopyNativeGmbToSharedMemoryAsyncCallback callback) {
+  std::move(callback).Run(
+      gpu_memory_buffer_factory_->FillSharedMemoryRegionWithBufferContents(
+          std::move(buffer_handle), std::move(shared_memory)));
+}
 #endif  // BUILDFLAG(IS_WIN)
 
 void GpuChannelMessageFilter::WaitForTokenInRange(
@@ -854,8 +880,7 @@ base::WeakPtr<GpuChannel> GpuChannel::AsWeakPtr() {
 
 bool GpuChannel::OnMessageReceived(const IPC::Message& msg) {
   // All messages should be pushed to channel_messages_ and handled separately.
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 void GpuChannel::OnChannelError() {
@@ -939,7 +964,7 @@ void GpuChannel::ExecuteDeferredRequest(
         return;
       }
 
-      stub->ExecuteDeferredRequest(*request.params);
+      stub->ExecuteDeferredRequest(*request.params, release_delegate);
 
       // If we get descheduled or yield while processing a message.
       if (stub->HasUnprocessedCommands() || !stub->IsScheduled()) {

@@ -25,13 +25,12 @@ class CORE_EXPORT FlexLayoutAlgorithm
       const LayoutAlgorithmParams& params,
       const HashMap<wtf_size_t, LayoutUnit>* cross_size_adjustments = nullptr);
 
+  void SetupRelayoutData(const FlexLayoutAlgorithm& previous, RelayoutType);
+
   MinMaxSizesResult ComputeMinMaxSizes(const MinMaxSizesFloatInput&);
   const LayoutResult* Layout();
 
  private:
-  const LayoutResult* RelayoutIgnoringChildScrollbarChanges();
-  const LayoutResult* RelayoutAndBreakEarlierForFlex(
-      const LayoutResult* previous_result);
   const LayoutResult* LayoutInternal();
 
   void PlaceFlexItems(
@@ -73,8 +72,7 @@ class CORE_EXPORT FlexLayoutAlgorithm
   void ConstructAndAppendFlexItems(
       Phase phase,
       HeapVector<Member<LayoutBox>>* oof_children = nullptr);
-  void ApplyFinalAlignmentAndReversals(
-      HeapVector<NGFlexLine>* flex_line_outputs);
+  void ApplyReversals(HeapVector<NGFlexLine>* flex_line_outputs);
   LayoutResult::EStatus GiveItemsFinalPositionAndSize(
       HeapVector<NGFlexLine>* flex_line_outputs,
       Vector<EBreakBetween>* row_break_between_outputs);

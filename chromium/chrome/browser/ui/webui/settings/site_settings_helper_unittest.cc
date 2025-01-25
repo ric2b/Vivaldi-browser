@@ -44,12 +44,14 @@
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/site_engagement/content/site_engagement_score.h"
 #include "components/strings/grit/privacy_sandbox_strings.h"
+#include "content/public/browser/file_system_access_permission_context.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_task_environment.h"
 #include "extensions/browser/extension_registry.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/device/public/cpp/test/fake_usb_device_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features_generated.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/webui/webui_allowlist.h"
 #include "url/gurl.h"
@@ -1089,7 +1091,7 @@ TEST_F(SiteSettingsHelperTest, AutomaticFullscreenVisibility) {
 
   // Automatic Fullscreen is visible for non-origin-specific lists.
   auto types = GetVisiblePermissionCategories();
-  EXPECT_TRUE(base::ranges::any_of(types, [](auto& t) { return t == type; }));
+  EXPECT_TRUE(base::Contains(types, type));
 
   constexpr char kDefault[] = "https://www.default.com:443";
   constexpr char kAllowed[] = "https://www.allowed.com:443";
@@ -1102,7 +1104,7 @@ TEST_F(SiteSettingsHelperTest, AutomaticFullscreenVisibility) {
   EXPECT_EQ(SiteSettingSource::kDefault, source);
   EXPECT_EQ(CONTENT_SETTING_BLOCK, content_setting);
   types = GetVisiblePermissionCategories(kDefault, &profile);
-  EXPECT_FALSE(base::ranges::any_of(types, [](auto& t) { return t == type; }));
+  EXPECT_FALSE(base::Contains(types, type));
 
   // Simulate allowing Automatic Fullscreen through enterprise policy.
   auto policy_provider = std::make_unique<content_settings::MockProvider>();
@@ -1121,8 +1123,49 @@ TEST_F(SiteSettingsHelperTest, AutomaticFullscreenVisibility) {
   EXPECT_EQ(SiteSettingSource::kPolicy, source);
   EXPECT_EQ(CONTENT_SETTING_ALLOW, content_setting);
   types = GetVisiblePermissionCategories(kAllowed, &profile);
-  EXPECT_TRUE(base::ranges::any_of(types, [](auto& t) { return t == type; }));
+  EXPECT_TRUE(base::Contains(types, type));
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+TEST_F(SiteSettingsHelperTest, WebPrintingVisibility) {
+  TestingProfile profile;
+  profile.SetPermissionControllerDelegate(
+      permissions::GetPermissionControllerDelegate(&profile));
+  base::test::ScopedFeatureList feature_list{blink::features::kWebPrinting};
+  const ContentSettingsType type = ContentSettingsType::WEB_PRINTING;
+
+  // Web Printing is visible for non-origin-specific lists.
+  EXPECT_TRUE(base::Contains(GetVisiblePermissionCategories(), type));
+
+  constexpr char kDefault[] = "https://www.default.com:443";
+  constexpr char kAllowed[] = "https://www.allowed.com:443";
+  constexpr char kIwa[] =
+      "isolated-app://aerugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaic";
+
+  // Web Printing is not visible for sites with the default source.
+  EXPECT_FALSE(
+      base::Contains(GetVisiblePermissionCategories(kDefault, &profile), type));
+
+  // Web Printing is always visible for IWA origins.
+  EXPECT_TRUE(
+      base::Contains(GetVisiblePermissionCategories(kIwa, &profile), type));
+
+  // Simulate allowing Web Printing through enterprise policy.
+  auto policy_provider = std::make_unique<content_settings::MockProvider>();
+  policy_provider->SetWebsiteSetting(
+      ContentSettingsPattern::FromString(kAllowed),
+      ContentSettingsPattern::FromString(kAllowed), type,
+      base::Value(CONTENT_SETTING_ALLOW), /*constraints=*/{},
+      content_settings::PartitionKey::GetDefaultForTesting());
+  content_settings::TestUtils::OverrideProvider(
+      HostContentSettingsMapFactory::GetForProfile(&profile),
+      std::move(policy_provider), ProviderType::kPolicyProvider);
+
+  // Web Printing is visible for origins with non-default sources.
+  EXPECT_TRUE(
+      base::Contains(GetVisiblePermissionCategories(kAllowed, &profile), type));
+}
+#endif
 
 namespace {
 
@@ -1353,11 +1396,11 @@ TEST_F(PersistentPermissionsSiteSettingsHelperTest,
   context->SetOriginHasExtendedPermissionForTesting(kTestOrigin);
 
   auto file_write_grant = context->GetWritePermissionGrant(
-      kTestOrigin, kTestPath,
+      kTestOrigin, content::PathInfo(kTestPath),
       ChromeFileSystemAccessPermissionContext::HandleType::kFile,
       ChromeFileSystemAccessPermissionContext::UserAction::kSave);
   auto file_read_grant = context->GetWritePermissionGrant(
-      kTestOrigin, kTestPath2,
+      kTestOrigin, content::PathInfo(kTestPath2),
       ChromeFileSystemAccessPermissionContext::HandleType::kFile,
       ChromeFileSystemAccessPermissionContext::UserAction::kSave);
 
@@ -1529,10 +1572,6 @@ class SiteSettingsHelperIsolatedWebAppTest : public testing::Test {
  private:
   content::BrowserTaskEnvironment task_environment_;
   TestingProfile testing_profile_;
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  web_app::test::ScopedSkipMainProfileCheck skip_main_profile_check_;
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 };
 
 TEST_F(SiteSettingsHelperIsolatedWebAppTest,

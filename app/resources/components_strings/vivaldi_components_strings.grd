@@ -132,6 +132,12 @@
         <message name="IDS_SAD_TAB_RELOAD_INCOGNITO" desc="One of the bullet points displayed on the web page if a reload failed to fix the issue, advising the user to open the web page in Chrome's Incognito mode." formatter_data="android_java">
           Open page in a new Private tab
         </message>
+        <message name="IDS_LINK_FROM_CLIPBOARD" desc="The label in the omnibox dropdown explaining that the link has been extracted from the user's clipboard." formatter_data="android_java" meaning="Length: 35em">
+          Paste and Go
+        </message>
+        <message name="IDS_TEXT_FROM_CLIPBOARD" desc="The label in the omnibox dropdown explaining that the text has been extracted from the user's clipboard." formatter_data="android_java" meaning="Length: 35em">
+          Paste and Search
+        </message>
       </if>
     </messages>
   </release>

@@ -7,6 +7,7 @@
 #import "base/ios/ios_util.h"
 #import "base/memory/weak_ptr.h"
 #import "base/metrics/histogram_functions.h"
+#import "base/metrics/histogram_macros_local.h"
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/prefs/pref_service.h"
@@ -47,6 +48,7 @@
 #import "ios/chrome/browser/shared/ui/util/image/image_saver.h"
 #import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
+#import "ios/chrome/browser/text_selection/model/text_classifier_util.h"
 #import "ios/chrome/browser/ui/lens/lens_availability.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
@@ -223,8 +225,8 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
   const GURL imageURL = params.src_url;
   const bool isImage = imageURL.is_valid();
 
-  DCHECK(self.browser->GetBrowserState());
-  const bool isOffTheRecord = self.browser->GetBrowserState()->IsOffTheRecord();
+  DCHECK(self.browser->GetProfile());
+  const bool isOffTheRecord = self.browser->GetProfile()->IsOffTheRecord();
 
   const GURL& lastCommittedURL = webState->GetLastCommittedURL();
   web::Referrer referrer(lastCommittedURL, web::ReferrerPolicyDefault);
@@ -286,22 +288,28 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
                                                            params:params]];
   }
 
-  // Insert any provided menu items. Do after Link and/or Image to allow
-  // inserting at beginning or adding to end.
-  ElementsToAddToContextMenu* result =
-      ios::provider::GetContextMenuElementsToAdd(
-          webState, params, self.baseViewController,
-          HandlerForProtocol(self.browser->GetCommandDispatcher(),
-                             MiniMapCommands),
-          HandlerForProtocol(self.browser->GetCommandDispatcher(),
-                             UnitConversionCommands));
-  if (result && result.elements) {
-    [menuElements addObjectsFromArray:result.elements];
-    menuTitle = result.title;
-    if (menuTitle.length > kContextMenuMaxTitleLength) {
-      menuTitle = [[menuTitle substringToIndex:kContextMenuMaxTitleLength - 1]
-          stringByAppendingString:kContextMenuEllipsis];
+  // This check skips every internal context menu entry. This may need to be
+  // changed to only affect entity detection entries.
+  if (IsEntitySelectionAllowedForURL(webState)) {
+    // Insert any provided menu items. Do after Link and/or Image to allow
+    // inserting at beginning or adding to end.
+    ElementsToAddToContextMenu* result =
+        ios::provider::GetContextMenuElementsToAdd(
+            webState, params, self.baseViewController,
+            HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                               MiniMapCommands),
+            HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                               UnitConversionCommands));
+    if (result && result.elements) {
+      [menuElements addObjectsFromArray:result.elements];
+      menuTitle = result.title;
+      if (menuTitle.length > kContextMenuMaxTitleLength) {
+        menuTitle = [[menuTitle substringToIndex:kContextMenuMaxTitleLength - 1]
+            stringByAppendingString:kContextMenuEllipsis];
+      }
     }
+    LOCAL_HISTOGRAM_BOOLEAN("IOS.Mobile.ContextMenu.EntitySelectionAllowed",
+                            true);
   }
 
   if (menuElements.count == 0) {
@@ -380,17 +388,6 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
     }];
     [linkOpeningElements addObject:openNewTab];
 
-    if (IsTabGroupInGridEnabled()) {
-      // Open in Tab Group.
-      UIMenuElement* openLinkInGroupMenu =
-          [self openLinkInGroupMenuElement:linkURL
-                                  scenario:scenario
-                                  referrer:referrer
-                            isOffTheRecord:isOffTheRecord
-                                    params:params];
-      [linkOpeningElements addObject:openLinkInGroupMenu];
-    }
-
     // Vivaldi: Option for open tab in background.
     UIAction* openNewBackgroundTab =
         [actionFactory actionToOpenInNewBackgroundTabWithBlock:^{
@@ -407,6 +404,17 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
     }];
     [linkOpeningElements addObject:openNewBackgroundTab];
     // End Vivaldi
+
+    if (IsTabGroupInGridEnabled()) {
+      // Open in Tab Group.
+      UIMenuElement* openLinkInGroupMenu =
+          [self openLinkInGroupMenuElement:linkURL
+                                  scenario:scenario
+                                  referrer:referrer
+                            isOffTheRecord:isOffTheRecord
+                                    params:params];
+      [linkOpeningElements addObject:openLinkInGroupMenu];
+    }
 
     if (!isOffTheRecord) {
       // Open in Incognito Tab.
@@ -580,9 +588,9 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
   web::NavigationManager::WebLoadParams webParams =
       ImageSearchParamGenerator::LoadParamsForImageData(
           imageData, URL,
-          ios::TemplateURLServiceFactory::GetForBrowserState(
-              self.browser->GetBrowserState()));
-  const BOOL isIncognito = self.browser->GetBrowserState()->IsOffTheRecord();
+          ios::TemplateURLServiceFactory::GetForProfile(
+              self.browser->GetProfile()));
+  const BOOL isIncognito = self.browser->GetProfile()->IsOffTheRecord();
 
   // Apply variation header data to the params.
   NSMutableDictionary<NSString*, NSString*>* combinedExtraHeaders =
@@ -619,7 +627,7 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
   __weak __typeof(self) weakSelf = self;
 
   std::set<const TabGroup*> groups =
-      GetAllGroupsForBrowserState(self.browser->GetBrowserState());
+      GetAllGroupsForProfile(self.browser->GetProfile());
 
   auto actionResult = ^(const TabGroup* group) {
     ContextMenuConfigurationProvider* strongSelf = weakSelf;
@@ -760,8 +768,7 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
   // TODO(crbug.com/351817704): Save to photo is not presented in the
   // baseViewController.
   const bool saveToPhotosAvailable =
-      !_isLensOverlay &&
-      IsSaveToPhotosAvailable(self.browser->GetBrowserState());
+      !_isLensOverlay && IsSaveToPhotosAvailable(self.browser->GetProfile());
 
   BrowserActionFactory* actionFactory =
       [[BrowserActionFactory alloc] initWithBrowser:self.browser
@@ -808,10 +815,16 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
   }
 
   if (IsSaveToPhotosActionImprovementEnabled() && saveToPhotosAvailable) {
+    UIImage* image;
+    if (@available(iOS 17, *)) {
+      image = DefaultSymbolWithPointSize(kPhotoBadgeArrowDownSymbol,
+                                         kSymbolActionPointSize);
+    } else {
+      image = DefaultSymbolWithPointSize(kPhotoSymbol, kSymbolActionPointSize);
+    }
     UIMenu* saveImageInMenu = [UIMenu
         menuWithTitle:l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_SAVE_IMAGE_IN)
-                image:DefaultSymbolWithPointSize(kPhotoBadgeArrowDownSymbol,
-                                                 kSymbolActionPointSize)
+                image:image
            identifier:nil
               options:UIMenuOptionsSingleSelection
              children:imageSavingElements];
@@ -838,8 +851,7 @@ NSString* const kAlertAccessibilityIdentifier = @"AlertAccessibilityIdentifier";
   // Search the image using Lens if Lens is enabled and available. Otherwise
   // fall back to a standard search by image experience.
   TemplateURLService* service =
-      ios::TemplateURLServiceFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
+      ios::TemplateURLServiceFactory::GetForProfile(self.browser->GetProfile());
 
   const BOOL useLens =
       lens_availability::CheckAndLogAvailabilityForLensEntryPoint(

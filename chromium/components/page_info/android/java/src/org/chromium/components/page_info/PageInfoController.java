@@ -40,6 +40,7 @@ import org.chromium.components.security_state.SecurityStateModel;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.content_public.browser.LoadCommittedDetails;
+import org.chromium.content_public.browser.Visibility;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.base.Clipboard;
@@ -152,6 +153,9 @@ public class PageInfoController
 
     // Dialog which is opened when clicking on forget site button.
     private Dialog mForgetSiteDialog;
+
+    // Vivaldi
+    private static Runnable sDismissPopup;
 
     /**
      * Creates the PageInfoController, but does not display it. Also initializes the corresponding
@@ -290,12 +294,12 @@ public class PageInfoController
                         mDelegate,
                         pageInfoHighlight.getHighlightedPermission());
         mSubpageControllers.add(mPermissionsController);
-        if (mDelegate.showTrackingProtectionACTFeaturesUI()) {
+        if (mDelegate.showTrackingProtectionActFeaturesUi()) {
             mTrackingProtectionLaunchController =
                     new PageInfoTrackingProtectionLaunchController(
                             this, mView.getCookiesRowView(), mDelegate);
             mSubpageControllers.add(mTrackingProtectionLaunchController);
-        } else if (mDelegate.showTrackingProtectionUI()) {
+        } else if (mDelegate.showTrackingProtectionUi()) {
             mTrackingProtectionController =
                     new PageInfoTrackingProtectionController(
                             this, mView.getCookiesRowView(), mDelegate);
@@ -307,7 +311,7 @@ public class PageInfoController
         }
 
         if (source == OpenedFromSource.WEBAPK_SNACKBAR
-                && mDelegate.showTrackingProtectionACTFeaturesUI()) {
+                && mDelegate.showTrackingProtectionActFeaturesUi()) {
             mContainer.showPage(
                     mTrackingProtectionLaunchController.createViewForSubpage(mContainer),
                     null,
@@ -337,12 +341,14 @@ public class PageInfoController
                     }
 
                     @Override
-                    public void wasHidden() {
-                        // The web contents were hidden (potentially by loading another URL via an
-                        // intent), so dismiss the dialog).
-                        // Vivaldi - Null check
-                        if (mDialog != null)
-                        mDialog.dismiss(true);
+                    public void onVisibilityChanged(@Visibility int visibility) {
+                        // The web contents were hidden or occluded (potentially by loading another
+                        // URL via an intent), so dismiss the dialog).
+                        if (visibility != Visibility.VISIBLE) {
+                            // Vivaldi - Null check
+                            if (mDialog != null)
+                            mDialog.dismiss(true);
+                        }
                     }
 
                     @Override
@@ -591,7 +597,8 @@ public class PageInfoController
             final String contentPublisher,
             @OpenedFromSource int source,
             PageInfoControllerDelegate delegate,
-            PageInfoHighlight pageInfoHighlight) {
+            PageInfoHighlight pageInfoHighlight,
+            Runnable onDismissButtonClicked) { // Vivaldi
         // Don't show the dialog if this tab doesn't have an activity. See https://crbug.com/1267383
         if (activity == null) return;
         // If the activity's decor view is not attached to window, we don't show the dialog because
@@ -621,6 +628,8 @@ public class PageInfoController
                                 delegate,
                                 pageInfoHighlight,
                                 source));
+        // Vivaldi
+        sDismissPopup = onDismissButtonClicked;
     }
 
     public static PageInfoController getLastPageInfoControllerForTesting() {
@@ -689,6 +698,10 @@ public class PageInfoController
     /** Dismiss the page info dialog. */
     @Override
     public void dismiss() {
+        // Vivaldi: dismiss the tracker blocker & page info popup.
+        if (BuildConfig.IS_VIVALDI) {
+            if (sDismissPopup != null) sDismissPopup.run();
+        } else
         if (mDialog != null) {
             mDialog.dismiss(true);
         }

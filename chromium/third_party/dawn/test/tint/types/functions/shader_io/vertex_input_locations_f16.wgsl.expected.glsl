@@ -1,13 +1,13 @@
 #version 310 es
-#extension GL_AMD_gpu_shader_half_float : require
+#extension GL_AMD_gpu_shader_half_float: require
 
-layout(location = 0) in int loc0_1;
-layout(location = 1) in uint loc1_1;
-layout(location = 2) in float loc2_1;
-layout(location = 3) in vec4 loc3_1;
-layout(location = 4) in float16_t loc4_1;
-layout(location = 5) in f16vec3 loc5_1;
-vec4 tint_symbol(int loc0, uint loc1, float loc2, vec4 loc3, float16_t loc4, f16vec3 loc5) {
+layout(location = 0) in int tint_symbol_loc0_Input;
+layout(location = 1) in uint tint_symbol_loc1_Input;
+layout(location = 2) in float tint_symbol_loc2_Input;
+layout(location = 3) in vec4 tint_symbol_loc3_Input;
+layout(location = 4) in float16_t tint_symbol_loc4_Input;
+layout(location = 5) in f16vec3 tint_symbol_loc5_Input;
+vec4 tint_symbol_inner(int loc0, uint loc1, float loc2, vec4 loc3, float16_t loc4, f16vec3 loc5) {
   int i = loc0;
   uint u = loc1;
   float f = loc2;
@@ -16,12 +16,9 @@ vec4 tint_symbol(int loc0, uint loc1, float loc2, vec4 loc3, float16_t loc4, f16
   f16vec3 y = loc5;
   return vec4(0.0f);
 }
-
 void main() {
-  gl_PointSize = 1.0;
-  vec4 inner_result = tint_symbol(loc0_1, loc1_1, loc2_1, loc3_1, loc4_1, loc5_1);
-  gl_Position = inner_result;
-  gl_Position.y = -(gl_Position.y);
-  gl_Position.z = ((2.0f * gl_Position.z) - gl_Position.w);
-  return;
+  gl_Position = tint_symbol_inner(tint_symbol_loc0_Input, tint_symbol_loc1_Input, tint_symbol_loc2_Input, tint_symbol_loc3_Input, tint_symbol_loc4_Input, tint_symbol_loc5_Input);
+  gl_Position[1u] = -(gl_Position.y);
+  gl_Position[2u] = ((2.0f * gl_Position.z) - gl_Position.w);
+  gl_PointSize = 1.0f;
 }

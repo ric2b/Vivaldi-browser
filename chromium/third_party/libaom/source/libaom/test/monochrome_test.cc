@@ -11,7 +11,10 @@
 
 #include <climits>
 #include <vector>
+
 #include "gtest/gtest.h"
+
+#include "config/aom_config.h"
 #include "test/codec_factory.h"
 #include "test/encode_test_driver.h"
 #include "test/i420_video_source.h"
@@ -52,6 +55,8 @@ class MonochromeTest
       encoder->Control(AOME_SET_CPUUSED, GET_PARAM(3));
       if (mode_ == ::libaom_test::kAllIntra) {
         encoder->Control(AOME_SET_CQ_LEVEL, kCqLevel);
+      } else if (mode_ == ::libaom_test::kRealTime) {
+        encoder->Control(AOME_SET_MAX_INTRA_BITRATE_PCT, 10000);
       }
       if (lossless_) {
         encoder->Control(AV1E_SET_LOSSLESS, 1);
@@ -120,6 +125,7 @@ class MonochromeTest
   double frame0_psnr_y_;
 };
 
+#if !CONFIG_REALTIME_ONLY
 TEST_P(MonochromeTest, TestMonochromeEncoding) {
   ::libaom_test::I420VideoSource video("hantro_collage_w352h288.yuv", 352, 288,
                                        30, 1, 0, 5);
@@ -173,6 +179,8 @@ TEST_P(MonochromeAllIntraTest, TestMonochromeEncoding) {
   }
 }
 
+#endif  // !CONFIG_REALTIME_ONLY
+
 class MonochromeRealtimeTest : public MonochromeTest {};
 
 TEST_P(MonochromeRealtimeTest, TestMonochromeEncoding) {
@@ -188,6 +196,7 @@ TEST_P(MonochromeRealtimeTest, TestMonochromeEncoding) {
   cfg_.rc_buf_optimal_sz = 5000;
   ASSERT_NO_FATAL_FAILURE(RunLoop(&video));
 
+#if CONFIG_AV1_DECODER
   // Check that the chroma planes are equal across all frames
   std::vector<int>::const_iterator iter = chroma_value_list_.begin();
   int initial_chroma_value = *iter;
@@ -195,8 +204,10 @@ TEST_P(MonochromeRealtimeTest, TestMonochromeEncoding) {
     // Check that all decoded frames have the same constant chroma planes.
     EXPECT_EQ(*iter, initial_chroma_value);
   }
+#endif
 }
 
+#if !CONFIG_REALTIME_ONLY
 AV1_INSTANTIATE_TEST_SUITE(MonochromeTest,
                            ::testing::Values(::libaom_test::kOnePassGood,
                                              ::libaom_test::kTwoPassGood),
@@ -207,6 +218,7 @@ AV1_INSTANTIATE_TEST_SUITE(MonochromeAllIntraTest,
                            ::testing::Values(::libaom_test::kAllIntra),
                            ::testing::Values(0, 1),   // lossless
                            ::testing::Values(6, 9));  // cpu_used
+#endif                                                // !CONFIG_REALTIME_ONLY
 
 AV1_INSTANTIATE_TEST_SUITE(MonochromeRealtimeTest,
                            ::testing::Values(::libaom_test::kRealTime),

@@ -90,7 +90,6 @@ bool CanUseCopyResource(const TextureCopy& src, const TextureCopy& dst, const Ex
     // https://docs.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12graphicscommandlist-copyresource
     // In order to use D3D12's copy resource, the textures must be the same dimensions, and
     // the copy must be of the entire resource.
-    // TODO(dawn:129): Support 1D textures.
     return src.aspect == src.texture->GetFormat().aspects &&
            src.texture->GetDimension() == dst.texture->GetDimension() &&  //
            dst.texture->GetNumMipLevels() == 1 &&                         //
@@ -402,15 +401,15 @@ MaybeError TransitionAndClearForSyncScope(CommandRecordingContext* commandContex
 
 class DescriptorHeapState;
 
+template <typename PipelineType>
 class BindGroupStateTracker : public BindGroupTrackerBase<false, uint64_t> {
     using Base = BindGroupTrackerBase;
 
   public:
-    BindGroupStateTracker(Device* device, DescriptorHeapState* heapState, bool inCompute)
+    BindGroupStateTracker(Device* device, DescriptorHeapState* heapState)
         : BindGroupTrackerBase(),
           mDevice(device),
           mHeapState(heapState),
-          mInCompute(inCompute),
           mViewAllocator(device->GetViewShaderVisibleDescriptorAllocator()),
           mSamplerAllocator(device->GetSamplerShaderVisibleDescriptorAllocator()) {}
 
@@ -478,15 +477,84 @@ class BindGroupStateTracker : public BindGroupTrackerBase<false, uint64_t> {
     void SetID3D12DescriptorHeaps(ID3D12GraphicsCommandList* commandList);
 
   private:
+    enum class RootBufferViewType { CBV, SRV, UAV };
+
+    static constexpr bool kIsRenderPipeline = std::is_same_v<PipelineType, RenderPipeline>;
+    static constexpr bool kIsComputePipeline = std::is_same_v<PipelineType, ComputePipeline>;
+
+    void SetRootSignature(ID3D12GraphicsCommandList* commandList, PipelineLayoutBase* layout) {
+        if constexpr (kIsRenderPipeline) {
+            commandList->SetGraphicsRootSignature(ToBackend(layout)->GetRootSignature());
+        } else {
+            static_assert(kIsComputePipeline);
+            commandList->SetComputeRootSignature(ToBackend(layout)->GetRootSignature());
+        }
+    }
+
+    void SetRootBufferView(ID3D12GraphicsCommandList* commandList,
+                           wgpu::BufferBindingType bindingType,
+                           uint32_t parameterIndex,
+                           const D3D12_GPU_VIRTUAL_ADDRESS& bufferLocation) {
+        switch (bindingType) {
+            case wgpu::BufferBindingType::Uniform:
+                if constexpr (kIsRenderPipeline) {
+                    commandList->SetGraphicsRootConstantBufferView(parameterIndex, bufferLocation);
+                } else {
+                    static_assert(kIsComputePipeline);
+                    commandList->SetComputeRootConstantBufferView(parameterIndex, bufferLocation);
+                }
+                break;
+            case wgpu::BufferBindingType::Storage:
+            case kInternalStorageBufferBinding:
+                if constexpr (kIsRenderPipeline) {
+                    commandList->SetGraphicsRootUnorderedAccessView(parameterIndex, bufferLocation);
+                } else {
+                    static_assert(kIsComputePipeline);
+                    commandList->SetComputeRootUnorderedAccessView(parameterIndex, bufferLocation);
+                }
+                break;
+            case wgpu::BufferBindingType::ReadOnlyStorage:
+                if constexpr (kIsRenderPipeline) {
+                    commandList->SetGraphicsRootShaderResourceView(parameterIndex, bufferLocation);
+                } else {
+                    static_assert(kIsComputePipeline);
+                    commandList->SetComputeRootShaderResourceView(parameterIndex, bufferLocation);
+                }
+                break;
+            case wgpu::BufferBindingType::Undefined:
+                DAWN_UNREACHABLE();
+        }
+    }
+
+    void SetRootDescriptorTable(ID3D12GraphicsCommandList* commandList,
+                                uint32_t parameterIndex,
+                                const D3D12_GPU_DESCRIPTOR_HANDLE& baseDescriptor) {
+        if constexpr (kIsRenderPipeline) {
+            commandList->SetGraphicsRootDescriptorTable(parameterIndex, baseDescriptor);
+        } else {
+            static_assert(kIsComputePipeline);
+            commandList->SetComputeRootDescriptorTable(parameterIndex, baseDescriptor);
+        }
+    }
+
+    void SetRootConstant(ID3D12GraphicsCommandList* commandList,
+                         uint32_t parameterIndex,
+                         uint32_t rootConstantsLength,
+                         const void* rootConstantsData,
+                         uint32_t registerOffset) {
+        if constexpr (kIsRenderPipeline) {
+            commandList->SetGraphicsRoot32BitConstants(parameterIndex, rootConstantsLength,
+                                                       rootConstantsData, registerOffset);
+        } else {
+            static_assert(kIsComputePipeline);
+            commandList->SetComputeRoot32BitConstants(parameterIndex, rootConstantsLength,
+                                                      rootConstantsData, registerOffset);
+        }
+    }
+
     void UpdateRootSignatureIfNecessary(ID3D12GraphicsCommandList* commandList) {
         if (mLastAppliedPipelineLayout != mPipelineLayout) {
-            if (mInCompute) {
-                commandList->SetComputeRootSignature(
-                    ToBackend(mPipelineLayout)->GetRootSignature());
-            } else {
-                commandList->SetGraphicsRootSignature(
-                    ToBackend(mPipelineLayout)->GetRootSignature());
-            }
+            SetRootSignature(commandList, mPipelineLayout);
             // Invalidate the root sampler tables previously set in the root signature.
             ResetRootSamplerTables();
         }
@@ -524,38 +592,9 @@ class BindGroupStateTracker : public BindGroupTrackerBase<false, uint64_t> {
                 D3D12_GPU_VIRTUAL_ADDRESS bufferLocation =
                     ToBackend(binding.buffer)->GetVA() + offset;
 
-                switch (std::get<BufferBindingInfo>(bindingInfo.bindingLayout).type) {
-                    case wgpu::BufferBindingType::Uniform:
-                        if (mInCompute) {
-                            commandList->SetComputeRootConstantBufferView(parameterIndex,
-                                                                          bufferLocation);
-                        } else {
-                            commandList->SetGraphicsRootConstantBufferView(parameterIndex,
-                                                                           bufferLocation);
-                        }
-                        break;
-                    case wgpu::BufferBindingType::Storage:
-                    case kInternalStorageBufferBinding:
-                        if (mInCompute) {
-                            commandList->SetComputeRootUnorderedAccessView(parameterIndex,
-                                                                           bufferLocation);
-                        } else {
-                            commandList->SetGraphicsRootUnorderedAccessView(parameterIndex,
-                                                                            bufferLocation);
-                        }
-                        break;
-                    case wgpu::BufferBindingType::ReadOnlyStorage:
-                        if (mInCompute) {
-                            commandList->SetComputeRootShaderResourceView(parameterIndex,
-                                                                          bufferLocation);
-                        } else {
-                            commandList->SetGraphicsRootShaderResourceView(parameterIndex,
-                                                                           bufferLocation);
-                        }
-                        break;
-                    case wgpu::BufferBindingType::Undefined:
-                        DAWN_UNREACHABLE();
-                }
+                SetRootBufferView(commandList,
+                                  std::get<BufferBindingInfo>(bindingInfo.bindingLayout).type,
+                                  parameterIndex, bufferLocation);
             }
         }
 
@@ -571,11 +610,7 @@ class BindGroupStateTracker : public BindGroupTrackerBase<false, uint64_t> {
         if (cbvUavSrvCount > 0) {
             uint32_t parameterIndex = pipelineLayout->GetCbvUavSrvRootParameterIndex(index);
             const D3D12_GPU_DESCRIPTOR_HANDLE baseDescriptor = group->GetBaseViewDescriptor();
-            if (mInCompute) {
-                commandList->SetComputeRootDescriptorTable(parameterIndex, baseDescriptor);
-            } else {
-                commandList->SetGraphicsRootDescriptorTable(parameterIndex, baseDescriptor);
-            }
+            SetRootDescriptorTable(commandList, parameterIndex, baseDescriptor);
         }
 
         if (samplerCount > 0) {
@@ -584,12 +619,7 @@ class BindGroupStateTracker : public BindGroupTrackerBase<false, uint64_t> {
             // Check if the group requires its sampler table to be set in the pipeline.
             // This because sampler heap allocations could be cached and use the same table.
             if (mBoundRootSamplerTables[index].ptr != baseDescriptor.ptr) {
-                if (mInCompute) {
-                    commandList->SetComputeRootDescriptorTable(parameterIndex, baseDescriptor);
-                } else {
-                    commandList->SetGraphicsRootDescriptorTable(parameterIndex, baseDescriptor);
-                }
-
+                SetRootDescriptorTable(commandList, parameterIndex, baseDescriptor);
                 mBoundRootSamplerTables[index] = baseDescriptor;
             }
         }
@@ -601,22 +631,13 @@ class BindGroupStateTracker : public BindGroupTrackerBase<false, uint64_t> {
             uint32_t firstRegisterOffset =
                 pipelineLayout->GetDynamicStorageBufferLengthInfo()[index].firstRegisterOffset;
 
-            if (mInCompute) {
-                commandList->SetComputeRoot32BitConstants(
-                    parameterIndex, dynamicStorageBufferLengths.size(),
-                    dynamicStorageBufferLengths.data(), firstRegisterOffset);
-            } else {
-                commandList->SetGraphicsRoot32BitConstants(
-                    parameterIndex, dynamicStorageBufferLengths.size(),
-                    dynamicStorageBufferLengths.data(), firstRegisterOffset);
-            }
+            SetRootConstant(commandList, parameterIndex, dynamicStorageBufferLengths.size(),
+                            dynamicStorageBufferLengths.data(), firstRegisterOffset);
         }
     }
 
     raw_ptr<Device> mDevice;
     raw_ptr<DescriptorHeapState> mHeapState;
-
-    bool mInCompute = false;
 
     PerBindGroup<D3D12_GPU_DESCRIPTOR_HANDLE> mBoundRootSamplerTables = {};
 
@@ -630,8 +651,8 @@ class DescriptorHeapState {
   public:
     explicit DescriptorHeapState(Device* device)
         : mDevice(device),
-          mComputeBindingTracker(device, this, true),
-          mGraphicsBindingTracker(device, this, false) {}
+          mComputeBindingTracker(device, this),
+          mGraphicsBindingTracker(device, this) {}
 
     void SetID3D12DescriptorHeaps(ID3D12GraphicsCommandList* commandList) {
         DAWN_ASSERT(commandList != nullptr);
@@ -650,16 +671,22 @@ class DescriptorHeapState {
         mGraphicsBindingTracker.ResetRootSamplerTables();
     }
 
-    BindGroupStateTracker* GetComputeBindingTracker() { return &mComputeBindingTracker; }
-    BindGroupStateTracker* GetGraphicsBindingTracker() { return &mGraphicsBindingTracker; }
+    BindGroupStateTracker<ComputePipeline>* GetComputeBindingTracker() {
+        return &mComputeBindingTracker;
+    }
+    BindGroupStateTracker<RenderPipeline>* GetGraphicsBindingTracker() {
+        return &mGraphicsBindingTracker;
+    }
 
   private:
     raw_ptr<Device> mDevice;
-    BindGroupStateTracker mComputeBindingTracker;
-    BindGroupStateTracker mGraphicsBindingTracker;
+    BindGroupStateTracker<ComputePipeline> mComputeBindingTracker;
+    BindGroupStateTracker<RenderPipeline> mGraphicsBindingTracker;
 };
 
-void BindGroupStateTracker::SetID3D12DescriptorHeaps(ID3D12GraphicsCommandList* commandList) {
+template <typename PipelineType>
+void BindGroupStateTracker<PipelineType>::SetID3D12DescriptorHeaps(
+    ID3D12GraphicsCommandList* commandList) {
     mHeapState->SetID3D12DescriptorHeaps(commandList);
 }
 
@@ -829,9 +856,15 @@ MaybeError CommandBuffer::RecordCommands(CommandRecordingContext* commandContext
                 srcBuffer->TrackUsageAndTransitionNow(commandContext, wgpu::BufferUsage::CopySrc);
                 dstBuffer->TrackUsageAndTransitionNow(commandContext, wgpu::BufferUsage::CopyDst);
 
-                commandList->CopyBufferRegion(
-                    dstBuffer->GetD3D12Resource(), copy->destinationOffset,
-                    srcBuffer->GetD3D12Resource(), copy->sourceOffset, copy->size);
+                if (CanCopyBufferToBufferWithCopyResource(srcBuffer, copy->sourceOffset, dstBuffer,
+                                                          copy->destinationOffset, copy->size)) {
+                    commandList->CopyResource(dstBuffer->GetD3D12Resource(),
+                                              srcBuffer->GetD3D12Resource());
+                } else {
+                    commandList->CopyBufferRegion(
+                        dstBuffer->GetD3D12Resource(), copy->destinationOffset,
+                        srcBuffer->GetD3D12Resource(), copy->sourceOffset, copy->size);
+                }
                 break;
             }
 
@@ -1179,7 +1212,7 @@ MaybeError CommandBuffer::RecordCommands(CommandRecordingContext* commandContext
 }
 
 MaybeError CommandBuffer::RecordComputePass(CommandRecordingContext* commandContext,
-                                            BindGroupStateTracker* bindingTracker,
+                                            BindGroupStateTracker<ComputePipeline>* bindingTracker,
                                             BeginComputePassCmd* computePass,
                                             const ComputePassResourceUsage& resourceUsages) {
     uint64_t currentDispatch = 0;
@@ -1483,7 +1516,7 @@ void CommandBuffer::EmulateBeginRenderPass(CommandRecordingContext* commandConte
 }
 
 MaybeError CommandBuffer::RecordRenderPass(CommandRecordingContext* commandContext,
-                                           BindGroupStateTracker* bindingTracker,
+                                           BindGroupStateTracker<RenderPipeline>* bindingTracker,
                                            BeginRenderPassCmd* renderPass,
                                            const bool passHasUAV) {
     Device* device = ToBackend(GetDevice());

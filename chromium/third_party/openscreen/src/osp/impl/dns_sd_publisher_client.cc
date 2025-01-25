@@ -90,8 +90,7 @@ void DnsSdPublisherClient::StartPublisherInternal(
       ServiceConfigToDnsSdInstance);
 }
 
-std::unique_ptr<discovery::DnsSdService, TaskRunnerDeleter>
-DnsSdPublisherClient::CreateDnsSdServiceInternal(
+discovery::DnsSdServicePtr DnsSdPublisherClient::CreateDnsSdServiceInternal(
     const ServicePublisher::Config& config) {
   // NOTE: With the current API, the client cannot customize the behavior of
   // DNS-SD beyond the interface list.

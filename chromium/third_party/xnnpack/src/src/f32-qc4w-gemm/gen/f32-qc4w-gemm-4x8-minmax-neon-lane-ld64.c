@@ -25,7 +25,7 @@ void xnn_f32_qc4w_gemm_minmax_ukernel_4x8__neon_lane_ld64(
     float* restrict c,
     size_t cm_stride,
     size_t cn_stride,
-    const union xnn_f32_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(mr != 0);
   assert(mr <= 4);
@@ -56,7 +56,7 @@ void xnn_f32_qc4w_gemm_minmax_ukernel_4x8__neon_lane_ld64(
     a3 = a2;
     c3 = c2;
   }
-  const int32x4_t vminus_kernel_zero_point = vld1q_dup_s32(&params->scalar.minus_kernel_zero_point);
+  const int32x4_t vminus_kernel_zero_point = vdupq_n_s32(-params->scalar.kernel_zero_point);
   const uint16x8_t vmask = vmovq_n_u16(UINT16_C(0xF));
 
   do {

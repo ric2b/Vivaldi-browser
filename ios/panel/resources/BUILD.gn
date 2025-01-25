@@ -41,6 +41,11 @@ bundle_data_xcassets("assets") {
     "Assets.xcassets/readinglist_panel_active.imageset/readinglist_panel_active.pdf",
     "Assets.xcassets/readinglist_panel_active.imageset/readinglist_panel_active_dark.pdf",
 
+    # translate_panel_active
+    "Assets.xcassets/translate_panel_active.imageset/Contents.json",
+    "Assets.xcassets/translate_panel_active.imageset/translate_panel_active.pdf",
+    "Assets.xcassets/translate_panel_active.imageset/translate_panel_active_dark.pdf",
+
     # vivaldi_bookmark_panel
     "Assets.xcassets/vivaldi_bookmark_panel.imageset/Contents.json",
     "Assets.xcassets/vivaldi_bookmark_panel.imageset/vivaldi_bookmark_panel.pdf",
@@ -60,5 +65,10 @@ bundle_data_xcassets("assets") {
     "Assets.xcassets/vivaldi_readinglist_panel.imageset/Contents.json",
     "Assets.xcassets/vivaldi_readinglist_panel.imageset/vivaldi_readinglist_panel.pdf",
     "Assets.xcassets/vivaldi_readinglist_panel.imageset/vivaldi_readinglist_panel_dark.pdf",
+
+    # vivaldi_translate_panel
+    "Assets.xcassets/vivaldi_translate_panel.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_translate_panel.imageset/vivaldi_translate_panel.pdf",
+    "Assets.xcassets/vivaldi_translate_panel.imageset/vivaldi_translate_panel_dark.pdf",
   ]
 }

@@ -5,18 +5,16 @@
 <translation id="1456207338570705181">Tocca per cercare è una funzione disponibile solo quando Google è impostato come motore di ricerca predefinito in Vivaldi. Invia la parola selezionata e la pagina corrente come contesto a Ricerca di Google. Puoi disattivarlo in <ph name="BEGIN_LINK" />Impostazioni<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Mostra/nascondi le schede normali/private</translation>
 <translation id="1644574205037202324">Cronologia</translation>
-<translation id="17513872634828108">Schede aperte</translation>
 <translation id="1829244130665387512">Trova nella pagina</translation>
 <translation id="1910514478706885609">Apri in nuovo gruppo schede</translation>
 <translation id="1925021887439448749">Inserisci indirizzo web personalizzato</translation>
 <translation id="2038563949887743358">Attiva Richiedi sito desktop</translation>
-<translation id="2139186145475833000">Aggiungi a schermata Home</translation>
 <translation id="2149973817440762519">Modifica segnalibro</translation>
 <translation id="2306442503286132111">Segnalibro salvato nella cartella <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Aspetto</translation>
 <translation id="2501278716633472235">Vai indietro</translation>
 <translation id="2633278372998075009">Schede private</translation>
-<translation id="272026394418727548">Pagina principale di Vivaldi</translation>
+<translation id="272026394418727548">Pagina iniziale di Vivaldi</translation>
 <translation id="2951071800649516099">Aggiungi pagine alla tua lista di lettura per dopo</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> segnalibro}
@@ -29,13 +27,14 @@
 <translation id="3571177741182643350">Articoli non letti - Disponibili offline:</translation>
 <translation id="3602290021589620013">Anteprima</translation>
 <translation id="3700829948786686853">Benvenuto in Vivaldi</translation>
-<translation id="3719826155360621982">Pagina principale</translation>
+<translation id="3719826155360621982">Pagina iniziale</translation>
 <translation id="385051799172605136">Indietro</translation>
 <translation id="399014816462153200">Articoli letti:</translation>
 <translation id="4121750346708795461">Se utilizzi questa applicazione, accetti il <ph name="BEGIN_LINK1" />Contratto di licenza per l'utente finale<ph name="END_LINK1" /> e l'<ph name="BEGIN_LINK2" />Informativa sulla privacy<ph name="END_LINK2" /> di Vivaldi.</translation>
 <translation id="4137746084635924146">Lingua del dispositivo</translation>
 <translation id="4167670741834902166">Nuova scheda privata</translation>
 <translation id="4195643157523330669">Apri in nuova scheda</translation>
+<translation id="4225895483398857530">Scorciatoia della barra degli strumenti</translation>
 <translation id="4243710787042215766">Apri in scheda privata</translation>
 <translation id="4304713468139749426">Gestore password</translation>
 <translation id="451872707440238414">Cerca nei segnalibri</translation>
@@ -70,10 +69,11 @@ Per modificare il termine di ricerca, premere a lungo per selezionare. Per perfe
 <translation id="7481312909269577407">Avanti</translation>
 <translation id="7968014550143838305">Aggiunto alla lista di lettura</translation>
 <translation id="804786196054284061">Contratto di licenza per l'utente finale</translation>
-<translation id="8127542551745560481">Modifica pagina principale</translation>
+<translation id="8127542551745560481">Modifica pagina iniziale</translation>
 <translation id="8560602726703398413">Trova la tua lista di lettura nei segnalibri</translation>
-<translation id="85991616550051997">Vai alla pagina principale</translation>
+<translation id="85991616550051997">Vai alla pagina iniziale</translation>
 <translation id="8820817407110198400">Segnalibri</translation>
+<translation id="9042893549633094279">Privacy e Sicurezza</translation>
 <translation id="9063523880881406963">Disattiva Richiedi sito desktop</translation>
 <translation id="9080642952018487277">Entra in modalità privata</translation>
 <translation id="96681097142096641">Vuoi vedere la pagina semplificata?</translation>

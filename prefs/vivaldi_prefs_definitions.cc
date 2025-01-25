@@ -32,6 +32,10 @@
 #include "prefs/vivaldi_pref_names.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
+#if !BUILDFLAG(IS_IOS)
+#include "chrome/common/pref_names.h"
+#endif // !IS_IOS
+
 // Preference override is available on Linux or in internal desktop builds on
 // any platform for testing convenience.
 #if BUILDFLAG(IS_LINUX) || \
@@ -49,8 +53,6 @@
 
 namespace vivaldi {
 
-void RegisterOldPlatformPrefs(user_prefs::PrefRegistrySyncable* registry);
-void MigrateOldPlatformPrefs(PrefService* prefs);
 base::Value GetPlatformComputedDefault(const std::string& path);
 
 namespace {
@@ -683,6 +685,18 @@ void VivaldiPrefsDefinitions::RegisterProfilePrefs(
         NOTREACHED();
     }
   }
+}
+
+void VivaldiPrefsDefinitions::MigrateObsoleteProfilePrefs(
+      PrefService* profile_prefs) {
+#if !BUILDFLAG(IS_IOS)
+  if (profile_prefs->HasPrefPath(vivaldiprefs::kAddressBarInlineSearchSuggestEnabled)) {
+    profile_prefs->SetBoolean(
+        prefs::kSearchSuggestEnabled,
+        profile_prefs->GetBoolean(vivaldiprefs::kAddressBarInlineSearchSuggestEnabled));
+    profile_prefs->ClearPref(vivaldiprefs::kAddressBarInlineSearchSuggestEnabled);
+  }
+#endif // !IS_IOS
 }
 
 std::optional<sync_preferences::SyncablePrefMetadata>

@@ -392,19 +392,21 @@ void RequestFilterManager::RequestHandler::OnBeforeRequestHandled(
     if (cancel == RequestFilter::kCancel && collapse &&
         pending_request.collapse) {
       *pending_request.collapse = true;
-    } else if (cancel == RequestFilter::kPreventCancel &&
-               pending_request.collapse) {
+    } else if (cancel == RequestFilter::kPreventCancel) {
       *pending_request.collapse = false;
+      *pending_request.new_url = GURL();
     }
   }
 
-  // All filters have different priorities and the callbacks only runs once, so
-  // the value here would normally never be equal. However, the initial value is
-  // 0 and we want filter 0 to be able to have a say.
-  if (filter_priority >= pending_request.new_url_priority &&
-      new_url.is_valid()) {
-    *(pending_request.new_url) = new_url;
-    pending_request.new_url_priority = filter_priority;
+  if (pending_request.cancel != RequestFilter::kPreventCancel) {
+    // All filters have different priorities and the callbacks only runs once,
+    // so the value here would normally never be equal. However, the initial
+    // value is 0 and we want filter 0 to be able to have a say.
+    if (filter_priority >= pending_request.new_url_priority &&
+        new_url.is_valid()) {
+      *(pending_request.new_url) = new_url;
+      pending_request.new_url_priority = filter_priority;
+    }
   }
 
   // This will make the number of blocking filters negative if the callback was

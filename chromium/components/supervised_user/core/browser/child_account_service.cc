@@ -21,10 +21,10 @@
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/tribool.h"
+#include "components/supervised_user/core/browser/family_link_user_capabilities.h"
 #include "components/supervised_user/core/browser/list_family_members_service.h"
 #include "components/supervised_user/core/browser/proto/families_common.pb.h"
 #include "components/supervised_user/core/browser/proto_fetcher.h"
-#include "components/supervised_user/core/browser/supervised_user_capabilities.h"
 #include "components/supervised_user/core/browser/supervised_user_preferences.h"
 #include "components/supervised_user/core/browser/supervised_user_settings_service.h"
 #include "components/supervised_user/core/common/features.h"
@@ -106,9 +106,9 @@ ChildAccountService::AuthState ChildAccountService::GetGoogleAuthState() const {
   signin::AccountsInCookieJarInfo accounts_in_cookie_jar_info =
       identity_manager_->GetAccountsInCookieJar();
   bool primary_account_has_cookie =
-      accounts_in_cookie_jar_info.accounts_are_fresh &&
+      accounts_in_cookie_jar_info.AreAccountsFresh() &&
       base::ranges::any_of(
-          accounts_in_cookie_jar_info.signed_in_accounts,
+          accounts_in_cookie_jar_info.GetPotentiallyInvalidSignedInAccounts(),
           [primary_account_id](const gaia::ListedAccount& account) {
             return account.id == primary_account_id && account.valid;
           });

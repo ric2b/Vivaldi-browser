@@ -116,7 +116,7 @@ inline uint16_t ByteSwap<2>(uint16_t x) {
 
 }  // namespace internal
 
-// Returns the bytes of |x| in reverse order. This is only defined for 16-, 32-,
+// Returns the bytes of `x` in reverse order. This is only defined for 16-, 32-,
 // and 64-bit unsigned integers.
 template <typename Integer>
 inline std::enable_if_t<std::is_unsigned<Integer>::value, Integer> ByteSwap(
@@ -124,7 +124,7 @@ inline std::enable_if_t<std::is_unsigned<Integer>::value, Integer> ByteSwap(
   return internal::ByteSwap<sizeof(Integer)>(x);
 }
 
-// Read a POD integer from |src| in big-endian byte order, returning the integer
+// Read a POD integer from `src` in big-endian byte order, returning the integer
 // in native byte order.
 template <typename Integer>
 inline Integer ReadBigEndian(const void* src) {
@@ -136,7 +136,7 @@ inline Integer ReadBigEndian(const void* src) {
   return result;
 }
 
-// Write a POD integer |val| to |dest| in big-endian byte order.
+// Write a POD integer `val` to `dest` in big-endian byte order.
 template <typename Integer>
 inline void WriteBigEndian(Integer val, void* dest) {
   if (!IsBigEndianArchitecture()) {

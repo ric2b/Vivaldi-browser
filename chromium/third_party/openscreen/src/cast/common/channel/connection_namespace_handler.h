@@ -43,12 +43,12 @@ class ConnectionNamespaceHandler : public CastMessageHandler {
 
   using RemoteConnectionResultCallback = std::function<void(bool)>;
 
-  // Both |vc_router| and |vc_policy| should outlive this object.
+  // Both `vc_router` and `vc_policy` should outlive this object.
   ConnectionNamespaceHandler(VirtualConnectionRouter& vc_router,
                              VirtualConnectionPolicy& vc_policy);
   ~ConnectionNamespaceHandler() override;
 
-  // Requests a virtual connection be established. The |result_callback| is
+  // Requests a virtual connection be established. The `result_callback` is
   // later invoked with true/false to indicate success, based on a response from
   // the remote.
   void OpenRemoteConnection(VirtualConnection conn,

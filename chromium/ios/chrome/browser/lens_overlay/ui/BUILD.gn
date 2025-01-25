@@ -5,6 +5,7 @@
 source_set("protocols") {
   sources = [
     "lens_overlay_bottom_sheet_presentation_delegate.h",
+    "lens_overlay_error_handler.h",
     "lens_overlay_result_consumer.h",
     "lens_result_page_mutator.h",
     "lens_toolbar_consumer.h",
@@ -41,6 +42,8 @@ source_set("view_controller") {
     "//ios/chrome/browser/ui/omnibox/popup",
     "//ios/chrome/common",
     "//ios/chrome/common/ui/colors",
+    "//ios/chrome/common/ui/promo_style",
+    "//ios/chrome/common/ui/promo_style:utils",
     "//ios/chrome/common/ui/util",
     "//ios/components/ui_util",
     "//ios/public/provider/chrome/browser/lens:lens_overlay_api",
@@ -70,8 +73,11 @@ source_set("entry_point") {
     "lens_overlay_entrypoint_view.mm",
   ]
   deps = [
+    "//ios/chrome/app/strings",
     "//ios/chrome/browser/shared/public/commands",
+    "//ios/chrome/browser/shared/ui/elements",
     "//ios/chrome/browser/shared/ui/symbols",
+    "//ios/chrome/browser/shared/ui/util",
     "//ios/chrome/common/ui/colors",
     "//ios/chrome/common/ui/util",
   ]
@@ -81,6 +87,20 @@ source_set("lens_overlay_accessibility_identifier_constants") {
   sources = [
     "lens_overlay_accessibility_identifier_constants.h",
     "lens_overlay_accessibility_identifier_constants.mm",
+  ]
+}
+
+source_set("network_issue_alert_presenter") {
+  sources = [
+    "lens_overlay_network_issue_alert_presenter.h",
+    "lens_overlay_network_issue_alert_presenter.mm",
+  ]
+  deps = [
+    ":protocols",
+    "//base",
+    "//ios/chrome/app/strings:ios_strings_grit",
+    "//ui/base",
+    "//url",
   ]
 }
 

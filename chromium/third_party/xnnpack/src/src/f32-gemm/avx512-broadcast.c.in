@@ -34,7 +34,7 @@ void xnn_${DATATYPE_SPEC}_gemm${"inc" if INC else ""}_minmax_ukernel_${MR}x${NR}
     $if INC:
       const float* restrict acc,
     $if DATATYPE == "QC4":
-      const union xnn_f32_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+      const struct xnn_f32_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
     $else:
       const union xnn_f32_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
@@ -69,10 +69,6 @@ void xnn_${DATATYPE_SPEC}_gemm${"inc" if INC else ""}_minmax_ukernel_${MR}x${NR}
         a${M} = a${M-1};
         c${M} = c${M-1};
       }
-  $if DATATYPE == "QC4":
-    const __m128i vminus_kernel_zero_point = _mm_load_si128((const __m128i *) params->sse.minus_kernel_zero_point);
-    const __m128i vmask = _mm_load_si128((const __m128i *) params->sse.mask);
-
   do {
     $if INC:
       $for M in range(MR):

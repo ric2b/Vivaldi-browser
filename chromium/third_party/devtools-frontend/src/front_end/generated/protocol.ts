@@ -175,6 +175,7 @@ export namespace Accessibility {
    * - from 'activedescendant' to 'owns' - relationships between elements other than parent/child/sibling.
    */
   export const enum AXPropertyName {
+    Actions = 'actions',
     Busy = 'busy',
     Disabled = 'disabled',
     Editable = 'editable',
@@ -757,6 +758,8 @@ export namespace Audits {
     ExcludeDomainNonASCII = 'ExcludeDomainNonASCII',
     ExcludeThirdPartyCookieBlockedInFirstPartySet = 'ExcludeThirdPartyCookieBlockedInFirstPartySet',
     ExcludeThirdPartyPhaseout = 'ExcludeThirdPartyPhaseout',
+    ExcludePortMismatch = 'ExcludePortMismatch',
+    ExcludeSchemeMismatch = 'ExcludeSchemeMismatch',
   }
 
   export const enum CookieWarningReason {
@@ -772,6 +775,8 @@ export namespace Audits {
     WarnDomainNonASCII = 'WarnDomainNonASCII',
     WarnThirdPartyPhaseout = 'WarnThirdPartyPhaseout',
     WarnCrossSiteRedirectDowngradeChangesInclusion = 'WarnCrossSiteRedirectDowngradeChangesInclusion',
+    WarnDeprecationTrialMetadata = 'WarnDeprecationTrialMetadata',
+    WarnThirdPartyCookieHeuristic = 'WarnThirdPartyCookieHeuristic',
   }
 
   export const enum CookieOperation {
@@ -1207,7 +1212,7 @@ export namespace Audits {
     ThirdPartyCookiesBlocked = 'ThirdPartyCookiesBlocked',
     NotSignedInWithIdp = 'NotSignedInWithIdp',
     MissingTransientUserActivation = 'MissingTransientUserActivation',
-    ReplacedByButtonMode = 'ReplacedByButtonMode',
+    ReplacedByActiveMode = 'ReplacedByActiveMode',
     InvalidFieldsSpecified = 'InvalidFieldsSpecified',
     RelyingPartyOriginIsOpaque = 'RelyingPartyOriginIsOpaque',
     TypeNotMatching = 'TypeNotMatching',
@@ -2465,6 +2470,11 @@ export namespace CSS {
      * The array keeps the types of ancestor CSSRules from the innermost going outwards.
      */
     ruleTypes?: CSSRuleType[];
+    /**
+     * @starting-style CSS at-rule array.
+     * The array enumerates @starting-style at-rules starting with the innermost one, going outwards.
+     */
+    startingStyles?: CSSStartingStyle[];
   }
 
   /**
@@ -2478,6 +2488,7 @@ export namespace CSS {
     LayerRule = 'LayerRule',
     ScopeRule = 'ScopeRule',
     StyleRule = 'StyleRule',
+    StartingStyleRule = 'StartingStyleRule',
   }
 
   /**
@@ -2731,6 +2742,10 @@ export namespace CSS {
      * Optional logical axes queried for the container.
      */
     logicalAxes?: DOM.LogicalAxes;
+    /**
+     * true if the query contains scroll-state() queries.
+     */
+    queriesScrollState?: boolean;
   }
 
   /**
@@ -2783,6 +2798,21 @@ export namespace CSS {
      * Layer name.
      */
     text: string;
+    /**
+     * The associated rule header range in the enclosing stylesheet (if
+     * available).
+     */
+    range?: SourceRange;
+    /**
+     * Identifier of the stylesheet containing this object (if exists).
+     */
+    styleSheetId?: StyleSheetId;
+  }
+
+  /**
+   * CSS Starting Style at-rule descriptor.
+   */
+  export interface CSSStartingStyle {
     /**
      * The associated rule header range in the enclosing stylesheet (if
      * available).
@@ -3282,6 +3312,10 @@ export namespace CSS {
     ranges: SourceRange[];
   }
 
+  export interface TrackComputedStyleUpdatesForNodeRequest {
+    nodeId?: DOM.NodeId;
+  }
+
   export interface TrackComputedStyleUpdatesRequest {
     propertiesToTrack: CSSComputedStyleProperty[];
   }
@@ -3477,6 +3511,13 @@ export namespace CSS {
      * Identifier of the removed stylesheet.
      */
     styleSheetId: StyleSheetId;
+  }
+
+  export interface ComputedStyleUpdatedEvent {
+    /**
+     * The node id that has updated computed styles.
+     */
+    nodeId: DOM.NodeId;
   }
 }
 
@@ -3769,8 +3810,10 @@ export namespace DOM {
   export const enum PseudoType {
     FirstLine = 'first-line',
     FirstLetter = 'first-letter',
+    Check = 'check',
     Before = 'before',
     After = 'after',
+    SelectArrow = 'select-arrow',
     Marker = 'marker',
     Backdrop = 'backdrop',
     Column = 'column',
@@ -3801,8 +3844,6 @@ export namespace DOM {
     Placeholder = 'placeholder',
     FileSelectorButton = 'file-selector-button',
     DetailsContent = 'details-content',
-    SelectFallbackButton = 'select-fallback-button',
-    SelectFallbackButtonText = 'select-fallback-button-text',
     Picker = 'picker',
   }
 
@@ -4807,6 +4848,7 @@ export namespace DOM {
     containerName?: string;
     physicalAxes?: PhysicalAxes;
     logicalAxes?: LogicalAxes;
+    queriesScrollState?: boolean;
   }
 
   export interface GetContainerForNodeResponse extends ProtocolResponseWithError {
@@ -6060,7 +6102,6 @@ export namespace Emulation {
     Gyroscope = 'gyroscope',
     LinearAcceleration = 'linear-acceleration',
     Magnetometer = 'magnetometer',
-    Proximity = 'proximity',
     RelativeOrientation = 'relative-orientation',
   }
 
@@ -8112,7 +8153,9 @@ export namespace Network {
   export type LoaderId = OpaqueIdentifier<string, 'Protocol.Network.LoaderId'>;
 
   /**
-   * Unique request identifier.
+   * Unique network request identifier.
+   * Note that this does not identify individual HTTP requests that are part of
+   * a network request.
    */
   export type RequestId = OpaqueIdentifier<string, 'Protocol.Network.RequestId'>;
 
@@ -8865,6 +8908,7 @@ export namespace Network {
     type: InitiatorType;
     /**
      * Initiator JavaScript stack trace, set for Script only.
+     * Requires the Debugger domain to be enabled.
      */
     stack?: Runtime.StackTrace;
     /**
@@ -9023,6 +9067,8 @@ export namespace Network {
     SchemefulSameSiteUnspecifiedTreatedAsLax = 'SchemefulSameSiteUnspecifiedTreatedAsLax',
     SamePartyFromCrossPartyContext = 'SamePartyFromCrossPartyContext',
     NameValuePairExceedsMaxSize = 'NameValuePairExceedsMaxSize',
+    PortMismatch = 'PortMismatch',
+    SchemeMismatch = 'SchemeMismatch',
   }
 
   /**
@@ -11586,11 +11632,13 @@ export namespace Page {
     DeferredFetch = 'deferred-fetch',
     DigitalCredentialsGet = 'digital-credentials-get',
     DirectSockets = 'direct-sockets',
+    DirectSocketsPrivate = 'direct-sockets-private',
     DisplayCapture = 'display-capture',
     DocumentDomain = 'document-domain',
     EncryptedMedia = 'encrypted-media',
     ExecutionWhileOutOfViewport = 'execution-while-out-of-viewport',
     ExecutionWhileNotRendered = 'execution-while-not-rendered',
+    FencedUnpartitionedStorageRead = 'fenced-unpartitioned-storage-read',
     FocusWithoutUserActivation = 'focus-without-user-activation',
     Fullscreen = 'fullscreen',
     Frobulate = 'frobulate',
@@ -12488,6 +12536,7 @@ export namespace Page {
     EmbedderExtensionMessagingForOpenPort = 'EmbedderExtensionMessagingForOpenPort',
     EmbedderExtensionSentMessageToCachedFrame = 'EmbedderExtensionSentMessageToCachedFrame',
     RequestedByWebViewClient = 'RequestedByWebViewClient',
+    PostMessageByWebViewClient = 'PostMessageByWebViewClient',
   }
 
   /**
@@ -13558,7 +13607,8 @@ export namespace Page {
   }
 
   /**
-   * Fired for top level page lifecycle events such as navigation, load, paint, etc.
+   * Fired for lifecycle events (navigation, load, paint, etc) in the current
+   * target (including local frames).
    */
   export interface LifecycleEventEvent {
     /**
@@ -14643,6 +14693,7 @@ export namespace Storage {
     destinationLimitPriority: SignedInt64AsBase10;
     aggregatableDebugReportingConfig: AttributionReportingAggregatableDebugReportingConfig;
     scopesData?: AttributionScopesData;
+    maxEventLevelReports: integer;
   }
 
   export const enum AttributionReportingSourceRegistrationResult {
@@ -14749,6 +14800,7 @@ export namespace Storage {
     ExcessiveReportingOrigins = 'excessiveReportingOrigins',
     NoHistograms = 'noHistograms',
     InsufficientBudget = 'insufficientBudget',
+    InsufficientNamedBudget = 'insufficientNamedBudget',
     NoMatchingSourceFilterData = 'noMatchingSourceFilterData',
     NotRegistered = 'notRegistered',
     ProhibitedByBrowserPolicy = 'prohibitedByBrowserPolicy',
@@ -16129,6 +16181,8 @@ export namespace Fetch {
 
   /**
    * Unique request identifier.
+   * Note that this does not identify individual HTTP requests that are part of
+   * a network request.
    */
   export type RequestId = OpaqueIdentifier<string, 'Protocol.Fetch.RequestId'>;
 
@@ -16486,6 +16540,7 @@ export namespace WebAudio {
     Suspended = 'suspended',
     Running = 'running',
     Closed = 'closed',
+    Interrupted = 'interrupted',
   }
 
   /**
@@ -16852,6 +16907,17 @@ export namespace WebAuthn {
      * defaultBackupState value.
      */
     backupState?: boolean;
+    /**
+     * The credential's user.name property. Equivalent to empty if not set.
+     * https://w3c.github.io/webauthn/#dom-publickeycredentialentity-name
+     */
+    userName?: string;
+    /**
+     * The credential's user.displayName property. Equivalent to empty if
+     * not set.
+     * https://w3c.github.io/webauthn/#dom-publickeycredentialuserentity-displayname
+     */
+    userDisplayName?: string;
   }
 
   export interface EnableRequest {
@@ -16948,6 +17014,24 @@ export namespace WebAuthn {
    * Triggered when a credential is added to an authenticator.
    */
   export interface CredentialAddedEvent {
+    authenticatorId: AuthenticatorId;
+    credential: Credential;
+  }
+
+  /**
+   * Triggered when a credential is deleted, e.g. through
+   * PublicKeyCredential.signalUnknownCredential().
+   */
+  export interface CredentialDeletedEvent {
+    authenticatorId: AuthenticatorId;
+    credentialId: binary;
+  }
+
+  /**
+   * Triggered when a credential is updated, e.g. through
+   * PublicKeyCredential.signalCurrentUserDetails().
+   */
+  export interface CredentialUpdatedEvent {
     authenticatorId: AuthenticatorId;
     credential: Credential;
   }
@@ -17315,6 +17399,8 @@ export namespace Preload {
     WindowClosed = 'WindowClosed',
     SlowNetwork = 'SlowNetwork',
     OtherPrerenderedPageActivated = 'OtherPrerenderedPageActivated',
+    V8OptimizerDisabled = 'V8OptimizerDisabled',
+    PrerenderFailedDuringPrefetch = 'PrerenderFailedDuringPrefetch',
   }
 
   /**
@@ -17927,7 +18013,6 @@ export namespace Debugger {
   }
 
   export const enum DebugSymbolsType {
-    None = 'None',
     SourceMap = 'SourceMap',
     EmbeddedDWARF = 'EmbeddedDWARF',
     ExternalDWARF = 'ExternalDWARF',
@@ -18217,11 +18302,22 @@ export namespace Debugger {
     maxDepth: integer;
   }
 
+  export interface SetBlackboxExecutionContextsRequest {
+    /**
+     * Array of execution context unique ids for the debugger to ignore.
+     */
+    uniqueIds: string[];
+  }
+
   export interface SetBlackboxPatternsRequest {
     /**
      * Array of regexps that will be used to check script url for blackbox state.
      */
     patterns: string[];
+    /**
+     * If true, also ignore scripts with no source url.
+     */
+    skipAnonymous?: boolean;
   }
 
   export interface SetBlackboxedRangesRequest {
@@ -18677,9 +18773,9 @@ export namespace Debugger {
      */
     scriptLanguage?: Debugger.ScriptLanguage;
     /**
-     * If the scriptLanguage is WebASsembly, the source of debug symbols for the module.
+     * If the scriptLanguage is WebAssembly, the source of debug symbols for the module.
      */
-    debugSymbols?: Debugger.DebugSymbols;
+    debugSymbols?: Debugger.DebugSymbols[];
     /**
      * The name the embedder supplied for this script.
      */

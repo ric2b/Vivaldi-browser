@@ -1,6 +1,8 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
+ * Copyright (C) 2002-2017 Németh László
+ *
  * The contents of this file are subject to the Mozilla Public License Version
  * 1.1 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -11,12 +13,7 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is Hunspell, based on MySpell.
- *
- * The Initial Developers of the Original Code are
- * Kevin Hendricks (MySpell) and Németh László (Hunspell).
- * Portions created by the Initial Developers are Copyright (C) 2002-2005
- * the Initial Developers. All Rights Reserved.
+ * Hunspell is based on MySpell which is Copyright (C) 2002 Kevin Hendricks.
  *
  * Contributor(s): David Einstein, Davide Prina, Giuseppe Modugno,
  * Gianluca Turconi, Simon Brouwer, Noll János, Bíró Árpád,
@@ -402,28 +399,28 @@ std::string PfxEntry::check_morph(const char* word,
               ((!needflag) || TESTAFF(he->astr, needflag, he->alen) ||
                (contclass && TESTAFF(contclass, needflag, contclasslen)))) {
             if (morphcode) {
-              result.append(" ");
+              result.push_back(MSEP_FLD);
               result.append(morphcode);
             } else
               result.append(getKey());
             if (!HENTRY_FIND(he, MORPH_STEM)) {
-              result.append(" ");
+              result.push_back(MSEP_FLD);
               result.append(MORPH_STEM);
               result.append(HENTRY_WORD(he));
             }
             // store the pointer of the hash entry
             if (HENTRY_DATA(he)) {
-              result.append(" ");
+              result.push_back(MSEP_FLD);
               result.append(HENTRY_DATA2(he));
             } else {
               // return with debug information
               char* flag = pmyMgr->encode_flag(getFlag());
-              result.append(" ");
+              result.push_back(MSEP_FLD);
               result.append(MORPH_FLAG);
               result.append(flag);
               free(flag);
             }
-            result.append("\n");
+            result.push_back(MSEP_REC);
           }
           he = he->next_homonym;
         } while (he);
@@ -807,7 +804,7 @@ std::string SfxEntry::check_twosfx_morph(const char* word,
           if (!st.empty()) {
             if (ppfx->getMorph()) {
               result.append(ppfx->getMorph());
-              result.append(" ");
+              result.push_back(MSEP_FLD);
             }
             result.append(st);
             mychomp(result);

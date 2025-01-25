@@ -11,15 +11,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type * as puppeteer from 'puppeteer-core';
 
+import {platform} from '../conductor/mocha-interface-helpers.js';
 import {SOURCE_ROOT} from '../conductor/paths.js';
+import {ScreenshotError} from '../conductor/screenshot-error.js';
 import {TestConfig} from '../conductor/test_config.js';
 import {
   getBrowserAndPages,
-  platform,
   timeout,
   waitFor,
 } from '../shared/helper.js';
-import {ScreenshotError} from '../shared/screenshot-error.js';
 
 /**
  * The goldens screenshot folder is always taken from the source directory (NOT
@@ -305,7 +305,7 @@ async function compare(golden: string, generated: string, maximumDiffThreshold: 
   if (isOnBot) {
     debugInfo = `${base64TestGeneratedImageLog}\n${base64DiffImageLog}\n`;
   } else {
-    debugInfo = `Run the tests again with FORCE_UPDATE_ALL_GOLDENS to update all tests that fail.
+    debugInfo = `Run the tests again with --on-diff=update to update all tests that fail.
   Only do this if you expected this screenshot to have changed!
 
   Diff image generated at:

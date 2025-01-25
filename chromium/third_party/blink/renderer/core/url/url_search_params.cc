@@ -74,8 +74,7 @@ URLSearchParams* URLSearchParams::Create(const URLSearchParamsInit* init,
       return URLSearchParams::Create(init->GetAsUSVStringUSVStringRecord(),
                                      exception_state);
   }
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 URLSearchParams* URLSearchParams::Create(const Vector<Vector<String>>& init,
@@ -174,7 +173,7 @@ void URLSearchParams::SetInputWithoutUpdate(const String& query_string) {
 String URLSearchParams::toString() const {
   Vector<char> encoded_data;
   EncodeAsFormData(encoded_data);
-  return String(encoded_data.data(), encoded_data.size());
+  return String(encoded_data);
 }
 
 uint32_t URLSearchParams::size() const {

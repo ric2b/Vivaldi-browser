@@ -11,7 +11,7 @@ struct vertex_main_outputs {
 
 RWByteAddressBuffer prevent_dce : register(u0);
 int4 countLeadingZeros_eab32b() {
-  int4 arg_0 = (1).xxxx;
+  int4 arg_0 = (int(1)).xxxx;
   uint4 v = asuint(arg_0);
   uint4 v_1 = (((v <= (65535u).xxxx)) ? ((16u).xxxx) : ((0u).xxxx));
   uint4 v_2 = ((((v << v_1) <= (16777215u).xxxx)) ? ((8u).xxxx) : ((0u).xxxx));
@@ -42,9 +42,7 @@ VertexOutput vertex_main_inner() {
 
 vertex_main_outputs vertex_main() {
   VertexOutput v_8 = vertex_main_inner();
-  VertexOutput v_9 = v_8;
-  VertexOutput v_10 = v_8;
-  vertex_main_outputs v_11 = {v_10.prevent_dce, v_9.pos};
-  return v_11;
+  vertex_main_outputs v_9 = {v_8.prevent_dce, v_8.pos};
+  return v_9;
 }
 

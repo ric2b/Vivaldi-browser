@@ -117,8 +117,7 @@ gfx::Image ResourceReader::ReadPngImage(std::string_view resource_url) {
     LOG(ERROR) << reader.GetError();
     return gfx::Image();
   }
-  gfx::Image image =
-      gfx::Image::CreateFrom1xPNGBytes(reader);
+  gfx::Image image = gfx::Image::CreateFrom1xPNGBytes(reader.bytes());
   if (image.IsEmpty()) {
     LOG(ERROR) << "Failed to read " << resource_url << " as PNG image";
     return gfx::Image();

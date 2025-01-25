@@ -52,8 +52,8 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 }
 // The Browser in which blocker engine is active.
 @property(nonatomic, assign) Browser* browser;
-// The user's browser state model used.
-@property(nonatomic, assign) ChromeBrowserState* browserState;
+// The user's profile used.
+@property(nonatomic, assign) ProfileIOS* profile;
 // Rule service for ad blocker.
 @property(nonatomic, assign) RuleService* ruleService;
 // Rule manager for ad blocker.
@@ -68,7 +68,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 @implementation VivaldiATBManager
 @synthesize consumer = _consumer;
 @synthesize browser = _browser;
-@synthesize browserState = _browserState;
+@synthesize profile = _profile;
 @synthesize ruleService = _ruleService;
 @synthesize ruleManager = _ruleManager;
 @synthesize ruleSourceHandler = _ruleSourceHandler;
@@ -77,10 +77,9 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 - (instancetype)initWithBrowser:(Browser*)browser {
   if ((self = [super init])) {
     _browser = browser;
-    _browserState =
-        _browser->GetBrowserState();
+    _profile = _browser->GetProfile();
     _ruleService =
-        adblock_filter::RuleServiceFactory::GetForBrowserState(_browserState);
+        adblock_filter::RuleServiceFactory::GetForProfile(_profile);
     _bridge.reset(new vivaldi_adblocker::VivaldiATBManagerBridge(
         self, _ruleService));
 

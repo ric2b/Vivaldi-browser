@@ -43,7 +43,7 @@ class SocketHandleWaiter {
   explicit SocketHandleWaiter(ClockNowFunctionPtr now_function);
   virtual ~SocketHandleWaiter() = default;
 
-  // Start notifying |subscriber| whenever |handle| has an event. May be called
+  // Start notifying `subscriber` whenever `handle` has an event. May be called
   // multiple times, to be notified for multiple handles, but should not be
   // called multiple times for the same handle.
   void Subscribe(Subscriber* subscriber, SocketHandleRef handle);
@@ -95,7 +95,7 @@ class SocketHandleWaiter {
   };
 
   // Call the subscriber associated with each changed handle.  Handles are only
-  // processed until |timeout| is exceeded.  Must be called with |mutex_| held.
+  // processed until `timeout` is exceeded.  Must be called with `mutex_` held.
   void ProcessReadyHandles(std::vector<HandleWithSubscription>* handles,
                            Clock::duration timeout);
 

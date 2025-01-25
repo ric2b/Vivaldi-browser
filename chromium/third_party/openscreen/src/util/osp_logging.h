@@ -99,7 +99,7 @@ class Voidify {
 #else
 #define OSP_DCHECK_IS_ON() 0
 // When DCHECKs are off, nothing will be logged. Use that fact to make
-// references to the |condition| expression (or |a| and |b|) so the compiler
+// references to the `condition` expression (or `a` and `b`) so the compiler
 // won't emit unused variable warnings/errors when DCHECKs are turned off.
 #define OSP_EAT_STREAM OSP_LOG_IF(FATAL, false)
 #define OSP_DCHECK(condition) OSP_EAT_STREAM << !(condition)

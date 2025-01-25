@@ -18,8 +18,8 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.content.TitleBitmapFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabFavicon;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.DefaultFaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.FaviconImageCallback;
@@ -142,7 +142,8 @@ public class LayerTitleCache {
         boolean isDarkTheme = tab.isIncognito();
 
         // Note(david@vivaldi.com): We always use the dark theme but not for the selected tab.
-        isDarkTheme = true;
+        if (ChromeApplicationImpl.isVivaldi())
+            isDarkTheme = true;
         Tab currentTab = mTabModelSelector.getCurrentTab();
         if (currentTab != null && currentTab.getId() == tab.getId() && !tab.isIncognito())
             isDarkTheme = false;
@@ -150,7 +151,8 @@ public class LayerTitleCache {
         Bitmap originalFavicon = getOriginalFavicon(tab);
 
         // Note(david@vivaldi.com): Fetching the favicon with taking the current theme into account.
-        originalFavicon = TabFavicon.getBitmap(tab);
+        if (ChromeApplicationImpl.isVivaldi())
+            originalFavicon = TabFavicon.getBitmap(tab);
         if (originalFavicon == null) {
             originalFavicon = mDefaultFaviconHelper.getDefaultFaviconBitmap(
                     mContext, tab.getUrl(), !isDarkTheme);
@@ -198,8 +200,9 @@ public class LayerTitleCache {
         // TODO(crbug.com/331642736): Investigate if this can be called with a different width than
         //  what is stored for the corresponding group title.
         TabGroupModelFilter filter =
-                (TabGroupModelFilter)
-                        mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(incognito);
+                mTabModelSelector
+                        .getTabGroupModelFilterProvider()
+                        .getTabGroupModelFilter(incognito);
         if (!filter.tabGroupExistsForRootId(groupRootId)) return;
 
         String titleString = filter.getTabGroupTitle(groupRootId);
@@ -225,8 +228,7 @@ public class LayerTitleCache {
         }
 
         TabGroupModelFilter filter =
-                (TabGroupModelFilter)
-                        mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter();
+                mTabModelSelector.getTabGroupModelFilterProvider().getCurrentTabGroupModelFilter();
         Bitmap titleBitmap =
                 titleBitmapFactory.getGroupTitleBitmap(filter, mContext, rootId, titleString);
         title.set(titleBitmap);

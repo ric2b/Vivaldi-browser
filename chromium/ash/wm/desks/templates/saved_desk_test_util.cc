@@ -6,6 +6,7 @@
 
 #include "ash/shell.h"
 #include "ash/style/icon_button.h"
+#include "ash/wm/desks/desks_test_util.h"
 #include "ash/wm/desks/overview_desk_bar_view.h"
 #include "ash/wm/desks/templates/saved_desk_controller.h"
 #include "ash/wm/desks/templates/saved_desk_dialog_controller.h"
@@ -17,6 +18,7 @@
 #include "base/memory/raw_ref.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
+#include "base/test/run_until.h"
 #include "ui/compositor/layer.h"
 #include "ui/views/animation/bounds_animator.h"
 #include "ui/views/animation/bounds_animator_observer.h"
@@ -265,6 +267,11 @@ void WaitForSavedDeskUI() {
   SavedDeskPresenterTestApi(overview_session->saved_desk_presenter())
       .SetOnUpdateUiClosure(run_loop.QuitClosure());
   run_loop.Run();
+}
+
+bool WaitForLibraryButtonVisible() {
+  return base::test::RunUntil(
+      []() { return IsLazyInitViewVisible(GetLibraryButton()); });
 }
 
 const app_restore::AppRestoreData* QueryRestoreData(

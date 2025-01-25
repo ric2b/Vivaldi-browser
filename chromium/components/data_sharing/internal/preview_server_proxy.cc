@@ -4,10 +4,11 @@
 
 #include "components/data_sharing/internal/preview_server_proxy.h"
 
+#include <algorithm>
 #include <optional>
 #include <utility>
 
-#include "base/base64.h"
+#include "base/base64url.h"
 #include "base/json/json_reader.h"
 #include "base/json/values_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -16,6 +17,8 @@
 #include "base/time/time.h"
 #include "components/data_sharing/public/features.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/sync/base/data_type.h"
+#include "components/sync/base/unique_position.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -50,16 +53,9 @@ constexpr base::FeatureParam<int> kPreviewDataSize{
 
 // lowerCamelCase JSON proto message keys.
 constexpr char kSharedEntitiesKey[] = "sharedEntities";
-constexpr char kClientTagHashKey[] = "clientTagHash";
 constexpr char kDeletedKey[] = "deleted";
-constexpr char kNameKey[] = "name";
-constexpr char kVersionKey[] = "version";
 constexpr char kCollaborationKey[] = "collaboration";
 constexpr char kCollaborationIdKey[] = "collaborationId";
-constexpr char kCreateTimeKey[] = "createTime";
-constexpr char kUpdateTimeKey[] = "updateTime";
-constexpr char kNanosKey[] = "nanos";
-constexpr char kSecondsKey[] = "seconds";
 constexpr char kSpecificsKey[] = "specifics";
 constexpr char kSharedGroupDataKey[] = "sharedTabGroupData";
 constexpr char kGuidKey[] = "guid";
@@ -75,6 +71,17 @@ constexpr char kUniquePositionKey[] = "uniquePosition";
 constexpr char kCustomCompressedV1Key[] = "customCompressedV1";
 constexpr char kColorKey[] = "color";
 
+struct TabData {
+  std::string url;
+  syncer::UniquePosition position;
+
+  TabData(const std::string& url, const syncer::UniquePosition& position)
+      : url(url), position(position) {}
+
+  bool operator<(const TabData& other) const {
+    return position.LessThan(other.position);
+  }
+};
 // Network annotation for getting preview data from server.
 constexpr net::NetworkTrafficAnnotationTag
     kGetSharedDataPreviewTrafficAnnotation =
@@ -221,28 +228,8 @@ std::optional<sync_pb::EntitySpecifics> ParseEntitySpecifics(
   return specifics;
 }
 
-// Returns a time for a timestamp object in a child dict.
-std::optional<base::Time> GetTimeFromDict(const base::Value::Dict& dict,
-                                          const std::string& timestamp_name) {
-  auto* time_stamp_dict = dict.FindDict(timestamp_name);
-  if (!time_stamp_dict) {
-    return std::nullopt;
-  }
-
-  auto* seconds_str = time_stamp_dict->FindString(kSecondsKey);
-  uint64_t seconds;
-  if (!seconds_str || !base::StringToUint64(*seconds_str, &seconds)) {
-    return std::nullopt;
-  }
-  auto nanos = time_stamp_dict->FindInt(kNanosKey);
-  return base::Time::FromSecondsSinceUnixEpoch(
-      seconds + (nanos ? (nanos.value() /
-                          static_cast<double>(base::Seconds(1).InNanoseconds()))
-                       : 0.0));
-}
-
-// Deserializes a shared entity ID from JSON.
-std::optional<SharedEntity> Deserialize(const base::Value& value) {
+// Deserializes a EntitySpecifics from JSON.
+std::optional<sync_pb::EntitySpecifics> Deserialize(const base::Value& value) {
   if (!value.is_dict()) {
     return std::nullopt;
   }
@@ -254,58 +241,20 @@ std::optional<SharedEntity> Deserialize(const base::Value& value) {
     return std::nullopt;
   }
 
-  std::optional<SharedEntity> entity = std::make_optional<SharedEntity>();
   // Get group id.
   auto collaboration_id = GetFieldValueFromChildDict(
       value_dict, kCollaborationKey, kCollaborationIdKey);
   if (!collaboration_id) {
     return std::nullopt;
   }
-  entity->group_id = GroupId(*collaboration_id);
 
   // Get entity specifics.
   auto* specifics_dict = value_dict.FindDict(kSpecificsKey);
   if (!specifics_dict) {
     return std::nullopt;
   }
-  auto specifics = ParseEntitySpecifics(*specifics_dict);
-  if (specifics) {
-    entity->specifics = std::move(specifics.value());
-  } else {
-    return std::nullopt;
-  }
 
-  // Get client tag hash.
-  auto* type = value_dict.FindString(kClientTagHashKey);
-  if (type) {
-    entity->client_tag_hash = *type;
-  }
-
-  // Get name.
-  auto* name = value_dict.FindString(kNameKey);
-  if (name) {
-    entity->name = *name;
-  }
-
-  // Get version.
-  auto* version_string = value_dict.FindString(kVersionKey);
-  uint64_t version;
-  if (version_string && base::StringToUint64(*version_string, &version)) {
-    entity->version = version;
-  }
-
-  // Get time.
-  auto create_time = GetTimeFromDict(value_dict, kCreateTimeKey);
-  if (create_time) {
-    entity->create_time = *create_time;
-  }
-
-  auto update_time = GetTimeFromDict(value_dict, kUpdateTimeKey);
-  if (update_time) {
-    entity->update_time = *update_time;
-  }
-
-  return entity;
+  return ParseEntitySpecifics(*specifics_dict);
 }
 
 }  // namespace
@@ -320,6 +269,7 @@ PreviewServerProxy::~PreviewServerProxy() = default;
 
 void PreviewServerProxy::GetSharedDataPreview(
     const GroupToken& group_token,
+    std::optional<syncer::DataType> data_type,
     base::OnceCallback<
         void(const DataSharingService::SharedDataPreviewOrFailureOutcome&)>
         callback) {
@@ -332,15 +282,27 @@ void PreviewServerProxy::GetSharedDataPreview(
                                  kPersistentFailure)));
     return;
   }
+  std::string data_type_str;
+  if (data_type.has_value()) {
+    int field_number = GetSpecificsFieldNumberFromDataType(*data_type);
+    data_type_str = base::NumberToString(field_number);
+  } else {
+    data_type_str = "-";
+  }
 
   // Path in the URL to get shared entnties preview, {collaborationId} needs to
   // be replaced by the caller.
   const char kSharedEntitiesPreviewPath[] =
-      "collaborations/{collaborationId}/dataTypes/-/sharedEntities:preview";
+      "collaborations/{collaborationId}/dataTypes/{data_type}/"
+      "sharedEntities:preview";
   std::string shared_entities_preview_path = kSharedEntitiesPreviewPath;
-  base::ReplaceFirstSubstringAfterOffset(
-      &shared_entities_preview_path, 0, "{collaborationId}",
-      base::Base64Encode(group_token.group_id.value()));
+  std::string encoded_id;
+  base::Base64UrlEncode(group_token.group_id.value(),
+                        base::Base64UrlEncodePolicy::OMIT_PADDING, &encoded_id);
+  base::ReplaceFirstSubstringAfterOffset(&shared_entities_preview_path, 0,
+                                         "{collaborationId}", encoded_id);
+  base::ReplaceFirstSubstringAfterOffset(&shared_entities_preview_path, 0,
+                                         "{data_type}", data_type_str);
   GURL url = GURL(
       kServiceBaseUrl.Get().append("/").append(shared_entities_preview_path));
 
@@ -400,16 +362,35 @@ void PreviewServerProxy::OnResponseJsonParsed(
   SharedDataPreview preview;
   if (result.has_value() && result->is_dict()) {
     if (auto* response_json = result->GetDict().FindList(kSharedEntitiesKey)) {
+      SharedTabGroupPreview group_preview;
+      std::vector<TabData> tab_data;
       for (const auto& shared_entity_json : *response_json) {
-        if (auto shared_entity = Deserialize(shared_entity_json)) {
-          if (shared_entity) {
-            preview.shared_entities.push_back(std::move(*shared_entity));
+        if (auto specifics = Deserialize(shared_entity_json)) {
+          if (specifics && specifics->has_shared_tab_group_data()) {
+            const sync_pb::SharedTabGroupDataSpecifics& tab_group_data =
+                specifics->shared_tab_group_data();
+            if (tab_group_data.has_tab_group()) {
+              group_preview.title = tab_group_data.tab_group().title();
+            } else if (tab_group_data.has_tab()) {
+              tab_data.emplace_back(
+                  tab_group_data.tab().url(),
+                  syncer::UniquePosition::FromProto(
+                      tab_group_data.tab().unique_position()));
+            }
           }
         }
       }
+      if (!group_preview.title.empty() && !tab_data.empty()) {
+        // Sort all the tabs.
+        std::sort(tab_data.begin(), tab_data.end());
+        for (const auto& data : tab_data) {
+          group_preview.tabs.emplace_back(GURL(data.url));
+        }
+        preview.shared_tab_group_preview = std::move(group_preview);
+      }
     }
   }
-  if (preview.shared_entities.empty()) {
+  if (!preview.shared_tab_group_preview) {
     std::move(callback).Run(base::unexpected(
         DataSharingService::PeopleGroupActionFailure::kPersistentFailure));
   } else {

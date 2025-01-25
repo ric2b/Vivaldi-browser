@@ -103,8 +103,7 @@ PpapiPluginProcessHost* PpapiPluginProcessHost::CreatePluginHost(
   if (plugin_host->Init(info))
     return plugin_host;
 
-  NOTREACHED_IN_MIGRATION();  // Init is not expected to fail.
-  return nullptr;
+  NOTREACHED();  // Init is not expected to fail.
 }
 
 // static
@@ -281,6 +280,8 @@ bool PpapiPluginProcessHost::Init(const ContentPluginInfo& info) {
   cmd_line->AppendSwitchASCII(
       switches::kPpapiSubpixelRenderingSetting,
       base::NumberToString(font_params.subpixel_rendering));
+
+  LOG(WARNING) << "Ppapi sandbox on Windows is not supported.";
 #endif
 
   if (!plugin_launcher.empty())

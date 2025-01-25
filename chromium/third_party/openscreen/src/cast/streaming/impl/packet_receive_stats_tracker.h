@@ -25,16 +25,16 @@ class PacketReceiveStatsTracker {
   ~PacketReceiveStatsTracker();
 
   // This should be called each time a RTP packet is successfully parsed,
-  // whether the packet is a duplicate or not. The |sequence_number| and
-  // |rtp_timestamp| arguments should be the values from the
-  // RtpPacketParser::ParseResult. |arrival_time| is when the packet was
+  // whether the packet is a duplicate or not. The `sequence_number` and
+  // `rtp_timestamp` arguments should be the values from the
+  // RtpPacketParser::ParseResult. `arrival_time` is when the packet was
   // received (i.e., right-off the network socket, before any
   // processing/parsing).
   void OnReceivedValidRtpPacket(uint16_t sequence_number,
                                 RtpTimeTicks rtp_timestamp,
                                 Clock::time_point arrival_time);
 
-  // Populates *only* those fields in the given |report| that pertain to packet
+  // Populates *only* those fields in the given `report` that pertain to packet
   // loss, jitter, and the latest-known RTP packet sequence number.
   void PopulateNextReport(RtcpReportBlock* report);
 
@@ -69,7 +69,7 @@ class PacketReceiveStatsTracker {
 
   const int rtp_timebase_;  // RTP timestamp ticks per second.
 
-  // Until |num_rtp_packets_received_| is greater than zero, the rest of these
+  // Until `num_rtp_packets_received_` is greater than zero, the rest of these
   // fields contain invalid values.
   int64_t num_rtp_packets_received_ = 0;
   int64_t num_rtp_packets_received_at_last_report_;
@@ -82,17 +82,17 @@ class PacketReceiveStatsTracker {
   // calculations.
   PacketSequenceNumber base_sequence_number_;
 
-  // The value of |greatest_sequence_number_| when the last call to
+  // The value of `greatest_sequence_number_` when the last call to
   // PopulateNextReport() was made. This is used in the computation of the
   // packet loss rate between reports.
   PacketSequenceNumber greatest_sequence_number_at_last_report_;
 
   // The time the last RTP packet was received. This is used in the computation
-  // that updates |jitter_|.
+  // that updates `jitter_`.
   Clock::time_point last_rtp_packet_arrival_time_;
 
   // The RTP timestamp of the last RTP packet received. This is used in the
-  // computation that updates |jitter_|.
+  // computation that updates `jitter_`.
   RtpTimeTicks last_rtp_packet_timestamp_;
 
   // The interarrival jitter. See RFC 3550 spec, section 6.4.1. The Cast

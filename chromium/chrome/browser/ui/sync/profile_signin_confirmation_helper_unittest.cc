@@ -14,6 +14,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -38,9 +39,12 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/login/users/chrome_user_manager_impl.h"
+#include "chrome/browser/ash/login/users/user_manager_delegate_impl.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
+#include "chrome/browser/browser_process.h"
+#include "chromeos/ash/components/settings/cros_settings.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "components/user_manager/user_manager_impl.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -138,7 +142,8 @@ class ProfileSigninConfirmationHelperTest : public testing::Test {
             /*extension_prefs=*/new TestingPrefStore(),
             /*standalone_browser_prefs=*/new TestingPrefStore(), user_prefs_,
             /*recommended_prefs=*/new TestingPrefStore(),
-            new user_prefs::PrefRegistrySyncable(), new PrefNotifierImpl());
+            new user_prefs::PrefRegistrySyncable(),
+            std::make_unique<PrefNotifierImpl>());
     RegisterUserProfilePrefs(pref_service->registry());
     builder.SetPrefService(
         base::WrapUnique<sync_preferences::PrefServiceSyncable>(pref_service));
@@ -164,6 +169,7 @@ class ProfileSigninConfirmationHelperTest : public testing::Test {
   void TearDown() override {
     // TestExtensionSystem uses DeleteSoon, so we need to delete the profile
     // and then run the message queue to clean up.
+    model_ = nullptr;
     profile_.reset();
     base::RunLoop().RunUntilIdle();
   }
@@ -172,13 +178,16 @@ class ProfileSigninConfirmationHelperTest : public testing::Test {
   base::ScopedTempDir profile_dir_;
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfile> profile_;
-  const raw_ptr<TestingPrefStoreWithCustomReadError> user_prefs_;
-  const raw_ptr<BookmarkModel> model_;
+  scoped_refptr<TestingPrefStoreWithCustomReadError> user_prefs_;
+  raw_ptr<BookmarkModel> model_;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   ash::ScopedCrosSettingsTestHelper cros_settings_test_helper_;
-  user_manager::ScopedUserManager test_user_manager_{
-      ChromeUserManagerImpl::CreateChromeUserManager()};
+  user_manager::ScopedUserManager user_manager_{
+      std::make_unique<user_manager::UserManagerImpl>(
+          std::make_unique<ash::UserManagerDelegateImpl>(),
+          g_browser_process->local_state(),
+          ash::CrosSettings::Get())};
 #endif
 };
 
@@ -241,9 +250,9 @@ TEST_F(ProfileSigninConfirmationHelperTest,
   char buf[18];
   for (int i = 0; i < 10; i++) {
     base::snprintf(buf, std::size(buf), "http://foo.com/%d", i);
-    history->AddPage(GURL(std::string(buf)), base::Time::Now(), nullptr, 1,
-                     GURL(), history::RedirectList(), ui::PAGE_TRANSITION_LINK,
-                     history::SOURCE_BROWSED, false, false);
+    history->AddPage(GURL(std::string(buf)), base::Time::Now(),
+                     /*context_id=*/{}, 1, GURL(), history::RedirectList(),
+                     ui::PAGE_TRANSITION_LINK, history::SOURCE_BROWSED, false);
   }
   EXPECT_TRUE(GetCallbackResult(
       base::BindOnce(&ui::CheckShouldPromptForNewProfile, profile_.get())));
@@ -258,9 +267,9 @@ TEST_F(ProfileSigninConfirmationHelperTest,
 
   // Profile is new but has a typed URL.
   profile_->SetIsNewProfile(true);
-  history->AddPage(GURL("http://example.com"), base::Time::Now(), nullptr, 1,
-                   GURL(), history::RedirectList(), ui::PAGE_TRANSITION_TYPED,
-                   history::SOURCE_BROWSED, false, false);
+  history->AddPage(GURL("http://example.com"), base::Time::Now(),
+                   /*context_id=*/{}, 1, GURL(), history::RedirectList(),
+                   ui::PAGE_TRANSITION_TYPED, history::SOURCE_BROWSED, false);
   EXPECT_TRUE(GetCallbackResult(
       base::BindOnce(&ui::CheckShouldPromptForNewProfile, profile_.get())));
 }

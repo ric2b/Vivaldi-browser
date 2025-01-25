@@ -12,117 +12,121 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {time, duration} from '../base/time';
-import {GenericSliceDetailsTabConfigBase} from './details_panel';
+import {time, duration, TimeSpan} from '../base/time';
+import {Engine} from '../trace_processor/engine';
+import {ColumnDef, Sorting, ThreadStateExtra} from './aggregation';
+import {TrackDescriptor} from './track';
 
 export interface SelectionManager {
   readonly selection: Selection;
+
+  findTimeRangeOfSelection(): TimeSpan | undefined;
   clear(): void;
-  setLegacy(args: LegacySelection, opts?: SelectionOpts): void;
+
+  /**
+   * Select a track event.
+   *
+   * @param trackUri - The URI of the track to select.
+   * @param eventId - The value of the events ID column.
+   * @param opts - Additional options.
+   */
+  selectTrackEvent(
+    trackUri: string,
+    eventId: number,
+    opts?: SelectionOpts,
+  ): void;
+
+  /**
+   * Select a track.
+   *
+   * @param trackUri - The URI for the track to select.
+   * @param opts - Additional options.
+   */
+  selectTrack(trackUri: string, opts?: SelectionOpts): void;
+
+  /**
+   * Select a track event via a sql table name + id.
+   *
+   * @param sqlTableName - The name of the SQL table to resolve.
+   * @param id - The ID of the event in that table.
+   * @param opts - Additional options.
+   */
+  selectSqlEvent(sqlTableName: string, id: number, opts?: SelectionOpts): void;
+
+  /**
+   * Create an area selection for the purposes of aggregation.
+   *
+   * @param args - The area to select.
+   * @param opts - Additional options.
+   */
+  selectArea(args: Area, opts?: SelectionOpts): void;
+
   scrollToCurrentSelection(): void;
+  registerAreaSelectionAggreagtor(aggr: AreaSelectionAggregator): void;
+
+  /**
+   * Register a new SQL selection resolver.
+   *
+   * A resolver consists of a SQL table name and a callback. When someone
+   * expresses an interest in selecting a slice on a matching table, the
+   * callback is called which can return a selection object or undefined.
+   */
+  registerSqlSelectionResolver(resolver: SqlSelectionResolver): void;
+}
+
+export interface AreaSelectionAggregator {
+  readonly id: string;
+  createAggregateView(engine: Engine, area: AreaSelection): Promise<boolean>;
+  getExtra(
+    engine: Engine,
+    area: AreaSelection,
+  ): Promise<ThreadStateExtra | void>;
+  getTabName(): string;
+  getDefaultSorting(): Sorting;
+  getColumnDefinitions(): ColumnDef[];
 }
 
 export type Selection =
-  | SingleSelection
+  | TrackEventSelection
+  | TrackSelection
   | AreaSelection
   | NoteSelection
-  | UnionSelection
-  | EmptySelection
-  | LegacySelectionWrapper;
+  | EmptySelection;
 
 /** Defines how changes to selection affect the rest of the UI state */
 export interface SelectionOpts {
   clearSearch?: boolean; // Default: true.
   switchToCurrentSelectionTab?: boolean; // Default: true.
-  pendingScrollId?: number; // Default: no auto-scroll.
+  scrollToSelection?: boolean; // Default: false.
 }
 
-// LEGACY Selection types:
-
-export interface LegacySelectionWrapper {
-  readonly kind: 'legacy';
-  readonly legacySelection: LegacySelection;
-}
-
-export type LegacySelection = (
-  | SliceSelection
-  | HeapProfileSelection
-  | CpuProfileSampleSelection
-  | ThreadSliceSelection
-  | ThreadStateSelection
-  | PerfSamplesSelection
-  | LogSelection
-  | GenericSliceSelection
-) & {trackUri?: string};
-
-export type SelectionKind = LegacySelection['kind']; // 'THREAD_STATE' | 'SLICE' ...
-
-export interface SliceSelection {
-  readonly kind: 'SCHED_SLICE';
-  readonly id: number;
-}
-
-export interface HeapProfileSelection {
-  readonly kind: 'HEAP_PROFILE';
-  readonly id: number;
-  readonly upid: number;
-  readonly ts: time;
-  readonly type: ProfileType;
-}
-
-export interface PerfSamplesSelection {
-  readonly kind: 'PERF_SAMPLES';
-  readonly id: number;
-  readonly utid?: number;
-  readonly upid?: number;
-  readonly leftTs: time;
-  readonly rightTs: time;
-  readonly type: ProfileType;
-}
-
-export interface CpuProfileSampleSelection {
-  readonly kind: 'CPU_PROFILE_SAMPLE';
-  readonly id: number;
-  readonly utid: number;
-  readonly ts: time;
-}
-
-export interface ThreadSliceSelection {
-  readonly kind: 'SLICE';
-  readonly id: number;
-  readonly table?: string;
-}
-
-export interface ThreadStateSelection {
-  readonly kind: 'THREAD_STATE';
-  readonly id: number;
-}
-
-export interface LogSelection {
-  readonly kind: 'LOG';
-  readonly id: number;
-  readonly trackUri: string;
-}
-
-export interface GenericSliceSelection {
-  readonly kind: 'GENERIC_SLICE';
-  readonly id: number;
-  readonly sqlTableName: string;
-  readonly start: time;
-  readonly duration: duration;
-  // NOTE: this config can be expanded for multiple details panel types.
-  readonly detailsPanelConfig: {
-    readonly kind: string;
-    readonly config: GenericSliceDetailsTabConfigBase;
-  };
-}
-
-// New Selection types:
-
-export interface SingleSelection {
-  readonly kind: 'single';
+export interface TrackEventSelection extends TrackEventDetails {
+  readonly kind: 'track_event';
   readonly trackUri: string;
   readonly eventId: number;
+}
+
+export interface TrackSelection {
+  readonly kind: 'track';
+  readonly trackUri: string;
+}
+
+export interface TrackEventDetails {
+  // ts and dur are required by the core, and must be provided.
+  readonly ts: time;
+  // Note: dur can be -1 for instant events.
+  readonly dur: duration;
+
+  // Optional additional information.
+  // TODO(stevegolton): Find an elegant way of moving this information out of
+  // the core.
+  readonly wakeupTs?: time;
+  readonly wakerCpu?: number;
+  readonly upid?: number;
+  readonly utid?: number;
+  readonly tableName?: string;
+  readonly profileType?: ProfileType;
+  readonly interactionType?: string;
 }
 
 export interface Area {
@@ -135,16 +139,16 @@ export interface Area {
 
 export interface AreaSelection extends Area {
   readonly kind: 'area';
+
+  // This array contains the resolved TrackDescriptor from Area.trackUris.
+  // The resolution is done by SelectionManager whenever a kind='area' selection
+  // is performed.
+  readonly tracks: ReadonlyArray<TrackDescriptor>;
 }
 
 export interface NoteSelection {
   readonly kind: 'note';
   readonly id: string;
-}
-
-export interface UnionSelection {
-  readonly kind: 'union';
-  readonly selections: ReadonlyArray<Selection>;
 }
 
 export interface EmptySelection {
@@ -171,4 +175,12 @@ export function profileType(s: string): ProfileType {
     return ProfileType.HEAP_PROFILE;
   }
   throw new Error('Unknown type ${s}');
+}
+
+export interface SqlSelectionResolver {
+  readonly sqlTableName: string;
+  readonly callback: (
+    id: number,
+    sqlTable: string,
+  ) => Promise<{trackUri: string; eventId: number} | undefined>;
 }

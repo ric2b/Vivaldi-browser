@@ -293,8 +293,11 @@ add_library(avif_enable_warnings INTERFACE)
 if(MSVC)
     message(STATUS "libavif: Enabling warnings for MSVC")
     target_compile_options(
-        avif_enable_warnings INTERFACE /W4 # For clang-cl, /W4 enables -Wall and -Wextra
-                                       /wd4324 # Disable: structure was padded due to alignment specifier
+        avif_enable_warnings
+        INTERFACE /W4 # For clang-cl, /W4 enables -Wall and -Wextra
+                  /wd4232 # Disable: address of dllimport 'dllimport' is not static,
+                          # identity not guaranteed
+                  /wd4324 # Disable: structure was padded due to alignment specifier
     )
     # Disable deprecation warnings about POSIX function names such as setmode (replaced by the ISO C and C++ conformant name _setmode).
     # Disable deprecation warnings about unsafe CRT library functions such as fopen (replaced by fopen_s).
@@ -718,17 +721,12 @@ endif()
 if(AVIF_BUILD_APPS)
     add_executable(avifenc apps/avifenc.c)
     if(WIN32)
-        # MinGW doesn't have a manifest tool (mt.exe), so we need to wrap
-        # utf8.manifest in a resource-definition script (.rc file).
-        target_sources(avifenc PRIVATE apps/utf8.rc)
-        # The MSVC linker (link.exe) fails with the following error if we
-        # don't use the /MANIFEST:NO linker option:
-        #   /MANIFEST:EMBED,ID=1" failed (exit code 1123) with the following
-        #   output:
-        #   CVTRES : fatal error CVT1100: duplicate resource.  type:MANIFEST,
-        #   name:1, language:0x0409
-        if(NOT MINGW)
-            target_link_options(avifenc PRIVATE /MANIFEST:NO)
+        if(MSVC)
+            target_sources(avifenc PRIVATE apps/utf8.manifest)
+        elseif(MINGW)
+            # MinGW doesn't have a manifest tool (mt.exe), so we need to wrap
+            # utf8.manifest in a resource-definition script (.rc file).
+            target_sources(avifenc PRIVATE apps/utf8.rc)
         endif()
     endif()
     if(AVIF_LIB_USE_CXX)
@@ -737,9 +735,10 @@ if(AVIF_BUILD_APPS)
     target_link_libraries(avifenc avif_apps avif avif_enable_warnings)
     add_executable(avifdec apps/avifdec.c)
     if(WIN32)
-        target_sources(avifdec PRIVATE apps/utf8.rc)
-        if(NOT MINGW)
-            target_link_options(avifdec PRIVATE /MANIFEST:NO)
+        if(MSVC)
+            target_sources(avifdec PRIVATE apps/utf8.manifest)
+        elseif(MINGW)
+            target_sources(avifdec PRIVATE apps/utf8.rc)
         endif()
     endif()
     if(AVIF_LIB_USE_CXX)
@@ -773,9 +772,10 @@ if(AVIF_BUILD_APPS)
 
         add_executable(avifgainmaputil "${AVIFGAINMAPUTIL_SRCS}")
         if(WIN32)
-            target_sources(avifgainmaputil PRIVATE apps/utf8.rc)
-            if(NOT MINGW)
-                target_link_options(avifgainmaputil PRIVATE /MANIFEST:NO)
+            if(MSVC)
+                target_sources(avifgainmaputil PRIVATE apps/utf8.manifest)
+            elseif(MINGW)
+                target_sources(avifgainmaputil PRIVATE apps/utf8.rc)
             endif()
         endif()
         set_target_properties(avifgainmaputil PROPERTIES LINKER_LANGUAGE "CXX")

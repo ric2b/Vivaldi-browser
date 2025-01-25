@@ -105,10 +105,10 @@ enum NvramSpacePolicy {
   NVRAM_POLICY_PCR0 = 1;
 }
 
-enum GscVersion {
-  GSC_VERSION_NOT_GSC = 0;
-  GSC_VERSION_CR50 = 1;
-  GSC_VERSION_TI50 = 2;
+enum GscDevice {
+  GSC_DEVICE_NOT_GSC = 0;
+  GSC_DEVICE_H1 = 1;
+  GSC_DEVICE_DT = 2;
 }
 
 // The status of whether last AP reboot is triggered by RO verification.
@@ -344,8 +344,8 @@ message GetVersionInfoReply {
   optional uint64 firmware_version = 6;
   // Vendor specific information.
   optional bytes vendor_specific = 7;
-  // The GSC version.
-  optional GscVersion gsc_version = 8;
+  // The GSC device.
+  optional GscDevice gsc_device = 8;
   // The RW firmware version.
   optional string rw_version = 9;
 }

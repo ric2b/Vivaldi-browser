@@ -2,19 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../ui/components/panel_feedback/panel_feedback.js';
+import '../../../ui/components/panel_introduction_steps/panel_introduction_steps.js';
 import '../../../ui/legacy/legacy.js';
 
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Platform from '../../../core/platform/platform.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
-import * as PanelFeedback from '../../../ui/components/panel_feedback/panel_feedback.js';
-import * as PanelIntroductionSteps from '../../../ui/components/panel_introduction_steps/panel_introduction_steps.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as Actions from '../recorder-actions/recorder-actions.js';
 
 import startViewStyles from './startView.css.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -65,7 +67,6 @@ export class CreateRecordingEvent extends Event {
 }
 
 export class StartView extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-start-view`;
   readonly #shadow = this.attachShadow({mode: 'open'});
 
   constructor() {
@@ -85,43 +86,37 @@ export class StartView extends HTMLElement {
   #render = (): void => {
     // clang-format off
     LitHtml.render(
-      LitHtml.html`
+      html`
         <div class="wrapper">
-          <${
-            PanelIntroductionSteps.PanelIntroductionSteps.PanelIntroductionSteps
-              .litTagName
-          }>
+          <devtools-panel-introduction-steps>
             <span slot="title">${i18nString(UIStrings.header)}</span>
             <span slot="step-1">${i18nString(UIStrings.step1)}</span>
             <span slot="step-2">${i18nString(UIStrings.step2)}</span>
             <span slot="step-3">${i18nString(UIStrings.step3)}</span>
-          </${
-            PanelIntroductionSteps.PanelIntroductionSteps.PanelIntroductionSteps
-              .litTagName
-          }>
+          </devtools-panel-introduction-steps>
           <div class="fit-content">
-            <${Buttons.Button.Button.litTagName} .variant=${
+            <devtools-button .variant=${
         Buttons.Button.Variant.PRIMARY
       } @click=${this.#onClick}
               .jslogContext=${Actions.RecorderActions.CREATE_RECORDING}>
               ${i18nString(UIStrings.createRecording)}
-            </${Buttons.Button.Button.litTagName}>
+            </devtools-button>
           </div>
-          <${PanelFeedback.PanelFeedback.PanelFeedback.litTagName} .data=${
+          <devtools-panel-feedback .data=${
         {
           feedbackUrl: FEEDBACK_URL,
           quickStartUrl: DOC_URL,
           quickStartLinkText: i18nString(UIStrings.quickStart),
-        } as PanelFeedback.PanelFeedback.PanelFeedbackData
+        }
       }>
-          </${PanelFeedback.PanelFeedback.PanelFeedback.litTagName}>
+          </devtools-panel-feedback>
           <div class="align-right">
-            <${PanelFeedback.FeedbackButton.FeedbackButton.litTagName} .data=${
+            <devtools-feedback-button .data=${
         {
           feedbackUrl: FEEDBACK_URL,
-        } as PanelFeedback.FeedbackButton.FeedbackButtonData
+        }
       }>
-            </${PanelFeedback.FeedbackButton.FeedbackButton.litTagName}>
+            </devtools-feedback-button>
           </div>
         </div>
       `,

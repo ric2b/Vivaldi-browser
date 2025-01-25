@@ -11,6 +11,7 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.phone.SimpleAnimationLayout;
+import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.hub.HubLayoutDependencyHolder;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.Tab;
@@ -21,6 +22,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 // Vivaldi
@@ -38,7 +40,7 @@ import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
 import org.chromium.ui.dragdrop.DragAndDropDelegate;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.ui.base.WindowAndroid;
-import org.chromium.chrome.browser.ui.desktop_windowing.DesktopWindowStateProvider;
+import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -87,9 +89,11 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             ViewStub tabHoverCardViewStubStack, // Vivaldi
             WindowAndroid windowAndroid, // Vivaldi
             ToolbarManager toolbarManager,
-            DesktopWindowStateProvider desktopWindowStateProvider,
+            DesktopWindowStateManager desktopWindowStateManager,
             ActionConfirmationManager actionConfirmationManager,
-            BrowserControlsStateProvider browserControlsStateProvider) { //Vivaldi
+            BrowserControlsStateProvider browserControlsStateProvider,
+            ModalDialogManager modalDialogManager, // Vivaldi
+            DataSharingTabManager dataSharingTabManager) { //Vivaldi
         super(
                 host,
                 contentContainer,
@@ -108,7 +112,8 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
                     dragAndDropDelegate, toolbarContainerView,
                     i == 0 ? tabHoverCardViewStub : tabHoverCardViewStubStack,
                     tabContentManagerSupplier, browserControlsStateProvider, windowAndroid,
-                    toolbarManager, desktopWindowStateProvider, actionConfirmationManager));
+                    toolbarManager, desktopWindowStateManager, actionConfirmationManager,
+                    modalDialogManager, dataSharingTabManager));
             mTabStrips.get(i).setIsStackStrip(i != 0);
             addObserver(mTabStrips.get(i).getTabSwitcherObserver());
         }
@@ -122,14 +127,22 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             TabCreatorManager creator,
             ControlContainer controlContainer,
             DynamicResourceLoader dynamicResourceLoader,
-            TopUiThemeColorProvider topUiColorProvider) {
+            TopUiThemeColorProvider topUiColorProvider,
+            Supplier<Integer> bottomControlsOffsetSupplier) {
         Context context = mHost.getContext();
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
 
         // Build Layouts
-        mSimpleAnimationLayout = new SimpleAnimationLayout(context, this, renderHost);
+        mSimpleAnimationLayout =
+                new SimpleAnimationLayout(context, this, renderHost, getContentContainer());
 
-        super.init(selector, creator, controlContainer, dynamicResourceLoader, topUiColorProvider);
+        super.init(
+                selector,
+                creator,
+                controlContainer,
+                dynamicResourceLoader,
+                topUiColorProvider,
+                bottomControlsOffsetSupplier);
 
         // Initialize Layouts
         TabContentManager tabContentManager = mTabContentManagerSupplier.get();
@@ -153,16 +166,6 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             return mSimpleAnimationLayout;
         }
         return super.getLayoutForType(layoutType);
-    }
-
-    @Override
-    public void onTabsAllClosing(boolean incognito) {
-        // Vivaldi
-        if (!BuildConfig.IS_VIVALDI)
-        if (getActiveLayout() == mStaticLayout && !incognito) {
-            showLayout(LayoutType.TAB_SWITCHER, /* animate= */ false);
-        }
-        super.onTabsAllClosing(incognito);
     }
 
     @Override

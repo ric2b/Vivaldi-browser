@@ -32,7 +32,6 @@
 #include <stdlib.h>   /* getenv */
 #include <string.h>   /* strcmp, strlen */
 #include <stdio.h>    /* fprintf(), stdin, stdout, stderr */
-#include <errno.h>    /* errno */
 #include <assert.h>   /* assert */
 
 #include "fileio.h"   /* stdinmark, stdoutmark, ZSTD_EXTENSION */
@@ -311,6 +310,7 @@ static void usageAdvanced(const char* programName)
     DISPLAYOUT("  -i#                           Set the minimum evaluation to time # seconds. [Default: 3]\n");
     DISPLAYOUT("  -B#                           Cut file into independent chunks of size #. [Default: No chunking]\n");
     DISPLAYOUT("  -S                            Output one benchmark result per input file. [Default: Consolidated result]\n");
+    DISPLAYOUT("  -D dictionary                 Benchmark using dictionary \n");
     DISPLAYOUT("  --priority=rt                 Set process priority to real-time.\n");
 #endif
 
@@ -1391,6 +1391,7 @@ int main(int argCount, const char* argv[])
         }
         benchParams.literalCompressionMode = literalCompressionMode;
 
+        if (benchParams.mode == BMK_decodeOnly) cLevel = cLevelLast = 0;
         if (cLevel > ZSTD_maxCLevel()) cLevel = ZSTD_maxCLevel();
         if (cLevelLast > ZSTD_maxCLevel()) cLevelLast = ZSTD_maxCLevel();
         if (cLevelLast < cLevel) cLevelLast = cLevel;
@@ -1400,19 +1401,15 @@ int main(int argCount, const char* argv[])
             if(separateFiles) {
                 unsigned i;
                 for(i = 0; i < filenames->tableSize; i++) {
-                    int c;
                     DISPLAYLEVEL(3, "Benchmarking %s \n", filenames->fileNames[i]);
-                    for(c = cLevel; c <= cLevelLast; c++) {
-                        operationResult = BMK_benchFilesAdvanced(&filenames->fileNames[i], 1, dictFileName, c, &compressionParams, g_displayLevel, &benchParams);
-                }   }
+                    operationResult = BMK_benchFilesAdvanced(&filenames->fileNames[i], 1, dictFileName, cLevel, cLevelLast, &compressionParams, g_displayLevel, &benchParams);
+                }
             } else {
-                for(; cLevel <= cLevelLast; cLevel++) {
-                    operationResult = BMK_benchFilesAdvanced(filenames->fileNames, (unsigned)filenames->tableSize, dictFileName, cLevel, &compressionParams, g_displayLevel, &benchParams);
-            }   }
+                operationResult = BMK_benchFilesAdvanced(filenames->fileNames, (unsigned)filenames->tableSize, dictFileName, cLevel, cLevelLast, &compressionParams, g_displayLevel, &benchParams);
+            }
         } else {
-            for(; cLevel <= cLevelLast; cLevel++) {
-                operationResult = BMK_syntheticTest(cLevel, compressibility, &compressionParams, g_displayLevel, &benchParams);
-        }   }
+            operationResult = BMK_syntheticTest(compressibility, cLevel, cLevelLast, &compressionParams, g_displayLevel, &benchParams);
+        }
 
 #else
         (void)bench_nbSeconds; (void)blockSize; (void)setRealTimePrio; (void)separateFiles; (void)compressibility;

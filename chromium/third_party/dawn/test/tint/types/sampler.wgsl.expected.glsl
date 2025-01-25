@@ -4,14 +4,7 @@ precision highp int;
 
 uniform highp sampler2D t_s;
 uniform highp sampler2DShadow d_sc;
-
-
-void tint_symbol() {
+void main() {
   vec4 a = texture(t_s, vec2(1.0f));
   vec4 b = textureGather(d_sc, vec2(1.0f), 1.0f);
-}
-
-void main() {
-  tint_symbol();
-  return;
 }

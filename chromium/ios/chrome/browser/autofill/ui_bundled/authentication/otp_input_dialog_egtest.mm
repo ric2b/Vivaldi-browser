@@ -89,13 +89,6 @@ id<GREYMatcher> OtpNewCodeLink() {
 
 #pragma mark - Setup
 
-- (AppLaunchConfiguration)appConfigurationForTestCase {
-  AppLaunchConfiguration config;
-  config.features_enabled.push_back(
-      autofill::features::kAutofillEnableVirtualCards);
-  return config;
-}
-
 - (void)setUp {
   [super setUp];
   [AutofillAppInterface setUpFakeCreditCardServer];
@@ -117,10 +110,10 @@ id<GREYMatcher> OtpNewCodeLink() {
   [AutofillAppInterface considerCreditCardFormSecureForTesting];
 }
 
-- (void)tearDown {
+- (void)tearDownHelper {
   [AutofillAppInterface clearAllServerDataForTesting];
   [AutofillAppInterface tearDownFakeCreditCardServer];
-  [super tearDown];
+  [super tearDownHelper];
 }
 
 - (void)showOtpInputDialog {
@@ -136,6 +129,11 @@ id<GREYMatcher> OtpNewCodeLink() {
       waitForUIElementToAppearWithMatcher:paymentsBottomSheetVirtualCard];
   [[EarlGrey selectElementWithMatcher:paymentsBottomSheetVirtualCard]
       performAction:grey_tap()];
+
+  // Wait enough time so the min delay is past before being allowed to fill
+  // credit card information from the sheet.
+  base::test::ios::SpinRunLoopWithMinDelay(base::Seconds(1));
+
   [[EarlGrey selectElementWithMatcher:
                  chrome_test_util::StaticTextWithAccessibilityLabelId(
                      IDS_IOS_PAYMENT_BOTTOM_SHEET_CONTINUE)]

@@ -8,22 +8,23 @@
 #ifndef LIBANGLE_CLTYPES_H_
 #define LIBANGLE_CLTYPES_H_
 
-#include "libANGLE/CLBitField.h"
-#include "libANGLE/CLRefPointer.h"
-#include "libANGLE/Debug.h"
+#if defined(ANGLE_ENABLE_CL)
+#    include "libANGLE/CLBitField.h"
+#    include "libANGLE/CLRefPointer.h"
+#    include "libANGLE/Debug.h"
 
-#include "common/PackedCLEnums_autogen.h"
-#include "common/angleutils.h"
+#    include "common/PackedCLEnums_autogen.h"
+#    include "common/angleutils.h"
 
 // Include frequently used standard headers
-#include <algorithm>
-#include <array>
-#include <functional>
-#include <list>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
+#    include <algorithm>
+#    include <array>
+#    include <functional>
+#    include <list>
+#    include <memory>
+#    include <string>
+#    include <utility>
+#    include <vector>
 
 namespace cl
 {
@@ -68,6 +69,14 @@ using WorkgroupCount   = std::array<uint32_t, 3>;
 template <typename T>
 using EventStatusMap = std::array<T, 3>;
 
+struct KernelArg
+{
+    bool isSet;
+    cl_uint index;
+    size_t size;
+    const void *valuePtr;
+};
+
 struct ImageDescriptor
 {
     MemObjectType type;
@@ -79,6 +88,40 @@ struct ImageDescriptor
     size_t slicePitch;
     cl_uint numMipLevels;
     cl_uint numSamples;
+
+    ImageDescriptor(MemObjectType type_,
+                    size_t width_,
+                    size_t height_,
+                    size_t depth_,
+                    size_t arraySize_,
+                    size_t rowPitch_,
+                    size_t slicePitch_,
+                    cl_uint numMipLevels_,
+                    cl_uint numSamples_)
+        : type(type_),
+          width(width_),
+          height(height_),
+          depth(depth_),
+          arraySize(arraySize_),
+          rowPitch(rowPitch_),
+          slicePitch(slicePitch_),
+          numMipLevels(numMipLevels_),
+          numSamples(numSamples_)
+    {
+        if (type == MemObjectType::Image1D || type == MemObjectType::Image1D_Array ||
+            type == MemObjectType::Image1D_Buffer)
+        {
+            height = 1;
+        }
+        if (type == MemObjectType::Image2D)
+        {
+            depth = 1;
+        }
+        if (!(type == MemObjectType::Image1D_Array || type == MemObjectType::Image2D_Array))
+        {
+            arraySize = 1;
+        }
+    }
 };
 
 struct MemOffsets
@@ -128,5 +171,7 @@ struct NDRange
 };
 
 }  // namespace cl
+
+#endif  // ANGLE_ENABLE_CL
 
 #endif  // LIBANGLE_CLTYPES_H_

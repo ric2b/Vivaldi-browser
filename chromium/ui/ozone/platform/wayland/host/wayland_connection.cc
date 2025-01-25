@@ -14,12 +14,12 @@
 #include <memory>
 #include <vector>
 
-#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
+#include "base/system/sys_info.h"
 #include "base/task/current_thread.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/events/devices/device_data_manager.h"
@@ -82,13 +82,14 @@ namespace {
 // advertised by the server.
 constexpr uint32_t kMaxCompositorVersion = 4;
 constexpr uint32_t kMaxKeyboardExtensionVersion = 2;
-constexpr uint32_t kMaxXdgShellVersion = 5;
+constexpr uint32_t kMaxXdgShellVersion = 6;
 constexpr uint32_t kMaxWpPresentationVersion = 1;
 constexpr uint32_t kMaxWpViewporterVersion = 1;
 constexpr uint32_t kMaxTextInputManagerV1Version = 1;
 constexpr uint32_t kMaxTextInputManagerV3Version = 1;
 constexpr uint32_t kMaxTextInputExtensionVersion = 14;
 constexpr uint32_t kMaxExplicitSyncVersion = 2;
+constexpr uint32_t kMaxLinuxDrmSyncobjVersion = 1;
 constexpr uint32_t kMaxAlphaCompositingVersion = 1;
 constexpr uint32_t kMaxXdgDecorationVersion = 1;
 constexpr uint32_t kMaxExtendedDragVersion = 1;
@@ -122,6 +123,18 @@ int64_t ConvertTimespecResultToMicros(uint32_t tv_sec_hi,
   result *= base::Time::kMicrosecondsPerSecond;
   result += (tv_nsec / base::Time::kNanosecondsPerMicrosecond);
   return result.ValueOrDie();
+}
+
+bool MinSupportedKernelForLinuxDrmSyncobj() {
+  int major, minor, build;
+  base::SysInfo::OperatingSystemVersionNumbers(&major, &minor, &build);
+  // We use drm_syncobj_eventfd_ioctl and DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE
+  // flag to wait for the release fence when using linux-drm-syncobj. The ioctl
+  // was introduced in kernel version 6.6 but important fixes for the ioctl as
+  // well as the flag were made in newer kernel versions. Set minimum supported
+  // kernel version to 6.11 to avoid using buggy implementation that may cause
+  // stability issues.
+  return major > 6 || (major == 6 && minor >= 11);
 }
 
 }  // namespace
@@ -171,10 +184,6 @@ bool WaylandConnection::Initialize(bool use_threaded_polling) {
                               &WaylandShm::Instantiate);
   RegisterGlobalObjectFactory(WaylandZAuraShell::kInterfaceName,
                               &WaylandZAuraShell::Instantiate);
-  if (features::IsLacrosColorManagementEnabled()) {
-    RegisterGlobalObjectFactory(WaylandZcrColorManager::kInterfaceName,
-                                &WaylandZcrColorManager::Instantiate);
-  }
   RegisterGlobalObjectFactory(WaylandCursorShape::kInterfaceName,
                               &WaylandCursorShape::Instantiate);
   RegisterGlobalObjectFactory(WaylandZcrCursorShapes::kInterfaceName,
@@ -483,16 +492,6 @@ base::TimeTicks WaylandConnection::ConvertPresentationTime(uint32_t tv_sec_hi,
   return now + base::Microseconds(delta_us);
 }
 
-const gfx::PointF WaylandConnection::MaybeConvertLocation(
-    const gfx::PointF& location,
-    const WaylandWindow* window) const {
-  if (!surface_submission_in_pixel_coordinates_ || !window)
-    return location;
-  gfx::PointF converted(location);
-  converted.InvScale(window->applied_state().window_scale);
-  return converted;
-}
-
 void WaylandConnection::DumpState(std::ostream& out) const {
   out << "available globals:";
   for (const auto& pair : available_globals_) {
@@ -661,6 +660,18 @@ void WaylandConnection::HandleGlobal(wl_registry* registry,
     if (!linux_explicit_synchronization_) {
       LOG(ERROR) << "Failed to bind zwp_linux_explicit_synchronization_v1";
       return;
+    }
+  } else if (!linux_drm_syncobj_manager_ &&
+             (strcmp(interface, "wp_linux_drm_syncobj_manager_v1") == 0)) {
+    if (enable_linux_drm_syncobj_for_testing_ ||
+        (base::FeatureList::IsEnabled(features::kWaylandLinuxDrmSyncobj) &&
+         MinSupportedKernelForLinuxDrmSyncobj())) {
+      linux_drm_syncobj_manager_ = wl::Bind<wp_linux_drm_syncobj_manager_v1>(
+          registry, name, std::min(version, kMaxLinuxDrmSyncobjVersion));
+      if (!linux_drm_syncobj_manager_) {
+        LOG(ERROR) << "Failed to bind wp_linux_drm_syncobj_manager_v1";
+        return;
+      }
     }
   } else if (!content_type_manager_v1_ &&
              (strcmp(interface, "wp_content_type_manager_v1") == 0)) {

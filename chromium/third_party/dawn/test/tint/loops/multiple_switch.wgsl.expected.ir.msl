@@ -2,46 +2,56 @@
 using namespace metal;
 
 #define TINT_ISOLATE_UB(VOLATILE_NAME) \
-  volatile bool VOLATILE_NAME = true; \
-  if (VOLATILE_NAME)
+  {volatile bool VOLATILE_NAME = false; if (VOLATILE_NAME) break;}
 
 kernel void tint_symbol() {
   int i = 0;
   {
-    int i = 0;
-    TINT_ISOLATE_UB(tint_volatile_true) while(true) {
-      if ((i < 2)) {
+    int i_1 = 0;
+    while(true) {
+      TINT_ISOLATE_UB(tint_volatile_false)
+      if ((i_1 < 2)) {
       } else {
         break;
       }
-      switch(i) {
+      bool tint_continue = false;
+      switch(i_1) {
         case 0:
         {
-          {
-            i = as_type<int>((as_type<uint>(i) + as_type<uint>(1)));
-          }
-          continue;
+          tint_continue = true;
+          break;
         }
         default:
         {
           break;
         }
       }
-      switch(i) {
+      if (tint_continue) {
+        {
+          i_1 = as_type<int>((as_type<uint>(i_1) + as_type<uint>(1)));
+        }
+        continue;
+      }
+      bool tint_continue_1 = false;
+      switch(i_1) {
         case 0:
         {
-          {
-            i = as_type<int>((as_type<uint>(i) + as_type<uint>(1)));
-          }
-          continue;
+          tint_continue_1 = true;
+          break;
         }
         default:
         {
           break;
         }
+      }
+      if (tint_continue_1) {
+        {
+          i_1 = as_type<int>((as_type<uint>(i_1) + as_type<uint>(1)));
+        }
+        continue;
       }
       {
-        i = as_type<int>((as_type<uint>(i) + as_type<uint>(1)));
+        i_1 = as_type<int>((as_type<uint>(i_1) + as_type<uint>(1)));
       }
       continue;
     }

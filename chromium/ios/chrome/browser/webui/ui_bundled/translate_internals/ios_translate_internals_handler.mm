@@ -18,11 +18,21 @@
 #import "ios/chrome/browser/translate/model/translate_service_ios.h"
 #import "ios/web/public/webui/web_ui_ios.h"
 
+// Vivaldi
+#import "ios/translate/vivaldi_ios_translate_client.h"
+// End Vivaldi
+
 IOSTranslateInternalsHandler::IOSTranslateInternalsHandler() = default;
 IOSTranslateInternalsHandler::~IOSTranslateInternalsHandler() = default;
 
 translate::TranslateClient* IOSTranslateInternalsHandler::GetTranslateClient() {
+
+#if defined(VIVALDI_BUILD)
+  return VivaldiIOSTranslateClient::FromWebState(web_ui()->GetWebState());
+#else
   return ChromeIOSTranslateClient::FromWebState(web_ui()->GetWebState());
+#endif // End Vivaldi
+
 }
 
 variations::VariationsService*

@@ -28,6 +28,7 @@ struct AutocompleteMatchType {
   //
   // Any changes to this enum also requires an update to:
   //  - `AutocompleteMatch::GetOmniboxEventResultType()`
+  //  - `AutocompleteMatch::GetVectorIcon()`
   //  - `GetClientSummarizedResultType()`
   //  - `AutocompleteMatchType::ToString()`
   //  - `AutocompleteMatchType::GetAccessibilityBaseLabel()`
@@ -96,10 +97,12 @@ struct AutocompleteMatchType {
                                        // similar embeddings to the query.
     FEATURED_ENTERPRISE_SEARCH  = 37,  // Site search engines featured by
                                        // Enterprise policy.
-    // Vivaldi
-    BOOKMARK_NICKNAME           = 38,  // A bookmark whose nickname
-                                       // contains the input.
-    DIRECT_MATCH                = 39,  // A direct match
+    HISTORY_EMBEDDINGS_ANSWER = 38,
+
+    // Vivaldi, make sure to keep the Vivaldi ones lasst, next to NUM_TYPES
+    BOOKMARK_NICKNAME,  // A bookmark whose nickname
+                        // contains the input.
+    DIRECT_MATCH,       // A direct match
     NUM_TYPES,
   };
   // clang-format on

@@ -6,7 +6,7 @@ fate-vsynth%: CODEC = $(word 3, $(subst -, ,$(@)))
 fate-vsynth%: FMT = avi
 fate-vsynth%: DEFAULT_SIZE = -s 352x288
 fate-vsynth3-%: DEFAULT_SIZE = -s $(FATEW)x$(FATEH)
-fate-vsynth%: CMD = enc_dec "rawvideo $(DEFAULT_SIZE) -pix_fmt yuv420p $(RAWDECOPTS)" $(SRC) $(FMT) "-c $(CODEC) $(ENCOPTS)" rawvideo "-pix_fmt yuv420p -fps_mode passthrough $(DECOPTS)" "" "" ${TWOPASS}
+fate-vsynth%: CMD = enc_dec "rawvideo $(DEFAULT_SIZE) -color_range mpeg -pix_fmt yuv420p $(RAWDECOPTS)" $(SRC) $(FMT) "-c $(CODEC) $(ENCOPTS)" rawvideo "-pix_fmt yuv420p -color_range mpeg -fps_mode passthrough $(DECOPTS)" "" "" ${TWOPASS}
 fate-vsynth%: CMP_UNIT = 1
 fate-vsynth%: REF = $(SRC_PATH)/tests/ref/vsynth/$(@:fate-%=%)
 
@@ -154,13 +154,15 @@ $(FATE_VCODEC_DV:%=fate-vsynth\%-%): CODEC    = dvvideo
 $(FATE_VCODEC_DV:%=fate-vsynth\%-%): FMT      = dv
 $(FATE_VCODEC_DV:%=fate-vsynth\%-%): DECOPTS += $(DEFAULT_SIZE)
 
-FATE_VCODEC-$(call ENCDEC, FFV1, AVI)   += ffv1 ffv1-v0 \
+FATE_VCODEC-$(call ENCDEC, FFV1, AVI)   += ffv1 ffv1-v0 ffv1-v2 \
                                            ffv1-v3-yuv420p \
                                            ffv1-2pass
+
 FATE_VCODEC_SCALE-$(call ENCDEC, FFV1, AVI) += ffv1-v3-yuv422p10 ffv1-v3-yuv444p16 \
-                                               ffv1-v3-bgr0 ffv1-v3-rgb48
+                                               ffv1-v3-bgr0 ffv1-v3-rgb48 ffv1-2pass10
 fate-vsynth%-ffv1:               ENCOPTS = -slices 4
 fate-vsynth%-ffv1-v0:            CODEC   = ffv1
+fate-vsynth%-ffv1-v2:            ENCOPTS = -level 2 -strict experimental
 fate-vsynth%-ffv1-v3-yuv420p:    ENCOPTS = -level 3 -pix_fmt yuv420p
 fate-vsynth%-ffv1-v3-yuv422p10:  ENCOPTS = -level 3 -pix_fmt yuv422p10 \
                                            -sws_flags neighbor+bitexact
@@ -176,6 +178,9 @@ fate-vsynth%-ffv1-v3-rgb48:      ENCOPTS = -level 3 -pix_fmt rgb48 -strict -2 \
 fate-vsynth%-ffv1-v3-rgb48:      DECOPTS = -sws_flags neighbor+bitexact
 fate-vsynth%-ffv1-2pass:         TWOPASS = 1
 fate-vsynth%-ffv1-2pass:         ENCOPTS = -coder range_tab -context 1
+fate-vsynth%-ffv1-2pass10:       TWOPASS = 1
+fate-vsynth%-ffv1-2pass10:       ENCOPTS = -coder range_tab -context 1 -pix_fmt yuv422p10 \
+                                           -sws_flags neighbor+bitexact
 
 FATE_VCODEC-$(call ENCDEC, FFVHUFF, AVI) += ffvhuff
 FATE_VCODEC_SCALE-$(call ENCDEC, FFVHUFF, AVI) += ffvhuff444 ffvhuff420p12 ffvhuff422p10left ffvhuff444p16
@@ -441,11 +446,21 @@ FATE_VCODEC_SCALE-$(call ENCDEC, R210, AVI)   += r210
 FATE_VCODEC_SCALE-$(call ENCDEC, V210, AVI)   += v210 v210-10
 fate-vsynth%-v210-10:            ENCOPTS = -pix_fmt yuv422p10
 
-FATE_VCODEC_SCALE-$(call ENCDEC, V308, AVI)   += v308
+FATE_VCODEC_SCALE-$(call ENCDEC, RAWVIDEO, AVI) += v308
+fate-vsynth%-v308:               ENCOPTS = -pix_fmt vyu444 -sws_flags neighbor+bitexact
+fate-vsynth%-v308:               DECOPTS = -sws_flags neighbor+bitexact
+fate-vsynth%-v308:               CODEC   = rawvideo
 
-FATE_VCODEC_SCALE-$(call ENCDEC, V408, AVI)   += v408
-fate-vsynth%-v408:               ENCOPTS = -sws_flags neighbor+bitexact
+FATE_VCODEC_SCALE-$(call ENCDEC, RAWVIDEO, AVI) += v408
+fate-vsynth%-v408:               ENCOPTS = -pix_fmt uyva -sws_flags neighbor+bitexact
 fate-vsynth%-v408:               DECOPTS = -sws_flags neighbor+bitexact
+fate-vsynth%-v408:               CODEC   = rawvideo
+
+FATE_VCODEC_SCALE-$(call ENCDEC, RAWVIDEO, MOV) += v410
+fate-vsynth%-v410:               ENCOPTS = -pix_fmt v30xle -sws_flags neighbor+bitexact
+fate-vsynth%-v410:               DECOPTS = -sws_flags neighbor+bitexact
+fate-vsynth%-v410:               CODEC   = rawvideo
+fate-vsynth%-v410:               FMT     = mov
 
 FATE_VCODEC_SCALE-$(call ENCDEC, AVUI, MOV)   += avui
 fate-vsynth%-avui:               ENCOPTS = -s pal -strict experimental -sws_flags neighbor+bitexact

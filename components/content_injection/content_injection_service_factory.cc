@@ -31,7 +31,7 @@ ServiceFactory::~ServiceFactory() {}
 
 content::BrowserContext* ServiceFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
+  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 KeyedService* ServiceFactory::BuildServiceInstanceFor(

@@ -64,15 +64,16 @@ enum Sandbox {
   // Like kUtility but allows loading of speech recognition libraries.
   kSpeechRecognition,
 
-  // Like kUtility but allows loading of the optimization guide library.
+  // Like kService but allows loading of the optimization guide library.
+  [EnableIf=is_linux]
   kVideoEffects,
 
   // Like kUtility but allows loading of screen AI library.
   [EnableIf=enable_screen_ai_service]
   kScreenAI,
 
-  // The PPAPI plugin process.
-  [EnableIf=enable_ppapi]
+  // The PPAPI plugin process. (Unsandboxed on Windows.)
+  [EnableIf=enable_ppapi_sandbox]
   kPpapi,
 
   // Equivalent to no sandbox on all non-Fuchsia platforms.
@@ -164,4 +165,12 @@ enum Sandbox {
   // Nearby Presence.
   [EnableIf=is_chromeos_ash]
   kNearby,
+
+  // Hosts On Device Translation service.
+  // Currently the sandboxing of the On Device Translation service needs
+  // a dedicated sandbox type on macOS and Linux.
+  // On Windows the kService sandbox type is used.
+  // TODO(crbug.com/340778819): Implement sandboxing on other platforms.
+  [EnableIf=is_linux_or_mac]
+  kOnDeviceTranslation,
 };

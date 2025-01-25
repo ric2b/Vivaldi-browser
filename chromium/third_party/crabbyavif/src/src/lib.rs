@@ -57,6 +57,8 @@ pub enum PixelFormat {
     // Android platform. They are intended to be pass-through formats that are used only by the
     // Android MediaCodec wrapper. All internal functions will treat them as opaque.
     AndroidP010 = 5,
+    AndroidNv12 = 6,
+    AndroidNv21 = 7,
 }
 
 impl PixelFormat {
@@ -66,7 +68,10 @@ impl PixelFormat {
 
     pub fn plane_count(&self) -> usize {
         match self {
-            PixelFormat::None | PixelFormat::AndroidP010 => 0,
+            PixelFormat::None
+            | PixelFormat::AndroidP010
+            | PixelFormat::AndroidNv12
+            | PixelFormat::AndroidNv21 => 0,
             PixelFormat::Yuv400 => 1,
             PixelFormat::Yuv420 | PixelFormat::Yuv422 | PixelFormat::Yuv444 => 3,
         }

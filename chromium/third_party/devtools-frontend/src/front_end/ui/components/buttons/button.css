@@ -30,9 +30,6 @@
   align-items: center;
 }
 
-/* This specific nesting is incompatible with what stylelint requires as ordering of the rules. */
-/* stylelint-disable no-descending-specificity */
-
 button {
   --hover-layer-color: var(--sys-color-state-hover-on-subtle);
   --active-layer-color: var(--sys-color-state-ripple-neutral-on-subtle);
@@ -43,6 +40,7 @@ button {
   align-items: center;
   background: transparent;
   border-radius: var(--sys-shape-corner-full);
+  cursor: inherit;
   display: inline-flex;
   position: relative;
   font-size: var(--sys-typescale-body4-size);
@@ -294,7 +292,6 @@ button {
     }
   }
 }
-/* stylelint-enable no-descending-specificity */
 
 .spinner {
   display: block;

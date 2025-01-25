@@ -16,7 +16,7 @@ namespace ip_protection {
 // Manages the cache of blind-signed auth tokens.
 //
 // This class is responsible for checking, fetching, and refilling auth tokens
-// for IpProtectionConfigCache.
+// for IpProtectionCore.
 class IpProtectionTokenManager {
  public:
   virtual ~IpProtectionTokenManager() = default;
@@ -58,9 +58,14 @@ class IpProtectionTokenManager {
   virtual std::string CurrentGeo() const = 0;
 
   // Set the "current" geo of the token cache manager. This function should only
-  // be called by the `IpProtectionConfigCache` for when a geo change has been
+  // be called by the `IpProtectionCore` for when a geo change has been
   // observed.
   virtual void SetCurrentGeo(const std::string& geo_id) = 0;
+
+  // Returns a bool indicating whether the token cache was ever filled.
+  //
+  // Returns true if the token cache was filled at some point, false otherwise.
+  virtual bool WasTokenCacheEverFilled() = 0;
 };
 
 }  // namespace ip_protection

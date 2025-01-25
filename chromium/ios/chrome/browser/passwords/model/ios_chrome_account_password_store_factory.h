@@ -8,8 +8,8 @@
 #import "base/memory/scoped_refptr.h"
 #import "base/no_destructor.h"
 #import "components/keyed_service/ios/refcounted_browser_state_keyed_service_factory.h"
-#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
+class ProfileIOS;
 enum class ServiceAccessType;
 
 namespace password_manager {
@@ -17,14 +17,13 @@ class PasswordStoreInterface;
 }
 
 // Singleton that owns all Gaia-account-scoped PasswordStores and associates
-// them with ChromeBrowserState.
+// them with ProfileIOS.
 class IOSChromeAccountPasswordStoreFactory
     : public RefcountedBrowserStateKeyedServiceFactory {
  public:
-  static scoped_refptr<password_manager::PasswordStoreInterface>
-  GetForBrowserState(ChromeBrowserState* browser_state,
-                     ServiceAccessType access_type);
-
+  static scoped_refptr<password_manager::PasswordStoreInterface> GetForProfile(
+      ProfileIOS* profile,
+      ServiceAccessType access_type);
   static IOSChromeAccountPasswordStoreFactory* GetInstance();
 
   IOSChromeAccountPasswordStoreFactory(

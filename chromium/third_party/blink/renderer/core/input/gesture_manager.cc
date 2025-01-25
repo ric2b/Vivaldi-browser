@@ -110,8 +110,7 @@ HitTestRequest::HitTestRequestType GestureManager::GetHitTypeForGestureType(
       // FIXME: Shouldn't LongTap and TwoFingerTap clear the Active state?
       return hit_type | HitTestRequest::kActive | HitTestRequest::kReadOnly;
     default:
-      NOTREACHED_IN_MIGRATION();
-      return hit_type | HitTestRequest::kActive | HitTestRequest::kReadOnly;
+      NOTREACHED();
   }
 }
 
@@ -161,7 +160,7 @@ WebInputEventResult GestureManager::HandleGestureEventInFrame(
     case WebInputEvent::Type::kGestureTapUnconfirmed:
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 
   return WebInputEventResult::kNotHandled;
@@ -274,7 +273,7 @@ WebInputEventResult GestureManager::HandleGestureTap(
       tapped_node ? tapped_node->GetDocument().GetFrame() : nullptr,
       mojom::blink::UserActivationNotificationType::kInteraction);
 
-  mouse_event_manager_->SetClickElement(tapped_element);
+  mouse_event_manager_->SetMouseDownElement(tapped_element);
 
   WebMouseEvent fake_mouse_down(
       WebInputEvent::Type::kMouseDown, gesture_event,
@@ -358,7 +357,7 @@ WebInputEventResult GestureManager::HandleGestureTap(
       if (frame_->View())
         frame_->View()->RegisterTapEvent(tapped_element);
     }
-    mouse_event_manager_->SetClickElement(nullptr);
+    mouse_event_manager_->SetMouseDownElement(nullptr);
   }
 
   if (mouse_up_event_result == WebInputEventResult::kNotHandled) {
@@ -375,8 +374,9 @@ WebInputEventResult GestureManager::HandleGestureTap(
 
   if (RuntimeEnabledFeatures::TextFragmentTapOpensContextMenuEnabled() &&
       current_hit_test.InnerNodeFrame()) {
-    current_hit_test.InnerNodeFrame()->View()->UpdateLifecycleToPrePaintClean(
-        DocumentUpdateReason::kHitTest);
+    current_hit_test.InnerNodeFrame()
+        ->View()
+        ->UpdateAllLifecyclePhasesExceptPaint(DocumentUpdateReason::kHitTest);
     current_hit_test = event_handling_util::HitTestResultInFrame(
         frame_, HitTestLocation(adjusted_point), hit_type);
     if (TextFragmentHandler::IsOverTextFragment(current_hit_test) &&

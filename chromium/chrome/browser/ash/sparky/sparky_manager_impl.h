@@ -12,6 +12,7 @@
 #include "chromeos/components/mahi/public/cpp/mahi_manager.h"
 #include "components/manta/mahi_provider.h"
 #include "components/manta/manta_service.h"
+#include "components/manta/proto/sparky.pb.h"
 #include "components/manta/sparky/sparky_provider.h"
 #include "components/manta/sparky/sparky_util.h"
 #include "ui/gfx/image/image_skia.h"
@@ -38,7 +39,10 @@ class SparkyManagerImpl : public chromeos::MahiManager, public KeyedService {
   std::u16string GetContentTitle() override;
   gfx::ImageSkia GetContentIcon() override;
   GURL GetContentUrl() override;
+  std::u16string GetSelectedText() override;
+  void GetContent(MahiContentCallback callback) override;
   void GetSummary(MahiSummaryCallback callback) override;
+  void GetElucidation(MahiElucidationCallback callback) override;
   void GetOutlines(MahiOutlinesCallback callback) override;
   void GoToOutlineContent(int outline_id) override;
   void AnswerQuestionRepeating(
@@ -81,12 +85,12 @@ class SparkyManagerImpl : public chromeos::MahiManager, public KeyedService {
 
   void OnSparkyProviderQAResponse(MahiAnswerQuestionCallbackRepeating callback,
                                   manta::MantaStatus status,
-                                  manta::DialogTurn* latest_turn);
+                                  manta::proto::Turn* latest_turn);
 
   // There is a maximum limit of consecutive calls which can be made from the
   // client with no additional request from the user. If the response from the
-  // server is trying to exceed this limit, there is a manual override and the
-  // last action for the latest turn will be set to done, so that no additional
+  // server is trying to exceed this limit, there is a manual override and a
+  // done action will added to the end of the latest turn, so that no additional
   // calls to the server are made.
   void CheckTurnLimit();
 
@@ -101,10 +105,6 @@ class SparkyManagerImpl : public chromeos::MahiManager, public KeyedService {
       crosapi::mojom::MahiPageContent::New();
 
   raw_ptr<Profile> profile_;
-
-  // Stores the dialog of the question and answers along with any associated
-  // actions.
-  std::vector<manta::DialogTurn> dialog_turns_;
 
   std::unique_ptr<manta::SparkyProvider> sparky_provider_;
 

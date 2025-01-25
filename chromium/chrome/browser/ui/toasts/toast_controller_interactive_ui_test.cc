@@ -4,7 +4,10 @@
 
 #include <memory>
 
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/run_loop.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -28,6 +31,7 @@
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
+#include "components/plus_addresses/features.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "net/dns/mock_host_resolver.h"
@@ -77,6 +81,31 @@ class OmniboxInputWaiter : public OmniboxTabHelper::Observer {
   base::ScopedObservation<OmniboxTabHelper, OmniboxTabHelper::Observer>
       omnibox_helper_observer_{this};
 };
+
+DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kSampleMenuItem);
+
+// Simplified menu model with a single item that runs `closure` on selecting it.
+class TestMenuModel : public ui::SimpleMenuModel,
+                      ui::SimpleMenuModel::Delegate {
+ public:
+  explicit TestMenuModel(base::RepeatingClosure closure)
+      : ui::SimpleMenuModel(/*delegate=*/this), closure_(std::move(closure)) {
+    AddItem(kCommandId, u"Some entry");
+    SetElementIdentifierAt(0, kSampleMenuItem);
+  }
+
+  // ui::SimpleMenuModel::Delegate:
+  void ExecuteCommand(int command_id, int event_flags) override {
+    ASSERT_EQ(command_id, kCommandId);
+    closure_.Run();
+  }
+
+ private:
+  static constexpr int kCommandId = 123;
+
+  base::RepeatingClosure closure_;
+};
+
 }  // namespace
 
 class ToastControllerInteractiveTest : public InteractiveBrowserTest {
@@ -84,7 +113,9 @@ class ToastControllerInteractiveTest : public InteractiveBrowserTest {
   void SetUp() override {
     feature_list_.InitWithFeatures(
         {toast_features::kToastFramework, toast_features::kLinkCopiedToast,
-         toast_features::kImageCopiedToast, toast_features::kReadingListToast},
+         toast_features::kImageCopiedToast, toast_features::kReadingListToast,
+         plus_addresses::features::kPlusAddressesEnabled,
+         plus_addresses::features::kPlusAddressFullFormFill},
         {});
     InteractiveBrowserTest::SetUp();
   }
@@ -105,8 +136,11 @@ class ToastControllerInteractiveTest : public InteractiveBrowserTest {
   }
 
   auto ShowToast(ToastParams params) {
-    return Do(
-        [&]() { GetToastController()->MaybeShowToast(std::move(params)); });
+    return Do(base::BindOnce(
+        [](ToastController* toast_controller, ToastParams toast_params) {
+          toast_controller->MaybeShowToast(std::move(toast_params));
+        },
+        GetToastController(), std::move(params)));
   }
 
   auto FireToastCloseTimer() {
@@ -142,15 +176,14 @@ class ToastControllerInteractiveTest : public InteractiveBrowserTest {
   base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest, ShowEphemeralToast) {
+IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest, ShowToast) {
   RunTestSequence(
       ShowToast(ToastParams(ToastId::kLinkCopied)),
       WaitForShow(toasts::ToastView::kToastViewId),
       Check([=, this]() { return GetToastController()->IsShowingToast(); }));
 }
 
-IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,
-                       ShowSameEphemeralToastTwice) {
+IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest, ShowSameToastTwice) {
   RunTestSequence(
       ShowToast(ToastParams(ToastId::kLinkCopied)),
       WaitForShow(toasts::ToastView::kToastViewId),
@@ -160,47 +193,12 @@ IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,
       Check([=, this]() { return GetToastController()->IsShowingToast(); }));
 }
 
-IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest, PreemptEphemeralToast) {
+IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest, PreemptToast) {
   RunTestSequence(
       ShowToast(ToastParams(ToastId::kLinkCopied)),
       WaitForShow(toasts::ToastView::kToastViewId),
       Check([=, this]() { return GetToastController()->IsShowingToast(); }),
       ShowToast(ToastParams(ToastId::kImageCopied)));
-}
-
-IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest, ShowPersistentToast) {
-  RunTestSequence(ShowToast(ToastParams(ToastId::kLensOverlay)),
-                  WaitForShow(toasts::ToastView::kToastViewId), Check([=, this]() {
-                    return GetToastController()->IsShowingToast();
-                  }));
-}
-
-IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest, PersistentToastHides) {
-  RunTestSequence(
-      ShowToast(ToastParams(ToastId::kLensOverlay)),
-      WaitForShow(toasts::ToastView::kToastViewId), Do([=, this]() {
-        GetToastController()->ClosePersistentToast(ToastId::kLensOverlay);
-      }),
-      WaitForHide(toasts::ToastView::kToastViewId));
-}
-
-IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest, PreemptPersistentToast) {
-  RunTestSequence(
-      ShowToast(ToastParams(ToastId::kLensOverlay)),
-      WaitForShow(toasts::ToastView::kToastViewId),
-      Check([=, this]() { return GetToastController()->IsShowingToast(); }),
-      CheckShowingToastId(ToastId::kLensOverlay),
-      ShowToast(ToastParams(ToastId::kLinkCopied)),
-      // Ephemeral Toast should force the persistent toast to close
-      WaitForHide(toasts::ToastView::kToastViewId),
-      // After the persistent toast closes, the ephemeral toast should show
-      WaitForShow(toasts::ToastView::kToastViewId),
-      CheckShowingToastId(ToastId::kLinkCopied),
-      // Simulate the ephemeral toast timing out and auto dismiss
-      FireToastCloseTimer(), WaitForHide(toasts::ToastView::kToastViewId),
-      // Persistent toast should reshow
-      WaitForShow(toasts::ToastView::kToastViewId),
-      CheckShowingToastId(ToastId::kLensOverlay));
 }
 
 IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest, FocusNextPane) {
@@ -320,6 +318,60 @@ IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,
                   WaitForShow(toasts::ToastView::kToastViewId),
                   NavigateWebContents(kFirstTab, GetURL()),
                   EnsurePresent(toasts::ToastView::kToastViewId));
+}
+
+// Tests that setting a menu model in `ToastParams` adds a menu button to the
+// toast that runs the menu model and that interacting with a menu element
+// closes the toast.
+IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,
+                       MenuButtonClickOpensMenu) {
+  ToastParams params(ToastId::kPlusAddressOverride);
+  int counter = 0;
+  params.menu_model = std::make_unique<TestMenuModel>(
+      base::BindLambdaForTesting([&counter]() { ++counter; }));
+  RunTestSequence(ShowToast(std::move(params)),
+                  WaitForShow(toasts::ToastView::kToastViewId),
+                  EnsurePresent(toasts::ToastView::kToastMenuButton),
+                  PressButton(toasts::ToastView::kToastMenuButton),
+                  WaitForShow(kSampleMenuItem), SelectMenuItem(kSampleMenuItem),
+                  WaitForHide(toasts::ToastView::kToastViewId),
+                  Check([&]() { return counter == 1; }));
+}
+
+// Tests that attempting to close the `ToastView` does not succeed while the
+// menu is open. If that happens, the `ToastView` is closed once the menu
+// closes.
+IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,
+                       ToastDoesNotCloseWhileMenuIsOpen) {
+  ToastParams params(ToastId::kPlusAddressOverride);
+  params.menu_model = std::make_unique<TestMenuModel>(base::DoNothing());
+  RunTestSequence(ShowToast(std::move(params)),
+                  WaitForShow(toasts::ToastView::kToastViewId),
+                  EnsurePresent(toasts::ToastView::kToastMenuButton),
+                  PressButton(toasts::ToastView::kToastMenuButton),
+                  WaitForShow(kSampleMenuItem),
+                  EnsurePresent(toasts::ToastView::kToastViewId),
+                  FireToastCloseTimer(),
+                  EnsurePresent(toasts::ToastView::kToastViewId),
+                  PressButton(toasts::ToastView::kToastMenuButton),
+                  WaitForHide(toasts::ToastView::kToastViewId));
+}
+
+// Tests that clicking the menu button twice closes the menu, but not the toast.
+IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest, TwoClicksOnMenuButton) {
+  ToastParams params(ToastId::kPlusAddressOverride);
+  int counter = 0;
+  params.menu_model = std::make_unique<TestMenuModel>(
+      base::BindLambdaForTesting([&counter]() { ++counter; }));
+  RunTestSequence(ShowToast(std::move(params)),
+                  WaitForShow(toasts::ToastView::kToastViewId),
+                  EnsurePresent(toasts::ToastView::kToastMenuButton),
+                  PressButton(toasts::ToastView::kToastMenuButton),
+                  WaitForShow(kSampleMenuItem),
+                  PressButton(toasts::ToastView::kToastMenuButton),
+                  WaitForHide(kSampleMenuItem),
+                  EnsurePresent(toasts::ToastView::kToastMenuButton),
+                  Check([&]() { return counter == 0; }));
 }
 
 IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,

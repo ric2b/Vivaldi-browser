@@ -139,7 +139,6 @@ export class Aggregate {
   distance!: number;
   self!: number;
   maxRet!: number;
-  type!: number;
   name!: string;
   idxs!: number[];
   constructor() {
@@ -147,10 +146,12 @@ export class Aggregate {
 }
 
 export class AggregateForDiff {
+  name: string;
   indexes: number[];
   ids: number[];
   selfSizes: number[];
   constructor() {
+    this.name = '';
     this.indexes = [];
     this.ids = [];
     this.selfSizes = [];
@@ -158,6 +159,7 @@ export class AggregateForDiff {
 }
 
 export class Diff {
+  name: string;
   addedCount: number;
   removedCount: number;
   addedSize: number;
@@ -166,7 +168,8 @@ export class Diff {
   addedIndexes: number[];
   countDelta!: number;
   sizeDelta!: number;
-  constructor() {
+  constructor(name: string) {
+    this.name = name;
     this.addedCount = 0;
     this.removedCount = 0;
     this.addedSize = 0;
@@ -177,6 +180,7 @@ export class Diff {
 }
 
 export class DiffForClass {
+  name!: string;
   addedCount!: number;
   removedCount!: number;
   addedSize!: number;

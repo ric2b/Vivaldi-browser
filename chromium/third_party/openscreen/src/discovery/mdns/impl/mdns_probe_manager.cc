@@ -53,12 +53,12 @@ MdnsProbeManagerImpl::~MdnsProbeManagerImpl() = default;
 Error MdnsProbeManagerImpl::StartProbe(MdnsDomainConfirmedProvider* callback,
                                        DomainName requested_name,
                                        IPAddress address) {
-  // Check if |requested_name| is already being queried for.
+  // Check if `requested_name` is already being queried for.
   if (FindOngoingProbe(requested_name) != ongoing_probes_.end()) {
     return Error::Code::kOperationInProgress;
   }
 
-  // Check if |requested_name| is already claimed.
+  // Check if `requested_name` is already claimed.
   if (IsDomainClaimed(requested_name)) {
     return Error::Code::kItemAlreadyExists;
   }
@@ -95,7 +95,7 @@ void MdnsProbeManagerImpl::RespondToProbeQuery(const MdnsMessage& message,
 
   // Iterate across all questions asked and all completed probes and add A or
   // AAAA records associated with the endpoints for which the names match.
-  // |questions| is expected to be of size 1 and |completed_probes| should be
+  // `questions` is expected to be of size 1 and `completed_probes` should be
   // small (generally size 1), so this should be fast.
   for (const auto& question : questions) {
     for (auto it = completed_probes_.begin(); it != completed_probes_.end();

@@ -59,6 +59,8 @@ describeWithMockConnection('ApplicationPanelSidebar', () => {
   const TEST_ORIGIN_B = 'http://www.example.org/';
   const TEST_ORIGIN_C = 'http://www.example.net/';
 
+  const TEST_EXTENSION_NAME = 'Test Extension';
+
   const ID = 'AA' as Protocol.Page.FrameId;
 
   const EVENTS = [
@@ -192,6 +194,89 @@ describeWithMockConnection('ApplicationPanelSidebar', () => {
     assert.deepEqual(sidebar.sharedStorageListTreeElement.view.getEventsForTesting(), EVENTS);
   });
 
+  it('shows extension storage based on added models', async () => {
+    for (const useTreeView of [false, true]) {
+      Application.ResourcesPanel.ResourcesPanel.instance({forceNew: true});
+      const sidebar = await Application.ResourcesPanel.ResourcesPanel.showAndGetSidebar();
+
+      // Cast to any allows overriding private method.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      sinon.stub(sidebar, 'useTreeViewForExtensionStorage' as any).returns(useTreeView);
+
+      const extensionStorageModel = target.model(Application.ExtensionStorageModel.ExtensionStorageModel);
+      assert.exists(extensionStorageModel);
+
+      const makeFakeExtensionStorage = (storageArea: Protocol.Extensions.StorageArea) =>
+          new Application.ExtensionStorageModel.ExtensionStorage(
+              extensionStorageModel, '', TEST_EXTENSION_NAME, storageArea);
+
+      const fakeModelLocal = makeFakeExtensionStorage(Protocol.Extensions.StorageArea.Local);
+      const fakeModelSession = makeFakeExtensionStorage(Protocol.Extensions.StorageArea.Session);
+
+      extensionStorageModel.dispatchEventToListeners(
+          Application.ExtensionStorageModel.Events.EXTENSION_STORAGE_ADDED, fakeModelLocal);
+      extensionStorageModel.dispatchEventToListeners(
+          Application.ExtensionStorageModel.Events.EXTENSION_STORAGE_ADDED, fakeModelSession);
+
+      if (useTreeView) {
+        assert.strictEqual(sidebar.extensionStorageListTreeElement!.childCount(), 1);
+        assert.strictEqual(sidebar.extensionStorageListTreeElement!.children()[0].title, TEST_EXTENSION_NAME);
+        assert.deepStrictEqual(
+            sidebar.extensionStorageListTreeElement!.children()[0].children().map(e => e.title), ['Session', 'Local']);
+      } else {
+        assert.strictEqual(sidebar.extensionStorageListTreeElement!.childCount(), 2);
+        assert.deepStrictEqual(
+            sidebar.extensionStorageListTreeElement!.children().map(e => e.title), ['Session', 'Local']);
+      }
+
+      extensionStorageModel.dispatchEventToListeners(
+          Application.ExtensionStorageModel.Events.EXTENSION_STORAGE_REMOVED, fakeModelLocal);
+      extensionStorageModel.dispatchEventToListeners(
+          Application.ExtensionStorageModel.Events.EXTENSION_STORAGE_REMOVED, fakeModelSession);
+      assert.strictEqual(sidebar.extensionStorageListTreeElement!.childCount(), 0);
+    }
+  });
+
+  it('does not add extension storage if already added by another model', async () => {
+    Application.ResourcesPanel.ResourcesPanel.instance({forceNew: true});
+    const sidebar = await Application.ResourcesPanel.ResourcesPanel.showAndGetSidebar();
+
+    // Fakes adding an ExtensionStorage to the ExtensionStorageModel for
+    // `target`. Returns a function that can be used to trigger a removal.
+    const addFakeExtensionStorage = (target: SDK.Target.Target): () => void => {
+      const model = target.model(Application.ExtensionStorageModel.ExtensionStorageModel);
+      assert.exists(model);
+
+      const extensionStorage = new Application.ExtensionStorageModel.ExtensionStorage(
+          model, '', TEST_EXTENSION_NAME, Protocol.Extensions.StorageArea.Local);
+
+      const stub = sinon.stub(model, 'storageForIdAndArea').returns(extensionStorage);
+      model.dispatchEventToListeners(
+          Application.ExtensionStorageModel.Events.EXTENSION_STORAGE_ADDED, extensionStorage);
+
+      return () => {
+        stub.restore();
+        model.dispatchEventToListeners(
+            Application.ExtensionStorageModel.Events.EXTENSION_STORAGE_REMOVED, extensionStorage);
+      };
+    };
+
+    // Add a fake extension storage to the main target. The UI should be updated.
+    addFakeExtensionStorage(target);
+    assert.strictEqual(sidebar.extensionStorageListTreeElement!.children()[0].childCount(), 1);
+
+    // Add a fake extension storage using a non-main target (e.g, an iframe).
+    // Make sure we don't add a second entry to the UI.
+    const removeFrameStorage =
+        addFakeExtensionStorage(createTarget({type: SDK.Target.Type.FRAME, parentTarget: target}));
+    assert.strictEqual(sidebar.extensionStorageListTreeElement!.children()[0].childCount(), 1);
+
+    // Removing the frame also shouldn't do anything, since the main frame
+    // still exists.
+    removeFrameStorage();
+    assert.strictEqual(sidebar.extensionStorageListTreeElement!.children()[0].childCount(), 1);
+  });
+
   async function getExpectedCall(expectedCall: string): Promise<sinon.SinonSpy> {
     Application.ResourcesPanel.ResourcesPanel.instance({forceNew: true});
     const sidebar = await Application.ResourcesPanel.ResourcesPanel.showAndGetSidebar();
@@ -294,6 +379,22 @@ describeWithMockConnection('ApplicationPanelSidebar', () => {
   it('adds indexed db after scope change',
      testUiUpdateOnScopeChange(
          Application.IndexedDBModel.IndexedDBModel, 'databases', 'indexedDBListTreeElement.appendChild'));
+
+  it('uses extension name when available for tree element title', () => {
+    const panel = Application.ResourcesPanel.ResourcesPanel.instance({forceNew: true});
+    const extensionName = 'Test Extension';
+    assert.strictEqual(
+        new Application.ApplicationPanelSidebar.ExtensionStorageTreeParentElement(panel, 'id', extensionName).title,
+        extensionName);
+  });
+
+  it('uses extension id as fallback for tree element title', () => {
+    const panel = Application.ResourcesPanel.ResourcesPanel.instance({forceNew: true});
+    const extensionId = 'id';
+    assert.strictEqual(
+        new Application.ApplicationPanelSidebar.ExtensionStorageTreeParentElement(panel, extensionId, '').title,
+        extensionId);
+  });
 });
 
 describeWithMockConnection('IDBDatabaseTreeElement', () => {

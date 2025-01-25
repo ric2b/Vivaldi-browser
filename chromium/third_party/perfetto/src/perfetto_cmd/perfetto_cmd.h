@@ -42,8 +42,6 @@
 
 namespace perfetto {
 
-class RateLimiter;
-
 // Directory for local state and temporary files. This is automatically
 // created by the system by setting setprop persist.traced.enable=1.
 extern const char* kStateDir;
@@ -93,6 +91,9 @@ class PerfettoCmd : public Consumer {
   void OnTimeout();
   bool is_detach() const { return !detach_key_.empty(); }
   bool is_attach() const { return !attach_key_.empty(); }
+  bool is_clone() const {
+    return clone_tsid_.has_value() || !clone_name_.empty();
+  }
 
   // Once we call ReadBuffers we expect one or more calls to OnTraceData
   // with the last call having |has_more| set to false. However we should
@@ -145,7 +146,6 @@ class PerfettoCmd : public Consumer {
 
   base::UnixTaskRunner task_runner_;
 
-  std::unique_ptr<RateLimiter> limiter_;
   std::unique_ptr<perfetto::TracingService::ConsumerEndpoint>
       consumer_endpoint_;
   std::unique_ptr<TraceConfig> trace_config_;
@@ -177,6 +177,7 @@ class PerfettoCmd : public Consumer {
   bool connected_ = false;
   std::string uuid_;
   std::optional<TracingSessionID> clone_tsid_{};
+  std::string clone_name_;
   bool clone_for_bugreport_ = false;
   std::function<void()> on_session_cloned_;
 

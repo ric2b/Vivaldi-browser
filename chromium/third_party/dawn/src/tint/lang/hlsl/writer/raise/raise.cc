@@ -28,6 +28,7 @@
 #include "src/tint/lang/hlsl/writer/raise/raise.h"
 
 #include <unordered_set>
+#include <utility>
 
 #include "src/tint/lang/core/ir/transform/add_empty_entry_point.h"
 #include "src/tint/lang/core/ir/transform/array_length_from_uniform.h"
@@ -38,6 +39,7 @@
 #include "src/tint/lang/core/ir/transform/demote_to_helper.h"
 #include "src/tint/lang/core/ir/transform/direct_variable_access.h"
 #include "src/tint/lang/core/ir/transform/multiplanar_external_texture.h"
+#include "src/tint/lang/core/ir/transform/remove_continue_in_switch.h"
 #include "src/tint/lang/core/ir/transform/remove_terminator_args.h"
 #include "src/tint/lang/core/ir/transform/rename_conflicts.h"
 #include "src/tint/lang/core/ir/transform/robustness.h"
@@ -50,8 +52,11 @@
 #include "src/tint/lang/hlsl/writer/raise/builtin_polyfill.h"
 #include "src/tint/lang/hlsl/writer/raise/decompose_storage_access.h"
 #include "src/tint/lang/hlsl/writer/raise/decompose_uniform_access.h"
-#include "src/tint/lang/hlsl/writer/raise/fxc_polyfill.h"
+#include "src/tint/lang/hlsl/writer/raise/localize_struct_array_assignment.h"
+#include "src/tint/lang/hlsl/writer/raise/pixel_local.h"
 #include "src/tint/lang/hlsl/writer/raise/promote_initializers.h"
+#include "src/tint/lang/hlsl/writer/raise/replace_default_only_switch.h"
+#include "src/tint/lang/hlsl/writer/raise/replace_non_indexable_mat_vec_stores.h"
 #include "src/tint/lang/hlsl/writer/raise/shader_io.h"
 #include "src/tint/utils/result/result.h"
 
@@ -72,17 +77,6 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     PopulateBindingRelatedOptions(options, remapper_data, multiplanar_map,
                                   array_length_from_uniform_options);
 
-    {
-        auto result = core::ir::transform::ArrayLengthFromUniform(
-            module,
-            BindingPoint{array_length_from_uniform_options.ubo_binding.group,
-                         array_length_from_uniform_options.ubo_binding.binding},
-            array_length_from_uniform_options.bindpoint_to_size_index);
-        if (result != Success) {
-            return result.Failure();
-        }
-    }
-
     RUN_TRANSFORM(core::ir::transform::BindingRemapper, module, remapper_data);
     RUN_TRANSFORM(core::ir::transform::MultiplanarExternalTexture, module, multiplanar_map);
 
@@ -94,10 +88,7 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     }
 
     {
-        // TODO(dsinclair): Add missing polyfills
-
         core::ir::transform::BuiltinPolyfillConfig core_polyfills{};
-        // core_polyfills.bitshift_modulo = true;
         core_polyfills.clamp_int = true;
         core_polyfills.dot_4x8_packed = options.polyfill_dot_4x8_packed;
 
@@ -111,7 +102,6 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
         core_polyfills.first_trailing_bit = true;
         core_polyfills.fwidth_fine = true;
         core_polyfills.insert_bits = core::ir::transform::BuiltinPolyfillLevel::kFull;
-        // core_polyfills.int_div_mod = !options.disable_polyfill_integer_div_mod;
 
         // Currently Pack4xU8Clamp() must be polyfilled because on latest DXC pack_clamp_u8()
         // receives an int32_t4 as its input.
@@ -119,9 +109,8 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
         core_polyfills.pack_4xu8_clamp = true;
         core_polyfills.pack_unpack_4x8 = options.polyfill_pack_unpack_4x8;
         core_polyfills.radians = true;
-        // core_polyfills.reflect_vec2_f32 = options.polyfill_reflect_vec2_f32;
+        core_polyfills.reflect_vec2_f32 = options.polyfill_reflect_vec2_f32;
         core_polyfills.texture_sample_base_clamp_to_edge_2d_f32 = true;
-        // core_polyfills.workgroup_uniform_load = true;
         RUN_TRANSFORM(core::ir::transform::BuiltinPolyfill, module, core_polyfills);
     }
 
@@ -134,7 +123,9 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     RUN_TRANSFORM(core::ir::transform::AddEmptyEntryPoint, module);
 
     if (options.compiler == Options::Compiler::kFXC) {
-        RUN_TRANSFORM(raise::FxcPolyfill, module);
+        RUN_TRANSFORM(raise::ReplaceDefaultOnlySwitch, module);
+        RUN_TRANSFORM(raise::LocalizeStructArrayAssignment, module);
+        RUN_TRANSFORM(raise::ReplaceNonIndexableMatVecStores, module);
     }
 
     if (!options.disable_robustness) {
@@ -147,11 +138,45 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
         // according to the description of the assembly store_uav_typed, out of bounds addressing
         // means nothing gets written to memory.
         //
-        // TODO(dsinclair): Need to translate this into new robustness.
+        // TODO(crbug.com/377360326): Implement ignore for texture actions for performance
         // config.texture_action = ast::transform::Robustness::Action::kIgnore;
 
         RUN_TRANSFORM(core::ir::transform::Robustness, module, config);
     }
+
+    // ArrayLengthFromUniform must run after Robustness, which introduces arrayLength calls.
+    {
+        auto result = core::ir::transform::ArrayLengthFromUniform(
+            module,
+            BindingPoint{array_length_from_uniform_options.ubo_binding.group,
+                         array_length_from_uniform_options.ubo_binding.binding},
+            array_length_from_uniform_options.bindpoint_to_size_index);
+        if (result != Success) {
+            return result.Failure();
+        }
+    }
+
+    if (!options.disable_workgroup_init) {
+        // Must run before ShaderIO as it may introduce a builtin parameter (local_invocation_index)
+        RUN_TRANSFORM(core::ir::transform::ZeroInitWorkgroupMemory, module);
+    }
+
+    const bool pixel_local_enabled = !options.pixel_local.attachment_formats.empty();
+
+    // ShaderIO must be run before DecomposeUniformAccess because it might
+    // introduce a uniform buffer for kNumWorkgroups.
+    {
+        raise::ShaderIOConfig config;
+        config.num_workgroups_binding = options.root_constant_binding_point;
+        config.add_input_position_member = pixel_local_enabled;
+        config.truncate_interstage_variables = options.truncate_interstage_variables;
+        config.interstage_locations = std::move(options.interstage_locations);
+        RUN_TRANSFORM(raise::ShaderIO, module, config);
+    }
+
+    // DemoteToHelper must come before any transform that introduces non-core instructions.
+    // Run after ShaderIO to ensure the discards are added to the entry point it introduces.
+    RUN_TRANSFORM(core::ir::transform::DemoteToHelper, module);
 
     RUN_TRANSFORM(core::ir::transform::DirectVariableAccess, module,
                   core::ir::transform::DirectVariableAccessOptions{});
@@ -160,33 +185,29 @@ Result<SuccessType> Raise(core::ir::Module& module, const Options& options) {
     // Comes after DecomposeStorageAccess.
     RUN_TRANSFORM(raise::DecomposeUniformAccess, module);
 
-    if (!options.disable_workgroup_init) {
-        RUN_TRANSFORM(core::ir::transform::ZeroInitWorkgroupMemory, module);
+    // PixelLocal must run after DirectVariableAccess to avoid chasing pointer parameters.
+    if (pixel_local_enabled) {
+        raise::PixelLocalConfig config;
+        config.options = options.pixel_local;
+        RUN_TRANSFORM(raise::PixelLocal, module, config);
     }
-
-    // TODO(dsinclair): LocalizeStructArrayAssignment
-    // TODO(dsinclair): PixelLocal transform
-    // TODO(dsinclair): TruncateInterstageVariables
-    // TODO(dsinclair): NumWorkgroupsFromUniform
-    // TODO(dsinclair): CalculateArrayLength
-    // TODO(dsinclair): RemoveContinueInSwitch
-
-    RUN_TRANSFORM(raise::ShaderIO, module);
-    // DemoteToHelper must come before any transform that introduces non-core instructions.
-    // Run after ShaderIO to ensure the discards are added to the entry point it introduces.
-    RUN_TRANSFORM(core::ir::transform::DemoteToHelper, module);
 
     RUN_TRANSFORM(raise::BinaryPolyfill, module);
     // BuiltinPolyfill must come after BinaryPolyfill and DecomposeStorageAccess as they add
     // builtins
     RUN_TRANSFORM(raise::BuiltinPolyfill, module);
     RUN_TRANSFORM(core::ir::transform::VectorizeScalarMatrixConstructors, module);
+    RUN_TRANSFORM(core::ir::transform::RemoveContinueInSwitch, module);
 
     // These transforms need to be run last as various transforms introduce terminator arguments,
     // naming conflicts, and expressions that need to be explicitly not inlined.
     RUN_TRANSFORM(core::ir::transform::RemoveTerminatorArgs, module);
     RUN_TRANSFORM(core::ir::transform::RenameConflicts, module);
-    RUN_TRANSFORM(core::ir::transform::ValueToLet, module);
+    {
+        core::ir::transform::ValueToLetConfig cfg;
+        cfg.replace_pointer_lets = true;
+        RUN_TRANSFORM(core::ir::transform::ValueToLet, module, cfg);
+    }
 
     // Anything which runs after this needs to handle `Capabilities::kAllowModuleScopedLets`
     RUN_TRANSFORM(raise::PromoteInitializers, module);

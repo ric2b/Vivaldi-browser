@@ -13,7 +13,7 @@
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/accelerators/accelerator.h"
-#include "ui/base/models/simple_menu_model.h"
+#include "ui/menus/simple_menu_model.h"
 
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -102,11 +102,13 @@ MenubarMenuAPI::GetFactoryInstance() {
 // static
 void MenubarMenuAPI::SendAction(content::BrowserContext* browser_context,
                                 int command,
-                                int event_state) {
+                                int event_state,
+                                bool persistent) {
   vivaldi::menubar_menu::Action action;
   // Convert to api id before sending to JS.
   action.id = command - IDC_VIV_MENU_FIRST;
   action.state = FlagToEventState(event_state);
+  action.persistent = persistent;
   ::vivaldi::BroadcastEvent(vivaldi::menubar_menu::OnAction::kEventName,
                             vivaldi::menubar_menu::OnAction::Create(action),
                             browser_context);

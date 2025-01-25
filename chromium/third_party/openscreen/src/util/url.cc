@@ -18,7 +18,7 @@ namespace openscreen {
 namespace {
 
 // Given a string and a range inside the string, compares it to the given
-// lower-case |compare_to| buffer.
+// lower-case `compare_to` buffer.
 bool CompareSchemeComponent(std::string_view spec,
                             const url::Component& component,
                             std::string_view compare_to) {

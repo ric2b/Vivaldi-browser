@@ -45,6 +45,7 @@
 - (void)configureWith:(NSArray*)speedDials
                parent:(VivaldiSpeedDialItem*)parent
         faviconLoader:(FaviconLoader*)faviconLoader
+   directMatchService:(direct_match::DirectMatchService*)directMatchService
           layoutStyle:(VivaldiStartPageLayoutStyle)style
          layoutColumn:(VivaldiStartPageLayoutColumn)column
          showAddGroup:(BOOL)showAddGroup
@@ -55,6 +56,7 @@
   [self.speedDialView configureWith:speedDials
                              parent:parent
                       faviconLoader:faviconLoader
+                 directMatchService:directMatchService
                         layoutStyle:style
                        layoutColumn:column
                        showAddGroup:showAddGroup

@@ -22,10 +22,10 @@ export const microSecondsToSeconds = (value: Types.Timing.MicroSeconds): Types.T
     Types.Timing.Seconds(value / 1000 / 1000);
 
 export function timeStampForEventAdjustedByClosestNavigation(
-    event: Types.TraceEvents.TraceEventData,
+    event: Types.Events.Event,
     traceBounds: Types.Timing.TraceWindowMicroSeconds,
-    navigationsByNavigationId: Map<string, Types.TraceEvents.TraceEventNavigationStart>,
-    navigationsByFrameId: Map<string, Types.TraceEvents.TraceEventNavigationStart[]>,
+    navigationsByNavigationId: Map<string, Types.Events.NavigationStart>,
+    navigationsByFrameId: Map<string, Types.Events.NavigationStart[]>,
     ): Types.Timing.MicroSeconds {
   let eventTimeStamp = event.ts - traceBounds.min;
   if (event.args?.data?.navigationId) {
@@ -77,16 +77,14 @@ export interface EventTimingsData<
   duration: ValueType;
 }
 
-export function eventTimingsMicroSeconds(event: Types.TraceEvents.TraceEventData):
-    EventTimingsData<Types.Timing.MicroSeconds> {
+export function eventTimingsMicroSeconds(event: Types.Events.Event): EventTimingsData<Types.Timing.MicroSeconds> {
   return {
     startTime: event.ts,
     endTime: Types.Timing.MicroSeconds(event.ts + (event.dur ?? Types.Timing.MicroSeconds(0))),
     duration: Types.Timing.MicroSeconds(event.dur || 0),
   };
 }
-export function eventTimingsMilliSeconds(event: Types.TraceEvents.TraceEventData):
-    EventTimingsData<Types.Timing.MilliSeconds> {
+export function eventTimingsMilliSeconds(event: Types.Events.Event): EventTimingsData<Types.Timing.MilliSeconds> {
   const microTimes = eventTimingsMicroSeconds(event);
   return {
     startTime: microSecondsToMilliseconds(microTimes.startTime),
@@ -94,7 +92,7 @@ export function eventTimingsMilliSeconds(event: Types.TraceEvents.TraceEventData
     duration: microSecondsToMilliseconds(microTimes.duration),
   };
 }
-export function eventTimingsSeconds(event: Types.TraceEvents.TraceEventData): EventTimingsData<Types.Timing.Seconds> {
+export function eventTimingsSeconds(event: Types.Events.Event): EventTimingsData<Types.Timing.Seconds> {
   const microTimes = eventTimingsMicroSeconds(event);
   return {
     startTime: microSecondsToSeconds(microTimes.startTime),
@@ -120,6 +118,14 @@ export function traceWindowMillisecondsToMicroSeconds(bounds: Types.Timing.Trace
     range: millisecondsToMicroseconds(bounds.range),
   };
 }
+export function traceWindowMicroSecondsToMilliSeconds(bounds: Types.Timing.TraceWindowMicroSeconds):
+    Types.Timing.TraceWindowMilliSeconds {
+  return {
+    min: microSecondsToMilliseconds(bounds.min),
+    max: microSecondsToMilliseconds(bounds.max),
+    range: microSecondsToMilliseconds(bounds.range),
+  };
+}
 
 export function traceWindowFromMilliSeconds(
     min: Types.Timing.MilliSeconds, max: Types.Timing.MilliSeconds): Types.Timing.TraceWindowMicroSeconds {
@@ -139,6 +145,14 @@ export function traceWindowFromMicroSeconds(
     range: Types.Timing.MicroSeconds(max - min),
   };
   return traceWindow;
+}
+
+export function traceWindowFromEvent(event: Types.Events.Event): Types.Timing.TraceWindowMicroSeconds {
+  return {
+    min: event.ts,
+    max: Types.Timing.MicroSeconds(event.ts + (event.dur ?? 0)),
+    range: event.dur ?? Types.Timing.MicroSeconds(0),
+  };
 }
 
 export interface BoundsIncludeTimeRange {
@@ -166,8 +180,7 @@ export function boundsIncludeTimeRange(data: BoundsIncludeTimeRange): boolean {
 }
 
 /** Checks to see if the event is within or overlaps the bounds */
-export function eventIsInBounds(
-    event: Types.TraceEvents.TraceEventData, bounds: Types.Timing.TraceWindowMicroSeconds): boolean {
+export function eventIsInBounds(event: Types.Events.Event, bounds: Types.Timing.TraceWindowMicroSeconds): boolean {
   const startTime = event.ts;
   return startTime <= bounds.max && bounds.min <= (startTime + (event.dur ?? 0));
 }
@@ -181,6 +194,16 @@ export interface WindowFitsInsideBounds {
   window: Types.Timing.TraceWindowMicroSeconds;
   bounds: Types.Timing.TraceWindowMicroSeconds;
 }
+
+/**
+ * Returns true if the window fits entirely within the bounds.
+ * Note that if the window is equivalent to the bounds, that is considered to fit
+ */
 export function windowFitsInsideBounds(data: WindowFitsInsideBounds): boolean {
   return data.window.min >= data.bounds.min && data.window.max <= data.bounds.max;
+}
+
+export function windowsEqual(
+    w1: Types.Timing.TraceWindowMicroSeconds, w2: Types.Timing.TraceWindowMicroSeconds): boolean {
+  return w1.min === w2.min && w1.max === w2.max;
 }

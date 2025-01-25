@@ -4,23 +4,29 @@
 
 #include "services/on_device_model/on_device_model_service.h"
 
+#include <cstdint>
 #include <memory>
 #include <queue>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/not_fatal_until.h"
+#include "base/notreached.h"
+#include "base/task/bind_post_task.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/uuid.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
+#include "services/on_device_model/fake/on_device_model_fake.h"
 #include "services/on_device_model/ml/gpu_blocklist.h"
 #include "services/on_device_model/ml/on_device_model_executor.h"
 #include "services/on_device_model/ml/on_device_model_internal.h"
 #include "services/on_device_model/ml/performance_class.h"
-
-#if !defined(ENABLE_ML_INTERNAL)
-#include "services/on_device_model/fake/on_device_model_fake.h"  //nogncheck
-#endif
+#include "services/on_device_model/ml/ts_model.h"
+#include "services/on_device_model/public/cpp/features.h"
+#include "services/on_device_model/public/cpp/service_client.h"
 
 namespace on_device_model {
 namespace {
@@ -48,7 +54,7 @@ class SessionWrapper final : public mojom::Session {
   void GetSizeInTokens(mojom::InputPtr input,
                        GetSizeInTokensCallback callback) override;
   void GetSizeInTokensDeprecated(const std::string& text,
-                       GetSizeInTokensCallback callback) override;
+                                 GetSizeInTokensCallback callback) override;
   void Score(const std::string& text, ScoreCallback callback) override;
   void Clone(mojo::PendingReceiver<mojom::Session> session) override;
 
@@ -98,14 +104,13 @@ class SessionWrapper final : public mojom::Session {
 class ModelWrapper final : public mojom::OnDeviceModel {
  public:
   explicit ModelWrapper(
-      bool support_multiple_sessions,
       std::unique_ptr<ml::OnDeviceModelExecutor> model,
       mojo::PendingReceiver<mojom::OnDeviceModel> receiver,
       base::OnceCallback<void(base::WeakPtr<mojom::OnDeviceModel>)> on_delete)
-      : support_multiple_sessions_(support_multiple_sessions),
-        model_(std::move(model)),
-        on_delete_(std::move(on_delete)) {
-    receivers_.Add(this, std::move(receiver), std::nullopt);
+      : model_(std::move(model)), on_delete_(std::move(on_delete)) {
+    receivers_.Add(
+        this, std::move(receiver),
+        std::unique_ptr<ml::OnDeviceModelExecutor::ScopedAdaptation>());
     receivers_.set_disconnect_handler(base::BindRepeating(
         &ModelWrapper::ModelDisconnected, weak_ptr_factory_.GetWeakPtr()));
   }
@@ -114,49 +119,39 @@ class ModelWrapper final : public mojom::OnDeviceModel {
   ModelWrapper(const ModelWrapper&) = delete;
   ModelWrapper& operator=(const ModelWrapper&) = delete;
 
-  bool support_multiple_sessions() const { return support_multiple_sessions_; }
-
   void AddAndRunPendingTask(
       base::OnceCallback<void(base::OnceClosure finish_callback)> task,
       base::WeakPtr<SessionWrapper> session = nullptr) {
-    if (support_multiple_sessions_) {
-      base::ScopedClosureRunner task_finished(base::BindOnce(
-          &ModelWrapper::TaskFinished, weak_ptr_factory_.GetWeakPtr()));
-      pending_tasks_.push(PendingTask{
-          .session = session,
-          .task = base::BindOnce(
-              std::move(task), base::BindOnce([](base::ScopedClosureRunner) {},
+    base::ScopedClosureRunner task_finished(
+        base::BindPostTaskToCurrentDefault(base::BindOnce(
+            &ModelWrapper::TaskFinished, weak_ptr_factory_.GetWeakPtr())));
+    pending_tasks_.push(PendingTask{
+        .session = session,
+        .task = base::BindOnce(std::move(task),
+                               base::BindOnce([](base::ScopedClosureRunner) {},
                                               std::move(task_finished))),
-      });
-      RunTaskIfPossible();
-      return;
-    }
-
-    std::move(task).Run(base::DoNothing());
+    });
+    RunTaskIfPossible();
   }
 
   void StartSession(mojo::PendingReceiver<mojom::Session> session) override {
     AddSession(std::move(session),
-               model_->CreateSession(receivers_.current_context()), {});
+               model_->CreateSession(receivers_.current_context().get()), {});
   }
 
   void ClassifyTextSafety(const std::string& text,
                           ClassifyTextSafetyCallback callback) override {
-    model_->ClassifyTextSafety(text, std::move(callback));
+    NOTREACHED();
   }
 
   void DetectLanguage(const std::string& text,
                       DetectLanguageCallback callback) override {
-    model_->DetectLanguage(text, std::move(callback));
+    NOTREACHED();
   }
 
   void LoadAdaptation(mojom::LoadAdaptationParamsPtr params,
                       mojo::PendingReceiver<mojom::OnDeviceModel> model,
                       LoadAdaptationCallback callback) override {
-    if (!support_multiple_sessions_) {
-      sessions_.clear();
-    }
-
     auto load_adaptation = base::BindOnce(
         &ModelWrapper::LoadAdaptationInternal, weak_ptr_factory_.GetWeakPtr(),
         std::move(params), std::move(model), std::move(callback));
@@ -175,11 +170,6 @@ class ModelWrapper final : public mojom::OnDeviceModel {
       current_session->AddPreviousContext(context.Clone());
     }
     SessionWrapper* current_session_ptr = current_session.get();
-
-    if (!support_multiple_sessions_) {
-      sessions_.clear();
-    }
-
     sessions_.insert(std::move(current_session));
     current_session_ptr->receiver().set_disconnect_handler(
         base::BindOnce(&ModelWrapper::SessionDisconnected,
@@ -222,15 +212,11 @@ class ModelWrapper final : public mojom::OnDeviceModel {
       std::move(callback).Run(result.error());
       return;
     }
-    receivers_.Add(this, std::move(model), *result);
+    receivers_.Add(this, std::move(model), std::move(*result));
     std::move(callback).Run(mojom::LoadModelResult::kSuccess);
   }
 
   void RunTaskIfPossible() {
-    if (!support_multiple_sessions_) {
-      return;
-    }
-
     if (is_running_) {
       return;
     }
@@ -253,11 +239,13 @@ class ModelWrapper final : public mojom::OnDeviceModel {
     RunTaskIfPossible();
   }
 
-  bool support_multiple_sessions_;
   std::set<std::unique_ptr<SessionWrapper>, base::UniquePtrComparator>
       sessions_;
   std::unique_ptr<ml::OnDeviceModelExecutor> model_;
-  mojo::ReceiverSet<mojom::OnDeviceModel, std::optional<uint32_t>> receivers_;
+  mojo::ReceiverSet<
+      mojom::OnDeviceModel,
+      std::unique_ptr<ml::OnDeviceModelExecutor::ScopedAdaptation>>
+      receivers_;
   base::OnceCallback<void(base::WeakPtr<mojom::OnDeviceModel>)> on_delete_;
   std::queue<PendingTask> pending_tasks_;
   bool is_running_ = false;
@@ -274,12 +262,9 @@ void SessionWrapper::AddContext(
     return;
   }
 
-  base::OnceClosure save_context = base::DoNothing();
-  if (model_->support_multiple_sessions()) {
-    save_context =
-        base::BindOnce(&SessionWrapper::AddPreviousContext,
-                       weak_ptr_factory_.GetWeakPtr(), input.Clone());
-  }
+  base::OnceClosure save_context =
+      base::BindOnce(&SessionWrapper::AddPreviousContext,
+                     weak_ptr_factory_.GetWeakPtr(), input.Clone());
 
   auto add_context_internal = base::BindOnce(
       &SessionWrapper::AddContextInternal, weak_ptr_factory_.GetWeakPtr(),
@@ -326,8 +311,9 @@ void SessionWrapper::GetSizeInTokens(mojom::InputPtr input,
                                weak_ptr_factory_.GetWeakPtr());
 }
 
-void SessionWrapper::GetSizeInTokensDeprecated(const std::string& text,
-                                     GetSizeInTokensCallback callback) {
+void SessionWrapper::GetSizeInTokensDeprecated(
+    const std::string& text,
+    GetSizeInTokensCallback callback) {
   auto input = mojom::Input::New();
   input->pieces.push_back(text);
   GetSizeInTokens(std::move(input), std::move(callback));
@@ -366,58 +352,15 @@ void SessionWrapper::CloneInternal(
 }
 
 const ml::ChromeML* DefaultImpl() {
+  if (base::FeatureList::IsEnabled(features::kUseFakeChromeML)) {
+    return fake_ml::GetFakeChromeML();
+  }
 #if defined(ENABLE_ML_INTERNAL)
   return ::ml::ChromeML::Get();
 #else
   return fake_ml::GetFakeChromeML();
 #endif
 }
-
-class LoadFailedService : public mojom::OnDeviceModelService {
- public:
-  explicit LoadFailedService(
-      mojo::PendingReceiver<mojom::OnDeviceModelService> receiver)
-      : receiver_(this, std::move(receiver)) {}
-
-  // mojom::OnDeviceModelService:
-  void LoadModel(mojom::LoadModelParamsPtr params,
-                 mojo::PendingReceiver<mojom::OnDeviceModel> model,
-                 LoadModelCallback callback) override {
-    std::move(callback).Run(
-        on_device_model::mojom::LoadModelResult::kFailedToLoadLibrary);
-  }
-  void GetEstimatedPerformanceClass(
-      GetEstimatedPerformanceClassCallback callback) override {
-    std::move(callback).Run(
-        on_device_model::mojom::PerformanceClass::kFailedToLoadLibrary);
-  }
-
- private:
-  mojo::Receiver<mojom::OnDeviceModelService> receiver_;
-};
-
-class GpuBlockedService : public mojom::OnDeviceModelService {
- public:
-  explicit GpuBlockedService(
-      mojo::PendingReceiver<mojom::OnDeviceModelService> receiver)
-      : receiver_(this, std::move(receiver)) {}
-
-  // mojom::OnDeviceModelService:
-  void LoadModel(mojom::LoadModelParamsPtr params,
-                 mojo::PendingReceiver<mojom::OnDeviceModel> model,
-                 LoadModelCallback callback) override {
-    std::move(callback).Run(
-        on_device_model::mojom::LoadModelResult::kGpuBlocked);
-  }
-  void GetEstimatedPerformanceClass(
-      GetEstimatedPerformanceClassCallback callback) override {
-    std::move(callback).Run(
-        on_device_model::mojom::PerformanceClass::kGpuBlocked);
-  }
-
- private:
-  mojo::Receiver<mojom::OnDeviceModelService> receiver_;
-};
 
 }  // namespace
 
@@ -429,20 +372,25 @@ OnDeviceModelService::OnDeviceModelService(
 OnDeviceModelService::OnDeviceModelService(
     mojo::PendingReceiver<mojom::OnDeviceModelService> receiver,
     const ml::ChromeML& chrome_ml)
-    : receiver_(this, std::move(receiver)), chrome_ml_(chrome_ml) {}
+    : receiver_(this, std::move(receiver)),
+      chrome_ml_(chrome_ml),
+      ts_holder_(ml::TsHolder::Create(chrome_ml_)) {}
 OnDeviceModelService::~OnDeviceModelService() = default;
 
 std::unique_ptr<mojom::OnDeviceModelService> OnDeviceModelService::Create(
     mojo::PendingReceiver<mojom::OnDeviceModelService> receiver) {
   const ml::ChromeML* chrome_ml = DefaultImpl();
-  // Check for errors and return dummy services.
-  // These should probably just receiver.ResetWithReason, but callers
-  // are currently expecting these errors to resolve later.
   if (!chrome_ml) {
-    return std::make_unique<LoadFailedService>(std::move(receiver));
+    receiver.ResetWithReason(
+        static_cast<uint32_t>(ServiceDisconnectReason::kFailedToLoadLibrary),
+        "Unable to load chrome_ml library.");
+    return nullptr;
   }
   if (ml::IsGpuBlocked(chrome_ml->api())) {
-    return std::make_unique<GpuBlockedService>(std::move(receiver));
+    receiver.ResetWithReason(
+        static_cast<uint32_t>(ServiceDisconnectReason::kGpuBlocked),
+        "The device's GPU is not supported.");
+    return nullptr;
   }
   // No errors, return real service.
   return std::make_unique<OnDeviceModelService>(std::move(receiver),
@@ -454,7 +402,6 @@ void OnDeviceModelService::LoadModel(
     mojo::PendingReceiver<mojom::OnDeviceModel> model,
     LoadModelCallback callback) {
   auto start = base::TimeTicks::Now();
-  bool support_multiple_sessions = params->support_multiple_sessions;
   auto model_impl = ml::OnDeviceModelExecutor::CreateWithResult(
       *chrome_ml_, std::move(params),
       base::BindOnce(
@@ -468,8 +415,7 @@ void OnDeviceModelService::LoadModel(
     return;
   }
   models_.insert(std::make_unique<ModelWrapper>(
-      support_multiple_sessions, std::move(model_impl.value()),
-      std::move(model),
+      std::move(model_impl.value()), std::move(model),
       base::BindOnce(&OnDeviceModelService::DeleteModel,
                      base::Unretained(this))));
   std::move(callback).Run(mojom::LoadModelResult::kSuccess);
@@ -480,6 +426,13 @@ void OnDeviceModelService::GetEstimatedPerformanceClass(
   base::ElapsedTimer timer;
   std::move(callback).Run(ml::GetEstimatedPerformanceClass(*chrome_ml_));
   base::UmaHistogramTimes("OnDeviceModel.BenchmarkDuration", timer.Elapsed());
+}
+
+void OnDeviceModelService::LoadTextSafetyModel(
+    on_device_model::mojom::TextSafetyModelParamsPtr params,
+    mojo::PendingReceiver<mojom::TextSafetyModel> model) {
+  ts_holder_.AsyncCall(&ml::TsHolder::Reset)
+      .WithArgs(std::move(params), std::move(model));
 }
 
 void OnDeviceModelService::DeleteModel(

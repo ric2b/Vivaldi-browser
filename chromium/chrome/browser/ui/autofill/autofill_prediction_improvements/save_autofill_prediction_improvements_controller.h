@@ -8,7 +8,13 @@
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
+#include "components/autofill/core/browser/autofill_ai_delegate.h"
+#include "components/user_annotations/user_annotations_types.h"
 #include "content/public/browser/web_contents.h"
+
+namespace optimization_guide::proto {
+class UserAnnotationsEntry;
+}
 
 namespace autofill {
 
@@ -16,6 +22,10 @@ namespace autofill {
 // improvements bubble.
 class SaveAutofillPredictionImprovementsController {
  public:
+  using LearnMoreClickedCallback = base::RepeatingCallback<void()>;
+  using UserFeedbackCallback =
+      base::RepeatingCallback<void(AutofillAiDelegate::UserFeedback)>;
+
   enum class PredictionImprovementsBubbleClosedReason {
     // Bubble closed reason not specified.
     kUnknown,
@@ -29,12 +39,6 @@ class SaveAutofillPredictionImprovementsController {
     kNotInteracted,
     // The bubble lost focus and was closed.
     kLostFocus,
-  };
-  struct PredictionImprovement {
-    // The prediction key displayed to the user and also used to identify it.
-    std::u16string key;
-    // The value of the prediction.
-    std::u16string value;
   };
 
   SaveAutofillPredictionImprovementsController() = default;
@@ -50,14 +54,27 @@ class SaveAutofillPredictionImprovementsController {
   // Shows a save improved predictions bubble which the user can accept or
   // decline.
   virtual void OfferSave(
-      std::vector<PredictionImprovement> prediction_improvements) = 0;
+      std::vector<optimization_guide::proto::UserAnnotationsEntry>
+          prediction_improvements,
+      user_annotations::PromptAcceptanceCallback prompt_acceptance_callback,
+      LearnMoreClickedCallback learn_more_clicked_callback,
+      UserFeedbackCallback user_feedback_callback) = 0;
 
   // Called when the user accepts to save prediction improvements.
   virtual void OnSaveButtonClicked() = 0;
 
+  // Called when the user clicks on the thumbs up button in the dialog.
+  virtual void OnThumbsUpClicked() = 0;
+
+  // Called when the user clicks on the thumbs down button in the dialog.
+  virtual void OnThumbsDownClicked() = 0;
+
+  // Called when the user clicks on the learn more button in the dialog.
+  virtual void OnLearnMoreClicked() = 0;
+
   // Returns the prediction improvements to be displayed in the UI.
-  virtual const std::vector<PredictionImprovement>& GetPredictionImprovements()
-      const = 0;
+  virtual const std::vector<optimization_guide::proto::UserAnnotationsEntry>&
+  GetPredictionImprovements() const = 0;
 
   // Called when the prediction improvements bubble is closed.
   virtual void OnBubbleClosed(

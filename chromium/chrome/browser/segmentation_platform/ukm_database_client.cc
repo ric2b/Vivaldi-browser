@@ -18,6 +18,8 @@
 #include "components/segmentation_platform/public/features.h"
 #include "components/ukm/ukm_service.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace segmentation_platform {
 
 UkmDatabaseClient::UkmDatabaseClient() {
@@ -37,12 +39,28 @@ segmentation_platform::UkmDataManager* UkmDatabaseClient::GetUkmDataManager() {
 }
 
 void UkmDatabaseClient::PreProfileInit(bool in_memory_database) {
+  // Skip if already initialized. This method is called multiple times to ensure
+  // the client is initialized in tests.
+  if (initialized_) {
+    return;
+  }
+  initialized_ = true;
+
+  // NOTE(konrad@vivaldi.com): The code below will result in crash when UKM
+  // feature is disabled.
+  if (!base::FeatureList::IsEnabled(
+          segmentation_platform::features::kSegmentationPlatformUkmEngine)) {
+    return;
+  }
+
   if (ukm_recorder_for_testing_) {
     ukm_observer_ = std::make_unique<UkmObserver>(ukm_recorder_for_testing_);
-  } else {
-    if (g_browser_process->GetMetricsServicesManager()->GetUkmService())
+  } else if (g_browser_process->GetMetricsServicesManager()) {
+    // GetMetricsServicesManager() can be null only in unit tests.
     ukm_observer_ = std::make_unique<UkmObserver>(
         g_browser_process->GetMetricsServicesManager()->GetUkmService());
+  } else {
+    CHECK_IS_TEST();
   }
 
   // Path service is setup at early startup.
@@ -52,7 +70,11 @@ void UkmDatabaseClient::PreProfileInit(bool in_memory_database) {
   ukm_data_manager_->Initialize(
       local_data_dir.Append(FILE_PATH_LITERAL("segmentation_platform/ukm_db")),
       in_memory_database);
-  ukm_data_manager_->StartObservation(ukm_observer_.get());
+  if (ukm_observer_) {
+    ukm_data_manager_->StartObservation(ukm_observer_.get());
+  } else {
+    CHECK_IS_TEST();
+  }
 }
 
 void UkmDatabaseClient::TearDownForTesting() {

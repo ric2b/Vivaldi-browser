@@ -258,8 +258,8 @@ func (h *finishedHash) Write(msg []byte) (n int, err error) {
 // handshake message with a TLS header. In DTLS, the header is rewritten to a
 // DTLS header with |seqno| as the sequence number.
 func (h *finishedHash) WriteHandshake(msg []byte, seqno uint16) {
-	if h.isDTLS {
-		// This is somewhat hacky. DTLS hashes a slightly different format.
+	if h.isDTLS && h.version <= VersionTLS12 {
+		// This is somewhat hacky. DTLS <= 1.2 hashes a slightly different format. (DTLS 1.3 uses the same format as TLS.)
 		// First, the TLS header.
 		h.Write(msg[:4])
 		// Then the sequence number and reassembled fragment offset (always 0).
@@ -466,8 +466,8 @@ func updateTrafficSecret(hash crypto.Hash, version uint16, secret []byte, isDTLS
 	return hkdfExpandLabel(hash, secret, applicationTrafficLabel, nil, hash.Size(), isDTLS)
 }
 
-func computePSKBinder(psk []byte, version uint16, label []byte, cipherSuite *cipherSuite, clientHello, helloRetryRequest, truncatedHello []byte) []byte {
-	finishedHash := newFinishedHash(version, false, cipherSuite)
+func computePSKBinder(psk []byte, version uint16, isDTLS bool, label []byte, cipherSuite *cipherSuite, clientHello, helloRetryRequest, truncatedHello []byte) []byte {
+	finishedHash := newFinishedHash(version, isDTLS, cipherSuite)
 	finishedHash.addEntropy(psk)
 	binderKey := finishedHash.deriveSecret(label)
 	finishedHash.Write(clientHello)

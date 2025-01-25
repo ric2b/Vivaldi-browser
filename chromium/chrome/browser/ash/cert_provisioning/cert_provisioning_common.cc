@@ -10,8 +10,9 @@
 #include "chrome/browser/ash/cert_provisioning/cert_provisioning_common.h"
 
 #include <optional>
-#include <string>
+#include <string_view>
 
+#include "base/feature_list.h"
 #include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
@@ -31,6 +32,8 @@
 #include "chromeos/ash/components/dbus/attestation/attestation_client.h"
 #include "chromeos/ash/components/dbus/attestation/interface.pb.h"
 #include "components/account_id/account_id.h"
+#include "components/invalidation/invalidation_constants.h"
+#include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/user_manager/user.h"
 
@@ -41,7 +44,20 @@ BASE_FEATURE(kCertProvisioningUseOnlyInvalidationsForTesting,
              "CertProvisioningUseOnlyInvalidationsForTesting",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kDeviceCertProvisioningInvalidationWithDirectMessagesEnabled,
+             "DeviceCertProvisioningInvalidationWithDirectMessagesEnabled",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kUserCertProvisioningInvalidationWithDirectMessagesEnabled,
+             "UserCertProvisioningInvalidationWithDirectMessagesEnabled",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 namespace {
+
+// GCP number to be used for certificates invalidations. Certificates are
+// considered critical to receive invalidation.
+constexpr std::string_view kCertProvisioningInvalidationProjectNumber =
+    invalidation::kCriticalInvalidationsProjectNumber;
+
 std::optional<AccountId> GetAccountId(CertScope scope, Profile* profile) {
   switch (scope) {
     case CertScope::kDevice: {
@@ -58,7 +74,7 @@ std::optional<AccountId> GetAccountId(CertScope scope, Profile* profile) {
     }
   }
 
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 // This function implements `DeleteVaKey()` and `DeleteVaKeysByPrefix()`, both
@@ -91,6 +107,17 @@ void DeleteVaKeysWithMatchBehavior(
 
 bool IsValidKeyType(const std::string& key_type) {
   return key_type == "rsa" || key_type == "ec";
+}
+
+bool IsDirectInvalidationEnabledForScope(CertScope scope) {
+  switch (scope) {
+    case CertScope::kUser:
+      return base::FeatureList::IsEnabled(
+          kUserCertProvisioningInvalidationWithDirectMessagesEnabled);
+    case CertScope::kDevice:
+      return base::FeatureList::IsEnabled(
+          kDeviceCertProvisioningInvalidationWithDirectMessagesEnabled);
+  }
 }
 
 }  // namespace
@@ -387,6 +414,13 @@ std::string MakeInvalidationListenerType(const std::string& cert_prov_id) {
 bool ShouldOnlyUseInvalidations() {
   return base::FeatureList::IsEnabled(
       kCertProvisioningUseOnlyInvalidationsForTesting);
+}
+
+std::string_view GetCertProvisioningInvalidationProjectNumber(CertScope scope) {
+  if (IsDirectInvalidationEnabledForScope(scope)) {
+    return kCertProvisioningInvalidationProjectNumber;
+  }
+  return policy::kPolicyFCMInvalidationSenderID;
 }
 
 }  // namespace cert_provisioning

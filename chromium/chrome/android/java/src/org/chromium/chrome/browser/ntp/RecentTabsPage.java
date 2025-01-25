@@ -14,13 +14,19 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ExpandableListView;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.tab_ui.InvalidationAwareThumbnailProvider;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeControllerFactory;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
+import org.chromium.chrome.browser.ui.native_page.BasicSmoothTransitionDelegate;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
-import org.chromium.chrome.browser.ui.native_page.NativePageHost;
+import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -52,14 +58,13 @@ public class RecentTabsPage
                 InvalidationAwareThumbnailProvider,
                 BrowserControlsStateProvider.Observer {
     private final Activity mActivity;
-    private final BrowserControlsStateProvider mBrowserControlsStateProvider;
+    @Nullable private final BrowserControlsStateProvider mBrowserControlsStateProvider;
     private final ExpandableListView mListView;
     private final String mTitle;
     private final ViewGroup mView;
 
     private RecentTabsManager mRecentTabsManager;
     private RecentTabsRowAdapter mAdapter;
-    private NativePageHost mPageHost;
 
     private boolean mSnapshotContentChanged;
     private int mSnapshotListPosition;
@@ -71,30 +76,32 @@ public class RecentTabsPage
     private boolean mIsAttachedToWindow;
 
     private final ObservableSupplier<Integer> mTabStripHeightSupplier;
+    private final ObservableSupplier<EdgeToEdgeController> mEdgeToEdgeSupplier;
     private Callback<Integer> mTabStripHeightChangeCallback;
+    private SmoothTransitionDelegate mSmoothTransitionDelegate;
+    private EdgeToEdgePadAdjuster mPadAdjuster;
 
     //** Vivaldi */
-    private VivaldiAccountManager.AccountStateObserver mAccountObserver;
+    private final VivaldiAccountManager.AccountStateObserver mAccountObserver;
 
     /**
      * Constructor returns an instance of RecentTabsPage.
      *
      * @param activity The activity this view belongs to.
      * @param recentTabsManager The RecentTabsManager which provides the model data.
-     * @param pageHost The NativePageHost used to provide a history navigation delegate object.
      * @param browserControlsStateProvider The {@link BrowserControlsStateProvider} used to provide
      *     offset values.
      * @param tabStripHeightSupplier Supplier for the tab strip height.
+     * @param edgeToEdgeSupplier Supplier for the {@link EdgeToEdgeController} for bottom insets.
      */
     public RecentTabsPage(
             Activity activity,
             RecentTabsManager recentTabsManager,
-            NativePageHost pageHost,
             BrowserControlsStateProvider browserControlsStateProvider,
-            ObservableSupplier<Integer> tabStripHeightSupplier) {
+            ObservableSupplier<Integer> tabStripHeightSupplier,
+            ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier) {
         mActivity = activity;
         mRecentTabsManager = recentTabsManager;
-        mPageHost = pageHost;
         Resources resources = activity.getResources();
 
         mTitle = resources.getString(R.string.recent_tabs);
@@ -133,13 +140,25 @@ public class RecentTabsPage
                                 mView.getPaddingRight(),
                                 mView.getPaddingBottom());
         mTabStripHeightSupplier.addObserver(mTabStripHeightChangeCallback);
+        mEdgeToEdgeSupplier = edgeToEdgeSupplier;
+        if (EdgeToEdgeUtils.isDrawKeyNativePageToEdgeEnabled()) {
+            mPadAdjuster =
+                    EdgeToEdgeControllerFactory.createForViewAndObserveSupplier(
+                            mListView, mEdgeToEdgeSupplier);
+        }
 
         onUpdated();
 
         // Vivaldi
-        mAccountObserver = () -> onUpdated();
-        mView.setPadding(0,0,0,0);
+        mAccountObserver = this::onUpdated;
+        mView.setPadding(0, 0, 0, 0);
         mView.findViewById(R.id.recent_tabs_root).setBackgroundColor(Color.TRANSPARENT);
+
+        View view = LayoutInflater.from(mActivity).inflate(R.layout.sign_in_for_sync_tabs, mView);
+        view.findViewById(R.id.no_sync_sign_in_button)
+                .setOnClickListener(v
+                        -> mView.getContext().startActivity(
+                                new Intent(mView.getContext(), VivaldiSyncActivity.class)));
     }
 
     // NativePage overrides
@@ -175,11 +194,23 @@ public class RecentTabsPage
     }
 
     @Override
+    public SmoothTransitionDelegate enableSmoothTransition() {
+        if (mSmoothTransitionDelegate == null) {
+            mSmoothTransitionDelegate = new BasicSmoothTransitionDelegate(getView());
+        }
+        return mSmoothTransitionDelegate;
+    }
+
+    @Override
+    public boolean supportsEdgeToEdge() {
+        return !EdgeToEdgeUtils.DISABLE_RECENT_TABS_E2E.getValue();
+    }
+
+    @Override
     public void destroy() {
         assert !mIsAttachedToWindow : "Destroy called before removed from window";
         mRecentTabsManager.destroy();
         mRecentTabsManager = null;
-        mPageHost = null;
         mAdapter.notifyDataSetInvalidated();
         mAdapter = null;
         mListView.setAdapter((RecentTabsRowAdapter) null);
@@ -190,6 +221,10 @@ public class RecentTabsPage
         }
 
         mTabStripHeightSupplier.removeObserver(mTabStripHeightChangeCallback);
+        if (mPadAdjuster != null) {
+            mPadAdjuster.destroy();
+            mPadAdjuster = null;
+        }
     }
 
     @Override
@@ -197,7 +232,9 @@ public class RecentTabsPage
 
     @Override
     public int getHeightOverlappedWithTopControls() {
-        return mBrowserControlsStateProvider.getTopControlsHeight();
+        return mBrowserControlsStateProvider == null
+                ? 0
+                : mBrowserControlsStateProvider.getTopControlsHeight();
     }
 
     // View.OnAttachStateChangeListener
@@ -211,6 +248,9 @@ public class RecentTabsPage
         // toggling the Sync quick setting.  For some reason, the layout is being dropped on the
         // flow and we need to force a root level layout to get the UI to appear.
         ViewUtils.requestLayout(view.getRootView(), "RecentTabsPage.onViewAttachedToWindow");
+
+        // Vivaldi
+        VivaldiAccountManager.get().addAccountStateObserver(mAccountObserver);
     }
 
     @Override
@@ -250,30 +290,14 @@ public class RecentTabsPage
         // will show a login button when we're not logged into sync.
         if (mRecentTabsManager.getVivaldiRecentTabsManager() != null) {
             if (mRecentTabsManager.getVivaldiRecentTabsManager().onlyShowForeignSessions()) {
-                View view = mActivity.findViewById(R.id.sign_in_for_tabs);
-                if (view == null) {
-                    view = LayoutInflater.from(mActivity).inflate(
-                            R.layout.sign_in_for_sync_tabs, null);
-                    view.findViewById(R.id.no_sync_sign_in_button)
-                            .setOnClickListener(v ->
-                                    mView.getContext().startActivity(new Intent(
-                                            mView.getContext(), VivaldiSyncActivity.class)));
-                    if (mView.indexOfChild(view) == -1) mView.addView(view);
+                View view = mView.findViewById(R.id.sign_in_for_tabs);
+                if (view != null) {
+                    if (VivaldiAccountManager.get().getSimplifiedState()
+                            != VivaldiAccountManager.SimplifiedState.LOGGED_IN) {
+                        view.setVisibility(View.VISIBLE);
+                    } else
+                        view.setVisibility(View.GONE);
                 }
-                if (VivaldiAccountManager.get().getSimplifiedState()
-                        == VivaldiAccountManager.SimplifiedState.LOGGED_IN) {
-                    mView.findViewById(R.id.no_sync_sign_in_button).setVisibility(View.GONE);
-                    if (VivaldiSyncService.get().getCommitStatus()
-                            != VivaldiSyncService.CycleStatus.SUCCESS) {
-                        ((android.widget.TextView) mView.findViewById(R.id.no_sync_text))
-                                .setText(R.string.vivaldi_sync_in_progress_text);
-                        return;
-                    }
-                    mView.removeView(view);
-                } else
-                    return;
-                // Once we get here, remove the sign in view.
-                mView.removeView(view);
             }
         }
 

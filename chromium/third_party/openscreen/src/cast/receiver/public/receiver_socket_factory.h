@@ -28,7 +28,7 @@ class ReceiverSocketFactory final : public TlsConnectionFactory::Client {
     virtual ~Client();
   };
 
-  // |client| and |socket_client| must outlive |this|.
+  // `client` and `socket_client` must outlive `this`.
   // TODO(btolsch): Add TaskRunner argument just for sequence checking.
   ReceiverSocketFactory(Client& client, CastSocket::Client& socket_client);
   ~ReceiverSocketFactory();

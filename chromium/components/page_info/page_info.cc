@@ -127,7 +127,9 @@ ContentSettingsType kPermissionType[] = {
 #if !BUILDFLAG(IS_ANDROID)
     ContentSettingsType::HID_GUARD,
     ContentSettingsType::SERIAL_GUARD,
+#endif
     ContentSettingsType::FILE_SYSTEM_WRITE_GUARD,
+#if !BUILDFLAG(IS_ANDROID)
     ContentSettingsType::LOCAL_FONTS,
 #endif
     ContentSettingsType::BLUETOOTH_GUARD,
@@ -147,6 +149,9 @@ ContentSettingsType kPermissionType[] = {
     ContentSettingsType::POINTER_LOCK,
     ContentSettingsType::WEB_APP_INSTALLATION,
 #endif  // !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_CHROMEOS)
+    ContentSettingsType::WEB_PRINTING,
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if defined(VIVALDI_BUILD)
     ContentSettingsType::AUTOPLAY,
@@ -576,6 +581,14 @@ void PageInfo::RecordPageInfoAction(page_info::PageInfoAction action) {
       base::RecordAction(base::UserMetricsAction(
           "PageInfo.CookiesSubpage.AllSitesFilteredOpened"));
       break;
+    case page_info::PAGE_INFO_SHOW_FULL_HISTORY_CLICKED:
+      base::RecordAction(
+          base::UserMetricsAction("PageInfo.History.ShowFullHistoryClicked"));
+      break;
+    case page_info::PAGE_INFO_SAFE_BROWSING_HELP_OPENED:
+      base::RecordAction(
+          base::UserMetricsAction("PageInfo.SafeBrowsing.HelpOpened"));
+      break;
   }
 }
 
@@ -672,8 +685,7 @@ void PageInfo::OnSitePermissionChanged(
   if (is_one_time) {
     constraints.set_session_model(
         content_settings::mojom::SessionModel::ONE_TIME);
-    if (base::FeatureList::IsEnabled(
-            content_settings::features::kActiveContentSettingExpiry)) {
+    if (content_settings::ShouldTypeExpireActively(type)) {
       constraints.set_lifetime(permissions::kOneTimePermissionMaximumLifetime);
     }
   }
@@ -695,7 +707,7 @@ void PageInfo::OnSitePermissionChanged(
         web_contents_->GetBrowserContext()->GetPermissionController();
 
     blink::PermissionType permission_type =
-        permissions::PermissionUtil::ContentSettingTypeToPermissionType(type);
+        permissions::PermissionUtil::ContentSettingsTypeToPermissionType(type);
 
     // An origin should subscribe to a permission status change from the top
     // frame. Hence we verify only the main frame.
@@ -743,12 +755,12 @@ void PageInfo::OnSiteChosenObjectDeleted(const ChooserUIInfo& ui_info,
 }
 
 void PageInfo::OnUIClosing(bool* reload_prompt) {
+#if BUILDFLAG(IS_ANDROID)
+  NOTREACHED();
+#else
   if (reload_prompt) {
     *reload_prompt = false;
   }
-#if BUILDFLAG(IS_ANDROID)
-  NOTREACHED_IN_MIGRATION();
-#else
   if (show_info_bar_ && web_contents_ && !web_contents_->IsBeingDestroyed()) {
     if (delegate_->CreateInfoBarDelegate() && reload_prompt) {
       *reload_prompt = true;
@@ -774,7 +786,7 @@ void PageInfo::OnPermissionUsageChange() {
 
 void PageInfo::OpenSiteSettingsView() {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 #else
   RecordPageInfoAction(page_info::PAGE_INFO_SITE_SETTINGS_OPENED);
   delegate_->ShowSiteSettings(site_url());
@@ -783,7 +795,7 @@ void PageInfo::OpenSiteSettingsView() {
 
 void PageInfo::OpenCookiesSettingsView() {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 #else
   RecordPageInfoAction(page_info::PAGE_INFO_COOKIES_SETTINGS_OPENED);
   delegate_->ShowCookiesSettings();
@@ -792,12 +804,12 @@ void PageInfo::OpenCookiesSettingsView() {
 
 void PageInfo::OpenAllSitesViewFilteredToRws() {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 #else
-  auto fps_owner = delegate_->GetRwsOwner(site_url_);
+  auto rws_owner = delegate_->GetRwsOwner(site_url_);
   RecordPageInfoAction(page_info::PAGE_INFO_ALL_SITES_WITH_FPS_FILTER_OPENED);
-  if (fps_owner) {
-    delegate_->ShowAllSitesSettingsFilteredByRwsOwner(*fps_owner);
+  if (rws_owner) {
+    delegate_->ShowAllSitesSettingsFilteredByRwsOwner(*rws_owner);
   } else {
     delegate_->ShowAllSitesSettingsFilteredByRwsOwner(std::u16string());
   }
@@ -807,7 +819,7 @@ void PageInfo::OpenAllSitesViewFilteredToRws() {
 
 void PageInfo::OpenCookiesDialog() {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 #else
   if (!web_contents_ || web_contents_->IsBeingDestroyed()) {
     return;
@@ -820,7 +832,7 @@ void PageInfo::OpenCookiesDialog() {
 
 void PageInfo::OpenCertificateDialog(net::X509Certificate* certificate) {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 #else
   if (!web_contents_ || web_contents_->IsBeingDestroyed()) {
     return;
@@ -836,7 +848,7 @@ void PageInfo::OpenCertificateDialog(net::X509Certificate* certificate) {
 
 void PageInfo::OpenSafetyTipHelpCenterPage() {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 #else
   RecordPageInfoAction(page_info::PAGE_INFO_SAFETY_TIP_HELP_OPENED);
   delegate_->OpenSafetyTipHelpCenterPage();
@@ -845,17 +857,26 @@ void PageInfo::OpenSafetyTipHelpCenterPage() {
 
 void PageInfo::OpenConnectionHelpCenterPage(const ui::Event& event) {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 #else
   RecordPageInfoAction(page_info::PAGE_INFO_CONNECTION_HELP_OPENED);
   delegate_->OpenConnectionHelpCenterPage(event);
 #endif
 }
 
+void PageInfo::OpenSafeBrowsingHelpCenterPage(const ui::Event& event) {
+#if BUILDFLAG(IS_ANDROID)
+  NOTREACHED();
+#else
+  RecordPageInfoAction(page_info::PAGE_INFO_SAFE_BROWSING_HELP_OPENED);
+  delegate_->OpenSafeBrowsingHelpCenterPage(event);
+#endif
+}
+
 void PageInfo::OpenContentSettingsExceptions(
     ContentSettingsType content_settings_type) {
 #if BUILDFLAG(IS_ANDROID)
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 #else
   RecordPageInfoAction(page_info::PAGE_INFO_CONNECTION_HELP_OPENED);
   delegate_->OpenContentSettingsExceptions(content_settings_type);
@@ -1126,8 +1147,7 @@ void PageInfo::ComputeUIInputs(const GURL& url) {
         key_exchange =
             SSL_get_curve_name(visible_security_state.key_exchange_group);
         if (!key_exchange) {
-          NOTREACHED_IN_MIGRATION();
-          key_exchange = "";
+          NOTREACHED();
         }
       }
       site_connection_details_ += l10n_util::GetStringFUTF16(
@@ -1214,7 +1234,7 @@ void PageInfo::PopulatePermissionInfo(PermissionInfo& permission_info,
         PermissionStatus::ASK, content::PermissionStatusSource::UNSPECIFIED);
     if (permissions::PermissionUtil::IsPermission(permission_info.type)) {
       permission_result = delegate_->GetPermissionResult(
-          permissions::PermissionUtil::ContentSettingTypeToPermissionType(
+          permissions::PermissionUtil::ContentSettingsTypeToPermissionType(
               permission_info.type),
           url::Origin::Create(site_url_), permission_info.requesting_origin);
     } else if (permission_info.type ==
@@ -1281,6 +1301,13 @@ bool PageInfo::ShouldShowPermission(
     return false;
   }
 
+#if BUILDFLAG(IS_CHROMEOS)
+  if (info.type == ContentSettingsType::WEB_PRINTING &&
+      !base::FeatureList::IsEnabled(blink::features::kWebPrinting)) {
+    return false;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
   const bool is_incognito =
       web_contents_->GetBrowserContext()->IsOffTheRecord();
 #if BUILDFLAG(IS_ANDROID)
@@ -1290,22 +1317,10 @@ bool PageInfo::ShouldShowPermission(
   if (info.type == ContentSettingsType::GEOLOCATION && !is_incognito) {
     return true;
   }
-
-  // The File System write permission is desktop only at the moment.
-  if (info.type == ContentSettingsType::FILE_SYSTEM_WRITE_GUARD) {
-    return false;
-  }
 #else
   // NFC is Android-only at the moment.
   if (info.type == ContentSettingsType::NFC) {
     return false;
-  }
-
-  // Display the File System Access write permission if the File System Access
-  // API is currently being used.
-  if (info.type == ContentSettingsType::FILE_SYSTEM_WRITE_GUARD &&
-      web_contents_->HasFileSystemAccessHandles()) {
-    return true;
   }
 
   // Hide camera if camera PTZ is granted or blocked.
@@ -1318,6 +1333,13 @@ bool PageInfo::ShouldShowPermission(
     }
   }
 #endif
+
+  // Display the File System Access write permission if the File System Access
+  // API is currently being used.
+  if (info.type == ContentSettingsType::FILE_SYSTEM_WRITE_GUARD &&
+      web_contents_->HasFileSystemAccessHandles()) {
+    return true;
+  }
 
   // TODO(crbug.com/40064079): Filter out FPS related STORAGE_ACCESS
   // permissions.
@@ -1368,8 +1390,15 @@ void PageInfo::PresentSitePermissions() {
     PopulatePermissionInfo(permission_info, content_settings, info, setting);
     if (ShouldShowPermission(permission_info)) {
       permission_info_list.push_back(permission_info);
+      if (!has_recorded_permission_metrics_) {
+        CHECK_EQ(info.secondary_pattern, ContentSettingsPattern::Wildcard());
+        base::UmaHistogramEnumeration(
+            "Privacy.PageInfo.SiteExceptionsScopeType",
+            info.primary_pattern.GetScope());
+      }
     }
   }
+  has_recorded_permission_metrics_ = true;
 
   for (ContentSettingsType type : kTwoPatternPermissions) {
     for (auto& requester : GetTwoSitePermissionRequesters(type)) {
@@ -1475,9 +1504,9 @@ void PageInfo::PresentSiteDataInternal(base::OnceClosure done) {
 #if !BUILDFLAG(IS_ANDROID)
   if (base::FeatureList::IsEnabled(
           privacy_sandbox::kPrivacySandboxFirstPartySetsUI)) {
-    auto fps_owner = delegate_->GetRwsOwner(site_url_);
-    if (fps_owner) {
-      cookies_info.rws_info = PageInfoUI::CookiesRwsInfo(*fps_owner);
+    auto rws_owner = delegate_->GetRwsOwner(site_url_);
+    if (rws_owner) {
+      cookies_info.rws_info = PageInfoUI::CookiesRwsInfo(*rws_owner);
       cookies_info.rws_info->is_managed = delegate_->IsRwsManaged();
     }
   }
@@ -1489,7 +1518,7 @@ void PageInfo::PresentSiteDataInternal(base::OnceClosure done) {
   cookies_info.blocking_status = blocking_status_;
   cookies_info.features = features_;
   cookies_info.expiration = cookie_exception_expiration_;
-  cookies_info.is_otr = web_contents_->GetBrowserContext()->IsOffTheRecord();
+  cookies_info.is_incognito = delegate_->IsIncognitoProfile();
   ui_->SetCookieInfo(cookies_info);
 
   std::move(done).Run();
@@ -1594,8 +1623,7 @@ void PageInfo::GetSafeBrowsingStatusByMaliciousContentStatus(
     std::u16string* details) {
   switch (malicious_content_status) {
     case security_state::MALICIOUS_CONTENT_STATUS_NONE:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
     case security_state::MALICIOUS_CONTENT_STATUS_MALWARE:
       *status = PageInfo::SAFE_BROWSING_STATUS_MALWARE;
       *details = l10n_util::GetStringUTF16(IDS_PAGE_INFO_MALWARE_DETAILS);

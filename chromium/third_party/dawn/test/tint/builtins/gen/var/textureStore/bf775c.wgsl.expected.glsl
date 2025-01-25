@@ -6,16 +6,11 @@ layout(binding = 0, rgba8i) uniform highp writeonly iimage2D arg_0;
 void textureStore_bf775c() {
   int arg_1 = 1;
   ivec4 arg_2 = ivec4(1);
-  imageStore(arg_0, ivec2(arg_1, 0), arg_2);
+  ivec4 v = arg_2;
+  imageStore(arg_0, ivec2(arg_1, 0), v);
 }
-
-void fragment_main() {
-  textureStore_bf775c();
-}
-
 void main() {
-  fragment_main();
-  return;
+  textureStore_bf775c();
 }
 #version 310 es
 
@@ -23,15 +18,10 @@ layout(binding = 0, rgba8i) uniform highp writeonly iimage2D arg_0;
 void textureStore_bf775c() {
   int arg_1 = 1;
   ivec4 arg_2 = ivec4(1);
-  imageStore(arg_0, ivec2(arg_1, 0), arg_2);
+  ivec4 v = arg_2;
+  imageStore(arg_0, ivec2(arg_1, 0), v);
 }
-
-void compute_main() {
-  textureStore_bf775c();
-}
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  compute_main();
-  return;
+  textureStore_bf775c();
 }

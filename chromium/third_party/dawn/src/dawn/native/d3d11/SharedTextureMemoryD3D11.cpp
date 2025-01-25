@@ -29,8 +29,6 @@
 
 #include <utility>
 
-#include "dawn/common/Log.h"
-
 #include "dawn/native/D3D11Backend.h"
 #include "dawn/native/d3d/D3DError.h"
 #include "dawn/native/d3d/KeyedMutex.h"
@@ -91,7 +89,7 @@ PropertiesFromD3D11Texture(Device* device, ID3D11Texture2D* d3d11Texture, bool i
 // static
 ResultOrError<Ref<SharedTextureMemory>> SharedTextureMemory::Create(
     Device* device,
-    const char* label,
+    StringView label,
     const SharedTextureMemoryDXGISharedHandleDescriptor* descriptor) {
     DAWN_INVALID_IF(descriptor->handle == nullptr, "shared HANDLE is missing.");
 
@@ -122,7 +120,7 @@ ResultOrError<Ref<SharedTextureMemory>> SharedTextureMemory::Create(
 // static
 ResultOrError<Ref<SharedTextureMemory>> SharedTextureMemory::Create(
     Device* device,
-    const char* label,
+    StringView label,
     const SharedTextureMemoryD3D11Texture2DDescriptor* descriptor) {
     DAWN_INVALID_IF(!descriptor->texture, "D3D11 texture is missing.");
 
@@ -147,7 +145,7 @@ ResultOrError<Ref<SharedTextureMemory>> SharedTextureMemory::Create(
 }
 
 SharedTextureMemory::SharedTextureMemory(Device* device,
-                                         const char* label,
+                                         StringView label,
                                          SharedTextureMemoryProperties properties,
                                          ComPtr<ID3D11Resource> resource)
     : d3d::SharedTextureMemory(device, label, properties), mResource(std::move(resource)) {

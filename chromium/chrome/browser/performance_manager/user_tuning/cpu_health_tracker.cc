@@ -217,8 +217,7 @@ bool CpuHealthTracker::CanDiscardPage(
   return !did_audio_status_change &&
          discard_helper->CanDiscard(
              page_node, ::mojom::LifecycleUnitDiscardReason::SUGGESTED,
-             measurement_window) ==
-             policies::PageDiscardingHelper::CanDiscardResult::kEligible;
+             measurement_window) == policies::CanDiscardResult::kEligible;
 }
 
 bool CpuHealthTracker::RecordAndUpdateHealthStatus(CpuPercent measurement) {
@@ -325,7 +324,7 @@ CpuHealthTracker::FilterForPossibleActionablePages(
     }
   }
 
-  return base::MakeFlatMap<resource_attribution::PageContext, CpuPercent>(
+  return base::flat_map<resource_attribution::PageContext, CpuPercent>(
       std::move(eligible_pages));
 }
 }  // namespace performance_manager::user_tuning

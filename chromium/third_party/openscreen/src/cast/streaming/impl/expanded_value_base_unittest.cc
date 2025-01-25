@@ -69,10 +69,10 @@ TEST(ExpandedValueBaseTest, TruncationAndExpansion) {
   // re-expanded, it should be 256 less than the original value.
   for (int64_t bias = -5; bias <= 5; ++bias) {
     for (int64_t i = 128; i <= 255; ++i) {
-      // Example: Let |original_value| be 192.  Then, the truncated 8-bit value
-      // will be 0xc0.  When a |reference| of zero is asked to expand 0xc0 back
+      // Example: Let `original_value` be 192.  Then, the truncated 8-bit value
+      // will be 0xc0.  When a `reference` of zero is asked to expand 0xc0 back
       // to the original value, it should produce -64 since -64 is closer to
-      // |reference| than 192.
+      // `reference` than 192.
       const TestValue original_value(bias + i);
       const uint8_t truncated = original_value.lower_8_bits();
       const TestValue reexpanded_value(bias + i - 256);
@@ -88,10 +88,10 @@ TEST(ExpandedValueBaseTest, TruncationAndExpansion) {
   // re-expanded, it should be 256 more than the original value.
   for (int64_t bias = -5; bias <= 5; ++bias) {
     for (int64_t i = -256; i <= -129; ++i) {
-      // Example: Let |original_value| be -192.  Then, the truncated 8-bit value
-      // will be 0x40.  When a |reference| of zero is asked to expand 0x40 back
+      // Example: Let `original_value` be -192.  Then, the truncated 8-bit value
+      // will be 0x40.  When a `reference` of zero is asked to expand 0x40 back
       // to the original value, it should produce 64 since 64 is closer to the
-      // |reference| than -192.
+      // `reference` than -192.
       const TestValue original_value(bias + i);
       const uint8_t truncated = original_value.lower_8_bits();
       const TestValue reexpanded_value(bias + i + 256);

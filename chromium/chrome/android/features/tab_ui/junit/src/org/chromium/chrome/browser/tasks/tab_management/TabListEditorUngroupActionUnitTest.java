@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.tasks.tab_management;
 
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -17,12 +18,14 @@ import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
@@ -31,8 +34,7 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
-import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.ConfirmationResult;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorAction.ActionDelegate;
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorAction.ActionObserver;
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorAction.ButtonType;
@@ -40,6 +42,7 @@ import org.chromium.chrome.browser.tasks.tab_management.TabListEditorAction.Icon
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorAction.ShowMode;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
+import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 
 import java.util.ArrayList;
@@ -52,6 +55,7 @@ import java.util.Set;
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class TabListEditorUngroupActionUnitTest {
+    @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Mock private SelectionDelegate<Integer> mSelectionDelegate;
     @Mock private TabGroupModelFilter mGroupFilter;
@@ -59,14 +63,13 @@ public class TabListEditorUngroupActionUnitTest {
     @Mock private Profile mProfile;
     @Mock private ActionConfirmationManager mActionConfirmationManager;
 
-    @Captor private ArgumentCaptor<Callback<Integer>> mConfirmationResultCaptor;
+    @Captor private ArgumentCaptor<Callback<Integer>> mActionConfirmationResultCaptor;
 
     private MockTabModel mTabModel;
     private TabListEditorAction mAction;
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         mAction =
                 TabListEditorUngroupAction.createAction(
                         RuntimeEnvironment.application,
@@ -142,10 +145,12 @@ public class TabListEditorUngroupActionUnitTest {
 
         assertTrue(mAction.perform());
         verify(mActionConfirmationManager)
-                .processRemoveTabAttempt(any(), mConfirmationResultCaptor.capture());
-        mConfirmationResultCaptor.getValue().onResult(ConfirmationResult.CONFIRMATION_POSITIVE);
+                .processUngroupTabAttempt(any(), mActionConfirmationResultCaptor.capture());
+        mActionConfirmationResultCaptor
+                .getValue()
+                .onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
         for (int id : tabIds) {
-            verify(mGroupFilter).moveTabOutOfGroup(id);
+            verify(mGroupFilter).moveTabOutOfGroupInDirection(id, /* trailing= */ true);
         }
         verify(mDelegate).hideByAction();
 
@@ -154,10 +159,12 @@ public class TabListEditorUngroupActionUnitTest {
 
         assertTrue(mAction.perform());
         verify(mActionConfirmationManager, times(2))
-                .processRemoveTabAttempt(any(), mConfirmationResultCaptor.capture());
-        mConfirmationResultCaptor.getValue().onResult(ConfirmationResult.CONFIRMATION_POSITIVE);
+                .processUngroupTabAttempt(any(), mActionConfirmationResultCaptor.capture());
+        mActionConfirmationResultCaptor
+                .getValue()
+                .onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
         for (int id : tabIds) {
-            verify(mGroupFilter, times(2)).moveTabOutOfGroup(id);
+            verify(mGroupFilter, times(2)).moveTabOutOfGroupInDirection(id, /* trailing= */ true);
         }
         verify(mDelegate, times(2)).hideByAction();
         Assert.assertEquals(1, helper.getCallCount());
@@ -175,11 +182,13 @@ public class TabListEditorUngroupActionUnitTest {
 
         assertTrue(mAction.performAction(tabs));
         verify(mActionConfirmationManager)
-                .processRemoveTabAttempt(any(), mConfirmationResultCaptor.capture());
-        mConfirmationResultCaptor.getValue().onResult(ConfirmationResult.IMMEDIATE_CONTINUE);
+                .processUngroupTabAttempt(any(), mActionConfirmationResultCaptor.capture());
+        mActionConfirmationResultCaptor
+                .getValue()
+                .onResult(ActionConfirmationResult.IMMEDIATE_CONTINUE);
 
         for (int id : tabIds) {
-            verify(mGroupFilter).moveTabOutOfGroup(id);
+            verify(mGroupFilter).moveTabOutOfGroupInDirection(id, /* trailing= */ true);
         }
     }
 
@@ -195,10 +204,12 @@ public class TabListEditorUngroupActionUnitTest {
 
         assertTrue(mAction.performAction(tabs));
         verify(mActionConfirmationManager)
-                .processRemoveTabAttempt(any(), mConfirmationResultCaptor.capture());
-        mConfirmationResultCaptor.getValue().onResult(ConfirmationResult.CONFIRMATION_NEGATIVE);
+                .processUngroupTabAttempt(any(), mActionConfirmationResultCaptor.capture());
+        mActionConfirmationResultCaptor
+                .getValue()
+                .onResult(ActionConfirmationResult.CONFIRMATION_NEGATIVE);
 
-        verify(mGroupFilter, never()).moveTabOutOfGroup(anyInt());
+        verify(mGroupFilter, never()).moveTabOutOfGroupInDirection(anyInt(), anyBoolean());
     }
 
     @Test
@@ -213,10 +224,10 @@ public class TabListEditorUngroupActionUnitTest {
 
         List<Tab> tabsToRemove = Arrays.asList(mTabModel.getTabAt(0), mTabModel.getTabAt(1));
         assertTrue(mAction.performAction(tabsToRemove));
-        verify(mActionConfirmationManager, never()).processRemoveTabAttempt(any(), any());
+        verify(mActionConfirmationManager, never()).processUngroupTabAttempt(any(), any());
 
         for (Tab tab : tabsToRemove) {
-            verify(mGroupFilter).moveTabOutOfGroup(tab.getId());
+            verify(mGroupFilter).moveTabOutOfGroupInDirection(tab.getId(), /* trailing= */ true);
         }
     }
 }

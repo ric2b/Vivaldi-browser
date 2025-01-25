@@ -8,6 +8,8 @@
 #include "base/no_destructor.h"
 #include "ios/chrome/browser/sync/model/sync_invalidations_service_factory.h"
 
+class ProfileIOS;
+
 namespace syncer {
 class SyncInvalidationsService;
 }  // namespace syncer
@@ -22,8 +24,7 @@ class VivaldiSyncInvalidationsServiceFactory
   VivaldiSyncInvalidationsServiceFactory& operator=(
       const VivaldiSyncInvalidationsServiceFactory&) = delete;
 
-  static syncer::SyncInvalidationsService* GetForBrowserState(
-      ChromeBrowserState* browser_state);
+  static syncer::SyncInvalidationsService* GetForProfile(ProfileIOS* profile);
 
   static VivaldiSyncInvalidationsServiceFactory* GetInstance();
 

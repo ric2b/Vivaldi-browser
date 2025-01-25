@@ -33,7 +33,7 @@ class MdnsRecordChangedCallback {
  public:
   virtual ~MdnsRecordChangedCallback() = default;
 
-  // Called when |record| has been changed.
+  // Called when `record` has been changed.
   // NOTE: This callback may not modify the instance from which it is called.
   // The return value of this function must be the set of all record changes to
   // be made once the operation completes.

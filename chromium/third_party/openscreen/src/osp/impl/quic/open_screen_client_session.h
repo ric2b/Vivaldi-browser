@@ -25,6 +25,9 @@ class OpenScreenClientSession
       const quic::ParsedQuicVersionVector& supported_versions);
   OpenScreenClientSession(const OpenScreenClientSession&) = delete;
   OpenScreenClientSession& operator=(const OpenScreenClientSession&) = delete;
+  OpenScreenClientSession(OpenScreenClientSession&&) noexcept = delete;
+  OpenScreenClientSession& operator=(OpenScreenClientSession&&) noexcept =
+      delete;
   ~OpenScreenClientSession() override;
 
   // OpenScreenSessionBase overrides. This will initiate the crypto stream.

@@ -45,6 +45,7 @@ _allowed_compiler_options = [
     'lib',
     'noPropertyAccessFromIndexSignature',
     'noUncheckedIndexedAccess',
+    'noUncheckedSideEffectImports',
     'noUnusedLocals',
     'skipLibCheck',
     'strictPropertyInitialization',
@@ -131,6 +132,7 @@ def validateJavaScriptAllowed(source_dir, out_dir, is_ios):
       'ash/webui/shimless_rma/',
       # TODO(b/267329383): Migrate A11y to TypeScript.
       'chrome/browser/resources/chromeos/accessibility',
+      'chrome/browser/resources/chromeos/gaia_action_buttons',
       'ui/file_manager/',
   ]
   for directory in ash_directories:
@@ -159,6 +161,8 @@ def validateJavaScriptAllowed(source_dir, out_dir, is_ios):
       # remove exception.
       'chrome/test/data/webui/chromeos/shimless_rma',
       'chrome/test/data/webui/cr_components/chromeos',
+      # TODO(crbug.com/373951324): Migrate offline dino game to TypeScript.
+      'components/neterror/resources',
       'components/policy/resources/webui',
       'ui/webui/resources/js',
       'ui/webui/resources/mojo',
@@ -166,6 +170,7 @@ def validateJavaScriptAllowed(source_dir, out_dir, is_ios):
       # TODO(crbug.com/40280699) : Migrate to TypeScript.
       'chrome/test/data/webui/media_internals',
       'content/browser/resources/media',
+      'content/browser/resources/service_worker',
 
       # TODO(b/274059668): Migrate OOBE to TypeScript.
       'chrome/browser/resources/chromeos/login',
@@ -256,6 +261,8 @@ def validateDefinitionDeps(definitions_files, target_path, gen_dir,
   # TODO(https://crbug.com/326005022): Determine if the following are actually
   # safe for computation of gn input values.
   exceptions_list = [
+      'third_party/d3/',
+      'third_party/jstemplate/',
       'third_party/material_web_components/',
       'third_party/node/node_modules/',
       'third_party/polymer/v3_0/',

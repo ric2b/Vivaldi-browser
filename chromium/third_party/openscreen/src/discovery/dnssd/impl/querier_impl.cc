@@ -22,7 +22,7 @@ namespace {
 static constexpr char kLocalDomain[] = "local";
 
 // Removes all error instances from the below records, and calls the log
-// function on all errors present in |new_endpoints|. Input vectors are expected
+// function on all errors present in `new_endpoints`. Input vectors are expected
 // to be sorted in ascending order.
 void ProcessErrors(std::vector<ErrorOr<DnsSdInstanceEndpoint>>* old_endpoints,
                    std::vector<ErrorOr<DnsSdInstanceEndpoint>>* new_endpoints,
@@ -43,21 +43,21 @@ void ProcessErrors(std::vector<ErrorOr<DnsSdInstanceEndpoint>>* old_endpoints,
       break;
     }
 
-    // If they are equal, the element is in both |old_endpoints| and
-    // |new_endpoints|, so skip it in both vectors.
+    // If they are equal, the element is in both `old_endpoints` and
+    // `new_endpoints`, so skip it in both vectors.
     if (old_ep == new_ep) {
       old_it++;
       new_it++;
       continue;
     }
 
-    // There's an error in |old_endpoints| not in |new_endpoints|, so skip it.
+    // There's an error in `old_endpoints` not in `new_endpoints`, so skip it.
     if (old_ep < new_ep) {
       old_it++;
       continue;
     }
 
-    // There's an error in |new_endpoints| not in |old_endpoints|, so it's a new
+    // There's an error in `new_endpoints` not in `old_endpoints`, so it's a new
     // error from the applied changes. Log it.
     log(std::move(new_ep.error()));
     new_it++;
@@ -95,7 +95,7 @@ bool IsEqualOrUpdate(const std::optional<DnsSdInstanceEndpoint>& first,
     return !first.has_value() && !second.has_value();
   }
 
-  // In the remaining case, both |first| and |second| must be values.
+  // In the remaining case, both `first` and `second` must be values.
   const DnsSdInstanceEndpoint& a = first.value();
   const DnsSdInstanceEndpoint& b = second.value();
 
@@ -116,7 +116,7 @@ bool IsNotEqualOrUpdate(const std::optional<DnsSdInstanceEndpoint>& first,
 // Calculates the created, updated, and deleted elements using the provided
 // sets, appending these values to the provided vectors. Each of the input
 // vectors is expected to contain only elements such that
-// |element|.is_error() == false. Additionally, input vectors are expected to
+// `element`.is_error() == false. Additionally, input vectors are expected to
 // be sorted in ascending order.
 //
 // NOTE: A lot of operations are used to do this, but each is only O(n) so the

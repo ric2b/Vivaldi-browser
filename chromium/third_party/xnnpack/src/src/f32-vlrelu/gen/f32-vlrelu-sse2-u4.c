@@ -19,14 +19,14 @@ void xnn_f32_vlrelu_ukernel__sse2_u4(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_lrelu_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f32_lrelu_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const __m128 vslope = _mm_load_ps(params->sse.slope);
+  const __m128 vslope = _mm_set1_ps(params->scalar.slope);
   for (; batch >= 4 * sizeof(float); batch -= 4 * sizeof(float)) {
     const __m128 vx0123 = _mm_loadu_ps(input);
     input += 4;

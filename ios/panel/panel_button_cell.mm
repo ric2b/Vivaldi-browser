@@ -81,6 +81,11 @@ using l10n_util::GetNSString;
       @"normal": vPanelHistory,
       @"highlighted": vPanelHistoryActive,
       @"accessibilityLabel": GetNSString(IDS_IOS_TOOLS_MENU_HISTORY)
+    },
+    @(PanelPage::TranslatePage): @{
+      @"normal": vPanelTranslate,
+      @"highlighted": vPanelTranslateActive,
+      @"accessibilityLabel": GetNSString(IDS_VIVALDI_TRANSLATE_TITLE)
     }
   };
 }

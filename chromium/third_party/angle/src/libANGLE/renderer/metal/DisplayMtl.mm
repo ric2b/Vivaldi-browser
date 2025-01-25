@@ -443,11 +443,6 @@ gl::Version DisplayMtl::getMaxConformantESVersion() const
     return std::min(getMaxSupportedESVersion(), gl::Version(3, 0));
 }
 
-Optional<gl::Version> DisplayMtl::getMaxSupportedDesktopVersion() const
-{
-    return Optional<gl::Version>::Invalid();
-}
-
 EGLSyncImpl *DisplayMtl::createSync()
 {
     return new EGLSyncMtl();
@@ -721,7 +716,7 @@ void DisplayMtl::ensureCapsInitialized() const
     // https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf
     mNativeCaps.maxElementIndex  = std::numeric_limits<GLuint>::max() - 1;
     mNativeCaps.max3DTextureSize = 2048;
-#if TARGET_OS_OSX || TARGET_OS_MACCATALYST
+#if TARGET_OS_OSX || TARGET_OS_MACCATALYST || TARGET_OS_SIMULATOR
     mNativeCaps.max2DTextureSize = 16384;
     // On macOS exclude [[position]] from maxVaryingVectors.
     mNativeCaps.maxVaryingVectors         = 31 - 1;
@@ -995,29 +990,27 @@ void DisplayMtl::initializeExtensions() const
 
     mNativeExtensions.texture3DOES = true;
 
+    mNativeExtensions.textureShadowLodEXT = true;
+
     mNativeExtensions.sampleVariablesOES = true;
 
-    if (@available(macOS 11.0, *))
+    if ([mMetalDevice supportsPullModelInterpolation])
     {
-        mNativeExtensions.shaderMultisampleInterpolationOES =
-            [mMetalDevice supportsPullModelInterpolation];
-        if (mNativeExtensions.shaderMultisampleInterpolationOES)
+        mNativeExtensions.shaderMultisampleInterpolationOES = true;
+        mNativeCaps.subPixelInterpolationOffsetBits         = 4;
+        if (supportsAppleGPUFamily(1))
         {
-            mNativeCaps.subPixelInterpolationOffsetBits = 4;
-            if (supportsAppleGPUFamily(1))
-            {
-                mNativeCaps.minInterpolationOffset = -0.5f;
-                mNativeCaps.maxInterpolationOffset = +0.5f;
-            }
-            else
-            {
-                // On non-Apple GPUs, the actual range is usually
-                // [-0.5, +0.4375] but due to framebuffer Y-flip
-                // the effective range for the Y direction will be
-                // [-0.4375, +0.5] when the default FBO is bound.
-                mNativeCaps.minInterpolationOffset = -0.4375f;  // -0.5 + (2 ^ -4)
-                mNativeCaps.maxInterpolationOffset = +0.4375f;  // +0.5 - (2 ^ -4)
-            }
+            mNativeCaps.minInterpolationOffset = -0.5f;
+            mNativeCaps.maxInterpolationOffset = +0.5f;
+        }
+        else
+        {
+            // On non-Apple GPUs, the actual range is usually
+            // [-0.5, +0.4375] but due to framebuffer Y-flip
+            // the effective range for the Y direction will be
+            // [-0.4375, +0.5] when the default FBO is bound.
+            mNativeCaps.minInterpolationOffset = -0.4375f;  // -0.5 + (2 ^ -4)
+            mNativeCaps.maxInterpolationOffset = +0.4375f;  // +0.5 - (2 ^ -4)
         }
     }
 
@@ -1211,12 +1204,12 @@ void DisplayMtl::initializeFeatures()
     ANGLE_FEATURE_CONDITION((&mFeatures), allowMultisampleStoreAndResolve,
                             supportsEitherGPUFamily(3, 1));
 
+    // Apple2 does not support comparison functions in MTLSamplerState
     ANGLE_FEATURE_CONDITION((&mFeatures), allowRuntimeSamplerCompareMode,
                             supportsEitherGPUFamily(3, 1));
-    // AMD does not support sample_compare_grad
-    ANGLE_FEATURE_CONDITION((&mFeatures), allowSamplerCompareGradient,
-                            supportsEitherGPUFamily(3, 1) && !isAMD());
-    ANGLE_FEATURE_CONDITION((&mFeatures), allowSamplerCompareLod, supportsEitherGPUFamily(3, 1));
+
+    // AMD does not support sample_compare with gradients
+    ANGLE_FEATURE_CONDITION((&mFeatures), allowSamplerCompareGradient, !isAMD());
 
     // http://anglebug.com/40644746
     // Stencil blit shader is not compiled on Intel & NVIDIA, need investigation.
@@ -1314,6 +1307,11 @@ void DisplayMtl::initializeFeatures()
     ANGLE_FEATURE_CONDITION((&mFeatures), preTransformTextureCubeGradDerivatives,
                             supportsAppleGPUFamily(1));
 
+    // Apple-specific cubemap derivative transformation is not compatible with
+    // the textureGrad shadow sampler emulation. The latter is used only on AMD.
+    ASSERT(!mFeatures.preTransformTextureCubeGradDerivatives.enabled ||
+           mFeatures.allowSamplerCompareGradient.enabled);
+
     // Metal compiler optimizations may remove infinite loops causing crashes later in shader
     // execution. http://crbug.com/1513738
     // Disabled on Mac11 due to test failures. http://crbug.com/1522730
@@ -1364,11 +1362,7 @@ bool DisplayMtl::supportsEitherGPUFamily(uint8_t iOSFamily, uint8_t macFamily) c
 bool DisplayMtl::supports32BitFloatFiltering() const
 {
 #if !TARGET_OS_WATCH
-    if (@available(macOS 11.0, *))
-    {
-        return [mMetalDevice supports32BitFloatFiltering];
-    }
-    return true;  // Always true on old macOS
+    return [mMetalDevice supports32BitFloatFiltering];
 #else
     return false;
 #endif
@@ -1376,14 +1370,14 @@ bool DisplayMtl::supports32BitFloatFiltering() const
 
 bool DisplayMtl::supportsBCTextureCompression() const
 {
-    if (@available(macOS 11.0, macCatalyst 16.4, iOS 16.4, *))
+    if (@available(macCatalyst 16.4, iOS 16.4, *))
     {
         return [mMetalDevice supportsBCTextureCompression];
     }
-#if TARGET_OS_OSX || TARGET_OS_MACCATALYST
-    return true;  // Always true on old macOS
+#if TARGET_OS_MACCATALYST
+    return true;  // Always true on old Catalyst
 #else
-    return false;  // Always false everywhere else
+    return false;  // Always false on old iOS
 #endif
 }
 

@@ -682,6 +682,12 @@
         <string>IDS_IOS_APPLICATION_SHORTCUT_INCOGNITOSEARCH_TITLE</string>
         <string>IDS_IOS_APPLICATION_SHORTCUT_VOICE_SEARCH_TITLE</string>
         <string>IDS_IOS_APPLICATION_SHORTCUT_QR_SCANNER_TITLE</string>
+
+        <!-- Vivaldi: praveen@vivaldi.com, HomeScreen Shortcut localization -->
+        <string>IDS_IOS_APPLICATION_SHORTCUT_UNINSTALL_SURVEY_TITLE</string>
+        <string>IDS_IOS_APPLICATION_SHORTCUT_UNINSTALL_SURVEY_SUBTITLE</string>
+        <!-- Vivaldi End -->
+
       </array>
     </dict>
   </array>

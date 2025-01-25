@@ -64,6 +64,8 @@ struct EndpointResponse {
 
 using EndpointFetcherCallback =
     base::OnceCallback<void(std::unique_ptr<EndpointResponse>)>;
+using UploadProgressCallback =
+    base::RepeatingCallback<void(uint64_t position, uint64_t total)>;
 
 // TODO(crbug.com/284531303) EndpointFetcher would benefit from
 // re-design/rethinking the APIs.
@@ -86,11 +88,14 @@ class EndpointFetcher {
   // constructor does/will not scale. New parameters will be added here and
   // existing parameters will be migrated (crbug.com/357567879).
   struct RequestParams {
-    RequestParams() = default;
-    ~RequestParams() = default;
+    RequestParams();
+    RequestParams(const EndpointFetcher::RequestParams& other);
+    ~RequestParams();
 
     std::optional<CredentialsMode> credentials_mode;
     std::optional<int> max_retries;
+    std::optional<bool> set_site_for_cookies;
+    std::optional<UploadProgressCallback> upload_progress_callback;
 
     class Builder final {
      public:
@@ -113,6 +118,17 @@ class EndpointFetcher {
         return *this;
       }
 
+      Builder& SetSetSiteForCookies(const bool should_set_site_for_cookies) {
+        request_params_->set_site_for_cookies = should_set_site_for_cookies;
+        return *this;
+      }
+
+      Builder& SetUploadProgressCallback(
+          const UploadProgressCallback callback) {
+        request_params_->upload_progress_callback = callback;
+        return *this;
+      }
+
      private:
       std::unique_ptr<RequestParams> request_params_;
     };
@@ -120,6 +136,12 @@ class EndpointFetcher {
 
   // Preferred constructor - forms identity_manager and url_loader_factory.
   // OAUTH authentication is used for this constructor.
+  //
+  // Note: When using signin::ConsentLevel::kSignin, please also make sure that
+  // your `scopes` are correctly set in AccessTokenRestrictions, otherwise
+  // AccessTokenFetcher will assume the `scopes` requires full access and crash
+  // if user doesn't have full access (e.g. sign in but not sync).
+  // TODO(crbug.com/382343700): Add a DCHECK to enforce this in EndPointFetcher.
   EndpointFetcher(
       const scoped_refptr<network::SharedURLLoaderFactory>& url_loader_factory,
       const std::string& oauth_consumer_name,
@@ -212,6 +234,8 @@ class EndpointFetcher {
 
   network::mojom::CredentialsMode GetCredentialsMode();
   int GetMaxRetries();
+  bool GetSetSiteForCookies();
+  UploadProgressCallback GetUploadProgressCallback();
 
   enum AuthType { CHROME_API_KEY, OAUTH, NO_AUTH };
   AuthType auth_type_;
@@ -240,7 +264,6 @@ class EndpointFetcher {
   const std::optional<signin::ConsentLevel> consent_level_;
   bool sanitize_response_;
   version_info::Channel channel_;
-
   const std::optional<RequestParams> request_params_;
 
   // Members set in Fetch

@@ -13,7 +13,7 @@ SamplerState s : register(s1);
 RWByteAddressBuffer a : register(u2);
 static bool continue_execution = true;
 int tint_f32_to_i32(float value) {
-  return (((value <= 2147483520.0f)) ? ((((value >= -2147483648.0f)) ? (int(value)) : (-2147483648))) : (2147483647));
+  return (((value <= 2147483520.0f)) ? ((((value >= -2147483648.0f)) ? (int(value)) : (int(-2147483648)))) : (int(2147483647)));
 }
 
 int foo_inner(float tint_symbol, float2 coord) {
@@ -22,16 +22,20 @@ int foo_inner(float tint_symbol, float2 coord) {
   }
   int result = tint_f32_to_i32(t.Sample(s, coord)[0u]);
   {
-    int i = 0;
+    int i = int(0);
     while(true) {
-      if ((i < 10)) {
+      if ((i < int(10))) {
       } else {
         break;
       }
       result = (result + i);
       {
-        int v = 0;
-        a.InterlockedAdd(int(0u), 1, v);
+        int v = int(0);
+        if (continue_execution) {
+          int v_1 = int(0);
+          a.InterlockedAdd(int(0u), int(1), v_1);
+          v = v_1;
+        }
         i = v;
       }
       continue;
@@ -41,11 +45,10 @@ int foo_inner(float tint_symbol, float2 coord) {
 }
 
 foo_outputs foo(foo_inputs inputs) {
-  foo_outputs v_1 = {foo_inner(inputs.tint_symbol, inputs.coord)};
+  foo_outputs v_2 = {foo_inner(inputs.tint_symbol, inputs.coord)};
   if (!(continue_execution)) {
     discard;
   }
-  foo_outputs v_2 = v_1;
   return v_2;
 }
 

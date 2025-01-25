@@ -48,6 +48,55 @@ static av_cold void vp9dsp_mc_init_riscv(VP9DSPContext *dsp, int bpp)
     }
 # endif
 
+#if HAVE_RVV
+    if (bpp == 8 && (flags & AV_CPU_FLAG_RVV_I32) && ff_rv_vlen_least(128)) {
+
+#define init_fpel(idx1, sz)                                           \
+    dsp->mc[idx1][FILTER_8TAP_SMOOTH ][1][0][0] = ff_vp9_avg##sz##_rvv;  \
+    dsp->mc[idx1][FILTER_8TAP_REGULAR][1][0][0] = ff_vp9_avg##sz##_rvv;  \
+    dsp->mc[idx1][FILTER_8TAP_SHARP  ][1][0][0] = ff_vp9_avg##sz##_rvv;  \
+    dsp->mc[idx1][FILTER_BILINEAR    ][1][0][0] = ff_vp9_avg##sz##_rvv
+
+    init_fpel(0, 64);
+    init_fpel(1, 32);
+    init_fpel(2, 16);
+    init_fpel(3, 8);
+    init_fpel(4, 4);
+
+    dsp->mc[0][FILTER_BILINEAR ][0][0][1] = ff_put_vp9_bilin_64v_rvv;
+    dsp->mc[0][FILTER_BILINEAR ][0][1][0] = ff_put_vp9_bilin_64h_rvv;
+    dsp->mc[0][FILTER_BILINEAR ][1][0][1] = ff_avg_vp9_bilin_64v_rvv;
+    dsp->mc[0][FILTER_BILINEAR ][1][1][0] = ff_avg_vp9_bilin_64h_rvv;
+    dsp->mc[1][FILTER_BILINEAR ][0][0][1] = ff_put_vp9_bilin_32v_rvv;
+    dsp->mc[1][FILTER_BILINEAR ][0][1][0] = ff_put_vp9_bilin_32h_rvv;
+    dsp->mc[1][FILTER_BILINEAR ][1][0][1] = ff_avg_vp9_bilin_32v_rvv;
+    dsp->mc[1][FILTER_BILINEAR ][1][1][0] = ff_avg_vp9_bilin_32h_rvv;
+    dsp->mc[2][FILTER_BILINEAR ][0][0][1] = ff_put_vp9_bilin_16v_rvv;
+    dsp->mc[2][FILTER_BILINEAR ][0][1][0] = ff_put_vp9_bilin_16h_rvv;
+    dsp->mc[2][FILTER_BILINEAR ][1][0][1] = ff_avg_vp9_bilin_16v_rvv;
+    dsp->mc[2][FILTER_BILINEAR ][1][1][0] = ff_avg_vp9_bilin_16h_rvv;
+    dsp->mc[3][FILTER_BILINEAR ][0][0][1] = ff_put_vp9_bilin_8v_rvv;
+    dsp->mc[3][FILTER_BILINEAR ][0][1][0] = ff_put_vp9_bilin_8h_rvv;
+    dsp->mc[3][FILTER_BILINEAR ][1][0][1] = ff_avg_vp9_bilin_8v_rvv;
+    dsp->mc[3][FILTER_BILINEAR ][1][1][0] = ff_avg_vp9_bilin_8h_rvv;
+    dsp->mc[4][FILTER_BILINEAR ][0][0][1] = ff_put_vp9_bilin_4v_rvv;
+    dsp->mc[4][FILTER_BILINEAR ][0][1][0] = ff_put_vp9_bilin_4h_rvv;
+    dsp->mc[4][FILTER_BILINEAR ][1][0][1] = ff_avg_vp9_bilin_4v_rvv;
+    dsp->mc[4][FILTER_BILINEAR ][1][1][0] = ff_avg_vp9_bilin_4h_rvv;
+    dsp->mc[0][FILTER_BILINEAR ][0][1][1] = ff_put_vp9_bilin_64hv_rvv;
+    dsp->mc[0][FILTER_BILINEAR ][1][1][1] = ff_avg_vp9_bilin_64hv_rvv;
+    dsp->mc[1][FILTER_BILINEAR ][0][1][1] = ff_put_vp9_bilin_32hv_rvv;
+    dsp->mc[1][FILTER_BILINEAR ][1][1][1] = ff_avg_vp9_bilin_32hv_rvv;
+    dsp->mc[2][FILTER_BILINEAR ][0][1][1] = ff_put_vp9_bilin_16hv_rvv;
+    dsp->mc[2][FILTER_BILINEAR ][1][1][1] = ff_avg_vp9_bilin_16hv_rvv;
+    dsp->mc[3][FILTER_BILINEAR ][0][1][1] = ff_put_vp9_bilin_8hv_rvv;
+    dsp->mc[3][FILTER_BILINEAR ][1][1][1] = ff_avg_vp9_bilin_8hv_rvv;
+    dsp->mc[4][FILTER_BILINEAR ][0][1][1] = ff_put_vp9_bilin_4hv_rvv;
+    dsp->mc[4][FILTER_BILINEAR ][1][1][1] = ff_avg_vp9_bilin_4hv_rvv;
+
+#undef init_fpel
+    }
+#endif
 #endif
 }
 
@@ -56,13 +105,6 @@ static av_cold void vp9dsp_intrapred_init_riscv(VP9DSPContext *dsp, int bpp)
 #if HAVE_RV
     int flags = av_get_cpu_flags();
 
-# if __riscv_xlen >= 64
-    if (bpp == 8 && (flags & AV_CPU_FLAG_RVB_ADDR)) {
-        dsp->intra_pred[TX_32X32][VERT_PRED] = ff_v_32x32_rvi;
-        dsp->intra_pred[TX_16X16][VERT_PRED] = ff_v_16x16_rvi;
-        dsp->intra_pred[TX_8X8][VERT_PRED] = ff_v_8x8_rvi;
-    }
-# endif
 #if HAVE_RVV
     if (bpp == 8 && flags & AV_CPU_FLAG_RVV_I64 && ff_rv_vlen_least(128)) {
         dsp->intra_pred[TX_8X8][DC_PRED] = ff_dc_8x8_rvv;

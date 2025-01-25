@@ -1,18 +1,11 @@
 SKIP: INVALID
 
+<dawn>/src/tint/lang/glsl/writer/printer/printer.cc:1487 internal compiler error: TINT_UNREACHABLE unhandled core builtin: subgroupExclusiveMul
+********************************************************************
+*  The tint shader compiler has encountered an unexpected error.   *
+*                                                                  *
+*  Please help us fix this issue by submitting a bug report at     *
+*  crbug.com/tint with the source program that triggered the bug.  *
+********************************************************************
 
-enable f16;
-
-@group(0) @binding(0) var<storage, read_write> prevent_dce : vec4<f16>;
-
-fn subgroupExclusiveMul_a07956() -> vec4<f16> {
-  var res : vec4<f16> = subgroupExclusiveMul(vec4<f16>(1.0h));
-  return res;
-}
-
-@compute @workgroup_size(1)
-fn compute_main() {
-  prevent_dce = subgroupExclusiveMul_a07956();
-}
-
-Failed to generate: error: Unknown builtin method: 0x55ecad0f7230
+tint executable returned error: signal: trace/BPT trap

@@ -2279,8 +2279,6 @@ EIGEN_STRONG_INLINE __m128i half2floatsse(__m128i h) {
 }
 
 EIGEN_STRONG_INLINE __m128i float2half(__m128 f) {
-  __m128i o = _mm_setzero_si128();
-
   // unsigned int sign_mask = 0x80000000u;
   __m128i sign = _mm_set1_epi32(0x80000000u);
   // unsigned int sign = f.u & sign_mask;
@@ -2307,7 +2305,7 @@ EIGEN_STRONG_INLINE __m128i float2half(__m128 f) {
   //  f.f += denorm_magic.f;
   f = _mm_add_ps(f, _mm_castsi128_ps(denorm_magic));
   // f.u - denorm_magic.u
-  o = _mm_sub_epi32(_mm_castps_si128(f), denorm_magic);
+  __m128i o = _mm_sub_epi32(_mm_castps_si128(f), denorm_magic);
   o = _mm_and_si128(o, subnorm_mask);
   // Correct result for inf/nan/zero/subnormal, 0 otherwise
   o = _mm_or_si128(o, naninf_value);

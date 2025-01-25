@@ -21,6 +21,7 @@
 #include "build/build_config.h"
 #include "chrome/enterprise_companion/app/app.h"
 #include "chrome/enterprise_companion/crash_client.h"
+#include "chrome/enterprise_companion/enterprise_companion_client.h"
 #include "chrome/enterprise_companion/enterprise_companion_status.h"
 #include "chrome/enterprise_companion/installer_paths.h"
 #include "chrome/enterprise_companion/ipc_support.h"
@@ -60,8 +61,8 @@ void InitLogging() {
     base::CreateDirectory(log_file_path->DirName());
 
     // Rotate the log if needed.
-    int64_t size = 0;
-    if (base::GetFileSize(*log_file_path, &size) && size >= kLogRotateAtSize) {
+    std::optional<int64_t> size = base::GetFileSize(*log_file_path);
+    if (size.has_value() && size.value() >= kLogRotateAtSize) {
       base::ReplaceFile(*log_file_path,
                         log_file_path->AddExtension(FILE_PATH_LITERAL(".old")),
                         nullptr);

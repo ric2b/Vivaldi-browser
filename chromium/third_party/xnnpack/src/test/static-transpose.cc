@@ -14,8 +14,8 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include <fp16/fp16.h>
 #include "xnnpack.h"
+#include "xnnpack/math.h"
 #include "xnnpack/node-type.h"
 #include "xnnpack/operator.h"
 #include "xnnpack/subgraph.h"
@@ -23,7 +23,7 @@
 
 using StaticTransposeTestQS8 = UnaryTest<int8_t, int8_t, /*min_dim=*/1>;
 using StaticTransposeTestQU8 = UnaryTest<uint8_t, uint8_t, /*min_dim=*/1>;
-using StaticTransposeTestF16 = UnaryTest<uint16_t, uint16_t, /*min_dim=*/1>;
+using StaticTransposeTestF16 = UnaryTest<xnn_float16, xnn_float16, /*min_dim=*/1>;
 using StaticTransposeTestF32 = UnaryTest<float, float, /*min_dim=*/1>;
 
 namespace {
@@ -234,8 +234,6 @@ TEST_F(StaticTransposeTestQS8, matches_operator_api)
   const int32_t output_zero_point = input_zero_point;
   const float output_scale = input_scale;
   std::generate(input.begin(), input.end(), [&]() { return i8dist(rng); });
-  std::fill(operator_output.begin(), operator_output.end(), INT8_C(0xA5));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), INT8_C(0xA5));
   std::vector<size_t> perm = RandomPermutation(dims, rng);
   std::vector<size_t> output_dims = PermuteInputDimensions(dims, perm);
 
@@ -298,8 +296,6 @@ TEST_F(StaticTransposeTestQU8, matches_operator_api)
   const int32_t output_zero_point = input_zero_point;
   const float output_scale = input_scale;
   std::generate(input.begin(), input.end(), [&]() { return u8dist(rng); });
-  std::fill(operator_output.begin(), operator_output.end(), UINT8_C(0xA5));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT8_C(0xA5));
   std::vector<size_t> perm = RandomPermutation(dims, rng);
   std::vector<size_t> output_dims = PermuteInputDimensions(dims, perm);
 
@@ -357,9 +353,7 @@ TEST_F(StaticTransposeTestQU8, matches_operator_api)
 
 TEST_F(StaticTransposeTestF16, matches_operator_api)
 {
-  std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
-  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
   std::vector<size_t> perm = RandomPermutation(dims, rng);
   std::vector<size_t> output_dims = PermuteInputDimensions(dims, perm);
 
@@ -419,8 +413,6 @@ TEST_F(StaticTransposeTestF16, matches_operator_api)
 TEST_F(StaticTransposeTestF32, matches_operator_api)
 {
   std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
-  std::fill(operator_output.begin(), operator_output.end(), nanf(""));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), nanf(""));
   std::vector<size_t> perm = RandomPermutation(dims, rng);
   std::vector<size_t> output_dims = PermuteInputDimensions(dims, perm);
 

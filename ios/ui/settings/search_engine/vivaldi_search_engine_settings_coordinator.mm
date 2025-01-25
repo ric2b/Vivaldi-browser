@@ -41,7 +41,7 @@
 - (void)start {
   self.viewController =
       [[VivaldiSearchEngineSettingsViewController alloc]
-                         initWithBrowserState:self.browser->GetBrowserState()];
+                         initWithProfile:self.browser->GetProfile()];
   self.viewController.title =
       l10n_util::GetNSString(IDS_IOS_SEARCH_ENGINE_SETTING_TITLE);
   self.viewController.navigationItem.largeTitleDisplayMode =
@@ -49,7 +49,7 @@
 
   self.mediator =
       [[VivaldiSearchEngineSettingsMediator alloc]
-          initWithBrowserState:self.browser->GetBrowserState()];
+          initWithProfile:self.browser->GetProfile()];
   self.mediator.consumer = self.viewController;
   self.viewController.delegate = self.mediator;
 

@@ -262,7 +262,16 @@ avifResult avifImageCopy(avifImage * dstImage, const avifImage * srcImage, avifP
             dstImage->gainMap = avifGainMapCreate();
             AVIF_CHECKERR(dstImage->gainMap, AVIF_RESULT_OUT_OF_MEMORY);
         }
-        dstImage->gainMap->metadata = srcImage->gainMap->metadata;
+        for (int c = 0; c < 3; ++c) {
+            dstImage->gainMap->gainMapMin[c] = srcImage->gainMap->gainMapMin[c];
+            dstImage->gainMap->gainMapMax[c] = srcImage->gainMap->gainMapMax[c];
+            dstImage->gainMap->gainMapGamma[c] = srcImage->gainMap->gainMapGamma[c];
+            dstImage->gainMap->baseOffset[c] = srcImage->gainMap->baseOffset[c];
+            dstImage->gainMap->alternateOffset[c] = srcImage->gainMap->alternateOffset[c];
+        }
+        dstImage->gainMap->baseHdrHeadroom = srcImage->gainMap->baseHdrHeadroom;
+        dstImage->gainMap->alternateHdrHeadroom = srcImage->gainMap->alternateHdrHeadroom;
+        dstImage->gainMap->useBaseColorSpace = srcImage->gainMap->useBaseColorSpace;
         AVIF_CHECKRES(avifRWDataSet(&dstImage->gainMap->altICC, srcImage->gainMap->altICC.data, srcImage->gainMap->altICC.size));
         dstImage->gainMap->altColorPrimaries = srcImage->gainMap->altColorPrimaries;
         dstImage->gainMap->altTransferCharacteristics = srcImage->gainMap->altTransferCharacteristics;
@@ -717,7 +726,7 @@ avifBool avifCropRectConvertCleanApertureBox(avifCropRect * cropRect,
 {
     avifDiagnosticsClearError(diag);
 
-    // ISO/IEC 14496-12:2020, Section 12.1.4.1:
+    // ISO/IEC 14496-12:2022, Section 12.1.4.1:
     //   For horizOff and vertOff, D shall be strictly positive and N may be
     //   positive or negative. For cleanApertureWidth and cleanApertureHeight,
     //   N shall be positive and D shall be strictly positive.
@@ -738,6 +747,15 @@ avifBool avifCropRectConvertCleanApertureBox(avifCropRect * cropRect,
         avifDiagnosticsPrintf(diag, "[Strict] clap width or height is negative");
         return AVIF_FALSE;
     }
+
+    // ISO/IEC 23000-22:2019/Amd. 2:2021, Section 7.3.6.7:
+    //   The clean aperture property is restricted according to the chroma
+    //   sampling format of the input image (4:4:4, 4:2:2:, 4:2:0, or 4:0:0) as
+    //   follows:
+    //   - cleanApertureWidth and cleanApertureHeight shall be integers;
+    //   - The leftmost pixel and the topmost line of the clean aperture as
+    //     defined in ISO/IEC 14496-12:2020, Section 12.1.4.1 shall be integers;
+    //   ...
 
     if ((widthN % widthD) != 0) {
         avifDiagnosticsPrintf(diag, "[Strict] clap width %d/%d is not an integer", widthN, widthD);
@@ -1183,7 +1201,18 @@ avifGainMap * avifGainMapCreate(void)
     gainMap->altTransferCharacteristics = AVIF_TRANSFER_CHARACTERISTICS_UNSPECIFIED;
     gainMap->altMatrixCoefficients = AVIF_MATRIX_COEFFICIENTS_UNSPECIFIED;
     gainMap->altYUVRange = AVIF_RANGE_FULL;
-    gainMap->metadata.useBaseColorSpace = AVIF_TRUE;
+    gainMap->useBaseColorSpace = AVIF_TRUE;
+    // Set all denominators to valid values (1).
+    for (int i = 0; i < 3; ++i) {
+        gainMap->gainMapMin[i].d = 1;
+        gainMap->gainMapMax[i].d = 1;
+        gainMap->gainMapGamma[i].n = 1;
+        gainMap->gainMapGamma[i].d = 1;
+        gainMap->baseOffset[i].d = 1;
+        gainMap->alternateOffset[i].d = 1;
+    }
+    gainMap->baseHdrHeadroom.d = 1;
+    gainMap->alternateHdrHeadroom.d = 1;
     return gainMap;
 }
 

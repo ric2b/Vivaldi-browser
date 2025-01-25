@@ -327,6 +327,26 @@
             }
           ]
         }
+      },
+      {
+        "name": "resetAll",
+        "type": "function",
+        "description": "Restores default content for all menus (either context or main menus).",
+        "parameters": [
+          {
+            "name": "isContext",
+            "type": "boolean"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
       }
     ],
     "events": [
@@ -359,6 +379,18 @@
             "name": "items",
             "type": "array",
             "items": { "$ref": "MenuTreeNode" }
+          }
+        ]
+      },
+      {
+        "name": "onResetAll",
+        "type": "function",
+        "description": "Fires when the entire menu tree is reset.",
+        "parameters": [
+          {
+            "name": "isContext",
+            "type": "boolean",
+            "description": "True for a context menu tree, false for a main menu tree."
           }
         ]
       }

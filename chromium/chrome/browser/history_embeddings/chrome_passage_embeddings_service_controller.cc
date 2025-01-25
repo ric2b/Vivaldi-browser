@@ -4,7 +4,18 @@
 
 #include "chrome/browser/history_embeddings/chrome_passage_embeddings_service_controller.h"
 
+#include <utility>
+
+#include "base/functional/bind.h"
+#include "base/notreached.h"
+#include "base/process/process.h"
+#include "components/history_embeddings/cpu_histogram_logger.h"
+#include "content/public/browser/browser_child_process_host.h"
+#include "content/public/browser/browser_child_process_host_iterator.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/browser/child_process_data.h"
 #include "content/public/browser/service_process_host.h"
+#include "content/public/common/process_type.h"
 
 namespace history_embeddings {
 
@@ -29,6 +40,8 @@ void ChromePassageEmbeddingsServiceController::LaunchService() {
 
   auto receiver = service_remote_.BindNewPipeAndPassReceiver();
   service_remote_.reset_on_disconnect();
+  // Unretained is safe because `this` owns `service_remote_`, which
+  // synchronously calls the idle handler.
   service_remote_.set_idle_handler(
       base::Minutes(1),
       base::BindRepeating(
@@ -36,9 +49,41 @@ void ChromePassageEmbeddingsServiceController::LaunchService() {
           base::Unretained(this)));
   content::ServiceProcessHost::Launch<
       passage_embeddings::mojom::PassageEmbeddingsService>(
-      std::move(receiver), content::ServiceProcessHost::Options()
-                               .WithDisplayName("Passage Embeddings Service")
-                               .Pass());
+      std::move(receiver),
+      content::ServiceProcessHost::Options()
+          .WithDisplayName("Passage Embeddings Service")
+          .WithProcessCallback(base::BindOnce(
+              &ChromePassageEmbeddingsServiceController::OnServiceLaunched,
+              weak_ptr_factory_.GetWeakPtr()))
+          .Pass());
+}
+
+void ChromePassageEmbeddingsServiceController::OnServiceLaunched(
+    const base::Process& process) {
+  // `OnServiceLaunched` is triggered by the same observable that
+  // `PerformanceManager` uses to register new process hosts, which is necessary
+  // before we can start the CPU histogram logger. As such, this has to be a
+  // `PostTask` to ensure that `InitializeCpuLogger` is invoked after the
+  // service process host is registered.
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &ChromePassageEmbeddingsServiceController::InitializeCpuLogger,
+          weak_ptr_factory_.GetWeakPtr()));
+}
+
+void ChromePassageEmbeddingsServiceController::InitializeCpuLogger() {
+  content::BrowserChildProcessHostIterator iter(content::PROCESS_TYPE_UTILITY);
+  while (!iter.Done()) {
+    const content::ChildProcessData& data = iter.GetData();
+    if (data.name == u"Passage Embeddings Service") {
+      cpu_logger_.StartLogging(
+          content::BrowserChildProcessHost::FromID(data.id));
+      return;
+    }
+    ++iter;
+  }
+  NOTREACHED();
 }
 
 }  // namespace history_embeddings

@@ -328,19 +328,19 @@ TEST(test_layer_settings_util, is_float) {
 }
 
 TEST(test_layer_settings_util, ToUint32) {
-    EXPECT_EQ(24, vl::ToUint32("24"));
-    EXPECT_EQ(3000300000, vl::ToUint32("3000300000"));
-    EXPECT_EQ(15, vl::ToUint32("0xF"));
-    EXPECT_EQ(15, vl::ToUint32("0XF"));
-    EXPECT_EQ(4294967295, vl::ToUint32("0xFFFFFFFF"));
+    EXPECT_EQ(24u, vl::ToUint32("24"));
+    EXPECT_EQ(3000300000u, vl::ToUint32("3000300000"));
+    EXPECT_EQ(15u, vl::ToUint32("0xF"));
+    EXPECT_EQ(15u, vl::ToUint32("0XF"));
+    EXPECT_EQ(4294967295u, vl::ToUint32("0xFFFFFFFF"));
 }
 
 TEST(test_layer_settings_util, ToUint64) {
-    EXPECT_EQ(24, vl::ToUint64("24"));
-    EXPECT_EQ(3000300000, vl::ToUint64("3000300000"));
-    EXPECT_EQ(15, vl::ToUint64("0xF"));
-    EXPECT_EQ(15, vl::ToUint64("0XF"));
-    EXPECT_EQ(4294967295, vl::ToUint64("0xFFFFFFFF"));
+    EXPECT_EQ(24ull, vl::ToUint64("24"));
+    EXPECT_EQ(3000300000ull, vl::ToUint64("3000300000"));
+    EXPECT_EQ(15ull, vl::ToUint64("0xF"));
+    EXPECT_EQ(15ull, vl::ToUint64("0XF"));
+    EXPECT_EQ(4294967295ull, vl::ToUint64("0xFFFFFFFF"));
     EXPECT_EQ(4294967296ull, vl::ToUint64("0x100000000"));
 }
 
@@ -408,173 +408,173 @@ TEST(test_layer_settings_util, to_framesets) {
         std::vector<VkuFrameset> framesets = vl::ToFrameSets("0");
         EXPECT_EQ(1, framesets.size());
 
-        EXPECT_EQ(0, framesets[0].first);
-        EXPECT_EQ(1, framesets[0].count);
-        EXPECT_EQ(1, framesets[0].step);
+        EXPECT_EQ(0u, framesets[0].first);
+        EXPECT_EQ(1u, framesets[0].count);
+        EXPECT_EQ(1u, framesets[0].step);
     }
 
     {
         std::vector<VkuFrameset> framesets = vl::ToFrameSets("76");
         EXPECT_EQ(1, framesets.size());
 
-        EXPECT_EQ(76, framesets[0].first);
-        EXPECT_EQ(1, framesets[0].count);
-        EXPECT_EQ(1, framesets[0].step);
+        EXPECT_EQ(76u, framesets[0].first);
+        EXPECT_EQ(1u, framesets[0].count);
+        EXPECT_EQ(1u, framesets[0].step);
     }
 
     {
         std::vector<VkuFrameset> framesets = vl::ToFrameSets("0-2");
         EXPECT_EQ(1, framesets.size());
 
-        EXPECT_EQ(0, framesets[0].first);
-        EXPECT_EQ(2, framesets[0].count);
-        EXPECT_EQ(1, framesets[0].step);
+        EXPECT_EQ(0u, framesets[0].first);
+        EXPECT_EQ(2u, framesets[0].count);
+        EXPECT_EQ(1u, framesets[0].step);
     }
 
     {
         std::vector<VkuFrameset> framesets = vl::ToFrameSets("0-2,6,7");
         EXPECT_EQ(3, framesets.size());
 
-        EXPECT_EQ(0, framesets[0].first);
-        EXPECT_EQ(2, framesets[0].count);
-        EXPECT_EQ(1, framesets[0].step);
+        EXPECT_EQ(0u, framesets[0].first);
+        EXPECT_EQ(2u, framesets[0].count);
+        EXPECT_EQ(1u, framesets[0].step);
 
-        EXPECT_EQ(6, framesets[1].first);
-        EXPECT_EQ(1, framesets[1].count);
-        EXPECT_EQ(1, framesets[1].step);
+        EXPECT_EQ(6u, framesets[1].first);
+        EXPECT_EQ(1u, framesets[1].count);
+        EXPECT_EQ(1u, framesets[1].step);
 
-        EXPECT_EQ(7, framesets[2].first);
-        EXPECT_EQ(1, framesets[2].count);
-        EXPECT_EQ(1, framesets[2].step);
+        EXPECT_EQ(7u, framesets[2].first);
+        EXPECT_EQ(1u, framesets[2].count);
+        EXPECT_EQ(1u, framesets[2].step);
     }
 
     {
         std::vector<VkuFrameset> framesets = vl::ToFrameSets("0-2,6-7");
         EXPECT_EQ(2, framesets.size());
 
-        EXPECT_EQ(0, framesets[0].first);
-        EXPECT_EQ(2, framesets[0].count);
-        EXPECT_EQ(1, framesets[0].step);
+        EXPECT_EQ(0u, framesets[0].first);
+        EXPECT_EQ(2u, framesets[0].count);
+        EXPECT_EQ(1u, framesets[0].step);
 
-        EXPECT_EQ(6, framesets[1].first);
-        EXPECT_EQ(7, framesets[1].count);
-        EXPECT_EQ(1, framesets[1].step);
+        EXPECT_EQ(6u, framesets[1].first);
+        EXPECT_EQ(7u, framesets[1].count);
+        EXPECT_EQ(1u, framesets[1].step);
     }
 
     {
         std::vector<VkuFrameset> framesets = vl::ToFrameSets("1-2,60,70");
         EXPECT_EQ(3, framesets.size());
 
-        EXPECT_EQ(1, framesets[0].first);
-        EXPECT_EQ(2, framesets[0].count);
-        EXPECT_EQ(1, framesets[0].step);
+        EXPECT_EQ(1u, framesets[0].first);
+        EXPECT_EQ(2u, framesets[0].count);
+        EXPECT_EQ(1u, framesets[0].step);
 
-        EXPECT_EQ(60, framesets[1].first);
-        EXPECT_EQ(1, framesets[1].count);
-        EXPECT_EQ(1, framesets[1].step);
+        EXPECT_EQ(60u, framesets[1].first);
+        EXPECT_EQ(1u, framesets[1].count);
+        EXPECT_EQ(1u, framesets[1].step);
 
-        EXPECT_EQ(70, framesets[2].first);
-        EXPECT_EQ(1, framesets[2].count);
-        EXPECT_EQ(1, framesets[2].step);
+        EXPECT_EQ(70u, framesets[2].first);
+        EXPECT_EQ(1u, framesets[2].count);
+        EXPECT_EQ(1u, framesets[2].step);
     }
 
     {
         std::vector<VkuFrameset> framesets = vl::ToFrameSets("10-20,60,70");
         EXPECT_EQ(3, framesets.size());
 
-        EXPECT_EQ(10, framesets[0].first);
-        EXPECT_EQ(20, framesets[0].count);
-        EXPECT_EQ(1, framesets[0].step);
+        EXPECT_EQ(10u, framesets[0].first);
+        EXPECT_EQ(20u, framesets[0].count);
+        EXPECT_EQ(1u, framesets[0].step);
 
-        EXPECT_EQ(60, framesets[1].first);
-        EXPECT_EQ(1, framesets[1].count);
-        EXPECT_EQ(1, framesets[1].step);
+        EXPECT_EQ(60u, framesets[1].first);
+        EXPECT_EQ(1u, framesets[1].count);
+        EXPECT_EQ(1u, framesets[1].step);
 
-        EXPECT_EQ(70, framesets[2].first);
-        EXPECT_EQ(1, framesets[2].count);
-        EXPECT_EQ(1, framesets[2].step);
+        EXPECT_EQ(70u, framesets[2].first);
+        EXPECT_EQ(1u, framesets[2].count);
+        EXPECT_EQ(1u, framesets[2].step);
     }
 
     {
         std::vector<VkuFrameset> framesets = vl::ToFrameSets("1-8-2");
         EXPECT_EQ(1, framesets.size());
 
-        EXPECT_EQ(1, framesets[0].first);
-        EXPECT_EQ(8, framesets[0].count);
-        EXPECT_EQ(2, framesets[0].step);
+        EXPECT_EQ(1u, framesets[0].first);
+        EXPECT_EQ(8u, framesets[0].count);
+        EXPECT_EQ(2u, framesets[0].step);
     }
 
     {
         std::vector<VkuFrameset> framesets = vl::ToFrameSets("1-8-2,0");
         EXPECT_EQ(2, framesets.size());
 
-        EXPECT_EQ(1, framesets[0].first);
-        EXPECT_EQ(8, framesets[0].count);
-        EXPECT_EQ(2, framesets[0].step);
+        EXPECT_EQ(1u, framesets[0].first);
+        EXPECT_EQ(8u, framesets[0].count);
+        EXPECT_EQ(2u, framesets[0].step);
 
-        EXPECT_EQ(0, framesets[1].first);
-        EXPECT_EQ(1, framesets[1].count);
-        EXPECT_EQ(1, framesets[1].step);
+        EXPECT_EQ(0u, framesets[1].first);
+        EXPECT_EQ(1u, framesets[1].count);
+        EXPECT_EQ(1u, framesets[1].step);
     }
 
     {
         std::vector<VkuFrameset> framesets = vl::ToFrameSets("1-8-2,10-20-5");
         EXPECT_EQ(2, framesets.size());
 
-        EXPECT_EQ(1, framesets[0].first);
-        EXPECT_EQ(8, framesets[0].count);
-        EXPECT_EQ(2, framesets[0].step);
+        EXPECT_EQ(1u, framesets[0].first);
+        EXPECT_EQ(8u, framesets[0].count);
+        EXPECT_EQ(2u, framesets[0].step);
 
-        EXPECT_EQ(10, framesets[1].first);
-        EXPECT_EQ(20, framesets[1].count);
-        EXPECT_EQ(5, framesets[1].step);
+        EXPECT_EQ(10u, framesets[1].first);
+        EXPECT_EQ(20u, framesets[1].count);
+        EXPECT_EQ(5u, framesets[1].step);
     }
 
     {
         std::vector<VkuFrameset> framesets = vl::ToFrameSets("1-8,10-20-5");
         EXPECT_EQ(2, framesets.size());
 
-        EXPECT_EQ(1, framesets[0].first);
-        EXPECT_EQ(8, framesets[0].count);
-        EXPECT_EQ(1, framesets[0].step);
+        EXPECT_EQ(1u, framesets[0].first);
+        EXPECT_EQ(8u, framesets[0].count);
+        EXPECT_EQ(1u, framesets[0].step);
 
-        EXPECT_EQ(10, framesets[1].first);
-        EXPECT_EQ(20, framesets[1].count);
-        EXPECT_EQ(5, framesets[1].step);
+        EXPECT_EQ(10u, framesets[1].first);
+        EXPECT_EQ(20u, framesets[1].count);
+        EXPECT_EQ(5u, framesets[1].step);
     }
 
     {
         std::vector<VkuFrameset> framesets = vl::ToFrameSets("1-8-2,10-20-1");
         EXPECT_EQ(2, framesets.size());
 
-        EXPECT_EQ(1, framesets[0].first);
-        EXPECT_EQ(8, framesets[0].count);
-        EXPECT_EQ(2, framesets[0].step);
+        EXPECT_EQ(1u, framesets[0].first);
+        EXPECT_EQ(8u, framesets[0].count);
+        EXPECT_EQ(2u, framesets[0].step);
 
-        EXPECT_EQ(10, framesets[1].first);
-        EXPECT_EQ(20, framesets[1].count);
-        EXPECT_EQ(1, framesets[1].step);
+        EXPECT_EQ(10u, framesets[1].first);
+        EXPECT_EQ(20u, framesets[1].count);
+        EXPECT_EQ(1u, framesets[1].step);
     }
 
     {
         std::vector<VkuFrameset> framesets = vl::ToFrameSets("1,2,3,4");
         EXPECT_EQ(4, framesets.size());
 
-        EXPECT_EQ(1, framesets[0].first);
-        EXPECT_EQ(1, framesets[0].count);
-        EXPECT_EQ(1, framesets[0].step);
+        EXPECT_EQ(1u, framesets[0].first);
+        EXPECT_EQ(1u, framesets[0].count);
+        EXPECT_EQ(1u, framesets[0].step);
 
-        EXPECT_EQ(2, framesets[1].first);
-        EXPECT_EQ(1, framesets[1].count);
-        EXPECT_EQ(1, framesets[1].step);
+        EXPECT_EQ(2u, framesets[1].first);
+        EXPECT_EQ(1u, framesets[1].count);
+        EXPECT_EQ(1u, framesets[1].step);
 
-        EXPECT_EQ(3, framesets[2].first);
-        EXPECT_EQ(1, framesets[2].count);
-        EXPECT_EQ(1, framesets[2].step);
+        EXPECT_EQ(3u, framesets[2].first);
+        EXPECT_EQ(1u, framesets[2].count);
+        EXPECT_EQ(1u, framesets[2].step);
 
-        EXPECT_EQ(4, framesets[3].first);
-        EXPECT_EQ(1, framesets[3].count);
-        EXPECT_EQ(1, framesets[3].step);
+        EXPECT_EQ(4u, framesets[3].first);
+        EXPECT_EQ(1u, framesets[3].count);
+        EXPECT_EQ(1u, framesets[3].step);
     }
 }
 
@@ -664,13 +664,13 @@ TEST(test_layer_settings_util, vkuGetUnknownSettings_SingleCreateInfo) {
 
     uint32_t unknown_settings_count = 0;
     vkuGetUnknownSettings(&create_info, setting_name_count, setting_names, &unknown_settings_count, nullptr);
-    EXPECT_EQ(2, unknown_settings_count);
+    EXPECT_EQ(2u, unknown_settings_count);
 
     std::vector<const char*> unknown_settings(unknown_settings_count);
 
     unknown_settings_count = 1;
     vkuGetUnknownSettings(&create_info, setting_name_count, setting_names, &unknown_settings_count, &unknown_settings[0]);
-    EXPECT_EQ(1, unknown_settings_count);
+    EXPECT_EQ(1u, unknown_settings_count);
     EXPECT_STREQ("bool_value", unknown_settings[0]);
 
     unknown_settings_count = 2;
@@ -777,13 +777,13 @@ TEST(test_layer_settings_util, vlGetUnknownSettings_MultipleCreateInfo) {
 
     uint32_t unknown_settings_count = 0;
     vkuGetUnknownSettings(&create_infoA, setting_name_count, setting_names, &unknown_settings_count, nullptr);
-    EXPECT_EQ(2, unknown_settings_count);
+    EXPECT_EQ(2u, unknown_settings_count);
 
     std::vector<const char*> unknown_settings(unknown_settings_count);
 
     unknown_settings_count = 1;
     vkuGetUnknownSettings(&create_infoA, setting_name_count, setting_names, &unknown_settings_count, &unknown_settings[0]);
-    EXPECT_EQ(1, unknown_settings_count);
+    EXPECT_EQ(1u, unknown_settings_count);
     EXPECT_STREQ("bool_value", unknown_settings[0]);
 
     unknown_settings_count = 2;

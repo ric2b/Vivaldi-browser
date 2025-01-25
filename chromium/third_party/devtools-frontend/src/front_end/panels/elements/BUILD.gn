@@ -88,6 +88,7 @@ devtools_module("elements") {
     "../../panels/utils:bundle",
     "../../ui/components/adorners:bundle",
     "../../ui/components/code_highlighter:bundle",
+    "../../ui/components/floating_button:bundle",
     "../../ui/components/highlighting:bundle",
     "../../ui/components/text_editor:bundle",
     "../../ui/components/tree_outline:bundle",
@@ -114,6 +115,7 @@ devtools_entrypoint("bundle") {
   visibility = [
     ":*",
     "../../entrypoints/*",
+    "../../panels/freestyler/*",
     "../../panels/profiler/*",
     "../../panels/recorder/*",
     "../../ui/components/docs/computed_style_property/*",
@@ -153,6 +155,7 @@ ts_library("unittests") {
     "AccessibilityTreeView.test.ts",
     "CSSRuleValidator.test.ts",
     "ClassesPaneWidget.test.ts",
+    "ComputedStyleWidget.test.ts",
     "DOMLinkifier.test.ts",
     "ElementStatePaneWidget.test.ts",
     "ElementsPanel.test.ts",

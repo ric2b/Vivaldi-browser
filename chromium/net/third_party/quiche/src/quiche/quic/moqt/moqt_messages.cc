@@ -4,14 +4,24 @@
 
 #include "quiche/quic/moqt/moqt_messages.h"
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
+#include "absl/algorithm/container.h"
+#include "absl/strings/escaping.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "quiche/quic/platform/api/quic_bug_tracker.h"
+#include "quiche/common/platform/api/quiche_bug_tracker.h"
 
 namespace moqt {
 
 MoqtObjectStatus IntegerToObjectStatus(uint64_t integer) {
-  if (integer >= 0x5) {
+  if (integer >=
+      static_cast<uint64_t>(MoqtObjectStatus::kInvalidObjectStatus)) {
     return MoqtObjectStatus::kInvalidObjectStatus;
   }
   return static_cast<MoqtObjectStatus>(integer);
@@ -55,10 +65,6 @@ MoqtFilterType GetFilterType(const MoqtSubscribe& message) {
 
 std::string MoqtMessageTypeToString(const MoqtMessageType message_type) {
   switch (message_type) {
-    case MoqtMessageType::kObjectStream:
-      return "OBJECT_STREAM";
-    case MoqtMessageType::kObjectDatagram:
-      return "OBJECT_PREFER_DATAGRAM";
     case MoqtMessageType::kClientSetup:
       return "CLIENT_SETUP";
     case MoqtMessageType::kServerSetup:
@@ -91,66 +97,113 @@ std::string MoqtMessageTypeToString(const MoqtMessageType message_type) {
       return "UNANNOUNCE";
     case MoqtMessageType::kGoAway:
       return "GOAWAY";
-    case MoqtMessageType::kStreamHeaderTrack:
-      return "STREAM_HEADER_TRACK";
-    case MoqtMessageType::kStreamHeaderGroup:
-      return "STREAM_HEADER_GROUP";
+    case MoqtMessageType::kSubscribeAnnounces:
+      return "SUBSCRIBE_NAMESPACE";
+    case MoqtMessageType::kSubscribeAnnouncesOk:
+      return "SUBSCRIBE_NAMESPACE_OK";
+    case MoqtMessageType::kSubscribeAnnouncesError:
+      return "SUBSCRIBE_NAMESPACE_ERROR";
+    case MoqtMessageType::kUnsubscribeAnnounces:
+      return "UNSUBSCRIBE_NAMESPACE";
+    case MoqtMessageType::kMaxSubscribeId:
+      return "MAX_SUBSCRIBE_ID";
+    case MoqtMessageType::kFetch:
+      return "FETCH";
+    case MoqtMessageType::kFetchCancel:
+      return "FETCH_CANCEL";
+    case MoqtMessageType::kFetchOk:
+      return "FETCH_OK";
+    case MoqtMessageType::kFetchError:
+      return "FETCH_ERROR";
     case MoqtMessageType::kObjectAck:
       return "OBJECT_ACK";
   }
   return "Unknown message " + std::to_string(static_cast<int>(message_type));
 }
 
+std::string MoqtDataStreamTypeToString(MoqtDataStreamType type) {
+  switch (type) {
+    case MoqtDataStreamType::kObjectDatagram:
+      return "OBJECT_PREFER_DATAGRAM";
+    case MoqtDataStreamType::kStreamHeaderTrack:
+      return "STREAM_HEADER_TRACK";
+    case MoqtDataStreamType::kStreamHeaderSubgroup:
+      return "STREAM_HEADER_SUBGROUP";
+    case MoqtDataStreamType::kStreamHeaderFetch:
+      return "STREAM_HEADER_FETCH";
+    case MoqtDataStreamType::kPadding:
+      return "PADDING";
+  }
+  return "Unknown stream type " + absl::StrCat(static_cast<int>(type));
+}
+
 std::string MoqtForwardingPreferenceToString(
     MoqtForwardingPreference preference) {
   switch (preference) {
-    case MoqtForwardingPreference::kObject:
-      return "OBJECT";
     case MoqtForwardingPreference::kDatagram:
       return "DATAGRAM";
     case MoqtForwardingPreference::kTrack:
       return "TRACK";
-    case MoqtForwardingPreference::kGroup:
-      return "GROUP";
+    case MoqtForwardingPreference::kSubgroup:
+      return "SUBGROUP";
   }
   QUIC_BUG(quic_bug_bad_moqt_message_type_01)
       << "Unknown preference " << std::to_string(static_cast<int>(preference));
   return "Unknown preference " + std::to_string(static_cast<int>(preference));
 }
 
-MoqtForwardingPreference GetForwardingPreference(MoqtMessageType type) {
+MoqtForwardingPreference GetForwardingPreference(MoqtDataStreamType type) {
   switch (type) {
-    case MoqtMessageType::kObjectStream:
-      return MoqtForwardingPreference::kObject;
-    case MoqtMessageType::kObjectDatagram:
+    case MoqtDataStreamType::kObjectDatagram:
       return MoqtForwardingPreference::kDatagram;
-    case MoqtMessageType::kStreamHeaderTrack:
+    case MoqtDataStreamType::kStreamHeaderTrack:
       return MoqtForwardingPreference::kTrack;
-    case MoqtMessageType::kStreamHeaderGroup:
-      return MoqtForwardingPreference::kGroup;
+    case MoqtDataStreamType::kStreamHeaderSubgroup:
+      return MoqtForwardingPreference::kSubgroup;
+    case MoqtDataStreamType::kStreamHeaderFetch:
+      return MoqtForwardingPreference::kTrack;  // This is a placeholder.
     default:
       break;
   }
   QUIC_BUG(quic_bug_bad_moqt_message_type_02)
       << "Message type does not indicate forwarding preference";
-  return MoqtForwardingPreference::kObject;
+  return MoqtForwardingPreference::kSubgroup;
 };
 
-MoqtMessageType GetMessageTypeForForwardingPreference(
+MoqtDataStreamType GetMessageTypeForForwardingPreference(
     MoqtForwardingPreference preference) {
   switch (preference) {
-    case MoqtForwardingPreference::kObject:
-      return MoqtMessageType::kObjectStream;
     case MoqtForwardingPreference::kDatagram:
-      return MoqtMessageType::kObjectDatagram;
+      return MoqtDataStreamType::kObjectDatagram;
     case MoqtForwardingPreference::kTrack:
-      return MoqtMessageType::kStreamHeaderTrack;
-    case MoqtForwardingPreference::kGroup:
-      return MoqtMessageType::kStreamHeaderGroup;
+      return MoqtDataStreamType::kStreamHeaderTrack;
+    case MoqtForwardingPreference::kSubgroup:
+      return MoqtDataStreamType::kStreamHeaderSubgroup;
   }
   QUIC_BUG(quic_bug_bad_moqt_message_type_03)
       << "Forwarding preference does not indicate message type";
-  return MoqtMessageType::kObjectStream;
+  return MoqtDataStreamType::kStreamHeaderSubgroup;
 }
+
+std::string FullTrackName::ToString() const {
+  std::vector<std::string> bits;
+  bits.reserve(tuple_.size());
+  for (absl::string_view raw_bit : tuple_) {
+    bits.push_back(absl::StrCat("\"", absl::CHexEscape(raw_bit), "\""));
+  }
+  return absl::StrCat("{", absl::StrJoin(bits, ", "), "}");
+}
+
+bool FullTrackName::operator==(const FullTrackName& other) const {
+  if (tuple_.size() != other.tuple_.size()) {
+    return false;
+  }
+  return absl::c_equal(tuple_, other.tuple_);
+}
+bool FullTrackName::operator<(const FullTrackName& other) const {
+  return absl::c_lexicographical_compare(tuple_, other.tuple_);
+}
+FullTrackName::FullTrackName(absl::Span<const absl::string_view> elements)
+    : tuple_(elements.begin(), elements.end()) {}
 
 }  // namespace moqt

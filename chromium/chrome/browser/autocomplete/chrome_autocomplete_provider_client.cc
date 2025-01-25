@@ -396,7 +396,7 @@ bool ChromeAutocompleteProviderClient::SearchSuggestEnabled() const {
                ->ShouldDisableSearchSuggest());
 #else
 
-#if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
+#if defined(VIVALDI_BUILD)
   if (vivaldi::IsVivaldiRunning()) {
     const PrefService* prefs = profile_->GetPrefs();
     return prefs->GetBoolean(
@@ -420,8 +420,9 @@ bool ChromeAutocompleteProviderClient::IsPersonalizedUrlDataCollectionActive()
 bool ChromeAutocompleteProviderClient::IsAuthenticated() const {
   const auto* identity_manager =
       IdentityManagerFactory::GetForProfile(profile_);
-  return identity_manager &&
-         !identity_manager->GetAccountsInCookieJar().signed_in_accounts.empty();
+  return identity_manager && !identity_manager->GetAccountsInCookieJar()
+                                  .GetPotentiallyInvalidSignedInAccounts()
+                                  .empty();
 }
 
 bool ChromeAutocompleteProviderClient::IsSyncActive() const {
@@ -569,11 +570,6 @@ void ChromeAutocompleteProviderClient::CloseIncognitoWindows() {
 
 bool ChromeAutocompleteProviderClient::OpenJourneys(const std::string& query) {
 #if !BUILDFLAG(IS_ANDROID)
-  if (!base::FeatureList::IsEnabled(history_clusters::kSidePanelJourneys) ||
-      !history_clusters::kSidePanelJourneysOpensFromOmnibox.Get()) {
-    return false;
-  }
-
   Browser* browser = BrowserList::GetInstance()->GetLastActive();
   if (!browser)
     return false;

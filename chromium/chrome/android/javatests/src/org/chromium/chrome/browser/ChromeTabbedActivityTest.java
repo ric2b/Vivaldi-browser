@@ -4,13 +4,13 @@
 
 package org.chromium.chrome.browser;
 
-import android.content.Context;
+import static org.mockito.Mockito.when;
+
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build.VERSION_CODES;
 import android.provider.Browser;
 
-import androidx.test.filters.LargeTest;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -26,6 +26,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.GarbageCollectionTestUtils;
 import org.chromium.base.IntentUtils;
@@ -42,29 +44,32 @@ import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
-import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
 import org.chromium.chrome.browser.tabmodel.ChromeTabCreator;
 import org.chromium.chrome.browser.tabmodel.TabClosureParams;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
-import org.chromium.chrome.test.util.ChromeTabUtils;
+import org.chromium.components.tab_group_sync.LocalTabGroupId;
+import org.chromium.components.tab_group_sync.SavedTabGroup;
+import org.chromium.components.tab_group_sync.SavedTabGroupTab;
+import org.chromium.components.tab_group_sync.TabGroupSyncService;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.PageTransition;
-import org.chromium.ui.permissions.AndroidPermissionDelegate;
 import org.chromium.url.JUnitTestGURLs;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 /** Instrumentation tests for ChromeTabbedActivity. */
@@ -72,6 +77,8 @@ import java.util.concurrent.ExecutionException;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @Batch(Batch.PER_CLASS)
 public class ChromeTabbedActivityTest {
+    @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
+
     @ClassRule
     public static ChromeTabbedActivityTestRule sActivityTestRule =
             new ChromeTabbedActivityTestRule();
@@ -80,30 +87,15 @@ public class ChromeTabbedActivityTest {
     public BlankCTATabInitialStateRule mBlankCTATabInitialStateRule =
             new BlankCTATabInitialStateRule(sActivityTestRule, false);
 
-    @Mock private AndroidPermissionDelegate mPermissionDelegate;
+    @Mock private TabGroupSyncService mTabGroupSyncService;
 
     private static final String FILE_PATH = "/chrome/test/data/android/test.html";
 
-    private static final String TABBED_SESSION_CONTAINED_GOOGLE_SEARCH_HISTOGRAM =
-            "Session.Android.TabbedSessionContainedGoogleSearch";
-
     private ChromeTabbedActivity mActivity;
-
-    private UmaSessionStats mUmaSessionStats;
 
     @Before
     public void setUp() {
         mActivity = sActivityTestRule.getActivity();
-
-        Context appContext =
-                InstrumentationRegistry.getInstrumentation()
-                        .getTargetContext()
-                        .getApplicationContext();
-
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    mUmaSessionStats = new UmaSessionStats(appContext);
-                });
     }
 
     /**
@@ -429,64 +421,6 @@ public class ChromeTabbedActivityTest {
         histogramWatcher.assertExpected();
     }
 
-    @Test
-    @LargeTest
-    public void testSessionContainedGoogleSearchPage() {
-        HistogramWatcher histogramWatcher =
-                HistogramWatcher.newBuilder()
-                        .expectBooleanRecord(TABBED_SESSION_CONTAINED_GOOGLE_SEARCH_HISTOGRAM, true)
-                        .build();
-
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    mUmaSessionStats.startNewSession(
-                            ActivityType.TABBED, null, mPermissionDelegate);
-                    mActivity.onResumeWithNative();
-                });
-        // Load Google SRP twice, but ensure histogram is only recorded to once.
-        ChromeTabUtils.fullyLoadUrlInNewTab(
-                InstrumentationRegistry.getInstrumentation(),
-                mActivity,
-                JUnitTestGURLs.SEARCH_URL.getSpec(),
-                false);
-
-        ChromeTabUtils.fullyLoadUrlInNewTab(
-                InstrumentationRegistry.getInstrumentation(),
-                mActivity,
-                JUnitTestGURLs.SEARCH_URL.getSpec(),
-                false);
-        ThreadUtils.runOnUiThreadBlocking(() -> mActivity.onPauseWithNative());
-
-        histogramWatcher.assertExpected();
-    }
-
-    @Test
-    @LargeTest
-    public void testSessionDidNotContainGoogleSearchPage() {
-        HistogramWatcher histogramWatcher =
-                HistogramWatcher.newBuilder()
-                        .expectBooleanRecord(
-                                TABBED_SESSION_CONTAINED_GOOGLE_SEARCH_HISTOGRAM, false)
-                        .build();
-
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    mUmaSessionStats.startNewSession(
-                            ActivityType.TABBED, null, mPermissionDelegate);
-                    mActivity.onResumeWithNative();
-                });
-
-        // Histogram record is false when session does not contain SRP.
-        ChromeTabUtils.fullyLoadUrlInNewTab(
-                InstrumentationRegistry.getInstrumentation(),
-                mActivity,
-                JUnitTestGURLs.EXAMPLE_URL.getSpec(),
-                false);
-        ThreadUtils.runOnUiThreadBlocking(() -> mActivity.onPauseWithNative());
-
-        histogramWatcher.assertExpected();
-    }
-
     private ChromeTabbedActivity createActivityForMismatchedIndicesTest() {
         // Launch a new ChromeTabbedActivity intent with the FLAG_ACTIVITY_MULTIPLE_TASK set to
         // ensure that a new activity is created. Note that generally our logs indicate
@@ -520,5 +454,75 @@ public class ChromeTabbedActivityTest {
 
         CriteriaHelper.pollUiThread(
                 () -> GarbageCollectionTestUtils.canBeGarbageCollected(activityRef));
+    }
+
+    @Test
+    @MediumTest
+    public void testBackShouldCloseTab() {
+        sActivityTestRule.getTestServer(); // Triggers the lazy initialization of the test server.
+        Tab tab =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> {
+                            ChromeTabCreator tabCreator = mActivity.getCurrentTabCreator();
+                            return tabCreator.createNewTab(
+                                    new LoadUrlParams(
+                                            sActivityTestRule.getTestServer().getURL(FILE_PATH)),
+                                    TabLaunchType.FROM_LINK,
+                                    null);
+                        });
+        boolean ret =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> {
+                            return mActivity.backShouldCloseTab(tab);
+                        });
+        Assert.assertTrue(ret);
+    }
+
+    @Test
+    @MediumTest
+    public void testBackShouldCloseTab_Collaboration() {
+
+        sActivityTestRule.getTestServer(); // Triggers the lazy initialization of the test server.
+        Tab tab =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> {
+                            ChromeTabCreator tabCreator = mActivity.getCurrentTabCreator();
+                            Tab newTab =
+                                    tabCreator.createNewTab(
+                                            new LoadUrlParams(
+                                                    sActivityTestRule
+                                                            .getTestServer()
+                                                            .getURL(FILE_PATH)),
+                                            TabLaunchType.FROM_LINK,
+                                            null);
+                            TabGroupModelFilter filter =
+                                    mActivity
+                                            .getTabModelSelector()
+                                            .getTabGroupModelFilterProvider()
+                                            .getTabGroupModelFilter(false);
+                            filter.createSingleTabGroup(newTab, false);
+                            return newTab;
+                        });
+
+        SavedTabGroupTab savedTab = new SavedTabGroupTab();
+        savedTab.localId = tab.getId();
+
+        String syncId = "sync_id";
+        SavedTabGroup savedTabGroup = new SavedTabGroup();
+        savedTabGroup.syncId = syncId;
+        savedTabGroup.localId = new LocalTabGroupId(tab.getTabGroupId());
+        savedTabGroup.collaborationId = "collaboration_id";
+        savedTabGroup.savedTabs = List.of(savedTab);
+
+        TabGroupSyncServiceFactory.setForTesting(mTabGroupSyncService);
+        when(mTabGroupSyncService.getGroup(syncId)).thenReturn(savedTabGroup);
+        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {syncId});
+
+        boolean ret =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> {
+                            return mActivity.backShouldCloseTab(tab);
+                        });
+        Assert.assertFalse(ret);
     }
 }

@@ -15,6 +15,7 @@
 #include <memory>
 #include <string>
 
+#include "ash/constants/web_app_id_constants.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
@@ -26,6 +27,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
@@ -33,6 +35,7 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
+#include "base/test/mock_callback.h"
 #include "base/test/test_future.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -85,7 +88,6 @@
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/test/os_integration_test_override_impl.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_paths.h"
@@ -152,6 +154,7 @@
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/ui_base_features.h"
 
@@ -395,8 +398,7 @@ class BrowserTest : public extensions::ExtensionBrowserTest,
       if (extension->name() == "App Test")
         return extension.get();
     }
-    NOTREACHED_IN_MIGRATION();
-    return nullptr;
+    NOTREACHED();
   }
 
   // BrowserListObserver:
@@ -983,6 +985,31 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, BeforeUnloadVsBeforeReload) {
   alert->view()->AcceptAppModalDialog();
 }
 
+IN_PROC_BROWSER_TEST_F(BrowserTest, NotifiesBrowserDidClose) {
+  const GURL url(base::StrCat({"data:text/html,", kBeforeUnloadHTML}));
+  EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  WebContents* contents = browser()->tab_strip_model()->GetActiveWebContents();
+  content::PrepContentsForBeforeUnloadTest(contents);
+
+  // Assert the did close notification is not fired if unload handlers prevent
+  // the browser from closing.
+  base::MockCallback<BrowserWindowInterface::BrowserDidCloseCallback>
+      browser_did_close_callback;
+  EXPECT_CALL(browser_did_close_callback, Run).Times(0);
+  base::CallbackListSubscription subscription =
+      browser()->RegisterBrowserDidClose(browser_did_close_callback.Get());
+  browser()->window()->Close();
+  EXPECT_FALSE(browser()->is_delete_scheduled());
+  testing::Mock::VerifyAndClearExpectations(&browser_did_close_callback);
+
+  // Close the browser skipping unload handlers, ensure the did close
+  // notification is propagated.
+  EXPECT_CALL(browser_did_close_callback, Run).Times(1);
+  browser()->set_force_skip_warning_user_on_close(true);
+  browser()->window()->Close();
+  EXPECT_TRUE(browser()->is_delete_scheduled());
+}
+
 // TODO(crbug.com/40641945): Test this with implicitly-created links.
 IN_PROC_BROWSER_TEST_F(BrowserTest, TargetBlankLinkOpensInGroup) {
   ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
@@ -1473,7 +1500,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, OpenAppWindowLikeNtp) {
 #endif  // !BUILDFLAG(IS_MAC)
 
 // Makes sure the browser doesn't crash when
-// set_show_state(ui::SHOW_STATE_MAXIMIZED) has been invoked.
+// set_show_state(ui::mojom::WindowShowState::kMaximized) has been invoked.
 IN_PROC_BROWSER_TEST_F(BrowserTest, StartMaximized) {
   Browser::CreateParams params[] = {
       Browser::CreateParams(Browser::TYPE_NORMAL, browser()->profile(), true),
@@ -1487,7 +1514,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, StartMaximized) {
                             browser()->profile(), true),
   };
   for (size_t i = 0; i < std::size(params); ++i) {
-    params[i].initial_show_state = ui::SHOW_STATE_MAXIMIZED;
+    params[i].initial_show_state = ui::mojom::WindowShowState::kMaximized;
     AddBlankTabAndShow(Browser::Create(params[i]));
   }
 }
@@ -1499,7 +1526,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, StartMaximized) {
 #define MAYBE_StartMinimized StartMinimized
 #endif
 // Makes sure the browser doesn't crash when
-// set_show_state(ui::SHOW_STATE_MINIMIZED) has been invoked.
+// set_show_state(ui::mojom::WindowShowState::kMinimized) has been invoked.
 IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_StartMinimized) {
   Browser::CreateParams params[] = {
       Browser::CreateParams(Browser::TYPE_NORMAL, browser()->profile(), true),
@@ -1513,7 +1540,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_StartMinimized) {
                             browser()->profile(), true),
   };
   for (size_t i = 0; i < std::size(params); ++i) {
-    params[i].initial_show_state = ui::SHOW_STATE_MINIMIZED;
+    params[i].initial_show_state = ui::mojom::WindowShowState::kMinimized;
     AddBlankTabAndShow(Browser::Create(params[i]));
   }
 }
@@ -3103,14 +3130,14 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, PreventCloseYieldsCancelledEvent) {
   ASSERT_TRUE(policy_refresh_sync_future.Wait());
 
   apps::AppUpdateWaiter waiter(
-      profile(), web_app::kCalculatorAppId,
+      profile(), ash::kCalculatorAppId,
       base::BindRepeating([](const apps::AppUpdate& update) {
         return update.AllowClose().has_value() && !update.AllowClose().value();
       }));
   waiter.Await();
 
   Browser* const browser =
-      web_app::LaunchWebAppBrowser(profile(), web_app::kCalculatorAppId);
+      web_app::LaunchWebAppBrowser(profile(), ash::kCalculatorAppId);
   ASSERT_TRUE(browser);
 
   EXPECT_EQ(BrowserClosingStatus::kDeniedByPolicy,

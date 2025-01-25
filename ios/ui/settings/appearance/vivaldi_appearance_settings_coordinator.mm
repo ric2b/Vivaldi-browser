@@ -14,6 +14,10 @@
   // The browser where the settings are being displayed.
   Browser* _browser;
 }
+// The parent view controller where this view is presented. This can be
+// different than the baseViewController. This aligns with the active window
+// from where currently active root modal view controller is presented.
+@property (nonatomic, strong) UIViewController* presentingViewController;
 // View provider class for the appearance settings.
 @property(nonatomic, strong) VivaldiAppearanceSettingsViewProvider* viewProvider;
 // Mediator class for the appearance settings
@@ -27,14 +31,17 @@
 
 - (instancetype)initWithBaseNavigationController:
                     (UINavigationController*)navigationController
+                        presentingViewController:
+              (UIViewController*)presentingViewController
                                          browser:(Browser*)browser {
   self = [super initWithBaseViewController:navigationController
                                    browser:browser];
 
   if (self) {
     _browser = browser;
+    _presentingViewController = presentingViewController;
     [VivaldiAppearanceSettingPrefs
-        setPrefService:_browser->GetBrowserState()->GetPrefs()];
+        setPrefService:_browser->GetProfile()->GetPrefs()];
     _baseNavigationController = navigationController;
   }
 
@@ -46,15 +53,17 @@
 - (void)start {
   self.viewProvider = [[VivaldiAppearanceSettingsViewProvider alloc] init];
   UIViewController* controller =
-      [VivaldiAppearanceSettingsViewProvider makeViewController];
+      [VivaldiAppearanceSettingsViewProvider
+          makeViewControllerWithPresentingViewControllerTrait:
+              self.presentingViewController.traitCollection];
   controller.title =
       l10n_util::GetNSString(IDS_VIVALDI_IOS_APPEARANCE_SETTING_TITLE);
   controller.navigationItem.largeTitleDisplayMode =
       UINavigationItemLargeTitleDisplayModeNever;
 
   self.mediator = [[VivaldiAppearanceSettingsMediator alloc]
-      initWithOriginalPrefService:self.browser->GetBrowserState()
-                                      ->GetOriginalChromeBrowserState()
+      initWithOriginalPrefService:self.browser->GetProfile()
+                                      ->GetOriginalProfile()
                                       ->GetPrefs()];
   self.mediator.consumer = self.viewProvider;
   self.viewProvider.settingsStateConsumer = self.mediator;
@@ -66,6 +75,7 @@
 - (void)stop {
   [super stop];
   self.viewProvider = nil;
+  self.presentingViewController = nil;
 }
 
 @end

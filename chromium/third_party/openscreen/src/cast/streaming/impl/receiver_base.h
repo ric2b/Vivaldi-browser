@@ -7,8 +7,8 @@
 
 #include <chrono>
 
-#include "cast/streaming/public/encoded_frame.h"
 #include "cast/streaming/impl/session_config.h"
+#include "cast/streaming/public/encoded_frame.h"
 #include "cast/streaming/ssrc.h"
 #include "platform/api/time.h"
 #include "platform/base/span.h"
@@ -28,7 +28,7 @@ namespace openscreen::cast {
 // there are two pairs in a normal system, one for the audio stream and one for
 // video stream. A local player is responsible for synchronizing the playout of
 // the frames of each stream to achieve lip-sync. See the discussion in
-// encoded_frame.h for how the |reference_time| and |rtp_timestamp| of the
+// encoded_frame.h for how the `reference_time` and `rtp_timestamp` of the
 // EncodedFrames are used to achieve this.
 class ReceiverBase {
  public:
@@ -37,7 +37,7 @@ class ReceiverBase {
     virtual ~Consumer();
 
     // Called whenever one or more frames have become ready for consumption. The
-    // |next_frame_buffer_size| argument is identical to the result of calling
+    // `next_frame_buffer_size` argument is identical to the result of calling
     // AdvanceToNextFrame(), and so the Consumer only needs to prepare a buffer
     // and call ConsumeNextFrame(). It may then call AdvanceToNextFrame() to
     // check whether there are any more frames ready, but this is not mandatory.
@@ -90,7 +90,7 @@ class ReceiverBase {
   // Returns the next frame, both metadata and payload data. The Consumer calls
   // this method after being notified via OnFramesReady(), and it can also call
   // this whenever AdvanceToNextFrame() indicates another frame is ready.
-  // |buffer| must point to a sufficiently-sized buffer that will be populated
+  // `buffer` must point to a sufficiently-sized buffer that will be populated
   // with the frame's payload data. Upon return |frame->data| will be set to the
   // portion of the buffer that was populated.
   virtual EncodedFrame ConsumeNextFrame(ByteBuffer buffer) = 0;

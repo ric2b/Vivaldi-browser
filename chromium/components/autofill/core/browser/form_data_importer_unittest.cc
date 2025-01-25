@@ -99,7 +99,6 @@ constexpr char kDefaultCountry[] = "US";
 // "+". As these tests check equality, we drop the "+" in the input as it would
 // be gone in the output.
 constexpr char kDefaultPhone[] = "1 650-555-0000";
-constexpr char kDefaultPhoneDomesticFormatting[] = "(650) 555-0000";
 constexpr char kDefaultPhoneAreaCode[] = "650";
 constexpr char kDefaultPhonePrefix[] = "555";
 constexpr char kDefaultPhoneSuffix[] = "0000";
@@ -198,7 +197,7 @@ std::unique_ptr<FormStructure> ConstructFormStructureFromFormData(
     GeoIpCountryCode geo_country = GeoIpCountryCode("")) {
   auto cached_form_structure =
       std::make_unique<FormStructure>(test::WithoutValues(form));
-  cached_form_structure->DetermineHeuristicTypes(geo_country, nullptr, nullptr);
+  cached_form_structure->DetermineHeuristicTypes(geo_country, nullptr);
 
   auto form_structure = std::make_unique<FormStructure>(form);
   form_structure->RetrieveFromCache(
@@ -226,8 +225,9 @@ AutofillProfile ConstructProfileFromTypeValuePairs(
     profile.SetRawInfoWithVerificationStatus(type, base::UTF8ToUTF16(value),
                                              VerificationStatus::kObserved);
   }
-  if (!profile.FinalizeAfterImport())
-    NOTREACHED_IN_MIGRATION();
+  if (!profile.FinalizeAfterImport()) {
+    NOTREACHED();
+  }
   return profile;
 }
 
@@ -489,8 +489,7 @@ class MockVirtualCardEnrollmentManager
       InitVirtualCardEnroll,
       (const CreditCard& credit_card,
        VirtualCardEnrollmentSource virtual_card_enrollment_source,
-       std::optional<payments::PaymentsNetworkInterface::
-                         GetDetailsForEnrollmentResponseDetails>
+       std::optional<payments::GetDetailsForEnrollmentResponseDetails>
            get_details_for_enrollment_response_details,
        PrefService* user_prefs,
        VirtualCardEnrollmentManager::RiskAssessmentFunction
@@ -532,7 +531,8 @@ class FormDataImporterTest : public testing::Test {
          features::kAutofillUseDEAddressModel,
          features::kAutofillUseFRAddressModel,
          features::kAutofillUseINAddressModel,
-         features::kAutofillUseITAddressModel},
+         features::kAutofillUseITAddressModel,
+         features::kAutofillUseNLAddressModel},
         {});
 
     // Advance the clock to year 20XX.
@@ -1415,18 +1415,16 @@ TEST_F(FormDataImporterTest,
       ConstructFormStructureFromFormData(form_data);
 
   ExtractAddressProfilesAndVerifyExpectation(
-      *form_structure,
-      {ConstructProfileFromTypeValuePairs(
-          {{NAME_FIRST, kDefaultFirstName},
-           {NAME_LAST, kDefaultLastName},
-           {EMAIL_ADDRESS, kDefaultMail},
-           // Note that this formatting is without a country code.
-           {PHONE_HOME_WHOLE_NUMBER, kDefaultPhoneDomesticFormatting},
-           {ADDRESS_HOME_LINE1, kDefaultAddressLine1},
-           {ADDRESS_HOME_CITY, kDefaultCity},
-           {ADDRESS_HOME_STATE, kDefaultState},
-           {ADDRESS_HOME_ZIP, kDefaultZip},
-           {ADDRESS_HOME_COUNTRY, kDefaultCountry}})});
+      *form_structure, {ConstructProfileFromTypeValuePairs(
+                           {{NAME_FIRST, kDefaultFirstName},
+                            {NAME_LAST, kDefaultLastName},
+                            {EMAIL_ADDRESS, kDefaultMail},
+                            {PHONE_HOME_WHOLE_NUMBER, kDefaultPhone},
+                            {ADDRESS_HOME_LINE1, kDefaultAddressLine1},
+                            {ADDRESS_HOME_CITY, kDefaultCity},
+                            {ADDRESS_HOME_STATE, kDefaultState},
+                            {ADDRESS_HOME_ZIP, kDefaultZip},
+                            {ADDRESS_HOME_COUNTRY, kDefaultCountry}})});
 }
 
 // Tests that not enough filled fields will result in not importing an address.
@@ -1519,17 +1517,16 @@ TEST_F(FormDataImporterTest,
   std::unique_ptr<FormStructure> form_structure =
       ConstructFormStructureFromFormData(form_data);
   ExtractAddressProfilesAndVerifyExpectation(
-      *form_structure,
-      {ConstructProfileFromTypeValuePairs(
-          {{NAME_FIRST, kDefaultFirstName},
-           {NAME_LAST, kDefaultLastName},
-           {EMAIL_ADDRESS, kDefaultMail},
-           {PHONE_HOME_WHOLE_NUMBER, kDefaultPhoneDomesticFormatting},
-           {ADDRESS_HOME_LINE1, kDefaultAddressLine1},
-           {ADDRESS_HOME_CITY, kDefaultCity},
-           {ADDRESS_HOME_STATE, kDefaultState},
-           {ADDRESS_HOME_ZIP, kDefaultZip},
-           {ADDRESS_HOME_COUNTRY, kDefaultCountry}})});
+      *form_structure, {ConstructProfileFromTypeValuePairs(
+                           {{NAME_FIRST, kDefaultFirstName},
+                            {NAME_LAST, kDefaultLastName},
+                            {EMAIL_ADDRESS, kDefaultMail},
+                            {PHONE_HOME_WHOLE_NUMBER, kDefaultPhone},
+                            {ADDRESS_HOME_LINE1, kDefaultAddressLine1},
+                            {ADDRESS_HOME_CITY, kDefaultCity},
+                            {ADDRESS_HOME_STATE, kDefaultState},
+                            {ADDRESS_HOME_ZIP, kDefaultZip},
+                            {ADDRESS_HOME_COUNTRY, kDefaultCountry}})});
 }
 
 // Test that even from unfocusable fields we extract.
@@ -1873,12 +1870,12 @@ TEST_F(FormDataImporterTest,
                                            "02", "2999");
 
   FormFieldData* card_number_field =
-      form.FindFieldByNameForTest(u"card_number");
+      test_api(form).FindFieldByNameForTest(u"card_number");
   ASSERT_TRUE(card_number_field != nullptr);
   card_number_field->set_user_input(u"4444333322221111");
 
   // FormFieldData::user_input for non-credit card fields should be ignored.
-  ASSERT_EQ(nullptr, form.FindFieldByNameForTest(u"cvc"));
+  ASSERT_EQ(nullptr, test_api(form).FindFieldByNameForTest(u"cvc"));
   FormFieldData cvc_field =
       CreateTestFormField("CVC", "cvc", "001", FormControlType::kInputText);
   cvc_field.set_user_input(u"002");

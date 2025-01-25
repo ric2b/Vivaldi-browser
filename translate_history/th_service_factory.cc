@@ -47,7 +47,7 @@ void TH_ServiceFactory::ShutdownForProfile(Profile* profile) {
 
 content::BrowserContext* TH_ServiceFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
+  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 KeyedService* TH_ServiceFactory::BuildServiceInstanceFor(

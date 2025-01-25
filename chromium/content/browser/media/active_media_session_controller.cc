@@ -31,41 +31,22 @@ ActiveMediaSessionController::ActiveMediaSessionController(
       controller_manager_remote_.BindNewPipeAndPassReceiver());
 
   if (request_id == base::UnguessableToken::Null()) {
-    // ID is null for all scenarios where kWebAppSystemMediaControls is not
-    // supported. ie. Linux always, mac/Windows with the feature flag off.
-    // Create a media controller that follows the active session for this case.
+    // Create a controller that automatically follows the active session.
     controller_manager_remote_->CreateActiveMediaController(
         media_controller_remote_.BindNewPipeAndPassReceiver());
   } else {
-    // Create a media controller tied to |request_id| when
-    // kWebAppSystemMediaControls is enabled (on Windows/macOS).
+    // Create a controller for the media session with ID `request_id`.
     controller_manager_remote_->CreateMediaControllerForSession(
         media_controller_remote_.BindNewPipeAndPassReceiver(), request_id);
   }
 
-  // Observe the active media controller for changes to playback state and
+  // Observe the media controller for changes to playback state and
   // supported actions.
   media_controller_remote_->AddObserver(
       media_controller_observer_receiver_.BindNewPipeAndPassRemote());
 }
 
 ActiveMediaSessionController::~ActiveMediaSessionController() = default;
-
-void ActiveMediaSessionController::RebindMojoForNewID(
-    base::UnguessableToken request_id) {
-  media_controller_remote_.reset();
-  media_controller_observer_receiver_.reset();
-
-  // Don't think this is necessary for browser as we pass it to
-  // Start/StopWatchingMediaKey which only uses it for PWAs, but probably good
-  // to keep it up to date.
-  request_id_ = request_id;
-
-  controller_manager_remote_->CreateMediaControllerForSession(
-      media_controller_remote_.BindNewPipeAndPassReceiver(), request_id);
-  media_controller_remote_->AddObserver(
-      media_controller_observer_receiver_.BindNewPipeAndPassRemote());
-}
 
 void ActiveMediaSessionController::MediaSessionInfoChanged(
     media_session::mojom::MediaSessionInfoPtr session_info) {

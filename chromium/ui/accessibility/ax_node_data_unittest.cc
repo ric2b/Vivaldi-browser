@@ -76,17 +76,34 @@ TEST(AXNodeDataTest, TextAttributes) {
                             "different font");
   EXPECT_TRUE(node_1.GetTextAttributes() != node_2.GetTextAttributes());
 
-  std::string tooltip;
   node_2.AddStringAttribute(ax::mojom::StringAttribute::kTooltip,
                             "test tooltip");
-  EXPECT_TRUE(node_2.GetStringAttribute(ax::mojom::StringAttribute::kTooltip,
-                                        &tooltip));
+  EXPECT_TRUE(node_2.HasStringAttribute(ax::mojom::StringAttribute::kTooltip));
+  const std::string& tooltip =
+      node_2.GetStringAttribute(ax::mojom::StringAttribute::kTooltip);
+
   EXPECT_EQ(tooltip, "test tooltip");
 
   AXTextAttributes node1_attributes = node_1.GetTextAttributes();
   AXTextAttributes moved_attributes = std::move(node1_attributes);
   EXPECT_TRUE(node1_attributes != moved_attributes);
   EXPECT_TRUE(moved_attributes == node_1.GetTextAttributes());
+
+  AXNodeData node_3;
+  AXTextAttributes node3_attributes = node_3.GetTextAttributes();
+  EXPECT_TRUE(node3_attributes.IsUnset());
+  node_3.AddIntAttribute(ax::mojom::IntAttribute::kColor,
+                         static_cast<int>(0xFFFF0000));
+  node3_attributes = node_3.GetTextAttributes();
+  EXPECT_FALSE(node3_attributes.IsUnset());
+
+  AXNodeData node_4;
+  AXTextAttributes node4_attributes = node_4.GetTextAttributes();
+  EXPECT_TRUE(node4_attributes.IsUnset());
+  const float kFontSize = 1001.5;
+  node_4.AddFloatAttribute(ax::mojom::FloatAttribute::kFontSize, kFontSize);
+  node4_attributes = node_4.GetTextAttributes();
+  EXPECT_EQ(node4_attributes.font_size, kFontSize);
 }
 
 TEST(AXNodeDataTest, IsButtonPressed) {

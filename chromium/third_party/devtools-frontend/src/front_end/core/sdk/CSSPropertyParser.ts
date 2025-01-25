@@ -489,6 +489,10 @@ export namespace ASTUtils {
 
     return split(args);
   }
+
+  export function equals(a: CodeMirror.SyntaxNode, b: CodeMirror.SyntaxNode): boolean {
+    return a.name === b.name && a.from === b.from && a.to === b.to;
+  }
 }
 
 export class VariableMatch implements Match {
@@ -605,11 +609,11 @@ export function tokenizeDeclaration(propertyName: string, propertyValue: string)
   }
 
   const childNodes = ASTUtils.children(decl);
-  if (childNodes.length < 3) {
+  if (childNodes.length < 2) {
     return null;
   }
   const [varName, colon, tree] = childNodes;
-  if (!varName || varName.type.isError || !colon || colon.type.isError || !tree || tree.type.isError) {
+  if (!varName || varName.type.isError || !colon || colon.type.isError || tree?.type.isError) {
     return null;
   }
 

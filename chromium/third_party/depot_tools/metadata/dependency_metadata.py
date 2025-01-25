@@ -221,8 +221,8 @@ class DependencyMetadata:
         # If the repository is hosted somewhere (i.e. Chromium isn't the
         # canonical repositroy of the dependency), at least one of the fields
         # Version, Date or Revision must be provided.
-        if (not (self.is_canonical or self.version or self.date
-                 or self.revision)):
+        if (not (self.is_canonical or self.version or self.date or self.revision
+                 or self.revision_in_deps)):
             versioning_fields = [
                 known_fields.VERSION, known_fields.DATE, known_fields.REVISION
             ]
@@ -306,6 +306,11 @@ class DependencyMetadata:
     @property
     def revision(self) -> Optional[str]:
         return self._return_as_property(known_fields.REVISION)
+
+    @property
+    def revision_in_deps(self) -> bool:
+        value = self._metadata.get(known_fields.REVISION, "")
+        return known_fields.REVISION.is_revision_in_deps(value)
 
     @property
     def license(self) -> Optional[List[str]]:

@@ -37,6 +37,7 @@
 include(utils/bytes/BUILD.cmake)
 include(utils/cli/BUILD.cmake)
 include(utils/command/BUILD.cmake)
+include(utils/constants/BUILD.cmake)
 include(utils/containers/BUILD.cmake)
 include(utils/debug/BUILD.cmake)
 include(utils/diagnostic/BUILD.cmake)

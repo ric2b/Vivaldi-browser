@@ -173,8 +173,7 @@ gfx::Rect BoundsForCharacter(const blink::WebAXObject& object,
                          inline_text_box_rect.width(), character_offsets[0]);
       }
       default:
-        NOTREACHED_IN_MIGRATION();
-        return gfx::Rect();
+        NOTREACHED();
     }
   }
 
@@ -325,7 +324,6 @@ gin::ObjectTemplateBuilder WebAXObjectProxy::GetObjectTemplateBuilder(
       .SetProperty("checked", &WebAXObjectProxy::Checked)
       .SetProperty("isVisible", &WebAXObjectProxy::IsVisible)
       .SetProperty("isVisited", &WebAXObjectProxy::IsVisited)
-      .SetProperty("isOffScreen", &WebAXObjectProxy::IsOffScreen)
       .SetProperty("isCollapsed", &WebAXObjectProxy::IsCollapsed)
       .SetProperty("hasPopup", &WebAXObjectProxy::HasPopup)
       .SetProperty("isValid", &WebAXObjectProxy::IsValid)
@@ -942,13 +940,6 @@ bool WebAXObjectProxy::IsVisited() {
     return false;
   }
   return accessibility_object_.IsVisited();
-}
-
-bool WebAXObjectProxy::IsOffScreen() {
-  if (!UpdateLayout()) {
-    return false;
-  }
-  return accessibility_object_.IsOffScreen();
 }
 
 bool WebAXObjectProxy::IsValid() {
@@ -1807,15 +1798,18 @@ std::vector<std::string> WebAXObjectProxy::GetMisspellings() const {
     return {};
 
   const ui::AXNodeData& node_data = GetAXNodeData();
-  std::vector<int32_t> marker_types;
-  std::vector<int32_t> marker_starts;
-  std::vector<int32_t> marker_ends;
-  if (node_data.GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerTypes,
-                                    &marker_types) &&
-      node_data.GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerStarts,
-                                    &marker_starts) &&
-      node_data.GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerEnds,
-                                    &marker_ends)) {
+  if (node_data.HasIntListAttribute(
+          ax::mojom::IntListAttribute::kMarkerTypes) &&
+      node_data.HasIntListAttribute(
+          ax::mojom::IntListAttribute::kMarkerStarts) &&
+      node_data.HasIntListAttribute(ax::mojom::IntListAttribute::kMarkerEnds)) {
+    const std::vector<int32_t> marker_types = node_data.GetIntListAttribute(
+        ax::mojom::IntListAttribute::kMarkerTypes);
+    const std::vector<int32_t> marker_starts = node_data.GetIntListAttribute(
+        ax::mojom::IntListAttribute::kMarkerStarts);
+    const std::vector<int32_t> marker_ends =
+        node_data.GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerEnds);
+
     DCHECK_EQ(marker_types.size(), marker_starts.size());
     DCHECK_EQ(marker_types.size(), marker_ends.size());
     for (size_t i = 0; i < marker_types.size(); ++i) {

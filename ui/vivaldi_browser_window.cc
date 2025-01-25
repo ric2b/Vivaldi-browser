@@ -21,6 +21,7 @@
 #include "browser/vivaldi_runtime_feature.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/platform_apps/audio_focus_web_contents_observer.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
@@ -53,7 +54,10 @@
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_dialogs.h"
+
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+//#include "chrome/browser/ui/toasts/toast_controller.h"
+#include "chrome/browser/ui/toasts/api/toast_specification.h"
 #include "chrome/browser/ui/views/autofill/autofill_bubble_handler_impl.h"
 #include "chrome/browser/ui/views/download/download_in_progress_dialog_view.h"
 #include "chrome/browser/ui/views/extensions/extension_keybinding_registry_views.h"
@@ -201,13 +205,13 @@ Browser* FindActiveBrowser() {
 #define VIVALDI_WINDOW_DOCUMENT "window.html"
 
 using extensions::vivaldi::window_private::WindowState;
-WindowState ConvertToJSWindowState(ui::WindowShowState state) {
+WindowState ConvertToJSWindowState(ui::mojom::WindowShowState state) {
   switch (state) {
-    case ui::SHOW_STATE_FULLSCREEN:
+    case ui::mojom::WindowShowState::kFullscreen:
       return WindowState::kFullscreen;
-    case ui::SHOW_STATE_MAXIMIZED:
+    case ui::mojom::WindowShowState::kMaximized:
       return WindowState::kMaximized;
-    case ui::SHOW_STATE_MINIMIZED:
+    case ui::mojom::WindowShowState::kMinimized:
       return WindowState::kMinimized;
     default:
       return WindowState::kNormal;
@@ -224,7 +228,6 @@ class VivaldiBrowserWindow::InterfaceHelper final
       public extensions::ExtensionKeybindingRegistry::Delegate,
       public extensions::ExtensionRegistryObserver,
       public extensions::VivaldiRootDocumentHandlerObserver,
-      public infobars::InfoBarContainer::Delegate,
       public ui::AcceleratorProvider,
       public views::WidgetObserver,
       public web_modal::WebContentsModalDialogHost,
@@ -347,12 +350,12 @@ class VivaldiBrowserWindow::InterfaceHelper final
         web_contents, std::move(controller), is_user_gesture);
   }
 
-  autofill::AutofillBubbleBase* ShowVirtualCardManualFallbackBubble(
+  virtual autofill::AutofillBubbleBase* ShowFilledCardInformationBubble(
       content::WebContents* web_contents,
-      autofill::VirtualCardManualFallbackBubbleController* controller,
+      autofill::FilledCardInformationBubbleController* controller,
       bool is_user_gesture) override {
-    return GetAutofillBubbleHandler()->ShowVirtualCardManualFallbackBubble(
-        web_contents, controller, is_user_gesture);
+    return GetAutofillBubbleHandler()->ShowFilledCardInformationBubble(
+        web_contents, std::move(controller), is_user_gesture);
   }
 
   autofill::AutofillBubbleBase* ShowVirtualCardEnrollBubble(
@@ -430,10 +433,6 @@ class VivaldiBrowserWindow::InterfaceHelper final
   content::WebContents* GetRootDocumentWebContents() override {
     return window_->web_contents_.get();
   }
-
-  // infobars::InfoBarContainer::Delegate overrides
-
-  void InfoBarContainerStateChanged(bool is_animating) override {}
 
   // ui::AcceleratorProvider overrides
 
@@ -859,10 +858,6 @@ void VivaldiBrowserWindow::CreateWebContents(
 
   browser_->set_initial_show_state(params.state);
 
-  // The infobar container must come after the toolbar so its arrow paints on
-  // top.
-  infobar_container_ = std::make_unique<vivaldi::InfoBarContainerWebProxy>(
-      interface_helper_.get());
 
   std::vector<extensions::ImageLoader::ImageRepresentation> info_list;
   for (const auto& iter : extensions::IconsInfo::GetIcons(extension()).map()) {
@@ -879,9 +874,6 @@ void VivaldiBrowserWindow::CreateWebContents(
       extension(), info_list,
       base::BindOnce(&VivaldiBrowserWindow::OnIconImagesLoaded,
                      weak_ptr_factory_.GetWeakPtr()));
-
-  // TODO(pettern): Crashes on shutdown, fix.
-  // extensions::ExtensionRegistry::Get(browser_->profile())->AddObserver(this);
 
   // Set this as a listener for the root document holding portal-windows.
   root_doc_handler_ =
@@ -900,7 +892,7 @@ void VivaldiBrowserWindow::CreateWebContents(
 
   autofill_bubble_handler_ =
       std::make_unique<autofill::AutofillBubbleHandlerImpl>(
-          browser_.get(), toolbar_button_provider_.get());
+          toolbar_button_provider_.get());
 
   // This will create a new instance of a VivaldiUIRelay maintained and owned by
   // the registry. The profile is key, there is only one relay per profile and
@@ -1070,7 +1062,7 @@ void VivaldiBrowserWindow::Show() {
 
 #if BUILDFLAG(IS_MAC)
   // VB-97912 Opening a new Window there is no focus on this window.
-  ui::WindowShowState current_state = GetRestoredState();
+  ui::mojom::WindowShowState current_state = GetRestoredState();
   widget_->SetInitialFocus(current_state);
 #endif
 }
@@ -1084,30 +1076,34 @@ void VivaldiBrowserWindow::ShowForReal() {
   if (!widget_)
     return;
 
-  ui::WindowShowState initial_show_state = browser_->initial_show_state();
-  if (initial_show_state == ui::SHOW_STATE_FULLSCREEN)
-    SetFullscreen(true);
-  else if (initial_show_state == ui::SHOW_STATE_MAXIMIZED)
-    Maximize();
-  else if (initial_show_state == ui::SHOW_STATE_MINIMIZED)
-    Minimize();
-
   // In maximized state IsVisible is true and activate does not show a
   // hidden window.
-  ui::WindowShowState current_state = GetRestoredState();
-  if (widget_->IsVisible() && current_state != ui::SHOW_STATE_MAXIMIZED) {
+  ui::mojom::WindowShowState current_state = GetRestoredState();
+  if (widget_->IsVisible() &&
+      current_state != ui::mojom::WindowShowState::kMaximized) {
     widget_->Activate();
   } else {
     widget_->Show();
   }
 
+  ui::mojom::WindowShowState initial_show_state =
+      browser_->initial_show_state();
+  if (initial_show_state == ui::mojom::WindowShowState::kFullscreen)
+    SetFullscreen(true);
+  else if (initial_show_state == ui::mojom::WindowShowState::kMaximized)
+    Maximize();
+  else if (initial_show_state == ui::mojom::WindowShowState::kMinimized)
+    Minimize();
+
   OnNativeWindowChanged();
 
-  // Loads any persistent tabs (pinned and ws) that were present when last
-  // window was closed without quitting application. Only Mac saves this
-  // informantion now, but we may have to extend this for all due to extensions
-  // that allow the application to run in background with no windows.
-  sessions::OpenPersistentTabs(browser_.get());
+  // If not already present, load any persistent tabs (pinned and ws) that were
+  // present when last window was closed without quitting application. Only Mac
+  // saves this informantion now, but we may have to extend this for all due to
+  // extension that allow the application to run in background with no windows.
+  // These tabs are already present when we open the window using the profile
+  // selector.
+  sessions::OpenPersistentTabs(browser_.get(), HasPersistentTabs());
 }
 
 void VivaldiBrowserWindow::Hide() {
@@ -1453,6 +1449,11 @@ bool VivaldiBrowserWindow::ShouldShowDialogOnCloseWindow() {
          !GetProfile()->IsGuestSession();
 }
 
+// To be used when window closes while the application keeps running (typical
+// behavior for Mac). Returns true if pinned tabs and open workspaces
+// should be saved to a separate session entry. Normal session code does not
+// handle saving pinned tabs and workspaces when last window closes. Behavior is
+// to discard all. We want to keep it.
 bool VivaldiBrowserWindow::ShouldSavePersistentTabsOnCloseWindow() {
   if (GetProfile()->IsGuestSession() || GetProfile()->IsOffTheRecord()) {
     return false;
@@ -1560,40 +1561,58 @@ StatusBubble* VivaldiBrowserWindow::GetStatusBubble() {
 }
 
 gfx::Rect VivaldiBrowserWindow::GetRestoredBounds() const {
-  if (!widget_)
+  if (!widget_) {
     return gfx::Rect();
+  }
 
-  return widget_->GetRestoredBounds();
+  gfx::Rect bounds = widget_->GetRestoredBounds();
+#if BUILDFLAG(IS_WIN)
+  // NOTE(andre@vivaldi.com) : VB-111399.
+  // If the current window is maximized we need to take into account the magic
+  // happening in the hwnd_message_handler where borders are added and removed
+  // based on window state. This is just to make sure that we don't bleed onto
+  // another monitor space and any new windows that should go to the same as
+  // |this| stays. A border of 1 pixel is added in maximized state.
+  if (IsMaximized()) {
+    bounds.set_x(bounds.x() + 2);
+    bounds.set_width(bounds.width() - 2);
+
+    bounds.set_y(bounds.y() + 2);
+    bounds.set_height(bounds.height() - 2);
+  }
+#endif //IS_WIN
+  return bounds;
 }
 
-ui::WindowShowState VivaldiBrowserWindow::GetRestoredState() const {
+ui::mojom::WindowShowState VivaldiBrowserWindow::GetRestoredState() const {
   if (!widget_)
-    return ui::SHOW_STATE_DEFAULT;
+    return ui::mojom::WindowShowState::kDefault;
 
   // First normal states are checked.
   if (IsFullscreen())
-    return ui::SHOW_STATE_FULLSCREEN;
+    return ui::mojom::WindowShowState::kFullscreen;
   if (IsMaximized())
-    return ui::SHOW_STATE_MAXIMIZED;
+    return ui::mojom::WindowShowState::kMaximized;
 
 #if defined(USE_AURA)
   // Use kRestoreShowStateKey in case a window is minimized/hidden.
-  ui::WindowShowState restore_state = widget_->GetNativeWindow()->GetProperty(
+  ui::mojom::WindowShowState restore_state =
+      widget_->GetNativeWindow()->GetProperty(
       aura::client::kRestoreShowStateKey);
 
   // Whitelist states to return so that invalid and transient states
   // are not saved and used to restore windows when they are recreated.
   switch (restore_state) {
-    case ui::SHOW_STATE_NORMAL:
-    case ui::SHOW_STATE_MAXIMIZED:
-    case ui::SHOW_STATE_FULLSCREEN:
+    case ui::mojom::WindowShowState::kNormal:
+    case ui::mojom::WindowShowState::kMaximized:
+    case ui::mojom::WindowShowState::kFullscreen:
       return restore_state;
     default:
       break;
   }
 #endif
 
-  return ui::SHOW_STATE_NORMAL;
+  return ui::mojom::WindowShowState::kNormal;
 }
 
 gfx::Rect VivaldiBrowserWindow::GetBounds() const {
@@ -1756,10 +1775,12 @@ bool VivaldiBrowserWindow::IsDownloadShelfVisible() const {
 }
 
 DownloadShelf* VivaldiBrowserWindow::GetDownloadShelf() {
-  return NULL;
+  return nullptr;
 }
 
 views::View* VivaldiBrowserWindow::GetTopContainer() {
+  // TODO: Will implement js-events in VB-111658.
+//  return GetContentsView();
   return nullptr;
 }
 
@@ -1974,20 +1995,20 @@ void VivaldiBrowserWindow::OnNativeWindowChanged(bool moved) {
   WindowStateData old_state = window_state_data_;
   WindowStateData new_state;
   if (widget_->IsFullscreen()) {
-    new_state.state = ui::SHOW_STATE_FULLSCREEN;
+    new_state.state = ui::mojom::WindowShowState::kFullscreen;
   } else if (widget_->IsMaximized()) {
-    new_state.state = ui::SHOW_STATE_MAXIMIZED;
+    new_state.state = ui::mojom::WindowShowState::kMaximized;
   } else if (widget_->IsMinimized()) {
-    new_state.state = ui::SHOW_STATE_MINIMIZED;
+    new_state.state = ui::mojom::WindowShowState::kMinimized;
   } else {
-    new_state.state = ui::SHOW_STATE_NORMAL;
+    new_state.state = ui::mojom::WindowShowState::kNormal;
   }
   new_state.bounds = widget_->GetWindowBoundsInScreen();
 
   // Call the delegate so it can dispatch events to the js side.
   // Ignore the case when moving away from the initial value
-  // ui::SHOW_STATE_DEFAULT to the first valid state.
-  if (old_state.state != ui::SHOW_STATE_DEFAULT &&
+  //  ui::mojom::WindowShowState::kDefault to the first valid state.
+  if (old_state.state != ui::mojom::WindowShowState::kDefault &&
       old_state.state != new_state.state) {
     OnStateChanged(new_state.state);
   }
@@ -2070,10 +2091,12 @@ void VivaldiBrowserWindow::OnActiveTabChanged(
     int reason) {
   UpdateTitleBar();
 
-  if (infobar_container_) {
-    infobar_container_->ChangeInfoBarManager(
-        infobars::ContentInfoBarManager::FromWebContents(new_contents));
-  }
+  extensions::VivaldiRootDocumentHandler* rootdocument_handler =
+      extensions::VivaldiRootDocumentHandlerFactory::GetForBrowserContext(
+          browser_->profile());
+
+  rootdocument_handler->InfoBarContainer()->ChangeInfoBarManager(
+      infobars::ContentInfoBarManager::FromWebContents(new_contents));
 }
 
 web_modal::WebContentsModalDialogHost*
@@ -2093,7 +2116,7 @@ bool VivaldiBrowserWindow::IsFullscreen() const {
   return widget_->IsFullscreen();
 }
 
-void VivaldiBrowserWindow::OnStateChanged(ui::WindowShowState state) {
+void VivaldiBrowserWindow::OnStateChanged(ui::mojom::WindowShowState state) {
   if (browser_.get() == nullptr) {
     return;
   }
@@ -2147,6 +2170,14 @@ ui::ElementContext VivaldiBrowserWindow::GetElementContext() {
 
 int VivaldiBrowserWindow::GetTopControlsHeight() const {
   return 0;
+}
+
+void VivaldiBrowserWindow::OnTabDetached(content::WebContents* contents, bool was_active) {
+  extensions::VivaldiRootDocumentHandler* rootdocument_handler =
+      extensions::VivaldiRootDocumentHandlerFactory::GetForBrowserContext(
+          browser_->profile());
+
+  rootdocument_handler->InfoBarContainer()->ChangeInfoBarManager(nullptr);
 }
 
 sharing_hub::SharingHubBubbleView* VivaldiBrowserWindow::ShowSharingHubBubble(
@@ -2297,7 +2328,7 @@ std::unique_ptr<content::EyeDropper> VivaldiBrowserWindow::OpenEyeDropper(
 }
 
 user_education::FeaturePromoController*
-VivaldiBrowserWindow::GetFeaturePromoController() {
+VivaldiBrowserWindow::GetFeaturePromoControllerImpl() {
   return nullptr;
 }
 
@@ -2311,19 +2342,7 @@ user_education::FeaturePromoResult VivaldiBrowserWindow::CanShowFeaturePromo(
   return user_education::FeaturePromoResult::Failure::kFeatureDisabled;
 }
 
-user_education::FeaturePromoResult VivaldiBrowserWindow::MaybeShowFeaturePromo(
-    user_education::FeaturePromoParams params) {
-  return user_education::FeaturePromoResult::Failure::kFeatureDisabled;
-}
-
-bool VivaldiBrowserWindow::MaybeShowStartupFeaturePromo(
-    user_education::FeaturePromoParams params) {
-  return false;
-}
-
-bool VivaldiBrowserWindow::CloseFeaturePromo(
-    const base::Feature& iph_feature,
-    user_education::EndFeaturePromoReason close_reason) {
+bool VivaldiBrowserWindow::AbortFeaturePromo(const base::Feature& iph_feature) {
   return false;
 }
 
@@ -2331,6 +2350,12 @@ user_education::FeaturePromoHandle
 VivaldiBrowserWindow::CloseFeaturePromoAndContinue(
     const base::Feature& iph_feature) {
   return {};
+}
+
+bool VivaldiBrowserWindow::NotifyFeaturePromoFeatureUsed(
+    const base::Feature& feature,
+    FeaturePromoFeatureUsedAction action) {
+  return false;
 }
 
 user_education::DisplayNewBadge VivaldiBrowserWindow::MaybeShowNewBadgeFor(
@@ -2425,15 +2450,15 @@ std::optional<bool> VivaldiBrowserWindow::GetCanResizeFromWebAPI() const {
   return web_contents->GetPrimaryPage().GetResizable();
 }
 
-ui::WindowShowState VivaldiBrowserWindow::GetWindowShowState() const {
+ui::mojom::WindowShowState VivaldiBrowserWindow::GetWindowShowState() const {
   if (IsMaximized()) {
-    return ui::SHOW_STATE_MAXIMIZED;
+    return ui::mojom::WindowShowState::kMaximized;
   } else if (IsMinimized()) {
-    return ui::SHOW_STATE_MINIMIZED;
+    return ui::mojom::WindowShowState::kMinimized;
   } else if (IsFullscreen()) {
-    return ui::SHOW_STATE_FULLSCREEN;
+    return ui::mojom::WindowShowState::kFullscreen;
   } else {
-    return ui::SHOW_STATE_DEFAULT;
+    return ui::mojom::WindowShowState::kDefault;
   }
 }
 
@@ -2453,6 +2478,21 @@ void VivaldiBrowserWindow::BeforeUnloadFired(content::WebContents* source) {
       FROM_HERE, base::BindOnce(&VivaldiBrowserWindow::DeleteThis,
                                 base::Unretained(this)));
 }
+
+void VivaldiBrowserWindow::ShowToast(
+    const ToastSpecification* spec,
+    std::vector<std::u16string> body_string_replacement_params) {
+  extensions::vivaldi::window_private::ToastParameters params;
+  std::u16string body = l10n_util::GetStringFUTF16(spec->body_string_id(), body_string_replacement_params, nullptr);
+  params.body = base::UTF16ToUTF8(body);
+
+  ::vivaldi::BroadcastEvent(
+      extensions::vivaldi::window_private::OnToastMessage::kEventName,
+      extensions::vivaldi::window_private::OnToastMessage::Create(id(), params),
+      browser_->profile());
+}
+
+/*********************/
 
 VivaldiToolbarButtonProvider::VivaldiToolbarButtonProvider(
     VivaldiBrowserWindow* window)
@@ -2508,11 +2548,6 @@ void VivaldiToolbarButtonProvider::ZoomChangedForActiveTab(
     bool can_show_bubble) {}
 
 AvatarToolbarButton* VivaldiToolbarButtonProvider::GetAvatarToolbarButton() {
-  return nullptr;
-}
-
-ManagementToolbarButton*
-VivaldiToolbarButtonProvider::GetManagementToolbarButton() {
   return nullptr;
 }
 

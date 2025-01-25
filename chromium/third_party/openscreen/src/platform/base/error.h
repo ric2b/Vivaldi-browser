@@ -292,7 +292,7 @@ class ErrorOr {
 
   ErrorOr(const ErrorOr& other) = delete;
   ErrorOr(ErrorOr&& other) noexcept : is_value_(other.is_value_) {
-    // NB: Both |value_| and |error_| are uninitialized memory at this point!
+    // NB: Both `value_` and `error_` are uninitialized memory at this point!
     // Unlike the other constructors, the compiler will not auto-generate
     // constructor calls for either union member because neither appeared in
     // this constructor's initializer list.
@@ -311,7 +311,7 @@ class ErrorOr {
   }
 
   ~ErrorOr() {
-    // NB: |value_| or |error_| must be explicitly destroyed since the compiler
+    // NB: `value_` or `error_` must be explicitly destroyed since the compiler
     // will not auto-generate the destructor calls for union members.
     if (is_value_) {
       value_.~ValueType();
@@ -362,14 +362,14 @@ class ErrorOr {
   }
 
  private:
-  // Only one of these is an active member, determined by |is_value_|. Since
+  // Only one of these is an active member, determined by `is_value_`. Since
   // they are union'ed, they must be explicitly constructed and destroyed.
   union {
     ValueType value_;
     Error error_;
   };
 
-  // If true, |value_| is initialized and active. Otherwise, |error_| is
+  // If true, `value_` is initialized and active. Otherwise, `error_` is
   // initialized and active.
   const bool is_value_;
 };

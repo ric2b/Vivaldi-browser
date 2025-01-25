@@ -165,6 +165,8 @@ declare global {
         touchAccessibility?: boolean;
         mouseButton?: SyntheticMouseEventButton;
         isDoubleClick?: boolean;
+        isTripleClick?: boolean;
+        useRewriters?: boolean;
       }
 
       export enum SelectToSpeakState {
@@ -408,7 +410,8 @@ declare global {
           callback: SetNativeChromeVoxArcSupportForCurrentAppCallback): void;
 
       export function sendSyntheticKeyEvent(
-          keyEvent: SyntheticKeyboardEvent, useRewriters?: boolean): void;
+          keyEvent: SyntheticKeyboardEvent, useRewriters?: boolean,
+          isRepeat?: boolean): void;
 
       export function enableMouseEvents(enabled: boolean): void;
 
@@ -483,6 +486,11 @@ declare global {
 
       export function sendGestureInfoToSettings(gestureInfo: GestureInfo[]):
           void;
+
+      export function updateFaceGazeBubble(text: string, isWarning?: boolean):
+          void;
+
+      export function enableDragEventRewriter(enabled: boolean): void;
 
       export const onIntroduceChromeVox: ChromeEvent<() => void>;
 

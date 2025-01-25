@@ -163,6 +163,23 @@ static inline void load_u8_8x7(const uint8_t *s, ptrdiff_t p,
   *s6 = vld1_u8(s);
 }
 
+static inline void load_u8_8x6(const uint8_t *s, ptrdiff_t p,
+                               uint8x8_t *const s0, uint8x8_t *const s1,
+                               uint8x8_t *const s2, uint8x8_t *const s3,
+                               uint8x8_t *const s4, uint8x8_t *const s5) {
+  *s0 = vld1_u8(s);
+  s += p;
+  *s1 = vld1_u8(s);
+  s += p;
+  *s2 = vld1_u8(s);
+  s += p;
+  *s3 = vld1_u8(s);
+  s += p;
+  *s4 = vld1_u8(s);
+  s += p;
+  *s5 = vld1_u8(s);
+}
+
 static inline void load_u8_8x4(const uint8_t *s, const ptrdiff_t p,
                                uint8x8_t *const s0, uint8x8_t *const s1,
                                uint8x8_t *const s2, uint8x8_t *const s3) {
@@ -1214,6 +1231,20 @@ static inline uint16x8_t load_unaligned_u16_4x2(const uint16_t *buf,
   return vreinterpretq_u16_u64(a_u64);
 }
 
+static inline int16x8_t load_unaligned_s16_4x2(const int16_t *buf,
+                                               uint32_t stride) {
+  int64_t a;
+  int64x2_t a_s64;
+  memcpy(&a, buf, 8);
+  buf += stride;
+  a_s64 = vdupq_n_s64(0);
+  a_s64 = vsetq_lane_s64(a, a_s64, 0);
+  memcpy(&a, buf, 8);
+  buf += stride;
+  a_s64 = vsetq_lane_s64(a, a_s64, 1);
+  return vreinterpretq_s16_s64(a_s64);
+}
+
 static inline void load_unaligned_u16_4x4(const uint16_t *buf, uint32_t stride,
                                           uint16x8_t *tu0, uint16x8_t *tu1) {
   *tu0 = load_unaligned_u16_4x2(buf, stride);
@@ -1351,6 +1382,17 @@ static inline void store_u8x2_strided_x2(uint8_t *dst, uint32_t dst_stride,
   store_u8_2x1_lane(dst, src, 0);
   dst += dst_stride;
   store_u8_2x1_lane(dst, src, 1);
+}
+
+static inline void store_u8x2_strided_x4(uint8_t *dst, uint32_t dst_stride,
+                                         uint8x8_t src) {
+  store_u8_2x1_lane(dst, src, 0);
+  dst += dst_stride;
+  store_u8_2x1_lane(dst, src, 1);
+  dst += dst_stride;
+  store_u8_2x1_lane(dst, src, 2);
+  dst += dst_stride;
+  store_u8_2x1_lane(dst, src, 3);
 }
 
 // Store two blocks of 32-bits from a single vector.

@@ -17,6 +17,7 @@
   PrefBackedBoolean* _bookmarksMatchingEnabled;
   PrefBackedBoolean* _bookmarksNicknameMatchingEnabled;
   PrefBackedBoolean* _directMatchEnabled;
+  PrefBackedBoolean* _directMatchPrioritizationEnabled;
 }
 @end
 
@@ -56,6 +57,13 @@
     [_directMatchEnabled setObserver:self];
     [self booleanDidChange:_directMatchEnabled];
 
+    _directMatchPrioritizationEnabled =
+        [[PrefBackedBoolean alloc]
+           initWithPrefService:originalPrefService
+              prefName:vivaldiprefs::kAddressBarSearchDirectMatchBoosted];
+    [_directMatchPrioritizationEnabled setObserver:self];
+    [self booleanDidChange:_directMatchPrioritizationEnabled];
+
   }
   return self;
 }
@@ -76,6 +84,10 @@
   [_directMatchEnabled stop];
   [_directMatchEnabled setObserver:nil];
   _directMatchEnabled = nil;
+
+  [_directMatchPrioritizationEnabled stop];
+  [_directMatchPrioritizationEnabled setObserver:nil];
+  _directMatchPrioritizationEnabled = nil;
 
   _prefService = nil;
   _consumer = nil;
@@ -110,6 +122,13 @@
   return [_directMatchEnabled value];
 }
 
+- (BOOL)isDirectMatchPrioritizationEnabled {
+  if (!_directMatchPrioritizationEnabled) {
+    return NO;
+  }
+  return [_directMatchPrioritizationEnabled value];
+}
+
 #pragma mark - Properties
 
 - (void)setConsumer:(id<VivaldiAddressBarSettingsConsumer>)consumer {
@@ -120,6 +139,9 @@
   [self.consumer setPreferenceForEnableBookmarksNicknameMatching:
       [self isBookmarksNicknameMatchingEnabled]];
   [self.consumer setPreferenceForEnableDirectMatch:[self isDirectMatchEnabled]];
+  [self.consumer
+      setPreferenceForEnableDirectMatchPrioritization:
+          [self isDirectMatchPrioritizationEnabled]];
 }
 
 #pragma mark - VivaldiAddressBarSettingsConsumer
@@ -143,6 +165,11 @@
     [_directMatchEnabled setValue:enable];
 }
 
+- (void)setPreferenceForEnableDirectMatchPrioritization:(BOOL)enable {
+  if (enable != [self isDirectMatchPrioritizationEnabled])
+    [_directMatchPrioritizationEnabled setValue:enable];
+}
+
 #pragma mark - BooleanObserver
 
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
@@ -156,6 +183,10 @@
         [observableBoolean value]];
   } else if (observableBoolean == _directMatchEnabled) {
     [self.consumer setPreferenceForEnableDirectMatch:[observableBoolean value]];
+  } else if (observableBoolean == _directMatchPrioritizationEnabled) {
+    [self.consumer
+        setPreferenceForEnableDirectMatchPrioritization:
+            [observableBoolean value]];
   }
 }
 

@@ -11,8 +11,8 @@ import androidx.annotation.Nullable;
 import org.chromium.base.ObserverList;
 import org.chromium.base.Promise;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.customtabs.BaseCustomTabActivity;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
-import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar;
 import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar.CustomTabTabObserver;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -83,15 +83,13 @@ public class CurrentPageVerifier implements NativeInitObserver {
     @Inject
     public CurrentPageVerifier(
             ActivityLifecycleDispatcher lifecycleDispatcher,
-            TabObserverRegistrar tabObserverRegistrar,
-            CustomTabActivityTabProvider tabProvider,
-            BrowserServicesIntentDataProvider intentDataProvider,
-            Verifier delegate) {
-        mTabProvider = tabProvider;
+            BaseCustomTabActivity activity,
+            BrowserServicesIntentDataProvider intentDataProvider) {
+        mTabProvider = activity.getCustomTabActivityTabProvider();
         mIntentDataProvider = intentDataProvider;
-        mDelegate = delegate;
+        mDelegate = activity.getVerifier();
 
-        tabObserverRegistrar.registerActivityTabObserver(mVerifyOnPageLoadObserver);
+        activity.getTabObserverRegistrar().registerActivityTabObserver(mVerifyOnPageLoadObserver);
         lifecycleDispatcher.register(this);
     }
 

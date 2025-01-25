@@ -35,15 +35,17 @@ static HomogeneousCoordinate ProjectHomogeneousPoint(
   // ray (point p and z-axis direction) that we are trying to project. This
   // happens when the layer is rotated so that it is infinitesimally thin, or
   // when it is co-planar with the camera origin -- i.e. when the layer is
-  // invisible anyway.
-  if (!std::isnormal(m22))
-    return HomogeneousCoordinate(0.0, 0.0, 0.0, 1.0);
+  // invisible anyway. Return an invalid point.
+  if (!std::isnormal(m22)) {
+    return HomogeneousCoordinate(0.0, 0.0, 0.0, 0.0);
+  }
   SkScalar z = -(transform.rc(2, 0) * p.x() + transform.rc(2, 1) * p.y() +
                  transform.rc(2, 3)) /
                m22;
   // Same underlying condition as the previous early return.
-  if (!std::isfinite(z))
-    return HomogeneousCoordinate(0.0, 0.0, 0.0, 1.0);
+  if (!std::isfinite(z)) {
+    return HomogeneousCoordinate(0.0, 0.0, 0.0, 0.0);
+  }
 
   HomogeneousCoordinate result(p.x(), p.y(), z, 1.0);
   transform.TransformVector4(result.vec.data());
@@ -731,15 +733,6 @@ gfx::PointF MathUtil::ProjectPoint(const gfx::Transform& transform,
   // and (2) this behavior is more consistent with existing behavior of WebKit
   // transforms if the user really does not ignore the return value.
   return h.CartesianPoint2d();
-}
-
-gfx::Point3F MathUtil::ProjectPoint3D(const gfx::Transform& transform,
-                                      const gfx::PointF& p,
-                                      bool* clipped) {
-  HomogeneousCoordinate h = ProjectHomogeneousPoint(transform, p, clipped);
-  if (!h.w())
-    return gfx::Point3F();
-  return h.CartesianPoint3d();
 }
 
 gfx::RectF MathUtil::ScaleRectProportional(const gfx::RectF& input_outer_rect,

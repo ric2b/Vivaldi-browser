@@ -34,9 +34,9 @@ import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import {IsolateSelector} from './IsolateSelector.js';
-import {type ProfileType} from './ProfileHeader.js';
+import type {ProfileType} from './ProfileHeader.js';
 import profileLauncherViewStyles from './profileLauncherView.css.js';
-import {type ProfilesPanel} from './ProfilesPanel.js';
+import type {ProfilesPanel} from './ProfilesPanel.js';
 
 const UIStrings = {
   /**
@@ -195,7 +195,7 @@ export class ProfileLauncherView extends Common.ObjectWrapper.eventMixin<EventTy
   restoreSelectedProfileType(): void {
     let typeId = this.selectedProfileTypeSetting.get();
     if (!this.typeIdToOptionElementAndProfileType.has(typeId)) {
-      typeId = this.typeIdToOptionElementAndProfileType.keys().next().value;
+      typeId = this.typeIdToOptionElementAndProfileType.keys().next().value as string;
       this.selectedProfileTypeSetting.set(typeId);
     }
 

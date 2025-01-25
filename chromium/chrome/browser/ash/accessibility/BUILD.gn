@@ -47,6 +47,7 @@ static_library("accessibility") {
     "//chrome/browser/ui/aura/accessibility",
     "//chrome/common",
     "//chrome/common:constants",
+    "//chromeos/ash/components/audio/public/cpp/sounds",
     "//chromeos/ash/components/browser_context_helper",
     "//chromeos/ash/components/dbus/upstart",
     "//chromeos/ash/components/language_packs",
@@ -59,7 +60,6 @@ static_library("accessibility") {
     "//extensions/browser/api/virtual_keyboard_private:virtual_keyboard_delegate",
     "//extensions/common:mojom",
     "//services/accessibility:buildflags",
-    "//services/audio/public/cpp",
     "//ui/content_accelerators",
     "//ui/events/ash",
     "//ui/views/controls/webview",
@@ -209,6 +209,7 @@ source_set("browser_tests") {
     "//chrome/test:test_support",
     "//chromeos/ash/components/browser_context_helper",
     "//components/live_caption:constants",
+    "//ui/base/mojom:ui_base_types",
     "//ui/events:test_support",
 
     # Tests from subdirectories:

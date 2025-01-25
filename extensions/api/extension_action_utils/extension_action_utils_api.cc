@@ -108,23 +108,15 @@ std::string GetShortcutTextForExtensionAction(
 }
 
 // Encodes the passed bitmap as a PNG represented as a dataurl.
-std::string EncodeBitmapToPng(const SkBitmap* bitmap) {
-  unsigned char* inputAddr =
-      bitmap->bytesPerPixel() == 1
-          ? reinterpret_cast<unsigned char*>(bitmap->getAddr8(0, 0))
-          : reinterpret_cast<unsigned char*>(
-                bitmap->getAddr32(0, 0));  // bpp = 4
+std::string EncodeBitmapToPng(const SkBitmap& bitmap) {
 
-  std::vector<unsigned char> png_data;
-  std::vector<gfx::PNGCodec::Comment> comments;
-  gfx::PNGCodec::Encode(inputAddr, gfx::PNGCodec::FORMAT_SkBitmap,
-                        gfx::Size(bitmap->width(), bitmap->height()),
-                        bitmap->rowBytes(), false, comments, &png_data);
+  std::optional<std::vector<uint8_t>> data =
+      gfx::PNGCodec::EncodeBGRASkBitmap(bitmap, /*discard_transparency=*/false);
+  if (!data) {
+    return std::string();
+  }
 
-  std::string_view base64_input(reinterpret_cast<const char*>(&png_data[0]),
-                                 png_data.size());
-  std::string base64_output;
-  base64_output = base::Base64Encode(base64_input);
+  std::string base64_output = base::Base64Encode(data.value());
   base64_output.insert(0, "data:image/png;base64,");
 
   return base64_output;
@@ -176,6 +168,7 @@ void FillBitmapForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
     float device_scale = ui::GetScaleFactorForNativeView(
         browser ? browser->window()->GetNativeWindow() : nullptr);
 #endif  // USE_HARDCODED_SCALE
+
     gfx::ImageSkia skia = image.AsImageSkia();
     gfx::ImageSkiaRep rep = skia.GetRepresentation(device_scale);
     if (rep.scale() != device_scale) {
@@ -185,7 +178,7 @@ void FillBitmapForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
     if (rep.is_null()) {
       info->badge_icon = std::string();
     } else {
-      info->badge_icon = EncodeBitmapToPng(&rep.GetBitmap());
+      info->badge_icon = EncodeBitmapToPng(rep.GetBitmap());
     }
   } else {
     info->badge_icon = std::string();
@@ -277,7 +270,7 @@ content::BrowserContext* ExtensionActionUtilFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
   // Redirected in incognito.
   return ExtensionsBrowserClient::Get()->GetContextRedirectedToOriginal(
-      context, /*force_guest_profile=*/true);
+      context);
 }
 
 // static
@@ -318,7 +311,7 @@ void ExtensionActionUtil::SendIconLoaded(
 
 ExtensionActionUtil::ExtensionActionUtil(Profile* profile) : profile_(profile) {
   ExtensionRegistry::Get(profile_)->AddObserver(this);
-  ExtensionActionAPI::Get(profile)->AddObserver(this);
+  extensions::ExtensionActionDispatcher::Get(profile)->AddObserver(this);
   CommandService::Get(profile_)->AddObserver(this);
 }
 
@@ -348,6 +341,7 @@ void ExtensionActionUtil::GetExtensionsInfo(
     info.optionspage = OptionsPageInfo::GetOptionsPage(extension).spec();
     info.homepage = ManifestURL::GetHomepageURL(extension).spec();
     info.tab_id = ExtensionAction::kDefaultTabId;
+    info.blocked = registry->blocked_extensions().Contains(info.id);
 
     // Extensions that has an action needs to be exposed in
     // ExtensionActionToolbar and require all information.
@@ -400,7 +394,7 @@ void ExtensionActionUtil::FillInfoForTabId(
 
 void ExtensionActionUtil::Shutdown() {
   ExtensionRegistry::Get(profile_)->RemoveObserver(this);
-  ExtensionActionAPI::Get(profile_)->RemoveObserver(this);
+  extensions::ExtensionActionDispatcher::Get(profile_)->RemoveObserver(this);
   CommandService::Get(profile_)->RemoveObserver(this);
 }
 
@@ -675,6 +669,8 @@ ExtensionActionUtilsGetToolbarExtensionsFunction::Run() {
   utilsTest->GetExtensionsInfo(registry->disabled_extensions(),
                                &toolbar_extensionactions);
   utilsTest->GetExtensionsInfo(registry->terminated_extensions(),
+                               &toolbar_extensionactions);
+  utilsTest->GetExtensionsInfo(registry->blocked_extensions(),
                                &toolbar_extensionactions);
 
   return RespondNow(ArgumentList(Results::Create(toolbar_extensionactions)));
@@ -1160,7 +1156,6 @@ VivaldiExtensionDisabledGlobalError::GetBubbleView() {
 
 void VivaldiExtensionDisabledGlobalError::OnShutdown(
     ExtensionRegistry* registry) {
-  DCHECK_EQ(ExtensionRegistry::Get(service_->profile()), registry);
   registry_observation_.Reset();
 }
 

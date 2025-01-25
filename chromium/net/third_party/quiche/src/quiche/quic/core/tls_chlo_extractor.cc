@@ -212,15 +212,13 @@ bool TlsChloExtractor::OnUnauthenticatedPublicHeader(
   }
   // QuicFramer is constructed without knowledge of the server's connection ID
   // so it needs to be set up here in order to decrypt the packet.
-  if (GetQuicRestartFlag(quic_dispatcher_ack_buffered_initial_packets)) {
-    // Only call SetInitialObfuscators once for the first ingested packet, whose
-    // |header.destination_connection_id| is the original connection ID.
-    if (framer_->GetDecrypter(ENCRYPTION_INITIAL) == nullptr) {
-      framer_->SetInitialObfuscators(header.destination_connection_id);
-    }
-  } else {
+  //
+  // Only call SetInitialObfuscators once for the first ingested packet, whose
+  // |header.destination_connection_id| is the original connection ID.
+  if (framer_->GetDecrypter(ENCRYPTION_INITIAL) == nullptr) {
     framer_->SetInitialObfuscators(header.destination_connection_id);
   }
+
   return true;
 }
 
@@ -397,6 +395,7 @@ void TlsChloExtractor::HandleParsedChlo(const SSL_CLIENT_HELLO* client_hello) {
                                 alpn_len);
     absl::string_view alpns_payload;
     if (!alpns_reader.ReadStringPiece16(&alpns_payload)) {
+      QUIC_CODE_COUNT_N(quic_chlo_alpns_invalid, 1, 2);
       HandleUnrecoverableError("Failed to read alpns_payload");
       return;
     }
@@ -404,6 +403,7 @@ void TlsChloExtractor::HandleParsedChlo(const SSL_CLIENT_HELLO* client_hello) {
     while (!alpns_payload_reader.IsDoneReading()) {
       absl::string_view alpn_payload;
       if (!alpns_payload_reader.ReadStringPiece8(&alpn_payload)) {
+        QUIC_CODE_COUNT_N(quic_chlo_alpns_invalid, 2, 2);
         HandleUnrecoverableError("Failed to read alpn_payload");
         return;
       }

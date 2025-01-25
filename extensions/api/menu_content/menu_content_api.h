@@ -35,12 +35,15 @@ class MenuContentAPI : public BrowserContextKeyedAPI,
   void MenuModelChanged(menus::Menu_Model* model,
                         int64_t select_id,
                         const std::string& menu_name) override;
+  void MenuModelReset(menus::Menu_Model* model, bool all) override;
 
   // Functions that will send events to JS.
   static void SendOnChanged(content::BrowserContext* context,
                             menus::Menu_Model* model,
                             int64_t select_id,
                             const std::string& named_menu);
+  static void SendOnResetAll(content::BrowserContext* context,
+                            menus::Menu_Model* model);
 
   // KeyedService implementation.
   void Shutdown() override;
@@ -149,10 +152,26 @@ class MenuContentResetFunction : public ExtensionFunction,
   MenuContentResetFunction() = default;
 
   // ::menus::MenuModelObserver
-  void MenuModelReset(menus::Menu_Model* model) override;
+  void MenuModelReset(menus::Menu_Model* model, bool all) override;
 
  private:
   ~MenuContentResetFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+};
+
+class MenuContentResetAllFunction : public ExtensionFunction,
+                                    public ::menus::MenuModelObserver {
+ public:
+  DECLARE_EXTENSION_FUNCTION("menuContent.resetAll", MENUCONTENT_RESET_ALL)
+  MenuContentResetAllFunction() = default;
+
+  // ::menus::MenuModelObserver
+  void MenuModelReset(menus::Menu_Model* model, bool all) override;
+
+ private:
+  ~MenuContentResetAllFunction() override = default;
 
   // ExtensionFunction:
   ResponseAction Run() override;

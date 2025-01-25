@@ -36,7 +36,7 @@ class TlsConnectionPosix : public TlsConnection {
   bool Send(ByteView data) override;
   IPEndpoint GetRemoteEndpoint() const override;
 
-  // Registers |this| with the platform TlsDataRouterPosix.  This is called
+  // Registers `this` with the platform TlsDataRouterPosix.  This is called
   // automatically by TlsConnectionFactoryPosix after the handshake completes.
   void RegisterConnectionWithDataRouter(PlatformClientPosix* platform_client);
 
@@ -51,7 +51,7 @@ class TlsConnectionPosix : public TlsConnection {
                      TaskRunner& task_runner);
 
  private:
-  // Called on any thread, to post a task to notify the Client that an |error|
+  // Called on any thread, to post a task to notify the Client that an `error`
   // has occurred.
   void DispatchError(Error error);
 

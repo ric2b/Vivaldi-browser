@@ -426,12 +426,7 @@ void ValidateAST::visitBuiltInFunction(TIntermOperator *node, const TFunction *f
         return;
     }
 
-    ImmutableStringBuilder opValueBuilder(16);
-    opValueBuilder << "op: ";
-    opValueBuilder.appendDecimal(op);
-
-    ImmutableString opValue = opValueBuilder;
-
+    ImmutableString opValue = BuildConcatenatedImmutableString("op: ", op);
     if (function == nullptr)
     {
         mDiagnostics->error(node->getLine(),
@@ -646,7 +641,9 @@ void ValidateAST::visitBuiltInVariable(TIntermSymbol *node)
             (name == "gl_CullDistance" && qualifier != EvqCullDistance) ||
             (name == "gl_FragDepth" && qualifier != EvqFragDepth) ||
             (name == "gl_LastFragData" && qualifier != EvqLastFragData) ||
-            (name == "gl_LastFragColorARM" && qualifier != EvqLastFragColor))
+            (name == "gl_LastFragColorARM" && qualifier != EvqLastFragColor) ||
+            (name == "gl_LastFragDepthARM" && qualifier != EvqLastFragDepth) ||
+            (name == "gl_LastFragStencilARM" && qualifier != EvqLastFragStencil))
         {
             mDiagnostics->error(
                 node->getLine(),

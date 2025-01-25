@@ -64,6 +64,9 @@ bool ConnectorDataPipeGetter::InternalMemoryMappedFile::DoInitialize() {
   void* mapped = mmap(nullptr, static_cast<size_t>(file_len), PROT_READ,
                       MAP_SHARED, file_.GetPlatformFile(), 0);
   if (mapped == MAP_FAILED) {
+    LOG(ERROR) << "Upload failure: The creation of a memory mapped file with "
+                  "MAP_SHARED failed for file "
+               << file_.GetPlatformFile();
     // Retry with MAP_PRIVATE mode.
     // Some file systems do not support MAP_SHARED. Here, it is acceptable to
     // use MAP_PRIVATE instead. Note: For MAP_PRIVATE, it is unspecified whether
@@ -73,9 +76,9 @@ bool ConnectorDataPipeGetter::InternalMemoryMappedFile::DoInitialize() {
                   MAP_PRIVATE, file_.GetPlatformFile(), 0);
   }
   if (mapped == MAP_FAILED) {
-    DPLOG(ERROR) << "Upload failure: The creation of a memory mapped file "
-                    "failed for file "
-                 << file_.GetPlatformFile();
+    LOG(ERROR) << "Upload failure: The creation of a memory mapped file with "
+                  "MAP_PRIVATE failed for file "
+               << file_.GetPlatformFile();
     return false;
   }
   length_ = static_cast<size_t>(file_len);
@@ -101,7 +104,8 @@ void ConnectorDataPipeGetter::InternalMemoryMappedFile::CloseHandles() {
 std::unique_ptr<ConnectorDataPipeGetter>
 ConnectorDataPipeGetter::CreateMultipartPipeGetter(const std::string& boundary,
                                                    const std::string& metadata,
-                                                   base::File file) {
+                                                   base::File file,
+                                                   bool is_obfuscated) {
   if (!file.IsValid()) {
     return nullptr;
   }
@@ -111,8 +115,8 @@ ConnectorDataPipeGetter::CreateMultipartPipeGetter(const std::string& boundary,
     return nullptr;
   }
 
-  return std::make_unique<ConnectorDataPipeGetter>(boundary, metadata,
-                                                   std::move(mm_file));
+  return std::make_unique<ConnectorDataPipeGetter>(
+      boundary, metadata, std::move(mm_file), is_obfuscated);
 }
 
 // static
@@ -136,7 +140,8 @@ ConnectorDataPipeGetter::CreateMultipartPipeGetter(
 
 // static
 std::unique_ptr<ConnectorDataPipeGetter>
-ConnectorDataPipeGetter::CreateResumablePipeGetter(base::File file) {
+ConnectorDataPipeGetter::CreateResumablePipeGetter(base::File file,
+                                                   bool is_obfuscated) {
   if (!file.IsValid()) {
     return nullptr;
   }
@@ -146,9 +151,9 @@ ConnectorDataPipeGetter::CreateResumablePipeGetter(base::File file) {
     return nullptr;
   }
 
-  return std::make_unique<ConnectorDataPipeGetter>(/*boundary*/ std::string(),
-                                                   /*metadata*/ std::string(),
-                                                   std::move(mm_file));
+  return std::make_unique<ConnectorDataPipeGetter>(
+      /*boundary*/ std::string(),
+      /*metadata*/ std::string(), std::move(mm_file), is_obfuscated);
 }
 
 // static
@@ -170,13 +175,19 @@ ConnectorDataPipeGetter::CreateResumablePipeGetter(
 ConnectorDataPipeGetter::ConnectorDataPipeGetter(
     const std::string& boundary,
     const std::string& metadata,
-    std::unique_ptr<InternalMemoryMappedFile> file)
+    std::unique_ptr<InternalMemoryMappedFile> file,
+    bool is_obfuscated)
     : ConnectorDataPipeGetter(boundary,
                               metadata,
                               std::move(file),
                               base::ReadOnlySharedMemoryMapping()) {
   file_data_pipe_ = true;
   CHECK(file_->IsValid());
+
+  if (is_obfuscated) {
+    deobfuscator_ =
+        std::make_unique<enterprise_obfuscation::DownloadObfuscator>();
+  }
 }
 
 ConnectorDataPipeGetter::ConnectorDataPipeGetter(
@@ -205,7 +216,18 @@ void ConnectorDataPipeGetter::Read(mojo::ScopedDataPipeProducerHandle pipe,
                                    ReadCallback callback) {
   Reset();
 
-  std::move(callback).Run(net::OK, FullSize());
+  if (deobfuscator_ && file_data_pipe_) {
+    CHECK(file_->IsValid());
+    auto overhead =
+        deobfuscator_->CalculateDeobfuscationOverhead(file_->bytes());
+    if (!overhead.value()) {
+      return;
+    }
+    // Pass the size of the deobfuscated data to the data pipe producer.
+    std::move(callback).Run(net::OK, FullSize() - overhead.value());
+  } else {
+    std::move(callback).Run(net::OK, FullSize());
+  }
 
   pipe_ = std::move(pipe);
   watcher_ = std::make_unique<mojo::SimpleWatcher>(
@@ -306,7 +328,31 @@ bool ConnectorDataPipeGetter::WriteFileData() {
 
   base::span<const uint8_t> bytes = file_->bytes();
   bytes = bytes.subspan(base::checked_cast<size_t>(file_offset));
-  return Write(bytes);
+
+  if (!deobfuscator_) {
+    return Write(bytes);
+  }
+
+  // For obfuscated files, we deobfuscate chunk by chunk and write it
+  // incrementally.
+  while (!bytes.empty()) {
+    auto deobfuscated_chunk = deobfuscator_->GetNextDeobfuscatedChunk(bytes);
+    if (!deobfuscated_chunk.has_value()) {
+      Reset();
+      return false;
+    }
+
+    if (!Write(deobfuscated_chunk.value())) {
+      return false;
+    }
+
+    size_t offset = deobfuscator_->GetNextChunkOffset();
+
+    // Update positions and move to the next chunk to deobfuscate.
+    write_position_ += offset;
+    bytes = bytes.subspan(offset);
+  }
+  return true;
 }
 
 bool ConnectorDataPipeGetter::WritePageData() {
@@ -339,7 +385,13 @@ bool ConnectorDataPipeGetter::Write(base::span<const uint8_t> data) {
     }
 
     data = data.subspan(actually_written_bytes);
-    write_position_ += actually_written_bytes;
+    if (deobfuscator_) {
+      // Update write position within the current deobfuscated chunk for the
+      // next call.
+      deobfuscator_->UpdateDeobfuscatedChunkPosition(actually_written_bytes);
+    } else {
+      write_position_ += actually_written_bytes;
+    }
   }
 }
 

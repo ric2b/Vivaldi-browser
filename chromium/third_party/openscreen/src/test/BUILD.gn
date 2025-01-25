@@ -20,6 +20,7 @@ openscreen_source_set("test_main") {
   deps = [
     "../platform",
     "../platform:standalone_impl",
+    "../third_party/getopt",
     "../third_party/googletest:gtest",
   ]
 }

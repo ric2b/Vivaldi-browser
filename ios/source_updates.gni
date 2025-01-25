@@ -26,28 +26,20 @@ update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui") {
   ]
 }
 
-update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs:inactive_tabs_button_ui_swift") {
-  sources -= [
-    "inactive_tabs_button.swift",
-  ]
-
-  sources += [
-    "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/inactive_tabs_button+vivaldi.swift",
-  ]
-}
-
 update_template_instance("//ios/chrome/widget_kit_extension:widget_kit_extension_swift") {
   sources -= [
     "main.swift",
     "search_widget.swift",
     "quick_actions_widget.swift",
-    "lockscreen_launcher_widget.swift"
+    "lockscreen_launcher_widget.swift",
+    "shortcuts_widget.swift"
   ]
   sources += [
     "//vivaldi/ios/chrome/widget_kit_extension/main.swift",
     "//vivaldi/ios/chrome/widget_kit_extension/search_widget.swift",
     "//vivaldi/ios/chrome/widget_kit_extension/quick_actions_widget.swift",
     "//vivaldi/ios/chrome/widget_kit_extension/lockscreen_launcher_widget.swift",
+    "//vivaldi/ios/chrome/widget_kit_extension/shortcuts_widget.swift",
   ]
 }
 

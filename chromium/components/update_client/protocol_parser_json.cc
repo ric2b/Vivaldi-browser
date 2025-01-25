@@ -199,9 +199,9 @@ bool ParseUpdateCheck(const base::Value& updatecheck_node_val,
   }
   const base::Value::Dict& updatecheck_node = updatecheck_node_val.GetDict();
 
-  for (auto kv : updatecheck_node) {
-    if (!kv.first.empty() && kv.first.front() == '_' && kv.second.is_string()) {
-      result->custom_attributes[kv.first] = kv.second.GetString();
+  for (auto [k, v] : updatecheck_node) {
+    if (!k.empty() && k.front() == '_' && v.is_string()) {
+      result->custom_attributes[k] = v.GetString();
     }
   }
 
@@ -257,7 +257,7 @@ bool ParseApp(const base::Value& app_node_val,
     return false;
   }
   const base::Value::Dict& app_node = app_node_val.GetDict();
-  for (const auto* cohort_key :
+  for (const auto& cohort_key :
        {ProtocolParser::Result::kCohort, ProtocolParser::Result::kCohortHint,
         ProtocolParser::Result::kCohortName}) {
     const std::string* cohort_value = app_node.FindString(cohort_key);

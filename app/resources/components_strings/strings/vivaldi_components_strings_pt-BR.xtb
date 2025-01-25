@@ -10,6 +10,7 @@
 <translation id="132390688737681464">Salvar e preencher endereços</translation>
 <translation id="1375198122581997741">Sobre a Versão</translation>
 <translation id="139305205187523129">Nenhum dado foi enviado por <ph name="HOST_NAME" />.</translation>
+<translation id="1555191101192706055">Os invasores no site que você tentou visitar podem induzi-lo a instalar software prejudicial que afeta a maneira como você navega — por exemplo, alterando sua página inicial ou exibindo anúncios extras nos sites que você visita.</translation>
 <translation id="1559528461873125649">Arquivo ou diretório não encontrado</translation>
 <translation id="1640244768702815859">Tente <ph name="BEGIN_LINK" />visitar a página inicial do site<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocolo não suportado</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Verificar o proxy e o firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emitido para: <ph name="ORGANIZATION" /> (<ph name="JURISDICTION" />)</translation>
 <translation id="2166378884831602661">Não foi possível estabelecer uma conexão segura com este site</translation>
+<translation id="2178904466768126352">Os invasores no site que você tentou visitar podem instalar software prejudicial que rouba ou exclui itens como senhas, fotos, mensagens ou números de cartão de crédito.</translation>
 <translation id="2187317261103489799">Detectar (padrão)</translation>
 <translation id="2224337661447660594">Sem Internet</translation>
 <translation id="2283340219607151381">Salvar e preencher endereços</translation>
@@ -92,6 +94,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Verificar as configurações do antivírus e do firewall<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Tente executar o Diagnóstico de Rede<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Válido</translation>
+<translation id="4241830393007970744">Os invasores no site que você tentou visitar podem induzi-lo a instalar software ou revelar coisas como senhas, telefone ou números de cartão de crédito.</translation>
 <translation id="4250431568374086873">Sua conexão com esse site não é completamente segura</translation>
 <translation id="4265872034478892965">Permitido pelo administrador</translation>
 <translation id="4305666528087210886">Não foi possível acessar seu arquivo</translation>
@@ -102,6 +105,7 @@
 <translation id="4522570452068850558">Detalhes</translation>
 <translation id="4558551763791394412">Tente desativar suas extensões.</translation>
 <translation id="4592951414987517459">Sua conexão com <ph name="DOMAIN" /> foi criptografada usando um pacote de criptografia moderno.</translation>
+<translation id="4598641255230617220">Colar e ir</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">A conexão foi interrompida</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Executar o Diagnóstico de Rede do Windows<ph name="END_LINK" /></translation>
@@ -111,6 +115,7 @@
 <translation id="4764776831041365478">A página em <ph name="URL" /> pode estar temporariamente indisponível ou pode ter sido movida permanentemente para um novo endereço.</translation>
 <translation id="483241715238664915">Habilitar avisos</translation>
 <translation id="4943872375798546930">Nenhum resultado</translation>
+<translation id="5017554619425969104">Texto copiado</translation>
 <translation id="5023310440958281426">Verifique as políticas do administrador</translation>
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 em uso)} other {(# em uso)}}</translation>
@@ -165,11 +170,11 @@
 <translation id="7108819624672055576">Permitida por uma extensão</translation>
 <translation id="7111012039238467737">(Válido)</translation>
 <translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
+<translation id="7126644664682723998">Colar e pesquisar</translation>
 <translation id="7179323680825933600">Salvar e preencher as formas de pagamento</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> não adere aos padrões de segurança.</translation>
 <translation id="7219179957768738017">A conexão usa a <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Mostrar notificações</translation>
-<translation id="7227747683324411744">Os invasores do site que você está tentando visitar podem induzi-lo a instalar softwares nocivos que afetam a maneira como você navega, por exemplo, alterando sua página inicial ou exibindo anúncios adicionais nos sites que você visita.</translation>
 <translation id="7353601530677266744">Linha de Comando</translation>
 <translation id="7364115444476960850">A página que você esta tentando acessar foi bloqueada pelo <ph name="BLOCKER_NAME" /> do Vivaldi</translation>
 <translation id="7419106976560586862">Caminho do Perfil</translation>
@@ -177,7 +182,6 @@
 <translation id="7518003948725431193">Nenhuma página foi encontrada para o endereço <ph name="URL" /></translation>
 <translation id="7549584377607005141">Esta página da Web necessita que os dados inseridos anteriormente sejam reenviados para ser exibida corretamente. É possível enviá-los novamente porém, ao fazer isso, você estará repetindo a ação realizada anteriormente na página.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> não consegue atender a esta solicitação no momento.</translation>
-<translation id="7605377493722372900">Os invasores do site que você está tentando visitar podem instalar um software nocivo que rouba ou exclui itens como sua senha, fotos, mensagens ou número de cartão de crédito.</translation>
 <translation id="7662298039739062396">Configuração controlada por uma extensão</translation>
 <translation id="7663736086183791259">Certificado <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">Certificado</translation>
@@ -203,7 +207,6 @@
 <translation id="8288807391153049143">Mostrar certificado</translation>
 <translation id="8289355894181816810">Entre em contato com seu administrador de rede se não souber o que isso significa.</translation>
 <translation id="8332188693563227489">O acesso a <ph name="HOST_NAME" /> foi negado</translation>
-<translation id="8422228580902424274">Invasores no site que você está tentando acessar podem induzir você a instalar um software ou compartilhar dados como senha, telefone ou número do cartão de crédito.</translation>
 <translation id="8473863474539038330">Endereços e mais</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> demorou muito para responder.</translation>
 <translation id="8503813439785031346">Nome de usuário</translation>

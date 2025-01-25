@@ -7,6 +7,7 @@ module auction_worklet.mojom;
 import "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom";
 import "content/services/auction_worklet/public/mojom/real_time_reporting.mojom";
 import "content/services/auction_worklet/public/mojom/reject_reason.mojom";
+import "content/services/auction_worklet/public/mojom/trusted_signals_cache.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "services/network/public/mojom/url_loader_factory.mojom";
 import "third_party/blink/public/mojom/devtools/devtools_agent.mojom";
@@ -14,28 +15,6 @@ import "third_party/blink/public/mojom/interest_group/ad_display_size.mojom";
 import "third_party/blink/public/mojom/interest_group/interest_group_types.mojom";
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
-
-struct PreviousWin {
-  // Approximate time a particular group won an auction.
-  //
-  // TODO(mmenke): Provide this as an integer time since an auction was won, in
-  // seconds, to reduce time resolution of cross-site information provided to an
-  // untrusted service.
-  //
-  // TODO(crbug.com/40765411): Decide what to do when wins are
-  // "in the future" due to clock changes.
-  mojo_base.mojom.Time time;
-
-  // A JSON serialized object corresponding to the ad that won the auction.
-  // This field is kept serialized to avoid deserializing unless we actually
-  // need the data inside. The internal message has the following structure:
-  // struct AdJSON {
-  //   string renderURL;
-  //   string adRenderId;
-  //   string metadata;  // JSON encoded metadata object
-  // };
-  string ad_json;
-};
 
 // Degree to which k-anonymity is enforced.
 enum KAnonymityBidMode {
@@ -81,26 +60,6 @@ struct BidderWorkletNonSharedParams {
   // A key is present iff it is sufficiently k-anonymous to
   // be used as an ad or an ad component.
   array<KAnonKey> kanon_keys;
-};
-
-// Browser signals passed to the BidderWorklet's generateBid() method that are
-// stored on disk and updated by the browser, as opposed to coming from the
-// frame running the auction, or from the definition of the InterestGroup taking
-// part in an auction.
-struct BiddingBrowserSignals {
-  // How many times this interest group has been joined in the period history
-  // is maintained.
-  int32 join_count;
-
-  // How many times this interest group has made bids in auctions.
-  int32 bid_count;
-
-  // Previous times the group won auctions.
-  array<PreviousWin> prev_wins;
-
-  // Whether the browser is under lockout or the buyer's origin is under
-  // cooldown for sending forDebuggingOnly reports.
-  bool for_debugging_only_in_cooldown_or_lockout;
 };
 
 // The results of running a FLEDGE generateBid() script.
@@ -216,6 +175,8 @@ struct BidderTimingMetrics {
   // execution which happened (which it might not have depending on the
   // execution mode).
   mojo_base.mojom.TimeDelta script_latency;
+
+  bool script_timed_out;
 };
 
 // Single use client for each GenerateBid() call. Allows deferring generating
@@ -414,6 +375,15 @@ interface BidderWorklet {
   //  InterestGroup definitions of the InterestGroups that can share this
   //  BidderWorklet.
   //
+  // `key_value_signals_cache_key`: When using version two of the trusted
+  //  signals key value protocol, this contains information needed to retrieve
+  //  the fetched signals for the call from the browser process through the
+  //  TrustedSignalsCache API. When the browser-side cache is disabled and
+  //  fetching is done by the worklet service directly, this should be null.
+  //  SetTrustedSignalsCache() must have already been called on the parent
+  //  AuctionWorkletService before creating the BidderWorklet in order to
+  //  pass in a non-null value.
+  //
   // `kanon_mode` determines whether to use k-anonymity to potentially re-run
   //  the bidding function with only ads that are k-anonymous and produce an
   //  alternative bid. See GenerateBidClient.OnGenerateBidComplete for more
@@ -480,6 +450,7 @@ interface BidderWorklet {
   //  that may be delivered later (via JS promises).
   BeginGenerateBid(
       BidderWorkletNonSharedParams bidder_worklet_non_shared_params,
+      TrustedSignalsCacheKey? key_value_signals_cache_key,
       KAnonymityBidMode kanon_mode,
       url.mojom.Origin interest_group_join_origin,
       url.mojom.Url? direct_from_seller_per_buyer_signals,
@@ -487,7 +458,7 @@ interface BidderWorklet {
       url.mojom.Origin browser_signal_seller_origin,
       url.mojom.Origin? browser_signal_top_level_seller_origin,
       mojo_base.mojom.TimeDelta browser_signal_recency,
-      BiddingBrowserSignals bidding_browser_signals,
+      blink.mojom.BiddingBrowserSignals bidding_browser_signals,
       mojo_base.mojom.Time auction_start_time,
       blink.mojom.AdSize? requested_ad_size,
       uint16 multi_bid_limit,

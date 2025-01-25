@@ -362,8 +362,7 @@ void RtcpTransceiverImpl::HandleReportBlocks(
   }
   NtpTime now_ntp = config_.clock->ConvertTimestampToNtpTime(now);
   uint32_t receive_time_ntp = CompactNtp(now_ntp);
-  Timestamp now_utc =
-      Timestamp::Millis(now_ntp.ToMs() - rtc::kNtpJan1970Millisecs);
+  Timestamp now_utc = Clock::NtpToUtc(now_ntp);
 
   for (const rtcp::ReportBlock& block : rtcp_report_blocks) {
     std::optional<TimeDelta> rtt;
@@ -375,7 +374,7 @@ void RtcpTransceiverImpl::HandleReportBlocks(
     auto sender_it = local_senders_by_ssrc_.find(block.source_ssrc());
     if (sender_it != local_senders_by_ssrc_.end()) {
       LocalSenderState& state = *sender_it->second;
-      state.report_block.SetReportBlock(sender_ssrc, block, now_utc);
+      state.report_block.SetReportBlock(sender_ssrc, block, now_utc, now);
       if (rtt.has_value()) {
         state.report_block.AddRoundTripTimeSample(*rtt);
       }
@@ -385,7 +384,7 @@ void RtcpTransceiverImpl::HandleReportBlocks(
       // No registered sender for this report block, still report it to the
       // network link.
       ReportBlockData report_block;
-      report_block.SetReportBlock(sender_ssrc, block, now_utc);
+      report_block.SetReportBlock(sender_ssrc, block, now_utc, now);
       if (rtt.has_value()) {
         report_block.AddRoundTripTimeSample(*rtt);
       }

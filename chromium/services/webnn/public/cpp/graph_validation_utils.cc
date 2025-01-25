@@ -20,6 +20,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/types/expected.h"
 #include "base/types/expected_macros.h"
+#include "base/types/fixed_array.h"
 #include "services/webnn/public/cpp/context_properties.h"
 #include "services/webnn/public/cpp/operand_descriptor.h"
 #include "services/webnn/public/cpp/supported_data_types.h"
@@ -317,38 +318,32 @@ base::expected<void, std::string> ValidateRecurrentNetworkOperand(
 
 std::string DataTypeConstraintToString(
     const SupportedDataTypes& constraint_set) {
-  std::vector<std::string> data_types;
-  data_types.reserve(constraint_set.size());
-  for (auto data_type : constraint_set) {
-    std::string data_type_as_string;
-    switch (data_type) {
-      case OperandDataType::kFloat32:
-        data_type_as_string = "float32";
-        break;
-      case OperandDataType::kFloat16:
-        data_type_as_string = "float16";
-        break;
-      case OperandDataType::kInt32:
-        data_type_as_string = "int32";
-        break;
-      case OperandDataType::kUint32:
-        data_type_as_string = "uint32";
-        break;
-      case OperandDataType::kInt64:
-        data_type_as_string = "int64";
-        break;
-      case OperandDataType::kUint64:
-        data_type_as_string = "uint64";
-        break;
-      case OperandDataType::kInt8:
-        data_type_as_string = "int8";
-        break;
-      case OperandDataType::kUint8:
-        data_type_as_string = "uint8";
-        break;
-    }
-    data_types.push_back(std::move(data_type_as_string));
-  }
+  base::FixedArray<std::string_view> data_types(constraint_set.size());
+  base::ranges::transform(constraint_set, data_types.begin(),
+                          [](OperandDataType data_type) {
+                            switch (data_type) {
+                              case OperandDataType::kFloat32:
+                                return "float32";
+                              case OperandDataType::kFloat16:
+                                return "float16";
+                              case OperandDataType::kInt32:
+                                return "int32";
+                              case OperandDataType::kUint32:
+                                return "uint32";
+                              case OperandDataType::kInt64:
+                                return "int64";
+                              case OperandDataType::kUint64:
+                                return "uint64";
+                              case OperandDataType::kInt8:
+                                return "int8";
+                              case OperandDataType::kUint8:
+                                return "uint8";
+                              case OperandDataType::kInt4:
+                                return "int4";
+                              case OperandDataType::kUint4:
+                                return "uint4";
+                            }
+                          });
   return base::JoinString(data_types, /*separator=*/",");
 }
 
@@ -895,18 +890,28 @@ ValidateScaleZeroPointOperandShapeIsCompatibleWithInput(
     base::span<const uint32_t> scale_shape,
     base::span<const uint32_t> zero_point_shape,
     std::string_view label) {
-  if (!BroadcastShapes(scale_shape, input_shape, /*bidirectional=*/false)) {
+  // Check whether `scale_shape` is a subsample of `input_shape`.
+  if (scale_shape.size() > input_shape.size()) {
     return base::unexpected(ErrorWithLabel(
-        label,
-        "The shape of scale is not broadcastable to the shape of input."));
-  }
-  if (!BroadcastShapes(zero_point_shape, input_shape,
-                       /*bidirectional=*/false)) {
-    return base::unexpected(ErrorWithLabel(
-        label,
-        "The shape of zeroPoint is not broadcastable to the shape of input."));
+        label, "The rank of scale is larger than the rank of input."));
   }
 
+  for (size_t i = 0; i < scale_shape.size(); ++i) {
+    auto scale_dim = scale_shape[scale_shape.size() - i - 1];
+    auto input_dim = input_shape[input_shape.size() - i - 1];
+    // The block_size should be an integer where block_size = dim_input /
+    // dim_scale along the axis.
+    if (input_dim % scale_dim != 0) {
+      return base::unexpected(ErrorWithLabel(
+          label,
+          "The shape of scale is not a subsample of the shape of input."));
+    }
+  }
+
+  if (!base::ranges::equal(scale_shape, zero_point_shape)) {
+    return base::unexpected(ErrorWithLabel(
+        label, "The shape of scale and zero point must be the same."));
+  }
   return base::ok();
 }
 
@@ -1336,9 +1341,9 @@ base::expected<OperandDescriptor, std::string> ValidateGatherAndInferOutput(
 
   if (input.Rank() <= axis) {
     return base::unexpected(ErrorWithLabel(
-        label,
-        "The axis must be in the range [0, N-1] where N is the rank of input "
-        "tensor."));
+        label, base::StringPrintf("The axis (%u) must be in the range [0, N-1] "
+                                  "where N=%u is the rank of input tensor.",
+                                  axis, input.Rank())));
   }
 
   if (!context_properties.data_type_limits.gather_input.Has(
@@ -1392,9 +1397,10 @@ ValidateGatherElementsAndInferOutput(
 
   if (input.Rank() <= axis) {
     return base::unexpected(ErrorWithLabel(
-        label,
-        "The axis must be in the range [0, N-1] where N is the rank of input "
-        "tensor."));
+        label, base::StringPrintf("The axis (%u) must be in the range [0, N-1] "
+                                  "where N=%u is the rank of input "
+                                  "tensor.",
+                                  axis, input.Rank())));
   }
 
   if (!context_properties.data_type_limits.gather_elements_input.Has(
@@ -1417,7 +1423,10 @@ ValidateGatherElementsAndInferOutput(
 
   if (input.Rank() != indices.Rank()) {
     return base::unexpected(ErrorWithLabel(
-        label, "The input and indices tensor must have the same rank."));
+        label,
+        base::StringPrintf(
+            "The input rank (%u) must be equal to the indices rank (%u).",
+            input.Rank(), indices.Rank())));
   }
 
   for (uint32_t i = 0; i < input.Rank(); ++i) {
@@ -1433,6 +1442,62 @@ ValidateGatherElementsAndInferOutput(
   }
 
   return OperandDescriptor::Create(input.data_type(), indices.shape());
+}
+
+base::expected<OperandDescriptor, std::string> ValidateGatherNDAndInferOutput(
+    const ContextProperties& context_properties,
+    const OperandDescriptor& input,
+    const OperandDescriptor& indices,
+    std::string_view label) {
+  if (input.Rank() == 0) {
+    return base::unexpected(
+        ErrorWithLabel(label, "The input should not be a scalar."));
+  }
+  if (!context_properties.data_type_limits.gather_nd_input.Has(
+          input.data_type())) {
+    return base::unexpected(ErrorWithLabel(
+        label, NotSupportedInputArgumentTypeError(
+                   input.data_type(),
+                   context_properties.data_type_limits.gather_nd_input)));
+  }
+
+  if (indices.Rank() == 0) {
+    return base::unexpected(
+        ErrorWithLabel(label, "The input should not be a scalar."));
+  }
+  static constexpr char kIndicesParam[] = "indices";
+  if (!context_properties.data_type_limits.gather_nd_indices.Has(
+          indices.data_type())) {
+    return base::unexpected(ErrorWithLabel(
+        label, NotSupportedArgumentTypeError(
+                   kIndicesParam, indices.data_type(),
+                   context_properties.data_type_limits.gather_nd_indices)));
+  }
+
+  uint32_t indices_last_dimension_size = indices.shape()[indices.Rank() - 1];
+  if (indices_last_dimension_size > input.Rank()) {
+    return base::unexpected(ErrorWithLabel(
+        label, base::StringPrintf(
+                   "The last dimension size of indices (%u) must be less than "
+                   "or equal to the input rank (%u).",
+                   indices_last_dimension_size, input.Rank())));
+  }
+
+  auto checked_output_rank = base::MakeCheckedNum(indices.Rank()) - 1 +
+                             input.Rank() - indices_last_dimension_size;
+  if (!checked_output_rank.IsValid()) {
+    return base::unexpected(
+        ErrorWithLabel(label, "The output rank is too large."));
+  }
+
+  std::vector<uint32_t> output_shape;
+  output_shape.reserve(checked_output_rank.ValueOrDie());
+  base::ranges::copy(indices.shape().begin(), indices.shape().end() - 1,
+                     std::back_inserter(output_shape));
+  base::ranges::copy(input.shape().begin() + indices_last_dimension_size,
+                     input.shape().end(), std::back_inserter(output_shape));
+
+  return OperandDescriptor::Create(input.data_type(), std::move(output_shape));
 }
 
 GemmAttributes::GemmAttributes() = default;
@@ -2353,6 +2418,16 @@ base::expected<OperandDescriptor, std::string> ValidateSliceAndInferOutput(
         "The length of sizes must be equal to the rank of the input tensor."));
   }
 
+  if (attributes.strides.size() != input_rank) {
+    return base::unexpected(
+        ErrorWithLabel(label,
+                       "The length of strides must be equal to the rank of the "
+                       "input tensor."));
+  }
+
+  std::vector<uint32_t> output_shape;
+  output_shape.reserve(input_rank);
+
   for (uint32_t i = 0; i < input_rank; ++i) {
     if (attributes.starts[i] >= input.shape()[i]) {
       return base::unexpected(ErrorWithLabel(
@@ -2370,6 +2445,14 @@ base::expected<OperandDescriptor, std::string> ValidateSliceAndInferOutput(
                      "For dimension (%u): the number of elements to slice "
                      "must not be 0.",
                      i)));
+    }
+
+    if (attributes.strides[i] < 1) {
+      return base::unexpected(ErrorWithLabel(
+          label,
+          base::StringPrintf(
+              "For dimension (%u): the stride (%u) must not be less than 1.", i,
+              attributes.strides[i])));
     }
 
     auto checked_ending_index =
@@ -2390,11 +2473,12 @@ base::expected<OperandDescriptor, std::string> ValidateSliceAndInferOutput(
                              "must not be greater than input size (%u).",
                              i, input.shape()[i])));
     }
+
+    uint32_t output_size = attributes.sizes[i] / attributes.strides[i] +
+                           (attributes.sizes[i] % attributes.strides[i] != 0);
+    output_shape.push_back(output_size);
   }
 
-  // The output is a tensor the same as the specified slice sizes.
-  std::vector<uint32_t> output_shape;
-  output_shape.assign(attributes.sizes.begin(), attributes.sizes.end());
   return OperandDescriptor::Create(input.data_type(), std::move(output_shape));
 }
 
@@ -2441,6 +2525,78 @@ base::expected<OperandDescriptor, std::string> ValidateReduceAndInferOutput(
                                                     keep_dimensions, label));
 
   return OperandDescriptor::Create(input.data_type(), output_shape);
+}
+
+base::expected<OperandDescriptor, std::string>
+ValidateScatterElementsAndInferOutput(
+    const ContextProperties& context_properties,
+    const OperandDescriptor& input,
+    const OperandDescriptor& indices,
+    const OperandDescriptor& updates,
+    const uint32_t axis,
+    std::string_view label) {
+  if (!context_properties.data_type_limits.scatter_elements_input.Has(
+          input.data_type())) {
+    return base::unexpected(ErrorWithLabel(
+        label,
+        NotSupportedInputArgumentTypeError(
+            input.data_type(),
+            context_properties.data_type_limits.scatter_elements_input)));
+  }
+
+  static constexpr char kIndicesParam[] = "indices";
+  if (!context_properties.data_type_limits.scatter_elements_indices.Has(
+          indices.data_type())) {
+    return base::unexpected(ErrorWithLabel(
+        label,
+        NotSupportedArgumentTypeError(
+            kIndicesParam, indices.data_type(),
+            context_properties.data_type_limits.scatter_elements_indices)));
+  }
+
+  if (input.data_type() != updates.data_type()) {
+    return base::unexpected(
+        ErrorWithLabel(label,
+                       "The updates tensor data type should be the same as "
+                       "input data type."));
+  }
+
+  if (input.Rank() == 0) {
+    return base::unexpected(
+        ErrorWithLabel(label, "The input should not be a scalar."));
+  }
+
+  if (input.Rank() <= axis) {
+    return base::unexpected(ErrorWithLabel(
+        label,
+        "The axis must be in the range [0, N-1] where N is the rank of input "
+        "tensor."));
+  }
+
+  if (indices.Rank() != input.Rank()) {
+    return base::unexpected(ErrorWithLabel(
+        label, "The indices and input tensors should have the same rank."));
+  }
+
+  for (uint32_t i = 0; i < input.Rank(); ++i) {
+    if (i == axis) {
+      continue;
+    }
+    if (input.shape()[i] != indices.shape()[i]) {
+      return base::unexpected(
+          ErrorWithLabel(label,
+                         "Except on the axis dimension, the input and indices "
+                         "tensor must have the same dimension size."));
+    }
+  }
+
+  if (indices.shape() != updates.shape()) {
+    return base::unexpected(ErrorWithLabel(
+        label, "The updates and indices tensors should have the same shape."));
+  }
+
+  // The output tensor has the same data type and shape as input's.
+  return input;
 }
 
 base::expected<OperandDescriptor, std::string> ValidateScatterNDAndInferOutput(

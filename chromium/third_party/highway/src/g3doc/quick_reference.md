@@ -139,6 +139,10 @@ omit this if your code will only ever use static dispatch.
 
 ## Notation in this doc
 
+By vector 'lanes', we mean the 'elements' of that vector. Analogous to the lanes
+of a highway or swimming pool, most operations act on each lane independently,
+but it is possible for lanes to interact and change order via 'swizzling' ops.
+
 *   `T` denotes the type of a vector lane (integer or floating-point);
 *   `N` is a size_t value that governs (but is not necessarily identical to) the
     number of lanes;
@@ -167,7 +171,7 @@ upper 16 bits of an IEEE binary32 float) only support load, store, and
 conversion to/from `float32_t`. The behavior of infinity and NaN in `float16_t`
 is implementation-defined due to Armv7. To ensure binary compatibility, these
 types are always wrapper structs and cannot be initialized with values directly.
-Instead, you can use `BitCastScalar` to set the representation.
+You can initialize them via `BitCastScalar` or `ConvertScalarTo`.
 
 On RVV/SVE, vectors are sizeless and cannot be wrapped inside a class. The
 Highway API allows using built-in types as vectors because operations are
@@ -300,9 +304,9 @@ Store(v, d2, ptr);  // Use d2, NOT DFromV<decltype(v)>()
 ## Targets
 
 Let `Target` denote an instruction set, one of `SCALAR/EMU128`, `RVV`,
-`SSE2/SSSE3/SSE4/AVX2/AVX3/AVX3_DL/AVX3_ZEN4/AVX3_SPR` (x86), `PPC8/PPC9/PPC10`
-(POWER), `NEON_WITHOUT_AES/NEON/SVE/SVE2/SVE_256/SVE2_128` (Arm),
-`WASM/WASM_EMU256` (WebAssembly).
+`SSE2/SSSE3/SSE4/AVX2/AVX3/AVX3_DL/AVX3_ZEN4/AVX3_SPR` (x86),
+`PPC8/PPC9/PPC10/Z14/Z15` (POWER), `WASM/WASM_EMU256` (WebAssembly),
+`NEON_WITHOUT_AES/NEON/NEON_BF16/SVE/SVE2/SVE_256/SVE2_128` (Arm).
 
 Note that x86 CPUs are segmented into dozens of feature flags and capabilities,
 which are often used together because they were introduced in the same CPU
@@ -388,8 +392,8 @@ functions reside in `project::[nested]::HWY_NAMESPACE`. Highway functions
 generally take either a `D` or vector/mask argument. For targets where vectors
 and masks are defined in namespace `hwy`, the functions will be found via
 Argument-Dependent Lookup. However, this does not work for function templates,
-and RVV and SVE both use builtin vectors. There are three options for portable
-code, in descending order of preference:
+and RVV and SVE both use built-in vectors. Thus portable code must use one of
+the three following options, in descending order of preference:
 
 -   `namespace hn = hwy::HWY_NAMESPACE;` alias used to prefix ops, e.g.
     `hn::LoadDup128(..)`;
@@ -397,10 +401,12 @@ code, in descending order of preference:
 -   `using hwy::HWY_NAMESPACE;` directive. This is generally discouraged,
     especially for SIMD code residing in a header.
 
-Note that overloaded operators are not yet supported on RVV and SVE. Until that
-is resolved, code that wishes to run on all targets must use the corresponding
-equivalents mentioned in the description of each overloaded operator, for
-example `Lt` instead of `operator<`.
+Note that overloaded operators were not supported on `RVV` and `SVE` until
+recently. Unfortunately, clang's `SVE` comparison operators return integer
+vectors instead of the `svbool_t` type which exists for this purpose. To ensure
+your code works on all targets, we recommend instead using the corresponding
+equivalents mentioned in our description of each overloaded operator, especially
+for comparisons, for example `Lt` instead of `operator<`.
 
 ### Initialization
 
@@ -623,8 +629,8 @@ from left to right, of the arguments passed to `Create{2-4}`.
     <code>V **SaturatedSub**(V a, V b)</code> returns `a[i] - b[i]` saturated to
     the minimum/maximum representable value.
 
-*   `V`: `{u}{8,16}` \
-    <code>V **AverageRound**(V a, V b)</code> returns `(a[i] + b[i] + 1) / 2`.
+*   `V`: `{u,i}` \
+    <code>V **AverageRound**(V a, V b)</code> returns `(a[i] + b[i] + 1) >> 1`.
 
 *   <code>V **Clamp**(V a, V lo, V hi)</code>: returns `a[i]` clamped to
     `[lo[i], hi[i]]`.
@@ -697,6 +703,32 @@ All other ops in this section are only available if `HWY_TARGET != HWY_SCALAR`:
 *   <code>V <b>operator*</b>(V a, V b)</code>: returns `r[i] = a[i] * b[i]`,
     truncating it to the lower half for integer inputs. Currently unavailable on
     SVE/RVV; use the equivalent `Mul` instead.
+
+*   `V`: `f`, `VI`: `Vec<RebindToSigned<DFromV<V>>>` \
+    <code>V **MulByPow2**(V a, VI b)</code>: Multiplies `a[i]` by `2^b[i]`.
+
+    `MulByPow2(a, b)` is equivalent to
+    `std::ldexp(a[i], HWY_MIN(HWY_MAX(b[i], LimitsMin<int>()), LimitsMax<int>()))`.
+
+*   `V`: `f`
+    <code>V **MulByFloorPow2**(V a, V b)</code>: Multiplies `a[i]` by
+    `2^floor(b[i])`.
+
+    It is implementation-defined if `MulByFloorPow2(a, b)` returns zero or NaN
+    in any lanes where `a[i]` is NaN and `b[i]` is equal to negative infinity.
+
+    It is implementation-defined if `MulByFloorPow2(a, b)` returns positive
+    infinity or NaN in any lanes where `a[i]` is NaN and `b[i]` is equal to
+    positive infinity.
+
+    If `a[i]` is a non-NaN value and `b[i]` is equal to negative infinity,
+    `MulByFloorPow2(a, b)` is equivalent to `a[i] * 0.0`.
+
+    If `b[i]` is NaN or if `a[i]` is non-NaN and `b[i]` is positive infinity,
+    `MulByFloorPow2(a, b)` is equivalent to `a[i] * b[i]`.
+
+    If `b[i]` is a finite value, `MulByFloorPow2(a, b)` is equivalent to
+    `MulByPow2(a, FloorInt(b))`.
 
 *   `V`: `{u,i}` \
     <code>V **MulHigh**(V a, V b)</code>: returns the upper half of `a[i] *
@@ -873,6 +905,10 @@ lane sizes, and `RotateRight` is often emulated with shifts:
     <code>V **ShiftRight**&lt;int&gt;(V a)</code> returns `a[i] >> int`.
 
 *   `V`: `{u,i}` \
+    <code>V **RoundingShiftRight**&lt;int&gt;(V a)</code> returns
+    `((int == 0) ? a[i] : (((a[i] >> (int - 1)) + 1) >> 1)`.
+
+*   `V`: `{u,i}` \
     <code>V **RotateLeft**&lt;int&gt;(V a)</code> returns `(a[i] << int) |
     (static_cast<TU>(a[i]) >> (sizeof(T)*8 - int))`.
 
@@ -887,6 +923,10 @@ Shift all lanes by the same (not necessarily compile-time constant) amount:
 
 *   `V`: `{u,i}` \
     <code>V **ShiftRightSame**(V a, int bits)</code> returns `a[i] >> bits`.
+
+*   `V`: `{u,i}` \
+    <code>V **RoundingShiftRightSame**&lt;int kShiftAmt&gt;(V a, int bits)
+    </code> returns `((bits == 0) ? a[i] : (((a[i] >> (bits - 1)) + 1) >> 1)`.
 
 *   `V`: `{u,i}` \
     <code>V **RotateLeftSame**(V a, int bits)</code> returns
@@ -909,6 +949,10 @@ Per-lane variable shifts (slow if SSSE3/SSE4, or 16-bit, or Shr i64 on AVX2):
 *   `V`: `{u,i}` \
     <code>V **operator>>**(V a, V b)</code> returns `a[i] >> b[i]`. Currently
     unavailable on SVE/RVV; use the equivalent `Shr` instead.
+
+*   `V`: `{u,i}` \
+    <code>V **RoundingShr**(V a, V b)</code> returns
+    `((b[i] == 0) ? a[i] : (((a[i] >> (b[i] - 1)) + 1) >> 1)`.
 
 *   `V`: `{u,i}` \
     <code>V **Rol**(V a, V b)</code> returns
@@ -1690,9 +1734,27 @@ All functions except `Stream` are defined in cache_control.h.
     Returns an implementation-defined value if the input exceeds the destination
     range.
 
-*   `V`: `f32`; `Ret`: `i32` \
+*   `V`: `f`; `Ret`: `Vec<RebindToSigned<DFromV<V>>>` \
     <code>Ret **NearestInt**(V a)</code>: returns the integer nearest to `a[i]`;
     results are undefined for NaN.
+
+*   `V`: `f`; `Ret`: `Vec<RebindToSigned<DFromV<V>>>` \
+    <code>Ret **CeilInt**(V a)</code>: equivalent to
+    `ConvertTo(RebindToSigned<DFromV<V>>(), Ceil(a))`, but `CeilInt(a)` is more
+    efficient on some targets, including SSE2, SSSE3, and AArch64 NEON.
+
+*   `V`: `f`; `Ret`: `Vec<RebindToSigned<DFromV<V>>>` \
+    <code>Ret **FloorInt**(V a)</code>: equivalent to
+    `ConvertTo(RebindToSigned<DFromV<V>>(), Floor(a))`, but `FloorInt(a)` is
+    more efficient on some targets, including SSE2, SSSE3, and AArch64 NEON.
+
+*   `D`: `i32`, `V`: `f64`
+    <code>Vec&lt;D&gt; **DemoteToNearestInt**(D d, V v)</code>: converts `v[i]`
+    to `TFromD<D>`, rounding to nearest (with ties to even).
+
+    `DemoteToNearestInt(d, v)` is equivalent to `DemoteTo(d, Round(v))`, but
+    `DemoteToNearestInt(d, v)` is more efficient on some targets, including x86
+    and RVV.
 
 #### Single vector demotion
 
@@ -2416,8 +2478,9 @@ and `bfloat16_t`:
 *   `Lanes`, `MaxLanes`
 *   `Zero`, `Set`, `Undefined`
 *   `BitCast`
-*   `Load`, `LoadU`, `LoadN`, `LoadNOr`, `MaskedLoad`, `MaskedLoadOr`
-*   `Store`, `StoreU`, `StoreN`, `BlendedStore`
+*   `Load`, `LoadU`, `LoadN`, `LoadNOr`, `LoadInterleaved[234]`, `MaskedLoad`,
+    `MaskedLoadOr`
+*   `Store`, `StoreU`, `StoreN`, `StoreInterleaved[234]`, `BlendedStore`
 *   `PromoteTo`, `DemoteTo`
 *   `PromoteUpperTo`, `PromoteLowerTo`
 *   `PromoteEvenTo`, `PromoteOddTo`

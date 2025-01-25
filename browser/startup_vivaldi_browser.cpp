@@ -25,6 +25,18 @@
 #include "browser/init_sparkle.h"
 #endif
 
+#if BUILDFLAG(IS_WIN)
+#include "base/vivaldi_switches.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_list.h"
+#if BUILDFLAG(ENABLE_SESSION_SERVICE)
+#include "chrome/browser/sessions/session_data_service.h"
+#include "chrome/browser/sessions/session_data_service_factory.h"
+#endif  // BUILDFLAG(ENABLE_SESSION_SERVICE)
+#include "components/keep_alive_registry/keep_alive_registry.h"
+#endif  // IS_WIN
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 using extensions::Extension;
 #endif
@@ -108,5 +120,28 @@ bool AddVivaldiNewPage(bool welcome_run_none, std::vector<GURL>* startup_urls) {
 
   return true;
 }
+
+#if BUILDFLAG(IS_WIN)
+void DoCleanShutdownIfNeeded(const base::CommandLine& command_line) {
+  if (command_line.HasSwitch(switches::kCleanShutdown)) {
+    // Make sure we save current session.
+    for (Browser* browser : *BrowserList::GetInstance()) {
+      browser->profile()->SaveSessionState();
+#if BUILDFLAG(ENABLE_SESSION_SERVICE)
+      auto* session_data_service =
+          SessionDataServiceFactory::GetForProfile(browser->profile());
+      if (session_data_service) {
+        session_data_service->SetForceKeepSessionState();
+      }
+#endif  // BUILDFLAG(ENABLE_SESSION_SERVICE)
+    }
+    // This will not show the "close window", "exit Vivaldi" and "running
+    // downloads" dialogs.
+    KeepAliveRegistry::GetInstance()->SetIsShuttingDown(true);
+  }
+}
+#endif  // BUILDFLAG(IS_WIN)
+
+
 
 }  // namespace vivaldi

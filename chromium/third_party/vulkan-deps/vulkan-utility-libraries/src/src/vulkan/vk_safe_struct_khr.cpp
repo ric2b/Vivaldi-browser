@@ -5304,71 +5304,6 @@ void safe_VkVideoDecodeH264DpbSlotInfoKHR::initialize(const safe_VkVideoDecodeH2
         pStdReferenceInfo = new StdVideoDecodeH264ReferenceInfo(*copy_src->pStdReferenceInfo);
     }
 }
-
-safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::safe_VkRenderingFragmentShadingRateAttachmentInfoKHR(
-    const VkRenderingFragmentShadingRateAttachmentInfoKHR* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
-    : sType(in_struct->sType),
-      imageView(in_struct->imageView),
-      imageLayout(in_struct->imageLayout),
-      shadingRateAttachmentTexelSize(in_struct->shadingRateAttachmentTexelSize) {
-    if (copy_pnext) {
-        pNext = SafePnextCopy(in_struct->pNext, copy_state);
-    }
-}
-
-safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::safe_VkRenderingFragmentShadingRateAttachmentInfoKHR()
-    : sType(VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR),
-      pNext(nullptr),
-      imageView(),
-      imageLayout(),
-      shadingRateAttachmentTexelSize() {}
-
-safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::safe_VkRenderingFragmentShadingRateAttachmentInfoKHR(
-    const safe_VkRenderingFragmentShadingRateAttachmentInfoKHR& copy_src) {
-    sType = copy_src.sType;
-    imageView = copy_src.imageView;
-    imageLayout = copy_src.imageLayout;
-    shadingRateAttachmentTexelSize = copy_src.shadingRateAttachmentTexelSize;
-    pNext = SafePnextCopy(copy_src.pNext);
-}
-
-safe_VkRenderingFragmentShadingRateAttachmentInfoKHR& safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::operator=(
-    const safe_VkRenderingFragmentShadingRateAttachmentInfoKHR& copy_src) {
-    if (&copy_src == this) return *this;
-
-    FreePnextChain(pNext);
-
-    sType = copy_src.sType;
-    imageView = copy_src.imageView;
-    imageLayout = copy_src.imageLayout;
-    shadingRateAttachmentTexelSize = copy_src.shadingRateAttachmentTexelSize;
-    pNext = SafePnextCopy(copy_src.pNext);
-
-    return *this;
-}
-
-safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::~safe_VkRenderingFragmentShadingRateAttachmentInfoKHR() {
-    FreePnextChain(pNext);
-}
-
-void safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::initialize(
-    const VkRenderingFragmentShadingRateAttachmentInfoKHR* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
-    FreePnextChain(pNext);
-    sType = in_struct->sType;
-    imageView = in_struct->imageView;
-    imageLayout = in_struct->imageLayout;
-    shadingRateAttachmentTexelSize = in_struct->shadingRateAttachmentTexelSize;
-    pNext = SafePnextCopy(in_struct->pNext, copy_state);
-}
-
-void safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::initialize(
-    const safe_VkRenderingFragmentShadingRateAttachmentInfoKHR* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
-    sType = copy_src->sType;
-    imageView = copy_src->imageView;
-    imageLayout = copy_src->imageLayout;
-    shadingRateAttachmentTexelSize = copy_src->shadingRateAttachmentTexelSize;
-    pNext = SafePnextCopy(copy_src->pNext);
-}
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
 safe_VkImportMemoryWin32HandleInfoKHR::safe_VkImportMemoryWin32HandleInfoKHR(const VkImportMemoryWin32HandleInfoKHR* in_struct,
@@ -9204,6 +9139,71 @@ void safe_VkPhysicalDeviceFragmentShadingRateKHR::initialize(const safe_VkPhysic
     sType = copy_src->sType;
     sampleCounts = copy_src->sampleCounts;
     fragmentSize = copy_src->fragmentSize;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::safe_VkRenderingFragmentShadingRateAttachmentInfoKHR(
+    const VkRenderingFragmentShadingRateAttachmentInfoKHR* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType),
+      imageView(in_struct->imageView),
+      imageLayout(in_struct->imageLayout),
+      shadingRateAttachmentTexelSize(in_struct->shadingRateAttachmentTexelSize) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::safe_VkRenderingFragmentShadingRateAttachmentInfoKHR()
+    : sType(VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR),
+      pNext(nullptr),
+      imageView(),
+      imageLayout(),
+      shadingRateAttachmentTexelSize() {}
+
+safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::safe_VkRenderingFragmentShadingRateAttachmentInfoKHR(
+    const safe_VkRenderingFragmentShadingRateAttachmentInfoKHR& copy_src) {
+    sType = copy_src.sType;
+    imageView = copy_src.imageView;
+    imageLayout = copy_src.imageLayout;
+    shadingRateAttachmentTexelSize = copy_src.shadingRateAttachmentTexelSize;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkRenderingFragmentShadingRateAttachmentInfoKHR& safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::operator=(
+    const safe_VkRenderingFragmentShadingRateAttachmentInfoKHR& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    imageView = copy_src.imageView;
+    imageLayout = copy_src.imageLayout;
+    shadingRateAttachmentTexelSize = copy_src.shadingRateAttachmentTexelSize;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::~safe_VkRenderingFragmentShadingRateAttachmentInfoKHR() {
+    FreePnextChain(pNext);
+}
+
+void safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::initialize(
+    const VkRenderingFragmentShadingRateAttachmentInfoKHR* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    imageView = in_struct->imageView;
+    imageLayout = in_struct->imageLayout;
+    shadingRateAttachmentTexelSize = in_struct->shadingRateAttachmentTexelSize;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkRenderingFragmentShadingRateAttachmentInfoKHR::initialize(
+    const safe_VkRenderingFragmentShadingRateAttachmentInfoKHR* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    imageView = copy_src->imageView;
+    imageLayout = copy_src->imageLayout;
+    shadingRateAttachmentTexelSize = copy_src->shadingRateAttachmentTexelSize;
     pNext = SafePnextCopy(copy_src->pNext);
 }
 

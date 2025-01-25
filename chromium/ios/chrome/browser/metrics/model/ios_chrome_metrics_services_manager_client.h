@@ -36,12 +36,6 @@ class IOSChromeMetricsServicesManagerClient
 
   ~IOSChromeMetricsServicesManagerClient() override;
 
- private:
-  // This is defined as a member class to get access to
-  // IOSChromeMetricsServiceAccessor through
-  // IOSChromeMetricsServicesManagerClient's friendship.
-  class IOSChromeEnabledStateProvider;
-
   // metrics_services_manager::MetricsServicesManagerClient:
   std::unique_ptr<variations::VariationsService> CreateVariationsService(
       variations::SyntheticTrialRegistry* synthetic_trial_registry) override;
@@ -49,12 +43,17 @@ class IOSChromeMetricsServicesManagerClient
       variations::SyntheticTrialRegistry* synthetic_trial_registry) override;
   metrics::MetricsStateManager* GetMetricsStateManager() override;
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
-  bool IsMetricsReportingEnabled() override;
-  bool IsMetricsConsentGiven() override;
+  const metrics::EnabledStateProvider& GetEnabledStateProvider() override;
   bool IsOffTheRecordSessionActive() override;
 
+ private:
+  // This is defined as a member class to get access to
+  // IOSChromeMetricsServiceAccessor through
+  // IOSChromeMetricsServicesManagerClient's friendship.
+  class IOSChromeEnabledStateProvider;
+
   // Static helper for `IsOffTheRecordSessionActive()`, suitable for binding
-  // into callbacks. `true` if any browser states have any incognito WebStates
+  // into callbacks. `true` if any profiles have any incognito WebStates
   // in any Browser.
   static bool AreIncognitoTabsPresent();
 

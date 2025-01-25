@@ -8,8 +8,10 @@
 #include <utility>
 
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/extensions/desktop_android/desktop_android_extension_host_delegate.h"
 #include "chrome/browser/extensions/desktop_android/desktop_android_extension_system.h"
 #include "chrome/browser/extensions/desktop_android/desktop_android_extension_web_contents_observer.h"
+#include "chrome/browser/extensions/desktop_android/desktop_android_runtime_api_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/version_info/version_info.h"
@@ -105,22 +107,19 @@ BrowserContext* DesktopAndroidExtensionsBrowserClient::GetOriginalContext(
 
 content::BrowserContext*
 DesktopAndroidExtensionsBrowserClient::GetContextRedirectedToOriginal(
-    content::BrowserContext* context,
-    bool force_guest_profile) {
+    content::BrowserContext* context) {
   return context;
 }
 
 content::BrowserContext*
 DesktopAndroidExtensionsBrowserClient::GetContextOwnInstance(
-    content::BrowserContext* context,
-    bool force_guest_profile) {
+    content::BrowserContext* context) {
   return context;
 }
 
 content::BrowserContext*
 DesktopAndroidExtensionsBrowserClient::GetContextForOriginalOnly(
-    content::BrowserContext* context,
-    bool force_guest_profile) {
+    content::BrowserContext* context) {
   return context;
 }
 
@@ -209,7 +208,7 @@ DesktopAndroidExtensionsBrowserClient::GetControlledFrameEmbedderURLLoader(
 
 std::unique_ptr<ExtensionHostDelegate>
 DesktopAndroidExtensionsBrowserClient::CreateExtensionHostDelegate() {
-  return nullptr;
+  return std::make_unique<DesktopAndroidExtensionHostDelegate>();
 }
 
 bool DesktopAndroidExtensionsBrowserClient::DidVersionUpdate(
@@ -257,7 +256,7 @@ void DesktopAndroidExtensionsBrowserClient::
 std::unique_ptr<RuntimeAPIDelegate>
 DesktopAndroidExtensionsBrowserClient::CreateRuntimeAPIDelegate(
     content::BrowserContext* context) const {
-  return nullptr;
+  return std::make_unique<DesktopAndroidRuntimeApiDelegate>();
 }
 
 const ComponentExtensionResourceManager*

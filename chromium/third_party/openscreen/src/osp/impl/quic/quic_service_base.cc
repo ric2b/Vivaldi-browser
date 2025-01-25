@@ -26,8 +26,9 @@ QuicServiceBase::QuicServiceBase(
       demuxer_(now_function, buffer_limit),
       connection_factory_(std::move(connection_factory)),
       connection_endpoints_(config.connection_endpoints),
-      observer_(observer),
-      cleanup_alarm_(now_function, task_runner) {}
+      now_function_(now_function),
+      task_runner_(task_runner),
+      observer_(observer) {}
 
 QuicServiceBase::~QuicServiceBase() {
   CloseAllConnections();
@@ -77,20 +78,28 @@ void QuicServiceBase::OnIncomingStream(uint64_t instance_id,
   observer_.OnIncomingConnection(std::move(connection));
 }
 
-void QuicServiceBase::OnConnectionClosed(uint64_t instance_id) {
+void QuicServiceBase::OnConnectionClosed(std::string_view instance_name) {
   if (state_ != ProtocolConnectionEndpoint::State::kRunning) {
     return;
   }
 
-  auto connection_entry = connections_.find(instance_id);
-  if (connection_entry == connections_.end()) {
-    return;
+  auto pending_entry = pending_connections_.find(instance_name);
+  if (pending_entry == pending_connections_.end()) {
+    auto instance_entry = instance_map_.find(instance_name);
+    if (instance_entry == instance_map_.end()) {
+      return;
+    } else {
+      uint64_t instance_id = instance_entry->second;
+      auto connection_entry = connections_.find(instance_id);
+      if (connection_entry == connections_.end()) {
+        return;
+      } else {
+        instance_request_ids_.ResetRequestId(instance_id);
+      }
+    }
   }
 
-  connection_factory_->OnConnectionClosed(
-      connection_entry->second.connection.get());
-  delete_connections_.push_back(instance_id);
-  instance_request_ids_.ResetRequestId(instance_id);
+  ScheduleCleanup(instance_name);
 }
 
 QuicStream::Delegate& QuicServiceBase::GetStreamDelegate(uint64_t instance_id) {
@@ -104,16 +113,6 @@ void QuicServiceBase::OnClientCertificates(
     std::string_view instance_name,
     const std::vector<std::string>& certs) {
   OSP_NOTREACHED();
-}
-
-void QuicServiceBase::OnConnectionDestroyed(
-    QuicProtocolConnection& connection) {
-  auto connection_entry = connections_.find(connection.GetInstanceID());
-  if (connection_entry == connections_.end()) {
-    return;
-  }
-
-  connection_entry->second.stream_manager->DropProtocolConnection(connection);
 }
 
 void QuicServiceBase::OnDataReceived(uint64_t instance_id,
@@ -169,7 +168,6 @@ bool QuicServiceBase::StartImpl() {
   }
 
   state_ = ProtocolConnectionEndpoint::State::kRunning;
-  Cleanup();  // Start periodic clean-ups.
   observer_.OnRunning();
   return true;
 }
@@ -182,7 +180,6 @@ bool QuicServiceBase::StopImpl() {
 
   CloseAllConnections();
   state_ = ProtocolConnectionEndpoint::State::kStopped;
-  Cleanup();  // Final clean-up.
   observer_.OnStopped();
   return true;
 }
@@ -220,44 +217,56 @@ QuicServiceBase::CreateProtocolConnectionImpl(uint64_t instance_id) {
   }
 
   return QuicProtocolConnection::FromExisting(
-      *this, *connection_entry->second.connection,
+      *connection_entry->second.connection,
       *connection_entry->second.stream_manager, instance_id);
 }
 
 void QuicServiceBase::CloseAllConnections() {
   for (auto& conn : pending_connections_) {
     conn.second.data.connection->Close();
-    connection_factory_->OnConnectionClosed(conn.second.data.connection.get());
     // `callbacks` is empty for QuicServer, so this only works for QuicClient.
     for (auto& item : conn.second.callbacks) {
       item.second->OnConnectFailed(item.first);
     }
   }
-  pending_connections_.clear();
 
   for (auto& conn : connections_) {
     conn.second.connection->Close();
-    connection_factory_->OnConnectionClosed(conn.second.connection.get());
   }
-  connections_.clear();
 
-  instance_map_.clear();
   next_instance_id_ = 1;
-  instance_request_ids_.Reset();
 }
 
-void QuicServiceBase::Cleanup() {
-  for (uint64_t instance_id : delete_connections_) {
-    auto it = connections_.find(instance_id);
-    if (it != connections_.end()) {
-      connections_.erase(it);
-    }
+void QuicServiceBase::ScheduleCleanup(std::string_view instance_name) {
+  constexpr Clock::duration kQuicCleanupDelay = std::chrono::milliseconds(500);
+  auto result = cleanup_alarms_.emplace(
+      instance_name, std::make_unique<Alarm>(now_function_, task_runner_));
+  if (result.second) {
+    result.first->second->ScheduleFromNow(
+        [this, instance_name] { Cleanup(instance_name); }, kQuicCleanupDelay);
   }
-  delete_connections_.clear();
+}
 
-  constexpr Clock::duration kQuicCleanupPeriod = std::chrono::milliseconds(500);
-  if (state_ != ProtocolConnectionEndpoint::State::kStopped) {
-    cleanup_alarm_.ScheduleFromNow([this] { Cleanup(); }, kQuicCleanupPeriod);
+void QuicServiceBase::Cleanup(std::string_view instance_name) {
+  cleanup_alarms_.erase(std::string(instance_name));
+
+  auto pending_entry = pending_connections_.find(instance_name);
+  if (pending_entry != pending_connections_.end()) {
+    connection_factory_->OnConnectionClosed(
+        pending_entry->second.data.connection.get());
+    pending_connections_.erase(pending_entry);
+  }
+
+  auto instance_entry = instance_map_.find(instance_name);
+  if (instance_entry != instance_map_.end()) {
+    uint64_t instance_id = instance_entry->second;
+    auto connection_entry = connections_.find(instance_id);
+    if (connection_entry != connections_.end()) {
+      connection_factory_->OnConnectionClosed(
+          connection_entry->second.connection.get());
+      instance_map_.erase(instance_entry);
+      connections_.erase(connection_entry);
+    }
   }
 }
 

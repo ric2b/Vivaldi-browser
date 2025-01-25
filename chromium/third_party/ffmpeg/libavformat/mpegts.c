@@ -34,7 +34,7 @@
 #include "libavcodec/bytestream.h"
 #include "libavcodec/defs.h"
 #include "libavcodec/get_bits.h"
-#include "libavcodec/opus.h"
+#include "libavcodec/opus/opus.h"
 #include "avformat.h"
 #include "mpegts.h"
 #include "internal.h"
@@ -2189,7 +2189,7 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
             uint32_t buf;
             AVDOVIDecoderConfigurationRecord *dovi;
             size_t dovi_size;
-            int dependency_pid;
+            int dependency_pid = -1; // Unset
 
             if (desc_end - *pp < 4) // (8 + 8 + 7 + 6 + 1 + 1 + 1) / 8
                 return AVERROR_INVALIDDATA;
@@ -2213,10 +2213,12 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
             if (desc_end - *pp >= 1) {  // 8 bits
                 buf = get8(pp, desc_end);
                 dovi->dv_bl_signal_compatibility_id = (buf >> 4) & 0x0f; // 4 bits
+                dovi->dv_md_compression = (buf >> 2) & 0x03; // 2 bits
             } else {
                 // 0 stands for None
                 // Dolby Vision V1.2.93 profiles and levels
                 dovi->dv_bl_signal_compatibility_id = 0;
+                dovi->dv_md_compression = AV_DOVI_COMPRESSION_NONE;
             }
 
             if (!av_packet_side_data_add(&st->codecpar->coded_side_data,
@@ -2228,14 +2230,16 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
             }
 
             av_log(fc, AV_LOG_TRACE, "DOVI, version: %d.%d, profile: %d, level: %d, "
-                   "rpu flag: %d, el flag: %d, bl flag: %d, dependency_pid: %d, compatibility id: %d\n",
+                   "rpu flag: %d, el flag: %d, bl flag: %d, dependency_pid: %d, "
+                   "compatibility id: %d, compression: %d\n",
                    dovi->dv_version_major, dovi->dv_version_minor,
                    dovi->dv_profile, dovi->dv_level,
                    dovi->rpu_present_flag,
                    dovi->el_present_flag,
                    dovi->bl_present_flag,
                    dependency_pid,
-                   dovi->dv_bl_signal_compatibility_id);
+                   dovi->dv_bl_signal_compatibility_id,
+                   dovi->dv_md_compression);
         }
         break;
     default:
@@ -3109,8 +3113,6 @@ static int mpegts_read_header(AVFormatContext *s)
     int64_t pos, probesize = s->probesize;
     int64_t seekback = FFMAX(s->probesize, (int64_t)ts->resync_size + PROBE_PACKET_MAX_BUF);
 
-    ffformatcontext(s)->prefer_codec_framerate = 1;
-
     if (ffio_ensure_seekback(pb, seekback) < 0)
         av_log(s, AV_LOG_WARNING, "Failed to allocate buffers for seekback\n");
 
@@ -3442,6 +3444,7 @@ const FFInputFormat ff_mpegts_demuxer = {
     .read_packet    = mpegts_read_packet,
     .read_close     = mpegts_read_close,
     .read_timestamp = mpegts_get_dts,
+    .flags_internal  = FF_INFMT_FLAG_PREFER_CODEC_FRAMERATE,
 };
 
 const FFInputFormat ff_mpegtsraw_demuxer = {
@@ -3454,4 +3457,5 @@ const FFInputFormat ff_mpegtsraw_demuxer = {
     .read_packet    = mpegts_raw_read_packet,
     .read_close     = mpegts_read_close,
     .read_timestamp = mpegts_get_dts,
+    .flags_internal  = FF_INFMT_FLAG_PREFER_CODEC_FRAMERATE,
 };

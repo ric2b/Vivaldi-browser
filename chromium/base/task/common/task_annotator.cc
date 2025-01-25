@@ -22,7 +22,6 @@
 #include "base/time/time.h"
 #include "base/trace_event/base_tracing.h"
 #include "base/tracing_buildflags.h"
-#include "third_party/abseil-cpp/absl/base/attributes.h"
 
 #if BUILDFLAG(ENABLE_BASE_TRACING)
 #include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_mojo_event_info.pbzero.h"  // nogncheck
@@ -37,15 +36,15 @@ TaskAnnotator::ObserverForTesting* g_task_annotator_observer = nullptr;
 // The PendingTask currently in progress on each thread. Used to allow creating
 // a breadcrumb of program counters on the stack to help identify a task's
 // origin in crashes.
-ABSL_CONST_INIT thread_local PendingTask* current_pending_task = nullptr;
+constinit thread_local PendingTask* current_pending_task = nullptr;
 
 // Scoped IPC-related data (IPC hash and/or IPC interface name). IPC hash or
 // interface name can be known before the associated task object is created;
 // thread-local so that this data can be affixed to the associated task.
-ABSL_CONST_INIT thread_local TaskAnnotator::ScopedSetIpcHash*
+constinit thread_local TaskAnnotator::ScopedSetIpcHash*
     current_scoped_ipc_hash = nullptr;
 
-ABSL_CONST_INIT thread_local TaskAnnotator::LongTaskTracker*
+constinit thread_local TaskAnnotator::LongTaskTracker*
     current_long_task_tracker = nullptr;
 
 // These functions can be removed, and the calls below replaced with direct
@@ -252,6 +251,24 @@ void TaskAnnotator::MaybeEmitIncomingTaskFlow(perfetto::EventContext& ctx,
 }
 
 // static
+void TaskAnnotator::EmitTaskTimingDetails(perfetto::EventContext& ctx) {
+  auto* const tracker = GetCurrentLongTaskTracker();
+  if (tracker) {
+    base::TimeTicks event_start_time = base::TimeTicks::Now();
+    base::TimeTicks task_start_time = tracker->GetTaskStartTime();
+
+    perfetto::protos::pbzero::CurrentTask* current_task =
+        ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>()
+            ->set_current_task();
+    current_task->set_event_offset_from_task_start_time_us(
+        static_cast<uint64_t>(
+            (event_start_time - task_start_time).InMicroseconds()));
+    current_task->set_task_start_time_us(
+        static_cast<uint64_t>(task_start_time.since_origin().InMicroseconds()));
+  }
+}
+
+// static
 void TaskAnnotator::MaybeEmitDelayAndPolicy(perfetto::EventContext& ctx,
                                             const PendingTask& task) {
   if (task.delayed_run_time.is_null()) {
@@ -304,22 +321,25 @@ TaskAnnotator::ScopedSetIpcHash::~ScopedSetIpcHash() {
 
 TaskAnnotator::LongTaskTracker::LongTaskTracker(const TickClock* tick_clock,
                                                 PendingTask& pending_task,
-                                                TaskAnnotator* task_annotator)
+                                                TaskAnnotator* task_annotator,
+                                                TimeTicks task_start_time)
     : resetter_(&current_long_task_tracker, this),
       tick_clock_(tick_clock),
+      task_start_time_(task_start_time),
       pending_task_(pending_task),
-      task_annotator_(task_annotator) {
-  TRACE_EVENT_CATEGORY_GROUP_ENABLED("scheduler.long_tasks", &is_tracing_);
-  if (is_tracing_) {
-    task_start_time_ = tick_clock_->NowTicks();
-  }
-}
+      task_annotator_(task_annotator) {}
 
 TaskAnnotator::LongTaskTracker::~LongTaskTracker() {
   DCHECK_EQ(this, GetCurrentLongTaskTracker());
 
-  if (!is_tracing_)
+  // Use this to ensure that NowTicks() are not called
+  // unnecessarily.
+  bool is_tracing = false;
+  TRACE_EVENT_CATEGORY_GROUP_ENABLED("scheduler.long_tasks", &is_tracing);
+
+  if (!is_tracing) {
     return;
+  }
 
   task_end_time_ = tick_clock_->NowTicks();
   MaybeTraceInterestingTaskDetails();

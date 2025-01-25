@@ -1,0 +1,35 @@
+# Copyright 2024 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/apple/swift_source_set.gni")
+
+swift_source_set("lottie_swiftui") {
+  bridge_header = "vivaldi_lottie_swiftui_view_bridge.h"
+  sources = [
+    "vivaldi_lottie_swiftui_view.swift",
+  ]
+
+  deps = [
+    ":lottie_objc_wrapper",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+    "SwiftUI.framework",
+  ]
+}
+
+source_set("lottie_objc_wrapper") {
+  sources = [
+    "vivaldi_lottie_view_objc_wrapper.h",
+    "vivaldi_lottie_view_objc_wrapper.mm",
+  ]
+
+  deps = [
+    "//base",
+    "//ios/public/provider/chrome/browser/lottie:lottie_animation_api",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+  ]
+}

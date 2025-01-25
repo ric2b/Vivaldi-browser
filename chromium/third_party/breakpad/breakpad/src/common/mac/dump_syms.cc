@@ -354,8 +354,9 @@ class DumpSymbols::DumperLineToModule:
                    vector<Module::Line>* lines,
                    std::map<uint32_t, Module::File*>* files) {
     DwarfLineToModule handler(module, compilation_dir_, lines, files);
-    LineInfo parser(program, length, byte_reader_, nullptr, 0,
-                                  nullptr, 0, &handler);
+    LineInfo parser(program, length, byte_reader_, string_section,
+                                  string_section_length, line_string_section,
+                                  line_string_section_length, &handler);
     parser.Start();
   }
  private:

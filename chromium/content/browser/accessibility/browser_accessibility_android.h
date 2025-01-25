@@ -240,12 +240,12 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid
   friend class BrowserAccessibility;  // Needs access to our constructor.
 
  private:
-  static size_t CommonPrefixLength(const std::u16string a,
-                                   const std::u16string b);
-  static size_t CommonSuffixLength(const std::u16string a,
-                                   const std::u16string b);
-  static size_t CommonEndLengths(const std::u16string a,
-                                 const std::u16string b);
+  static size_t CommonPrefixLength(const std::u16string& a,
+                                   const std::u16string& b);
+  static size_t CommonSuffixLength(const std::u16string& a,
+                                   const std::u16string& b);
+  static size_t CommonEndLengths(const std::u16string& a,
+                                 const std::u16string& b);
 
   // BrowserAccessibility overrides.
   BrowserAccessibility* PlatformGetLowestPlatformAncestor() const override;
@@ -259,7 +259,7 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid
   // on a value (e.g. a date time, or combobox), we wish to expose the value
   // that the user has chosen. When the value is exposed as the name, then the
   // accessible name is added to the Android API's "hint" attribute instead.
-  bool ShouldExposeValueAsName() const;
+  bool ShouldExposeValueAsName(const std::u16string& value) const;
 
   int CountChildrenWithRole(ax::mojom::Role role) const;
 

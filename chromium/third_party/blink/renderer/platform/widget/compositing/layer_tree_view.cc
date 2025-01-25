@@ -23,7 +23,6 @@
 #include "base/values.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_timeline.h"
-#include "cc/base/features.h"
 #include "cc/base/region.h"
 #include "cc/benchmarks/micro_benchmark.h"
 #include "cc/debug/layer_tree_debug_state.h"
@@ -135,11 +134,21 @@ void LayerTreeView::Disconnect() {
   delegate_ = nullptr;
 }
 
-void LayerTreeView::ReattachTo(
+void LayerTreeView::ClearPreviousDelegateAndReattachIfNeeded(
     LayerTreeViewDelegate* delegate,
     scoped_refptr<scheduler::WidgetScheduler> scheduler) {
   // Reset state tied to the previous `delegate_`.
   layer_tree_host_->WaitForProtectedSequenceCompletion();
+
+  if (!delegate) {
+    // If we're not reattaching to a new delegate, ensure that the LayerTreeHost
+    // is no longer visible. Note that this should be done before calling
+    // `LayerTreeHost::DetachInputDelegateAndRenderFrameObserver()` to avoid
+    // having a gap in time in the compositor where the LayerTreeHost is already
+    // detached but is still marked as visible. This is done to stop the compositor from producing frames which require an input delegate. See also
+    // https://crbug,com/41496745 for more details.
+    layer_tree_host_->SetVisible(false);
+  }
   layer_tree_host_->DetachInputDelegateAndRenderFrameObserver();
   layer_tree_host_->StopDeferringCommits(
       cc::PaintHoldingCommitTrigger::kWidgetSwapped);
@@ -160,6 +169,10 @@ void LayerTreeView::ReattachTo(
 
   // Invalidate weak ptrs so callbacks from the previous delegate are dropped.
   weak_factory_for_delegate_.InvalidateWeakPtrs();
+
+  if (!delegate) {
+    return;
+  }
 
   switch (frame_sink_state_) {
     case FrameSinkState::kNoFrameSink:
@@ -384,9 +397,7 @@ void LayerTreeView::WillCommit(const cc::CommitState&) {
   if (!delegate_)
     return;
   delegate_->WillCommitCompositorFrame();
-  if (base::FeatureList::IsEnabled(features::kNonBlockingCommit)) {
-    widget_scheduler_->DidCommitFrameToCompositor();
-  }
+  widget_scheduler_->DidCommitFrameToCompositor();
 }
 
 void LayerTreeView::DidCommit(int source_frame_number,
@@ -397,9 +408,6 @@ void LayerTreeView::DidCommit(int source_frame_number,
     return;
   }
   delegate_->DidCommitCompositorFrame(commit_start_time, commit_finish_time);
-  if (!base::FeatureList::IsEnabled(features::kNonBlockingCommit)) {
-    widget_scheduler_->DidCommitFrameToCompositor();
-  }
 }
 
 void LayerTreeView::DidCommitAndDrawFrame(int source_frame_number) {
@@ -476,7 +484,7 @@ LayerTreeView::GetBeginMainFrameMetrics() {
 
 void LayerTreeView::NotifyThroughputTrackerResults(
     cc::CustomTrackerResults results) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void LayerTreeView::DidObserveFirstScrollDelay(

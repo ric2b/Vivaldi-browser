@@ -12,7 +12,7 @@ struct vertex_main_outputs {
 RWByteAddressBuffer prevent_dce : register(u0);
 uint pack4x8snorm_4d22e7() {
   float4 arg_0 = (1.0f).xxxx;
-  int4 v = (int4(round((clamp(arg_0, (-1.0f).xxxx, (1.0f).xxxx) * 127.0f))) & (255).xxxx);
+  int4 v = (int4(round((clamp(arg_0, (-1.0f).xxxx, (1.0f).xxxx) * 127.0f))) & (int(255)).xxxx);
   uint res = asuint((v.x | ((v.y << 8u) | ((v.z << 16u) | (v.w << 24u)))));
   return res;
 }
@@ -36,9 +36,7 @@ VertexOutput vertex_main_inner() {
 
 vertex_main_outputs vertex_main() {
   VertexOutput v_2 = vertex_main_inner();
-  VertexOutput v_3 = v_2;
-  VertexOutput v_4 = v_2;
-  vertex_main_outputs v_5 = {v_4.prevent_dce, v_3.pos};
-  return v_5;
+  vertex_main_outputs v_3 = {v_2.prevent_dce, v_2.pos};
+  return v_3;
 }
 

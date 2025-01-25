@@ -107,6 +107,29 @@ rather than after downloading and checking O(log n) builds, pass the
 **--verify-range** option to bisect-builds.py. This will check the first and
 last builds in the range before starting the bisect.
 
+### Bisecting Browser Automation Tests
+
+You can also use this script for tests built with browser automation frameworks
+like Puppeteer and Selenium to find the regression range that causes the
+failure.
+
+First, you'll need to alter your test launch settings to accept
+`executable_path` (the actual configuration might differ; please refer to the
+documentation for your browser automation framework) for the Chrome binary from
+environment variables or command-line parameters.
+
+Then, you can run your automated tests and pass the Chrome binary path with the
+`%p` placeholder in `--command`. You might also need the corresponding WebDriver
+for some frameworks. Pass `--chromedriver` to download it and use `%d` in
+`--command`. Additionally, use `--no-interactive` to automatically detect test
+failures and enable `-v/--verbose` to show the logs from your tests. Here's an
+example of setting the ChromeDriver path through an environment variable and the
+Chrome binary path via the command line:
+
+```none
+python3 tools/bisect-builds.py -g 85.0.4183.121 -b 86.0.4240.193 -v --verify-range --not-interactive -c "CHROMEDRIVER_EXECUTABLE_PATH=%d npx test --browser %p"
+```
+
 
 ### Field trials
 

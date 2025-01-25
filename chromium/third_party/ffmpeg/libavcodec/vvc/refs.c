@@ -52,6 +52,8 @@ void ff_vvc_unref_frame(VVCFrameContext *fc, VVCFrame *frame, int flags)
     frame->flags &= ~flags;
     if (!frame->flags) {
         av_frame_unref(frame->frame);
+        ff_refstruct_unref(&frame->sps);
+        ff_refstruct_unref(&frame->pps);
         ff_refstruct_unref(&frame->progress);
 
         ff_refstruct_unref(&frame->tab_dmvr_mvf);
@@ -112,12 +114,17 @@ static FrameProgress *alloc_progress(void)
 
 static VVCFrame *alloc_frame(VVCContext *s, VVCFrameContext *fc)
 {
+    const VVCSPS *sps = fc->ps.sps;
     const VVCPPS *pps = fc->ps.pps;
     for (int i = 0; i < FF_ARRAY_ELEMS(fc->DPB); i++) {
         int ret;
         VVCFrame *frame = &fc->DPB[i];
+        VVCWindow *win = &frame->scaling_win;
         if (frame->frame->buf[0])
             continue;
+
+        frame->sps = ff_refstruct_ref_c(fc->ps.sps);
+        frame->pps = ff_refstruct_ref_c(fc->ps.pps);
 
         ret = ff_thread_get_buffer(s->avctx, frame->frame, AV_GET_BUFFER_FLAG_REF);
         if (ret < 0)
@@ -138,6 +145,13 @@ static VVCFrame *alloc_frame(VVCContext *s, VVCFrameContext *fc)
         frame->ctb_count = pps->ctb_width * pps->ctb_height;
         for (int j = 0; j < frame->ctb_count; j++)
             frame->rpl_tab[j] = frame->rpl;
+
+        win->left_offset   = pps->r->pps_scaling_win_left_offset   << sps->hshift[CHROMA];
+        win->right_offset  = pps->r->pps_scaling_win_right_offset  << sps->hshift[CHROMA];
+        win->top_offset    = pps->r->pps_scaling_win_top_offset    << sps->vshift[CHROMA];
+        win->bottom_offset = pps->r->pps_scaling_win_bottom_offset << sps->vshift[CHROMA];
+        frame->ref_width   = pps->r->pps_pic_width_in_luma_samples  - win->left_offset   - win->right_offset;
+        frame->ref_height  = pps->r->pps_pic_height_in_luma_samples - win->bottom_offset - win->top_offset;
 
         frame->progress = alloc_progress();
         if (!frame->progress)
@@ -177,9 +191,9 @@ int ff_vvc_set_new_ref(VVCContext *s, VVCFrameContext *fc, AVFrame **frame)
     fc->ref = ref;
 
     if (s->no_output_before_recovery_flag && (IS_RASL(s) || !GDR_IS_RECOVERED(s)))
-        ref->flags = 0;
+        ref->flags = VVC_FRAME_FLAG_SHORT_REF;
     else if (ph->r->ph_pic_output_flag)
-        ref->flags = VVC_FRAME_FLAG_OUTPUT;
+        ref->flags = VVC_FRAME_FLAG_OUTPUT | VVC_FRAME_FLAG_SHORT_REF;
 
     if (!ph->r->ph_non_ref_pic_flag)
         ref->flags |= VVC_FRAME_FLAG_SHORT_REF;
@@ -296,7 +310,7 @@ void ff_vvc_bump_frame(VVCContext *s, VVCFrameContext *fc)
 
 static VVCFrame *find_ref_idx(VVCContext *s, VVCFrameContext *fc, int poc, uint8_t use_msb)
 {
-    const int mask = use_msb ? ~0 : fc->ps.sps->max_pic_order_cnt_lsb - 1;
+    const unsigned mask = use_msb ? ~0 : fc->ps.sps->max_pic_order_cnt_lsb - 1;
 
     for (int i = 0; i < FF_ARRAY_ELEMS(fc->DPB); i++) {
         VVCFrame *ref = &fc->DPB[i];
@@ -348,11 +362,30 @@ static VVCFrame *generate_missing_ref(VVCContext *s, VVCFrameContext *fc, int po
     return frame;
 }
 
+#define CHECK_MAX(d) (frame->ref_##d * frame->sps->r->sps_pic_##d##_max_in_luma_samples >= ref->ref_##d * (frame->pps->r->pps_pic_##d##_in_luma_samples - max))
+#define CHECK_SAMPLES(d) (frame->pps->r->pps_pic_##d##_in_luma_samples == ref->pps->r->pps_pic_##d##_in_luma_samples)
+static int check_candidate_ref(const VVCFrame *frame, const VVCRefPic *refp)
+{
+    const VVCFrame *ref = refp->ref;
+
+    if (refp->is_scaled) {
+        const int max = FFMAX(8, frame->sps->min_cb_size_y);
+        return frame->ref_width * 2 >= ref->ref_width &&
+            frame->ref_height * 2 >= ref->ref_height &&
+            frame->ref_width <= ref->ref_width * 8 &&
+            frame->ref_height <= ref->ref_height * 8 &&
+            CHECK_MAX(width) && CHECK_MAX(height);
+    }
+    return CHECK_SAMPLES(width) && CHECK_SAMPLES(height);
+}
+
+#define RPR_SCALE(f) (((ref->f << 14) + (fc->ref->f >> 1)) / fc->ref->f)
 /* add a reference with the given poc to the list and mark it as used in DPB */
 static int add_candidate_ref(VVCContext *s, VVCFrameContext *fc, RefPicList *list,
                              int poc, int ref_flag, uint8_t use_msb)
 {
-    VVCFrame *ref = find_ref_idx(s, fc, poc, use_msb);
+    VVCFrame *ref   = find_ref_idx(s, fc, poc, use_msb);
+    VVCRefPic *refp = &list->refs[list->nb_refs];
 
     if (ref == fc->ref || list->nb_refs >= VVC_MAX_REF_ENTRIES)
         return AVERROR_INVALIDDATA;
@@ -363,9 +396,21 @@ static int add_candidate_ref(VVCContext *s, VVCFrameContext *fc, RefPicList *lis
             return AVERROR(ENOMEM);
     }
 
-    list->list[list->nb_refs] = poc;
-    list->ref[list->nb_refs]  = ref;
-    list->isLongTerm[list->nb_refs] = ref_flag & VVC_FRAME_FLAG_LONG_REF;
+    refp->poc = poc;
+    refp->ref = ref;
+    refp->is_lt = ref_flag & VVC_FRAME_FLAG_LONG_REF;
+    refp->is_scaled = ref->sps->r->sps_num_subpics_minus1 != fc->ref->sps->r->sps_num_subpics_minus1||
+        memcmp(&ref->scaling_win, &fc->ref->scaling_win, sizeof(ref->scaling_win)) ||
+        ref->pps->r->pps_pic_width_in_luma_samples != fc->ref->pps->r->pps_pic_width_in_luma_samples ||
+        ref->pps->r->pps_pic_height_in_luma_samples != fc->ref->pps->r->pps_pic_height_in_luma_samples;
+
+    if (!check_candidate_ref(fc->ref, refp))
+        return AVERROR_INVALIDDATA;
+
+    if (refp->is_scaled) {
+        refp->scale[0] = RPR_SCALE(ref_width);
+        refp->scale[1] = RPR_SCALE(ref_height);
+    }
     list->nb_refs++;
 
     mark_ref(ref, ref_flag);
@@ -461,9 +506,14 @@ int ff_vvc_slice_rpl(VVCContext *s, VVCFrameContext *fc, SliceContext *sc)
                 return ret;
             }
         }
-        if ((!rsh->sh_collocated_from_l0_flag) == lx &&
-            rsh->sh_collocated_ref_idx < rpl->nb_refs)
-            fc->ref->collocated_ref = rpl->ref[rsh->sh_collocated_ref_idx];
+        if (ph->r->ph_temporal_mvp_enabled_flag &&
+            (!rsh->sh_collocated_from_l0_flag) == lx &&
+            rsh->sh_collocated_ref_idx < rpl->nb_refs) {
+            const VVCRefPic *refp = rpl->refs + rsh->sh_collocated_ref_idx;
+            if (refp->is_scaled || refp->ref->sps->ctb_log2_size_y != sps->ctb_log2_size_y)
+                return AVERROR_INVALIDDATA;
+            fc->ref->collocated_ref = refp->ref;
+        }
     }
     return 0;
 }
@@ -538,12 +588,13 @@ void ff_vvc_report_progress(VVCFrame *frame, const VVCProgress vp, const int y)
     VVCProgressListener *l = NULL;
 
     ff_mutex_lock(&p->lock);
-
-    av_assert0(p->progress[vp] < y || p->progress[vp] == INT_MAX);
-    p->progress[vp] = y;
-    l = get_done_listener(p, vp);
-    ff_cond_signal(&p->cond);
-
+    if (p->progress[vp] < y) {
+        // Due to the nature of thread scheduling, later progress may reach this point before earlier progress.
+        // Therefore, we only update the progress when p->progress[vp] < y.
+        p->progress[vp] = y;
+        l = get_done_listener(p, vp);
+        ff_cond_signal(&p->cond);
+    }
     ff_mutex_unlock(&p->lock);
 
     while (l) {

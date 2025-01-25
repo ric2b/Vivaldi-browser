@@ -47,12 +47,13 @@
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/transport_client_socket_pool.h"
 #include "net/spdy/buffered_spdy_framer.h"
+#include "net/spdy/multiplexed_session_creation_initiator.h"
 #include "net/spdy/spdy_http_utils.h"
 #include "net/spdy/spdy_stream.h"
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "net/test/gtest_util.h"
-#include "net/third_party/quiche/src/quiche/spdy/core/spdy_alt_svc_wire_format.h"
-#include "net/third_party/quiche/src/quiche/spdy/core/spdy_framer.h"
+#include "net/third_party/quiche/src/quiche/http2/core/spdy_alt_svc_wire_format.h"
+#include "net/third_party/quiche/src/quiche/http2/core/spdy_framer.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/static_http_user_agent_settings.h"
 #include "net/url_request/url_request_context_builder.h"
@@ -474,7 +475,8 @@ base::WeakPtr<SpdySession> CreateSpdySessionHelper(
   base::WeakPtr<SpdySession> spdy_session;
   rv =
       http_session->spdy_session_pool()->CreateAvailableSessionFromSocketHandle(
-          key, std::move(connection), net_log, &spdy_session);
+          key, std::move(connection), net_log,
+          MultiplexedSessionCreationInitiator::kUnknown, &spdy_session);
   // Failure is reported asynchronously.
   EXPECT_THAT(rv, IsOk());
   EXPECT_TRUE(spdy_session);
@@ -563,7 +565,8 @@ base::WeakPtr<SpdySession> CreateFakeSpdySession(SpdySessionPool* pool,
   handle->SetSocket(std::make_unique<FakeSpdySessionClientSocket>());
   base::WeakPtr<SpdySession> spdy_session;
   int rv = pool->CreateAvailableSessionFromSocketHandle(
-      key, std::move(handle), NetLogWithSource(), &spdy_session);
+      key, std::move(handle), NetLogWithSource(),
+      MultiplexedSessionCreationInitiator::kUnknown, &spdy_session);
   // Failure is reported asynchronously.
   EXPECT_THAT(rv, IsOk());
   EXPECT_TRUE(spdy_session);
@@ -975,7 +978,7 @@ void SpdyTestUtil::UpdateWithStreamDestruction(int stream_id) {
       }
     }
   }
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 // static

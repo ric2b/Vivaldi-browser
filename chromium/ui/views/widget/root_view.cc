@@ -21,6 +21,7 @@
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
@@ -62,36 +63,6 @@ class MouseEnterExitEvent : public ui::MouseEvent {
   }
 };
 
-// TODO(crbug.com/40821061): This class is for debug purpose only.
-// Remove it after resolving the issue.
-class DanglingMouseMoveHandlerOnViewDestroyingChecker
-    : public views::ViewObserver {
- public:
-  explicit DanglingMouseMoveHandlerOnViewDestroyingChecker(
-      const raw_ptr<views::View, AcrossTasksDanglingUntriaged>&
-          mouse_move_handler)
-      : mouse_move_handler_(mouse_move_handler) {
-    scoped_observation.Observe(mouse_move_handler_);
-  }
-
-  // views::ViewObserver:
-  void OnViewIsDeleting(views::View* view) override {
-    // `mouse_move_handler_` should be nulled before `view` dies. Otherwise
-    // `mouse_move_handler_` will become a dangling pointer.
-    CHECK(!mouse_move_handler_);
-    scoped_observation.Reset();
-  }
-
- private:
-  base::ScopedObservation<views::View, views::ViewObserver> scoped_observation{
-      this};
-  // RAW_PTR_EXCLUSION: Avoid turning this into a `raw_ref<raw_ptr<>>`. The
-  // current `raw_ptr&` setup is intentional and used to observe the pointer
-  // without counting as a live reference to the underlying memory.
-  RAW_PTR_EXCLUSION const raw_ptr<views::View, AcrossTasksDanglingUntriaged>&
-      mouse_move_handler_;
-};
-
 }  // namespace
 
 // Used by RootView to create a hidden child that can be used to make screen
@@ -106,36 +77,91 @@ class AnnounceTextView : public View {
   METADATA_HEADER(AnnounceTextView, View)
 
  public:
-  AnnounceTextView() { UpdateAccessibleRole(); }
+  AnnounceTextView() {
+    // When constructed the view will have no name, but will change as soon as
+    // text needs to be announced.
+    UpdateAccessibleAttributes(std::u16string());
+  }
 
   ~AnnounceTextView() override = default;
 
   void AnnounceTextAs(const std::u16string& text,
                       ui::AXPlatformNode::AnnouncementType announcement_type) {
-    announce_text_ = text;
+    UpdateAccessibleAttributes(text, announcement_type);
+    CHECK(HasValidRole());
+
+    NotifyAccessibilityEvent(AnnounceEventType(announcement_type),
+                             /*send_native_event=*/true);
+  }
+
+  ax::mojom::Event AnnounceEventType(
+      ui::AXPlatformNode::AnnouncementType announcement_type) const {
+    CHECK(HasValidRole());
+
+    ax::mojom::Event event_type = ax::mojom::Event::kNone;
     switch (announcement_type) {
       case ui::AXPlatformNode::AnnouncementType::kAlert:
-        announce_event_type_ = ax::mojom::Event::kAlert;
-        announce_role_ = ax::mojom::Role::kAlert;
+        event_type = ax::mojom::Event::kAlert;
         break;
       case ui::AXPlatformNode::AnnouncementType::kPolite:
-        announce_event_type_ = ax::mojom::Event::kLiveRegionChanged;
-        announce_role_ = ax::mojom::Role::kStatus;
+        event_type = ax::mojom::Event::kLiveRegionChanged;
         break;
     }
+
+    CHECK(IsValidEvent(event_type));
+    return event_type;
+  }
+
+  void UpdateAccessibleAttributes(
+      const std::u16string& announce_text,
+      std::optional<ui::AXPlatformNode::AnnouncementType> announcement_type =
+          std::nullopt) {
+    // Since this view is a unique view that is hidden and only to provide a
+    // mechanism for Views to make their own announcements, we should not fire
+    // events that are not `announce_event_type_` which may otherwise be
+    // generated when we, for example, update the name of the view.
+    ScopedAccessibilityEventBlocker scoped_event_blocker(
+        GetViewAccessibility());
+
+    // View should have a initial accessible role, and it will later change
+    // depending on the `announce_role` accordingly.
+    ax::mojom::Role announce_role = ax::mojom::Role::kStatus;
+    if (announcement_type.has_value()) {
+      switch (announcement_type.value()) {
+        case ui::AXPlatformNode::AnnouncementType::kAlert:
+          announce_role = ax::mojom::Role::kAlert;
+          break;
+        case ui::AXPlatformNode::AnnouncementType::kPolite:
+          announce_role = ax::mojom::Role::kStatus;
+          break;
+      }
+    }
+
+    UpdateAccessibleRole(announce_role);
+    GetViewAccessibility().SetIsInvisible(true);
+    GetViewAccessibility().SetLiveAtomic(true);
+    GetViewAccessibility().SetLiveStatus("polite");
+
+    if (announce_text.empty()) {
+      GetViewAccessibility().SetName(
+          announce_text, ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
+    } else {
+      GetViewAccessibility().SetName(announce_text);
+    }
+
     if (base::FeatureList::IsEnabled(
             features::kAnnounceTextAdditionalAttributes)) {
       GetViewAccessibility().SetContainerLiveStatus("polite");
+      GetViewAccessibility().SetLiveRelevant("additions text");
+      GetViewAccessibility().SetContainerLiveRelevant("additions text");
     } else {
       GetViewAccessibility().RemoveContainerLiveStatus();
+      GetViewAccessibility().RemoveLiveRelevant();
+      GetViewAccessibility().RemoveContainerLiveRelevant();
     }
-
-    UpdateAccessibleRole();
-
-    NotifyAccessibilityEvent(announce_event_type_, /*send_native_event=*/true);
   }
 
-  void UpdateAccessibleRole() {
+  void UpdateAccessibleRole(ax::mojom::Role announce_role) {
 #if BUILDFLAG(IS_CHROMEOS)
     // On ChromeOS, kAlert role can invoke an unnecessary event on reparenting.
     GetViewAccessibility().SetRole(ax::mojom::Role::kStaticText);
@@ -144,34 +170,21 @@ class AnnounceTextView : public View {
     // May require setting kLiveStatus, kContainerLiveStatus to "polite".
     GetViewAccessibility().SetRole(ax::mojom::Role::kAlert);
 #else
-    GetViewAccessibility().SetRole(announce_role_);
+    GetViewAccessibility().SetRole(announce_role);
 #endif
   }
 
-  // View:
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    node_data->AddBoolAttribute(ax::mojom::BoolAttribute::kLiveAtomic, true);
-    node_data->AddStringAttribute(ax::mojom::StringAttribute::kLiveStatus,
-                                  "polite");
-    if (base::FeatureList::IsEnabled(
-            features::kAnnounceTextAdditionalAttributes)) {
-      node_data->AddStringAttribute(ax::mojom::StringAttribute::kLiveRelevant,
-                                    "additions text");
-      node_data->AddStringAttribute(
-          ax::mojom::StringAttribute::kContainerLiveRelevant, "additions text");
-    }
-
-    !announce_text_.empty() ? node_data->SetNameChecked(announce_text_)
-                            : node_data->SetNameExplicitlyEmpty();
-    node_data->AddState(ax::mojom::State::kInvisible);
+  bool HasValidRole() const {
+    return GetViewAccessibility().GetCachedRole() ==
+               ax::mojom::Role::kStaticText ||
+           GetViewAccessibility().GetCachedRole() == ax::mojom::Role::kAlert ||
+           GetViewAccessibility().GetCachedRole() == ax::mojom::Role::kStatus;
   }
 
- private:
-  std::u16string announce_text_;
-  ax::mojom::Event announce_event_type_ = ax::mojom::Event::kNone;
-  // View should have a initial accessible role, and it will later change
-  // depending on the announce_role_ accordingly.
-  ax::mojom::Role announce_role_ = ax::mojom::Role::kStatus;
+  bool IsValidEvent(ax::mojom::Event announce_event_type) const {
+    return announce_event_type == ax::mojom::Event::kAlert ||
+           announce_event_type == ax::mojom::Event::kLiveRegionChanged;
+  }
 };
 
 BEGIN_METADATA(AnnounceTextView)
@@ -213,7 +226,7 @@ class PreEventDispatchHandler : public ui::EventHandler {
         location.SetToMax(parent_bounds.origin());
         location.SetToMin(parent_bounds.bottom_right());
       }
-      v->ShowContextMenu(location, ui::MENU_SOURCE_KEYBOARD);
+      v->ShowContextMenu(location, ui::mojom::MenuSourceType::kKeyboard);
       event->StopPropagation();
     }
 #endif
@@ -265,7 +278,8 @@ class PostEventDispatchHandler : public ui::EventHandler {
          event->type() == ui::EventType::kGestureTwoFingerTap)) {
       gfx::Point screen_location(location);
       View::ConvertPointToScreen(target, &screen_location);
-      target->ShowContextMenu(screen_location, ui::MENU_SOURCE_TOUCH);
+      target->ShowContextMenu(screen_location,
+                              ui::mojom::MenuSourceType::kTouch);
       event->StopPropagation();
     }
   }
@@ -735,16 +749,21 @@ void RootView::ViewHierarchyChanged(
   widget_->ViewHierarchyChanged(details);
 
   if (!details.is_add && !details.move_view) {
-    if (!explicit_mouse_handler_ && mouse_pressed_handler_ == details.child)
-      mouse_pressed_handler_ = nullptr;
-    if (mouse_move_handler_ == details.child)
+    if (mouse_pressed_handler_ == details.child) {
+      SetMouseHandler(nullptr);
+    }
+    if (mouse_move_handler_ == details.child) {
       mouse_move_handler_ = nullptr;
-    if (gesture_handler_ == details.child)
+    }
+    if (gesture_handler_ == details.child) {
       gesture_handler_ = nullptr;
-    if (event_dispatch_target_ == details.child)
+    }
+    if (event_dispatch_target_ == details.child) {
       event_dispatch_target_ = nullptr;
-    if (old_dispatch_target_ == details.child)
+    }
+    if (old_dispatch_target_ == details.child) {
       old_dispatch_target_ = nullptr;
+    }
   }
 }
 
@@ -847,8 +866,6 @@ void RootView::HandleMouseEnteredOrMoved(const ui::MouseEvent& event) {
       mouse_move_handler_ = v;
       // TODO(crbug.com/40821061): This is for debug purpose only.
       // Remove it after resolving the issue.
-      DanglingMouseMoveHandlerOnViewDestroyingChecker
-          mouse_move_handler_dangling_checker(mouse_move_handler_);
       if (!mouse_move_handler_->GetNotifyEnterExitOnChild() ||
           !mouse_move_handler_->Contains(old_handler)) {
         MouseEnterExitEvent entered(event, ui::EventType::kMouseEntered);

@@ -376,8 +376,4 @@
   return self.safeAreaLayoutGuide.bottomAnchor;
 }
 
-- (BOOL)isiPadOrientationPortrait {
-  return self.bounds.size.height > self.bounds.size.width;
-}
-
 @end

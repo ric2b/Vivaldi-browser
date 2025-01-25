@@ -31,8 +31,6 @@ public class MessagesMetrics {
     private static final String ENQUEUED_HIDDEN_HISTOGRAM_NAME = "Android.Messages.Enqueued.Hidden";
     private static final String ENQUEUED_HIDING_HISTOGRAM_NAME = "Android.Messages.Enqueued.Hiding";
     private static final String FULLY_VISIBLE_NAME = "Android.Messages.FullyVisible";
-    private static final String ERROR_FULLY_VISIBLE_NOT_INFORMED_NAME =
-            "Android.Messages.Error.FullyVisibleNotInformed";
     private static final String DISMISSED_WITHOUT_FULLY_VISIBLE =
             "Android.Messages.DismissedWithoutFullyVisible";
     private static final String DISMISSED_HISTOGRAM_PREFIX = "Android.Messages.Dismissed.";
@@ -165,10 +163,10 @@ public class MessagesMetrics {
             boolean messageDismissedByGesture,
             long durationMs) {
         String histogramSuffix = messageIdentifierToHistogramSuffix(messageIdentifier);
-        RecordHistogram.recordMediumTimesHistogram(
+        RecordHistogram.deprecatedRecordMediumTimesHistogram(
                 TIME_TO_ACTION_HISTOGRAM_PREFIX + histogramSuffix, durationMs);
         if (messageDismissedByGesture) {
-            RecordHistogram.recordMediumTimesHistogram(
+            RecordHistogram.deprecatedRecordMediumTimesHistogram(
                     TIME_TO_ACTION_DISMISS_HISTOGRAM_PREFIX + histogramSuffix, durationMs);
         }
     }
@@ -224,7 +222,7 @@ public class MessagesMetrics {
 
     static void recordTimeToFullyShow(@MessageIdentifier int messageIdentifier, long durationMs) {
         String histogramSuffix = messageIdentifierToHistogramSuffix(messageIdentifier);
-        RecordHistogram.recordMediumTimesHistogram(
+        RecordHistogram.deprecatedRecordMediumTimesHistogram(
                 STACKING_TIME_TO_FULLY_SHOW_PREFIX + histogramSuffix, durationMs);
     }
 
@@ -270,15 +268,6 @@ public class MessagesMetrics {
     static void recordFullyVisible(@MessageIdentifier int messageIdentifier) {
         RecordHistogram.recordEnumeratedHistogram(
                 FULLY_VISIBLE_NAME, messageIdentifier, MessageIdentifier.COUNT);
-    }
-
-    /**
-     * Record the fully visible callback is not triggered when it is supposed to be. E.g. when the
-     * message is dismissed by gesture, primary action, secondary action, timer.
-     */
-    static void recordErrorFullyVisibleNotInformed(@MessageIdentifier int messageIdentifier) {
-        RecordHistogram.recordEnumeratedHistogram(
-                ERROR_FULLY_VISIBLE_NOT_INFORMED_NAME, messageIdentifier, MessageIdentifier.COUNT);
     }
 
     /** Record when the message is dismissed without being fully visible before. */
@@ -414,6 +403,18 @@ public class MessagesMetrics {
                 return "PromptHatsQuickDelete";
             case MessageIdentifier.PROMPT_HATS_SAFETY_HUB:
                 return "PromptHatsSafetyHub";
+            case MessageIdentifier.DEFAULT_BROWSER_PROMO:
+                return "DefaultBrowserPromo";
+            case MessageIdentifier.TAB_REMOVED_THROUGH_COLLABORATION:
+                return "TabRemovedThroughCollaboration";
+            case MessageIdentifier.TAB_NAVIGATED_THROUGH_COLLABORATION:
+                return "TabNavigatedThroughCollaboration";
+            case MessageIdentifier.COLLABORATION_MEMBER_ADDED:
+                return "CollaborationMemberAdded";
+            case MessageIdentifier.COLLABORATION_REMOVED:
+                return "CollaborationRemoved";
+            case MessageIdentifier.CCT_ACCOUNT_MISMATCH_NOTICE:
+                return "CctAccountMismatchNotice";
             default:
                 return "Unknown";
         }

@@ -54,8 +54,8 @@ using l10n_util::GetNSString;
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
   // Registrar for pref changes notifications.
   PrefChangeRegistrar _prefChangeRegistrar;
-  // The browser state for this mediator.
-  raw_ptr<ChromeBrowserState> _browserState;
+  // The profile for this mediator.
+  raw_ptr<ProfileIOS> _profile;
   // Observer for tab bar enabled/disabled state
   PrefBackedBoolean* _tabBarEnabled;
   // Observer for omnibox position
@@ -97,21 +97,21 @@ using l10n_util::GetNSString;
 @synthesize runningExtensiveChanges = _runningExtensiveChanges;
 
 #pragma mark - INITIALIZERS
-- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState
-                       bookmarkModel:(BookmarkModel*)bookmarkModel {
+- (instancetype)initWithProfile:(ProfileIOS*)profile
+                  bookmarkModel:(BookmarkModel*)bookmarkModel {
   if ((self = [super init])) {
-    _browserState = browserState;
+    _profile = profile;
     _bookmarkModel = bookmarkModel->AsWeakPtr();
     _bookmarkModelBridge = std::make_unique<BookmarkModelBridge>(
           self, _bookmarkModel.get());
 
     VivaldiMostVisitedSitesManager* mostVisitedSiteManager =
         [[VivaldiMostVisitedSitesManager alloc]
-            initWithBrowserState:browserState];
+            initWithProfile:profile];
     mostVisitedSiteManager.consumer = self;
     _mostVisitedSiteManager = mostVisitedSiteManager;
 
-    _prefs = browserState->GetPrefs();
+    _prefs = profile->GetPrefs();
     _prefChangeRegistrar.Init(_prefs);
     _prefObserverBridge.reset(new PrefObserverBridge(self));
 
@@ -154,7 +154,7 @@ using l10n_util::GetNSString;
     [_showCustomizeStartPageButton setObserver:self];
     [self booleanDidChange:_showCustomizeStartPageButton];
 
-    [VivaldiStartPagePrefs setPrefService:browserState->GetPrefs()];
+    [VivaldiStartPagePrefs setPrefService:profile->GetPrefs()];
 
     self.isTopSitesResultsAvailable = NO;
   }
@@ -170,7 +170,7 @@ using l10n_util::GetNSString;
 }
 
 - (void)disconnect {
-  _browserState = nil;
+  _profile = nil;
   _bookmarkModel = nullptr;
   _bookmarkModelBridge.reset();
   self.consumer = nil;
@@ -301,7 +301,7 @@ using l10n_util::GetNSString;
 - (void)fetchSpeedDialFolders {
 
   bookmarks::ManagedBookmarkService* managedBookmarkService =
-      ManagedBookmarkServiceFactory::GetForBrowserState(_browserState.get());
+      ManagedBookmarkServiceFactory::GetForProfile(_profile.get());
 
   _speedDialFolders = [[NSMutableArray alloc] init];
   NSMutableArray* speedDialFolderChildren = [[NSMutableArray alloc] init];

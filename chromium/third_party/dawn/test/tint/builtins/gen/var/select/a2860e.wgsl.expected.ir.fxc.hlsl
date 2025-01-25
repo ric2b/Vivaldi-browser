@@ -11,8 +11,8 @@ struct vertex_main_outputs {
 
 RWByteAddressBuffer prevent_dce : register(u0);
 int4 select_a2860e() {
-  int4 arg_0 = (1).xxxx;
-  int4 arg_1 = (1).xxxx;
+  int4 arg_0 = (int(1)).xxxx;
+  int4 arg_1 = (int(1)).xxxx;
   bool4 arg_2 = (true).xxxx;
   int4 res = ((arg_2) ? (arg_1) : (arg_0));
   return res;
@@ -37,9 +37,7 @@ VertexOutput vertex_main_inner() {
 
 vertex_main_outputs vertex_main() {
   VertexOutput v_1 = vertex_main_inner();
-  VertexOutput v_2 = v_1;
-  VertexOutput v_3 = v_1;
-  vertex_main_outputs v_4 = {v_3.prevent_dce, v_2.pos};
-  return v_4;
+  vertex_main_outputs v_2 = {v_1.prevent_dce, v_1.pos};
+  return v_2;
 }
 

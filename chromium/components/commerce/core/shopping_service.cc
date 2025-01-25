@@ -186,7 +186,8 @@ ShoppingService::ShoppingService(
         parcel_tracking_proto_db,
     history::HistoryService* history_service,
     std::unique_ptr<commerce::WebExtractor> web_extractor,
-    sessions::TabRestoreService* tab_restore_service)
+    sessions::TabRestoreService* tab_restore_service,
+    TemplateURLService* template_url_service)
     : country_on_startup_(country_on_startup),
       locale_on_startup_(locale_on_startup),
       opt_guide_(opt_guide),
@@ -202,7 +203,6 @@ ShoppingService::ShoppingService(
                   /*require_sync_feature_enabled=*/!base::FeatureList::
                       IsEnabled(syncer::kReplaceSyncPromosWithSignInPromos))),
       web_extractor_(std::move(web_extractor)),
-      history_service_(history_service),
       tab_restore_service_(tab_restore_service),
       weak_ptr_factory_(this) {
   // Register for the types of information we're allowed to receive from
@@ -237,14 +237,11 @@ ShoppingService::ShoppingService(
   if (identity_manager) {
     account_checker_ = base::WrapUnique(new AccountChecker(
         country_on_startup_, locale_on_startup_, pref_service, identity_manager,
-        sync_service, url_loader_factory));
+        sync_service, url_loader_factory, template_url_service));
   }
 
   if (identity_manager && account_checker_) {
-    if (subscription_proto_db &&
-        commerce::IsRegionLockedFeatureEnabled(
-            kShoppingList, kShoppingListRegionLaunched,
-            account_checker_->GetCountry(), account_checker_->GetLocale())) {
+    if (subscription_proto_db) {
       subscriptions_manager_ = std::make_unique<SubscriptionsManager>(
           identity_manager, url_loader_factory, subscription_proto_db,
           account_checker_.get());
@@ -304,8 +301,8 @@ ShoppingService::ShoppingService(
         CanLoadProductSpecificationsFullPageUi(account_checker_.get())) {
       cluster_manager_ = std::make_unique<ClusterManager>(
           product_specifications_service_,
-          std::make_unique<ClusterServerProxy>(identity_manager,
-                                               url_loader_factory),
+          std::make_unique<ClusterServerProxy>(
+              identity_manager, url_loader_factory, account_checker_.get()),
           base::BindRepeating(&ShoppingService::GetProductInfoForUrl,
                               weak_ptr_factory_.GetWeakPtr()),
           base::BindRepeating(&ShoppingService::GetUrlInfosForActiveWebWrappers,
@@ -313,8 +310,8 @@ ShoppingService::ShoppingService(
     }
   }
 
-  if (history_service_) {
-    history_service_observation_.Observe(history_service_);
+  if (history_service) {
+    history_service_observation_.Observe(history_service);
   }
 
   if (product_specifications_service_) {
@@ -1110,6 +1107,18 @@ std::unique_ptr<ProductInfo> ShoppingService::OptGuideResultToProductInfo(
     info->category_data = buyable_product.category_data();
   }
 
+  // TODO(376128060): Remove the feature check after M132.
+  if (CanLoadProductSpecificationsFullPageUi(account_checker_.get())) {
+    for (int i = 0; i < buyable_product.price_summary_size(); ++i) {
+      info->price_summary.push_back(buyable_product.price_summary(i));
+    }
+
+    if (buyable_product.has_price_display_recommendation()) {
+      info->price_display_recommendation =
+          buyable_product.price_display_recommendation();
+    }
+  }
+
   return info;
 }
 
@@ -1748,14 +1757,6 @@ void ShoppingService::StartTrackingParcels(
 }
 
 void ShoppingService::GetAllParcelStatuses(GetParcelStatusCallback callback) {
-  if (base::FeatureList::IsEnabled(kParcelTrackingTestData)) {
-    auto statuses = std::make_unique<std::vector<ParcelTrackingStatus>>();
-    statuses->push_back(GetParcelTrackingStatusTestData());
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback), true, std::move(statuses)));
-    return;
-  }
   if (parcels_manager_) {
     parcels_manager_->GetAllParcelStatuses(std::move(callback));
   } else {
@@ -1902,18 +1903,6 @@ void ShoppingService::OnProductSpecificationsSetRemoved(
         return entry.virtual_url().spec().starts_with(base_url);
       },
       GetProductSpecsTabUrlForID(set.uuid()).spec()));
-}
-
-void ShoppingService::QueryHistoryForUrl(
-    const GURL& url,
-    history::HistoryService::QueryURLCallback callback) {
-  if (!history_service_) {
-    std::move(callback).Run(history::QueryURLResult());
-    return;
-  }
-
-  history_service_->QueryURL(url, false, std::move(callback),
-                             &cancelable_task_tracker_);
 }
 
 base::WeakPtr<ShoppingService> ShoppingService::AsWeakPtr() {

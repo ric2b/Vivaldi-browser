@@ -15,12 +15,13 @@ namespace openscreen::osp {
 class ReceiverList {
  public:
   ReceiverList();
-  ~ReceiverList();
+  ReceiverList(const ReceiverList&) = delete;
+  ReceiverList& operator=(const ReceiverList&) = delete;
   ReceiverList(ReceiverList&&) noexcept = delete;
-  ReceiverList& operator=(ReceiverList&&) = delete;
+  ReceiverList& operator=(ReceiverList&&) noexcept = delete;
+  ~ReceiverList();
 
   void OnReceiverAdded(const ServiceInfo& info);
-
   Error OnReceiverChanged(const ServiceInfo& info);
   // If successfully removed, returns the service info that was removed. If
   // `info` is a reference to an entry in `receivers`, it is immediately

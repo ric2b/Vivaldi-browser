@@ -9,6 +9,7 @@
  */
 
 import './certificate_list_v2.js';
+import './certificate_confirmation_dialog.js';
 import './certificate_info_dialog.js';
 import './certificate_password_dialog.js';
 import './certificate_subpage_v2.js';
@@ -23,7 +24,7 @@ import '//resources/cr_elements/cr_button/cr_button.js';
 import '//resources/cr_elements/cr_link_row/cr_link_row.js';
 import '//resources/cr_elements/cr_shared_style.css.js';
 import '//resources/cr_elements/cr_shared_vars.css.js';
-import '//resources/cr_elements/icons_lit.html.js';
+import '//resources/cr_elements/icons.html.js';
 import '//resources/cr_elements/cr_page_selector/cr_page_selector.js';
 import '//resources/cr_elements/cr_menu_selector/cr_menu_selector.js';
 import '//resources/cr_elements/cr_nav_menu_item_style.css.js';
@@ -39,9 +40,10 @@ import {loadTimeData} from '//resources/js/load_time_data.js';
 import {PromiseResolver} from '//resources/js/promise_resolver.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import type {CertificateConfirmationDialogElement} from './certificate_confirmation_dialog.js';
 import type {CertificateListV2Element} from './certificate_list_v2.js';
 import {getTemplate} from './certificate_manager_v2.html.js';
-import type {ImportResult} from './certificate_manager_v2.mojom-webui.js';
+import type {ActionResult} from './certificate_manager_v2.mojom-webui.js';
 import {CertificateSource} from './certificate_manager_v2.mojom-webui.js';
 import type {CertificatePasswordDialogElement} from './certificate_password_dialog.js';
 import type {CertificateSubpageV2Element, SubpageCertificateList} from './certificate_subpage_v2.js';
@@ -53,6 +55,10 @@ import {Page, RouteObserverMixin, Router} from './navigation_v2.js';
 
 interface PasswordResult {
   password: string|null;
+}
+
+interface ConfirmationResult {
+  confirmed: boolean;
 }
 
 const CertificateManagerV2ElementBase =
@@ -83,6 +89,7 @@ export interface CertificateManagerV2Element {
     clientCertSection: HTMLElement,
     crsCertSection: CrsSectionV2Element,
     adminCertsSection: CertificateSubpageV2Element,
+    userCertsSection: CertificateSubpageV2Element,
     platformCertsSection: CertificateSubpageV2Element,
     platformClientCertsSection: CertificateSubpageV2Element,
   };
@@ -101,86 +108,90 @@ export class CertificateManagerV2Element extends
   static get properties() {
     return {
       selectedPage_: String,
-      // TODO(crbug.com/40928765): Try to clean this up so that default values
-      // don't need to be repeated for each subpage.
       enterpriseSubpageLists_: {
-        type: Array,
-        value: () => {
+        type: Array<SubpageCertificateList>,
+        value: (): SubpageCertificateList[] => {
           return [
             {
               headerText: loadTimeData.getString(
                   'certificateManagerV2TrustedCertsList'),
               certSource: CertificateSource.kEnterpriseTrustedCerts,
-              hideExport: false,
-              showImport: false,
-              showImportAndBind: false,
-              hideIfEmpty: false,
-              hideHeader: false,
             },
             {
               headerText: loadTimeData.getString(
                   'certificateManagerV2IntermediateCertsList'),
               certSource: CertificateSource.kEnterpriseIntermediateCerts,
-              hideExport: false,
-              showImport: false,
-              showImportAndBind: false,
               hideIfEmpty: true,
-              hideHeader: false,
             },
             {
               headerText: loadTimeData.getString(
                   'certificateManagerV2DistrustedCertsList'),
               certSource: CertificateSource.kEnterpriseDistrustedCerts,
-              hideExport: false,
-              showImport: false,
-              showImportAndBind: false,
               hideIfEmpty: true,
-              hideHeader: false,
             },
           ];
         },
       },
       platformSubpageLists_: {
-        type: Array,
-        value: () => {
+        type: Array<SubpageCertificateList>,
+        value: (): SubpageCertificateList[] => {
           return [
             {
               headerText: loadTimeData.getString(
                   'certificateManagerV2TrustedCertsList'),
               certSource: CertificateSource.kPlatformUserTrustedCerts,
-              hideExport: false,
-              showImport: false,
-              showImportAndBind: false,
-              hideIfEmpty: false,
-              hideHeader: false,
             },
             {
               headerText: loadTimeData.getString(
                   'certificateManagerV2IntermediateCertsList'),
               certSource: CertificateSource.kPlatformUserIntermediateCerts,
-              hideExport: false,
-              showImport: false,
-              showImportAndBind: false,
               hideIfEmpty: true,
-              hideHeader: false,
             },
             {
               headerText: loadTimeData.getString(
                   'certificateManagerV2DistrustedCertsList'),
               certSource: CertificateSource.kPlatformUserDistrustedCerts,
-              hideExport: false,
-              showImport: false,
-              showImportAndBind: false,
               hideIfEmpty: true,
-              hideHeader: false,
             },
           ];
         },
       },
 
       clientPlatformSubpageLists_: {
-        type: Array,
-        computed: 'computeClientPlatformSubpageLists_(showClientCertImport_)',
+        type: Array<SubpageCertificateList>,
+        // <if expr="chromeos_ash">
+        computed: 'computeClientPlatformSubpageLists_(showClientCertImport_,' +
+            'showClientCertImportAndBind_)',
+        // </if>
+        // <if expr="not chromeos_ash">
+        computed: 'computeClientPlatformSubpageLists_()',
+        // </if>
+      },
+
+      userSubpageLists_: {
+        type: Array<SubpageCertificateList>,
+        value: (): SubpageCertificateList[] => {
+          return [
+            {
+              headerText: loadTimeData.getString(
+                  'certificateManagerV2TrustedCertsList'),
+              certSource: CertificateSource.kUserTrustedCerts,
+              showImport: loadTimeData.getBoolean('userCertsImportAllowed'),
+            },
+            {
+              headerText: loadTimeData.getString(
+                  'certificateManagerV2IntermediateCertsList'),
+              certSource: CertificateSource.kUserIntermediateCerts,
+              showImport: loadTimeData.getBoolean('userCertsImportAllowed'),
+            },
+            {
+              headerText: loadTimeData.getString(
+                  'certificateManagerV2DistrustedCertsList'),
+              certSource: CertificateSource.kUserDistrustedCerts,
+              showImport: loadTimeData.getBoolean('userCertsImportAllowed'),
+            },
+          ];
+        },
       },
 
       toastMessage_: String,
@@ -189,13 +200,30 @@ export class CertificateManagerV2Element extends
       infoDialogTitle_: String,
       infoDialogMessage_: String,
       showPasswordDialog_: Boolean,
+      confirmationDialogTitle_: String,
+      confirmationDialogMessage_: String,
+      showConfirmationDialog_: Boolean,
 
       showSearch_: {
         type: Boolean,
         value: false,
       },
 
-      showClientCertImport_: Boolean,
+      // <if expr="chromeos_ash">
+      showClientCertImport_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('clientCertImportAllowed');
+        },
+      },
+
+      showClientCertImportAndBind_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('clientCertImportAndBindAllowed');
+        },
+      },
+      // </if>
 
       certificateSourceEnum_: {
         type: Object,
@@ -216,20 +244,17 @@ export class CertificateManagerV2Element extends
   private infoDialogMessage_: string;
   private showPasswordDialog_: boolean = false;
   private passwordEntryResolver_: PromiseResolver<PasswordResult>|null = null;
+  private showConfirmationDialog_: boolean = false;
+  private confirmationDialogTitle_: string;
+  private confirmationDialogMessage_: string;
+  private confirmationDialogResolver_: PromiseResolver<ConfirmationResult>|
+      null = null;
   private enterpriseSubpageLists_: SubpageCertificateList[];
   private platformSubpageLists_: SubpageCertificateList[];
   private clientPlatformSubpageLists_: SubpageCertificateList[];
-  // <if expr="not chromeos_ash">
-  private showClientCertImport_: boolean = false;
-  // </if>
   // <if expr="chromeos_ash">
-  // TODO(crbug.com/40928765): Import should also be disabled in kiosk mode or
-  // when disabled by policy.
-  // TODO(crbug.com/40928765): This controls both "import" and "import and
-  // bind". If we implement client cert import on Linux too we should make a
-  // separate bool for each so that "import and bind" is only enabled on
-  // chromeos.
-  private showClientCertImport_: boolean = true;
+  private showClientCertImport_: boolean;
+  private showClientCertImportAndBind_: boolean;
   // </if>
 
   override ready() {
@@ -237,6 +262,8 @@ export class CertificateManagerV2Element extends
     const proxy = CertificatesV2BrowserProxy.getInstance();
     proxy.callbackRouter.askForImportPassword.addListener(
         this.onAskForImportPassword_.bind(this));
+    proxy.callbackRouter.askForConfirmation.addListener(
+        this.onAskForConfirmation_.bind(this));
   }
 
   private onAskForImportPassword_(): Promise<PasswordResult> {
@@ -255,6 +282,29 @@ export class CertificateManagerV2Element extends
     this.passwordEntryResolver_.resolve({password: passwordDialog.value()});
     this.passwordEntryResolver_ = null;
     this.showPasswordDialog_ = false;
+  }
+
+  private onAskForConfirmation_(title: string, message: string):
+      Promise<ConfirmationResult> {
+    this.confirmationDialogTitle_ = title;
+    this.confirmationDialogMessage_ = message;
+    this.showConfirmationDialog_ = true;
+    assert(this.confirmationDialogResolver_ === null);
+    this.confirmationDialogResolver_ =
+        new PromiseResolver<ConfirmationResult>();
+    return this.confirmationDialogResolver_.promise;
+  }
+
+  private onConfirmationDialogClose_() {
+    const confirmationDialog =
+        this.shadowRoot!.querySelector<CertificateConfirmationDialogElement>(
+            '#confirmationDialog');
+    assert(confirmationDialog);
+    assert(this.confirmationDialogResolver_);
+    this.confirmationDialogResolver_.resolve(
+        {confirmed: confirmationDialog.wasConfirmed()});
+    this.confirmationDialogResolver_ = null;
+    this.showConfirmationDialog_ = false;
   }
 
   private onHashCopied_() {
@@ -294,6 +344,9 @@ export class CertificateManagerV2Element extends
           break;
         case Page.PLATFORM_CLIENT_CERTS:
           this.$.platformClientCertsSection.setInitialFocus();
+          break;
+        case Page.USER_CERTS:
+          this.$.userCertsSection.setInitialFocus();
           break;
         default:
           assertNotReached();
@@ -354,14 +407,27 @@ export class CertificateManagerV2Element extends
     Router.getInstance().navigateTo(Page.PLATFORM_CLIENT_CERTS);
   }
 
-  private onImportResult_(e: CustomEvent<ImportResult|null>) {
+  private onImportResult_(e: CustomEvent<ActionResult|null>) {
     const result = e.detail;
     if (result === null) {
       return;
     }
     if (result.error !== undefined) {
-      // TODO(crbug.com/40928765): localize
-      this.infoDialogTitle_ = 'import result';
+      this.infoDialogTitle_ =
+          loadTimeData.getString('certificateManagerV2ImportErrorTitle');
+      this.infoDialogMessage_ = result.error;
+      this.showInfoDialog_ = true;
+    }
+  }
+
+  private onDeleteResult_(e: CustomEvent<ActionResult|null>) {
+    const result = e.detail;
+    if (result === null) {
+      return;
+    }
+    if (result.error !== undefined) {
+      this.infoDialogTitle_ =
+          loadTimeData.getString('certificateManagerV2DeleteErrorTitle');
       this.infoDialogMessage_ = result.error;
       this.showInfoDialog_ = true;
     }
@@ -379,13 +445,22 @@ export class CertificateManagerV2Element extends
             'certificateManagerV2ClientCertsFromPlatform'),
         certSource: CertificateSource.kPlatformClientCert,
         hideExport: true,
+        // <if expr="chromeos_ash">
         showImport: this.showClientCertImport_,
-        showImportAndBind: this.showClientCertImport_,
-        hideIfEmpty: false,
+        showImportAndBind: this.showClientCertImportAndBind_,
         // TODO(crbug.com/40928765): Figure out how we want to display the
         // import buttons/etc on this subpage. For now just show the header
         // when we need the import buttons to be visible.
-        hideHeader: !this.showClientCertImport_,
+        hideHeader:
+            !this.showClientCertImport_ && !this.showClientCertImportAndBind_,
+        // </if>
+        // <if expr="is_linux">
+        showImport: true,
+        hideHeader: false,
+        // </if>
+        // <if expr="not chromeos_ash and not is_linux">
+        hideHeader: true,
+        // </if>
       },
     ];
   }

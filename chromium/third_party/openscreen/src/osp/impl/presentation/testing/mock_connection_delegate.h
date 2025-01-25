@@ -15,6 +15,11 @@ namespace openscreen::osp {
 
 class MockConnectionDelegate : public Connection::Delegate {
  public:
+  MockConnectionDelegate() = default;
+  MockConnectionDelegate(const MockConnectionDelegate&) = delete;
+  MockConnectionDelegate& operator=(const MockConnectionDelegate&) = delete;
+  MockConnectionDelegate(MockConnectionDelegate&&) noexcept = delete;
+  MockConnectionDelegate& operator=(MockConnectionDelegate&&) noexcept = delete;
   ~MockConnectionDelegate() override = default;
 
   MOCK_METHOD0(OnConnected, void());

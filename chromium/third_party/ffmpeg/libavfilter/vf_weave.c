@@ -22,8 +22,8 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
+#include "filters.h"
 #include "formats.h"
-#include "internal.h"
 #include "video.h"
 
 typedef struct WeaveContext {
@@ -52,11 +52,14 @@ static const AVOption weave_options[] = {
 
 AVFILTER_DEFINE_CLASS_EXT(weave, "(double)weave", weave_options);
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
     int reject_flags = AV_PIX_FMT_FLAG_PAL | AV_PIX_FMT_FLAG_HWACCEL;
 
-    return ff_set_common_formats(ctx, ff_formats_pixdesc_filter(0, reject_flags));
+    return ff_set_common_formats2(ctx, cfg_in, cfg_out,
+                                  ff_formats_pixdesc_filter(0, reject_flags));
 }
 
 static int config_props_output(AVFilterLink *outlink)
@@ -68,10 +71,12 @@ static int config_props_output(AVFilterLink *outlink)
     int ret;
 
     if (!s->double_weave) {
+        FilterLink *il = ff_filter_link(inlink);
+        FilterLink *ol = ff_filter_link(outlink);
         outlink->time_base.num = inlink->time_base.num * 2;
         outlink->time_base.den = inlink->time_base.den;
-        outlink->frame_rate.num = inlink->frame_rate.num;
-        outlink->frame_rate.den = inlink->frame_rate.den * 2;
+        ol->frame_rate.num = il->frame_rate.num;
+        ol->frame_rate.den = il->frame_rate.den * 2;
     }
     outlink->w = inlink->w;
     outlink->h = inlink->h * 2;
@@ -97,12 +102,13 @@ typedef struct ThreadData {
 static int weave_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
     AVFilterLink *inlink = ctx->inputs[0];
+    FilterLink *inl = ff_filter_link(inlink);
     WeaveContext *s = ctx->priv;
     ThreadData *td = arg;
     AVFrame *in = td->in;
     AVFrame *out = td->out;
 
-    const int weave = (s->double_weave && !(inlink->frame_count_out & 1));
+    const int weave = (s->double_weave && !(inl->frame_count_out & 1));
     const int field1 = weave ? s->first_field : (!s->first_field);
     const int field2 = weave ? (!s->first_field) : s->first_field;
 
@@ -206,7 +212,7 @@ const AVFilter ff_vf_weave = {
     .uninit        = uninit,
     FILTER_INPUTS(weave_inputs),
     FILTER_OUTPUTS(weave_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .flags         = AVFILTER_FLAG_SLICE_THREADS,
 };
 
@@ -229,6 +235,6 @@ const AVFilter ff_vf_doubleweave = {
     .uninit        = uninit,
     FILTER_INPUTS(weave_inputs),
     FILTER_OUTPUTS(weave_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .flags         = AVFILTER_FLAG_SLICE_THREADS,
 };

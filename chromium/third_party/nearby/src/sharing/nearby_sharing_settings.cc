@@ -149,7 +149,7 @@ void NearbyShareSettings::StartVisibilityTimer(
         proto::DeviceVisibility visibility;
         {
           absl::MutexLock lock(&mutex_);
-          visibility = GetRawFallbackVisibility().visibility;
+          visibility = fallback_visibility_;
           visibility_expiration_timer_.reset();
         }
         SetVisibility(visibility);
@@ -257,6 +257,14 @@ void NearbyShareSettings::SetVisibility(DeviceVisibility visibility,
     visibility = DeviceVisibility::DEVICE_VISIBILITY_SELF_SHARE;
   }
   DeviceVisibility last_visibility = GetVisibility();
+  absl::Duration max_expiration =
+      absl::Seconds(kMaxVisibilityExpirationSeconds);
+  if (expiration > max_expiration) {
+    LOG(WARNING) << "Set visbility expiration is too long. visibility="
+                 << static_cast<int>(visibility)
+                 << ", expiration=" << expiration;
+    expiration = max_expiration;
+  }
   if (analytics_recorder_ != nullptr) {
     analytics_recorder_->NewSetVisibility(
         last_visibility, visibility, absl::ToInt64Milliseconds(expiration));
@@ -267,6 +275,7 @@ void NearbyShareSettings::SetVisibility(DeviceVisibility visibility,
              << ", expiration=" << expiration;
   visibility_expiration_timer_.reset();
 
+  SetFallbackVisibility(last_visibility);
   absl::Time now = clock_->Now();
   if (expiration != absl::ZeroDuration()) {
     NL_VLOG(1) << __func__ << ": temporary visibility timer starts.";
@@ -274,16 +283,8 @@ void NearbyShareSettings::SetVisibility(DeviceVisibility visibility,
     preference_manager_.SetInteger(
         prefs::kNearbySharingBackgroundVisibilityExpirationSeconds,
         absl::ToUnixSeconds(fallback_visibility_timestamp));
-    SetFallbackVisibility(last_visibility);
     StartVisibilityTimer(expiration);
   } else {
-    // Since our UI provides the option to go back to temporary everyone mode,
-    // we should only clear the fallback visibility when we are not in everyone
-    // mode. Once we fall back to a non-everyone mode visibility, we should
-    // clear the fallback visibility.
-    if (visibility != DeviceVisibility::DEVICE_VISIBILITY_EVERYONE) {
-      SetFallbackVisibility(DeviceVisibility::DEVICE_VISIBILITY_UNSPECIFIED);
-    }
     preference_manager_.SetInteger(
         prefs::kNearbySharingBackgroundVisibilityExpirationSeconds, 0);
   }

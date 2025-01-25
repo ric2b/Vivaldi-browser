@@ -56,5 +56,9 @@ extern const base::FeatureParam<int> kMaxDaysForMLPromotionGuardrailStorage(
     "max_days_to_store_guardrails",
     kTotalDaysToStoreMLGuardrails);
 
+BASE_FEATURE(kBypassAppBannerEngagementChecks,
+             "BypassAppBannerEngagementChecks",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 }  // namespace features
 }  // namespace webapps

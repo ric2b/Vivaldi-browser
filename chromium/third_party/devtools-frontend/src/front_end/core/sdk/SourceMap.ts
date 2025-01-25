@@ -37,7 +37,7 @@ import * as Common from '../common/common.js';
 import * as Platform from '../platform/platform.js';
 import * as Root from '../root/root.js';
 
-import {type CallFrame, type ScopeChainEntry} from './DebuggerModel.js';
+import type {CallFrame, ScopeChainEntry} from './DebuggerModel.js';
 import {SourceMapScopesInfo} from './SourceMapScopesInfo.js';
 
 /**
@@ -247,8 +247,8 @@ export class SourceMap {
     if (inlineFrameIndex && this.#scopesInfo !== null) {
       // For inlineFrameIndex != 0 we use the callsite info for the corresponding inlining site.
       // Note that the callsite for "inlineFrameIndex" is actually in the previous frame.
-      const functions = this.#scopesInfo.findInlinedFunctions(lineNumber, columnNumber);
-      const {callsite} = functions[inlineFrameIndex - 1];
+      const {inlinedFunctions} = this.#scopesInfo.findInlinedFunctions(lineNumber, columnNumber);
+      const {callsite} = inlinedFunctions[inlineFrameIndex - 1];
       if (!callsite) {
         console.error('Malformed source map. Expected to have a callsite info for index', inlineFrameIndex);
         return null;
@@ -832,13 +832,7 @@ export class SourceMap {
       return [frame];
     }
 
-    const functionNames =
-        this.#scopesInfo.findInlinedFunctions(frame.location().lineNumber, frame.location().columnNumber);
-    const result: CallFrame[] = [];
-    for (const [index, fn] of functionNames.entries()) {
-      result.push(frame.createVirtualCallFrame(index, fn.name));
-    }
-    return result;
+    return this.#scopesInfo.expandCallFrame(frame);
   }
 
   resolveScopeChain(frame: CallFrame): ScopeChainEntry[]|null {

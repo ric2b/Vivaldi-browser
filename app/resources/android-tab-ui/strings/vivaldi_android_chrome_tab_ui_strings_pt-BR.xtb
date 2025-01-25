@@ -3,7 +3,7 @@
 <translationbundle lang="pt-BR">
 <translation id="2947471979790858922">Sua atividade nessas abas privadas será removida deste dispositivo</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
-        =1 {Pode encontrar as abas que fechar nas Abas recentes, no menu principal do Vivaldi. A sua aba privado não estará disponível.}
-        other {Pode encontrar as abas que fechar nas Abas recentes, no menu principal do Vivaldi. As suas # abas privados não estarão disponíveis.}}</translation>
+        =1 {Você pode encontrar suas abas fechadas em Abas Recentes, no menu principal do Vivaldi. Sua aba privada não estará disponível.}
+        other {Você pode encontrar suas abas fechadas em Abas Recentes, no menu principal do Vivaldi. Suas # abas privadas não estarão disponíveis.}}</translation>
 <translation id="4871187110787939393">Fechar todas as abas privadas?</translation>
 </translationbundle>

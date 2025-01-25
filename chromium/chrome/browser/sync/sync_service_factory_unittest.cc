@@ -21,7 +21,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/data_sharing/public/features.h"
-#include "components/saved_tab_groups/features.h"
+#include "components/saved_tab_groups/public/features.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/sync/base/command_line_switches.h"
 #include "components/sync/base/data_type.h"
@@ -194,9 +194,7 @@ class SyncServiceFactoryTest : public testing::Test {
     datatypes.Put(syncer::SEND_TAB_TO_SELF);
     datatypes.Put(syncer::SHARING_MESSAGE);
 #if !BUILDFLAG(IS_ANDROID)
-    if (base::FeatureList::IsEnabled(syncer::kSyncWebauthnCredentials)) {
-      datatypes.Put(syncer::WEBAUTHN_CREDENTIAL);
-    }
+    datatypes.Put(syncer::WEBAUTHN_CREDENTIAL);
 #endif  // !BUILDFLAG(IS_ANDROID)
     if (base::FeatureList::IsEnabled(
             data_sharing::features::kDataSharingFeature)) {

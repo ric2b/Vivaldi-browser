@@ -37,6 +37,12 @@ config_data chromeos
 make -j 120
 $ICUROOT/scripts/copy_data.sh chromeos
 
+echo "Build the filtered data for Chromecast Video"
+(cd data && make clean)
+config_data chromecast_video
+make -j 120
+$ICUROOT/scripts/copy_data.sh chromecast_video
+
 echo "Build the filtered data for Cast"
 (cd data && make clean)
 config_data cast

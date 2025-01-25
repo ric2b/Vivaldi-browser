@@ -135,7 +135,6 @@
 <translation id="3607176258839749451">Գրանցումը ձախողվեց սխալի պատճառով։ Նորից փորձեք ավելի ուշ։</translation>
 <translation id="3646647753063635401">Սինքրոնացնել բոլոր տվյալները և ավտոմատ միացնել սինքրոնացումը տվյալների նոր տեսակների համար</translation>
 <translation id="3682791711395736890">Դիտել կայքի համակարգչային տարբերակը</translation>
-<translation id="3692650606013198282">Բացել գաղտնի ռեժիմում</translation>
 <translation id="3699026013955941879">Կոդը ժամկետնանց է։ Խնդրում ենք նոր ակտիվացման կոդի հարցում կատարել։</translation>
 <translation id="3700829948786686853">Բարի գալուստ Vivaldi</translation>
 <translation id="3766350025418769949">Դուք կարող եք Vivaldi-ի գաղտնաբառերի կառավարչում Ձեր պահպանած գաղտնաբառերն օգտագործել iPad-ի այլ հավելվածներում։</translation>
@@ -197,6 +196,7 @@
 <translation id="4619615317237390068">Այլ սարքերի ներդիրներ</translation>
 <translation id="462860218383788109">Խմբագրման ամսաթվով</translation>
 <translation id="4640946580087069269">Պատճենել նոթի մեջ</translation>
+<translation id="4643117005422448078">Առաջնային կայքեր</translation>
 <translation id="4654578955713250802">Արգելափակել գովազդն ու հետևիչները</translation>
 <translation id="4655510151391078468">Այս կոդը չի համընկնում այն մեկի հետ, որը Ձեզ ուղարկել ենք։
         Ձեզ մնացել է <ph name="ATTEMPTS" /> փորձ։</translation>
@@ -230,6 +230,7 @@
 <translation id="5122095890854520072">Լատիշերեն (<ph name="ORIGIN" />)</translation>
 <translation id="5153806174841856652">Մուտքը ձախողվեց</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Նորից կոդ ուղարկել<ph name="END_LINK" /></translation>
+<translation id="5166345991950198590">Ցույց տալ հաճախ այցելվող կայքերը</translation>
 <translation id="5191012692655103305">Ստացվում են ներդիրներն ու պատմությունը…</translation>
 <translation id="5238642303473095117">Ջնջել տվյալները</translation>
 <translation id="5245732982828228444">Ձեր նոթերը կգտնեք այստեղ</translation>
@@ -290,7 +291,6 @@
 <translation id="6703516503311038964">Ես ցանկանում եմ ստանալ Vivaldi-ի լրագիրը</translation>
 <translation id="6724024423419410528">Գույներ</translation>
 <translation id="6745857330065678428">Ժառանգել շեշտման գույնն էջից</translation>
-<translation id="6757792528048321576">Գովազդի ու հետևիչների արգելափակիչ</translation>
 <translation id="6798469570047202628">Մուտքագրված է սխալ գաղտնաբառ</translation>
 <translation id="681368974849482173">Նոթը ստեղծված է</translation>
 <translation id="6830986331692390764">Սինքրոնացման տվյալները մաքրվում են։ Խնդրում ենք սպասել։</translation>
@@ -327,7 +327,6 @@
 <translation id="7417521636956146248">Որոնիչները կվերադառնան ստանդարտ կարգավորումներին, ինչը նաև կզրոյացնի Ձեր սեփական որոնիչները։</translation>
 <translation id="7454640759045234067">Հետևիչ է արգելափակված</translation>
 <translation id="7461899062138731833">ԱՂԲՅՈՒՐՆԵՐ</translation>
-<translation id="7490291412537629707">Բացել նոր հետին ներդիրում</translation>
 <translation id="750493650310597496">0 ընտրված</translation>
 <translation id="7525067979554623046">Ստեղծել</translation>
 <translation id="753732157349120914">Ներդիրների փոխանցիչ</translation>
@@ -363,7 +362,6 @@
 <translation id="8142291334394582384">Հակադարձել որոնման առաջարկների հերթականությունը</translation>
 <translation id="8147118677117542370">Խնդրում ենք նշել Ձեր տարիքը։</translation>
 <translation id="8165573437634525334">Տվյալները պաշտպանված են ծածկագրման գաղտնաբառով</translation>
-<translation id="8182979418912184986">Նոր գաղտնի ներդիր</translation>
 <translation id="8237090677709100373">Սեփական գույնի կոդ</translation>
 <translation id="8257908958623224237">Կոնֆլիկտ մեկ այլ սպասառուի տվյալների հետ։</translation>
 <translation id="8261506727792406068">Ջնջել</translation>
@@ -376,7 +374,6 @@
 <translation id="8347535536909603600">Հեռացնել քուքիների զգուշացումները (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">Այլ սարքերի ներդիրները տեսնելու համար, Դուք պետք է միացնեք սինքրոնացումը։</translation>
 <translation id="8366175803122817174">Բացել բոլոր նոթերի հասցեները</translation>
-<translation id="8384409685584033392">Էջի տեղեկատվություն</translation>
 <translation id="839736845446313156">Գրանցվել</translation>
 <translation id="8414685983518053656">Նոթեր</translation>
 <translation id="8423076545503792640">Հարցումը ձախողվեց սխալի պատճառով։ Նորից փորձեք ավելի ուշ։</translation>
@@ -386,13 +383,14 @@
 <translation id="8503813439785031346">Օգտվողի անուն</translation>
 <translation id="8515808232153642813">Վերծանել</translation>
 <translation id="8517852590337319813">Ակտիվացրեք Ձեր հաշիվը</translation>
-<translation id="8546963963006468833">Vivaldi-ի հետ Դուք կարող եք հեշտությամբ բացել հղումները, որոնել վիդջեթներով և ինքնալրացնել գաղտնաբառերն այլ հավելվածներում։</translation>
+<translation id="8546963963006468833">Vivaldi-ի հետ Դուք կարող եք հեշտությամբ բացել հղումները, որոնել վիջեթներով և ինքնալրացնել գաղտնաբառերն այլ հավելվածներում։</translation>
 <translation id="8562452229998620586">Պահպանված գաղտնաբառերը կերևան այստեղ։</translation>
 <translation id="8591818185775466306">Ջնջել <ph name="ITEM_TYPE" />ը</translation>
 <translation id="8605953154325672921">Պահանջվում է օգտվողի անուն</translation>
 <translation id="8675578805254882416">Ստացում</translation>
 <translation id="8677007239430848917">Ավելացրեք Ձեր առաջին նոթը՝ հպելով պլյուսի նշանը ստորև</translation>
 <translation id="8684294196284714094">Պատրա՞ստ եք դարձնել Vivaldi-ն Ձեր հիմնական բրաուզերը։</translation>
+<translation id="8733945742171960420">Հենց սկսեք աշխատանքը, Ձեր առաջնային կայքերը կհայտնվեն այստեղ։</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> նոթ ջնջված է</translation>
 <translation id="8763006697839582351">Բացել Vivaldi-ի գաղտնի ռեժիմում</translation>
 <translation id="8765173886020357878">Որոնման առաջարկներ</translation>

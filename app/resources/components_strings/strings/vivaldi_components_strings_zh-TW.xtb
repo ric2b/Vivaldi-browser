@@ -10,8 +10,9 @@
 <translation id="132390688737681464">儲存並填入地址</translation>
 <translation id="1375198122581997741">關於版本</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> 未傳送任何資料。</translation>
+<translation id="1555191101192706055">您嘗試造訪的網站上的攻擊者，可能會誘騙您安裝有害軟體，以影響您的瀏覽方式 — 例如變更您的首頁，或在您造訪的網站上顯示額外廣告。</translation>
 <translation id="1559528461873125649">找不到您所指定的檔案或目錄</translation>
-<translation id="1640244768702815859">請嘗試<ph name="BEGIN_LINK" />前往網站首頁<ph name="END_LINK" />。</translation>
+<translation id="1640244768702815859">請嘗試<ph name="BEGIN_LINK" />造訪網站首頁<ph name="END_LINK" />。</translation>
 <translation id="1645368109819982629">不支援的通訊協定</translation>
 <translation id="1662550410081243962">儲存並填入付款方式</translation>
 <translation id="1710259589646384581">作業系統</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />檢查代理和防火牆<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">核發對象：<ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">這個網站無法提供安全連線</translation>
+<translation id="2178904466768126352">您嘗試造訪的網站上的攻擊者，可能會安裝有害軟體，以竊取或刪除您的密碼、照片、訊息或是信用卡號碼等資料。</translation>
 <translation id="2187317261103489799">偵測（預設）</translation>
 <translation id="2224337661447660594">沒有網際網路連線</translation>
 <translation id="2283340219607151381">儲存並填入地址</translation>
@@ -92,6 +94,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />檢查防火牆和防毒軟體設定<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />正在嘗試執行網路診斷<ph name="END_LINK" />。</translation>
 <translation id="4235360514405112390">有效</translation>
+<translation id="4241830393007970744">您嘗試造訪的網站上的攻擊者，可能會誘騙您安裝軟體或是透露您的密碼、電話號碼或是信用卡號碼等資料。</translation>
 <translation id="4250431568374086873">您與這個網站的連線可能有安全漏洞</translation>
 <translation id="4265872034478892965">依據管理員的設定允許</translation>
 <translation id="4305666528087210886">無法存取您的檔案</translation>
@@ -102,6 +105,7 @@
 <translation id="4522570452068850558">詳細資訊</translation>
 <translation id="4558551763791394412">試試看停用擴充功能。</translation>
 <translation id="4592951414987517459">您的 <ph name="DOMAIN" /> 連線使用新型加密套件進行加密。</translation>
+<translation id="4598641255230617220">貼上並前往</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">您的連線已中斷</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />正在執行 Windows 網路診斷<ph name="END_LINK" /></translation>
@@ -111,6 +115,7 @@
 <translation id="4764776831041365478"><ph name="URL" /> 的網頁可能暫時無法使用或被永久移至新網址。</translation>
 <translation id="483241715238664915">開啟警告</translation>
 <translation id="4943872375798546930">無結果</translation>
+<translation id="5017554619425969104">您複製的文字</translation>
 <translation id="5023310440958281426">請查看您的管理員策略</translation>
 <translation id="5039804452771397117">允許</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{（1 個 Cookie 正在使用）}other{（# 個 Cookie 正在使用）}}</translation>
@@ -165,11 +170,11 @@
 <translation id="7108819624672055576">依據擴充功能設定允許</translation>
 <translation id="7111012039238467737">（有效）</translation>
 <translation id="7113310725918019676">允許來自 <ph name="DOMAIN" /> 的 <ph name="BLOCKED_TYPE" /></translation>
+<translation id="7126644664682723998">貼上並搜尋</translation>
 <translation id="7179323680825933600">儲存並填入付款方式</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合安全性標準。</translation>
 <translation id="7219179957768738017">這個連線使用 <ph name="SSL_VERSION" />。</translation>
 <translation id="7221855153210829124">顯示通知</translation>
-<translation id="7227747683324411744">您試圖造訪的網站的攻擊者，可能會誘騙您安裝有害軟體，以影響您的瀏覽方式 — 例如變更您的首頁或是在您造訪的網站上顯示額外的廣告。</translation>
 <translation id="7353601530677266744">命令列</translation>
 <translation id="7364115444476960850">您嘗試造訪的網頁已遭 Vivaldi 的 <ph name="BLOCKER_NAME" /> 規則封鎖</translation>
 <translation id="7419106976560586862">設定檔路徑</translation>
@@ -177,7 +182,6 @@
 <translation id="7518003948725431193">找不到此網址的網頁：<ph name="URL" /></translation>
 <translation id="7549584377607005141">這個網頁需要使用您先前輸入的資料才能正確顯示。您可以重新傳送這些資料，不過這麼做會重複執行這個網頁先前執行過的任何動作。</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> 目前無法處理這項要求。</translation>
-<translation id="7605377493722372900">您試圖造訪的網站的攻擊者，可能會在您的裝置上安裝有害軟體，以竊取或刪除您的密碼、照片、訊息或是信用卡號碼等資料。</translation>
 <translation id="7662298039739062396">由擴充功能控制的設定</translation>
 <translation id="7663736086183791259">憑證 <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">憑證</translation>
@@ -203,7 +207,6 @@
 <translation id="8288807391153049143">顯示憑證</translation>
 <translation id="8289355894181816810">如果您不確定這代表什麼意思，請與網路管理員聯絡。</translation>
 <translation id="8332188693563227489">存取 <ph name="HOST_NAME" /> 的請求遭拒</translation>
-<translation id="8422228580902424274">您試圖造訪的網站的攻擊者，可能會誘騙您安裝軟體或是洩露您的密碼、電話號碼或是信用卡號碼等資料。</translation>
 <translation id="8473863474539038330">地址和其它資訊</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> 的回應時間過長。</translation>
 <translation id="8503813439785031346">使用者名稱</translation>

@@ -1,6 +1,11 @@
 import pytest
 
-from webdriver.error import InvalidArgumentException, NoSuchWindowException, StaleElementReferenceException
+from webdriver.error import (
+    InvalidArgumentException,
+    MoveTargetOutOfBoundsException,
+    NoSuchWindowException,
+    StaleElementReferenceException,
+)
 
 from tests.classic.perform_actions.support.mouse import (
     get_inview_center,
@@ -8,7 +13,7 @@ from tests.classic.perform_actions.support.mouse import (
 )
 from tests.classic.perform_actions.support.refine import get_events
 from tests.support.asserts import assert_move_to_coordinates
-from tests.support.helpers import filter_dict
+from tests.support.helpers import center_point, filter_dict
 from tests.support.sync import Poll
 
 from . import assert_pointer_events, record_pointer_events
@@ -35,6 +40,15 @@ def test_stale_element_reference(session, stale_element, mouse_chain, as_frame):
 
     with pytest.raises(StaleElementReferenceException):
         mouse_chain.click(element=element).perform()
+
+
+@pytest.mark.parametrize("origin", ["element", "pointer", "viewport"])
+def test_params_actions_origin_outside_viewport(session, test_actions_page, mouse_chain, origin):
+    if origin == "element":
+        origin = session.find.css("#outer", all=False)
+
+    with pytest.raises(MoveTargetOutOfBoundsException):
+        mouse_chain.pointer_move(-100, -100, origin=origin).perform()
 
 
 def test_click_at_coordinates(session, test_actions_page, mouse_chain):
@@ -202,6 +216,53 @@ def test_move_to_position_in_viewport(
     mouse_chain.pointer_move(x, y).perform()
     events = get_events(session)
     assert len(events) == event_count
+
+
+@pytest.mark.parametrize("origin", ["viewport", "pointer", "element"])
+def test_move_to_origin_position_within_frame(
+    session, iframe, inline, mouse_chain, origin
+):
+    session.url = inline(
+        iframe(
+            """
+        <input>
+        <script>
+            "use strict;"
+
+            var allEvents = { events: [] };
+            window.addEventListener("mousemove", e => {
+                allEvents.events.push([
+                    e.clientX,
+                    e.clientY,
+                ]);
+            });
+        </script>
+    """
+        )
+    )
+
+    frame = session.find.css("iframe", all=False)
+    session.switch_frame(frame)
+
+    elem = session.find.css("input", all=False)
+    elem_center_point = center_point(elem)
+
+    offset = [10, 5]
+
+    if origin == "element":
+        origin = elem
+        target_point = [
+            elem_center_point[0] + offset[0],
+            elem_center_point[1] + offset[1],
+        ]
+    else:
+        target_point = offset
+
+    mouse_chain.pointer_move(offset[0], offset[1], origin=origin).perform()
+
+    events = get_events(session)
+    assert len(events) == 1
+    assert events[0] == target_point
 
 
 @pytest.mark.parametrize("drag_duration", [0, 300, 800])

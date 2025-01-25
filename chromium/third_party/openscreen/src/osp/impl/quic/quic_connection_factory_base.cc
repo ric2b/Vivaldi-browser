@@ -27,7 +27,7 @@ QuicConnectionFactoryBase::~QuicConnectionFactoryBase() {
 
 void QuicConnectionFactoryBase::OnError(UdpSocket* socket, const Error& error) {
   // Close all related connections and the UpdSocket will be closed because none
-  // of the remaining |connections_| reference the socket.
+  // of the remaining `connections_` reference the socket.
   for (auto& it : connections_) {
     if (it.second.socket == socket) {
       it.second.connection->Close();

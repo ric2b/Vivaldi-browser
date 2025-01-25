@@ -6,7 +6,7 @@ import * as i18n from '../i18n/i18n.js';
 import type * as Platform from '../platform/platform.js';
 import * as Root from '../root/root.js';
 
-import {type SettingStorageType} from './Settings.js';
+import type {SettingStorageType} from './Settings.js';
 
 const UIStrings = {
   /**
@@ -302,7 +302,7 @@ export interface SettingRegistration {
  */
 export interface LearnMore {
   tooltip: () => Platform.UIString.LocalizedString;
-  url: Platform.DevToolsPath.UrlString;
+  url?: Platform.DevToolsPath.UrlString;
 }
 
 interface LocalizedSettingExtensionOption {

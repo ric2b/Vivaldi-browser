@@ -40,6 +40,16 @@
 #import "ios/chrome/browser/overlays/ui_bundled/overlay_request_coordinator_delegate.h"
 #import "ios/chrome/browser/overlays/ui_bundled/overlay_request_mediator_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 @interface InfobarBannerOverlayCoordinator () <InfobarBannerPositioner>
 // The list of supported mediator classes.
 @property(class, nonatomic, readonly) NSArray<Class>* supportedMediatorClasses;
@@ -89,6 +99,15 @@
   CGRect omniboxFrame = [topOmnibox convertRect:topOmnibox.bounds toView:nil];
   CGFloat omniboxMaxY = CGRectGetMaxY(omniboxFrame);
 
+  if (IsVivaldiRunning() &&
+      GetApplicationContext()
+          ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox)) {
+    // Place the infobar just below the safe area insets when omnibox is at the
+    // bottom.
+    return [VivaldiGlobalHelpers safeAreaInsets].top +
+        kInfobarTopPaddingBottomOmnibox;
+  } // End Vivaldi
+
   // Use the top toolbar's layout guide when the omnibox is at the bottom.
   if (topOmnibox.hidden) {
     UIView* topToolbar =
@@ -121,8 +140,8 @@
                   type:config->infobar_type()];
   mediator.consumer = self.bannerViewController;
   mediator.engagementTracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
+      feature_engagement::TrackerFactory::GetForProfile(
+          self.browser->GetProfile());
 
   self.mediator = mediator;
   // Present the banner.

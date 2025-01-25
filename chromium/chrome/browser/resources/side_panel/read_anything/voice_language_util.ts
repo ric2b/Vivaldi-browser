@@ -74,10 +74,22 @@ export enum VoiceClientSideStatusCode {
   INSTALL_ERROR_ALLOCATION,  // Couldn't install due to not enough memory
 }
 
+export enum NotificationType {
+  NONE,         // No notification needed.
+  DOWNLOADING,  // Language is downloading.
+  DOWNLOADED,   // Language is downloaded.
+  NO_INTERNET,  // No available voices for this language due to no internet.
+  NO_SPACE,     // No available voices for this language due to no space.
+  NO_SPACE_HQ,  // No high-quality voices for this language due to no space.
+  GENERIC_ERROR,
+}
+
 // These strings are not localized and will be in English, even for non-English
-// Natural and eSpeak voices.
+// Natural, Google, and eSpeak voices.
 const NATURAL_STRING_IDENTIFIER = '(Natural)';
 const ESPEAK_STRING_IDENTIFIER = 'eSpeak';
+// Google voices that are not Natural.
+const GOOGLE_STRING_IDENTIFIER = 'Google';
 
 // Helper for filtering the voice list broken into a separate method
 // that doesn't modify instance data to simplify testing.
@@ -96,14 +108,31 @@ export function getFilteredVoiceList(possibleVoices: SpeechSynthesisVoice[]):
   if (chrome.readingMode.isChromeOsAsh) {
     availableVoices = availableVoices.filter(
         ({name}) => !name.toLowerCase().includes('android'));
-  }
-  // Filter out espeak voices if there exists a Google voice in the same
-  // locale.
-  if (chrome.readingMode.isChromeOsAsh) {
+    // Filter out espeak voices if there exists a Google voice in the same
+    // locale.
     availableVoices = availableVoices.filter(
         voice => !isEspeak(voice) ||
             convertLangOrLocaleToExactVoicePackLocale(voice.lang) ===
                 undefined);
+  } else {
+    // Group non-Google voices by language and select a default voice for each
+    // language. This represents the system voice for each language.
+    const languageToNonGoogleVoices =
+        availableVoices.filter(voice => !isGoogle(voice))
+            .reduce((map, voice) => {
+              map[voice.lang] = map[voice.lang] || [];
+              map[voice.lang].push(voice);
+              return map;
+            }, {} as {[language: string]: SpeechSynthesisVoice[]});
+    const systemVoices =
+        Object.values(languageToNonGoogleVoices).map((voices) => {
+          const defaultVoice = voices.find(voice => voice.default);
+          return defaultVoice || voices[0];
+        });
+
+    // Keep all Google voices and one system voice per language.
+    availableVoices = availableVoices.filter(
+        voice => isGoogle(voice) || systemVoices.includes(voice));
   }
 
   return availableVoices;
@@ -117,6 +146,10 @@ export function isEspeak(voice: SpeechSynthesisVoice|undefined) {
   return voice && voice.name.includes(ESPEAK_STRING_IDENTIFIER);
 }
 
+export function isGoogle(voice: SpeechSynthesisVoice|undefined) {
+  return voice && voice.name.includes(GOOGLE_STRING_IDENTIFIER);
+}
+
 export function getNaturalVoiceOrDefault(voices: SpeechSynthesisVoice[]):
     SpeechSynthesisVoice {
   const naturalVoice = voices.find(v => isNatural(v));
@@ -127,6 +160,62 @@ export function getNaturalVoiceOrDefault(voices: SpeechSynthesisVoice[]):
   const defaultVoice =
       voices.find(({default: isDefaultVoice}) => isDefaultVoice);
   return defaultVoice ? defaultVoice : voices[0];
+}
+
+export function getNotification(
+    lang: string, status: VoiceClientSideStatusCode,
+    availableVoices: SpeechSynthesisVoice[],
+    onLine: boolean = window.navigator.onLine): NotificationType {
+  // No need to check the install status if the language is missing.
+  const voicePackLanguage = convertLangOrLocaleForVoicePackManager(lang);
+  if (!voicePackLanguage) {
+    return NotificationType.NONE;
+  }
+
+  // TODO(b/300259625): Show more error messages.
+  switch (status) {
+    case VoiceClientSideStatusCode.SENT_INSTALL_REQUEST:
+    case VoiceClientSideStatusCode.SENT_INSTALL_REQUEST_ERROR_RETRY:
+    case VoiceClientSideStatusCode.INSTALLED_AND_UNAVAILABLE:
+      return NotificationType.DOWNLOADING;
+    case VoiceClientSideStatusCode.ERROR_INSTALLING:
+      // Don't show an error if there are available on-device voices for this
+      // language.
+      if (hasVoiceWithVoicePackLang(availableVoices, voicePackLanguage)) {
+        return NotificationType.NONE;
+      }
+      // There's not a specific error code from the language pack installer
+      // for internet connectivity, but if there's an installation error
+      // and we detect we're offline, we can assume that the install error
+      // was due to lack of internet connection.
+      if (!onLine) {
+        return NotificationType.NO_INTERNET;
+      }
+      // Show a generic error message.
+      return NotificationType.GENERIC_ERROR;
+    case VoiceClientSideStatusCode.INSTALL_ERROR_ALLOCATION:
+      // If we get an allocation error but voices exist for the given
+      // language, show an allocation error specific to downloading high
+      // quality voices.
+      if (hasVoiceWithVoicePackLang(availableVoices, voicePackLanguage)) {
+        return NotificationType.NO_SPACE_HQ;
+      }
+      return NotificationType.NO_SPACE;
+    case VoiceClientSideStatusCode.AVAILABLE:
+      return NotificationType.DOWNLOADED;
+    case VoiceClientSideStatusCode.NOT_INSTALLED:
+      return NotificationType.NONE;
+    default:
+      // This ensures the switch statement is exhaustive
+      return status satisfies never;
+  }
+}
+
+function hasVoiceWithVoicePackLang(
+    availableVoices: SpeechSynthesisVoice[], voicePackLanguage: string) {
+  return availableVoices.some(
+      voice =>
+          getVoicePackConvertedLangIfExists(voice.lang) === voicePackLanguage);
 }
 
 export function createInitialListOfEnabledLanguages(

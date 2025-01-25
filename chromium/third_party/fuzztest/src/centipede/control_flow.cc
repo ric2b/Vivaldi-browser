@@ -19,7 +19,11 @@
 #include <cstdlib>
 #include <filesystem>  // NOLINT
 #include <fstream>
+#include <istream>
+#include <iterator>
+#include <ostream>
 #include <queue>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -36,6 +40,7 @@
 #include "./centipede/util.h"
 #include "./common/defs.h"
 #include "./common/logging.h"
+#include "./common/remote_file.h"
 
 namespace centipede {
 
@@ -82,8 +87,10 @@ PCTable GetPcTableFromBinaryWithTracePC(std::string_view binary_path,
       saw_new_function = true;
       continue;
     }
-    if (!absl::EndsWith(line, "<__sanitizer_cov_trace_pc>") &&
-        !absl::EndsWith(line, "<__sanitizer_cov_trace_pc@plt>"))
+    // On MacOS there is an extra underscope before the symbols, so not sealing
+    // the symbol with `<`.
+    if (!absl::EndsWith(line, "__sanitizer_cov_trace_pc>") &&
+        !absl::EndsWith(line, "__sanitizer_cov_trace_pc@plt>"))
       continue;
     uintptr_t pc = std::stoul(line, nullptr, 16);
     uintptr_t flags = saw_new_function ? PCInfo::kFuncEntry : 0;
@@ -94,15 +101,27 @@ PCTable GetPcTableFromBinaryWithTracePC(std::string_view binary_path,
   return pc_table;
 }
 
-CFTable ReadCfTableFromFile(std::string_view file_path) {
-  ByteArray cf_infos_as_bytes;
-  ReadFromLocalFile(file_path, cf_infos_as_bytes);
-  size_t cf_table_size = cf_infos_as_bytes.size() / sizeof(CFTable::value_type);
-  const auto *cf_infos =
-      reinterpret_cast<CFTable::value_type *>(cf_infos_as_bytes.data());
-  CFTable cf_table{cf_infos, cf_infos + cf_table_size};
-  CHECK_EQ(cf_table.size(), cf_table_size);
-  return cf_table;
+CFTable ReadCfTable(std::istream &in) {
+  const std::string input_string(std::istreambuf_iterator<char>(in), {});
+  const ByteArray cf_table_as_bytes(input_string.begin(), input_string.end());
+  CHECK_EQ(cf_table_as_bytes.size() % sizeof(CFTable::value_type), 0);
+  const size_t cf_table_size =
+      cf_table_as_bytes.size() / sizeof(CFTable::value_type);
+  const auto *cf_entries =
+      reinterpret_cast<const CFTable::value_type *>(cf_table_as_bytes.data());
+  return CFTable{cf_entries, cf_entries + cf_table_size};
+}
+
+CFTable ReadCfTable(std::string_view file_path) {
+  std::string cf_table_contents;
+  CHECK_OK(RemoteFileGetContents(file_path, cf_table_contents));
+  std::istringstream cf_table_stream(cf_table_contents);
+  return ReadCfTable(cf_table_stream);
+}
+
+void WriteCfTable(const CFTable &cf_table, std::ostream &out) {
+  out.write(reinterpret_cast<const char *>(cf_table.data()),
+            sizeof(CFTable::value_type) * cf_table.size());
 }
 
 DsoTable ReadDsoTableFromFile(std::string_view file_path) {

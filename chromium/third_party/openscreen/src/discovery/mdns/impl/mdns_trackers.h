@@ -29,7 +29,7 @@ class MdnsSender;
 //
 // Instances of this class represent nodes of a bidirectional graph, such that
 // if node A is adjacent to node B, B is also adjacent to A. In this class, the
-// adjacent nodes are stored in adjacency list |associated_tracker_|, and
+// adjacent nodes are stored in adjacency list `associated_tracker_`, and
 // exposed methods to add and remove nodes from this list also modify the added
 // or removed node to remove this instance from its adjacency list.
 //
@@ -42,7 +42,7 @@ class MdnsTracker {
  public:
   enum class TrackerType { kRecordTracker, kQuestionTracker };
 
-  // MdnsTracker does not own |sender|, |task_runner| and |random_delay|
+  // MdnsTracker does not own `sender`, `task_runner` and `random_delay`
   // and expects that the lifetime of these objects exceeds the lifetime of
   // MdnsTracker.
   MdnsTracker(MdnsSender& sender,
@@ -104,8 +104,8 @@ class MdnsRecordTracker : public MdnsTracker {
   using RecordExpiredCallback =
       std::function<void(const MdnsRecordTracker*, const MdnsRecord&)>;
 
-  // NOTE: In the case that |record| is of type NSEC, |dns_type| is expected to
-  // differ from |record|'s type.
+  // NOTE: In the case that `record` is of type NSEC, `dns_type` is expected to
+  // differ from `record`'s type.
   MdnsRecordTracker(MdnsRecord record,
                     DnsType dns_type,
                     MdnsSender& sender,
@@ -124,7 +124,7 @@ class MdnsRecordTracker : public MdnsTracker {
   };
 
   // Updates record tracker with the new record:
-  // 1. Resets TTL to the value specified in |new_record|.
+  // 1. Resets TTL to the value specified in `new_record`.
   // 2. Schedules expiration in case of a goodbye record.
   // Returns Error::Code::kParameterInvalid if new_record is not a valid update
   // for the current tracked record.
@@ -146,15 +146,15 @@ class MdnsRecordTracker : public MdnsTracker {
 
   // Returns information about the stored record.
   //
-  // NOTE: These methods are NOT all pass-through methods to |record_|.
+  // NOTE: These methods are NOT all pass-through methods to `record_`.
   // specifically, dns_type() returns the DNS Type associated with this record
-  // tracker, which may be different from the record type if |record_| is of
-  // type NSEC. To avoid this case, direct access to the underlying |record_|
+  // tracker, which may be different from the record type if `record_` is of
+  // type NSEC. To avoid this case, direct access to the underlying `record_`
   // instance is not provided.
   //
   // In this case, creating an MdnsRecord with the below data will result in a
   // runtime error due to CHECKS and that Rdata's associated type will not
-  // match DnsType when |record_| is of type NSEC. Therefore, creating such
+  // match DnsType when `record_` is of type NSEC. Therefore, creating such
   // records should be guarded by is_negative_response() checks.
   const DomainName& name() const { return record_.name(); }
   DnsType dns_type() const { return dns_type_; }
@@ -185,7 +185,7 @@ class MdnsRecordTracker : public MdnsTracker {
   MdnsRecord record_;
 
   // DnsType this record tracker represents. This may not match the type of
-  // |record_| if it is an NSEC record.
+  // `record_` if it is an NSEC record.
   const DnsType dns_type_;
 
   // A point in time when the record was received and the tracking has started.

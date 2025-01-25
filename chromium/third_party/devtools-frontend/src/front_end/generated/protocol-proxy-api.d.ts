@@ -704,6 +704,16 @@ declare namespace ProtocolProxyApi {
     invoke_getLocationForSelector(params: Protocol.CSS.GetLocationForSelectorRequest): Promise<Protocol.CSS.GetLocationForSelectorResponse>;
 
     /**
+     * Starts tracking the given node for the computed style updates
+     * and whenever the computed style is updated for node, it queues
+     * a `computedStyleUpdated` event with throttling.
+     * There can only be 1 node tracked for computed style updates
+     * so passing a new node id removes tracking from the previous node.
+     * Pass `undefined` to disable tracking.
+     */
+    invoke_trackComputedStyleUpdatesForNode(params: Protocol.CSS.TrackComputedStyleUpdatesForNodeRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
      * Starts tracking the given computed styles for updates. The specified array of properties
      * replaces the one previously specified. Pass empty array to disable tracking.
      * Use takeComputedStyleUpdates to retrieve the list of nodes that had properties modified.
@@ -819,6 +829,8 @@ declare namespace ProtocolProxyApi {
      * Fired whenever an active document stylesheet is removed.
      */
     styleSheetRemoved(params: Protocol.CSS.StyleSheetRemovedEvent): void;
+
+    computedStyleUpdated(params: Protocol.CSS.ComputedStyleUpdatedEvent): void;
 
   }
 
@@ -1173,9 +1185,10 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Returns the query container of the given node based on container query
-     * conditions: containerName, physical, and logical axes. If no axes are
-     * provided, the style container is returned, which is the direct parent or the
-     * closest element with a matching container-name.
+     * conditions: containerName, physical and logical axes, and whether it queries
+     * scroll-state. If no axes are provided and queriesScrollState is false, the
+     * style container is returned, which is the direct parent or the closest
+     * element with a matching container-name.
      */
     invoke_getContainerForNode(params: Protocol.DOM.GetContainerForNodeRequest): Promise<Protocol.DOM.GetContainerForNodeResponse>;
 
@@ -2487,7 +2500,7 @@ declare namespace ProtocolProxyApi {
     invoke_setShowHitTestBorders(params: Protocol.Overlay.SetShowHitTestBordersRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
-     * Request that backend shows an overlay with web vital metrics.
+     * Deprecated, no longer has any effect.
      */
     invoke_setShowWebVitals(params: Protocol.Overlay.SetShowWebVitalsRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2956,7 +2969,8 @@ declare namespace ProtocolProxyApi {
     javascriptDialogOpening(params: Protocol.Page.JavascriptDialogOpeningEvent): void;
 
     /**
-     * Fired for top level page lifecycle events such as navigation, load, paint, etc.
+     * Fired for lifecycle events (navigation, load, paint, etc) in the current
+     * target (including local frames).
      */
     lifecycleEvent(params: Protocol.Page.LifecycleEventEvent): void;
 
@@ -3861,6 +3875,18 @@ declare namespace ProtocolProxyApi {
     credentialAdded(params: Protocol.WebAuthn.CredentialAddedEvent): void;
 
     /**
+     * Triggered when a credential is deleted, e.g. through
+     * PublicKeyCredential.signalUnknownCredential().
+     */
+    credentialDeleted(params: Protocol.WebAuthn.CredentialDeletedEvent): void;
+
+    /**
+     * Triggered when a credential is updated, e.g. through
+     * PublicKeyCredential.signalCurrentUserDetails().
+     */
+    credentialUpdated(params: Protocol.WebAuthn.CredentialUpdatedEvent): void;
+
+    /**
      * Triggered when a credential is used in a webauthn assertion.
      */
     credentialAsserted(params: Protocol.WebAuthn.CredentialAssertedEvent): void;
@@ -4205,6 +4231,13 @@ declare namespace ProtocolProxyApi {
      * Enables or disables async call stacks tracking.
      */
     invoke_setAsyncCallStackDepth(params: Protocol.Debugger.SetAsyncCallStackDepthRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Replace previous blackbox execution contexts with passed ones. Forces backend to skip
+     * stepping/pausing in scripts in these execution contexts. VM will try to leave blackboxed script by
+     * performing 'step in' several times, finally resorting to 'step out' if unsuccessful.
+     */
+    invoke_setBlackboxExecutionContexts(params: Protocol.Debugger.SetBlackboxExecutionContextsRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
      * Replace previous blackbox patterns with passed ones. Forces backend to skip stepping/pausing in

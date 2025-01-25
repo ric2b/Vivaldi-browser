@@ -3,7 +3,8 @@
 // found in the LICENSE file.
 
 import type * as Platform from '../../../../core/platform/platform.js';
-import * as TraceEngine from '../../../../models/trace/trace.js';
+import * as Trace from '../../../../models/trace/trace.js';
+import * as Extensions from '../../../../panels/timeline/extensions/extensions.js';
 import * as EnvironmentHelpers from '../../../../testing/EnvironmentHelpers.js';
 import * as TraceHelpers from '../../../../testing/TraceHelpers.js';
 import * as PerfUI from '../../../legacy/components/perf_ui/perf_ui.js';
@@ -81,7 +82,7 @@ function renderDecorationExample() {
           [
             {
               type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
-              startAtTime: TraceEngine.Types.Timing.MicroSeconds(25_000),
+              startAtTime: Trace.Types.Timing.MicroSeconds(25_000),
             },
             {type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE},
           ],
@@ -93,13 +94,13 @@ function renderDecorationExample() {
           [
             {
               type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
-              startAtTime: TraceEngine.Types.Timing.MicroSeconds(15_000),
+              startAtTime: Trace.Types.Timing.MicroSeconds(15_000),
             },
           ],
           [
             {
               type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
-              startAtTime: TraceEngine.Types.Timing.MicroSeconds(10_000),
+              startAtTime: Trace.Types.Timing.MicroSeconds(10_000),
             },
             {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
           ],
@@ -109,7 +110,7 @@ function renderDecorationExample() {
           [
             {
               type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
-              startAtTime: TraceEngine.Types.Timing.MicroSeconds(10_000),
+              startAtTime: Trace.Types.Timing.MicroSeconds(10_000),
             },
             {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
             {type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE},
@@ -124,14 +125,14 @@ function renderDecorationExample() {
           [
             {
               type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
-              startAtTime: TraceEngine.Types.Timing.MicroSeconds(1_000),
+              startAtTime: Trace.Types.Timing.MicroSeconds(1_000),
             },
             {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
           ],
           [
             {
               type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
-              startAtTime: TraceEngine.Types.Timing.MicroSeconds(1_000),
+              startAtTime: Trace.Types.Timing.MicroSeconds(1_000),
             },
             {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
             {type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE},
@@ -140,8 +141,8 @@ function renderDecorationExample() {
             {
               type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE,
               // This triangle should start 1/4 of hte event, and end at 3/4 of the event.
-              customStartTime: TraceEngine.Types.Timing.MicroSeconds(25_250),
-              customEndTime: TraceEngine.Types.Timing.MicroSeconds(25_750),
+              customStartTime: Trace.Types.Timing.MicroSeconds(25_250),
+              customEndTime: Trace.Types.Timing.MicroSeconds(25_750),
             },
           ],
         ],
@@ -363,8 +364,52 @@ function renderInitiatorsExample() {
   flameChart.update();
 }
 
+/**
+ * Used to test the color palette for extension events
+ */
+function renderExtensionTrackExample() {
+  const colorPalette = Trace.Types.Extensions.extensionPalette;
+  const paletteLength = colorPalette.length;
+
+  class FakeProviderWithExtensionColors extends TraceHelpers.FakeFlameChartProvider {
+    override entryColor(entryIndex: number): string {
+      const color = colorPalette[entryIndex % paletteLength];
+      return Extensions.ExtensionUI.extensionEntryColor(
+          {args: {color}} as Trace.Types.Extensions.SyntheticExtensionEntry);
+    }
+    override maxStackDepth(): number {
+      return paletteLength + 1;
+    }
+    override timelineData(): PerfUI.FlameChart.FlameChartTimelineData|null {
+      return PerfUI.FlameChart.FlameChartTimelineData.create({
+        entryLevels: colorPalette.map((_, i) => i),
+        entryStartTimes: colorPalette.map(() => 0),
+        entryTotalTimes: colorPalette.map(() => 100),
+        groups: [{
+          name: 'Testing extension palette' as Platform.UIString.LocalizedString,
+          startLevel: 0,
+          style: defaultGroupStyle,
+        }],
+      });
+    }
+  }
+  const container = document.querySelector('div#extension');
+  if (!container) {
+    throw new Error('No container');
+  }
+  const delegate = new TraceHelpers.MockFlameChartDelegate();
+  const dataProvider = new FakeProviderWithExtensionColors();
+  const flameChart = new PerfUI.FlameChart.FlameChart(dataProvider, delegate);
+
+  flameChart.markAsRoot();
+  flameChart.setWindowTimes(0, 100);
+  flameChart.show(container);
+  flameChart.update();
+}
+
 renderBasicExample();
 renderDecorationExample();
 renderNestedExample();
 renderTrackCustomizationExample();
 renderInitiatorsExample();
+renderExtensionTrackExample();

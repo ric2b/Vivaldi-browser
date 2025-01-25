@@ -171,6 +171,11 @@ assert len(_KNOWN_GERRIT_TO_SHORT_URLS) == len(
 # at once. Picked arbitrarily.
 _MAX_STACKED_BRANCHES_UPLOAD = 20
 
+_NO_BRANCH_ERROR = (
+    'Unable to determine base commit in detached HEAD state. '
+    'Get on a branch or run `git cl upload --no-squash <base>` to '
+    'upload all commits since base!')
+
 
 class GitPushError(Exception):
     pass
@@ -2151,8 +2156,7 @@ class Changelist(object):
             custom_cl_base = base_branch = git_diff_args[0]
         else:
             if self.GetBranch() is None:
-                DieWithError(
-                    'Can\'t upload from detached HEAD state. Get on a branch!')
+                DieWithError(_NO_BRANCH_ERROR)
 
             # Default to diffing against common ancestor of upstream branch
             base_branch = self.GetCommonAncestorWithUpstream()
@@ -2835,9 +2839,11 @@ class Changelist(object):
             print('Committed patch for change %i patchset %i locally.' %
                   (parsed_issue_arg.issue, patchset))
             print(
-                'Note: this created a local commit which does not have '
-                'the same hash as the one uploaded for review. This will make '
-                'uploading changes based on top of this branch difficult.\n'
+                'Note: this created a local commit on top of parent commit '
+                'that is different from the one in Gerrit. If the patched CL '
+                'is not yours and you cannot upload new patches to it, you '
+                'will not be able to upload stacked changes created on top of '
+                'this branch.\n'
                 'If you want to do that, use "git cl patch --force" instead.')
 
         if self.GetBranch():
@@ -3881,7 +3887,22 @@ def CMDcreds_check(parser, args):
     _, _ = parser.parse_args(args)
 
     if newauth.Enabled():
-        git_auth.Configure(os.getcwd(), Changelist())
+        cl = Changelist()
+        git_auth.Configure(os.getcwd(), cl)
+        # Perform some advisory checks
+        email = scm.GIT.GetConfig(os.getcwd(), 'user.email') or ''
+        if not gerrit_util.ShouldUseSSO(cl.GetGerritHost(), email):
+            a = gerrit_util.LuciAuthAuthenticator()
+            try:
+                a.luci_auth.get_access_token()
+            except auth.LoginRequiredError as e:
+                print('NOTE: You are not logged in with luci-auth.')
+                print(
+                    'You may not be able to perform some actions without logging in.'
+                )
+                print('If you wish to log in, run:')
+                print('   ' + e.login_command)
+                print('and re-run this command.')
         return 0
     if newauth.ExplicitlyDisabled():
         git_auth.ClearRepoConfig(os.getcwd(), Changelist())
@@ -4780,7 +4801,10 @@ def FindFilesForLint(options, args):
     """Returns the base folder and a list of files to lint."""
     files = []
     cwd = os.getcwd()
-    if len(args) > 0:
+    if len(args) == 1 and args[0] == '-':
+        # the input is from stdin.
+        files.append(args[0])
+    elif len(args) > 0:
         # If file paths are given in positional args, run the lint tools
         # against them without using git commands. This allows git_cl.py
         # runnable against any files even out of git checkouts.
@@ -4821,10 +4845,8 @@ def CMDlint(parser, args):
     """Runs cpplint on the current changelist or given files.
 
     positional arguments:
-      files           Files to lint. If omitted in the current git checkout, it
-                      will run cpplint against all the affected files. If it is
-                      not executed in git checkouts, files to lint must be
-                      provided.
+      files           Files to lint. If omitted, lint all the affected files.
+                      If -, lint stdin.
     """
     parser.add_option(
         '--filter',
@@ -5278,6 +5300,13 @@ def CMDupload(parser, args):
     # authentication is not working properly.
     gerrit_util.GetAccountDetails(cl.GetGerritHost())
 
+    # Check whether git should be updated.
+    recommendation = git_common.check_git_version()
+    if recommendation:
+        print(colorama.Fore.RED)
+        print(f'WARNING: {recommendation}')
+        print(colorama.Style.RESET_ALL)
+
     # TODO(crbug.com/1475405): Warn users if the project uses submodules and
     # they have fsmonitor enabled.
     if os.path.isfile('.gitmodules'):
@@ -5506,7 +5535,7 @@ def _UploadAllPrecheck(
     """
     cl = Changelist()
     if cl.GetBranch() is None:
-        DieWithError('Can\'t upload from detached HEAD state. Get on a branch!')
+        DieWithError(_NO_BRANCH_ERROR)
 
     branch_ref = None
     cls: List[Changelist] = []

@@ -105,27 +105,27 @@ SkBitmap SmartCropAndSize(const SkBitmap& capture,
 std::vector<unsigned char> EncodeBitmap(SkBitmap bitmap,
                                         ImageFormat image_format,
                                         int image_quality) {
-  std::vector<unsigned char> data;
+  std::optional<std::vector<unsigned char>> data;
   if (!bitmap.getPixels()) {
     LOG(ERROR) << "Cannot encode empty bitmap";
   } else {
     switch (image_format) {
       case ImageFormat::kJPEG:
-        if (!gfx::JPEGCodec::Encode(bitmap, image_quality, &data)) {
+        data = gfx::JPEGCodec::Encode(bitmap, image_quality);
+        if (!data.has_value()) {
           LOG(ERROR) << "Failed to encode bitmap as jpeg";
-          data.clear();
         }
         break;
       case ImageFormat::kPNG:
-        if (!gfx::PNGCodec::EncodeBGRASkBitmap(
-                bitmap, true /* discard transparency */, &data)) {
+        data = gfx::PNGCodec::EncodeBGRASkBitmap(
+            bitmap, true /* discard transparency */);
+        if (!data.has_value()) {
           LOG(ERROR) << "Failed to encode bitmap as png";
-          data.clear();
         }
         break;
     }
   }
-  return data;
+  return data.value_or(std::vector<unsigned char>());
 }
 
 std::string EncodeBitmapAsDataUrl(SkBitmap bitmap,
@@ -183,7 +183,7 @@ base::FilePath EncodeBitmapToFile(base::FilePath directory,
 
   base_path = base::GetUniquePath(base_path.AppendASCII(filename));
 
-  if(base::WriteFile(base_path, image_bytes)) {
+  if (!base::WriteFile(base_path, image_bytes)) {
     LOG(ERROR) << "Error writing to file: " << base_path.value();
     return base::FilePath();
   }

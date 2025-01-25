@@ -7,7 +7,7 @@ title: Create a CL
 ---
 
 For a more thorough introduction, see the [appropriate section of the Developer
-Guide](/chromium-os/developer-library/guides/development/developer-guide/#making-changes-to-packages-whose-source-code-is-checked-into-chromium-os-git-repositories).
+Guide](/chromium-os/developer-library/guides/development/developer-guide/#making-changes-to-packages-whose-source-code-is-checked-into-chromiumos-git-repositories).
 
 Here's the basic flow when creating/uploading a CL for review:
 

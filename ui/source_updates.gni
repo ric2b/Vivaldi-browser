@@ -103,7 +103,7 @@ update_target("//chrome/browser/ui:ui") {
   ]
 }
 
-update_target("//ui/base:base") {
+update_target("//ui/menus:menus") {
   sources += [
     "//vivaldi/ui/base/vivaldi_simple_menu_model.cc",
   ]

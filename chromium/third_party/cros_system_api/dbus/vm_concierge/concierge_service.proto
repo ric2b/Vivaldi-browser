@@ -364,9 +364,6 @@ message StartArcVmRequest {
   // Whether to lock guest memory (for the purpose of disabling host swap).
   bool lock_guest_memory = 18;
 
-  // Whether the keyboard shortcut helper integration feature is enabled.
-  bool enable_keyboard_shortcut_helper_integration = 21;
-
   // Whether broadcast anr prenotify is enabled.
   bool enable_broadcast_anr_prenotify = 25;
 
@@ -1561,4 +1558,36 @@ message GetVmMemoryManagementKillsConnectionResponse {
 
   // The reason for failure.
   string failure_reason = 2;
+}
+
+// Request sent to set up a new user within a VM.
+message SetUpVmUserRequest {
+  // Name of the target VM.
+  string vm_name = 1;
+
+  // The owner of the VM.
+  string owner_id = 2;
+
+  // The username for the new user.
+  string username = 3;
+
+  // Optional UID for the new user.
+  optional uint32 uid = 4;
+
+  // Optional groups for the new user.
+  repeated string group_names = 5;
+}
+
+// Response sent for a SetUpVmUser call.
+message SetUpVmUserResponse {
+  // Whether the user was successfully set up.
+  bool success = 1;
+
+  // The failure_reason if the user was not set up successfully.
+  string failure_reason = 2;
+
+  // If the uid specified in SetUpVmUserRequest already exists,
+  // this is the corresponding username. Otherwise, this is the
+  // username specified in SetUpVmUserRequest.
+  string username = 3;
 }

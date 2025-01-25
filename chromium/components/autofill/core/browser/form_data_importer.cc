@@ -118,12 +118,6 @@ bool IsValidFieldTypeAndValue(
 bool ShouldOfferVirtualCardEnrollment(
     const std::optional<CreditCard>& extracted_credit_card,
     std::optional<int64_t> fetched_card_instrument_id) {
-#if BUILDFLAG(IS_IOS)
-  if (!base::FeatureList::IsEnabled(features::kAutofillEnableVirtualCards)) {
-    return false;
-  }
-#endif
-
   if (!extracted_credit_card) {
     return false;
   }
@@ -555,13 +549,6 @@ FormDataImporter::GetAddressObservedFieldValues(
       }
     }
     observed_field_values.insert_or_assign(field_type, value);
-    // The `autofill_source_profile_guid()` is not reset when a field is
-    // manually edited or filled with non-address information later.
-    import_metadata.filled_types_to_autofill_guid.insert_or_assign(
-        field_type, field->is_autofilled() &&
-                            field->filling_product() == FillingProduct::kAddress
-                        ? field->autofill_source_profile_guid()
-                        : std::nullopt);
 
     if (field->parsed_autocomplete()) {
       import_metadata.did_import_from_unrecognized_autocomplete_field |=
@@ -991,7 +978,7 @@ FormDataImporter::ExtractCreditCardFromForm(const FormStructure& form) {
       result.card.SetInfoForMonthInputType(value);
     } else {
       bool saved = result.card.SetInfo(field.Type(), value, app_locale);
-      if (!saved && field.IsSelectOrSelectListElement()) {
+      if (!saved && field.IsSelectElement()) {
         // Saving with the option text (here `value`) may fail for the
         // expiration month. Attempt to save with the option value. First find
         // the index of the option text in the select options and try the

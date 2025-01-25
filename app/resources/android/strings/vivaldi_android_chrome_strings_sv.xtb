@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Tryck för Sök är en funktion som är tillgänglig när Google är vald som standardsökmotor i Vivaldi. Den skickar det markerade ordet och den aktuella sidan som kontext till Google Search. Du kan stänga av detta i <ph name="BEGIN_LINK" />Inställningar<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Växla vanliga/privata flikar</translation>
 <translation id="1644574205037202324">Historik</translation>
-<translation id="17513872634828108">Öppna flikar</translation>
 <translation id="1829244130665387512">Sök på sida</translation>
 <translation id="1910514478706885609">Öppna i ny flikstack</translation>
 <translation id="1925021887439448749">Ange anpassad webbadress</translation>
 <translation id="2038563949887743358">Aktivera begäran av datoranpassad webbsida</translation>
-<translation id="2139186145475833000">Lägg till på startskärmen</translation>
 <translation id="2149973817440762519">Redigera bokmärke</translation>
 <translation id="2306442503286132111">Bokmarke sparat i <ph name="FOLDER_NAME" />-mappen</translation>
 <translation id="2433507940547922241">Utseende</translation>
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">Aktuellt enhetsspråk</translation>
 <translation id="4167670741834902166">Ny privat flik</translation>
 <translation id="4195643157523330669">Öppna i ny flik</translation>
+<translation id="4225895483398857530">Genväg till verktygsfältet</translation>
 <translation id="4243710787042215766">Öppna i privat flik</translation>
 <translation id="4304713468139749426">Lösenordshanterare</translation>
 <translation id="451872707440238414">Sök bland dina bokmärken</translation>
@@ -74,6 +73,7 @@ Gör ett långt tryck för att justera din sökterm. För att förfina sökninge
 <translation id="8560602726703398413">Hitta din läslista i Bokmärken</translation>
 <translation id="85991616550051997">Gå till hemsida</translation>
 <translation id="8820817407110198400">Bokmärken</translation>
+<translation id="9042893549633094279">Integritet och säkerhet</translation>
 <translation id="9063523880881406963">Inaktivera webbplats förfrågan</translation>
 <translation id="9080642952018487277">Gå in i privat läge</translation>
 <translation id="96681097142096641">Visa förenklad sida?</translation>

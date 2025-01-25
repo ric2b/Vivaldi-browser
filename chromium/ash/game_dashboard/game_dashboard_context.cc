@@ -159,13 +159,7 @@ void GameDashboardContext::EnableFeatures(
     SetToolbarVisibility(/*visible=*/true);
   } else {
     CloseWelcomeDialogIfAny();
-    // Hide the toolbar if the system is in tablet mode or if the window
-    // is undergoing a resize animation. The toolbar is still visible in
-    // clamshell, overview mode.
-    SetToolbarVisibility(
-        /*visible=*/!(display::Screen::GetScreen()->InTabletMode() ||
-                      main_menu_toggle_method ==
-                          GameDashboardMainMenuToggleMethod::kAnimation));
+    SetToolbarVisibility(/*visible=*/false);
     if (main_menu_widget_) {
       CloseMainMenu(main_menu_toggle_method);
     }
@@ -607,7 +601,8 @@ void GameDashboardContext::RemoveCursorHandler() {
 void GameDashboardContext::CreateAndAddGameDashboardButtonWidget() {
   auto game_dashboard_button = std::make_unique<GameDashboardButton>(
       base::BindRepeating(&GameDashboardContext::OnGameDashboardButtonPressed,
-                          weak_ptr_factory_.GetWeakPtr()));
+                          weak_ptr_factory_.GetWeakPtr()),
+      game_dashboard_utils::GetFrameHeaderHeight(game_window_) / 2.0f);
   DCHECK(!game_dashboard_button_);
   game_dashboard_button_ = game_dashboard_button.get();
   // Allow the Game Dashboard button to be activatable so that it can be
@@ -778,6 +773,7 @@ void GameDashboardContext::AnimateToolbarWidgetBoundsChange(
 
 void GameDashboardContext::MaybeShowToolbar() {
   if (game_dashboard_utils::ShouldShowToolbar() && !toolbar_widget_ &&
+      !OverviewController::Get()->InOverviewSession() &&
       !display::Screen::GetScreen()->InTabletMode()) {
     // Show the toolbar, if it's not already showing.
     ToggleToolbar();

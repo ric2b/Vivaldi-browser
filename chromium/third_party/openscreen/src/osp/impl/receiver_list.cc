@@ -20,8 +20,9 @@ Error ReceiverList::OnReceiverChanged(const ServiceInfo& info) {
       receivers_.begin(), receivers_.end(), [&info](const ServiceInfo& x) {
         return x.instance_name == info.instance_name;
       });
-  if (existing_info == receivers_.end())
+  if (existing_info == receivers_.end()) {
     return Error::Code::kItemNotFound;
+  }
 
   *existing_info = info;
   return Error::None();
@@ -32,8 +33,9 @@ ErrorOr<ServiceInfo> ReceiverList::OnReceiverRemoved(const ServiceInfo& info) {
   // first one.
   ServiceInfo out = info;
   const auto it = std::remove(receivers_.begin(), receivers_.end(), info);
-  if (it == receivers_.end())
+  if (it == receivers_.end()) {
     return Error::Code::kItemNotFound;
+  }
 
   receivers_.erase(it, receivers_.end());
   return out;

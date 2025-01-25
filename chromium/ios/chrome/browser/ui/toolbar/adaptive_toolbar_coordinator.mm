@@ -74,14 +74,13 @@
   _started = YES;
 
   self.viewController.overrideUserInterfaceStyle =
-      browser->GetBrowserState()->IsOffTheRecord()
-          ? UIUserInterfaceStyleDark
-          : UIUserInterfaceStyleUnspecified;
+      browser->GetProfile()->IsOffTheRecord() ? UIUserInterfaceStyleDark
+                                              : UIUserInterfaceStyleUnspecified;
   self.viewController.layoutGuideCenter = LayoutGuideCenterForBrowser(browser);
   self.viewController.adaptiveDelegate = self;
 
   self.mediator = [[AdaptiveToolbarMediator alloc] init];
-  self.mediator.incognito = browser->GetBrowserState()->IsOffTheRecord();
+  self.mediator.incognito = browser->GetProfile()->IsOffTheRecord();
   self.mediator.consumer = self.viewController;
   self.mediator.navigationBrowserAgent =
       WebNavigationBrowserAgent::FromBrowser(browser);
@@ -89,8 +88,7 @@
   self.mediator.webContentAreaOverlayPresenter =
       OverlayPresenter::FromBrowser(browser, OverlayModality::kWebContentArea);
   self.mediator.templateURLService =
-      ios::TemplateURLServiceFactory::GetForBrowserState(
-          browser->GetBrowserState());
+      ios::TemplateURLServiceFactory::GetForProfile(browser->GetProfile());
   self.mediator.actionFactory = [[BrowserActionFactory alloc]
       initWithBrowser:browser
              scenario:kMenuScenarioHistogramToolbarMenu];
@@ -122,7 +120,7 @@
 }
 
 - (void)updateToolbarForSideSwipeSnapshot:(web::WebState*)webState {
-  BOOL isNonIncognitoNTP = !self.browser->GetBrowserState()->IsOffTheRecord() &&
+  BOOL isNonIncognitoNTP = !self.browser->GetProfile()->IsOffTheRecord() &&
                            IsVisibleURLNewTabPage(webState);
 
   [self.mediator updateConsumerForWebState:webState];
@@ -177,18 +175,6 @@
   // Implemented in primary and secondary toolbars directly.
 }
 
-- (void)setTabGridButtonIPHHighlighted:(BOOL)iphHighlighted {
-  [self.mediator updateConsumerWithTabGridButtonIPHHighlighted:iphHighlighted];
-}
-
-- (void)setNewTabButtonIPHHighlighted:(BOOL)iphHighlighted {
-  [self.mediator updateConsumerWithNewTabButtonIPHHighlighted:iphHighlighted];
-}
-
-- (void)showShareButtonIPHAfterLocationBarUnfocus {
-  // no-op, handled in ToolbarCoordinator.
-}
-
 #pragma mark - ToolbarCoordinatee
 
 - (id<PopupMenuUIUpdating>)popupMenuUIUpdater {
@@ -198,15 +184,12 @@
 #pragma mark - Protected
 
 - (ToolbarButtonFactory*)buttonFactoryWithType:(ToolbarType)type {
-  BOOL isIncognito = self.browser->GetBrowserState()->IsOffTheRecord();
+  BOOL isIncognito = self.browser->GetProfile()->IsOffTheRecord();
   ToolbarStyle style =
       isIncognito ? ToolbarStyle::kIncognito : ToolbarStyle::kNormal;
 
   ToolbarButtonActionsHandler* actionHandler =
-      [[ToolbarButtonActionsHandler alloc]
-          initWithEngagementTracker:feature_engagement::TrackerFactory::
-                                        GetForBrowserState(
-                                            self.browser->GetBrowserState())];
+      [[ToolbarButtonActionsHandler alloc] init];
 
   CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
 

@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Feil</translation>
 <translation id="1175364870820465910">&amp;Skriv ut...</translation>
 <translation id="1181037720776840403">Fjern</translation>
+<translation id="1184037892196730210">Kan ikke caste skjermen</translation>
 <translation id="1187722533808055681">Oppvåkninger fra inaktiv</translation>
 <translation id="122082903575839559">Signaturalgoritme for sertifikat</translation>
 <translation id="1221825588892235038">Bare markering</translation>
@@ -366,6 +367,7 @@
 <translation id="7287143125007575591">Ingen tilgang.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Kontroller stavemåte mens du skriver</translation>
+<translation id="7359680654975233185">Kan ikke caste fanen</translation>
 <translation id="7385854874724088939">Noe gikk galt under utskriften.  Sjekk printeren og prøv igjen.</translation>
 <translation id="7412226954991670867">GPU-minne</translation>
 <translation id="7421925624202799674">&amp;Vis sidekilde</translation>
@@ -379,6 +381,7 @@
 <translation id="7661259717474717992">Tillat sider å lagre og lese infokapsler</translation>
 <translation id="7663719505383602579">Mottaker: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installert av administratoren din</translation>
+<translation id="7685038817958445325">Kan ikke caste</translation>
 <translation id="7685049629764448582">JavaScript-minne</translation>
 <translation id="7701869757853594372">USER-håndtak</translation>
 <translation id="7704305437604973648">Oppgave</translation>

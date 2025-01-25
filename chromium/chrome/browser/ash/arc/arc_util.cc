@@ -33,7 +33,9 @@
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/guest_os/guest_os_session_tracker.h"
+#include "chrome/browser/ash/guest_os/guest_os_session_tracker_factory.h"
 #include "chrome/browser/ash/guest_os/guest_os_share_path.h"
+#include "chrome/browser/ash/guest_os/guest_os_share_path_factory.h"
 #include "chrome/browser/ash/login/configuration_keys.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/login/demo_mode/demo_setup_controller.h"
@@ -50,6 +52,7 @@
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
+#include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "chromeos/ash/components/settings/cros_settings.h"
 #include "chromeos/components/mgs/managed_guest_session_utils.h"
 #include "components/embedder_support/user_agent_utils.h"
@@ -249,6 +252,14 @@ ArcStatus GetArcStatusForProfile(const Profile* profile,
     return ArcStatus::kNotAvailable;
   }
 
+  if (ash::switches::IsRevenBranding() &&
+      (!policy_util::IsAccountManaged(profile) ||
+       !ash::InstallAttributes::Get()->IsEnterpriseManaged())) {
+    VLOG_IF(1, should_report_reason)
+        << "ARC unavailable on reven board due to unmanaged device or account.";
+    return ArcStatus::kNotAvailable;
+  }
+
   if (!ash::ProfileHelper::IsPrimaryProfile(profile)) {
     VLOG_IF(1, should_report_reason)
         << "Non-primary users are not supported in ARC.";
@@ -322,8 +333,8 @@ void SharePathIfRequired(ConvertToContentUrlsAndShareCallback callback,
   Profile* const profile = ProfileManager::GetPrimaryUserProfile();
   DCHECK(profile);
   for (const auto& path : paths_to_share) {
-    if (!guest_os::GuestOsSharePath::GetForProfile(profile)->IsPathShared(
-            kArcVmName, path)) {
+    if (!guest_os::GuestOsSharePathFactory::GetForProfile(profile)
+             ->IsPathShared(kArcVmName, path)) {
       path_list.push_back(path);
     }
   }
@@ -333,14 +344,14 @@ void SharePathIfRequired(ConvertToContentUrlsAndShareCallback callback,
   }
 
   const auto& vm_info =
-      guest_os::GuestOsSessionTracker::GetForProfile(profile)->GetVmInfo(
+      guest_os::GuestOsSessionTrackerFactory::GetForProfile(profile)->GetVmInfo(
           kArcVmName);
   if (!vm_info) {
     LOG(WARNING) << "ARCVM not running, cannot share paths";
     std::move(callback).Run(std::vector<GURL>());
     return;
   }
-  guest_os::GuestOsSharePath::GetForProfile(profile)->SharePaths(
+  guest_os::GuestOsSharePathFactory::GetForProfile(profile)->SharePaths(
       kArcVmName, vm_info->seneschal_server_handle(), path_list,
       base::BindOnce(
           [](ConvertToContentUrlsAndShareCallback callback,
@@ -410,11 +421,10 @@ bool IsArcAllowedForProfile(const Profile* profile) {
 
   // This is next check. We should be persistent and report the same result.
   if (result != it->second) {
-    NOTREACHED_IN_MIGRATION()
-        << "ARC allowed was changed for the current user session "
-        << "and profile " << profile->GetPath().MaybeAsASCII()
-        << ". This may lead to unexpected behavior. ARC allowed is"
-        << " forced to " << it->second;
+    NOTREACHED() << "ARC allowed was changed for the current user session "
+                 << "and profile " << profile->GetPath().MaybeAsASCII()
+                 << ". This may lead to unexpected behavior. ARC allowed is"
+                 << " forced to " << it->second;
   }
   return it->second;
 }

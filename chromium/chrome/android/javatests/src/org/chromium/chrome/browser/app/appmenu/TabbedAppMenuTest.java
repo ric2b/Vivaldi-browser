@@ -67,10 +67,10 @@ import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
 import org.chromium.components.content_settings.ContentSettingsType;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.test.util.DeviceRestriction;
 import org.chromium.ui.test.util.GmsCoreVersionRestriction;
-import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.IOException;
 import java.util.concurrent.Callable;
@@ -130,9 +130,6 @@ public class TabbedAppMenuTest {
 
         showAppMenuAndAssertMenuShown();
 
-        PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> getListView().setSelection(0));
-        CriteriaHelper.pollInstrumentationThread(
-                () -> Criteria.checkThat(getCurrentFocusedRow(), Matchers.is(0)));
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
     }
 
@@ -246,7 +243,7 @@ public class TabbedAppMenuTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Main"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @Restriction(DeviceFormFactor.PHONE)
     public void testHideMenuOnToggleOverview() throws TimeoutException {
         // App menu is shown during setup.
         Assert.assertTrue("App menu should be showing.", mAppMenuHandler.isAppMenuShowing());
@@ -291,7 +288,7 @@ public class TabbedAppMenuTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Main", "Bookmark", "RenderTest"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @Restriction(DeviceFormFactor.PHONE)
     public void testBookmarkMenuItem() throws IOException {
         PropertyModel bookmarkStarPropertyModel =
                 AppMenuTestSupport.getMenuItemPropertyModel(
@@ -338,7 +335,7 @@ public class TabbedAppMenuTest {
     @Test
     @SmallTest
     @Feature({"Browser", "Main", "RenderTest"})
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @Restriction(DeviceFormFactor.PHONE)
     public void testRequestDesktopSiteMenuItem_checkbox() throws IOException {
         Tab tab = mActivityTestRule.getActivity().getTabModelSelector().getCurrentTab();
         boolean isRequestDesktopSite =
@@ -556,6 +553,13 @@ public class TabbedAppMenuTest {
                     AppMenuTestSupport.showAppMenu(
                             mActivityTestRule.getAppMenuCoordinator(), null, false);
                     Assert.assertTrue(mAppMenuHandler.isAppMenuShowing());
+                });
+
+        // Make sure the menu is ready to be selected.
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    getListView().setSelection(0);
+                    Criteria.checkThat(getCurrentFocusedRow(), Matchers.is(0));
                 });
     }
 

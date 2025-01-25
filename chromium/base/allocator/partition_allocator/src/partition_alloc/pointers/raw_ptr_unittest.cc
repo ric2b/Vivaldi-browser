@@ -1624,7 +1624,7 @@ class BackupRefPtrTest : public testing::Test {
   }
 
   partition_alloc::PartitionAllocator allocator_ =
-      partition_alloc::PartitionAllocator([]() {
+      partition_alloc::PartitionAllocator([] {
         partition_alloc::PartitionOptions opts;
         opts.backup_ref_ptr = partition_alloc::PartitionOptions::kEnabled;
         opts.memory_tagging = {
@@ -2249,7 +2249,7 @@ TEST_F(BackupRefPtrTest, SpatialAlgoCompat) {
   RawPtrCountingImpl::ClearCounters();
 
   uint32_t gen_val = 1;
-  std::generate(counting_ptr, counting_ptr_end, [&gen_val]() {
+  std::generate(counting_ptr, counting_ptr_end, [&gen_val] {
     gen_val ^= gen_val + 1;
     return gen_val;
   });

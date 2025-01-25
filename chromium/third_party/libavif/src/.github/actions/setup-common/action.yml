@@ -1,37 +1,31 @@
-name: 'Common setup for all OSes'
-description: 'Installs common dependencies'
+name: "Common setup for all OSes"
+description: "Installs common dependencies"
 inputs:
   codec-aom:
-    description: 'Can take the values: OFF, LOCAL, SYSTEM'
-    default: 'OFF'
+    description: "Can take the values: OFF, LOCAL, SYSTEM"
+    default: "OFF"
   codec-dav1d:
-    description: 'Can take the values: OFF, LOCAL, SYSTEM'
-    default: 'OFF'
+    description: "Can take the values: OFF, LOCAL, SYSTEM"
+    default: "OFF"
   codec-rav1e:
-    description: 'Can take the values: OFF, LOCAL, SYSTEM'
-    default: 'OFF'
-  recent-cmake:
-    description: 'Can take the values: true, false. Only useful on Linux'
-    default: 'false'
+    description: "Can take the values: OFF, LOCAL, SYSTEM"
+    default: "OFF"
+  oldest-cmake:
+    description: "Can take the values: true, false. Only useful on Linux to force using the minimum required CMake"
+    default: "false"
 runs:
   using: "composite"
   steps:
     - name: Set up Python
       uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
       with:
-        python-version: '3.x'
-    - name: Set up CMake < 3.21
-      if: ${{ runner.os == 'Linux' && inputs.recent-cmake == 'false' }}
+        python-version: "3.x"
+    - name: Set up CMake 3.13
+      if: ${{ runner.os == 'Linux' && inputs.oldest-cmake == 'true' }}
       uses: jwlawson/actions-setup-cmake@802fa1a2c4e212495c05bf94dba2704a92a472be # v2.0.2
       with:
         # Use the minimum required version of cmake.
-        cmake-version: '3.13.x'
-    - name: Set up CMake >= 3.21
-      if: ${{ runner.os == 'Linux' && inputs.recent-cmake == 'true' }}
-      uses: jwlawson/actions-setup-cmake@802fa1a2c4e212495c05bf94dba2704a92a472be # v2.0.2
-      with:
-        # Need cmake 3.21 to set CMAKE_C_STANDARD to 23 for [[nodiscard]].
-        cmake-version: '3.21.x'
+        cmake-version: "3.13.x"
     - name: Print CMake version
       run: cmake --version
       shell: bash
@@ -44,6 +38,4 @@ runs:
       if: ${{ inputs.codec-rav1e == 'LOCAL' }}
       uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
       with:
-        profile: minimal
         toolchain: stable
-        override: true

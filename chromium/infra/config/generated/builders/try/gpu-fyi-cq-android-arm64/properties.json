@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Android FYI Release (Pixel 6)",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "builder_group": "chromium.gpu.fyi",
@@ -34,7 +34,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "GPU FYI Android arm64 Builder",
-                "project": "chromium-m130"
+                "project": "chromium-m132"
               },
               "run_tests_serially": true
             }
@@ -43,7 +43,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "GPU FYI Android arm64 Builder",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "builder_group": "chromium.gpu.fyi",
@@ -72,17 +72,18 @@
         {
           "bucket": "ci",
           "builder": "GPU FYI Android arm64 Builder",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "Android FYI Release (Pixel 6)",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
       ],
-      "retry_failed_shards": false
+      "retry_failed_shards": false,
+      "targets_spec_directory": "src/infra/config/generated/builders/try/gpu-fyi-cq-android-arm64/targets"
     }
   },
   "$build/flakiness": {
@@ -96,11 +97,15 @@
   },
   "$build/siso": {
     "configs": [
-      "builder"
+      "builder",
+      "remote-link"
     ],
+    "enable_cloud_monitoring": true,
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
     "experiments": [],
+    "metrics_project": "chromium-reclient-metrics",
+    "output_local_strategy": "greedy",
     "project": "rbe-chromium-untrusted",
     "remote_jobs": -1
   },

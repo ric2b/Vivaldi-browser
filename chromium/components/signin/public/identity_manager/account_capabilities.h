@@ -23,7 +23,7 @@ class AccountCapabilitiesFetcherIOS;
 }  // namespace ios
 
 namespace supervised_user {
-class SupervisedUserCapabilitiesObserver;
+class FamilyLinkUserCapabilitiesObserver;
 }  // namespace supervised_user
 
 // Stores the information about account capabilities. Capabilities provide
@@ -76,6 +76,9 @@ class AccountCapabilities {
 
   // The user account is able to use IP Protection.
   signin::Tribool can_use_chrome_ip_protection() const;
+
+  // The user account is able to use copyeditor feature.
+  signin::Tribool can_use_copyeditor_feature() const;
 
   // The user account is able to use DevTools AI features.
   signin::Tribool can_use_devtools_generative_ai_features() const;
@@ -134,7 +137,7 @@ class AccountCapabilities {
 #endif
   friend class AccountCapabilitiesTestMutator;
   friend class AccountTrackerService;
-  friend class supervised_user::SupervisedUserCapabilitiesObserver;
+  friend class supervised_user::FamilyLinkUserCapabilitiesObserver;
 
   // Returns the capability state using the service name.
   signin::Tribool GetCapabilityByName(const std::string& name) const;

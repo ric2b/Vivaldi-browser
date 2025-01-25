@@ -10,6 +10,7 @@
 <translation id="132390688737681464">Adressen speichern und ausfüllen</translation>
 <translation id="1375198122581997741">Informationen zur Version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> hat keine Daten gesendet.</translation>
+<translation id="1555191101192706055">Auf dieser Website besteht die Gefahr, dass Angreifer dich zur Installation von Schadsoftware verleiten möchten, die deine Internetnutzung beeinträchtigt. Solche Software könnte zum Beispiel deine Startseite ändern oder auf Websites zusätzliche Werbung einblenden.</translation>
 <translation id="1559528461873125649">Datei oder Verzeichnis nicht vorhanden</translation>
 <translation id="1640244768702815859">Versuchen Sie <ph name="BEGIN_LINK" />die Startseite aufzurufen<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Nicht unterstütztes Protokoll</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proxy und Firewall prüfen<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Ausgestellt für: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Diese Website kann keine sichere Verbindung bereitstellen</translation>
+<translation id="2178904466768126352">Auf dieser Website besteht die Gefahr, dass Angreifer Schadsoftware installieren, mit der beispielsweise Passwörter, Fotos, Nachrichten oder Kreditkartennummern gestohlen oder gelöscht werden können.</translation>
 <translation id="2187317261103489799">Erkennen (Standardeinstellung)</translation>
 <translation id="2224337661447660594">Kein Internet</translation>
 <translation id="2283340219607151381">Adressen speichern und ausfüllen</translation>
@@ -92,6 +94,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Firewall und Antivirenkonfiguration prüfen<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Versuchen Sie eine Netzwerkdiagnose durchzuführen<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Gültig</translation>
+<translation id="4241830393007970744">Auf dieser Website besteht die Gefahr, dass Angreifer dich zur Installation von Software oder zur Preisgabe von Daten wie Passwörtern, deiner Telefonnummer oder Kreditkartennummern verleiten möchten.</translation>
 <translation id="4250431568374086873">Die Verbindung zu dieser Website ist nicht volkommen sicher</translation>
 <translation id="4265872034478892965">Von Ihrem Administrator zugelassen</translation>
 <translation id="4305666528087210886">Zugriff auf die Datei nicht möglich</translation>
@@ -102,6 +105,7 @@
 <translation id="4522570452068850558">Details</translation>
 <translation id="4558551763791394412">Deaktivieren Sie Ihre Erweiterungen.</translation>
 <translation id="4592951414987517459">Ihre Verbindung zu <ph name="DOMAIN" /> wird mit einer modernen Verschlüsselungs-Suite verschlüsselt.</translation>
+<translation id="4598641255230617220">Einfügen und aufrufen</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Ihre Verbindung wurde unterbrochen</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Eine Windows Netzwerkdiagnose durchzuführen<ph name="END_LINK" /></translation>
@@ -111,6 +115,7 @@
 <translation id="4764776831041365478">Die Webseite unter <ph name="URL" /> ist möglicherweise vorübergehend nicht verfügbar oder wurde dauerhaft an eine neue Webadresse verschoben.</translation>
 <translation id="483241715238664915">Warnmeldungen aktivieren</translation>
 <translation id="4943872375798546930">Keine Ergebnisse</translation>
+<translation id="5017554619425969104">Kopierter Text</translation>
 <translation id="5023310440958281426">Prüfen Sie die Richtlinien Ihres Administrators</translation>
 <translation id="5039804452771397117">Zulassen</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 wird verwendet)}other{(# werden verwendet)}}</translation>
@@ -165,11 +170,11 @@
 <translation id="7108819624672055576">Von einer Erweiterung zugelassen</translation>
 <translation id="7111012039238467737">(Gültig)</translation>
 <translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> von <ph name="DOMAIN" /> zulassen</translation>
+<translation id="7126644664682723998">Einfügen und Suchen</translation>
 <translation id="7179323680825933600">Zahlungsmethoden speichern und ausfüllen</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> erfüllt die Sicherheitsstandards nicht.</translation>
 <translation id="7219179957768738017">Die Verbindung verwendet <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Benachrichtigungen anzeigen</translation>
-<translation id="7227747683324411744">Angreifer auf der Website, die Sie zu besuchen versuchen, könnten Sie mit einem Trick dazu bringen, schädliche Software zu installieren, die Ihr Surfverhalten beeinflusst, indem sie z. B. Ihre Startseite ändert oder Ihnen zusätzliche Werbung auf den von Ihnen besuchten Websites anzeigt.</translation>
 <translation id="7353601530677266744">Befehlszeile</translation>
 <translation id="7364115444476960850">Die Seite, auf die Sie zugreifen wollten, wurde von Vivaldis <ph name="BLOCKER_NAME" /> geblockt</translation>
 <translation id="7419106976560586862">Profilpfad</translation>
@@ -177,7 +182,6 @@
 <translation id="7518003948725431193">Für die folgende Webadresse wurde keine Webseite gefunden: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Damit diese Webseite richtig angezeigt wird, werden die Daten benötigt, die Sie zuvor eingegeben haben. Sie können diese Daten erneut senden, dabei werden jedoch sämtliche Aktionen wiederholt, die zuvor durch diese Seite ausgeführt wurden.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kann diese Anfrage momentan nicht verarbeiten.</translation>
-<translation id="7605377493722372900">Angreifer könnten auf der Website, die Sie besuchen wollen, schädliche Software installieren, die Dinge wie Ihr Passwort, Fotos, Nachrichten oder Ihre Kreditkartennummern stiehlt oder löscht.</translation>
 <translation id="7662298039739062396">Einstellung wird von einer Erweiterung gesteuert</translation>
 <translation id="7663736086183791259">Zertifikat <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">Zertifikat</translation>
@@ -203,7 +207,6 @@
 <translation id="8288807391153049143">Zertifikat anzeigen</translation>
 <translation id="8289355894181816810">Wenn Sie weitere Informationen dazu benötigen, kann Ihnen Ihr Netzwerkadministrator weiterhelfen.</translation>
 <translation id="8332188693563227489">Der Zugriff auf <ph name="HOST_NAME" /> wurde verweigert</translation>
-<translation id="8422228580902424274">Angreifer auf der Website, die Sie besuchen wollen, könnten Sie dazu verleiten, Software zu installieren sowie Ihr Passwort, Ihre Telefon- oder Kreditkartennummer preiszugeben.</translation>
 <translation id="8473863474539038330">Adressen und andere Daten</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> antwortete dem Gateway nicht.</translation>
 <translation id="8503813439785031346">Nutzername</translation>

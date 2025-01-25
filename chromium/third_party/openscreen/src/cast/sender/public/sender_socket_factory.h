@@ -13,9 +13,9 @@
 #include "cast/common/public/cast_socket.h"
 #include "cast/common/public/parsed_certificate.h"
 #include "platform/api/task_runner.h"
+#include "platform/api/task_runner_deleter.h"
 #include "platform/api/tls_connection_factory.h"
 #include "platform/base/ip_address.h"
-#include "util/serial_delete_ptr.h"
 
 namespace openscreen::cast {
 
@@ -44,7 +44,7 @@ class SenderSocketFactory final : public TlsConnectionFactory::Client,
     kIncludesVideo,
   };
 
-  // |client| and |task_runner| must outlive |this|.  If no trust stores are
+  // `client` and `task_runner` must outlive `this`.  If no trust stores are
   // passed, the default production certificates are used.
   SenderSocketFactory(Client& client, TaskRunner& task_runner);
   SenderSocketFactory(Client& client,
@@ -53,16 +53,16 @@ class SenderSocketFactory final : public TlsConnectionFactory::Client,
                       std::unique_ptr<TrustStore> crl_trust_store);
   ~SenderSocketFactory();
 
-  // |factory| cannot be nullptr and must outlive |this|.
+  // `factory` cannot be nullptr and must outlive `this`.
   void set_factory(TlsConnectionFactory* factory);
 
-  // Begins connecting to a Cast device at |endpoint|.  If a successful
+  // Begins connecting to a Cast device at `endpoint`.  If a successful
   // connection is made, including device authentication, the new CastSocket
-  // will be passed to |client_|'s OnConnected method.  The new CastSocket will
-  // have its client set to |client|.  If any part of the connection process
-  // fails, |client_|'s OnError method is called instead.  This includes if the
+  // will be passed to `client_`'s OnConnected method.  The new CastSocket will
+  // have its client set to `client`.  If any part of the connection process
+  // fails, `client_`'s OnError method is called instead.  This includes if the
   // device's media policy, as determined by authentication, is audio-only and
-  // |media_policy| is kIncludesVideo.
+  // `media_policy` is kIncludesVideo.
   void Connect(const IPEndpoint& endpoint,
                DeviceMediaPolicy media_policy,
                CastSocket::Client* client);
@@ -88,7 +88,7 @@ class SenderSocketFactory final : public TlsConnectionFactory::Client,
   struct PendingAuth {
     IPEndpoint endpoint;
     DeviceMediaPolicy media_policy;
-    SerialDeletePtr<CastSocket> socket;
+    std::unique_ptr<CastSocket, TaskRunnerDeleter> socket;
     CastSocket::Client* client;
     std::unique_ptr<AuthContext> auth_context;
     std::unique_ptr<ParsedCertificate> peer_cert;

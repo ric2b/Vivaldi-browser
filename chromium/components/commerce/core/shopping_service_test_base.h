@@ -15,8 +15,8 @@
 #include "base/test/task_environment.h"
 #include "base/values.h"
 #include "components/commerce/core/commerce_info_cache.h"
-#include "components/commerce/core/mock_tab_restore_service.h"
 #include "components/commerce/core/compare/product_specifications_server_proxy.h"
+#include "components/commerce/core/mock_tab_restore_service.h"
 #include "components/commerce/core/product_specifications/mock_product_specifications_service.h"
 #include "components/commerce/core/shopping_service.h"
 #include "components/commerce/core/web_extractor.h"
@@ -111,6 +111,13 @@ class MockOptGuideDecider
       const std::string& currency_code = "USD",
       const std::string& gpc_title = "example_gpc_title",
       const std::vector<std::vector<std::string>>& product_categories = {});
+
+  void AddPriceSummaryToPriceTrackingResponse(
+      OptimizationMetadata* out_meta,
+      const PriceSummary_ProductOfferCondition condition,
+      const int64_t lowest_price,
+      const int64_t highest_price,
+      const std::string& country_code);
 
   void AddPriceUpdateToPriceTrackingResponse(OptimizationMetadata* out_meta,
                                              const std::string& currency_code,

@@ -34,7 +34,7 @@ import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
 import org.chromium.ui.widget.Toast;
 
 // Vivaldi
-import org.chromium.chrome.browser.browser_controls.BrowserControlsVisibilityManager;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
 
 /**
  * The root coordinator for the bottom controls component. This component is intended for use with
@@ -101,7 +101,7 @@ public class BottomControlsCoordinator implements BackPressHandler {
             ObservableSupplier<Boolean> overlayPanelVisibilitySupplier,
             ObservableSupplier<Integer> constraintsSupplier,
             Supplier<Boolean> readAloudRestoringSupplier,
-            BrowserControlsVisibilityManager browserControlsVisibilityManager) { // Vivaldi
+            BrowserControlsSizer browserControlsVisibilityManager) { // Vivaldi
         mRootFrameLayout = root;
         root.setConstraintsSupplier(constraintsSupplier);
         PropertyModel model = new PropertyModel(BottomControlsProperties.ALL_KEYS);

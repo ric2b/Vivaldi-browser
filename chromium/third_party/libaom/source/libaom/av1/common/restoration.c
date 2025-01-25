@@ -1123,8 +1123,8 @@ void av1_loop_restoration_filter_frame_init(AV1LrStruct *lr_ctxt,
   }
 }
 
-void av1_loop_restoration_copy_planes(AV1LrStruct *loop_rest_ctxt,
-                                      AV1_COMMON *cm, int num_planes) {
+static void loop_restoration_copy_planes(AV1LrStruct *loop_rest_ctxt,
+                                         AV1_COMMON *cm, int num_planes) {
   typedef void (*copy_fun)(const YV12_BUFFER_CONFIG *src_ybc,
                            YV12_BUFFER_CONFIG *dst_ybc, int hstart, int hend,
                            int vstart, int vend);
@@ -1207,7 +1207,7 @@ void av1_loop_restoration_filter_frame(YV12_BUFFER_CONFIG *frame,
 
   foreach_rest_unit_in_planes(loop_rest_ctxt, cm, num_planes);
 
-  av1_loop_restoration_copy_planes(loop_rest_ctxt, cm, num_planes);
+  loop_restoration_copy_planes(loop_rest_ctxt, cm, num_planes);
 }
 
 void av1_foreach_rest_unit_in_row(

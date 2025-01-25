@@ -131,7 +131,7 @@ enum class NotificationCatalogName {
   kVMCameraMic = 112,
   kSecurityToken = 113,
   kCrostiniExportImport = 114,
-  kLacrosCannotLaunch = 115,
+  // [Deprecated] kLacrosCannotLaunch = 115,
   kRequestFileSystem = 116,
   kNetworkPortalDetector = 117,
   kCrostiniPackage = 118,
@@ -202,7 +202,14 @@ enum class NotificationCatalogName {
   kOnDeviceAppControls = 183,
   kFaceGazeAssetsDownloaded = 184,
   kFaceGazeAssetsFailed = 185,
-  kMaxValue = kFaceGazeAssetsFailed
+  kDeviceRestrictionScheduleUpcomingLogout = 186,
+  kDeviceRestrictionSchedulePostLogout = 187,
+  kTouchpadDisabled = 188,
+  kOnTaskEnterLockedMode = 189,
+  kOnTaskSessionEnd = 190,
+  kOnTaskAddContentToBundle = 191,
+  kOnTaskRemoveContentFromBundle = 192,
+  kMaxValue = kOnTaskRemoveContentFromBundle
 };
 
 // A living catalog that registers system nudges.
@@ -251,7 +258,8 @@ enum class NudgeCatalogName {
   kBirchPrivacy = 35,
   kVideoConferenceTraySidetoneNotSupported = 36,
   kVideoConferenceTraySidetoneEnabled = 37,
-  kMaxValue = kVideoConferenceTraySidetoneEnabled
+  kGraduationAppEnabled = 38,
+  kMaxValue = kGraduationAppEnabled
 };
 
 // A living catalog that registers toasts.
@@ -311,7 +319,13 @@ enum class ToastCatalogName {
   kAppNotClosable = 49,
   kGameDashboardEnterTablet = 50,
   kInformedRestoreOnboarding = 51,
-  kMaxValue = kInformedRestoreOnboarding
+  kTouchpadDisabled = 52,
+  // [Deprecated] kOnTaskEnterLockedMode = 53,
+  // [Deprecated] kOnTaskSessionEnd = 54,
+  kOnTaskUrlBlocked = 55,
+  kCopyImageToClipboardAction = 56,
+  kCaptureModeTextCopied = 57,
+  kMaxValue = kCaptureModeTextCopied
 };
 
 }  // namespace ash

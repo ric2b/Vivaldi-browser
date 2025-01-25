@@ -86,9 +86,8 @@ const char* SilenceStateToString(InputController::SilenceState state) {
     case InputController::SILENCE_STATE_AUDIO_AND_SILENCE:
       return "SILENCE_STATE_AUDIO_AND_SILENCE";
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
-  return "INVALID";
 }
 
 // Helper method which calculates the average power of an audio bus. Unit is in
@@ -265,14 +264,11 @@ void InputController::MaybeSetUpAudioProcessing(
     return;
   }
 
-  int fifo_size = media::GetProcessingAudioFifoSize();
-
-  // Only use the FIFO/new thread if its size is explicitly set.
-  if (fifo_size) {
+  if (media::IsChromeWideEchoCancellationEnabled()) {
     // base::Unretained() is safe since both |audio_processor_handler_| and
     // |event_handler_| outlive |processing_fifo_|.
     processing_fifo_ = std::make_unique<ProcessingAudioFifo>(
-        *processing_input_params, fifo_size,
+        *processing_input_params, kProcessingFifoSize,
         base::BindRepeating(&AudioProcessorHandler::ProcessCapturedAudio,
                             base::Unretained(audio_processor_handler_.get())),
         base::BindRepeating(&EventHandler::OnLog,
@@ -382,7 +378,7 @@ void InputController::Close() {
   if (!stream_)
     return;
 
-  check_muted_state_timer_.AbandonAndStop();
+  check_muted_state_timer_.Stop();
 
   std::string log_string;
   static const char kLogStringPrefix[] = "AIC::Close => ";

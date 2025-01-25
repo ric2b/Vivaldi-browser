@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">Landslag 12</translation>
 <translation id="1158503667684816647">Ekki sýna staðfestingu aftur</translation>
 <translation id="1222195720020481779">Keyri uppsetningarforrit...</translation>
+<translation id="1224683873953469764">Fáðu vivaldi fyrir síma</translation>
 <translation id="1270785070369717623">Því miður eru Opera GX stillingarnar þínar ekki aðgengilegar þegar sá vafri er í gangi. Til þess að flytja inn stillingarnar þínar í Vivaldi þarftu að vista vinnuna þína og loka öllum Opera GX gluggum. Ýttu svo á halda áfram.</translation>
 <translation id="1276145862619442150">Hraðval</translation>
 <translation id="1281950884873973195">Dýr 6</translation>
@@ -12,6 +13,7 @@
 <translation id="1454726940098520109">Ekki sýna staðfestingu aftur</translation>
 <translation id="1462666970065907900">Ertu alveg viss um að þú viljir loka þessum glugga?</translation>
 <translation id="1480046233931937785">Kreditlisti</translation>
+<translation id="1521774566618522728">Virkt í dag</translation>
 <translation id="1526344461589023948">Villa kom upp þegar reynt var að vista niðurhalsuppfærslur. Vinsamlegast athugaðu hvort tölvan sé með nóg diskapláss og prófaðu aftur síðar.</translation>
 <translation id="1635542496948266458">Skipta um prófíl</translation>
 <translation id="1657174850639146440">Skrímsli 9</translation>
@@ -97,6 +99,7 @@
 <translation id="4430019312045809116">Hljóðstyrkur</translation>
 <translation id="443008484043213881">Tól</translation>
 <translation id="4456211719108566931">Skrímsli 6</translation>
+<translation id="4459169140545916303">Virkt fyrir <ph name="DEVICE_LAST_ACTIVATED_TIME" /> dögum síðan</translation>
 <translation id="4512900838580567989">Opna hlekk í nýjum bakgrunnsflipa</translation>
 <translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Opna mynd í nýjum bakgrunnsflipa</translation>
@@ -148,6 +151,7 @@
 <translation id="7099506190679014195">Uppfærsla á öruggu lyklaboxi</translation>
 <translation id="7111492742514999492">Landslag 9</translation>
 <translation id="7208252576848052204">Því miður eru Arc stillingarnar þínar ekki aðgengilegar þegar sá vafri er í gangi. Til þess að flytja inn stillingarnar þínar í Vivaldi þarftu að vista vinnuna þína og loka öllum Arc gluggum. Ýttu svo á halda áfram.</translation>
+<translation id="7321500017121629018">Virkt í gær</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Ekki tókst að hefja uppfærsluferlið. Vinsamlegast athugaðu hvort tölvan sé með nægt minni eða diskapláss og prófaðu aftur síðar.</translation>
 <translation id="7658239707568436148">Hætta við</translation>

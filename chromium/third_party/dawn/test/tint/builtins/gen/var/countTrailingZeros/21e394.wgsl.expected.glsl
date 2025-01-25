@@ -2,127 +2,76 @@
 precision highp float;
 precision highp int;
 
-uint tint_count_trailing_zeros(uint v) {
-  uint x = uint(v);
-  uint b16 = (bool((x & 65535u)) ? 0u : 16u);
-  x = (x >> b16);
-  uint b8 = (bool((x & 255u)) ? 0u : 8u);
-  x = (x >> b8);
-  uint b4 = (bool((x & 15u)) ? 0u : 4u);
-  x = (x >> b4);
-  uint b2 = (bool((x & 3u)) ? 0u : 2u);
-  x = (x >> b2);
-  uint b1 = (bool((x & 1u)) ? 0u : 1u);
-  uint is_zero = ((x == 0u) ? 1u : 0u);
-  return uint((((((b16 | b8) | b4) | b2) | b1) + is_zero));
-}
-
-layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+layout(binding = 0, std430)
+buffer prevent_dce_block_1_ssbo {
   uint inner;
-} prevent_dce;
-
+} v;
 uint countTrailingZeros_21e394() {
   uint arg_0 = 1u;
-  uint res = tint_count_trailing_zeros(arg_0);
+  uint v_1 = arg_0;
+  uint v_2 = mix(0u, 16u, ((v_1 & 65535u) == 0u));
+  uint v_3 = mix(0u, 8u, (((v_1 >> v_2) & 255u) == 0u));
+  uint v_4 = mix(0u, 4u, ((((v_1 >> v_2) >> v_3) & 15u) == 0u));
+  uint v_5 = mix(0u, 2u, (((((v_1 >> v_2) >> v_3) >> v_4) & 3u) == 0u));
+  uint v_6 = mix(0u, 1u, ((((((v_1 >> v_2) >> v_3) >> v_4) >> v_5) & 1u) == 0u));
+  uint res = ((v_2 | (v_3 | (v_4 | (v_5 | v_6)))) + mix(0u, 1u, (((((v_1 >> v_2) >> v_3) >> v_4) >> v_5) == 0u)));
   return res;
 }
-
-struct VertexOutput {
-  vec4 pos;
-  uint prevent_dce;
-};
-
-void fragment_main() {
-  prevent_dce.inner = countTrailingZeros_21e394();
-}
-
 void main() {
-  fragment_main();
-  return;
+  v.inner = countTrailingZeros_21e394();
 }
 #version 310 es
 
-uint tint_count_trailing_zeros(uint v) {
-  uint x = uint(v);
-  uint b16 = (bool((x & 65535u)) ? 0u : 16u);
-  x = (x >> b16);
-  uint b8 = (bool((x & 255u)) ? 0u : 8u);
-  x = (x >> b8);
-  uint b4 = (bool((x & 15u)) ? 0u : 4u);
-  x = (x >> b4);
-  uint b2 = (bool((x & 3u)) ? 0u : 2u);
-  x = (x >> b2);
-  uint b1 = (bool((x & 1u)) ? 0u : 1u);
-  uint is_zero = ((x == 0u) ? 1u : 0u);
-  return uint((((((b16 | b8) | b4) | b2) | b1) + is_zero));
-}
-
-layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+layout(binding = 0, std430)
+buffer prevent_dce_block_1_ssbo {
   uint inner;
-} prevent_dce;
-
+} v;
 uint countTrailingZeros_21e394() {
   uint arg_0 = 1u;
-  uint res = tint_count_trailing_zeros(arg_0);
+  uint v_1 = arg_0;
+  uint v_2 = mix(0u, 16u, ((v_1 & 65535u) == 0u));
+  uint v_3 = mix(0u, 8u, (((v_1 >> v_2) & 255u) == 0u));
+  uint v_4 = mix(0u, 4u, ((((v_1 >> v_2) >> v_3) & 15u) == 0u));
+  uint v_5 = mix(0u, 2u, (((((v_1 >> v_2) >> v_3) >> v_4) & 3u) == 0u));
+  uint v_6 = mix(0u, 1u, ((((((v_1 >> v_2) >> v_3) >> v_4) >> v_5) & 1u) == 0u));
+  uint res = ((v_2 | (v_3 | (v_4 | (v_5 | v_6)))) + mix(0u, 1u, (((((v_1 >> v_2) >> v_3) >> v_4) >> v_5) == 0u)));
   return res;
 }
-
-struct VertexOutput {
-  vec4 pos;
-  uint prevent_dce;
-};
-
-void compute_main() {
-  prevent_dce.inner = countTrailingZeros_21e394();
-}
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  compute_main();
-  return;
+  v.inner = countTrailingZeros_21e394();
 }
 #version 310 es
 
-uint tint_count_trailing_zeros(uint v) {
-  uint x = uint(v);
-  uint b16 = (bool((x & 65535u)) ? 0u : 16u);
-  x = (x >> b16);
-  uint b8 = (bool((x & 255u)) ? 0u : 8u);
-  x = (x >> b8);
-  uint b4 = (bool((x & 15u)) ? 0u : 4u);
-  x = (x >> b4);
-  uint b2 = (bool((x & 3u)) ? 0u : 2u);
-  x = (x >> b2);
-  uint b1 = (bool((x & 1u)) ? 0u : 1u);
-  uint is_zero = ((x == 0u) ? 1u : 0u);
-  return uint((((((b16 | b8) | b4) | b2) | b1) + is_zero));
-}
-
-layout(location = 0) flat out uint prevent_dce_1;
-uint countTrailingZeros_21e394() {
-  uint arg_0 = 1u;
-  uint res = tint_count_trailing_zeros(arg_0);
-  return res;
-}
 
 struct VertexOutput {
   vec4 pos;
   uint prevent_dce;
 };
 
-VertexOutput vertex_main() {
-  VertexOutput tint_symbol = VertexOutput(vec4(0.0f, 0.0f, 0.0f, 0.0f), 0u);
+layout(location = 0) flat out uint vertex_main_loc0_Output;
+uint countTrailingZeros_21e394() {
+  uint arg_0 = 1u;
+  uint v = arg_0;
+  uint v_1 = mix(0u, 16u, ((v & 65535u) == 0u));
+  uint v_2 = mix(0u, 8u, (((v >> v_1) & 255u) == 0u));
+  uint v_3 = mix(0u, 4u, ((((v >> v_1) >> v_2) & 15u) == 0u));
+  uint v_4 = mix(0u, 2u, (((((v >> v_1) >> v_2) >> v_3) & 3u) == 0u));
+  uint v_5 = mix(0u, 1u, ((((((v >> v_1) >> v_2) >> v_3) >> v_4) & 1u) == 0u));
+  uint res = ((v_1 | (v_2 | (v_3 | (v_4 | v_5)))) + mix(0u, 1u, (((((v >> v_1) >> v_2) >> v_3) >> v_4) == 0u)));
+  return res;
+}
+VertexOutput vertex_main_inner() {
+  VertexOutput tint_symbol = VertexOutput(vec4(0.0f), 0u);
   tint_symbol.pos = vec4(0.0f);
   tint_symbol.prevent_dce = countTrailingZeros_21e394();
   return tint_symbol;
 }
-
 void main() {
-  gl_PointSize = 1.0;
-  VertexOutput inner_result = vertex_main();
-  gl_Position = inner_result.pos;
-  prevent_dce_1 = inner_result.prevent_dce;
-  gl_Position.y = -(gl_Position.y);
-  gl_Position.z = ((2.0f * gl_Position.z) - gl_Position.w);
-  return;
+  VertexOutput v_6 = vertex_main_inner();
+  gl_Position = v_6.pos;
+  gl_Position[1u] = -(gl_Position.y);
+  gl_Position[2u] = ((2.0f * gl_Position.z) - gl_Position.w);
+  vertex_main_loc0_Output = v_6.prevent_dce;
+  gl_PointSize = 1.0f;
 }

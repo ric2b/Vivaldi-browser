@@ -28,11 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/animation/css/css_animations.h"
 
 #include <algorithm>
@@ -69,6 +64,7 @@
 #include "third_party/blink/renderer/core/css/css_keyframe_rule.h"
 #include "third_party/blink/renderer/core/css/css_property_equality.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
+#include "third_party/blink/renderer/core/css/native_paint_image_generator.h"
 #include "third_party/blink/renderer/core/css/parser/css_variable_parser.h"
 #include "third_party/blink/renderer/core/css/post_style_update_scope.h"
 #include "third_party/blink/renderer/core/css/properties/computed_style_utils.h"
@@ -201,7 +197,8 @@ std::optional<AnimationTimeDelta> CSSAnimationProxy::CalculateInheritedTime(
   if (animation) {
     // A cancelled CSS animation does not become active again due to an
     // animation update.
-    if (animation->CalculateAnimationPlayState() == Animation::kIdle) {
+    if (animation->CalculateAnimationPlayState() ==
+        V8AnimationPlayState::Enum::kIdle) {
       return std::nullopt;
     }
 
@@ -282,7 +279,8 @@ std::optional<AnimationTimeDelta> CSSAnimationProxy::CalculateInheritedTime(
     // issue is resolved.
     if (previous_timeline && previous_timeline->IsMonotonicallyIncreasing() &&
         !is_paused_ && animation->StartTimeInternal() &&
-        animation->CalculateAnimationPlayState() == Animation::kRunning) {
+        animation->CalculateAnimationPlayState() ==
+            V8AnimationPlayState::Enum::kRunning) {
       return std::nullopt;
     }
     // A new animation with a null timeline will be stuck in the play or pause
@@ -906,8 +904,7 @@ ScrollTimeline::ScrollAxis ComputeAxis(TimelineAxis axis) {
       return ScrollTimeline::ScrollAxis::kY;
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return ScrollTimeline::ScrollAxis::kBlock;
+  NOTREACHED();
 }
 
 // The CSSScrollTimelineOptions and CSSViewTimelineOptions structs exist
@@ -1520,7 +1517,8 @@ void CSSAnimations::CalculateCompositorAnimationUpdate(
 
   const ComputedStyle* old_style = animating_element.GetComputedStyle();
   if (!old_style || old_style->IsEnsuredInDisplayNone() ||
-      !old_style->HasCurrentCompositableAnimation()) {
+      (!old_style->HasCurrentCompositableAnimation() &&
+       !element_animations->HasCompositedPaintWorkletAnimation())) {
     return;
   }
 
@@ -1554,8 +1552,13 @@ void CSSAnimations::CalculateCompositorAnimationUpdate(
 
   for (auto& entry : element_animations->Animations()) {
     Animation& animation = *entry.key;
-    if (snapshot(animation.effect()))
+    if (snapshot(animation.effect())) {
       update.UpdateCompositorKeyframes(&animation);
+    } else if (NativePaintImageGenerator::
+                   NativePaintWorkletAnimationsEnabled()) {
+      element_animations->RecalcCompositedStatusForKeyframeChange(
+          element, animation.effect());
+    }
   }
 
   for (auto& entry : element_animations->GetWorkletAnimations()) {
@@ -1705,33 +1708,35 @@ void CSSAnimations::CalculateAnimationUpdate(
         // play state and that the change is not blocked by a sticky state.
         bool toggle_pause_state = false;
         bool will_be_playing = false;
-        const Animation::AnimationPlayState play_state =
+        const V8AnimationPlayState::Enum play_state =
             animation->CalculateAnimationPlayState();
         if (is_paused != was_paused && !animation->GetIgnoreCSSPlayState()) {
           switch (play_state) {
-            case Animation::kIdle:
+            case V8AnimationPlayState::Enum::kIdle:
               break;
 
-            case Animation::kPaused:
+            case V8AnimationPlayState::Enum::kPaused:
               toggle_pause_state = !is_paused;
               will_be_playing = !is_paused;
               break;
 
-            case Animation::kRunning:
-            case Animation::kFinished:
+            case V8AnimationPlayState::Enum::kRunning:
+            case V8AnimationPlayState::Enum::kFinished:
               toggle_pause_state = is_paused;
               will_be_playing = !is_paused;
               break;
 
             default:
               // kUnset and kPending.
-              NOTREACHED_IN_MIGRATION();
+              NOTREACHED();
           }
         } else if (!animation->GetIgnoreCSSPlayState()) {
-          will_be_playing = !is_paused && play_state != Animation::kIdle;
+          will_be_playing =
+              !is_paused && play_state != V8AnimationPlayState::Enum::kIdle;
         } else {
-          will_be_playing = (play_state == Animation::kRunning) ||
-                            (play_state == Animation::kFinished);
+          will_be_playing =
+              (play_state == V8AnimationPlayState::Enum::kRunning) ||
+              (play_state == V8AnimationPlayState::Enum::kFinished);
         }
 
         AnimationTimeline* timeline = existing_animation->Timeline();

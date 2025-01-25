@@ -36,3 +36,13 @@ constexpr const char* kSignedResourceSearchEnginesSopranos =
 
 constexpr const char* kSignedResourceSearchEnginesSnapshot =
   "https://downloads.vivaldi.com/search/snapshot/{}/search_engines.json";
+
+// Search engines prompt
+constexpr const char* kSignedResourceSearchEnginesPrompt =
+    "https://downloads.vivaldi.com/search/{}/search_engines_prompt.json";
+
+constexpr const char* kSignedResourceSearchEnginesPromptSopranos =
+  "https://downloads.vivaldi.com/search/sopranos/{}/search_engines_prompt.json";
+
+constexpr const char* kSignedResourceSearchEnginesPromptSnapshot =
+  "https://downloads.vivaldi.com/search/snapshot/{}/search_engines_prompt.json";

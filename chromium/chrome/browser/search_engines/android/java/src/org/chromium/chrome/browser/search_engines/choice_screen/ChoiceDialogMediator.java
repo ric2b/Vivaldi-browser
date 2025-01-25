@@ -8,10 +8,12 @@ import androidx.annotation.IntDef;
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.TimeUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -80,7 +82,7 @@ class ChoiceDialogMediator {
         int COUNT = 4;
     }
 
-    // LINT.ThenChange(//tools/metrics/histograms/enums.xml:OsDefaultsChoiceDialogStatus)
+    // LINT.ThenChange(//tools/metrics/histograms/metadata/search/enums.xml:OsDefaultsChoiceDialogStatus)
 
     /** See {@link #startObserving}. */
     interface Delegate {
@@ -101,6 +103,9 @@ class ChoiceDialogMediator {
     }
 
     private static final String TAG = "ChoiceDialogMediator";
+
+    /** Duration for which we suppress repeated taps to launch the choice selection screen. */
+    @VisibleForTesting static final int DEBOUNCE_TIME_MILLIS = 1000;
 
     private final ActivityLifecycleDispatcher mLifecycleDispatcher;
     private final SearchEngineChoiceService mSearchEngineChoiceService;
@@ -128,6 +133,27 @@ class ChoiceDialogMediator {
      * happen yet.
      */
     private @Nullable Long mFirstServiceEventTimeMillis;
+
+    /**
+     * Time at which the "next" button on the dialog has been tapped and triggered an "initial"
+     * request to launch the choice screen. Can be {@code null} if the tap it didn't happen yet, or
+     * if Chrome lost the active app status (used as heuristic to detect that we effectively
+     * switched to the choice screen).
+     *
+     * @see #maybeLaunchChoiceScreen()
+     */
+    private @Nullable Long mLaunchChoiceScreenTimeMillis;
+
+    /**
+     * Time at which the "next" button on the dialog has been tapped and triggered a request
+     * ("initial" or "repeated") to launch the choice screen. Is used to prevent multi-taps from
+     * requesting the choice screen too often. Can be {@code null} if the tap it didn't happen yet,
+     * or if Chrome lost the active app status (used as heuristic to detect that we effectively
+     * switched to the choice screen).
+     *
+     * @see #maybeLaunchChoiceScreen()
+     */
+    private @Nullable Long mLatestAcceptedTapTimeMillis;
 
     private @Nullable Delegate mDelegate;
 
@@ -163,7 +189,21 @@ class ChoiceDialogMediator {
                     }
 
                     @Override
-                    public void onPauseWithNative() {}
+                    public void onPauseWithNative() {
+                        if (mLaunchChoiceScreenTimeMillis == null) {
+                            // We are navigating away, might be a user-initiated app switch since
+                            // we don't have a timestamp recorded for having tapped the button to
+                            // launch the choice screen.
+                            return;
+                        }
+
+                        // Since we have a timestamp here, we assume that the pause is caused by the
+                        // choice screen being launched, record it and rearm the delay tracking.
+                        recordLaunchChoiceScreenDelay(
+                                TimeUtils.currentTimeMillis() - mLaunchChoiceScreenTimeMillis);
+                        mLaunchChoiceScreenTimeMillis = null;
+                        mLatestAcceptedTapTimeMillis = null;
+                    }
                 };
     }
 
@@ -177,7 +217,7 @@ class ChoiceDialogMediator {
         assert mDelegate == null;
         mDelegate = delegate;
 
-        mObservationStartedTimeMillis = System.currentTimeMillis();
+        mObservationStartedTimeMillis = TimeUtils.currentTimeMillis();
         changeDialogType(DialogType.LOADING);
 
         if (SearchEnginesFeatureUtils.clayBlockingEnableVerboseLogging()) {
@@ -185,18 +225,19 @@ class ChoiceDialogMediator {
             Log.i(TAG, "Mediator initializing");
         }
 
-        if (!mIsDeviceChoiceRequiredSupplier.hasValue()) {
+        int silentlyPendingDurationMillis =
+                SearchEnginesFeatureUtils.clayBlockingDialogSilentlyPendingDurationMillis();
+        if (!mIsDeviceChoiceRequiredSupplier.hasValue() && silentlyPendingDurationMillis > 0) {
             // An initial response from the supplier is still pending, so it won't call the observer
-            // on registration by itself. It's unclear how long it would take. We proactively
-            // trigger the blocking dialog. We use a grace period (externally configured via
-            // `SearchEnginesFeatureUtils.clayBlockingDialogSilentlyPendingDurationMillis()`) before
-            // showing so that if the backend responds quickly enough, we can reduce the chances to
-            // unnecessarily show the dialog.
+            // on registration by itself. It's unclear how long it would take.
+            // If a positive `clayBlockingDialogSilentlyPendingDurationMillis()` grace period
+            // duration is provided, we proactively trigger the blocking dialog after this time
+            // elapses.
             ThreadUtils.postOnUiThreadDelayed(
                     () -> {
                         if (mDialogType != DialogType.LOADING) {
-                            // Another update arrived via the supplier, which changed the internal
-                            // state. No need to show it here anymore.
+                            // The backend responded quickly enough, and updated the state. We don't
+                            // need to show the dialog here anymore.
                             return;
                         }
 
@@ -208,7 +249,7 @@ class ChoiceDialogMediator {
                             Log.i(TAG, "Dialog shown while waiting for a backend response.");
                         }
                     },
-                    SearchEnginesFeatureUtils.clayBlockingDialogSilentlyPendingDurationMillis());
+                    silentlyPendingDurationMillis);
         }
         mIsDeviceChoiceRequiredSupplier.addObserver(mIsDeviceChoiceRequiredObserver);
         mLifecycleDispatcher.register(mActivityLifecycleObserver);
@@ -232,16 +273,13 @@ class ChoiceDialogMediator {
         }
     }
 
-    /**
-     * Method to call when the primary action button of the dialog is tapped.
-     *
-     * @param dialogType type of the dialog at the moment the button was wired up.
-     */
-    void onActionButtonClick(@DialogType int dialogType) {
+    /** Method to call when the primary action button of the dialog is tapped. */
+    void onActionButtonClick() {
         assert mDelegate != null;
 
-        switch (dialogType) {
-            case DialogType.CHOICE_LAUNCH -> mSearchEngineChoiceService.launchDeviceChoiceScreens();
+        switch (mDialogType) {
+            case DialogType.CHOICE_LAUNCH -> recordLaunchChoiceScreenTapHandlingStatus(
+                    maybeLaunchChoiceScreen());
             case DialogType.CHOICE_CONFIRM -> mDelegate.dismissDialog();
             case DialogType.LOADING, DialogType.UNKNOWN -> throw new IllegalStateException();
         }
@@ -253,7 +291,7 @@ class ChoiceDialogMediator {
                 : "The dialog is not expected to have already been shown";
         assert mDialogType != DialogType.UNKNOWN;
         assert mObservationStartedTimeMillis != null;
-        mDialogAddedTimeMillis = System.currentTimeMillis();
+        mDialogAddedTimeMillis = TimeUtils.currentTimeMillis();
         mSearchEngineChoiceService.notifyDeviceChoiceBlockShown();
 
         if (SearchEnginesFeatureUtils.clayBlockingEnableVerboseLogging()) {
@@ -278,7 +316,7 @@ class ChoiceDialogMediator {
         boolean wasDialogDismissed = wasDialogShown && mDialogType == DialogType.UNKNOWN;
 
         if (mFirstServiceEventTimeMillis == null) {
-            mFirstServiceEventTimeMillis = System.currentTimeMillis();
+            mFirstServiceEventTimeMillis = TimeUtils.currentTimeMillis();
             if (SearchEnginesFeatureUtils.clayBlockingEnableVerboseLogging()) {
                 // TODO(b/355201070): Replace this after e2e testing with UMA recording.
                 Log.i(
@@ -293,10 +331,10 @@ class ChoiceDialogMediator {
                                 ? mFirstServiceEventTimeMillis - mObservationStartedTimeMillis
                                 : "<N/A>");
             }
-            RecordHistogram.recordMediumTimesHistogram(
+            RecordHistogram.deprecatedRecordMediumTimesHistogram(
                     "Search.OsDefaultsChoice.DelayFromDialogShownToFirstStatus",
                     wasDialogShown ? mFirstServiceEventTimeMillis - mDialogAddedTimeMillis : 0);
-            RecordHistogram.recordMediumTimesHistogram(
+            RecordHistogram.deprecatedRecordMediumTimesHistogram(
                     "Search.OsDefaultsChoice.DelayFromObservationToFirstStatus",
                     mObservationStartedTimeMillis == null
                             ? 0
@@ -383,10 +421,10 @@ class ChoiceDialogMediator {
 
                         mDelegate.dismissDialog();
                         destroy();
-                        RecordHistogram.recordMediumTimesHistogram(
+                        RecordHistogram.deprecatedRecordMediumTimesHistogram(
                                 "Search.OsDefaultsChoice.DelayFromDialogShownToFirstStatus",
                                 dialogTimeoutMillis);
-                        RecordHistogram.recordMediumTimesHistogram(
+                        RecordHistogram.deprecatedRecordMediumTimesHistogram(
                                 "Search.OsDefaultsChoice.DelayFromObservationToFirstStatus",
                                 dialogTimeoutMillis);
                     },
@@ -395,8 +433,84 @@ class ChoiceDialogMediator {
     }
 
     private void changeDialogType(@DialogType int type) {
+        if (mDialogType == type) return;
+
         mDialogType = type;
         RecordHistogram.recordEnumeratedHistogram(
                 "Search.OsDefaultsChoice.DialogStatusChange", type, DialogType.COUNT);
+
+        // Reset the debounce logic, to avoid making the button unresponsive.
+        mLaunchChoiceScreenTimeMillis = null;
+        mLatestAcceptedTapTimeMillis = null;
+    }
+
+    /**
+     * Processes an incoming tap on the button to launch the choice screen, and returns how it was
+     * handled.
+     */
+    @LaunchChoiceScreenTapHandlingStatus
+    private int maybeLaunchChoiceScreen() {
+        // The nullability of the 2 timestamps is expected to always be in sync.
+        assert (mLaunchChoiceScreenTimeMillis == null) == (mLatestAcceptedTapTimeMillis == null);
+
+        if (mLatestAcceptedTapTimeMillis == null) {
+            mLatestAcceptedTapTimeMillis = TimeUtils.currentTimeMillis();
+            mLaunchChoiceScreenTimeMillis = TimeUtils.currentTimeMillis();
+            mSearchEngineChoiceService.launchDeviceChoiceScreens();
+            return LaunchChoiceScreenTapHandlingStatus.INITIAL_TAP;
+        }
+
+        if (TimeUtils.currentTimeMillis() - mLatestAcceptedTapTimeMillis <= DEBOUNCE_TIME_MILLIS) {
+            // TODO(b/374288328): Consider disabling the button and indicate the "loading" status
+            // instead of invisibly debouncing taps.
+            return LaunchChoiceScreenTapHandlingStatus.SUPPRESSED_TAP;
+        }
+
+        // Accept some repeated taps after a while, it might be due to something going wrong on the
+        // backend, and repeating the call might trigger a new attempt that could successfully show
+        // the choice screen.
+        mLatestAcceptedTapTimeMillis = TimeUtils.currentTimeMillis();
+        mSearchEngineChoiceService.launchDeviceChoiceScreens();
+        return LaunchChoiceScreenTapHandlingStatus.REPEATED_TAP;
+    }
+
+    private static void recordLaunchChoiceScreenDelay(long delayMillis) {
+        RecordHistogram.recordTimesHistogram(
+                "Search.OsDefaultsChoice.LaunchChoiceScreenDelay", delayMillis);
+    }
+
+    @IntDef({
+        LaunchChoiceScreenTapHandlingStatus.INITIAL_TAP,
+        LaunchChoiceScreenTapHandlingStatus.SUPPRESSED_TAP,
+        LaunchChoiceScreenTapHandlingStatus.REPEATED_TAP
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @VisibleForTesting
+    @interface LaunchChoiceScreenTapHandlingStatus {
+        // These values are persisted to logs. Entries should not be renumbered and numeric values
+        // should never be reused.
+        // LINT.IfChange
+        /** No previously tracked tap. */
+        int INITIAL_TAP = 0;
+
+        /** The previously accepted tap happened too recently, so this one is ignored. */
+        int SUPPRESSED_TAP = 1;
+
+        /**
+         * The previously accepted tap doesn't seem to have had a result yet, we let this one
+         * through in case the request was dropped and this can allow unblocking the dialog.
+         */
+        int REPEATED_TAP = 2;
+
+        int COUNT = 3;
+        // LINT.ThenChange(//tools/metrics/histograms/metadata/search/enums.xml:LaunchOsChoiceScreenTapHandlingStatus)
+    }
+
+    private static void recordLaunchChoiceScreenTapHandlingStatus(
+            @LaunchChoiceScreenTapHandlingStatus int tapHandlingStatus) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "Search.OsDefaultsChoice.LaunchChoiceScreenTapHandlingStatus",
+                tapHandlingStatus,
+                LaunchChoiceScreenTapHandlingStatus.COUNT);
     }
 }

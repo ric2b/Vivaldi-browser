@@ -104,7 +104,6 @@
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/scoped_browser_locale.h"
-#include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
 #include "components/policy/core/common/management/scoped_management_service_override_for_testing.h"
 #include "components/policy/core/common/policy_pref_names.h"
@@ -731,8 +730,8 @@ class ExtensionServiceTest : public ExtensionServiceTestWithInstall {
 
   // Helper method to test that an extension moves through being blocked and
   // unblocked as appropriate for its type.
-  void AssertExtensionBlocksAndUnblocks(
-      bool should_block, const std::string extension_id) {
+  void AssertExtensionBlocksAndUnblocks(bool should_block,
+                                        const std::string& extension_id) {
     // Assume we start in an unblocked state.
     EXPECT_FALSE(IsBlocked(extension_id));
 
@@ -764,7 +763,7 @@ class ExtensionServiceTest : public ExtensionServiceTestWithInstall {
            "manifest_version": 2
          })");
 
-    ChromeTestExtensionLoader loader(testing_profile());
+    ChromeTestExtensionLoader loader(profile());
     loader.set_pack_extension(false);
     loader.LoadExtension(good_extension_dir.UnpackedPath());
 
@@ -2118,7 +2117,7 @@ TEST_F(ExtensionServiceTest, UpdateIncognitoMode) {
   EXPECT_FALSE(util::IsIncognitoEnabled(id, profile()));
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 // This tests that the granted permissions preferences are correctly set for
 // pre-installed apps.
 TEST_F(ExtensionServiceTest, PreinstalledAppsGrantedPermissions) {
@@ -2848,7 +2847,7 @@ TEST_F(ExtensionServiceTest, DefaultUnpackedFileAccess) {
   InitializeEmptyExtensionService();
   GURL file_url("file:///etc/passwd");
 
-  ChromeTestExtensionLoader loader(testing_profile());
+  ChromeTestExtensionLoader loader(profile());
   loader.set_pack_extension(false);
   scoped_refptr<const Extension> extension = loader.LoadExtension(
       data_dir().AppendASCII("permissions").AppendASCII("files"));
@@ -2922,7 +2921,7 @@ TEST_F(ExtensionServiceTest, FileAccessFlagAndPrefMismatch) {
   // flags that say the extension was installed with file access as well as
   // having the file access pref explicitly set to true (which we do for
   // unpacked extensions on install)
-  ChromeTestExtensionLoader loader(testing_profile());
+  ChromeTestExtensionLoader loader(profile());
   loader.set_pack_extension(false);
   scoped_refptr<const Extension> extension = loader.LoadExtension(
       data_dir().AppendASCII("permissions").AppendASCII("files"));
@@ -4987,7 +4986,7 @@ TEST_F(ExtensionServiceTest, ExternalExtensionBecomesEnabledIfForceInstalled) {
   EXPECT_EQ(disable_reason::DISABLE_NONE, prefs->GetDisableReasons(good_crx));
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 // This tests if pre-installed apps are installed correctly.
 TEST_F(ExtensionServiceTest, PreinstalledAppsInstall) {
   InitializeEmptyExtensionService();
@@ -5167,6 +5166,60 @@ TEST_F(ExtensionServiceTest,
   EXPECT_FALSE(blocklist_prefs::IsExtensionBlocklisted(good_crx, prefs));
 }
 
+TEST_F(ExtensionServiceTest,
+       DisableAndReenableUnpackedExtensionBasedOnDeveloperMode) {
+  base::test::ScopedFeatureList feature_list(
+      extensions_features::kExtensionDisableUnsupportedDeveloper);
+  InitializeEmptyExtensionService();
+  // Turn developer mode ON.
+  util::SetDeveloperModeForProfile(profile(), true);
+
+  // Load an unpacked extension and verify enablement.
+  scoped_refptr<const Extension> unpacked_crx =
+      ChromeTestExtensionLoader(profile()).LoadExtension(
+          data_dir().AppendASCII("simple_with_file"));
+  EXPECT_EQ(ManifestLocation::kUnpacked, unpacked_crx->location());
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(unpacked_crx->id()));
+  EXPECT_FALSE(registry()->disabled_extensions().Contains(unpacked_crx->id()));
+
+  // Turn developer mode OFF. Verify that the unpacked extension is disabled.
+  util::SetDeveloperModeForProfile(profile(), false);
+  EXPECT_FALSE(registry()->enabled_extensions().Contains(unpacked_crx->id()));
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(unpacked_crx->id()));
+  EXPECT_EQ(
+      disable_reason::DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION,
+      ExtensionPrefs::Get(profile())->GetDisableReasons(unpacked_crx->id()));
+
+  // Turn developer mode ON. The unpacked extension should now be enabled.
+  util::SetDeveloperModeForProfile(profile(), true);
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(unpacked_crx->id()));
+  EXPECT_FALSE(registry()->disabled_extensions().Contains(unpacked_crx->id()));
+}
+
+TEST_F(ExtensionServiceTest,
+       UnpackedExtensionStatusUnaffectedWhenFeatureIsOff) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      extensions_features::kExtensionDisableUnsupportedDeveloper);
+  InitializeEmptyExtensionService();
+  // Turn developer mode ON.
+  util::SetDeveloperModeForProfile(profile(), true);
+
+  // Load an unpacked extension and verify enablement.
+  scoped_refptr<const Extension> unpacked_crx =
+      ChromeTestExtensionLoader(profile()).LoadExtension(
+          data_dir().AppendASCII("simple_with_file"));
+  EXPECT_EQ(ManifestLocation::kUnpacked, unpacked_crx->location());
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(unpacked_crx->id()));
+  EXPECT_FALSE(registry()->disabled_extensions().Contains(unpacked_crx->id()));
+
+  // Turn developer mode OFF. Verify that the unpacked extension is still
+  // enabled.
+  util::SetDeveloperModeForProfile(profile(), false);
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(unpacked_crx->id()));
+  EXPECT_FALSE(registry()->disabled_extensions().Contains(unpacked_crx->id()));
+}
+
 TEST_F(ExtensionServiceTest, TerminateExtension) {
   InitializeEmptyExtensionService();
 
@@ -5344,7 +5397,7 @@ TEST_F(ExtensionServiceWithEmptyServiceTest,
            "manifest_version": 3
          })");
 
-  ChromeTestExtensionLoader loader(testing_profile());
+  ChromeTestExtensionLoader loader(profile());
   loader.set_pack_extension(false);
   scoped_refptr<const Extension> extension =
       loader.LoadExtension(test_dir.UnpackedPath());
@@ -5357,45 +5410,21 @@ TEST_F(ExtensionServiceWithEmptyServiceTest,
   EXPECT_EQ(UnloadedExtensionReason::UNINSTALL, unloaded_reason());
 }
 
-// Test that allows testing the
-// extensions_features::kExtensionsZipFileInstalledInProfileDir feature for .zip
-// file installs.
+// Test uninstall to profile dir for .zip file installs.
 class ExtensionServiceZipUninstallProfileFeatureTest
-    : public ExtensionServiceWithEmptyServiceTest,
-      public testing::WithParamInterface<bool> {
+    : public ExtensionServiceWithEmptyServiceTest {
  public:
   void SetUp() override {
     ExtensionServiceWithEmptyServiceTest::SetUp();
-    const bool kFeatureEnabled = GetParam();
-    feature_list_.InitWithFeatureState(
-        extensions_features::kExtensionsZipFileInstalledInProfileDir,
-        kFeatureEnabled);
-    if (kFeatureEnabled) {
       expected_extension_install_directory_ =
           service()->unpacked_install_directory();
-    } else {
-      base::FilePath dir_temp;
-      ASSERT_TRUE(base::PathService::Get(base::DIR_TEMP, &dir_temp));
-      expected_extension_install_directory_ = dir_temp;
-    }
   }
 
  protected:
-  base::test::ScopedFeatureList scoped_feature_list_;
   base::FilePath expected_extension_install_directory_;
 };
 
-INSTANTIATE_TEST_SUITE_P(
-    ,
-    ExtensionServiceZipUninstallProfileFeatureTest,
-    // extensions_features::kExtensionsZipFileInstalledInProfileDir enabled.
-    testing::Bool(),
-    [](const testing::TestParamInfo<
-        ExtensionServiceZipUninstallProfileFeatureTest::ParamType>& info) {
-      return info.param ? "ProfileDir" : "TempDir";
-    });
-
-TEST_P(ExtensionServiceZipUninstallProfileFeatureTest,
+TEST_F(ExtensionServiceZipUninstallProfileFeatureTest,
        UninstallExtensionFromZip) {
   MockExtensionRegistryObserver observer;
 
@@ -5412,30 +5441,18 @@ TEST_P(ExtensionServiceZipUninstallProfileFeatureTest,
 
   registry()->AddObserver(&observer);
 
-  const bool kFeatureEnabled = GetParam();
-  if (kFeatureEnabled) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(&ZipFileInstaller::InstallZipFileToUnpackedExtensionsDir,
                        zipfile_installer, original_path,
                        service()->unpacked_install_directory()));
-  } else {
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&ZipFileInstaller::InstallZipFileToTempDir,
-                                  zipfile_installer, original_path));
-  }
   task_environment()->RunUntilIdle();
 
   std::string extension_id = std::string(observer.last_extension_installed);
   EXPECT_EQ(observer.last_extension_installed, extension_id);
   EXPECT_EQ(1u, registry()->enabled_extensions().size());
 
-  if (kFeatureEnabled) {
-    UninstallExtension(extension_id, /*delete_type=*/kDeletePath);
-
-  } else {
-    UninstallExtension(extension_id, /*delete_type=*/kDoNotDelete);
-  }
+  UninstallExtension(extension_id, /*delete_type=*/kDeletePath);
   EXPECT_FALSE(registry()->enabled_extensions().Contains(
       observer.last_extension_installed));
   EXPECT_TRUE(registry()->enabled_extensions().empty());

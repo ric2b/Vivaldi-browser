@@ -101,7 +101,7 @@ void RecordButtonClicked(SyncConfirmationScreenMode mode,
           signin_metrics::SyncButtonClicked::kSyncSettingsUnknownWeighted;
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 
   base::UmaHistogramEnumeration("Signin.SyncButtons.Clicked", *button_clicked);

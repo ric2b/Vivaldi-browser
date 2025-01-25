@@ -7,132 +7,79 @@ breadcrumbs:
 - - /developers/design-documents/sync
   - Sync
 page_name: sync-diagnostics
-title: Sync diagnostics (Needs update)
+title: Sync diagnostics
 ---
-
-### <http://go/aboutsync>
 
 ### Overview
 
 *   Located in **about:sync** (or **chrome://sync-internals**)
-*   Inspired by **chrome://net-internals**
-*   In M35 - Notifications tab has been branched off to
-            **chrome://invalidations**.
 *   Tabs:
-    *   About tab: "Classic" about:sync page, concise status overview
-    *   Data tab: dump debugging data to text for copy & paste
-    *   Notifications tab: Keeps track of incoming sync notifications
-    *   Events tab: logs for sync-related events
-    *   Sync Node Browser tab: browse all synced data
-    *   Search tab: Searching for strings in all synced data
-    *   Traffic tab: Text dump all of the sent and received messages to
-                and from chrome sync servers.
+    *   About: Concise status overview, also contains mini versions of "Data"
+        and "Traffic Log"
+    *   Data: Dump debugging data to text for copy & paste
+    *   Sync Node Browser: Browse all synced data
+    *   Search: Search for strings in all synced data
+    *   User Events: Create test USER_EVENTS entities
+    *   Traffic Log: Log of all of the sent and received messages to and from
+        Chrome sync servers
+    *   Invalidations: Inspect incoming sync invalidations per data type, i.e.
+        messages from the server informing the client that new data is
+        available.
 
-### **About tab**
+### About tab
 
-*   "Classic" about:sync page
+*   Contains all the most-used features and stats; most error states should
+    show up here, and will be colored red
 *   Updates on the fly
     *   Try moving a bookmark, or stopping and starting sync
-*   Some stuff will eventually be moved out, but page is still useful as
-            an overview
+*   Contains "Dump status" (same as the "Data" tab), and a protocol log (same as
+    the "Traffic Log" tab)
 
 ### Data tab
 
-*   Dump to text button
-    *   Dumps all info from about and events tab
-        *   But can also select datatypes info to dump
-    *   Can be used to tell users to:
-        *   Open about:sync
-        *   Repro the problem if possible
-        *   Wait a while (15-30 seconds)
-        *   Go to data tab
-        *   Dump info, paste into bug (or email privately if there's
-                    sensitive info)
-    *   Event log will probably be most useful part
-    *   Redacts sensitive info
-*   Room for improvement
-    *   Automatically highlight dumped text, add "Copy to clipboard"
-                button
-    *   Button to add to an existing bug, or create a new one
+*   "Dump sync events to text" button: Dumps all info from the "About" tab,
+    including the protocol log, to copy-pastable text
+    *   But can also select datatypes info to dump
+*   "Dump sync nodes to file" button: Dumps all the above, plus the actual
+    synced data (basically the contents of the "Sync Node Browser" tab), to a
+    file
 
-### Notifications tab (up to M35)
+### Sync Node Browser tab
 
-*   If a notification is received when the page (not just the tab) is
-            open, a counter will increment (one for each data type)
-    *   Try moving a bookmark, setting a preference, or stopping and
-                starting sync
-    *   Takes ~5-10 seconds for a notification to bounce back
-    *   Total Count of invalidations per each data type
-    *   Session Counters reset if you reload
-*   Room for improvement
-    *   More detailed connection stats
-        *   How long has connection been up? Which XMPP server/port? How
-                    long ago was the last message sent/received?
-
-### Events tab
-
-*   Shows all sync events (i.e., functions in SyncManager::Observer and
-            incoming notifications) that happen as long as the page is open
-    *   Try moving a bookmark, or starting sync (dumps lots of data!)
-    *   Doesn't quite log everything yet
-    *   Only logs events after backend is initialized
-    *   Resets if you reload
-*   Room for improvement
-    *   Store last N events (C++ side) so you can open it right when you
-                hit a problem and still get some useful info
-    *   Also log requests/responses to HTTP server
-    *   Perhaps more logging for sync setup events
-    *   Better display ([82866](http://crbug.com/82866))
-    *   Start logging even before backend is initialized (tricky)
-
-### Sync node browser tab
-
-*   Shows sync nodes
-    *   Sync nodes are structured in a tree.
-    *   Each data type has a top-level node which is a child of the root
-                node
-    *   Only bookmarks sub-tree has true tree structure
+*   Shows sync nodes aka entities
+    *   Sync nodes are structured in a tree, shown on the left, with details of
+        the selected node on the right
+    *   Each data type has a top-level node which is a child of the root node
+    *   Only the bookmarks sub-tree has a true tree structure
         *   Everything else is just a list under the top-level node
-    *   Use links to navigate tree: parent, first child, predecessor,
-                successor
-    *   Ignore specifics information for folder
-*   Tree view version
-    *   Tree visualized on the left, details of selected node on the
-                right
-*   Does *not* auto-update; you need to refresh
-    *   Be careful, you may lose logged events; you can always open a
-                new about:sync tab instead
-*   Room for improvement
-    *   Implement auto-updating (hard)
-    *   Add a refresh button (easier)
+*   Does *not* auto-update; you need click "Refresh"
 
 ### Search tab
 
 *   Searches expressions in all the nodes
 *   Supports Regex over the JSONified version of each node
-*   Has quick searches to provide for easy access to interesting nodes.
-            So far:
+*   Has quick searches to provide for easy access to interesting nodes
     *   Unapplied updates
     *   Unsynced items
-    *   Delted items
     *   Conflicted items (unapplied and unsynced)
+    *   Deleted items
 
-### Network-level debugging
+### User Events tab
 
-*   Sync talks to the sync server via POSTing to clients4.google.com.
-*   Sync talks to the notification servers via XMPP (talk.google.com).
-*   Both sockets should show up in **chrome://net-internals** (after
-            [82365](http://code.google.com/p/chromium/issues/detail?id=82365) is
-            fixed).
+*   Allows creating test USER_EVENTS
 
-### Room for improvement
+### Traffic Log tab
 
-*   Data type-specific tabs
-    *   Model associators / change processors have access to the
-                SyncService, so shouldn't be too hard to emit events or
-                reply to calls
-    *   Probably easier for things that live on the UI thread
-*   Some way to capture VLOG() events
-*   Should be obvious when sync isn't working
-*   Use HTML notifications for events
-*   Front-end for memory usage info (Lingesh is working on backend)
+*   Shows all messages (Commit and GetUpdates) sent between Chrome and the sync
+    servers
+*   By default, does *not* capture the actual entity specifics; this can be
+    enabled via the "Capture Specifics" checkbox in the "About" tab, or the
+    `--sync-include-specifics` command-line param
+*   Logs all messages that happen while sync-internals is open, plus up to 6 (by
+    default) messages that happened before; this can be configured via the
+    `--sync-protocol-log-buffer-size` command-line param
+
+### Invalidations tab
+
+*   Show a log and running totals (since browser startup) of incoming
+    invalidations per data type

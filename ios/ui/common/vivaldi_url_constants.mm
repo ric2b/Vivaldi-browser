@@ -5,6 +5,7 @@
 
 NSString* const vVivaldiBrowserPrivacyUrl =
     @"https://vivaldi.com/privacy/browser/";
+NSString* const vVivaldiCommunityUrl = @"https://vivaldi.net/";
 NSString* const vVivaldiCommunityPrivacyUrl =
     @"https://vivaldi.com/privacy/community-privacy-policy";
 NSString* const vVivaldiSyncActivateAccountUrl =
@@ -30,8 +31,11 @@ NSString* const vVivaldiRecoverPasswordUrl =
 NSString* const vVivaldiDirectMatchLearnMoreUrl =
     @"https://help.vivaldi.com/desktop/navigation/what-is-direct-match";
 
+const char vVivaldiSyncStatusUrl[] = "https://vivaldistatus.com";
 const char vVivaldiBugReportURL[] =
     "https://help.vivaldi.com/ios/ios-troubleshoot/report-a-bug-in-vivaldi-on-ios/";
+const char vVivaldiCrashReasonURL[] =
+    "https://help.vivaldi.com/ios/ios-troubleshoot/error-messages-in-vivaldi-on-ios/";
 
 // Help
 const char vVivaldiHelpCopyLinkToHightlightUrl[] =

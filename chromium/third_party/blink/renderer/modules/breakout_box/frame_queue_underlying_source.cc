@@ -44,8 +44,7 @@ media::VideoFrame::ID GetFrameId(
 }
 
 media::VideoFrame::ID GetFrameId(const scoped_refptr<media::AudioBuffer>&) {
-  NOTREACHED_IN_MIGRATION();
-  return media::VideoFrame::ID();
+  NOTREACHED();
 }
 
 }  // namespace
@@ -89,7 +88,7 @@ FrameQueueUnderlyingSource<NativeFrameType>::FrameQueueUnderlyingSource(
 }
 
 template <typename NativeFrameType>
-ScriptPromiseUntyped FrameQueueUnderlyingSource<NativeFrameType>::Pull(
+ScriptPromise<IDLUndefined> FrameQueueUnderlyingSource<NativeFrameType>::Pull(
     ScriptState* script_state,
     ExceptionState&) {
   DCHECK(realm_task_runner_->RunsTasksInCurrentSequence());
@@ -99,7 +98,7 @@ ScriptPromiseUntyped FrameQueueUnderlyingSource<NativeFrameType>::Pull(
   }
   auto frame_queue = frame_queue_handle_.Queue();
   if (!frame_queue)
-    return ScriptPromiseUntyped::CastUndefined(script_state);
+    return ToResolvedUndefinedPromise(script_state);
 
   if (!frame_queue->IsEmpty()) {
     // Enqueuing the frame in the stream controller synchronously can lead to a
@@ -112,11 +111,11 @@ ScriptPromiseUntyped FrameQueueUnderlyingSource<NativeFrameType>::Pull(
                           NativeFrameType>::MaybeSendFrameFromQueueToStream,
                       WrapPersistent(this)));
   }
-  return ScriptPromiseUntyped::CastUndefined(script_state);
+  return ToResolvedUndefinedPromise(script_state);
 }
 
 template <typename NativeFrameType>
-ScriptPromiseUntyped FrameQueueUnderlyingSource<NativeFrameType>::Start(
+ScriptPromise<IDLUndefined> FrameQueueUnderlyingSource<NativeFrameType>::Start(
     ScriptState* script_state,
     ExceptionState& exception_state) {
   DCHECK(realm_task_runner_->RunsTasksInCurrentSequence());
@@ -129,21 +128,21 @@ ScriptPromiseUntyped FrameQueueUnderlyingSource<NativeFrameType>::Start(
       // implementations should return their own failure messages.
       exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                         "Invalid track");
-      return ScriptPromiseUntyped();
+      return EmptyPromise();
     }
   }
 
-  return ScriptPromiseUntyped::CastUndefined(script_state);
+  return ToResolvedUndefinedPromise(script_state);
 }
 
 template <typename NativeFrameType>
-ScriptPromiseUntyped FrameQueueUnderlyingSource<NativeFrameType>::Cancel(
+ScriptPromise<IDLUndefined> FrameQueueUnderlyingSource<NativeFrameType>::Cancel(
     ScriptState* script_state,
     ScriptValue reason,
     ExceptionState&) {
   DCHECK(realm_task_runner_->RunsTasksInCurrentSequence());
   Close();
-  return ScriptPromiseUntyped::CastUndefined(script_state);
+  return ToResolvedUndefinedPromise(script_state);
 }
 
 template <typename NativeFrameType>

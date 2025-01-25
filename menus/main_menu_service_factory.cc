@@ -52,14 +52,14 @@ void MainMenuServiceFactory::ShutdownForProfile(Profile* profile) {
 
 content::BrowserContext* MainMenuServiceFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
+  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 KeyedService* MainMenuServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   std::unique_ptr<Menu_Model> service(
       new Menu_Model(context, Menu_Model::kMainMenu));
-  service->Load();
+  service->Load(false);
   return service.release();
 }
 

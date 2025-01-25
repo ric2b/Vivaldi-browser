@@ -1287,9 +1287,7 @@ TEST_F(DocumentTest, RejectsHasPrivateTokenCallFromNonHttpNonHttpsDocument) {
 
   Document& document = scope.GetDocument();
   ScriptState* script_state = scope.GetScriptState();
-  ExceptionState exception_state(script_state->GetIsolate(),
-                                 v8::ExceptionContext::kOperation, "Document",
-                                 "hasPrivateToken");
+  DummyExceptionStateForTesting exception_state;
 
   auto promise = document.hasPrivateToken(
       script_state, "https://issuer.example", exception_state);
@@ -1675,9 +1673,7 @@ TEST_F(DocumentTest,
 
   Document& document = scope.GetDocument();
   ScriptState* script_state = scope.GetScriptState();
-  ExceptionState exception_state(script_state->GetIsolate(),
-                                 v8::ExceptionContext::kOperation, "Document",
-                                 "hasRedemptionRecord");
+  DummyExceptionStateForTesting exception_state;
 
   auto promise = document.hasRedemptionRecord(
       script_state, "https://issuer.example", exception_state);
@@ -1893,8 +1889,6 @@ TEST_F(UnassociatedListedElementTest, GetUnassociatedListedElements) {
         GetElement("unassociated_button"), GetElement("unassociated_fieldset"),
         GetElement("unassociated_input"), GetElement("unassociated_textarea"),
         GetElement("unassociated_output"), GetElement("unassociated_select"),
-        /*Button inside <select> Shadow DOM*/ _,
-        GetElement("unassociated_object"),
         /*Button inside <object> Shadow DOM*/ _,
         GetElement("unassociated_custom_element"));
   };

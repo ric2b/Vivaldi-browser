@@ -43,6 +43,7 @@
 #include "libavcodec/raw.h"
 
 #include "avformat.h"
+#include "avformat_internal.h"
 #include "avio_internal.h"
 #include "demux.h"
 #include "id3v2.h"
@@ -215,6 +216,7 @@ static int update_stream_avctx(AVFormatContext *s)
 int avformat_open_input(AVFormatContext **ps, const char *filename,
                         const AVInputFormat *fmt, AVDictionary **options)
 {
+    FormatContextInternal *fci;
     AVFormatContext *s = *ps;
     FFFormatContext *si;
     AVDictionary *tmp = NULL;
@@ -223,7 +225,8 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
 
     if (!s && !(s = avformat_alloc_context()))
         return AVERROR(ENOMEM);
-    si = ffformatcontext(s);
+    fci = ff_fc_internal(s);
+    si = &fci->fc;
     if (!s->av_class) {
         av_log(NULL, AV_LOG_ERROR, "Input context has not been properly allocated by avformat_alloc_context() and is not NULL either\n");
         return AVERROR(EINVAL);
@@ -336,7 +339,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     if (s->pb && !si->data_offset)
         si->data_offset = avio_tell(s->pb);
 
-    si->raw_packet_buffer_size = 0;
+    fci->raw_packet_buffer_size = 0;
 
     update_stream_avctx(s);
 
@@ -410,7 +413,7 @@ static void force_codec_ids(AVFormatContext *s, AVStream *st)
 
 static int probe_codec(AVFormatContext *s, AVStream *st, const AVPacket *pkt)
 {
-    FFFormatContext *const si = ffformatcontext(s);
+    FormatContextInternal *const fci = ff_fc_internal(s);
     FFStream *const sti = ffstream(st);
 
     if (sti->request_probe > 0) {
@@ -440,8 +443,8 @@ no_packet:
             }
         }
 
-        end = si->raw_packet_buffer_size >= s->probesize
-                || sti->probe_packets <= 0;
+        end = fci->raw_packet_buffer_size >= s->probesize ||
+              sti->probe_packets <= 0;
 
         if (end || av_log2(pd->buf_size) != av_log2(pd->buf_size - pkt->size)) {
             int score = set_codec_from_probe_data(s, st, pd);
@@ -563,7 +566,7 @@ static void update_timestamps(AVFormatContext *s, AVStream *st, AVPacket *pkt)
  */
 static int handle_new_packet(AVFormatContext *s, AVPacket *pkt, int allow_passthrough)
 {
-    FFFormatContext *const si = ffformatcontext(s);
+    FormatContextInternal *const fci = ff_fc_internal(s);
     AVStream *st;
     FFStream *sti;
     int err;
@@ -587,17 +590,17 @@ static int handle_new_packet(AVFormatContext *s, AVPacket *pkt, int allow_passth
 
     update_timestamps(s, st, pkt);
 
-    if (sti->request_probe <= 0 && allow_passthrough && !si->raw_packet_buffer.head)
+    if (sti->request_probe <= 0 && allow_passthrough && !fci->raw_packet_buffer.head)
         return 0;
 
-    err = avpriv_packet_list_put(&si->raw_packet_buffer, pkt, NULL, 0);
+    err = avpriv_packet_list_put(&fci->raw_packet_buffer, pkt, NULL, 0);
     if (err < 0) {
         av_packet_unref(pkt);
         return err;
     }
 
-    pkt = &si->raw_packet_buffer.tail->pkt;
-    si->raw_packet_buffer_size += pkt->size;
+    pkt = &fci->raw_packet_buffer.tail->pkt;
+    fci->raw_packet_buffer_size += pkt->size;
 
     err = probe_codec(s, st, pkt);
     if (err < 0)
@@ -615,7 +618,7 @@ int ff_buffer_packet(AVFormatContext *s, AVPacket *pkt)
 
 int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
-    FFFormatContext *const si = ffformatcontext(s);
+    FormatContextInternal *const fci = ff_fc_internal(s);
     int err;
 
 #if FF_API_INIT_PACKET
@@ -629,16 +632,16 @@ FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 
     for (;;) {
-        PacketListEntry *pktl = si->raw_packet_buffer.head;
+        PacketListEntry *pktl = fci->raw_packet_buffer.head;
 
         if (pktl) {
             AVStream *const st = s->streams[pktl->pkt.stream_index];
-            if (si->raw_packet_buffer_size >= s->probesize)
+            if (fci->raw_packet_buffer_size >= s->probesize)
                 if ((err = probe_codec(s, st, NULL)) < 0)
                     return err;
             if (ffstream(st)->request_probe <= 0) {
-                avpriv_packet_list_get(&si->raw_packet_buffer, pkt);
-                si->raw_packet_buffer_size -= pkt->size;
+                avpriv_packet_list_get(&fci->raw_packet_buffer, pkt);
+                fci->raw_packet_buffer_size -= pkt->size;
                 return 0;
             }
         }
@@ -765,11 +768,12 @@ static int has_decode_delay_been_guessed(AVStream *st)
 static PacketListEntry *get_next_pkt(AVFormatContext *s, AVStream *st,
                                      PacketListEntry *pktl)
 {
-    FFFormatContext *const si = ffformatcontext(s);
+    FormatContextInternal *const fci = ff_fc_internal(s);
+    FFFormatContext *const si = &fci->fc;
     if (pktl->next)
         return pktl->next;
     if (pktl == si->packet_buffer.tail)
-        return si->parse_queue.head;
+        return fci->parse_queue.head;
     return NULL;
 }
 
@@ -849,10 +853,11 @@ static void update_dts_from_pts(AVFormatContext *s, int stream_index,
 static void update_initial_timestamps(AVFormatContext *s, int stream_index,
                                       int64_t dts, int64_t pts, AVPacket *pkt)
 {
-    FFFormatContext *const si = ffformatcontext(s);
+    FormatContextInternal *const fci = ff_fc_internal(s);
+    FFFormatContext *const si = &fci->fc;
     AVStream *const st  = s->streams[stream_index];
     FFStream *const sti = ffstream(st);
-    PacketListEntry *pktl = si->packet_buffer.head ? si->packet_buffer.head : si->parse_queue.head;
+    PacketListEntry *pktl = si->packet_buffer.head ? si->packet_buffer.head : fci->parse_queue.head;
 
     uint64_t shift;
 
@@ -902,9 +907,10 @@ static void update_initial_timestamps(AVFormatContext *s, int stream_index,
 static void update_initial_durations(AVFormatContext *s, AVStream *st,
                                      int stream_index, int64_t duration)
 {
-    FFFormatContext *const si = ffformatcontext(s);
+    FormatContextInternal *const fci = ff_fc_internal(s);
+    FFFormatContext *const si = &fci->fc;
     FFStream *const sti = ffstream(st);
-    PacketListEntry *pktl = si->packet_buffer.head ? si->packet_buffer.head : si->parse_queue.head;
+    PacketListEntry *pktl = si->packet_buffer.head ? si->packet_buffer.head : fci->parse_queue.head;
     int64_t cur_dts = RELATIVE_TS_BASE;
 
     if (sti->first_dts != AV_NOPTS_VALUE) {
@@ -930,7 +936,7 @@ static void update_initial_durations(AVFormatContext *s, AVStream *st,
             av_log(s, AV_LOG_DEBUG, "first_dts %s but no packet with dts in the queue\n", av_ts2str(sti->first_dts));
             return;
         }
-        pktl = si->packet_buffer.head ? si->packet_buffer.head : si->parse_queue.head;
+        pktl = si->packet_buffer.head ? si->packet_buffer.head : fci->parse_queue.head;
         sti->first_dts = cur_dts;
     } else if (sti->cur_dts != RELATIVE_TS_BASE)
         return;
@@ -962,7 +968,8 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
                                AVCodecParserContext *pc, AVPacket *pkt,
                                int64_t next_dts, int64_t next_pts)
 {
-    FFFormatContext *const si = ffformatcontext(s);
+    FormatContextInternal *const fci = ff_fc_internal(s);
+    FFFormatContext *const si = &fci->fc;
     FFStream *const sti = ffstream(st);
     int num, den, presentation_delayed, delay;
     int64_t offset;
@@ -1047,7 +1054,7 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
         }
     }
 
-    if (pkt->duration > 0 && (si->packet_buffer.head || si->parse_queue.head))
+    if (pkt->duration > 0 && (si->packet_buffer.head || fci->parse_queue.head))
         update_initial_durations(s, st, pkt->stream_index, pkt->duration);
 
     /* Correct timestamps with byte offset if demuxers only have timestamps
@@ -1155,7 +1162,8 @@ static void compute_pkt_fields(AVFormatContext *s, AVStream *st,
 static int parse_packet(AVFormatContext *s, AVPacket *pkt,
                         int stream_index, int flush)
 {
-    FFFormatContext *const si = ffformatcontext(s);
+    FormatContextInternal *const fci = ff_fc_internal(s);
+    FFFormatContext *const si = &fci->fc;
     AVPacket *out_pkt = si->parse_pkt;
     AVStream *st = s->streams[stream_index];
     FFStream *const sti = ffstream(st);
@@ -1248,7 +1256,7 @@ static int parse_packet(AVFormatContext *s, AVPacket *pkt,
 
         compute_pkt_fields(s, st, sti->parser, out_pkt, next_dts, next_pts);
 
-        ret = avpriv_packet_list_put(&si->parse_queue,
+        ret = avpriv_packet_list_put(&fci->parse_queue,
                                      out_pkt, NULL, 0);
         if (ret < 0)
             goto fail;
@@ -1323,7 +1331,8 @@ static int extract_extradata(FFFormatContext *si, AVStream *st, const AVPacket *
 
 static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
 {
-    FFFormatContext *const si = ffformatcontext(s);
+    FormatContextInternal *const fci = ff_fc_internal(s);
+    FFFormatContext *const si = &fci->fc;
     int ret, got_packet = 0;
     AVDictionary *metadata = NULL;
 
@@ -1331,7 +1340,7 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
     // removed from the build configurations.
     int skip_parse = 0;
 
-    while (!got_packet && !si->parse_queue.head) {
+    while (!got_packet && !fci->parse_queue.head) {
         AVStream *st;
         FFStream *sti;
 
@@ -1462,8 +1471,8 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
         }
     }
 
-    if (!got_packet && si->parse_queue.head)
-        ret = avpriv_packet_list_get(&si->parse_queue, pkt);
+    if (!got_packet && fci->parse_queue.head)
+        ret = avpriv_packet_list_get(&fci->parse_queue, pkt);
 
     if (ret >= 0) {
         AVStream *const st  = s->streams[pkt->stream_index];
@@ -1514,7 +1523,7 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
 #endif
     }
 
-    if (!si->metafree) {
+    if (!fci->metafree) {
         int metaret = av_opt_get_dict_val(s, "metadata", AV_OPT_SEARCH_CHILDREN, &metadata);
         if (metadata) {
             s->event_flags |= AVFMT_EVENT_FLAG_METADATA_UPDATED;
@@ -1522,7 +1531,7 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
             av_dict_free(&metadata);
             av_opt_set_dict_val(s, "metadata", NULL, AV_OPT_SEARCH_CHILDREN);
         }
-        si->metafree = metaret == AVERROR_OPTION_NOT_FOUND;
+        fci->metafree = metaret == AVERROR_OPTION_NOT_FOUND;
     }
 
     if (s->debug & FF_FDEBUG_TS)
@@ -2523,7 +2532,7 @@ static int extract_extradata(FFFormatContext *si, AVStream *st, const AVPacket *
 int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 {
     FFFormatContext *const si = ffformatcontext(ic);
-    int count = 0, ret = 0;
+    int count = 0, ret = 0, err;
     int64_t read_size;
     AVPacket *pkt1 = si->pkt;
     int64_t old_offset  = avio_tell(ic->pb);
@@ -2535,7 +2544,6 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
     int64_t max_subtitle_analyze_duration;
     int64_t probesize = ic->probesize;
     int eof_reached = 0;
-    int *missing_streams = av_opt_ptr(ic->iformat->priv_class, ic->priv_data, "missing_streams");
 
     flush_codecs = probesize > 0;
 
@@ -2679,19 +2687,18 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                 break;
         }
         analyzed_all_streams = 0;
-        if (!missing_streams || !*missing_streams)
-            if (i == ic->nb_streams) {
-                analyzed_all_streams = 1;
-                /* NOTE: If the format has no header, then we need to read some
-                 * packets to get most of the streams, so we cannot stop here. */
-                if (!(ic->ctx_flags & AVFMTCTX_NOHEADER)) {
-                    /* If we found the info for all the codecs, we can stop. */
-                    ret = count;
-                    av_log(ic, AV_LOG_DEBUG, "All info found\n");
-                    flush_codecs = 0;
-                    break;
-                }
+        if (i == ic->nb_streams && !si->missing_streams) {
+            analyzed_all_streams = 1;
+            /* NOTE: If the format has no header, then we need to read some
+             * packets to get most of the streams, so we cannot stop here. */
+            if (!(ic->ctx_flags & AVFMTCTX_NOHEADER)) {
+                /* If we found the info for all the codecs, we can stop. */
+                ret = count;
+                av_log(ic, AV_LOG_DEBUG, "All info found\n");
+                flush_codecs = 0;
+                break;
             }
+        }
         /* We did not get all the codec info, but we read too much data. */
         if (read_size >= probesize) {
             ret = count;
@@ -2949,7 +2956,8 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
                         best_fps   = std_fps.num;
                     }
 
-                    if (si->prefer_codec_framerate && codec_frame_rate.num > 0 && codec_frame_rate.den > 0) {
+                    if ((ffifmt(ic->iformat)->flags_internal & FF_INFMT_FLAG_PREFER_CODEC_FRAMERATE) &&
+                        codec_frame_rate.num > 0 && codec_frame_rate.den > 0) {
                         error       = fabs(av_q2d(codec_frame_rate) /
                                            av_q2d(std_fps) - 1);
                         if (error < best_error) {
@@ -3039,9 +3047,11 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
         }
     }
 
-    ret = compute_chapters_end(ic);
-    if (ret < 0)
+    err = compute_chapters_end(ic);
+    if (err < 0) {
+        ret = err;
         goto find_stream_info_err;
+    }
 
     /* update the stream parameters from the internal codec contexts */
     for (unsigned i = 0; i < ic->nb_streams; i++) {

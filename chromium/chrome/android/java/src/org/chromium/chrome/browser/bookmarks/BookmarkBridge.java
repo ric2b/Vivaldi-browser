@@ -1080,6 +1080,15 @@ class BookmarkBridge {
         return pairList;
     }
 
+    /**
+     * Vivaldi
+     * Checks if current tab URL is already added tol folder given
+     */
+    public boolean isURLAddedToFolder(long folderId, GURL url) {
+        return BookmarkBridgeJni.get().isURLAddedToFolder(
+                mNativeBookmarkBridge, BookmarkBridge.this, folderId, url);
+    }
+
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     @NativeMethods
     public interface Natives {
@@ -1245,6 +1254,16 @@ class BookmarkBridge {
         void getChildIDsVivaldi(long nativeBookmarkBridge, BookmarkBridge caller, long id, int type,
                          boolean getFolders, boolean getBookmarks, boolean getSeparators,
                          List<BookmarkId> bookmarksList);
+        BookmarkItem getStartPageNode(
+                long nativeBookmarkBridge, BookmarkBridge caller, String title);
+        boolean isURLAddedToStartPage(
+                long nativeBookmarkBridge, BookmarkBridge caller, @JniType("GURL") GURL url);
+        BookmarkId getMostRecentlyAddedUserNormalBookmarkIdForUrl(
+                long nativeBookmarkBridge, @JniType("GURL") GURL url);
+        BookmarkId getReadingListItemForUrl(long nativeBookmarkBridge, @JniType("GURL") GURL url);
+
+        boolean isURLAddedToFolder(long nativeBookmarkBridge, BookmarkBridge caller,
+                long id, @JniType("GURL") GURL url);
     }
 
     /** Vivaldi */
@@ -1265,6 +1284,7 @@ class BookmarkBridge {
     @CalledByNative
     private void bookmarkSpeedDialNodeChanged(BookmarkItem node) {
         if (mIsDoingExtensiveChanges) return;
+        if (!node.isFolder()) return;
 
         for (BookmarkModelObserver observer : mObservers) {
             observer.bookmarkSpeedDialNodeChanged(node);
@@ -1312,7 +1332,6 @@ class BookmarkBridge {
 
     /** Vivaldi
      * Get speed dial folders.
-     * @param folderList
      */
     public void getSpeedDialFolders(List<BookmarkId> folderList) {
         assert mIsNativeBookmarkModelLoaded;
@@ -1323,11 +1342,51 @@ class BookmarkBridge {
     /** Vivaldi
      * Get speed dial folders including folders in subfolder
      * tree of speed dial folders
-     * @param folderList
      */
     public void getSpeedDialFoldersWithSubfolders(List<BookmarkId> folderList) {
         assert mIsNativeBookmarkModelLoaded;
         BookmarkBridgeJni.get().getSpeedDialFoldersWithSubfolders(
                 mNativeBookmarkBridge, BookmarkBridge.this, folderList);
+    }
+
+    /**
+     * Vivaldi
+     * Returns the Start Page Folder name.
+     */
+    public BookmarkItem getStartPageNode(String title) {
+        return BookmarkBridgeJni.get().getStartPageNode(
+                mNativeBookmarkBridge, BookmarkBridge.this, title);
+    }
+
+    /**
+     * Vivaldi
+     * Checks if current tab URL is already added as Start Page Item.
+     */
+    public boolean isURLAddedToStartPage(GURL url) {
+        return BookmarkBridgeJni.get().isURLAddedToStartPage(
+                mNativeBookmarkBridge, BookmarkBridge.this, url);
+    }
+
+    /**
+     * Vivaldi
+     * Returns BookmarkId of the normal Bookmark item for the given URL, null otherwise.
+     */
+    public @Nullable BookmarkId getMostRecentlyAddedUserNormalBookmarkIdForUrl(@NonNull GURL url) {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeBookmarkBridge == 0) return null;
+        assert mIsNativeBookmarkModelLoaded;
+        return BookmarkBridgeJni.get().getMostRecentlyAddedUserNormalBookmarkIdForUrl(
+                mNativeBookmarkBridge, url);
+    }
+
+    /**
+     * Vivaldi
+     * Returns BookmarkId of the Reading list item for the given URL, null otherwise.
+     */
+    public @Nullable BookmarkId getReadingListItemForUrl(@NonNull GURL url) {
+        ThreadUtils.assertOnUiThread();
+        if (mNativeBookmarkBridge == 0) return null;
+        assert mIsNativeBookmarkModelLoaded;
+        return BookmarkBridgeJni.get().getReadingListItemForUrl(mNativeBookmarkBridge, url);
     }
 }

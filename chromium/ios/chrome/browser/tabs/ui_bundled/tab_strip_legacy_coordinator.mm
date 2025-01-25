@@ -87,7 +87,7 @@ PrefObserverDelegate> {
   DCHECK(self.browser);
   DCHECK(self.presentationProvider);
   TabStripStyle style =
-      self.browser->GetBrowserState()->IsOffTheRecord() ? INCOGNITO : NORMAL;
+      self.browser->GetProfile()->IsOffTheRecord() ? INCOGNITO : NORMAL;
   self.tabStripController = [[TabStripController alloc]
       initWithBaseViewController:self.baseViewController
                          browser:self.browser
@@ -102,7 +102,7 @@ PrefObserverDelegate> {
 
   // Vivaldi
   [self startObservingOmniboxPosition:GetApplicationContext()->GetLocalState()];
-  PrefService* prefService = self.browser->GetBrowserState()->GetPrefs();
+  PrefService* prefService = self.browser->GetProfile()->GetPrefs();
   if (prefService) {
     [VivaldiAppearanceSettingPrefs setPrefService:prefService];
     [self startObservingTabStyles:prefService];

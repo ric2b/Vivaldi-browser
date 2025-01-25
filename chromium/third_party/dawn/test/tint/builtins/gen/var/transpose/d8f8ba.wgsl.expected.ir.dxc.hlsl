@@ -13,7 +13,7 @@ RWByteAddressBuffer prevent_dce : register(u0);
 int transpose_d8f8ba() {
   float3x4 arg_0 = float3x4((1.0f).xxxx, (1.0f).xxxx, (1.0f).xxxx);
   float4x3 res = transpose(arg_0);
-  return (((res[0].x == 0.0f)) ? (1) : (0));
+  return (((res[int(0)].x == 0.0f)) ? (int(1)) : (int(0)));
 }
 
 void fragment_main() {
@@ -35,9 +35,7 @@ VertexOutput vertex_main_inner() {
 
 vertex_main_outputs vertex_main() {
   VertexOutput v_1 = vertex_main_inner();
-  VertexOutput v_2 = v_1;
-  VertexOutput v_3 = v_1;
-  vertex_main_outputs v_4 = {v_3.prevent_dce, v_2.pos};
-  return v_4;
+  vertex_main_outputs v_2 = {v_1.prevent_dce, v_1.pos};
+  return v_2;
 }
 

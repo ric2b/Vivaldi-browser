@@ -19,6 +19,7 @@
 #import "ios/chrome/browser/shared/ui/util/keyboard_observer_helper.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_layout_util.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
@@ -187,13 +188,16 @@ const CGFloat kHeaderTopPadding = 16.0f;
   self.view = self.tableView;
 }
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-  [self updateBackgroundColor];
-  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
-    [self.delegate autocompleteResultConsumerDidChangeTraitCollection:self];
+  if (@available(iOS 17, *)) {
+    return;
   }
+
+  [self updateUIOnTraitChange];
 }
+#endif
 
 - (void)toggleOmniboxDebuggerView {
   if (self.debugInfoViewController.viewIfLoaded.window) {
@@ -295,6 +299,12 @@ const CGFloat kHeaderTopPadding = 16.0f;
   self.shouldUpdateVisibleSuggestionCount = YES;
   self.tableView.sectionHeaderTopPadding = 0;
 
+  if (@available(iOS 17, *)) {
+    NSArray<UITrait>* traits = TraitCollectionSetForTraits(nil);
+    [self registerForTraitChanges:traits
+                       withAction:@selector(updateUIOnTraitChange)];
+  }
+
   // Vivaldi
   [self updateTableViewForReverseState];
   // End Vivaldi
@@ -310,8 +320,9 @@ const CGFloat kHeaderTopPadding = 16.0f;
 
 - (void)viewWillDisappear:(BOOL)animated {
   [super viewWillDisappear:animated];
-  UMA_HISTOGRAM_MEDIUM_TIMES("MobileOmnibox.PopupOpenDuration",
-                             base::TimeTicks::Now() - self.viewAppearanceTime);
+  DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES(
+      "MobileOmnibox.PopupOpenDuration",
+      base::TimeTicks::Now() - self.viewAppearanceTime);
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size
@@ -1228,6 +1239,15 @@ const CGFloat kHeaderTopPadding = 16.0f;
   return _omniboxGuide;
 }
 
+// Update the view controller's background color and notifies `delegate` when a
+// UITrait has been changed.
+- (void)updateUIOnTraitChange {
+  [self updateBackgroundColor];
+  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+    [self.delegate autocompleteResultConsumerDidChangeTraitCollection:self];
+  }
+}
+
 #pragma mark - Vivaldi
 - (void)setShouldReverseSearchResults:(BOOL)shouldReverseSearchResults {
   if (_shouldReverseSearchResults != shouldReverseSearchResults) {
@@ -1296,5 +1316,6 @@ const CGFloat kHeaderTopPadding = 16.0f;
     }
   }
 }
+// End Vivaldi
 
 @end

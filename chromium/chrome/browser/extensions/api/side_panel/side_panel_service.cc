@@ -18,7 +18,6 @@
 #include "components/sessions/core/session_id.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/pref_types.h"
-#include "extensions/common/extension_features.h"
 
 namespace extensions {
 
@@ -54,9 +53,7 @@ SidePanelService::SidePanelService(content::BrowserContext* context)
 
 bool SidePanelService::HasSidePanelActionForTab(const Extension& extension,
                                                 TabId tab_id) {
-  if (!OpenSidePanelOnIconClick(extension.id()) ||
-      !base::FeatureList::IsEnabled(
-          extensions_features::kExtensionSidePanelIntegration)) {
+  if (!OpenSidePanelOnIconClick(extension.id())) {
     return false;
   }
 
@@ -66,11 +63,6 @@ bool SidePanelService::HasSidePanelActionForTab(const Extension& extension,
 bool SidePanelService::HasSidePanelContextMenuActionForTab(
     const Extension& extension,
     TabId tab_id) {
-  if (!base::FeatureList::IsEnabled(
-          extensions_features::kExtensionSidePanelIntegration)) {
-    return false;
-  }
-
   return HasSidePanelAvailableForTab(extension, tab_id);
 }
 
@@ -238,9 +230,14 @@ base::expected<bool, std::string> SidePanelService::OpenSidePanelForWindow(
         base::StringPrintf("No active side panel for windowId: %d", window_id));
   }
 
+  Browser* browser = window_controller->GetBrowser();
+  if (!browser) {
+    return base::unexpected(
+        base::StringPrintf("No browser for windowId: %d", window_id));
+  }
+
   side_panel_util::OpenGlobalExtensionSidePanel(
-      *window_controller->GetBrowser(), /*web_contents=*/nullptr,
-      extension.id());
+      *browser, /*web_contents=*/nullptr, extension.id());
   return true;
 }
 
@@ -251,20 +248,26 @@ base::expected<bool, std::string> SidePanelService::OpenSidePanelForTab(
     std::optional<int> window_id,
     bool include_incognito_information) {
   // First, find the corresponding tab.
-  Browser* browser = nullptr;
+  WindowController* window = nullptr;
   content::WebContents* web_contents = nullptr;
   if (!ExtensionTabUtil::GetTabById(tab_id, context,
-                                    include_incognito_information, &browser,
-                                    nullptr, &web_contents, nullptr)) {
+                                    include_incognito_information, &window,
+                                    &web_contents, nullptr) ||
+      !window) {
     return base::unexpected(
         base::StringPrintf("No tab with tabId: %d", tab_id));
   }
 
-  CHECK(browser);
+  Browser* browser = window->GetBrowser();
+  if (!browser) {
+    return base::unexpected(
+        base::StringPrintf("No browser for tabId: %d", tab_id));
+  }
 
   // If both `tab_id` and `window_id` were provided, ensure the tab is in
-  // the specified window.
-  if (window_id && window_id != ExtensionTabUtil::GetWindowId(browser)) {
+  // the specified window. The window can also be null for prerender tabs
+  // which can't have a side panel.
+  if (window_id && window_id != window->GetWindowId()) {
     return base::unexpected(
         "The specified tab does not belong to the specified window.");
   }

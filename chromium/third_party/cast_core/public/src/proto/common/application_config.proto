@@ -76,10 +76,25 @@ message CastWebApplicationConfig {
   }
 }
 
+// A cast application that supports Cast-to-Native (non Android).
+message NativePackage {
+  // An identifier for what platform the package refers to. This must match an
+  // identifier provided by the OEM and reported by cast to DCS.
+  string platform = 1;
+  // opaque to cast OEM version string.
+  string min_app_version = 2;
+  // Opaque launch intent with schema that is owned and handled by the
+  // OEM's platform, could be a direct associated package name, or contain a
+  // json blob with things like package name, launch args, etc.
+  string package_launch_info = 3;
+}
+
 // Config for applications running in native runtime.
 message NativeApplicationConfig {
   // Cast application URL (https).
   // NOTE: this field is added ONLY FOR TESTING purposes. Proper integration
   // with native runtimes is still TBD.
-  string url = 1;
+  string url = 1 [deprecated = true];
+  // A set of native packages for this application.
+  repeated NativePackage native_applications = 2;
 }

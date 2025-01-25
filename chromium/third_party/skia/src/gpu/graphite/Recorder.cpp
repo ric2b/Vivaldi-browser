@@ -62,9 +62,7 @@ namespace skgpu::graphite {
  */
 class DefaultImageProvider final : public ImageProvider {
 public:
-    static sk_sp<DefaultImageProvider> Make() {
-        return sk_ref_sp(new DefaultImageProvider);
-    }
+    static sk_sp<DefaultImageProvider> Make() { return sk_sp(new DefaultImageProvider); }
 
     sk_sp<SkImage> findOrCreate(Recorder* recorder,
                                 const SkImage* image,
@@ -100,7 +98,6 @@ Recorder::Recorder(sk_sp<SharedContext> sharedContext,
         , fRuntimeEffectDict(std::make_unique<RuntimeEffectDictionary>())
         , fRootTaskList(new TaskList)
         , fRootUploads(new UploadList)
-        , fUniformDataCache(new UniformDataCache)
         , fTextureDataCache(new TextureDataCache)
         , fProxyReadCounts(new ProxyReadCountMap)
         , fUniqueID(next_id())
@@ -117,9 +114,11 @@ Recorder::Recorder(sk_sp<SharedContext> sharedContext,
         fOwnedResourceProvider = nullptr;
         fResourceProvider = context->priv().resourceProvider();
     } else {
-        fOwnedResourceProvider = fSharedContext->makeResourceProvider(this->singleOwner(),
-                                                                    fUniqueID,
-                                                                    options.fGpuBudgetInBytes);
+        fOwnedResourceProvider = fSharedContext->makeResourceProvider(
+                this->singleOwner(),
+                fUniqueID,
+                options.fGpuBudgetInBytes,
+                /* avoidBufferAlloc= */ false);
         fResourceProvider = fOwnedResourceProvider.get();
     }
     fUploadBufferManager = std::make_unique<UploadBufferManager>(fResourceProvider,
@@ -224,7 +223,6 @@ std::unique_ptr<Recording> Recorder::snap() {
     fRuntimeEffectDict->reset();
     fProxyReadCounts = std::make_unique<ProxyReadCountMap>();
     fTextureDataCache = std::make_unique<TextureDataCache>();
-    fUniformDataCache = std::make_unique<UniformDataCache>();
     if (!this->priv().caps()->requireOrderedRecordings()) {
         fAtlasProvider->textAtlasManager()->evictAtlases();
     }

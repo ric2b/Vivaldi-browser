@@ -13,11 +13,12 @@
 #include <vector>     // For std::vector.
 
 #include <gtest/gtest.h>
-#include <fp16/fp16.h>
 #include "xnnpack.h"
+#include "xnnpack/math.h"
 #include "xnnpack/node-type.h"
 #include "xnnpack/operator.h"
 #include "xnnpack/subgraph.h"
+#include "xnnpack/buffer.h"
 #include "replicable_random_device.h"
 
 template <class T> class RoPETestBase : public ::testing::Test {
@@ -34,12 +35,12 @@ template <class T> class RoPETestBase : public ::testing::Test {
     heads = dim_dist(rng);
     channels = dim_dist(rng) * 2;  // ensure the number of channels is even
 
-    input = std::vector<T>(XNN_EXTRA_BYTES / sizeof(T) +
+    input = xnnpack::Buffer<T>(XNN_EXTRA_BYTES / sizeof(T) +
                            batch_size * tokens * heads * channels);
     weights =
-        std::vector<T>(XNN_EXTRA_BYTES / sizeof(T) + max_tokens * channels);
-    operator_output = std::vector<T>(batch_size * tokens * heads * channels);
-    subgraph_output = std::vector<T>(operator_output.size());
+        xnnpack::Buffer<T>(XNN_EXTRA_BYTES / sizeof(T) + max_tokens * channels);
+    operator_output = xnnpack::Buffer<T>(batch_size * tokens * heads * channels);
+    subgraph_output = xnnpack::Buffer<T>(operator_output.size());
   }
 
   xnnpack::ReplicableRandomDevice rng;
@@ -52,13 +53,13 @@ template <class T> class RoPETestBase : public ::testing::Test {
   size_t heads;
   size_t channels;
 
-  std::vector<T> input;
-  std::vector<T> weights;
-  std::vector<T> operator_output;
-  std::vector<T> subgraph_output;
+  xnnpack::Buffer<T> input;
+  xnnpack::Buffer<T> weights;
+  xnnpack::Buffer<T> operator_output;
+  xnnpack::Buffer<T> subgraph_output;
 };
 
-using RoPETestF16 = RoPETestBase<uint16_t>;
+using RoPETestF16 = RoPETestBase<xnn_float16>;
 using RoPETestF32 = RoPETestBase<float>;
 
 TEST_F(RoPETestF16, define)
@@ -97,7 +98,6 @@ TEST_F(RoPETestF16, define)
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_rope);
   ASSERT_EQ(node->compute_type, xnn_compute_type_fp16);
-  ASSERT_EQ(node->params.rope.max_tokens, max_tokens);
   ASSERT_EQ(node->num_inputs, 2);
   ASSERT_EQ(node->inputs[0], input_id);
   ASSERT_EQ(node->inputs[1], weights_id);
@@ -142,7 +142,6 @@ TEST_F(RoPETestF32, define)
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_rope);
   ASSERT_EQ(node->compute_type, xnn_compute_type_fp32);
-  ASSERT_EQ(node->params.rope.max_tokens, max_tokens);
   ASSERT_EQ(node->num_inputs, 2);
   ASSERT_EQ(node->inputs[0], input_id);
   ASSERT_EQ(node->inputs[1], weights_id);
@@ -157,12 +156,10 @@ TEST_F(RoPETestF16, matches_operator_api)
 
   xnn_operator_t op = nullptr;
 
-  std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::generate(weights.begin(), weights.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
-  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
+  std::generate(weights.begin(), weights.end(), [&]() { return f32dist(rng); });
 
-  const xnn_status status = xnn_create_rope_nthc_f16(max_tokens, /*flags=*/0, &op);
+  const xnn_status status = xnn_create_rope_nthc_f16(/*flags=*/0, &op);
   if (status == xnn_status_unsupported_hardware) {
     GTEST_SKIP();
   }
@@ -239,10 +236,8 @@ TEST_F(RoPETestF32, matches_operator_api)
 
   std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
   std::generate(weights.begin(), weights.end(), [&]() { return f32dist(rng); });
-  std::fill(operator_output.begin(), operator_output.end(), nanf(""));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), nanf(""));
 
-  const xnn_status status = xnn_create_rope_nthc_f32(max_tokens, /*flags=*/0, &op);
+  const xnn_status status = xnn_create_rope_nthc_f32(/*flags=*/0, &op);
   if (status == xnn_status_unsupported_hardware) {
     GTEST_SKIP();
   }

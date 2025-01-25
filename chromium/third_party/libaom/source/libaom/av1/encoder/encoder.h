@@ -819,9 +819,15 @@ typedef struct {
 typedef struct {
   /*!
    * Controls the level at which rate-distortion optimization of transform
-   * coefficients favours sharpness in the block. Has no impact on RD when set
-   * to zero (default). For values 1-7, eob and skip block optimization are
-   * avoided and rdmult is adjusted in favour of block sharpness.
+   * coefficients favors sharpness in the block. Has no impact on RD when set
+   * to zero (default).
+   *
+   * For values 1-7, eob and skip block optimization are
+   * avoided and rdmult is adjusted in favor of block sharpness.
+   *
+   * In all-intra mode: it also sets the `loop_filter_sharpness` syntax element
+   * in the bitstream. Larger values increasingly reduce how much the filtering
+   * can change the sample values on block edges to favor perceived sharpness.
    */
   int sharpness;
 
@@ -2566,11 +2572,6 @@ typedef struct AV1_COMP_DATA {
    * Decide to pop the source for this frame from input buffer queue.
    */
   int pop_lookahead;
-
-  /*!
-   * Display order hint of frame whose packed data is in cx_data buffer.
-   */
-  int frame_display_order_hint;
 } AV1_COMP_DATA;
 
 /*!
@@ -3739,12 +3740,6 @@ typedef struct EncodeFrameParams {
 
 /*!\cond */
 
-// EncodeFrameResults contains information about the result of encoding a
-// single frame
-typedef struct {
-  size_t size;  // Size of resulting bitstream
-} EncodeFrameResults;
-
 void av1_initialize_enc(unsigned int usage, enum aom_rc_mode end_usage);
 
 struct AV1_COMP *av1_create_compressor(AV1_PRIMARY *ppi,
@@ -3848,7 +3843,7 @@ int av1_get_compressed_data(AV1_COMP *cpi, AV1_COMP_DATA *const cpi_data);
 int av1_encode(AV1_COMP *const cpi, uint8_t *const dest, size_t dest_size,
                const EncodeFrameInput *const frame_input,
                const EncodeFrameParams *const frame_params,
-               EncodeFrameResults *const frame_results);
+               size_t *const frame_size);
 
 /*!\cond */
 int av1_get_preview_raw_frame(AV1_COMP *cpi, YV12_BUFFER_CONFIG *dest);
@@ -3880,7 +3875,10 @@ int av1_set_internal_size(AV1EncoderConfig *const oxcf,
 
 int av1_get_quantizer(struct AV1_COMP *cpi);
 
-int av1_convert_sect5obus_to_annexb(uint8_t *buffer, size_t *input_size);
+// This function assumes that the input buffer contains valid OBUs. It should
+// not be called on untrusted input.
+int av1_convert_sect5obus_to_annexb(uint8_t *buffer, size_t buffer_size,
+                                    size_t *input_size);
 
 void av1_alloc_mb_wiener_var_pred_buf(AV1_COMMON *cm, ThreadData *td);
 

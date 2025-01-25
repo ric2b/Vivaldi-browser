@@ -134,7 +134,7 @@ static int extract_extradata_support(AVCodecContext *avctx)
 static int mediacodec_init_bsf(AVCodecContext *avctx)
 {
     MediaCodecEncContext *s = avctx->priv_data;
-    char str[128];
+    char str[128] = {0};
     int ret;
     int crop_right = s->width - avctx->width;
     int crop_bottom = s->height - avctx->height;
@@ -154,8 +154,12 @@ static int mediacodec_init_bsf(AVCodecContext *avctx)
             ret = snprintf(str, sizeof(str), "h264_metadata=crop_right=%d:crop_bottom=%d",
                            crop_right, crop_bottom);
         else if (avctx->codec_id == AV_CODEC_ID_HEVC)
-            ret = snprintf(str, sizeof(str), "hevc_metadata=crop_right=%d:crop_bottom=%d",
-                           crop_right, crop_bottom);
+            /* Encoder can use CTU size larger than 16x16, so the real crop
+             * margin can be larger than crop_right/crop_bottom. Let bsf figure
+             * out the real crop margin.
+             */
+            ret = snprintf(str, sizeof(str), "hevc_metadata=width=%d:height=%d",
+                           avctx->width, avctx->height);
         if (ret >= sizeof(str))
             return AVERROR_BUFFER_TOO_SMALL;
     }
@@ -234,7 +238,9 @@ static av_cold int mediacodec_init(AVCodecContext *avctx)
     ff_AMediaFormat_setString(format, "mime", codec_mime);
     // Workaround the alignment requirement of mediacodec. We can't do it
     // silently for AV_PIX_FMT_MEDIACODEC.
-    if (avctx->pix_fmt != AV_PIX_FMT_MEDIACODEC) {
+    if (avctx->pix_fmt != AV_PIX_FMT_MEDIACODEC &&
+        (avctx->codec_id == AV_CODEC_ID_H264 ||
+         avctx->codec_id == AV_CODEC_ID_HEVC)) {
         s->width = FFALIGN(avctx->width, 16);
         s->height = FFALIGN(avctx->height, 16);
     } else {
@@ -770,6 +776,7 @@ const FFCodec ff_ ## short_name ## _mediacodec_encoder = {              \
                         AV_CODEC_CAP_ENCODER_FLUSH,                     \
     .priv_data_size   = sizeof(MediaCodecEncContext),                   \
     .p.pix_fmts       = avc_pix_fmts,                                   \
+    .color_ranges   = AVCOL_RANGE_MPEG | AVCOL_RANGE_JPEG,              \
     .init             = mediacodec_init,                                \
     FF_CODEC_RECEIVE_PACKET_CB(mediacodec_encode),                      \
     .close            = mediacodec_close,                               \

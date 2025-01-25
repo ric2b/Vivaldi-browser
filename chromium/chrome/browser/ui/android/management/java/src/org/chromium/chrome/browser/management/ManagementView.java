@@ -142,6 +142,7 @@ public class ManagementView extends ScrollView {
 
     public void setProfileReportingText(SpannableStringBuilder text) {
         mProfileReportDetails.setText(text);
+        mProfileReportDetails.setMovementMethod(LinkMovementMethod.getInstance());
     }
 
     /** Sets whether legacy tech reporting is enabled. Then updates view accordingly. */
@@ -181,7 +182,6 @@ public class ManagementView extends ScrollView {
         if (isManaged()) {
             mDescription.setText(
                     getContext()
-                            .getResources()
                             .getString(
                                     mIsBrowserManaged
                                             ? R.string.management_browser_notice

@@ -74,8 +74,8 @@ String StringBuilder::Substring(unsigned start, unsigned length) const {
     return string_.Substring(start, length);
   length = std::min(length, length_ - start);
   if (is_8bit_)
-    return String(Characters8() + start, length);
-  return String(Characters16() + start, length);
+    return String(Span8().subspan(start, length));
+  return String(Span16().subspan(start, length));
 }
 
 StringView StringBuilder::SubstringView(unsigned start, unsigned length) const {
@@ -85,8 +85,8 @@ StringView StringBuilder::SubstringView(unsigned start, unsigned length) const {
     return StringView(string_, start, length);
   length = std::min(length, length_ - start);
   if (is_8bit_)
-    return StringView(Characters8() + start, length);
-  return StringView(Characters16() + start, length);
+    return StringView(Span8().subspan(start, length));
+  return StringView(Span16().subspan(start, length));
 }
 
 void StringBuilder::Swap(StringBuilder& builder) {
@@ -279,6 +279,44 @@ void StringBuilder::Append(const LChar* characters, unsigned length) {
 
   EnsureBuffer16(length);
   buffer16_.Append(characters, length);
+  length_ += length;
+}
+
+void StringBuilder::Append(base::span<const UChar> chars) {
+  if (chars.empty()) {
+    return;
+  }
+  DCHECK(chars.data());
+
+  // If there's only one char we use append(UChar) instead since it will
+  // check for latin1 and avoid converting to 16bit if possible.
+  if (chars.size() == 1) {
+    Append(chars[0]);
+    return;
+  }
+
+  unsigned length = base::checked_cast<unsigned>(chars.size());
+  EnsureBuffer16(length);
+  buffer16_.AppendSpan(chars);
+  length_ += length;
+}
+
+void StringBuilder::Append(base::span<const LChar> chars) {
+  if (chars.empty()) {
+    return;
+  }
+  DCHECK(chars.data());
+
+  unsigned length = base::checked_cast<unsigned>(chars.size());
+  if (is_8bit_) {
+    EnsureBuffer8(length);
+    buffer8_.AppendSpan(chars);
+    length_ += length;
+    return;
+  }
+
+  EnsureBuffer16(length);
+  buffer16_.AppendSpan(chars);
   length_ += length;
 }
 

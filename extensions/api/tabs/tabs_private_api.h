@@ -512,8 +512,35 @@ class TabsPrivateExecSendTabToSelfActionFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class TabsPrivateGetSendTabToSelfTargetsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.getSendTabToSelfTargets",
+                             TABSPRIVATE_GETSENDTABTOSELFTARGETS)
 
+  TabsPrivateGetSendTabToSelfTargetsFunction() = default;
 
+ protected:
+  ~TabsPrivateGetSendTabToSelfTargetsFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+};
+
+// Note: SendSend is not a typo, we use "SendTabToSelf" for all related
+// functions.
+class TabsPrivateSendSendTabToSelfTargetFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.sendSendTabToSelfTarget",
+                             TABSPRIVATE_SENDSENDTABTOSELFTARGET)
+
+  TabsPrivateSendSendTabToSelfTargetFunction() = default;
+
+ protected:
+  ~TabsPrivateSendSendTabToSelfTargetFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+};
 
 }  // namespace extensions
 

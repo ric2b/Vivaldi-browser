@@ -54,8 +54,6 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleRequest(
       {&VivaldiUtilitiesHookDelegate::HandleIsUrlValid, "utilities.isUrlValid"},
       {&VivaldiUtilitiesHookDelegate::HandleUrlToThumbnailText,
        "utilities.urlToThumbnailText"},
-      {&VivaldiUtilitiesHookDelegate::HandleSupportsProxy,
-       "utilities.supportsProxy"},
       {&VivaldiUtilitiesHookDelegate::HandleIsRTL, "utilities.isRTL"},
   };
 
@@ -316,29 +314,6 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleIsUrlValid(
       .ToChecked();
   RequestResult result(RequestResult::HANDLED);
   result.return_value = std::move(result_object);
-  return result;
-}
-
-RequestResult VivaldiUtilitiesHookDelegate::HandleSupportsProxy(
-    v8::Local<v8::Context> context,
-    v8::LocalVector<v8::Value> &arguments) {
-  bool support =
-#if defined(ARCH_CPU_ARM_FAMILY) && (BUILDFLAG(IS_LINUX))
-      false;
-#elif BUILDFLAG(IS_WIN) && defined(ARCH_CPU_32_BITS)
-      false;
-#else
-      true;
-#endif
-  v8::Isolate* isolate = context->GetIsolate();
-  v8::Local<v8::Object> object = v8::Object::New(isolate);
-  object
-      ->Set(context, gin::StringToV8(isolate, "support"),
-            v8::Boolean::New(isolate, support))
-      .ToChecked();
-
-  RequestResult result(RequestResult::HANDLED);
-  result.return_value = std::move(object);
   return result;
 }
 

@@ -35,7 +35,7 @@ const CGFloat kMostVisitedFaviconMinimalSize = 32;
   std::unique_ptr<ntp_tiles::MostVisitedSitesObserverBridge> _mostVisitedBridge;
 }
 // The user's browser state model used.
-@property(nonatomic, assign) ChromeBrowserState* browserState;
+@property(nonatomic, assign) ProfileIOS* profile;
 // Most visited items from the MostVisitedSites service (copied upon receiving
 // the callback). Those items are up to date with the model.
 @property(nonatomic, strong)
@@ -52,20 +52,20 @@ const CGFloat kMostVisitedFaviconMinimalSize = 32;
 }
 
 @synthesize consumer = _consumer;
-@synthesize browserState = _browserState;
+@synthesize profile = _profile;
 
 #pragma mark - INITIALIZERS
-- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState {
+- (instancetype)initWithProfile:(ProfileIOS*)profile {
   if ((self = [super init])) {
-    _browserState = browserState;
-    _localState = _browserState->GetPrefs();
+    _profile = profile;
+    _localState = _profile->GetPrefs();
 
     favicon::LargeIconService* largeIconService =
-        IOSChromeLargeIconServiceFactory::GetForBrowserState(_browserState);
+        IOSChromeLargeIconServiceFactory::GetForProfile(_profile);
     LargeIconCache* largeIconCache =
-        IOSChromeLargeIconCacheFactory::GetForBrowserState(_browserState);
+        IOSChromeLargeIconCacheFactory::GetForProfile(_profile);
     std::unique_ptr<ntp_tiles::MostVisitedSites> mostVisitedFactory =
-        IOSMostVisitedSitesFactory::NewForBrowserState(_browserState);
+        IOSMostVisitedSitesFactory::NewForBrowserState(_profile);
 
     _mostVisitedAttributesProvider =
         [[FaviconAttributesProvider alloc]

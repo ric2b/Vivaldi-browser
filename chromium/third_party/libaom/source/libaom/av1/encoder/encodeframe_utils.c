@@ -45,7 +45,8 @@ void av1_set_ssim_rdmult(const AV1_COMP *const cpi, int *errorperbit,
   // BLOCK_4X4 (minimum possible block size), geom_mean_of_scale can go up
   // to 4.8323^1024 and exceed DBL_MAX, resulting in data overflow.
   assert(bsize_base >= BLOCK_8X8);
-  assert(cpi->oxcf.tune_cfg.tuning == AOM_TUNE_SSIM);
+  assert(cpi->oxcf.tune_cfg.tuning == AOM_TUNE_SSIM ||
+         cpi->oxcf.tune_cfg.tuning == AOM_TUNE_SSIMULACRA2);
 
   for (row = mi_row / num_mi_w;
        row < num_rows && row < mi_row / num_mi_w + num_brows; ++row) {

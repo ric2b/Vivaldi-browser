@@ -5,7 +5,6 @@
 
 $ABC = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 $assert SSE in [2, 3, 4]
-$assert not XOP or AVX
 $assert not AVX or SSE == 4
 $assert REQUANTIZATION == "FP32" or not REQUANTIZATION
 $assert DATATYPE in ["QC8", "QD8", "QS8", "QU8", "QC4", "QB4"]
@@ -15,7 +14,7 @@ $assert VARIANT in ["LD64", "LD128", "EXTENDED"]
 $assert MR <= 4
 #include <assert.h>
 
-$if XOP or AVX:
+$if AVX:
   #ifdef _MSC_VER
     #include <intrin.h>
   #else
@@ -25,6 +24,7 @@ $else:
   $SSE_HEADER = {2: "emmintrin.h", 3: "tmmintrin.h", 4: "smmintrin.h"}[SSE]
   #include <${SSE_HEADER}>
 
+#include "xnnpack/common.h"
 #include "xnnpack/gemm.h"
 #include "xnnpack/math.h"
 $if DATATYPE != "QD8":
@@ -54,14 +54,14 @@ $LOAD_SUFFIX = {"LD128": "_ld128", "LD64": "_ld64", "EXTENDED": ""}[VARIANT]
 $GEMM_SUFFIX = "_xw" if VARIANT == "EXTENDED" else ""
 $REQUANTIZATION_SPEC = "_" + REQUANTIZATION.lower() if REQUANTIZATION else ""
 $if DATATYPE in ["QD8", "QC4", "QB4"]:
-  $PARAMS_STRUCT = "xop" if (XOP and DATATYPE == "QC4") else "sse"
+  $PARAMS_STRUCT = "scalar"
 $else:
-  $PARAMS_STRUCT = REQUANTIZATION.lower() + "_" + ("sse4" if SSE == 4 and DATATYPE != "QU8" else "sse2")
-$PARAMS_UNION = {"QC8": "xnn_qs8_qc8w_conv_minmax_params", "QD8": "xnn_f32_minmax_params", "QC4": "xnn_f32_qc4w_minmax_params", "QS8": "xnn_qs8_conv_minmax_params", "QU8": "xnn_qu8_conv_minmax_params", "QB4": "xnn_f32_qb4w_minmax_params"}[DATATYPE]
+  $PARAMS_STRUCT = REQUANTIZATION.lower() + "_scalar"
+$PARAMS_TYPE = {"QC8": "union xnn_qs8_qc8w_conv_minmax_params", "QD8": "union xnn_f32_minmax_params", "QC4": "struct xnn_f32_qc4w_minmax_params", "QS8": "union xnn_qs8_conv_minmax_params", "QU8": "union xnn_qu8_conv_minmax_params", "QB4": "struct xnn_f32_qb4w_minmax_params"}[DATATYPE]
 $XINT8_T = "uint8_t" if DATATYPE == "QU8" else "int8_t"
 $OUT_T = "float" if DATATYPE in ["QD8", "QC4", "QB4"] else XINT8_T
 $_MM_LOADX_SI128 = "_mm_loadu_si128" if DATATYPE == "QB4" else "_mm_load_si128"
-$ISA = "xop" if XOP else "avx" if AVX else {2: "sse2", 3: "ssse3", 4: "sse41"}[SSE]
+$ISA = "avx" if AVX else {2: "sse2", 3: "ssse3", 4: "sse41"}[SSE]
 void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukernel_${MR}x4c8__${ISA}${LOAD_SUFFIX}(
     size_t mr,
     size_t nc,
@@ -73,10 +73,10 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
     size_t cm_stride,
     size_t cn_stride,
     $if DATATYPE in ["QD8", "QC4", "QB4"]:
-      const union ${PARAMS_UNION} params[restrict XNN_MIN_ELEMENTS(1)],
+      const ${PARAMS_TYPE} params[restrict XNN_MIN_ELEMENTS(1)],
       const struct xnn_qd8_quantization_params quantization_params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
     $else:
-      const union ${PARAMS_UNION} params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+      const ${PARAMS_TYPE} params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(mr != 0);
   assert(mr <= ${MR});
@@ -88,7 +88,7 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
   assert(c != NULL);
 
   $if DATATYPE == "QB4":
-    size_t bl = params->sse.blocksize;
+    size_t bl = params->scalar.blocksize;
     assert(bl <= round_up_po2(kc, 2));
     assert(bl != 0);
     assert(bl % 32 == 0);
@@ -114,10 +114,36 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
         c${M} = c${M-1};
       }
 
+  $if DATATYPE in ["QD8", "QC4", "QB4"]:
+    const __m128 vmin = _mm_set1_ps(params->${PARAMS_STRUCT}.min);
+    const __m128 vmax = _mm_set1_ps(params->${PARAMS_STRUCT}.max);
+    XNN_FORCE_REALIZATION(vmin);
+    XNN_FORCE_REALIZATION(vmax);
+  $else:
+    $if DATATYPE != "QC8":
+      const __m128 vscale = _mm_set1_ps(params->${PARAMS_STRUCT}.scale);
+      XNN_FORCE_REALIZATION(vscale);
+
+    const __m128 voutput_max_less_zero_point = _mm_set1_ps((int32_t) params->${PARAMS_STRUCT}.output_max - (int32_t) params->${PARAMS_STRUCT}.output_zero_point);
+    const __m128i voutput_zero_point = _mm_set1_epi16(params->${PARAMS_STRUCT}.output_zero_point);
+    $if DATATYPE == "QU8":
+      const __m128i voutput_min = _mm_set1_epi8(params->${PARAMS_STRUCT}.output_min);
+    $else:
+      $if SSE < 4:
+        const __m128i voutput_min = _mm_set1_epi16(params->${PARAMS_STRUCT}.output_min);
+      $if SSE == 4:
+        const __m128i voutput_min = _mm_set1_epi8(params->${PARAMS_STRUCT}.output_min);
+    XNN_FORCE_REALIZATION(voutput_max_less_zero_point);
+    XNN_FORCE_REALIZATION(voutput_zero_point);
+    XNN_FORCE_REALIZATION(voutput_min);
+
   $if DATATYPE in ["QC4", "QB4"]:
-    const __m128i vmask = _mm_load_si128((const __m128i*) params->${PARAMS_STRUCT}.mask);  // 0xF0
-    $if XOP:
-      const __m128i vshift = _mm_load_si128((const __m128i*) params->${PARAMS_STRUCT}.shift);  // 4
+    const __m128i vmask = _mm_set1_epi8(0xF0);
+    XNN_FORCE_REALIZATION(vmask);
+
+  $if DATATYPE == "QU8":
+    const __m128i vb_zero_point = _mm_set1_epi16(params->${PARAMS_STRUCT}.kernel_zero_point);
+    XNN_FORCE_REALIZATION(vb_zero_point);
   do {
     $if DATATYPE in ["QD8", "QC4"]:
       const __m128i vksum = _mm_load_si128((const __m128i*) w);
@@ -198,7 +224,6 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
     w = (const int32_t*) w + 4;
 
     $if DATATYPE == "QU8":
-      const __m128i vb_zero_point = _mm_load_si128((const __m128i*) params->${PARAMS_STRUCT}.kernel_zero_point);
       $if SSE < 4 or VARIANT == "LD128":
         const __m128i vzero = _mm_setzero_si128();
     $if DATATYPE == "QB4":
@@ -217,7 +242,7 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
       ${_}while (k >= 16 * sizeof(${XINT8_T})) {
         $for M in range(MR):
           ${_}const __m128i va${M}c0 = _mm_loadl_epi64((const __m128i*) a${M});
-          $# SSE 4, AVX & XOP
+          $# SSE 4, AVX
           $if SSE == 4:
             ${_}const __m128i vxa${M}c0 = _mm_cvtepi8_epi16(va${M}c0);
           $# SSE 2 only
@@ -231,22 +256,15 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
               ${_}const __m128i vb${N}${N+1}c01 = ${_MM_LOADX_SI128}((const __m128i*) w);
             $else:
               ${_}const __m128i vb${N}${N+1}c01 = ${_MM_LOADX_SI128}((const __m128i*) ((const ${XINT8_T}*) w + ${N * 8}));
-            $if XOP:
-              ${_}const __m128i vb${N}${N+1}c0 = _mm_shl_epi8(vb${N}${N+1}c01, vshift);
-            $else:
-              ${_}const __m128i vbs${N}${N+1}c0 = _mm_slli_epi32(vb${N}${N+1}c01, 4);
-              ${_}const __m128i vb${N}${N+1}c0 = _mm_and_si128(vbs${N}${N+1}c0, vmask);
+            ${_}const __m128i vbs${N}${N+1}c0 = _mm_slli_epi32(vb${N}${N+1}c01, 4);
+            ${_}const __m128i vb${N}${N+1}c0 = _mm_and_si128(vbs${N}${N+1}c0, vmask);
             ${_}const __m128i vsb${N}${N+1}c0 = _mm_cmpgt_epi8(_mm_setzero_si128(), vb${N}${N+1}c0);
             ${_}const __m128i vxb${N}c0 = _mm_unpacklo_epi8(vb${N}${N+1}c0, vsb${N}${N+1}c0);
             ${_}const __m128i vxb${N+1}c0 = _mm_unpackhi_epi8(vb${N}${N+1}c0, vsb${N}${N+1}c0);
 
             $for M in range(MR):
-              $if XOP:
-                ${_}vacc${M}x${N} = _mm_maddd_epi16(vxa${M}c0, vxb${N}c0, vacc${M}x${N});
-                ${_}vacc${M}x${N+1} = _mm_maddd_epi16(vxa${M}c0, vxb${N+1}c0, vacc${M}x${N+1});
-              $else:
-                ${_}vacc${M}x${N} = _mm_add_epi32(vacc${M}x${N}, _mm_madd_epi16(vxa${M}c0, vxb${N}c0));
-                ${_}vacc${M}x${N+1} = _mm_add_epi32(vacc${M}x${N+1}, _mm_madd_epi16(vxa${M}c0, vxb${N+1}c0));
+              ${_}vacc${M}x${N} = _mm_add_epi32(vacc${M}x${N}, _mm_madd_epi16(vxa${M}c0, vxb${N}c0));
+              ${_}vacc${M}x${N+1} = _mm_add_epi32(vacc${M}x${N+1}, _mm_madd_epi16(vxa${M}c0, vxb${N+1}c0));
         $else:
           $for N in range(4):
             $if VARIANT == "LD64":
@@ -254,12 +272,9 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
                 ${_}const __m128i vb${N}c01 = _mm_loadl_epi64((const __m128i*) w);
               $else:
                 ${_}const __m128i vb${N}c01 = _mm_loadl_epi64((const __m128i*) ((const ${XINT8_T}*) w + ${N * 8}));
-            $if XOP:
-              ${_}const __m128i vb${N}c0 = _mm_shl_epi8(vb${N}c01, vshift);
-            $else:
-              ${_}const __m128i vbs${N}c0 = _mm_slli_epi32(vb${N}c01, 4);
-              ${_}const __m128i vb${N}c0 = _mm_and_si128(vbs${N}c0, vmask);
-            $# SSE 4, AVX & XOP
+            ${_}const __m128i vbs${N}c0 = _mm_slli_epi32(vb${N}c01, 4);
+            ${_}const __m128i vb${N}c0 = _mm_and_si128(vbs${N}c0, vmask);
+            $# SSE 4, AVX
             $if SSE == 4:
               ${_}const __m128i vxb${N}c0 = _mm_cvtepi8_epi16(vb${N}c0);
             $# SSE 2 only
@@ -267,14 +282,11 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
               ${_}const __m128i vxb${N}c0 = _mm_srai_epi16(_mm_unpacklo_epi8(vb${N}c0, vb${N}c0), 8);
 
             $for M in range(MR):
-              $if XOP:
-                ${_}vacc${M}x${N} = _mm_maddd_epi16(vxa${M}c0, vxb${N}c0, vacc${M}x${N});
-              $else:
-                ${_}vacc${M}x${N} = _mm_add_epi32(vacc${M}x${N}, _mm_madd_epi16(vxa${M}c0, vxb${N}c0));
+              ${_}vacc${M}x${N} = _mm_add_epi32(vacc${M}x${N}, _mm_madd_epi16(vxa${M}c0, vxb${N}c0));
 
         $for M in range(MR):
           ${_}const __m128i va${M}c1 = _mm_loadl_epi64((const __m128i*) a${M});
-          $# SSE 4, AVX & XOP
+          $# SSE 4, AVX
           $if SSE == 4:
             ${_}const __m128i vxa${M}c1 = _mm_cvtepi8_epi16(va${M}c1);
           $# SSE 2 only
@@ -290,17 +302,13 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
             ${_}const __m128i vxb${N+1}c1 = _mm_unpackhi_epi8(vb${N}${N+1}c1, vsb${N}${N+1}c1);
 
             $for M in range(MR):
-              $if XOP:
-                ${_}vacc${M}x${N} = _mm_maddd_epi16(vxa${M}c1, vxb${N}c1, vacc${M}x${N});
-                ${_}vacc${M}x${N+1} = _mm_maddd_epi16(vxa${M}c1, vxb${N+1}c1, vacc${M}x${N+1});
-              $else:
-                ${_}vacc${M}x${N} = _mm_add_epi32(vacc${M}x${N}, _mm_madd_epi16(vxa${M}c1, vxb${N}c1));
-                ${_}vacc${M}x${N+1} = _mm_add_epi32(vacc${M}x${N+1}, _mm_madd_epi16(vxa${M}c1, vxb${N+1}c1));
+              ${_}vacc${M}x${N} = _mm_add_epi32(vacc${M}x${N}, _mm_madd_epi16(vxa${M}c1, vxb${N}c1));
+              ${_}vacc${M}x${N+1} = _mm_add_epi32(vacc${M}x${N+1}, _mm_madd_epi16(vxa${M}c1, vxb${N+1}c1));
         $else:
           $for N in range(4):
             $if VARIANT == "LD64":
               ${_}const __m128i vb${N}c1 = _mm_and_si128(vb${N}c01, vmask);
-              $# SSE 4, AVX & XOP
+              $# SSE 4, AVX
               $if SSE == 4:
                 ${_}const __m128i vxb${N}c1 = _mm_cvtepi8_epi16(vb${N}c1);
               $# SSE 2 only
@@ -308,10 +316,7 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
                 ${_}const __m128i vxb${N}c1 = _mm_srai_epi16(_mm_unpacklo_epi8(vb${N}c1, vb${N}c1), 8);
 
             $for M in range(MR):
-              $if XOP:
-                ${_}vacc${M}x${N} = _mm_maddd_epi16(vxa${M}c1, vxb${N}c1, vacc${M}x${N});
-              $else:
-                ${_}vacc${M}x${N} = _mm_add_epi32(vacc${M}x${N}, _mm_madd_epi16(vxa${M}c1, vxb${N}c1));
+              ${_}vacc${M}x${N} = _mm_add_epi32(vacc${M}x${N}, _mm_madd_epi16(vxa${M}c1, vxb${N}c1));
 
 
         ${_}w = (const ${XINT8_T}*) w + 32;
@@ -322,14 +327,14 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
       $for M in range(MR):
         ${_}const __m128i va${M} = _mm_loadl_epi64((const __m128i*) a${M});
         $if DATATYPE == "QU8":
-          $# SSE 4, AVX & XOP
+          $# SSE 4, AVX
           $if SSE == 4:
             ${_}const __m128i vxa${M} = _mm_cvtepu8_epi16(va${M});
           $# SSE 2 only
           $else:
             ${_}const __m128i vxa${M} = _mm_unpacklo_epi8(va${M}, vzero);
         $else:
-          $# SSE 4, AVX & XOP
+          $# SSE 4, AVX
           $if SSE == 4:
             ${_}const __m128i vxa${M} = _mm_cvtepi8_epi16(va${M});
           $# SSE 2 only
@@ -344,11 +349,8 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
               ${_}__m128i vb${N}${N+1} = ${_MM_LOADX_SI128}((const __m128i*) w);
             $else:
               ${_}__m128i vb${N}${N+1} = ${_MM_LOADX_SI128}((const __m128i*) ((const ${XINT8_T}*) w + ${N * 8}));
-            $if XOP:
-              ${_}vb${N}${N+1} = _mm_shl_epi8(vb${N}${N+1}, vshift);
-            $else:
-              ${_}vb${N}${N+1} = _mm_slli_epi32(vb${N}${N+1}, 4);
-              ${_}vb${N}${N+1} = _mm_and_si128(vb${N}${N+1}, vmask);
+            ${_}vb${N}${N+1} = _mm_slli_epi32(vb${N}${N+1}, 4);
+            ${_}vb${N}${N+1} = _mm_and_si128(vb${N}${N+1}, vmask);
           $else:
             $if N == 0:
               ${_}const __m128i vb${N}${N+1} = _mm_load_si128((const __m128i*) w);
@@ -358,7 +360,7 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
           $if DATATYPE == "QU8":
             ${_}const __m128i vxb${N} = _mm_sub_epi16(_mm_unpacklo_epi8(vb${N}${N+1}, vzero), vb_zero_point);
             ${_}const __m128i vxb${N+1} = _mm_sub_epi16(_mm_unpackhi_epi8(vb${N}${N+1}, vzero), vb_zero_point);
-          $# SSE 4, AVX & XOP
+          $# SSE 4, AVX
           $elif SSE == 4:
             ${_}const __m128i vxbm${N+1} = _mm_unpackhi_epi8(vb${N}${N+1}, vb${N}${N+1});
             ${_}const __m128i vxb${N} = _mm_cvtepi8_epi16(vb${N}${N+1});
@@ -370,12 +372,8 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
             ${_}const __m128i vxb${N+1} = _mm_unpackhi_epi8(vb${N}${N+1}, vsb${N}${N+1});
 
           $for M in range(MR):
-            $if XOP:
-              ${_}vacc${M}x${N} = _mm_maddd_epi16(vxa${M}, vxb${N}, vacc${M}x${N});
-              ${_}vacc${M}x${N+1} = _mm_maddd_epi16(vxa${M}, vxb${N+1}, vacc${M}x${N+1});
-            $else:
-              ${_}vacc${M}x${N} = _mm_add_epi32(vacc${M}x${N}, _mm_madd_epi16(vxa${M}, vxb${N}));
-              ${_}vacc${M}x${N+1} = _mm_add_epi32(vacc${M}x${N+1}, _mm_madd_epi16(vxa${M}, vxb${N+1}));
+            ${_}vacc${M}x${N} = _mm_add_epi32(vacc${M}x${N}, _mm_madd_epi16(vxa${M}, vxb${N}));
+            ${_}vacc${M}x${N+1} = _mm_add_epi32(vacc${M}x${N+1}, _mm_madd_epi16(vxa${M}, vxb${N+1}));
       $else:
         $for N in range(4):
           $if VARIANT == "LD64":
@@ -384,11 +382,8 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
                 ${_}__m128i vb${N} = _mm_loadl_epi64((const __m128i*) w);
               $else:
                 ${_}__m128i vb${N} = _mm_loadl_epi64((const __m128i*) ((const ${XINT8_T}*) w + ${N * 8}));
-              $if XOP:
-                ${_}vb${N} = _mm_shl_epi8(vb${N}, vshift);
-              $else:
-                ${_}vb${N} = _mm_slli_epi32(vb${N}, 4);
-                ${_}vb${N} = _mm_and_si128(vb${N}, vmask);
+              ${_}vb${N} = _mm_slli_epi32(vb${N}, 4);
+              ${_}vb${N} = _mm_and_si128(vb${N}, vmask);
             $else:
               $if N == 0:
                 ${_}const __m128i vb${N} = _mm_loadl_epi64((const __m128i*) w);
@@ -396,14 +391,14 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
                 ${_}const __m128i vb${N} = _mm_loadl_epi64((const __m128i*) ((const ${XINT8_T}*) w + ${N * 8}));
 
             $if DATATYPE == "QU8":
-              $# SSE 4, AVX & XOP
+              $# SSE 4, AVX
               $if SSE == 4:
                 ${_}const __m128i vxb${N} = _mm_sub_epi16(_mm_cvtepu8_epi16(vb${N}), vb_zero_point);
               $# SSE 2 only
               $else:
                 ${_}const __m128i vxb${N} = _mm_sub_epi16(_mm_unpacklo_epi8(vb${N}, vzero), vb_zero_point);
             $else:
-              $# SSE 4, AVX & XOP
+              $# SSE 4, AVX
               $if SSE == 4:
                 ${_}const __m128i vxb${N} = _mm_cvtepi8_epi16(vb${N});
               $# SSE 2 only
@@ -416,10 +411,7 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
               ${_}const __m128i vxb${N} = _mm_load_si128((const __m128i*) ((const int16_t*) w + ${N * 8}));
 
           $for M in range(MR):
-            $if XOP:
-              ${_}vacc${M}x${N} = _mm_maddd_epi16(vxa${M}, vxb${N}, vacc${M}x${N});
-            $else:
-              ${_}vacc${M}x${N} = _mm_add_epi32(vacc${M}x${N}, _mm_madd_epi16(vxa${M}, vxb${N}));
+            ${_}vacc${M}x${N} = _mm_add_epi32(vacc${M}x${N}, _mm_madd_epi16(vxa${M}, vxb${N}));
 
       $if VARIANT == "EXTENDED":
         ${_}w = (const int16_t*) w + 32;
@@ -491,11 +483,9 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
       $for M in range(MR):
         vout${M}x0123 = _mm_add_ps(vout${M}x0123, vbias0123);
 
-      const __m128 vmin = _mm_load_ps(params->${PARAMS_STRUCT}.min);
       $for M in range(MR):
         vout${M}x0123 = _mm_max_ps(vout${M}x0123, vmin);
 
-      const __m128 vmax = _mm_load_ps(params->${PARAMS_STRUCT}.max);
       $for M in range(MR):
         vout${M}x0123 = _mm_min_ps(vout${M}x0123, vmax);
 
@@ -533,18 +523,15 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
         $for M in range(MR):
           vscaled${M}x0123 = _mm_mul_ps(vscaled${M}x0123, vscale0123);
       $else:
-        const __m128 vscale = _mm_load_ps(params->${PARAMS_STRUCT}.scale);
         $for M in range(MR):
           vscaled${M}x0123 = _mm_mul_ps(vscaled${M}x0123, vscale);
 
-      const __m128 voutput_max_less_zero_point = _mm_load_ps(params->${PARAMS_STRUCT}.output_max_less_zero_point);
       $for M in range(MR):
         vscaled${M}x0123 = _mm_min_ps(vscaled${M}x0123, voutput_max_less_zero_point);
 
       $for M in range(MR):
         vacc${M}x0123 = _mm_cvtps_epi32(vscaled${M}x0123);
 
-      const __m128i voutput_zero_point = _mm_load_si128((const __m128i*) params->${PARAMS_STRUCT}.output_zero_point);
       $for M in range(0, MR, 2):
         __m128i vacc${M}${min(M+1, MR-1)}x0123 = _mm_adds_epi16(_mm_packs_epi32(vacc${M}x0123, vacc${min(M+1, MR-1)}x0123), voutput_zero_point);
 
@@ -554,10 +541,9 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
         $else:
           __m128i vout = _mm_packus_epi16(vacc0${min(1, MR-1)}x0123, vacc0${min(1, MR-1)}x0123);
 
-        vout = _mm_max_epu8(vout, _mm_load_si128((const __m128i*) params->${PARAMS_STRUCT}.output_min));
+        vout = _mm_max_epu8(vout, voutput_min);
       $else:
         $if SSE < 4:
-          const __m128i voutput_min = _mm_load_si128((const __m128i*) params->${PARAMS_STRUCT}.output_min);
           $for M in range(0, MR, 2):
             vacc${M}${min(M+1, MR-1)}x0123 = _mm_max_epi16(vacc${M}${min(M+1, MR-1)}x0123, voutput_min);
 
@@ -566,14 +552,14 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
         $else:
           __m128i vout = _mm_packs_epi16(vacc0${min(1, MR-1)}x0123, vacc0${min(1, MR-1)}x0123);
 
-        $# SSE 4, AVX & XOP
+        $# SSE 4, AVX
         $if SSE == 4:
-          vout = _mm_max_epi8(vout, _mm_load_si128((const __m128i*) params->${PARAMS_STRUCT}.output_min));
+          vout = _mm_max_epi8(vout, voutput_min);
 
       if (nc >= 4) {
         unaligned_store_u32(c0, (uint32_t) _mm_cvtsi128_si32(vout));
         $for M in range(1, MR):
-          $# SSE 4, AVX & XOP
+          $# SSE 4, AVX
           $if SSE == 4:
             unaligned_store_u32(c${M}, (uint32_t) _mm_extract_epi32(vout, ${M}));
           $# SSE 2 only
@@ -596,7 +582,7 @@ void xnn_${DATATYPE_SPEC}_gemm${GEMM_SUFFIX}_minmax${REQUANTIZATION_SPEC}_ukerne
           vout = _mm_srli_epi32(vout, 16);
         }
         if (nc & 1) {
-          $# SSE 4, AVX & XOP
+          $# SSE 4, AVX
           $if SSE == 4:
             $for M in range(MR):
               *c${M} = (${OUT_T}) _mm_extract_epi8(vout, ${M * 4});

@@ -427,25 +427,7 @@ public class ExternalNavigationHandlerTest {
 
         mDelegate.setShouldReturnAsActivityResult(true);
         checkUrl("tel:012345678", redirectHandlerForLinkClick())
-                .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
-    }
-
-    @Test
-    @SmallTest
-    public void testShouldReturnAsActivityResult_preserveOtherResultTypes() {
-        checkUrl(YOUTUBE_URL, redirectHandlerForLinkClick())
-                .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
-        assertOverrideUrlToNavigateToTab();
-
-        mDelegate.setShouldDisableAllExternalIntents(true);
-        checkUrl(YOUTUBE_URL, redirectHandlerForLinkClick())
-                .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
-        assertOverrideUrlToNavigateToTab();
-
-        mDelegate.setShouldReturnAsActivityResult(true);
-        checkUrl(YOUTUBE_URL, redirectHandlerForLinkClick())
-                .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
-        assertOverrideUrlToNavigateToTab();
+                .expecting(OverrideUrlLoadingResultType.OVERRIDE_CLOSING_AFTER_AUTH, IGNORE);
     }
 
     @Test
@@ -960,7 +942,7 @@ public class ExternalNavigationHandlerTest {
 
     @Test
     @SmallTest
-    public void testCCTIntentUriDoesNotFireCCTAndLoadInChrome_InIncognito() throws Exception {
+    public void testCctIntentUriDoesNotFireCctAndLoadInChrome_InIncognito() throws Exception {
         mUrlHandler.mResolveInfoContainsSelf = true;
         mDelegate.setCanLoadUrlInTab(false);
         checkUrl(INTENT_URL_FOR_SELF_CUSTOM_TABS, redirectHandlerForLinkClick())
@@ -972,7 +954,7 @@ public class ExternalNavigationHandlerTest {
 
     @Test
     @SmallTest
-    public void testCCTIntentUriFiresCCT_InRegular() throws Exception {
+    public void testCctIntentUriFiresCct_InRegular() throws Exception {
         checkUrl(INTENT_URL_FOR_SELF_CUSTOM_TABS, redirectHandlerForLinkClick())
                 .withIsIncognito(false)
                 .expecting(
@@ -1120,8 +1102,10 @@ public class ExternalNavigationHandlerTest {
                         + "S."
                         + ExternalNavigationHandler.EXTRA_BROWSER_FALLBACK_URL
                         + "="
-                        + "https://play.google.com/store/apps/details?id=com.imdb.mobile"
-                        + "&referrer=mypage;end";
+                        + Uri.encode(
+                                "https://play.google.com/store/apps/details?id=com.imdb.mobile"
+                                        + "&referrer=mypage")
+                        + ";end";
         checkUrl(intent, redirectHandlerForLinkClick())
                 .expecting(
                         OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT,
@@ -1136,7 +1120,9 @@ public class ExternalNavigationHandlerTest {
                         + "S."
                         + ExternalNavigationHandler.EXTRA_BROWSER_FALLBACK_URL
                         + "="
-                        + "https://play.google.com/store/apps/details?id=com.imdb.mobile;end";
+                        + Uri.encode(
+                                "https://play.google.com/store/apps/details?id=com.imdb.mobile")
+                        + ";end";
         checkUrl(intentNoRef, redirectHandlerForLinkClick())
                 .expecting(
                         OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT,
@@ -1151,9 +1137,28 @@ public class ExternalNavigationHandlerTest {
                         + "S."
                         + ExternalNavigationHandler.EXTRA_BROWSER_FALLBACK_URL
                         + "="
-                        + "https://play.google.com/store/search?q=pub:imdb;end";
+                        + Uri.encode("https://play.google.com/store/search?q=pub:imdb")
+                        + ";end";
         checkUrl(intentBadUrl, redirectHandlerForLinkClick())
                 .expecting(OverrideUrlLoadingResultType.OVERRIDE_WITH_NAVIGATE_TAB, IGNORE);
+
+        String intentWithQuery =
+                "intent:///name/nm0000158#Intent;scheme=imdb;package=com.imdb.mobile;"
+                        + "S."
+                        + ExternalNavigationHandler.EXTRA_BROWSER_FALLBACK_URL
+                        + "="
+                        + Uri.encode(
+                                "https://play.google.com/store/apps/details?id=com.imdb.mobile"
+                                        + "&referrer=mypage&unknown-param=foo")
+                        + ";end";
+        checkUrl(intentWithQuery, redirectHandlerForLinkClick())
+                .expecting(
+                        OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT,
+                        START_OTHER_ACTIVITY);
+
+        Assert.assertEquals(
+                "market://details?id=com.imdb.mobile&referrer=mypage&unknown-param=foo",
+                mUrlHandler.mStartActivityIntent.getDataString());
     }
 
     @Test
@@ -2990,6 +2995,24 @@ public class ExternalNavigationHandlerTest {
         Assert.assertEquals("https://www.example.com/", mUrlHandler.mNewUrlAfterClobbering);
     }
 
+    @Test
+    @SmallTest
+    public void testReportToSafeBrowsing() {
+        // Because this test uses a TestContext, we don't actually send
+        // the intent for real. This does, however, ensure we call
+        // ExternalNavigationHandler.doStartActivity, which triggers the
+        // report to Safe Browsing.
+        mUrlHandler.sendIntentsForReal();
+
+        checkUrl("tel:012345678", redirectHandlerForLinkClick())
+                .expecting(
+                        OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT,
+                        START_OTHER_ACTIVITY);
+
+        Assert.assertEquals(
+                "tel:012345678", mDelegate.intentReportedToSafeBrowsing().getDataString());
+    }
+
     private static List<ResolveInfo> makeResolveInfos(ResolveInfo... infos) {
         return Arrays.asList(infos);
     }
@@ -3378,6 +3401,17 @@ public class ExternalNavigationHandlerTest {
         @Override
         public void returnAsActivityResult(GURL url) {}
 
+        @Override
+        public void maybeRecordExternalNavigationSchemeHistogram(GURL url) {}
+
+        @Override
+        public void notifyCctPasswordSavingRecorderOfExternalNavigation() {}
+
+        @Override
+        public void reportIntentToSafeBrowsing(Intent intent) {
+            mSafeBrowsingIntent = intent;
+        }
+
         public void reset() {
             startIncognitoIntentCalled = false;
         }
@@ -3462,6 +3496,10 @@ public class ExternalNavigationHandlerTest {
             mShouldReturnAsActivityResult = returnResult;
         }
 
+        public Intent intentReportedToSafeBrowsing() {
+            return mSafeBrowsingIntent;
+        }
+
         public boolean startIncognitoIntentCalled;
         public boolean maybeSetRequestMetadataCalled;
         public Callback<Boolean> incognitoDialogUserDecisionCallback;
@@ -3485,6 +3523,7 @@ public class ExternalNavigationHandlerTest {
         private boolean mResolvesToOtherBrowser;
         private boolean mShouldDisableAllExternalIntents;
         private boolean mShouldReturnAsActivityResult;
+        private Intent mSafeBrowsingIntent;
     }
 
     private void checkIntentSanity(Intent intent, String name) {

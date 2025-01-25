@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "try",
               "builder": "win10.20h2-blink-rel",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-fyi-archive",
@@ -36,10 +36,11 @@
         {
           "bucket": "try",
           "builder": "win10.20h2-blink-rel",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
       ],
-      "retry_failed_shards": false
+      "retry_failed_shards": false,
+      "targets_spec_directory": "src/infra/config/generated/builders/try/win10.20h2-blink-rel/targets"
     }
   },
   "$build/reclient": {

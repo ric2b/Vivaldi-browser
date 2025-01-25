@@ -17,6 +17,7 @@ source_set("helpers") {
   deps = [
    "//base",
    "//url",
+   "//ios/chrome/browser/shared/ui/util",
    "//ios/components/webui:url_constants",
   ]
 

@@ -254,16 +254,10 @@ message PasswordMetadata {
 }
 
 message PinMetadata {
-  // If true, the key is "locked" after too many unsuccessful authorization
-  // attempts. Future authentication attempts against a locked key fail with
-  // CRYPTOHOME_ERROR_TPM_DEFEND_LOCK error.
-  // Currently, such locking is supported only for keys with
-  // |low_entropy_credential| policy set to true,
-  // This is populated by cryptohome,  should be omitted in any Add/Update
-  // request. And it will be ignored when present in any Add/Update request.
-  bool auth_locked = 1;
   // The hash information used to generate the secret.
   KnowledgeFactorHashInfo hash_info = 2;
+
+  reserved 1;
 }
 
 message CryptohomeRecoveryMetadata {

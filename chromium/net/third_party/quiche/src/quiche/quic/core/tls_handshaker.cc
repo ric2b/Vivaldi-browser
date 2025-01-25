@@ -154,22 +154,26 @@ void TlsHandshaker::AdvanceHandshake() {
   }
   if (ShouldCloseConnectionOnUnexpectedError(ssl_error) &&
       !is_connection_closed()) {
+    std::string ssl_error_stack = CryptoUtils::GetSSLErrorStack();
     QUIC_VLOG(1) << "SSL_do_handshake failed; SSL_get_error returns "
-                 << ssl_error;
-    ERR_print_errors_fp(stderr);
+                 << ssl_error << ", SSLErrorStack: " << ssl_error_stack;
     if (last_tls_alert_.has_value()) {
       std::string error_details =
           absl::StrCat("TLS handshake failure (",
                        EncryptionLevelToString(last_tls_alert_->level), ") ",
                        static_cast<int>(last_tls_alert_->desc), ": ",
-                       SSL_alert_desc_string_long(last_tls_alert_->desc));
+                       SSL_alert_desc_string_long(last_tls_alert_->desc),
+                       ". SSLErrorStack:", ssl_error_stack);
       QUIC_DLOG(ERROR) << error_details;
-      CloseConnection(TlsAlertToQuicErrorCode(last_tls_alert_->desc),
+      CloseConnection(TlsAlertToQuicErrorCode(last_tls_alert_->desc)
+                          .value_or(QUIC_HANDSHAKE_FAILED),
                       static_cast<QuicIetfTransportErrorCodes>(
                           CRYPTO_ERROR_FIRST + last_tls_alert_->desc),
                       error_details);
     } else {
-      CloseConnection(QUIC_HANDSHAKE_FAILED, "TLS handshake failed");
+      CloseConnection(QUIC_HANDSHAKE_FAILED,
+                      absl::StrCat("TLS handshake failed. SSLErrorStack:",
+                                   ssl_error_stack));
     }
   }
 }
@@ -177,7 +181,13 @@ void TlsHandshaker::AdvanceHandshake() {
 void TlsHandshaker::CloseConnection(QuicErrorCode error,
                                     const std::string& reason_phrase) {
   QUICHE_DCHECK(!reason_phrase.empty());
-  stream()->OnUnrecoverableError(error, reason_phrase);
+  if (extra_error_details_.empty()) {
+    stream()->OnUnrecoverableError(error, reason_phrase);
+  } else {
+    stream()->OnUnrecoverableError(
+        error,
+        absl::StrCat(reason_phrase, ". ExtraDetail:", extra_error_details_));
+  }
   is_connection_closed_ = true;
 }
 
@@ -185,7 +195,13 @@ void TlsHandshaker::CloseConnection(QuicErrorCode error,
                                     QuicIetfTransportErrorCodes ietf_error,
                                     const std::string& reason_phrase) {
   QUICHE_DCHECK(!reason_phrase.empty());
-  stream()->OnUnrecoverableError(error, ietf_error, reason_phrase);
+  if (extra_error_details_.empty()) {
+    stream()->OnUnrecoverableError(error, ietf_error, reason_phrase);
+  } else {
+    stream()->OnUnrecoverableError(
+        error, ietf_error,
+        absl::StrCat(reason_phrase, ". ExtraDetail:", extra_error_details_));
+  }
   is_connection_closed_ = true;
 }
 

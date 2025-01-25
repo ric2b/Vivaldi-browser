@@ -25,8 +25,7 @@ viz::SharedImageFormat WGPUFormatToViz(wgpu::TextureFormat format) {
     case wgpu::TextureFormat::RGBA16Float:
       return viz::SinglePlaneFormat::kRGBA_F16;
     default:
-      NOTREACHED_IN_MIGRATION();
-      return viz::SinglePlaneFormat::kRGBA_8888;
+      NOTREACHED();
   }
 }
 
@@ -344,17 +343,10 @@ bool WebGPUSwapBufferProvider::CopyToVideoFrame(
   // need to release WebGPU/Dawn's context's access to the texture.
   ReleaseWGPUTextureAccessIfNeeded();
 
-  uint32_t texture_target =
-      current_swap_buffer_->GetSharedImage()->GetTextureTarget();
-
-  gpu::MailboxHolder mailbox_holder(
-      current_swap_buffer_->GetSharedImage()->mailbox(),
-      current_swap_buffer_->GetSyncToken(), texture_target);
-
   if (frame_pool->CopyRGBATextureToVideoFrame(
-          Format(), current_swap_buffer_->GetSharedImage()->size(),
-          PredefinedColorSpaceToGfxColorSpace(color_space_),
-          kTopLeft_GrSurfaceOrigin, mailbox_holder, dst_color_space,
+          current_swap_buffer_->GetSharedImage()->size(),
+          current_swap_buffer_->GetSharedImage(),
+          current_swap_buffer_->GetSyncToken(), dst_color_space,
           std::move(callback))) {
     // Subsequent access to this swap buffer (either webgpu or compositor) must
     // wait for the copy operation to finish.

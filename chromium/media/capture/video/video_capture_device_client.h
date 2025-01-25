@@ -9,10 +9,12 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "base/feature_list.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/threading/thread_collision_warner.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -85,9 +87,10 @@ class CAPTURE_EXPORT VideoCaptureDeviceClient
       scoped_refptr<VideoCaptureBufferPool> buffer_pool,
       VideoCaptureJpegDecoderFactoryCB jpeg_decoder_factory_callback);
 #else
-  VideoCaptureDeviceClient(std::unique_ptr<VideoFrameReceiver> receiver,
-                           scoped_refptr<VideoCaptureBufferPool> buffer_pool,
-                           VideoEffectsContext video_effects_context);
+  VideoCaptureDeviceClient(
+      std::unique_ptr<VideoFrameReceiver> receiver,
+      scoped_refptr<VideoCaptureBufferPool> buffer_pool,
+      std::optional<VideoEffectsContext> video_effects_context);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   VideoCaptureDeviceClient(const VideoCaptureDeviceClient&) = delete;
@@ -153,8 +156,8 @@ class CAPTURE_EXPORT VideoCaptureDeviceClient
                const std::string& reason) override;
   void OnFrameDropped(VideoCaptureFrameDropReason reason) override;
   void OnLog(const std::string& message) override;
-  void OnStarted() override;
   double GetBufferPoolUtilization() const override;
+  void OnStarted() override;
 
  private:
   VideoCaptureDevice::Client::ReserveResult CreateReadyFrameFromExternalBuffer(
@@ -197,7 +200,8 @@ class CAPTURE_EXPORT VideoCaptureDeviceClient
   VideoPixelFormat last_captured_pixel_format_;
 
 #if BUILDFLAG(ENABLE_VIDEO_EFFECTS)
-  std::optional<VideoCaptureEffectsProcessor> effects_processor_;
+  scoped_refptr<base::SequencedTaskRunner> effects_processor_task_runner_;
+  std::unique_ptr<VideoCaptureEffectsProcessor> effects_processor_;
 #endif  // !BUILDFLAG(ENABLE_VIDEO_EFFECTS)
 
   // Thread collision warner to ensure that producer-facing API is not called

@@ -12,7 +12,7 @@
 #include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
-#include "components/request_filter/adblock_filter/adblock_tab_handler.h"
+#include "components/request_filter/adblock_filter/adblock_state_and_logs_impl.h"
 #include "components/request_filter/adblock_filter/utils.h"
 #include "components/request_filter/filtered_request_info.h"
 #include "content/public/browser/browser_context.h"
@@ -124,12 +124,12 @@ bool IsOriginWanted(content::BrowserContext* browser_context,
 
 AdBlockRequestFilter::AdBlockRequestFilter(
     base::WeakPtr<RulesIndexManager> rules_index_manager,
-    base::WeakPtr<TabHandler> tab_handler,
+    base::WeakPtr<StateAndLogsImpl> state_and_logs,
     base::WeakPtr<Resources> resources)
     : vivaldi::RequestFilter(vivaldi::RequestFilter::kAdBlock,
                              RuleGroupToPriority(rules_index_manager->group())),
       rules_index_manager_(std::move(rules_index_manager)),
-      tab_handler_(std::move(tab_handler)),
+      state_and_logs_(std::move(state_and_logs)),
       resources_(std::move(resources)) {}
 
 AdBlockRequestFilter::~AdBlockRequestFilter() = default;
@@ -147,11 +147,11 @@ bool AdBlockRequestFilter::DoesAdAttributionMatch(
     content::RenderFrameHost* frame,
     std::string_view tracker_url_spec,
     std::string_view ad_domain_and_query_trigger) {
-  if (!tab_handler_) {
+  if (!state_and_logs_) {
     return false;
   }
-  return tab_handler_->DoesAdAttributionMatch(frame, tracker_url_spec,
-                                              ad_domain_and_query_trigger);
+  return state_and_logs_->DoesAdAttributionMatch(frame, tracker_url_spec,
+                                                 ad_domain_and_query_trigger);
 }
 
 bool AdBlockRequestFilter::OnBeforeRequest(
@@ -175,8 +175,8 @@ bool AdBlockRequestFilter::OnBeforeRequest(
   content::RenderFrameHost* frame = content::RenderFrameHost::FromID(
       request->render_process_id, request->render_frame_id);
 
-  if (is_frame && tab_handler_) {
-    tab_handler_->ResetFrameBlockState(rules_index_manager_->group(), frame);
+  if (is_frame && state_and_logs_) {
+    state_and_logs_->ResetFrameBlockState(rules_index_manager_->group(), frame);
   }
 
   // TODO(julien): Add filtering of csp reports
@@ -211,36 +211,44 @@ bool AdBlockRequestFilter::OnBeforeRequest(
                               rules_index_manager_->group()),
           frame, url_for_activations, origin_for_activations);
 
+  if (state_and_logs_ && is_frame) {
+    state_and_logs_->LogTabActivations(rules_index_manager_->group(), frame,
+                                       activations);
+  }
+
+  if (state_and_logs_ && is_main_frame &&
+      rules_index_manager_->group() == RuleGroup::kAdBlockingRules &&
+      activations[flat::ActivationType_ATTRIBUTE_ADS].GetDecision().value_or(
+          flat::Decision_MODIFY) == flat::Decision_PASS) {
+    state_and_logs_->ArmAdAttribution(frame);
+  }
+
   std::optional<flat::Decision> document_decision =
       activations[flat::ActivationType_DOCUMENT].GetDecision();
 
-  if (tab_handler_ && is_main_frame &&
-      activations[flat::ActivationType_ATTRIBUTE_ADS].GetDecision().value_or(
-          flat::Decision_MODIFY) == flat::Decision_PASS) {
-    tab_handler_->SetAdAttributionState(true, frame);
-  }
-
-  if (document_decision && document_decision == flat::Decision_PASS) {
-    std::move(callback).Run(RequestFilter::kAllow, false, GURL());
-    // Whole document is allowed as is. No more questions asked.
-    return true;
-  }
+  // Even if we are to allow the whole document, we keep handling rules as
+  // usual, in case we encounter some ad attribution rules.
+  bool allow_whole_document =
+      (document_decision && document_decision == flat::Decision_PASS);
 
   bool disable_generic_rules =
       activations[flat::ActivationType_GENERIC_BLOCK].GetDecision().value_or(
           flat::Decision_MODIFY) == flat::Decision_PASS;
 
   const flat::ResourceType resource_type = ResourceTypeFromRequest(*request);
-  const flat::RequestFilterRule* rule =
+  std::optional<RulesIndex::RuleAndSource> rule_and_source =
       rules_index_manager_->rules_index()->FindMatchingBeforeRequestRule(
           request->request.url, document_origin, resource_type, is_third_party,
           disable_generic_rules,
           base::BindRepeating(&AdBlockRequestFilter::DoesAdAttributionMatch,
                               base::Unretained(this), frame));
 
-  CHECK(!rule || rule->options() & flat::OptionFlag_MODIFY_BLOCK);
+  CHECK(!rule_and_source ||
+        rule_and_source->rule->options() & flat::OptionFlag_MODIFY_BLOCK);
 
-  if (!rule || rule->decision() == flat::Decision_PASS) {
+  if (!rule_and_source ||
+      rule_and_source->rule->decision() == flat::Decision_PASS ||
+      allow_whole_document) {
     RulesIndex::FoundModifiersByType modifiers_by_type =
         rules_index_manager_->rules_index()->FindMatchingModifierRules(
             RulesIndex::kAllowedRequest, request->request.url, document_origin,
@@ -252,17 +260,18 @@ bool AdBlockRequestFilter::OnBeforeRequest(
       std::vector<std::string> ad_query_triggers;
       for (const auto& [ad_query_trigger, ad_query_trigger_rule] :
            ad_query_trigger_results.value_with_decision) {
-        if (ad_query_trigger_rule->decision() != flat::Decision_PASS) {
+        if (ad_query_trigger_rule.rule->decision() != flat::Decision_PASS) {
           ad_query_triggers.push_back(ad_query_trigger);
         }
       }
-      if (!ad_query_triggers.empty() && tab_handler_) {
-        tab_handler_->SetTabAdQueryTriggers(
+      if (!ad_query_triggers.empty() && state_and_logs_) {
+        state_and_logs_->SetTabAdQueryTriggers(
             request->request.url, std::move(ad_query_triggers), frame);
       }
     }
 
-    if (rule && rule->ad_domains_and_query_triggers()) {
+    if (rule_and_source &&
+        rule_and_source->rule->ad_domains_and_query_triggers()) {
       std::move(callback).Run(RequestFilter::kPreventCancel, false, GURL());
       return true;
     }
@@ -271,9 +280,9 @@ bool AdBlockRequestFilter::OnBeforeRequest(
     return true;
   }
 
-  if (tab_handler_ && frame)
-    tab_handler_->OnUrlBlocked(rules_index_manager_->group(), document_origin,
-                               request->request.url, frame);
+  if (state_and_logs_ && frame)
+    state_and_logs_->OnUrlBlocked(rules_index_manager_->group(),
+                                  document_origin, request->request.url, frame);
 
   RulesIndex::FoundModifiersByType modifiers_by_type =
       rules_index_manager_->rules_index()->FindMatchingModifierRules(
@@ -295,7 +304,8 @@ bool AdBlockRequestFilter::OnBeforeRequest(
             return false;
           }
 
-          return GetRulePriority(*lhs.second) < GetRulePriority(*rhs.second);
+          return GetRulePriority(*lhs.second.rule) <
+                 GetRulePriority(*rhs.second.rule);
         });
 
     std::optional<std::string> resource(
@@ -307,8 +317,8 @@ bool AdBlockRequestFilter::OnBeforeRequest(
     }
   }
 
-  if (is_frame && tab_handler_) {
-    tab_handler_->SetFrameBlockState(rules_index_manager_->group(), frame);
+  if (is_frame && state_and_logs_) {
+    state_and_logs_->SetFrameBlockState(rules_index_manager_->group(), frame);
   }
 
   std::move(callback).Run(RequestFilter::kCancel,
@@ -397,8 +407,8 @@ bool AdBlockRequestFilter::OnHeadersReceived(
 
   std::set<std::string> added_headers;
 
-  for (const auto& [value, rule] : csp.value_with_decision) {
-    if (rule->decision() == flat::Decision_PASS) {
+  for (const auto& [value, rule_and_source] : csp.value_with_decision) {
+    if (rule_and_source.rule->decision() == flat::Decision_PASS) {
       continue;
     }
     added_headers.insert(value);

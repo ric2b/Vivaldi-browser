@@ -29,6 +29,11 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/translate/vivaldi_ios_translate_service.h"
+// End Vivaldi
+
 @interface LanguageSettingsMediator () <PrefObserverDelegate> {
   // Registrar for pref change notifications.
   std::unique_ptr<PrefChangeRegistrar> _prefChangeRegistrar;
@@ -154,6 +159,12 @@
     language::ToTranslateLanguageSynonym(&canonicalLanguageCode);
     std::string targetLanguageCode = TranslateServiceIOS::GetTargetLanguage(
         self.prefService, self.languageModelManager->GetPrimaryModel());
+
+    if (vivaldi::IsVivaldiRunning()) {
+      targetLanguageCode = VivaldiIOSTranslateService::GetTargetLanguage(
+          self.prefService, self.languageModelManager->GetPrimaryModel());
+    } // End Vivaldi
+
     languageItem.targetLanguage = targetLanguageCode == canonicalLanguageCode;
 
     // A language is Translate-blocked if the language is not supported by the

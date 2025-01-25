@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <string>
+#include <unordered_set>
 
 #include "base/check.h"
 #include "base/logging.h"
@@ -680,19 +681,22 @@ void AXTableInfo::ClearExtraMacNodes() {
     return;
   }
 
+  std::set<AXNodeID> deleting_node_ids;
   for (AXNode* extra_mac_node : extra_mac_nodes) {
+    deleting_node_ids.insert(extra_mac_node->id());
     for (AXTreeObserver& observer : tree_->observers()) {
       observer.OnNodeWillBeDeleted(tree_, extra_mac_node);
     }
   }
 
-  std::vector<AXNodeID> deleted_ids;
+  for (AXTreeObserver& observer : tree_->observers()) {
+    observer.OnAtomicUpdateStarting(tree_, deleting_node_ids, {});
+  }
+
   {
     ScopedTreeUpdateInProgressStateSetter tree_update_in_progress(*tree_);
 
     for (AXNode* extra_mac_node : extra_mac_nodes) {
-      AXNodeID deleted_id = extra_mac_node->id();
-      deleted_ids.push_back(deleted_id);
       delete extra_mac_node;
     }
 
@@ -700,7 +704,7 @@ void AXTableInfo::ClearExtraMacNodes() {
 
   }  // tree_update_in_progress.
 
-  for (AXNodeID deleted_id : deleted_ids) {
+  for (AXNodeID deleted_id : deleting_node_ids) {
     for (AXTreeObserver& observer : tree_->observers()) {
       observer.OnNodeDeleted(tree_, deleted_id);
     }

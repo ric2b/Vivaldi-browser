@@ -26,6 +26,7 @@
 #include "quiche/quic/core/frames/quic_connection_close_frame.h"
 #include "quiche/quic/core/frames/quic_new_connection_id_frame.h"
 #include "quiche/quic/core/frames/quic_path_response_frame.h"
+#include "quiche/quic/core/frames/quic_reset_stream_at_frame.h"
 #include "quiche/quic/core/frames/quic_rst_stream_frame.h"
 #include "quiche/quic/core/quic_connection_id.h"
 #include "quiche/quic/core/quic_constants.h"
@@ -426,54 +427,49 @@ class TestConnection : public QuicConnection {
         .WillRepeatedly(Return(QuicBandwidth::Infinite()));
   }
 
-  TestAlarmFactory::TestAlarm* GetAckAlarm() {
-    return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        &QuicConnectionPeer::GetAckAlarm(this));
+  QuicTestAlarmProxy GetAckAlarm() {
+    return QuicTestAlarmProxy(QuicConnectionPeer::GetAckAlarm(this));
   }
 
-  TestAlarmFactory::TestAlarm* GetPingAlarm() {
-    return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        &QuicConnectionPeer::GetPingAlarm(this));
+  QuicTestAlarmProxy GetPingAlarm() {
+    return QuicTestAlarmProxy(QuicConnectionPeer::GetPingAlarm(this));
   }
 
-  TestAlarmFactory::TestAlarm* GetRetransmissionAlarm() {
-    return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        &QuicConnectionPeer::GetRetransmissionAlarm(this));
+  QuicTestAlarmProxy GetRetransmissionAlarm() {
+    return QuicTestAlarmProxy(QuicConnectionPeer::GetRetransmissionAlarm(this));
   }
 
-  TestAlarmFactory::TestAlarm* GetSendAlarm() {
-    return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        &QuicConnectionPeer::GetSendAlarm(this));
+  QuicTestAlarmProxy GetSendAlarm() {
+    return QuicTestAlarmProxy(QuicConnectionPeer::GetSendAlarm(this));
   }
 
-  TestAlarmFactory::TestAlarm* GetTimeoutAlarm() {
-    return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        &QuicConnectionPeer::GetIdleNetworkDetectorAlarm(this));
+  QuicTestAlarmProxy GetTimeoutAlarm() {
+    return QuicTestAlarmProxy(
+        QuicConnectionPeer::GetIdleNetworkDetectorAlarm(this));
   }
 
-  TestAlarmFactory::TestAlarm* GetMtuDiscoveryAlarm() {
-    return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        &QuicConnectionPeer::GetMtuDiscoveryAlarm(this));
+  QuicTestAlarmProxy GetMtuDiscoveryAlarm() {
+    return QuicTestAlarmProxy(QuicConnectionPeer::GetMtuDiscoveryAlarm(this));
   }
 
-  TestAlarmFactory::TestAlarm* GetProcessUndecryptablePacketsAlarm() {
-    return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        &QuicConnectionPeer::GetProcessUndecryptablePacketsAlarm(this));
+  QuicTestAlarmProxy GetProcessUndecryptablePacketsAlarm() {
+    return QuicTestAlarmProxy(
+        QuicConnectionPeer::GetProcessUndecryptablePacketsAlarm(this));
   }
 
-  TestAlarmFactory::TestAlarm* GetDiscardPreviousOneRttKeysAlarm() {
-    return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        &QuicConnectionPeer::GetDiscardPreviousOneRttKeysAlarm(this));
+  QuicTestAlarmProxy GetDiscardPreviousOneRttKeysAlarm() {
+    return QuicTestAlarmProxy(
+        QuicConnectionPeer::GetDiscardPreviousOneRttKeysAlarm(this));
   }
 
-  TestAlarmFactory::TestAlarm* GetDiscardZeroRttDecryptionKeysAlarm() {
-    return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        &QuicConnectionPeer::GetDiscardZeroRttDecryptionKeysAlarm(this));
+  QuicTestAlarmProxy GetDiscardZeroRttDecryptionKeysAlarm() {
+    return QuicTestAlarmProxy(
+        QuicConnectionPeer::GetDiscardZeroRttDecryptionKeysAlarm(this));
   }
 
-  TestAlarmFactory::TestAlarm* GetBlackholeDetectorAlarm() {
-    return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        &QuicConnectionPeer::GetBlackholeDetectorAlarm(this));
+  QuicTestAlarmProxy GetBlackholeDetectorAlarm() {
+    return QuicTestAlarmProxy(
+        QuicConnectionPeer::GetBlackholeDetectorAlarm(this));
   }
 
   TestAlarmFactory::TestAlarm* GetRetirePeerIssuedConnectionIdAlarm() {
@@ -486,9 +482,9 @@ class TestConnection : public QuicConnection {
         QuicConnectionPeer::GetRetireSelfIssuedConnectionIdAlarm(this));
   }
 
-  TestAlarmFactory::TestAlarm* GetMultiPortProbingAlarm() {
-    return reinterpret_cast<TestAlarmFactory::TestAlarm*>(
-        &QuicConnectionPeer::GetMultiPortProbingAlarm(this));
+  QuicTestAlarmProxy GetMultiPortProbingAlarm() {
+    return QuicTestAlarmProxy(
+        QuicConnectionPeer::GetMultiPortProbingAlarm(this));
   }
 
   void PathDegradingTimeout() {
@@ -991,6 +987,11 @@ class QuicConnectionTest : public QuicTestWithParam<TestParams> {
                                     level);
   }
 
+  size_t ProcessDataPacketAtLevel(uint64_t number, bool has_stop_waiting,
+                                  EncryptionLevel level) {
+    return ProcessDataPacketAtLevel(number, has_stop_waiting, level, 0);
+  }
+
   size_t ProcessCryptoPacketAtLevel(uint64_t number, EncryptionLevel level) {
     QuicPacketHeader header = ConstructPacketHeader(number, level);
     QuicFrames frames;
@@ -1018,7 +1019,7 @@ class QuicConnectionTest : public QuicTestWithParam<TestParams> {
   }
 
   size_t ProcessDataPacketAtLevel(uint64_t number, bool has_stop_waiting,
-                                  EncryptionLevel level) {
+                                  EncryptionLevel level, uint32_t flow_label) {
     std::unique_ptr<QuicPacket> packet(
         ConstructDataPacket(number, has_stop_waiting, level));
     char buffer[kMaxOutgoingPacketSize];
@@ -1028,7 +1029,12 @@ class QuicConnectionTest : public QuicTestWithParam<TestParams> {
                                     buffer, kMaxOutgoingPacketSize);
     connection_.ProcessUdpPacket(
         kSelfAddress, kPeerAddress,
-        QuicReceivedPacket(buffer, encrypted_length, clock_.Now(), false));
+        QuicReceivedPacket(buffer, encrypted_length, clock_.Now(), false,
+                           0 /* ttl */, true /* ttl_valid */,
+                           nullptr /* packet_headers */, 0 /* headers_length */,
+                           false /* owns_header_buffer */, ECN_NOT_ECT,
+                           flow_label));
+
     if (connection_.GetSendAlarm()->IsSet()) {
       connection_.GetSendAlarm()->Fire();
     }
@@ -1510,7 +1516,6 @@ class QuicConnectionTest : public QuicTestWithParam<TestParams> {
     connection_.RemoveEncrypter(ENCRYPTION_INITIAL);
     connection_.SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
 
-    config.SetConnectionOptionsToSend(QuicTagVector{kSPAD});
     QuicConfigPeer::SetReceivedStatelessResetToken(&config,
                                                    kTestStatelessResetToken);
     QuicConfigPeer::SetReceivedAlternateServerAddress(&config,
@@ -1585,6 +1590,41 @@ class QuicConnectionTest : public QuicTestWithParam<TestParams> {
 INSTANTIATE_TEST_SUITE_P(QuicConnectionTests, QuicConnectionTest,
                          ::testing::ValuesIn(GetTestParams()),
                          ::testing::PrintToStringParamName());
+
+// Regression test for b/372756997.
+TEST_P(QuicConnectionTest, NoNestedCloseConnection) {
+  if (!GetQuicReloadableFlag(quic_avoid_nested_close_connection)) {
+    // EXPECT_QUIC_BUG tests are expensive so only run one instance of them.
+    if (!IsDefaultTestConfiguration()) {
+      return;
+    }
+  }
+  EXPECT_TRUE(connection_.connected());
+  EXPECT_CALL(visitor_, OnConnectionClosed(_, ConnectionCloseSource::FROM_SELF))
+      .WillRepeatedly(
+          Invoke(this, &QuicConnectionTest::SaveConnectionCloseFrame));
+  EXPECT_CALL(connection_, OnSerializedPacket(_)).Times(AnyNumber());
+
+  // Prepare the writer to fail to send the first connection close packet due
+  // to the packet being too large.
+  writer_->SetShouldWriteFail();
+  writer_->SetWriteError(*writer_->MessageTooBigErrorCode());
+
+  if (GetQuicReloadableFlag(quic_avoid_nested_close_connection)) {
+    connection_.CloseConnection(
+        QUIC_CRYPTO_TOO_MANY_ENTRIES, "Closed by test",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
+    EXPECT_THAT(saved_connection_close_frame_.quic_error_code,
+                IsError(QUIC_CRYPTO_TOO_MANY_ENTRIES));
+  } else {
+    EXPECT_QUIC_BUG(
+        connection_.CloseConnection(
+            QUIC_CRYPTO_TOO_MANY_ENTRIES, "Closed by test",
+            ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET),
+        // 30=QUIC_CRYPTO_TOO_MANY_ENTRIES, 27=QUIC_PACKET_WRITE_ERROR.
+        "Initial error code: 30, new error code: 27");
+  }
+}
 
 // These two tests ensure that the QuicErrorCode mapping works correctly.
 // Both tests expect to see a Google QUIC close if not running IETF QUIC.
@@ -3135,7 +3175,6 @@ TEST_P(QuicConnectionTest,
   connection_.SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
 
   QuicConfig config;
-  config.SetConnectionOptionsToSend(QuicTagVector{kSPAD});
   QuicConfigPeer::SetReceivedStatelessResetToken(&config,
                                                  kTestStatelessResetToken);
   QuicConfigPeer::SetReceivedAlternateServerAddress(&config,
@@ -6518,7 +6557,13 @@ TEST_P(QuicConnectionTest, SendDelayedAckOnOutgoingCryptoPacket) {
   ProcessCryptoPacketAtLevel(1, ENCRYPTION_INITIAL);
   connection_.SendCryptoDataWithString("foo", 0);
   // Check that ack is bundled with outgoing crypto data.
-  EXPECT_EQ(3u, writer_->frame_count());
+  EXPECT_FALSE(writer_->ack_frames().empty());
+  if (!QuicVersionUsesCryptoFrames(connection_.transport_version())) {
+    EXPECT_FALSE(writer_->stream_frames().empty());
+  } else {
+    EXPECT_FALSE(writer_->crypto_frames().empty());
+  }
+  EXPECT_FALSE(writer_->padding_frames().empty());
   EXPECT_TRUE(writer_->stop_waiting_frames().empty());
   EXPECT_FALSE(connection_.HasPendingAcks());
 }
@@ -6563,14 +6608,13 @@ TEST_P(QuicConnectionTest, BundleAckForSecondCHLO) {
   ForceWillingAndAbleToWriteOnceForDeferSending();
   ProcessCryptoPacketAtLevel(2, ENCRYPTION_INITIAL);
   // Check that ack is sent and that delayed ack alarm is reset.
-  EXPECT_EQ(3u, writer_->frame_count());
   EXPECT_TRUE(writer_->stop_waiting_frames().empty());
   if (!QuicVersionUsesCryptoFrames(connection_.transport_version())) {
-    EXPECT_EQ(1u, writer_->stream_frames().size());
+    EXPECT_FALSE(writer_->stream_frames().empty());
   } else {
-    EXPECT_EQ(1u, writer_->crypto_frames().size());
+    EXPECT_FALSE(writer_->crypto_frames().empty());
   }
-  EXPECT_EQ(1u, writer_->padding_frames().size());
+  EXPECT_FALSE(writer_->padding_frames().empty());
   ASSERT_FALSE(writer_->ack_frames().empty());
   EXPECT_EQ(QuicPacketNumber(2u), LargestAcked(writer_->ack_frames().front()));
   EXPECT_FALSE(connection_.HasPendingAcks());
@@ -6603,14 +6647,13 @@ TEST_P(QuicConnectionTest, BundleAckForSecondCHLOTwoPacketReject) {
     ProcessCryptoPacketAtLevel(2, ENCRYPTION_INITIAL);
   }
   // Check that ack is sent and that delayed ack alarm is reset.
-  EXPECT_EQ(3u, writer_->frame_count());
   EXPECT_TRUE(writer_->stop_waiting_frames().empty());
   if (!QuicVersionUsesCryptoFrames(connection_.transport_version())) {
-    EXPECT_EQ(1u, writer_->stream_frames().size());
+    EXPECT_FALSE(writer_->stream_frames().empty());
   } else {
-    EXPECT_EQ(1u, writer_->crypto_frames().size());
+    EXPECT_FALSE(writer_->crypto_frames().empty());
   }
-  EXPECT_EQ(1u, writer_->padding_frames().size());
+  EXPECT_FALSE(writer_->padding_frames().empty());
   ASSERT_FALSE(writer_->ack_frames().empty());
   EXPECT_EQ(QuicPacketNumber(2u), LargestAcked(writer_->ack_frames().front()));
   EXPECT_FALSE(connection_.HasPendingAcks());
@@ -9974,6 +10017,103 @@ TEST_P(QuicConnectionTest, PtoSkipsPacketNumber) {
   EXPECT_TRUE(connection_.GetRetransmissionAlarm()->IsSet());
 }
 
+TEST_P(QuicConnectionTest, PtoChangesFlowLabel) {
+  QuicConfig config;
+  QuicTagVector connection_options;
+  connection_options.push_back(k1PTO);
+  connection_options.push_back(kPTOS);
+  config.SetConnectionOptionsToSend(connection_options);
+  EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _));
+  connection_.SetFromConfig(config);
+  EXPECT_FALSE(connection_.GetRetransmissionAlarm()->IsSet());
+  EXPECT_EQ(0, connection_.outgoing_flow_label());
+  connection_.EnableBlackholeAvoidanceViaFlowLabel();
+  static_cast<test::MockRandom*>(helper_->GetRandomGenerator())->ChangeValue();
+  const uint32_t flow_label = connection_.outgoing_flow_label();
+  EXPECT_NE(0, flow_label);
+
+  QuicStreamId stream_id = 2;
+  QuicPacketNumber last_packet;
+  SendStreamDataToPeer(stream_id, "foooooo", 0, NO_FIN, &last_packet);
+  SendStreamDataToPeer(stream_id, "foooooo", 7, NO_FIN, &last_packet);
+  EXPECT_EQ(QuicPacketNumber(2), last_packet);
+  EXPECT_TRUE(connection_.GetRetransmissionAlarm()->IsSet());
+
+  // Fire PTO and verify the flow label has changed.
+  EXPECT_CALL(*send_algorithm_, OnPacketSent(_, _, _, _, _)).Times(1);
+  connection_.GetRetransmissionAlarm()->Fire();
+  EXPECT_NE(flow_label, connection_.outgoing_flow_label());
+  EXPECT_EQ(1, connection_.GetStats().num_flow_label_changes);
+
+  EXPECT_CALL(visitor_, OnForwardProgressMadeAfterFlowLabelChange());
+  EXPECT_CALL(*send_algorithm_, OnCongestionEvent(_, _, _, _, _, _, _));
+  QuicAckFrame frame = InitAckFrame(last_packet);
+  ProcessAckPacket(1, &frame);
+  EXPECT_EQ(
+      1, connection_.GetStats().num_forward_progress_after_flow_label_change);
+}
+
+TEST_P(QuicConnectionTest, NewReceiveNewFlowLabelWithGapChangesFlowLabel) {
+  QuicConfig config;
+  QuicTagVector connection_options;
+  connection_options.push_back(k1PTO);
+  connection_options.push_back(kPTOS);
+  config.SetConnectionOptionsToSend(connection_options);
+  EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _));
+  connection_.SetFromConfig(config);
+  EXPECT_EQ(0, connection_.outgoing_flow_label());
+  connection_.EnableBlackholeAvoidanceViaFlowLabel();
+  static_cast<test::MockRandom*>(helper_->GetRandomGenerator())->ChangeValue();
+  const uint32_t flow_label = connection_.outgoing_flow_label();
+  EXPECT_NE(0, flow_label);
+  EXPECT_CALL(visitor_, OnStreamFrame(_)).Times(AnyNumber());
+
+  // Receive the first packet to initialize the flow label.
+  ProcessDataPacketAtLevel(1, !kHasStopWaiting, ENCRYPTION_INITIAL, 0);
+  EXPECT_EQ(flow_label, connection_.outgoing_flow_label());
+
+  // Receive the second packet with the same flow label
+  ProcessDataPacketAtLevel(2, !kHasStopWaiting, ENCRYPTION_INITIAL, flow_label);
+  EXPECT_EQ(flow_label, connection_.outgoing_flow_label());
+
+  // Receive a packet with gap and a new flow label and verify the outgoing
+  // flow label has changed.
+  static_cast<test::MockRandom*>(helper_->GetRandomGenerator())->ChangeValue();
+  ProcessDataPacketAtLevel(4, !kHasStopWaiting, ENCRYPTION_INITIAL,
+                           flow_label + 1);
+  EXPECT_NE(flow_label, connection_.outgoing_flow_label());
+}
+
+TEST_P(QuicConnectionTest,
+       NewReceiveNewFlowLabelWithNoGapDoesNotChangeFlowLabel) {
+  QuicConfig config;
+  QuicTagVector connection_options;
+  connection_options.push_back(k1PTO);
+  connection_options.push_back(kPTOS);
+  config.SetConnectionOptionsToSend(connection_options);
+  EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _));
+  connection_.SetFromConfig(config);
+  EXPECT_EQ(0, connection_.outgoing_flow_label());
+  connection_.EnableBlackholeAvoidanceViaFlowLabel();
+  static_cast<test::MockRandom*>(helper_->GetRandomGenerator())->ChangeValue();
+  const uint32_t flow_label = connection_.outgoing_flow_label();
+  EXPECT_NE(0, flow_label);
+  EXPECT_CALL(visitor_, OnStreamFrame(_)).Times(AnyNumber());
+
+  // Receive the first packet to initialize the flow label.
+  ProcessDataPacketAtLevel(1, !kHasStopWaiting, ENCRYPTION_INITIAL, 0);
+  EXPECT_EQ(flow_label, connection_.outgoing_flow_label());
+
+  // Receive the second packet with the same flow label
+  ProcessDataPacketAtLevel(2, !kHasStopWaiting, ENCRYPTION_INITIAL, flow_label);
+  EXPECT_EQ(flow_label, connection_.outgoing_flow_label());
+
+  // Receive a packet with no gap and a new flow label and verify the outgoing
+  // flow label has not changed.
+  ProcessDataPacketAtLevel(3, !kHasStopWaiting, ENCRYPTION_INITIAL, flow_label);
+  EXPECT_EQ(flow_label, connection_.outgoing_flow_label());
+}
+
 TEST_P(QuicConnectionTest, SendCoalescedPackets) {
   if (!connection_.version().CanSendCoalescedPackets()) {
     return;
@@ -10315,6 +10455,75 @@ void QuicConnectionTest::TestClientRetryHandling(
     TestConnectionCloseQuicErrorCode(IETF_QUIC_PROTOCOL_VIOLATION);
   } else {
     EXPECT_TRUE(connection_.connected());
+  }
+}
+
+TEST_P(QuicConnectionTest, FixTimeoutsClient) {
+  if (!connection_.version().UsesTls()) {
+    return;
+  }
+  set_perspective(Perspective::IS_CLIENT);
+  if (GetQuicReloadableFlag(quic_fix_timeouts)) {
+    EXPECT_CALL(visitor_, GetHandshakeState())
+        .WillRepeatedly(Return(HANDSHAKE_START));
+  }
+  QuicConfig config;
+  QuicTagVector connection_options;
+  connection_options.push_back(kFTOE);
+  config.SetConnectionOptionsToSend(connection_options);
+  QuicConfigPeer::SetNegotiated(&config, true);
+  QuicConfigPeer::SetReceivedOriginalConnectionId(&config,
+                                                  connection_.connection_id());
+  QuicConfigPeer::SetReceivedInitialSourceConnectionId(
+      &config, connection_.connection_id());
+
+  EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _)).Times(1);
+  connection_.SetFromConfig(config);
+  QuicIdleNetworkDetector& idle_network_detector =
+      QuicConnectionPeer::GetIdleNetworkDetector(&connection_);
+  if (GetQuicReloadableFlag(quic_fix_timeouts)) {
+    // Handshake timeout has not been removed yet.
+    EXPECT_NE(idle_network_detector.handshake_timeout(),
+              QuicTime::Delta::Infinite());
+  } else {
+    // Handshake timeout has been set to infinite.
+    EXPECT_EQ(idle_network_detector.handshake_timeout(),
+              QuicTime::Delta::Infinite());
+  }
+}
+
+TEST_P(QuicConnectionTest, FixTimeoutsServer) {
+  if (!connection_.version().UsesTls()) {
+    return;
+  }
+  set_perspective(Perspective::IS_SERVER);
+  if (GetQuicReloadableFlag(quic_fix_timeouts)) {
+    EXPECT_CALL(visitor_, GetHandshakeState())
+        .WillRepeatedly(Return(HANDSHAKE_START));
+  }
+  QuicConfig config;
+  quic::QuicTagVector initial_received_options;
+  initial_received_options.push_back(quic::kFTOE);
+  ASSERT_TRUE(
+      config.SetInitialReceivedConnectionOptions(initial_received_options));
+  QuicConfigPeer::SetNegotiated(&config, true);
+  QuicConfigPeer::SetReceivedOriginalConnectionId(&config,
+                                                  connection_.connection_id());
+  QuicConfigPeer::SetReceivedInitialSourceConnectionId(&config,
+                                                       QuicConnectionId());
+
+  EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _)).Times(1);
+  connection_.SetFromConfig(config);
+  QuicIdleNetworkDetector& idle_network_detector =
+      QuicConnectionPeer::GetIdleNetworkDetector(&connection_);
+  if (GetQuicReloadableFlag(quic_fix_timeouts)) {
+    // Handshake timeout has not been removed yet.
+    EXPECT_NE(idle_network_detector.handshake_timeout(),
+              QuicTime::Delta::Infinite());
+  } else {
+    // Handshake timeout has been set to infinite.
+    EXPECT_EQ(idle_network_detector.handshake_timeout(),
+              QuicTime::Delta::Infinite());
   }
 }
 
@@ -11375,8 +11584,7 @@ TEST_P(QuicConnectionTest, DuplicateAckCausesLostPackets) {
   ;
   ProcessAckPacket(1, &frame);
   EXPECT_TRUE(connection_.BlackholeDetectionInProgress());
-  QuicAlarm* retransmission_alarm = connection_.GetRetransmissionAlarm();
-  EXPECT_TRUE(retransmission_alarm->IsSet());
+  EXPECT_TRUE(connection_.GetRetransmissionAlarm()->IsSet());
 
   // ACK packet 1 - 5 and 7.
   QuicAckFrame frame2 =
@@ -13193,6 +13401,7 @@ TEST_P(QuicConnectionTest, MultiPortConnection) {
   EXPECT_EQ(1, connection_.GetStats().num_path_degrading);
   EXPECT_EQ(1, stats->num_successful_probes);
   EXPECT_EQ(1, stats->num_client_probing_attempts);
+  EXPECT_EQ(1, connection_.GetStats().num_client_probing_attempts);
   EXPECT_EQ(0, stats->num_multi_port_probe_failures_when_path_degrading);
   EXPECT_EQ(kTestRTT, stats->rtt_stats.latest_rtt());
   EXPECT_EQ(kTestRTT,
@@ -13270,6 +13479,7 @@ TEST_P(QuicConnectionTest, MultiPortConnection) {
   EXPECT_EQ(2, connection_.GetStats().num_path_degrading);
   EXPECT_EQ(1, stats->num_multi_port_probe_failures_when_path_degrading);
   EXPECT_EQ(0, stats->num_multi_port_probe_failures_when_path_not_degrading);
+  EXPECT_EQ(0, connection_.GetStats().num_stateless_resets_on_alternate_path);
 }
 
 TEST_P(QuicConnectionTest, TooManyMultiPortPathCreations) {
@@ -13443,6 +13653,8 @@ TEST_P(QuicConnectionTest, MultiPortPathReceivesStatelessReset) {
   EXPECT_CALL(visitor_, OnConnectionClosed(_, ConnectionCloseSource::FROM_PEER))
       .Times(0);
   connection_.ProcessUdpPacket(kNewSelfAddress, kPeerAddress, *received);
+  EXPECT_EQ(connection_.GetStats().num_client_probing_attempts, 1);
+  EXPECT_EQ(connection_.GetStats().num_stateless_resets_on_alternate_path, 1);
 }
 
 // Test that if the client's active migration is disabled, multi-port will not
@@ -15387,6 +15599,11 @@ TEST_P(QuicConnectionTest, AckElicitingFrames) {
   if (!version().HasIetfQuicFrames()) {
     return;
   }
+  EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _));
+  QuicConfig config;
+  config.SetReliableStreamReset(true);
+  connection_.SetFromConfig(config);
+
   EXPECT_CALL(connection_id_generator_,
               GenerateNextConnectionId(TestConnectionId(12)))
       .WillOnce(Return(TestConnectionId(456)));
@@ -15395,6 +15612,7 @@ TEST_P(QuicConnectionTest, AckElicitingFrames) {
       .WillOnce(Return(TestConnectionId(789)));
   EXPECT_CALL(visitor_, SendNewConnectionId(_)).Times(2);
   EXPECT_CALL(visitor_, OnRstStream(_));
+  EXPECT_CALL(visitor_, OnResetStreamAt(_));
   EXPECT_CALL(visitor_, OnWindowUpdateFrame(_));
   EXPECT_CALL(visitor_, OnBlockedFrame(_));
   EXPECT_CALL(visitor_, OnHandshakeDoneReceived());
@@ -16014,6 +16232,10 @@ TEST_P(QuicConnectionTest, CoalesceOneRTTPacketWithInitialAndHandshakePackets) {
 
 // Regression test for b/180103273
 TEST_P(QuicConnectionTest, SendMultipleConnectionCloses) {
+  // EXPECT_QUIC_BUG tests are expensive so only run one instance of them.
+  if (!IsDefaultTestConfiguration()) {
+    return;
+  }
   if (!version().HasIetfQuicFrames() ||
       !GetQuicReloadableFlag(quic_default_enable_5rto_blackhole_detection2)) {
     return;
@@ -16041,7 +16263,9 @@ TEST_P(QuicConnectionTest, SendMultipleConnectionCloses) {
       &connection_, INTERNAL_ERROR, QUIC_INTERNAL_ERROR, "internal error");
   // Fire blackhole detection alarm.  This will invoke
   // SendConnectionClosePacket() a second time.
-  connection_.GetBlackholeDetectorAlarm()->Fire();
+  EXPECT_QUIC_BUG(connection_.GetBlackholeDetectorAlarm()->Fire(),
+                  // 1=QUIC_INTERNAL_ERROR, 85=QUIC_TOO_MANY_RTOS.
+                  "Initial error code: 1, new error code: 85");
 }
 
 // Regression test for b/157895910.
@@ -17482,6 +17706,49 @@ TEST_P(QuicConnectionTest, RejectEcnIfWriterDoesNotSupport) {
   EXPECT_CALL(mock_writer, SupportsEcn()).WillOnce(Return(false));
   EXPECT_FALSE(connection_.set_ecn_codepoint(ECN_ECT1));
   EXPECT_EQ(connection_.ecn_codepoint(), ECN_NOT_ECT);
+}
+
+TEST_P(QuicConnectionTest, RejectResetStreamAtIfNotNegotiated) {
+  if (!version().HasIetfQuicFrames()) {
+    return;
+  }
+  EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _));
+  QuicConfig config;
+  config.SetReliableStreamReset(false);
+  connection_.SetFromConfig(config);
+  connection_.SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
+
+  EXPECT_CALL(visitor_, OnConnectionClosed(_, _)).Times(1);
+  connection_.OnResetStreamAtFrame(QuicResetStreamAtFrame());
+}
+
+TEST_P(QuicConnectionTest, ResetStreamAt) {
+  if (!version().HasIetfQuicFrames()) {
+    return;
+  }
+  EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _));
+  QuicConfig config;
+  config.SetReliableStreamReset(true);
+  connection_.SetFromConfig(config);
+  connection_.SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
+
+  EXPECT_CALL(visitor_, OnResetStreamAt(QuicResetStreamAtFrame(
+                            0, 0, QUIC_STREAM_NO_ERROR, 20, 10)))
+      .Times(1);
+  connection_.OnResetStreamAtFrame(QuicResetStreamAtFrame(0, 0, 0, 20, 10));
+}
+
+TEST_P(QuicConnectionTest, OnParsedClientHelloInfoWithDebugVisitor) {
+  const ParsedClientHello parsed_chlo{.sni = "sni",
+                                      .uaid = "uiad",
+                                      .supported_groups = {1, 2, 3},
+                                      .cert_compression_algos = {4, 5, 6},
+                                      .alpns = {"h2", "http/1.1"},
+                                      .retry_token = "retry_token"};
+  MockQuicConnectionDebugVisitor debug_visitor;
+  connection_.set_debug_visitor(&debug_visitor);
+  EXPECT_CALL(debug_visitor, OnParsedClientHelloInfo(parsed_chlo)).Times(1);
+  connection_.OnParsedClientHelloInfo(parsed_chlo);
 }
 
 }  // namespace

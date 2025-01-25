@@ -864,8 +864,9 @@ OPENSSL_EXPORT void SSL_CTX_set0_buffer_pool(SSL_CTX *ctx,
 // |SSL_CTX| and |SSL| objects maintain lists of credentials in preference
 // order. During the handshake, BoringSSL will select the first usable
 // credential from the list. Non-credential APIs, such as
-// |SSL_CTX_use_certificate|, configure a "default credential", which is
-// appended to this list if configured.
+// |SSL_CTX_use_certificate|, configure a "legacy credential", which is
+// appended to this list if configured. Using the legacy credential is the same
+// as configuring an equivalent credential with the |SSL_CREDENTIAL| API.
 //
 // When selecting credentials, BoringSSL considers the credential's type, its
 // cryptographic capabilities, and capabilities advertised by the peer. This
@@ -969,7 +970,7 @@ OPENSSL_EXPORT int SSL_CTX_add1_credential(SSL_CTX *ctx, SSL_CREDENTIAL *cred);
 OPENSSL_EXPORT int SSL_add1_credential(SSL *ssl, SSL_CREDENTIAL *cred);
 
 // SSL_certs_clear removes all credentials configured on |ssl|. It also removes
-// the certificate chain and private key on the default credential.
+// the certificate chain and private key on the legacy credential.
 OPENSSL_EXPORT void SSL_certs_clear(SSL *ssl);
 
 // SSL_get0_selected_credential returns the credential in use in the current
@@ -1000,8 +1001,9 @@ OPENSSL_EXPORT const SSL_CREDENTIAL *SSL_get0_selected_credential(
 // than return an error. Additionally, overwriting a previously-configured
 // certificate and key pair only works if the certificate is configured first.
 //
-// Each of these functions configures the default credential. To select between
-// multiple certificates, see |SSL_CREDENTIAL_new_x509| and related APIs.
+// Each of these functions configures the single "legacy credential" on the
+// |SSL_CTX| or |SSL|. To select between multiple certificates, use
+// |SSL_CREDENTIAL_new_x509| and other APIs to configure a list of credentials.
 
 // SSL_CTX_use_certificate sets |ctx|'s leaf certificate to |x509|. It returns
 // one on success and zero on failure. If |ctx| has a private key which is
@@ -1502,6 +1504,25 @@ OPENSSL_EXPORT void SSL_CTX_set_private_key_method(
 // credential-specific state, such as a handle to the private key.
 OPENSSL_EXPORT int SSL_CREDENTIAL_set_private_key_method(
     SSL_CREDENTIAL *cred, const SSL_PRIVATE_KEY_METHOD *key_method);
+
+// SSL_CREDENTIAL_set_must_match_issuer sets the flag that this credential
+// should be considered only when it matches a peer request for a particular
+// issuer via a negotiation mechanism (such as the certificate_authorities
+// extension).
+OPENSSL_EXPORT void SSL_CREDENTIAL_set_must_match_issuer(SSL_CREDENTIAL *cred);
+
+// SSL_CREDENTIAL_clear_must_match_issuer clears the flag requiring issuer
+// matching, indicating this credential should be considered regardless of peer
+// issuer matching requests. (This is the default).
+OPENSSL_EXPORT void SSL_CREDENTIAL_clear_must_match_issuer(
+    SSL_CREDENTIAL *cred);
+
+// SSL_CREDENTIAL_must_match_issuer returns the value of the flag indicating
+// that this credential should be considered only when it matches a peer request
+// for a particular issuer via a negotiation mechanism (such as the
+// certificate_authorities extension).
+OPENSSL_EXPORT int SSL_CREDENTIAL_must_match_issuer(
+    const SSL_CREDENTIAL *cred);
 
 // SSL_can_release_private_key returns one if |ssl| will no longer call into the
 // private key and zero otherwise. If the function returns one, the caller can
@@ -2977,6 +2998,12 @@ OPENSSL_EXPORT void SSL_CTX_set_client_CA_list(SSL_CTX *ctx,
 // which should contain DER-encoded distinguished names (RFC 5280). It takes
 // ownership of |name_list|.
 OPENSSL_EXPORT void SSL_set0_client_CAs(SSL *ssl,
+                                        STACK_OF(CRYPTO_BUFFER) *name_list);
+
+// SSL_set0_CA_names sets |ssl|'s CA name list for the certificate authorities
+// extension to |name_list|, which should contain DER-encoded distinguished names
+// (RFC 5280). It takes ownership of |name_list|.
+OPENSSL_EXPORT void SSL_set0_CA_names(SSL *ssl,
                                         STACK_OF(CRYPTO_BUFFER) *name_list);
 
 // SSL_CTX_set0_client_CAs sets |ctx|'s client certificate CA list to
@@ -5894,9 +5921,12 @@ OPENSSL_EXPORT bool SSL_serialize_handback(const SSL *ssl, CBB *out);
 OPENSSL_EXPORT bool SSL_apply_handback(SSL *ssl, Span<const uint8_t> handback);
 
 // SSL_get_traffic_secrets sets |*out_read_traffic_secret| and
-// |*out_write_traffic_secret| to reference the TLS 1.3 traffic secrets for
-// |ssl|. This function is only valid on TLS 1.3 connections that have
-// completed the handshake. It returns true on success and false on error.
+// |*out_write_traffic_secret| to reference the current TLS 1.3 traffic secrets
+// for |ssl|. It returns true on success and false on error.
+//
+// This function is only valid on TLS 1.3 connections that have completed the
+// handshake. It is not valid for QUIC or DTLS, where multiple traffic secrets
+// may be active at a time.
 OPENSSL_EXPORT bool SSL_get_traffic_secrets(
     const SSL *ssl, Span<const uint8_t> *out_read_traffic_secret,
     Span<const uint8_t> *out_write_traffic_secret);

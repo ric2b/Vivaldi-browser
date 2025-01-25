@@ -50,7 +50,6 @@ bool ConvertPermissionType(::permissions::RequestType type,
     // ----------------------------------------------.
     // Following are unsupported by our handling code.
     // ----------------------------------------------.
-    case ::permissions::RequestType::kAccessibilityEvents:
     case ::permissions::RequestType::kArSession:
     case ::permissions::RequestType::kCameraPanTiltZoom:
     case ::permissions::RequestType::kCapturedSurfaceControl:

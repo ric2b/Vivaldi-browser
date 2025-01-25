@@ -16,8 +16,9 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include <fp16/fp16.h>
 #include "xnnpack.h"
+#include "xnnpack/buffer.h"
+#include "xnnpack/math.h"
 #include "xnnpack/node-type.h"
 #include "xnnpack/operator.h"
 #include "xnnpack/subgraph.h"
@@ -41,10 +42,10 @@ template <typename T> class Concatenate2Test : public ::testing::Test {
     output_dims = input1_dims;
     output_dims[axis] = input1_dims[axis] + input2_dims[axis];
 
-    input1 = std::vector<T>(NumElements(input1_dims));
-    input2 = std::vector<T>(NumElements(input2_dims));
-    operator_output = std::vector<T>(NumElements(output_dims));
-    subgraph_output = std::vector<T>(NumElements(output_dims));
+    input1 = xnnpack::Buffer<T>(NumElements(input1_dims));
+    input2 = xnnpack::Buffer<T>(NumElements(input2_dims));
+    operator_output = xnnpack::Buffer<T>(NumElements(output_dims));
+    subgraph_output = xnnpack::Buffer<T>(NumElements(output_dims));
 
     signed_zero_point = i8dist(rng);
     unsigned_zero_point = u8dist(rng);
@@ -114,15 +115,15 @@ template <typename T> class Concatenate2Test : public ::testing::Test {
   int32_t unsigned_zero_point;
   float scale;
 
-  std::vector<T> input1;
-  std::vector<T> input2;
-  std::vector<T> operator_output;
-  std::vector<T> subgraph_output;
+  xnnpack::Buffer<T> input1;
+  xnnpack::Buffer<T> input2;
+  xnnpack::Buffer<T> operator_output;
+  xnnpack::Buffer<T> subgraph_output;
 };
 
 using Concatenate2TestQS8 = Concatenate2Test<int8_t>;
 using Concatenate2TestQU8 = Concatenate2Test<uint8_t>;
-using Concatenate2TestF16 = Concatenate2Test<uint16_t>;
+using Concatenate2TestF16 = Concatenate2Test<xnn_float16>;
 using Concatenate2TestF32 = Concatenate2Test<float>;
 
 TEST_F(Concatenate2TestQS8, define)
@@ -311,8 +312,6 @@ TEST_F(Concatenate2TestQS8, matches_operator_api)
 {
   std::generate(input1.begin(), input1.end(), [&]() { return i8dist(rng); });
   std::generate(input2.begin(), input2.end(), [&]() { return i8dist(rng); });
-  std::fill(operator_output.begin(), operator_output.end(), INT8_C(0xA5));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), INT8_C(0xA5));
 
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
 
@@ -385,8 +384,6 @@ TEST_F(Concatenate2TestQU8, matches_operator_api)
 {
   std::generate(input1.begin(), input1.end(), [&]() { return u8dist(rng); });
   std::generate(input2.begin(), input2.end(), [&]() { return u8dist(rng); });
-  std::fill(operator_output.begin(), operator_output.end(), UINT8_C(0xA5));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT8_C(0xA5));
 
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
 
@@ -457,10 +454,8 @@ TEST_F(Concatenate2TestQU8, matches_operator_api)
 
 TEST_F(Concatenate2TestF16, matches_operator_api)
 {
-  std::generate(input1.begin(), input1.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::generate(input2.begin(), input2.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
-  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::generate(input1.begin(), input1.end(), [&]() { return f32dist(rng); });
+  std::generate(input2.begin(), input2.end(), [&]() { return f32dist(rng); });
 
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
 
@@ -479,7 +474,7 @@ TEST_F(Concatenate2TestF16, matches_operator_api)
   ASSERT_EQ(xnn_status_success, xnn_setup_copy_nc_x16(op1, input1.data(), operator_output.data()));
   ASSERT_EQ(
     xnn_status_success,
-    xnn_setup_copy_nc_x16( op2, input2.data(), (uint16_t*) operator_output.data() + op1->channels));
+    xnn_setup_copy_nc_x16( op2, input2.data(), (xnn_float16*) operator_output.data() + op1->channels));
 
   ASSERT_EQ(xnn_status_success, xnn_run_operator(op1, /*threadpool=*/nullptr));
   ASSERT_EQ(xnn_status_success, xnn_run_operator(op2, /*threadpool=*/nullptr));
@@ -530,8 +525,6 @@ TEST_F(Concatenate2TestF32, matches_operator_api)
 {
   std::generate(input1.begin(), input1.end(), [&]() { return f32dist(rng); });
   std::generate(input2.begin(), input2.end(), [&]() { return f32dist(rng); });
-  std::fill(operator_output.begin(), operator_output.end(), std::nanf(""));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), std::nanf(""));
 
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
 

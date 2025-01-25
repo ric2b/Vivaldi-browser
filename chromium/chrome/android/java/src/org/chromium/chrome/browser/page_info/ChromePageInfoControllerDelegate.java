@@ -39,14 +39,14 @@ import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxReferrer;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxSettingsBaseFragment;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.settings.SettingsLauncherFactory;
+import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 import org.chromium.chrome.browser.site_settings.ChromeSiteSettingsDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
-import org.chromium.components.browser_ui.settings.SettingsLauncher;
+import org.chromium.components.browser_ui.settings.SettingsNavigation;
 import org.chromium.components.browser_ui.site_settings.AllSiteSettings;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsDelegate;
@@ -110,10 +110,10 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
             TabCreator tabCreator) {
         super(
                 new ChromeAutocompleteSchemeClassifier(Profile.fromWebContents(webContents)),
-                /** isSiteSettingsAvailable= */
-                SiteSettingsHelper.isSiteSettingsAvailable(webContents),
-                /** cookieControlsShown= */
-                CookieControlsBridge.isCookieControlsEnabled(Profile.fromWebContents(webContents)));
+                /* isSiteSettingsAvailable= */ SiteSettingsHelper.isSiteSettingsAvailable(
+                        webContents),
+                /* cookieControlsShown= */ CookieControlsBridge.isCookieControlsEnabled(
+                        Profile.fromWebContents(webContents)));
         mContext = context;
         mWebContents = webContents;
         mModalDialogManagerSupplier = modalDialogManagerSupplier;
@@ -250,8 +250,9 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
     /** {@inheritDoc} */
     @Override
     public void showTrackingProtectionSettings() {
-        SettingsLauncher settingsLauncher = SettingsLauncherFactory.createSettingsLauncher();
-        settingsLauncher.launchSettingsActivity(mContext, TrackingProtectionSettings.class);
+        SettingsNavigation settingsNavigation =
+                SettingsNavigationFactory.createSettingsNavigation();
+        settingsNavigation.startSettings(mContext, TrackingProtectionSettings.class);
     }
 
     /** {@inheritDoc} */
@@ -260,8 +261,9 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
         Bundle extras = new Bundle();
         extras.putString(EXTRA_SEARCH, rwsOwner);
 
-        SettingsLauncher settingsLauncher = SettingsLauncherFactory.createSettingsLauncher();
-        settingsLauncher.launchSettingsActivity(mContext, AllSiteSettings.class, extras);
+        SettingsNavigation settingsNavigation =
+                SettingsNavigationFactory.createSettingsNavigation();
+        settingsNavigation.startSettings(mContext, AllSiteSettings.class, extras);
     }
 
     @Override
@@ -409,17 +411,23 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
     }
 
     @Override
-    public boolean showTrackingProtectionUI() {
-        return getSiteSettingsDelegate().shouldShowTrackingProtectionUI();
+    public boolean showTrackingProtectionUi() {
+        return getSiteSettingsDelegate().shouldShowTrackingProtectionUi();
     }
 
     @Override
-    public boolean showTrackingProtectionACTFeaturesUI() {
-        return getSiteSettingsDelegate().shouldShowTrackingProtectionACTFeaturesUI();
+    public boolean shouldShowTrackingProtectionBrandedUi() {
+        return getSiteSettingsDelegate().shouldShowTrackingProtectionBrandedUi();
+    }
+
+    @Override
+    public boolean showTrackingProtectionActFeaturesUi() {
+        return getSiteSettingsDelegate().shouldShowTrackingProtectionActFeaturesUi();
     }
 
     @Override
     public boolean allThirdPartyCookiesBlockedTrackingProtection() {
-        return UserPrefs.get(mProfile).getBoolean(Pref.BLOCK_ALL3PC_TOGGLE_ENABLED);
+        return UserPrefs.get(mProfile).getBoolean(Pref.BLOCK_ALL3PC_TOGGLE_ENABLED)
+                || isIncognito();
     }
 }

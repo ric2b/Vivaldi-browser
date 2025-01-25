@@ -6,40 +6,27 @@
 #include <assert.h>
 #include <stddef.h>
 
-#ifdef _WIN32
-  #include <windows.h>
-#else
-  #include <pthread.h>
-#endif
-
 #include "xnnpack/common.h"
 #include "xnnpack/config.h"
+#include "xnnpack/init-once.h"
 #include "xnnpack/microfnptr.h"
 #include "xnnpack/vbinary.h"
 
-#if XNN_ARCH_ARM || XNN_ARCH_ARM64
+#if (XNN_ARCH_ARM || XNN_ARCH_ARM64) && XNN_ENABLE_ARM_FP16_VECTOR
   static struct xnn_cmul_config f16_cmul_config = {0};
 #endif
 static struct xnn_cmul_config f32_cmul_config = {0};
 
 
-#if XNN_PLATFORM_WINDOWS
-  #if XNN_ARCH_ARM || XNN_ARCH_ARM64
-    static INIT_ONCE init_guard_f16_cmul = INIT_ONCE_STATIC_INIT;
-  #endif
-  static INIT_ONCE init_guard_f32_cmul = INIT_ONCE_STATIC_INIT;
-#else
-  #if XNN_ARCH_ARM || XNN_ARCH_ARM64
-    static pthread_once_t init_guard_f16_cmul = PTHREAD_ONCE_INIT;
-  #endif
-  static pthread_once_t init_guard_f32_cmul = PTHREAD_ONCE_INIT;
+#if (XNN_ARCH_ARM || XNN_ARCH_ARM64) && XNN_ENABLE_ARM_FP16_VECTOR
+  XNN_INIT_ONCE_GUARD(f16_cmul);
 #endif
+XNN_INIT_ONCE_GUARD(f32_cmul);
 
 
-#if XNN_ARCH_ARM || XNN_ARCH_ARM64
+#if (XNN_ARCH_ARM || XNN_ARCH_ARM64) && XNN_ENABLE_ARM_FP16_VECTOR
   static void init_f16_cmul_config(void) {
       f16_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f16_vcmul_ukernel__neonfp16arith_u16;
-      f16_cmul_config.element_tile = 16;
   }
 #endif
 
@@ -49,57 +36,41 @@ static void init_f32_cmul_config(void) {
     assert(hardware_config != NULL);
     if (hardware_config->use_arm_neon) {
       f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__neon_u8;
-      f32_cmul_config.element_tile = 8;
     } else if (!XNN_PLATFORM_MOBILE) {
       f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__scalar_u4;
-      f32_cmul_config.element_tile = 4;
     }
   #elif XNN_ARCH_ARM64
     f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__neon_u8;
-    f32_cmul_config.element_tile = 8;
   #elif XNN_ARCH_X86 || XNN_ARCH_X86_64
-    f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__sse_u8;
-    f32_cmul_config.element_tile = 8;
+    const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config();
+    assert(hardware_config != NULL);
+    #if XNN_ENABLE_AVX512F
+      if (!XNN_PLATFORM_MOBILE && hardware_config->use_x86_avx512f) {
+        f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__avx512f_u32;
+      } else
+    #endif
+    if (hardware_config->use_x86_fma3) {
+      f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__fma3_u16;
+    } else {
+      f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__sse_u8;
+    }
   #elif XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
     f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__wasmsimd_u8;
-    f32_cmul_config.element_tile = 8;
   #elif XNN_ARCH_RISCV && XNN_ENABLE_RISCV_VECTOR
     const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config();
     f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__rvv_u2v;
-    f32_cmul_config.element_tile = hardware_config->vlenb;
   #else
     f32_cmul_config.ukernel = (xnn_vbinary_ukernel_fn) xnn_f32_vcmul_ukernel__scalar_u4;
-    f32_cmul_config.element_tile = 4;
   #endif
 }
 
-
-#if XNN_PLATFORM_WINDOWS && (XNN_ARCH_ARM || XNN_ARCH_ARM64)
-  static BOOL CALLBACK init_f16_cmul_config_windows(PINIT_ONCE init_once, PVOID parameter, PVOID* context) {
-    init_f16_cmul_config();
-    return TRUE;
-  }
-#endif
-
-#if XNN_PLATFORM_WINDOWS
-  static BOOL CALLBACK init_f32_cmul_config_windows(PINIT_ONCE init_once, PVOID parameter, PVOID* context) {
-    init_f32_cmul_config();
-    return TRUE;
-  }
-#endif
-
-
 const struct xnn_cmul_config* xnn_init_f16_cmul_config() {
-  #if XNN_ARCH_ARM || XNN_ARCH_ARM64
+  #if (XNN_ARCH_ARM || XNN_ARCH_ARM64) && XNN_ENABLE_ARM_FP16_VECTOR
     const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config();
     if (hardware_config == NULL || !xnn_is_f16_compatible_config(hardware_config)) {
       return NULL;
     }
-    #if XNN_PLATFORM_WINDOWS
-      InitOnceExecuteOnce(&init_guard_f16_cmul, &init_f16_cmul_config_windows, NULL, NULL);
-    #else
-      pthread_once(&init_guard_f16_cmul, &init_f16_cmul_config);
-    #endif
+    XNN_INIT_ONCE(f16_cmul);
     return &f16_cmul_config;
   #else
     return NULL;
@@ -111,10 +82,6 @@ const struct xnn_cmul_config* xnn_init_f32_cmul_config() {
   if (hardware_config == NULL) {
     return NULL;
   }
-  #if XNN_PLATFORM_WINDOWS
-    InitOnceExecuteOnce(&init_guard_f32_cmul, &init_f32_cmul_config_windows, NULL, NULL);
-  #else
-    pthread_once(&init_guard_f32_cmul, &init_f32_cmul_config);
-  #endif
+  XNN_INIT_ONCE(f32_cmul);
   return &f32_cmul_config;
 }

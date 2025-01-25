@@ -79,6 +79,11 @@ static constexpr wgpu::TextureUsage kShaderTextureUsages =
     wgpu::TextureUsage::TextureBinding | kReadOnlyStorageTexture |
     wgpu::TextureUsage::StorageBinding | kWriteOnlyStorageTexture;
 
+// Usages that are used to validate operations that act on texture views.
+static constexpr wgpu::TextureUsage kTextureViewOnlyUsages =
+    kShaderTextureUsages | kResolveTextureLoadAndStoreUsages |
+    wgpu::TextureUsage::TransientAttachment | wgpu::TextureUsage::StorageAttachment;
+
 class TextureBase : public SharedResource {
   public:
     enum class ClearValue { Zero, NonZero };
@@ -223,7 +228,7 @@ class TextureViewBase : public ApiObjectBase {
     TextureViewBase(TextureBase* texture, const UnpackedPtr<TextureViewDescriptor>& descriptor);
     ~TextureViewBase() override;
 
-    static Ref<TextureViewBase> MakeError(DeviceBase* device, const char* label = nullptr);
+    static Ref<TextureViewBase> MakeError(DeviceBase* device, StringView label = nullptr);
 
     ObjectType GetType() const override;
     void FormatLabel(absl::FormatSink* s) const override;
@@ -243,11 +248,17 @@ class TextureViewBase : public ApiObjectBase {
     // Returns the size of the texture's subresource at this view's base mip level and aspect.
     Extent3D GetSingleSubresourceVirtualSize() const;
 
+    // |GetUsage| returns the usage with which the texture view was created using the base WebGPU
+    // API. The dawn-internal-usages extension may add additional usages. |GetInternalUsage|
+    // returns the union of base usage and the usages added by the extension.
+    wgpu::TextureUsage GetUsage() const;
+    wgpu::TextureUsage GetInternalUsage() const;
+
   protected:
     void DestroyImpl() override;
 
   private:
-    TextureViewBase(DeviceBase* device, ObjectBase::ErrorTag tag, const char* label);
+    TextureViewBase(DeviceBase* device, ObjectBase::ErrorTag tag, StringView label);
 
     ApiObjectList* GetObjectTrackingList() override;
 
@@ -256,6 +267,8 @@ class TextureViewBase : public ApiObjectBase {
     const raw_ref<const Format> mFormat;
     wgpu::TextureViewDimension mDimension;
     SubresourceRange mRange;
+    const wgpu::TextureUsage mUsage = wgpu::TextureUsage::None;
+    const wgpu::TextureUsage mInternalUsage = wgpu::TextureUsage::None;
 };
 
 }  // namespace dawn::native

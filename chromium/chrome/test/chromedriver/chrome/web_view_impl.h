@@ -60,6 +60,7 @@ class WebViewImpl : public WebView {
   // Overridden from WebView:
   bool IsServiceWorker() const override;
   std::string GetId() override;
+  std::string GetSessionId() override;
   bool WasCrashed() override;
   Status AttachTo(DevToolsClient* root_client);
   Status AttachChildView(WebViewImpl* child);
@@ -93,6 +94,7 @@ class WebViewImpl : public WebView {
                                  const std::string& function,
                                  const base::Value::List& args,
                                  const base::TimeDelta& timeout,
+                                 const CallFunctionOptions& options,
                                  std::unique_ptr<base::Value>* result) override;
   Status CallFunction(const std::string& frame,
                       const std::string& function,
@@ -192,6 +194,8 @@ class WebViewImpl : public WebView {
   Status HandleDialog(bool accept,
                       const std::optional<std::string>& text) override;
 
+  WebView* FindContainerForFrame(const std::string& frame_id) override;
+
  protected:
   WebViewImpl(const std::string& id,
               const bool w3c_compliant,
@@ -208,6 +212,7 @@ class WebViewImpl : public WebView {
                                          std::string function,
                                          base::Value::List args,
                                          const base::TimeDelta& timeout,
+                                         bool include_shadow_root,
                                          std::unique_ptr<base::Value>* result);
   Status CallAsyncFunctionInternal(const std::string& frame,
                                    const std::string& function,
@@ -221,7 +226,6 @@ class WebViewImpl : public WebView {
                                          const std::string& context_id,
                                          const std::string& object_group_name,
                                          const std::string& expected_loader_id,
-                                         bool w3c_compliant,
                                          const Timeout& timeout,
                                          base::Value& arg,
                                          base::Value::List& nodes);
@@ -229,7 +233,6 @@ class WebViewImpl : public WebView {
                                          const std::string& context_id,
                                          const std::string& object_group_name,
                                          const std::string& expected_loader_id,
-                                         bool w3c_compliant,
                                          const Timeout& timeout,
                                          base::Value::Dict& arg_dict,
                                          base::Value::List& nodes);
@@ -237,13 +240,12 @@ class WebViewImpl : public WebView {
                                          const std::string& context_id,
                                          const std::string& object_group_name,
                                          const std::string& expected_loader_id,
-                                         bool w3c_compliant,
                                          const Timeout& timeout,
                                          base::Value::List& arg_list,
                                          base::Value::List& nodes);
   Status CreateElementReferences(const std::string& frame_id,
-                                 const std::string& loader_id,
                                  const base::Value::List& nodes,
+                                 bool include_shadow_root,
                                  base::Value& res);
 
   Status InitProfileInternal();

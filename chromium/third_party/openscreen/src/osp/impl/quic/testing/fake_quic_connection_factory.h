@@ -22,6 +22,15 @@ class FakeQuicConnectionFactoryBridge {
  public:
   explicit FakeQuicConnectionFactoryBridge(
       const IPEndpoint& controller_endpoint);
+  FakeQuicConnectionFactoryBridge(const FakeQuicConnectionFactoryBridge&) =
+      delete;
+  FakeQuicConnectionFactoryBridge& operator=(
+      const FakeQuicConnectionFactoryBridge&) = delete;
+  FakeQuicConnectionFactoryBridge(FakeQuicConnectionFactoryBridge&&) noexcept =
+      delete;
+  FakeQuicConnectionFactoryBridge& operator=(
+      FakeQuicConnectionFactoryBridge&&) noexcept = delete;
+  ~FakeQuicConnectionFactoryBridge();
 
   bool server_idle() const { return server_idle_; }
   bool client_idle() const { return client_idle_; }
@@ -40,8 +49,8 @@ class FakeQuicConnectionFactoryBridge {
 
  private:
   struct ConnectionPair {
-    FakeQuicConnection* controller;
-    FakeQuicConnection* receiver;
+    FakeQuicConnection* controller = nullptr;
+    FakeQuicConnection* receiver = nullptr;
   };
 
   const IPEndpoint controller_endpoint_;
@@ -58,6 +67,14 @@ class FakeClientQuicConnectionFactory final
  public:
   FakeClientQuicConnectionFactory(TaskRunner& task_runner,
                                   FakeQuicConnectionFactoryBridge* bridge);
+  FakeClientQuicConnectionFactory(const FakeClientQuicConnectionFactory&) =
+      delete;
+  FakeClientQuicConnectionFactory& operator=(
+      const FakeClientQuicConnectionFactory&) = delete;
+  FakeClientQuicConnectionFactory(FakeClientQuicConnectionFactory&&) noexcept =
+      delete;
+  FakeClientQuicConnectionFactory& operator=(
+      FakeClientQuicConnectionFactory&&) noexcept = delete;
   ~FakeClientQuicConnectionFactory() override;
 
   // UdpSocket::Client overrides.
@@ -78,7 +95,7 @@ class FakeClientQuicConnectionFactory final
   std::unique_ptr<UdpSocket> socket_;
 
  private:
-  FakeQuicConnectionFactoryBridge* bridge_;
+  FakeQuicConnectionFactoryBridge* bridge_ = nullptr;
   bool idle_ = true;
 };
 
@@ -87,6 +104,14 @@ class FakeServerQuicConnectionFactory final
  public:
   FakeServerQuicConnectionFactory(TaskRunner& task_runner,
                                   FakeQuicConnectionFactoryBridge* bridge);
+  FakeServerQuicConnectionFactory(const FakeServerQuicConnectionFactory&) =
+      delete;
+  FakeServerQuicConnectionFactory& operator=(
+      const FakeServerQuicConnectionFactory&) = delete;
+  FakeServerQuicConnectionFactory(FakeServerQuicConnectionFactory&&) noexcept =
+      delete;
+  FakeServerQuicConnectionFactory& operator=(
+      FakeServerQuicConnectionFactory&&) noexcept = delete;
   ~FakeServerQuicConnectionFactory() override;
 
   // UdpSocket::Client overrides.
@@ -102,7 +127,7 @@ class FakeServerQuicConnectionFactory final
   bool idle() const { return idle_; }
 
  private:
-  FakeQuicConnectionFactoryBridge* bridge_;
+  FakeQuicConnectionFactoryBridge* bridge_ = nullptr;
   bool idle_ = true;
 };
 

@@ -28,11 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/inspector/inspector_page_agent.h"
 
 #include <memory>
@@ -178,7 +173,8 @@ Resource* CachedResource(LocalFrame* frame,
   Resource* cached_resource = document->Fetcher()->CachedResource(url);
   if (!cached_resource) {
     cached_resource = MemoryCache::Get()->ResourceForURL(
-        url, document->Fetcher()->GetCacheIdentifier(url));
+        url, document->Fetcher()->GetCacheIdentifier(
+                 url, /*skip_service_worker=*/false));
   }
   if (!cached_resource)
     cached_resource = loader->ResourceForURL(url);
@@ -283,16 +279,14 @@ static std::unique_ptr<TextResourceDecoder> CreateResourceTextDecoder(
 }
 
 static void MaybeEncodeTextContent(const String& text_content,
-                                   const char* buffer_data,
-                                   wtf_size_t buffer_size,
+                                   base::span<const uint8_t> buffer,
                                    String* result,
                                    bool* base64_encoded) {
   if (!text_content.IsNull()) {
     *result = text_content;
     *base64_encoded = false;
-  } else if (buffer_data) {
-    *result =
-        Base64Encode(base::as_bytes(base::make_span(buffer_data, buffer_size)));
+  } else if (buffer.data()) {
+    *result = Base64Encode(buffer);
     *base64_encoded = true;
   } else {
     *result = "";
@@ -305,15 +299,13 @@ static void MaybeEncodeTextContent(const String& text_content,
                                    String* result,
                                    bool* base64_encoded) {
   if (!buffer) {
-    return MaybeEncodeTextContent(text_content, nullptr, 0, result,
-                                  base64_encoded);
+    const base::span<const uint8_t> empty;
+    return MaybeEncodeTextContent(text_content, empty, result, base64_encoded);
   }
 
   const SegmentedBuffer::DeprecatedFlatData flat_buffer(buffer.get());
-  return MaybeEncodeTextContent(
-      text_content, flat_buffer.data(),
-      base::checked_cast<wtf_size_t>(flat_buffer.size()), result,
-      base64_encoded);
+  return MaybeEncodeTextContent(text_content, base::as_byte_span(flat_buffer),
+                                result, base64_encoded);
 }
 
 // static
@@ -339,17 +331,15 @@ bool InspectorPageAgent::SegmentedBufferContent(
   WTF::TextEncoding encoding(text_encoding_name);
 
   const SegmentedBuffer::DeprecatedFlatData flat_buffer(buffer);
+  const auto byte_buffer = base::as_byte_span(flat_buffer);
   if (decoder) {
-    text_content = decoder->Decode(flat_buffer);
+    text_content = decoder->Decode(byte_buffer);
     text_content = text_content + decoder->Flush();
   } else if (encoding.IsValid()) {
-    text_content = encoding.Decode(
-        flat_buffer.data(), base::checked_cast<wtf_size_t>(flat_buffer.size()));
+    text_content = encoding.Decode(byte_buffer);
   }
 
-  MaybeEncodeTextContent(text_content, flat_buffer.data(),
-                         base::checked_cast<wtf_size_t>(flat_buffer.size()),
-                         result, base64_encoded);
+  MaybeEncodeTextContent(text_content, byte_buffer, result, base64_encoded);
   return true;
 }
 
@@ -1569,7 +1559,7 @@ InspectorPageAgent::BuildObjectForResourceTree(LocalFrame* frame) {
             .setContentSize(cached_resource->GetResponse().DecodedBodyLength())
             .build();
     std::optional<base::Time> last_modified =
-        cached_resource->GetResponse().LastModified();
+        cached_resource->GetResponse().LastModified(*frame->GetDocument());
     if (last_modified) {
       resource_object->setLastModified(
           last_modified.value().InSecondsFSinceUnixEpoch());

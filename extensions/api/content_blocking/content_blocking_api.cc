@@ -3,17 +3,24 @@
 #include "extensions/api/content_blocking/content_blocking_api.h"
 
 #include "base/lazy_instance.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "components/ad_blocker/adblock_known_sources_handler.h"
-#include "components/request_filter/adblock_filter/adblock_request_filter_tab_helper.h"
+#include "components/search_engines/template_url_service.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
+#include "components/request_filter/adblock_filter/adblock_state_and_logs.h"
+#include "components/request_filter/adblock_filter/adblock_tab_state_and_logs.h"
 #include "extensions/schema/content_blocking.h"
 #include "extensions/tools/vivaldi_tools.h"
 
 namespace extensions {
 
 namespace {
+
+constexpr const char *kPartnerListURL = "https://downloads.vivaldi.com/lists/vivaldi/partners-current.txt";
 
 std::optional<adblock_filter::RuleGroup> FromVivaldiContentBlockingRuleGroup(
     vivaldi::content_blocking::RuleGroup rule_group) {
@@ -173,8 +180,7 @@ vivaldi::content_blocking::RuleSource ToVivaldiContentBlockingRuleSource(
 }
 
 void RecordBLockedUrls(
-    const adblock_filter::RequestFilterTabHelper::BlockedUrlInfoMap&
-        blocked_urls,
+    const adblock_filter::TabStateAndLogs::BlockedUrlInfoMap& blocked_urls,
     std::vector<vivaldi::content_blocking::BlockedUrlsInfo>*
         blocked_urls_info) {
   for (const auto& blocked_url : blocked_urls) {
@@ -201,7 +207,7 @@ ContentBlockingEventRouter::ContentBlockingEventRouter(
     rules_service->AddObserver(this);
     if (rules_service->IsLoaded()) {
       rules_service->GetKnownSourcesHandler()->AddObserver(this);
-      rules_service->GetTabHandler()->AddObserver(this);
+      rules_service->GetStateAndLogs()->AddObserver(this);
       rules_service->GetRuleManager()->AddObserver(this);
     }
   }
@@ -210,7 +216,7 @@ ContentBlockingEventRouter::ContentBlockingEventRouter(
 void ContentBlockingEventRouter::OnRuleServiceStateLoaded(
     adblock_filter::RuleService* rule_service) {
   rule_service->GetKnownSourcesHandler()->AddObserver(this);
-  rule_service->GetTabHandler()->AddObserver(this);
+  rule_service->GetStateAndLogs()->AddObserver(this);
   rule_service->GetRuleManager()->AddObserver(this);
 }
 
@@ -338,7 +344,7 @@ void ContentBlockingEventRouter::Shutdown() {
     rules_service->RemoveObserver(this);
     if (rules_service->IsLoaded()) {
       rules_service->GetKnownSourcesHandler()->RemoveObserver(this);
-      rules_service->GetTabHandler()->RemoveObserver(this);
+      rules_service->GetStateAndLogs()->RemoveObserver(this);
       rules_service->GetRuleManager()->RemoveObserver(this);
     }
   }
@@ -749,13 +755,13 @@ ContentBlockingGetBlockedUrlsInfoFunction::RunWithService(
     if (ExtensionTabUtil::GetTabById(tab_id, browser_context(), true,
                                      &web_contents) &&
         web_contents) {
-      adblock_filter::RequestFilterTabHelper* tab_helper =
-          adblock_filter::RequestFilterTabHelper::FromWebContents(web_contents);
-      if (!tab_helper)
+      adblock_filter::TabStateAndLogs* tab_state_and_logs =
+          rules_service->GetStateAndLogs()->GetTabHelper(web_contents);
+      if (!tab_state_and_logs)
         continue;
 
-      const adblock_filter::RequestFilterTabHelper::TabBlockedUrlInfo&
-          tab_blocked_urls_info = tab_helper->GetBlockedUrlsInfo(group);
+      const adblock_filter::TabStateAndLogs::TabBlockedUrlInfo&
+          tab_blocked_urls_info = tab_state_and_logs->GetBlockedUrlsInfo(group);
       if (tab_blocked_urls_info.blocked_trackers.empty() &&
           tab_blocked_urls_info.blocked_urls.empty()) {
         continue;
@@ -769,7 +775,7 @@ ContentBlockingGetBlockedUrlsInfoFunction::RunWithService(
       for (const auto& blocked_tracker :
            tab_blocked_urls_info.blocked_trackers) {
         auto* source_to_info_map =
-            rules_service->GetTabHandler()->GetTrackerInfo(
+            rules_service->GetStateAndLogs()->GetTrackerInfo(
                 group, blocked_tracker.first);
         if (!source_to_info_map) {
           // The information forthis tracker went away since the blocking was
@@ -821,28 +827,29 @@ ExtensionFunction::ResponseValue
 ContentBlockingGetBlockedCountersFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   namespace Results = vivaldi::content_blocking::GetBlockedCounters::Results;
-  const auto* reporter = rules_service->GetTabHandler();
+  const auto* reporter = rules_service->GetStateAndLogs();
   Results::Counters counters;
-  counters.blocked_domains.tracking =
-      ToVivaldiBlockedCounter(reporter->GetBlockedDomains()[static_cast<size_t>(
+  counters.blocked_domains.tracking = ToVivaldiBlockedCounter(
+      reporter->GetBlockedDomainCounters()[static_cast<size_t>(
           adblock_filter::RuleGroup::kTrackingRules)]);
-  counters.blocked_domains.ad_blocking =
-      ToVivaldiBlockedCounter(reporter->GetBlockedDomains()[static_cast<size_t>(
+  counters.blocked_domains.ad_blocking = ToVivaldiBlockedCounter(
+      reporter->GetBlockedDomainCounters()[static_cast<size_t>(
           adblock_filter::RuleGroup::kAdBlockingRules)]);
   counters.blocked_for_origin.tracking = ToVivaldiBlockedCounter(
-      reporter->GetBlockedForOrigin()[static_cast<size_t>(
+      reporter->GetBlockedForOriginCounters()[static_cast<size_t>(
           adblock_filter::RuleGroup::kTrackingRules)]);
   counters.blocked_for_origin.ad_blocking = ToVivaldiBlockedCounter(
-      reporter->GetBlockedForOrigin()[static_cast<size_t>(
+      reporter->GetBlockedForOriginCounters()[static_cast<size_t>(
           adblock_filter::RuleGroup::kAdBlockingRules)]);
   return ArgumentList(Results::Create(
-      reporter->GetReportingStart().InMillisecondsFSinceUnixEpoch(), counters));
+      reporter->GetBlockedCountersStart().InMillisecondsFSinceUnixEpoch(),
+      counters));
 }
 
 ExtensionFunction::ResponseValue
 ContentBlockingClearBlockedCountersFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
-  rules_service->GetTabHandler()->ClearBlockedCounters();
+  rules_service->GetStateAndLogs()->ClearBlockedCounters();
   return NoArguments();
 }
 
@@ -860,6 +867,39 @@ ContentBlockingIsExemptOfFilteringFunction::RunWithService(
 }
 
 ExtensionFunction::ResponseValue
+ContentBlockingIsExemptByPartnerURLFunction::RunWithService(
+    adblock_filter::RuleService* rules_service) {
+  using vivaldi::content_blocking::IsExemptByPartnerURL::Params;
+  namespace Results = vivaldi::content_blocking::IsExemptByPartnerURL::Results;
+  std::optional<Params> params(Params::Create(args()));
+
+  GURL url{params->url};
+  int tab_id{params->tab_id};
+  vivaldi::content_blocking::URLPartnerInfo url_partner_info;
+  url_partner_info.status = false;
+
+  content::WebContents* web_contents;
+  if (ExtensionTabUtil::GetTabById(tab_id, browser_context(), true,
+                                     &web_contents) &&
+      web_contents) {
+    uint32_t rule_source_id = adblock_filter::RuleSourceCore::FromUrl(GURL{kPartnerListURL})->id();
+
+    url_partner_info.status =
+        rules_service->HasDocumentActivationForRuleSource(
+              adblock_filter::RuleGroup::kAdBlockingRules, web_contents, rule_source_id);
+  }
+
+  // detect template name based on url
+  auto *templateURLService = TemplateURLServiceFactory::GetForProfile(Profile::FromBrowserContext(browser_context()));
+  TemplateURL* templateURL =
+    templateURLService->GetTemplateURLForHost(url.host());
+
+  if (templateURL) url_partner_info.name = base::UTF16ToUTF8(templateURL->short_name());
+
+  return ArgumentList(Results::Create(url_partner_info));
+}
+
+ExtensionFunction::ResponseValue
 ContentBlockingGetAdAttributionDomainFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::GetAdAttributionDomain::Params;
@@ -871,17 +911,22 @@ ContentBlockingGetAdAttributionDomainFunction::RunWithService(
 
   for (auto tab_id : params->tab_ids) {
     content::WebContents* web_contents;
-    if (ExtensionTabUtil::GetTabById(tab_id, browser_context(), true,
-                                     &web_contents) &&
-        web_contents) {
-      adblock_filter::RequestFilterTabHelper* tab_helper =
-          adblock_filter::RequestFilterTabHelper::FromWebContents(web_contents);
-      vivaldi::content_blocking::AdAttributionDomain attribution_for_tab;
-      attribution_for_tab.tab_id = tab_id;
-      attribution_for_tab.domain = tab_helper->current_ad_landing_domain();
-      attribution_for_tab.active = tab_helper->is_on_ad_landing_site();
-      tab_attribution_domains.push_back(std::move(attribution_for_tab));
+    if (!ExtensionTabUtil::GetTabById(tab_id, browser_context(), true,
+                                      &web_contents) ||
+        !web_contents) {
+      continue;
     }
+    adblock_filter::TabStateAndLogs* tab_state_and_logs =
+        rules_service->GetStateAndLogs()->GetTabHelper(web_contents);
+    if (!tab_state_and_logs) {
+      continue;
+    }
+    vivaldi::content_blocking::AdAttributionDomain attribution_for_tab;
+    attribution_for_tab.tab_id = tab_id;
+    attribution_for_tab.domain =
+        tab_state_and_logs->GetCurrentAdLandingDomain();
+    attribution_for_tab.active = tab_state_and_logs->IsOnAdLandingSite();
+    tab_attribution_domains.push_back(std::move(attribution_for_tab));
   }
   return ArgumentList(Results::Create(tab_attribution_domains));
 }
@@ -897,22 +942,28 @@ ContentBlockingGetAdAttributionAllowedTrackersFunction::RunWithService(
 
   for (auto tab_id : params->tab_ids) {
     content::WebContents* web_contents;
-    if (ExtensionTabUtil::GetTabById(tab_id, browser_context(), true,
-                                     &web_contents) &&
-        web_contents) {
-      adblock_filter::RequestFilterTabHelper* tab_helper =
-          adblock_filter::RequestFilterTabHelper::FromWebContents(web_contents);
-      vivaldi::content_blocking::AllowedAdAttributionTrackers
-          allowed_ad_attribution_trackers_for_tab;
-      allowed_ad_attribution_trackers_for_tab.tab_id = tab_id;
-      allowed_ad_attribution_trackers_for_tab.tracker_urls =
-          std::vector<std::string>(
-              tab_helper->allowed_attribution_trackers().begin(),
-              tab_helper->allowed_attribution_trackers().end());
-      allowed_ad_attribution_trackers.push_back(
-          std::move(allowed_ad_attribution_trackers_for_tab));
+    if (!ExtensionTabUtil::GetTabById(tab_id, browser_context(), true,
+                                      &web_contents) ||
+        !web_contents) {
+      continue;
     }
+    adblock_filter::TabStateAndLogs* tab_state_and_logs =
+        rules_service->GetStateAndLogs()->GetTabHelper(web_contents);
+
+    if (!tab_state_and_logs) {
+      continue;
+    }
+    vivaldi::content_blocking::AllowedAdAttributionTrackers
+        allowed_ad_attribution_trackers_for_tab;
+    allowed_ad_attribution_trackers_for_tab.tab_id = tab_id;
+    allowed_ad_attribution_trackers_for_tab.tracker_urls =
+        std::vector<std::string>(
+            tab_state_and_logs->GetAllowedAttributionTrackers().begin(),
+            tab_state_and_logs->GetAllowedAttributionTrackers().end());
+    allowed_ad_attribution_trackers.push_back(
+        std::move(allowed_ad_attribution_trackers_for_tab));
   }
+
   return ArgumentList(Results::Create(allowed_ad_attribution_trackers));
 }
 }  // namespace extensions

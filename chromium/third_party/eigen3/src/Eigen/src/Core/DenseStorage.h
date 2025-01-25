@@ -258,8 +258,8 @@ class DenseStorage<T, 0, Dynamic, Dynamic, Options_> {
     m_cols = cols;
     eigen_assert(m_rows * m_cols == 0 && "The number of rows times columns must equal the storage size.");
   }
-  EIGEN_DEVICE_FUNC const T* data() const { return nullptr; }
-  EIGEN_DEVICE_FUNC T* data() { return nullptr; }
+  EIGEN_DEVICE_FUNC constexpr const T* data() const { return nullptr; }
+  EIGEN_DEVICE_FUNC constexpr T* data() { return nullptr; }
 };
 
 template <typename T, int Rows_, int Options_>
@@ -288,8 +288,8 @@ class DenseStorage<T, 0, Rows_, Dynamic, Options_> {
     m_cols = cols;
     eigen_assert(Rows_ * m_cols == 0 && "The number of rows times columns must equal the storage size.");
   }
-  EIGEN_DEVICE_FUNC const T* data() const { return nullptr; }
-  EIGEN_DEVICE_FUNC T* data() { return nullptr; }
+  EIGEN_DEVICE_FUNC constexpr const T* data() const { return nullptr; }
+  EIGEN_DEVICE_FUNC constexpr T* data() { return nullptr; }
 };
 
 template <typename T, int Cols_, int Options_>
@@ -318,8 +318,8 @@ class DenseStorage<T, 0, Dynamic, Cols_, Options_> {
     m_rows = rows;
     eigen_assert(m_rows * Cols_ == 0 && "The number of rows times columns must equal the storage size.");
   }
-  EIGEN_DEVICE_FUNC const T* data() const { return nullptr; }
-  EIGEN_DEVICE_FUNC T* data() { return nullptr; }
+  EIGEN_DEVICE_FUNC constexpr const T* data() const { return nullptr; }
+  EIGEN_DEVICE_FUNC constexpr T* data() { return nullptr; }
 };
 
 // dynamic-size matrix with fixed-size storage
@@ -507,8 +507,8 @@ class DenseStorage<T, Dynamic, Dynamic, Dynamic, Options_> {
     m_rows = rows;
     m_cols = cols;
   }
-  EIGEN_DEVICE_FUNC const T* data() const { return m_data; }
-  EIGEN_DEVICE_FUNC T* data() { return m_data; }
+  EIGEN_DEVICE_FUNC constexpr const T* data() const { return m_data; }
+  EIGEN_DEVICE_FUNC constexpr T* data() { return m_data; }
 };
 
 // matrix with dynamic width and fixed height (so that matrix has dynamic size).
@@ -574,8 +574,8 @@ class DenseStorage<T, Dynamic, Rows_, Dynamic, Options_> {
     }
     m_cols = cols;
   }
-  EIGEN_DEVICE_FUNC const T* data() const { return m_data; }
-  EIGEN_DEVICE_FUNC T* data() { return m_data; }
+  EIGEN_DEVICE_FUNC constexpr const T* data() const { return m_data; }
+  EIGEN_DEVICE_FUNC constexpr T* data() { return m_data; }
 };
 
 // matrix with dynamic height and fixed width (so that matrix has dynamic size).
@@ -641,8 +641,8 @@ class DenseStorage<T, Dynamic, Dynamic, Cols_, Options_> {
     }
     m_rows = rows;
   }
-  EIGEN_DEVICE_FUNC const T* data() const { return m_data; }
-  EIGEN_DEVICE_FUNC T* data() { return m_data; }
+  EIGEN_DEVICE_FUNC constexpr const T* data() const { return m_data; }
+  EIGEN_DEVICE_FUNC constexpr T* data() { return m_data; }
 };
 
 }  // end namespace Eigen

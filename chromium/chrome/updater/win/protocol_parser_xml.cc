@@ -13,7 +13,6 @@
 #include <cstdint>
 #include <string>
 
-#include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/flat_map.h"
 #include "base/strings/string_number_conversions_win.h"
@@ -309,9 +308,9 @@ bool ProtocolParserXML::ParseElement(const ElementHandlerMap& handler_map,
     return false;
   }
 
-  for (const auto& handler : handler_map) {
-    if (handler.first == basename.Get()) {
-      return (this->*handler.second)(node, results);
+  for (const auto& [name, handler] : handler_map) {
+    if (name == basename.Get()) {
+      return (this->*handler)(node, results);
     }
   }
 

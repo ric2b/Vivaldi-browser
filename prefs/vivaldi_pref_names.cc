@@ -137,6 +137,19 @@ const char kVivaldiStartpagePortraitImage[] =
 const char kVivaldiStartpageLandscapeImage[] =
     "vivaldi.appearance.startpage_image.landscape";
 const char kVivaldiStartupWallpaper[] = "vivaldi.startup.wallpaper.name";
+const char kVivaldiStartPageOpenWithItem[] =
+    "vivaldi.start_page.open_with.item";
+const char kVivaldiStartPageLastVisitedGroup[] =
+    "vivaldi.start_page.last_visited_group";
+
+// Panels
+const char kVivaldiPreferTranslatePanel[] = "vivaldi.translate.prefer_panel";
+
+// Content Settings
+extern const char kVivaldiPageZoomLevel[] =
+    "vivaldi.content_setting.pagezoom.level";
+extern const char kGlobalPageZoomEnabled[] =
+    "vivaldi.content_setting.pagezoom.global_enabled";
 #endif
 
 #if BUILDFLAG(IS_ANDROID)

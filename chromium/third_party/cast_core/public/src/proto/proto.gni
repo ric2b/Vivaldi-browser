@@ -20,14 +20,11 @@ import("//third_party/cast_core/public/src/build/chromium/proto.gni")
 # are used as in proto_library.gni, with default values set for import_dirs,
 # generate_python, extra_configs. The rule also adds built-in protos to deps.
 template("cast_core_proto_library_base") {
-  _deps = [
+  _link_deps = [
     "//third_party/cast_core/public/src/proto:base_protos",
   ]
-  if (defined(invoker.deps)) {
-    _deps += invoker.deps
-  }
 
-  _extra_configs = [ 
+  _extra_configs = [
     "//third_party/cast_core/public/src/proto:force_local_well_known_protos",
   ]
   if (defined(invoker.extra_configs)) {
@@ -47,12 +44,12 @@ template("cast_core_proto_library_base") {
                              "sources",
                              "proto_in_dir",
                              "proto_out_dir",
-                             "link_deps",
+                             "deps",
                              "proto_deps",
                              "generate_javascript",
                              "testonly",
                            ])
-    deps = _deps
+    link_deps = _link_deps
     extra_configs = _extra_configs
     import_dirs = _import_dirs
 

@@ -20,6 +20,14 @@ export class ManagedUserProfileNoticeValuePropElement extends CrLitElement {
     return getCss();
   }
 
+  get titleElement(): HTMLElement|undefined {
+    return this.shadowRoot?.querySelector('.title') || undefined;
+  }
+
+  override firstUpdated() {
+    this.titleElement?.focus();
+  }
+
   override render() {
     return getHtml.bind(this)();
   }
@@ -31,14 +39,16 @@ export class ManagedUserProfileNoticeValuePropElement extends CrLitElement {
       subtitle: {type: String},
       email: {type: String},
       accountName: {type: String},
+      showEnterpriseBadge: {type: Boolean},
     };
   }
 
-  pictureUrl: string;
-  override title: string;
-  subtitle: string;
-  email: string;
-  accountName: string;
+  pictureUrl: string = '';
+  override title: string = '';
+  subtitle: string = '';
+  email: string = '';
+  accountName: string = '';
+  showEnterpriseBadge: boolean = false;
 }
 
 declare global {

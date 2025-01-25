@@ -87,7 +87,7 @@ struct VirtualConnection {
     ProtocolVersion max_protocol_version;
   };
 
-  // |local_id| and |peer_id| can be one of several formats:
+  // `local_id` and `peer_id` can be one of several formats:
   //  - sender-0 or receiver-0: identifies the appropriate platform endpoint of
   //    the device.  Authentication and transport-related messages use these.
   //  - sender-12345: Possible form of a Cast sender ID.  The number portion is
@@ -97,7 +97,7 @@ struct VirtualConnection {
   //  - GUID-style hex string: Random string identifying a particular receiver
   //    app on the device.
   //
-  // Additionally, |peer_id| can be an asterisk when broadcast-sending.
+  // Additionally, `peer_id` can be an asterisk when broadcast-sending.
   std::string local_id;
   std::string peer_id;
   int socket_id;

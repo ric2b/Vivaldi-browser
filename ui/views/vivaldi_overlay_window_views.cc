@@ -89,18 +89,18 @@ void VideoOverlayWindowViews::InitVivaldiControls() {
   progress_view->SetPaintToLayer(ui::LAYER_TEXTURED);
   progress_view->layer()->SetFillsBoundsOpaquely(false);
   progress_view->layer()->SetName("VideoProgressControlsView");
-  progress_view_ =
+  vivaldi_progress_view_ =
       GetControlsContainerView()->AddChildView(std::move(progress_view));
 
   video_pip_delegate_ = std::make_unique<VideoPipControllerDelegate>(
-      progress_view_, mute_button_, volume_slider_);
+      vivaldi_progress_view_, mute_button_, volume_slider_);
 
   video_pip_controller_ = std::make_unique<vivaldi::VideoPIPController>(
       video_pip_delegate_.get(), controller_->GetWebContents());
 
-  // base::Unretained() here because both progress_view_ and
+  // base::Unretained() here because both vivaldi_progress_view_ and
   // video_pip_controller_ lifetimes are tied to |this|.
-  progress_view_->set_callback(
+  vivaldi_progress_view_->set_callback(
       base::BindRepeating(&vivaldi::VideoPIPController::SeekTo,
                           base::Unretained(video_pip_controller_.get())));
 
@@ -131,8 +131,8 @@ void VideoOverlayWindowViews::InitVivaldiControls() {
 }
 
 void VideoOverlayWindowViews::UpdateVivaldiControlsVisibility(bool is_visible) {
-  if (progress_view_) {
-    progress_view_->ToggleVisibility(is_visible);
+  if (vivaldi_progress_view_) {
+    vivaldi_progress_view_->ToggleVisibility(is_visible);
   }
   if (mute_button_) {
     mute_button_->SetVisible(is_visible);
@@ -154,10 +154,10 @@ void VideoOverlayWindowViews::UpdateVivaldiControlsBounds(int primary_control_y,
   int window_width = GetBounds().size().width();
   int offset_left = kVivaldiButtonControlSize.width();
 
-  progress_view_->SetSize(gfx::Size(
+  vivaldi_progress_view_->SetSize(gfx::Size(
       window_width - (margin * 2) - offset_left - kVideoControlsPadding,
       kVideoProgressHeight));
-  progress_view_->SetPosition(
+  vivaldi_progress_view_->SetPosition(
       gfx::Point(margin + offset_left + kVideoControlsPadding,
                  primary_control_y - kVideoProgressHeight));
 
@@ -205,8 +205,8 @@ void VideoOverlayWindowViews::HandleVivaldiKeyboardEvents(ui::KeyEvent* event) {
 void VideoOverlayWindowViews::HandleVivaldiGestureEvent(
     ui::GestureEvent* event) {
   bool handled = false;
-  if (progress_view_) {
-    handled = progress_view_->HandleGestureEvent(event);
+  if (vivaldi_progress_view_) {
+    handled = vivaldi_progress_view_->HandleGestureEvent(event);
   }
   if (!handled) {
     HandleVivaldiMuteButton();
@@ -214,7 +214,8 @@ void VideoOverlayWindowViews::HandleVivaldiGestureEvent(
 }
 
 bool VideoOverlayWindowViews::IsPointInVivaldiControl(const gfx::Point& point) {
-  if ((progress_view_ && progress_view_->GetMirroredBounds().Contains(point)) ||
+  if ((vivaldi_progress_view_ &&
+       vivaldi_progress_view_->GetMirroredBounds().Contains(point)) ||
       (mute_button_ && mute_button_->GetMirroredBounds().Contains(point)) ||
       (volume_slider_ && volume_slider_->GetMirroredBounds().Contains(point))) {
     return true;

@@ -30,7 +30,6 @@
 #include "build/build_config.h"
 #include "components/webrtc/thread_wrapper.h"
 #include "crypto/openssl_util.h"
-#include "media/base/decoder_factory.h"
 #include "media/base/media_permission.h"
 #include "media/media_buildflags.h"
 #include "media/mojo/clients/mojo_video_encoder_metrics_provider.h"
@@ -591,9 +590,7 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
   // BoringSSL no longer requires this after
   // https://bugs.chromium.org/p/boringssl/issues/detail?id=35
   if (!rtc::InitializeSSL()) {
-    LOG(ERROR) << "Failed on InitializeSSL.";
-    NOTREACHED_IN_MIGRATION();
-    return;
+    NOTREACHED() << "Failed on InitializeSSL.";
   }
 
   base::WaitableEvent create_network_manager_event(
@@ -641,9 +638,7 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
           &PeerConnectionDependencyFactory::InitializeSignalingThread,
           WrapCrossThreadPersistent(this),
           Platform::Current()->GetRenderingColorSpace(),
-          Platform::Current()->MediaThreadTaskRunner(),
           CrossThreadUnretained(Platform::Current()->GetGpuFactories()),
-          Platform::Current()->GetMediaDecoderFactory(),
           CreateMojoVideoEncoderMetricsProviderFactory(DomWindow()->GetFrame()),
           CrossThreadUnretained(&start_signaling_event)));
 
@@ -656,9 +651,7 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
 
 void PeerConnectionDependencyFactory::InitializeSignalingThread(
     const gfx::ColorSpace& render_color_space,
-    scoped_refptr<base::SequencedTaskRunner> media_task_runner,
     media::GpuVideoAcceleratorFactories* gpu_factories,
-    base::WeakPtr<media::DecoderFactory> media_decoder_factory,
     scoped_refptr<media::MojoVideoEncoderMetricsProviderFactory>
         video_encoder_metrics_provider_factory,
     base::WaitableEvent* event) {
@@ -729,8 +722,7 @@ void PeerConnectionDependencyFactory::InitializeSignalingThread(
                                   webrtc_video_perf_reporter_.Get())));
   std::unique_ptr<webrtc::VideoDecoderFactory> webrtc_decoder_factory =
       blink::CreateWebrtcVideoDecoderFactory(
-          gpu_factories, media_decoder_factory, std::move(media_task_runner),
-          render_color_space,
+          gpu_factories, render_color_space,
           base::BindRepeating(&WebrtcVideoPerfReporter::StoreWebrtcVideoStats,
                               WrapCrossThreadWeakPersistent(
                                   webrtc_video_perf_reporter_.Get())));
@@ -761,7 +753,7 @@ void PeerConnectionDependencyFactory::InitializeSignalingThread(
 
   // Audio Processing Module (APM) instances are owned and handled by the Blink
   // media stream module.
-  DCHECK_EQ(pcf_deps.audio_processing.get(), nullptr);
+  DCHECK_EQ(pcf_deps.audio_processing_builder, nullptr);
   webrtc::EnableMedia(pcf_deps);
   pc_factory_ = webrtc::CreateModularPeerConnectionFactory(std::move(pcf_deps));
   CHECK(pc_factory_.get());

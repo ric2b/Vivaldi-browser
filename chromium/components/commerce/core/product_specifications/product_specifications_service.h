@@ -19,6 +19,7 @@ extern const size_t kMaxNameLength;
 extern const size_t kMaxTableSize;
 
 class ProductSpecificationsServiceTest;
+class ProductSpecificationsServiceSyncDisabledTest;
 
 // Acquires synced data about product specifications.
 class ProductSpecificationsService
@@ -85,6 +86,7 @@ class ProductSpecificationsService
 
  private:
   friend class commerce::ProductSpecificationsServiceTest;
+  friend class commerce::ProductSpecificationsServiceSyncDisabledTest;
   std::unique_ptr<ProductSpecificationsSyncBridge> bridge_;
   scoped_refptr<base::SequencedTaskRunner> backend_task_runner_;
   std::vector<base::OnceCallback<void()>> deferred_operations_;
@@ -120,6 +122,8 @@ class ProductSpecificationsService
   void NotifyProductSpecificationsRemoval(const ProductSpecificationsSet& set);
 
   void MigrateLegacySpecificsIfApplicable();
+
+  void DisableInitializedForTesting();
 
   base::WeakPtrFactory<ProductSpecificationsService> weak_ptr_factory_{this};
 };

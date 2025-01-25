@@ -22,12 +22,18 @@ import metadata.validation_result as vr
 
 HEX_PATTERN = re.compile(r"^[a-fA-F0-9]{7,40}$")
 
+# A special pattern to indicate that revision is written in DEPS file.
+DEPS_PATTERN = re.compile(r"^DEPS$")
+
 
 class RevisionField(field_types.SingleLineTextField):
     """Custom field for the revision."""
 
     def __init__(self):
         super().__init__(name="Revision")
+
+    def is_revision_in_deps(self, value: str) -> bool:
+        return bool(DEPS_PATTERN.match(value))
 
     def narrow_type(self, value: str) -> Optional[str]:
         value = super().narrow_type(value)
@@ -52,6 +58,8 @@ class RevisionField(field_types.SingleLineTextField):
           - Non-empty value.
           - Valid hexadecimal format (length 7-40 characters).
         """
+        if self.is_revision_in_deps(value):
+            return None
 
         if util.is_unknown(value):
             return vr.ValidationWarning(

@@ -16,8 +16,8 @@ namespace openscreen::cast {
 // internally-owned SDL audio device.
 class SDLAudioPlayer final : public SDLPlayerBase {
  public:
-  // |error_callback| is run only if a fatal error occurs, at which point the
-  // player has halted and set |error_status()|.
+  // `error_callback` is run only if a fatal error occurs, at which point the
+  // player has halted and set `error_status()`.
   SDLAudioPlayer(ClockNowFunctionPtr now_function,
                  TaskRunner& task_runner,
                  Receiver& receiver,

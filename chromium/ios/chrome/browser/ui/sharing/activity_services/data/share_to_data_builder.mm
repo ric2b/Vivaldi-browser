@@ -70,24 +70,29 @@ ShareToData* ShareToDataForWebState(web::WebState* web_state,
        !helper->IsFindUIActive());
   NSString* tab_title = tab_util::GetTabTitle(web_state);
 
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(web_state->GetBrowserState());
+  ProfileIOS* profile =
+      ProfileIOS::FromBrowserState(web_state->GetBrowserState());
 
 #if defined(VIVALDI_BUILD)
-  VivaldiAccountSyncManager* sync_account_manager =
-      [[VivaldiAccountSyncManager alloc] initWithBrowserState:browser_state];
-  send_tab_to_self::SendTabToSelfSyncService* send_tab_to_self_service =
-      SendTabToSelfSyncServiceFactory::GetForBrowserState(browser_state);
-  BOOL can_send_tab_to_self =
-      sync_account_manager &&
-      [sync_account_manager hasSyncConsent] &&
-      send_tab_to_self_service &&
-      send_tab_to_self_service->GetEntryPointDisplayReason(final_url_to_share);
+  BOOL can_send_tab_to_self = !profile->IsOffTheRecord();
+  // Send to tabs is not available for private tabs by design from Chromium.
+  if (!profile->IsOffTheRecord()) {
+    VivaldiAccountSyncManager* sync_account_manager =
+        [[VivaldiAccountSyncManager alloc] initWithProfile:profile];
+    send_tab_to_self::SendTabToSelfSyncService* send_tab_to_self_service =
+        SendTabToSelfSyncServiceFactory::GetForProfile(profile);
+  can_send_tab_to_self =
+        sync_account_manager &&
+        [sync_account_manager hasSyncConsent] &&
+        send_tab_to_self_service &&
+        send_tab_to_self_service->GetEntryPointDisplayReason(
+            final_url_to_share);
+  }
 #else
   ChromeAccountManagerService* account_manager_service =
-      ChromeAccountManagerServiceFactory::GetForBrowserState(browser_state);
+      ChromeAccountManagerServiceFactory::GetForProfile(profile);
   send_tab_to_self::SendTabToSelfSyncService* send_tab_to_self_service =
-      SendTabToSelfSyncServiceFactory::GetForBrowserState(browser_state);
+      SendTabToSelfSyncServiceFactory::GetForProfile(profile);
   BOOL can_send_tab_to_self =
       account_manager_service &&
       send_tab_to_self_service &&

@@ -70,7 +70,7 @@ e.g. `Feedback.ChromeOS.ExitPath` will be an Enum Histogram
     expires_after="2023-07-27">
   <owner>longbowei@google.com</owner>
   <owner>xiangdongkong@google.com</owner>
-  <owner>cros-feedback-app@google.com</owner>
+  <owner>cros-device-enablement@google.com</owner>
   <summary>
     Records a summary of the actions the user took before exiting the app. Fires
     when user closes the feedback app, case includes: User quits on search page

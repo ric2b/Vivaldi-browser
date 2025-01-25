@@ -26,12 +26,6 @@ SafeBrowsingClient* SafeBrowsingClientFactory::GetForProfile(
 }
 
 // static
-SafeBrowsingClient* SafeBrowsingClientFactory::GetForBrowserState(
-    ProfileIOS* profile) {
-  return GetForProfile(profile);
-}
-
-// static
 SafeBrowsingClientFactory* SafeBrowsingClientFactory::GetInstance() {
   static base::NoDestructor<SafeBrowsingClientFactory> instance;
   return instance.get();
@@ -49,17 +43,15 @@ SafeBrowsingClientFactory::SafeBrowsingClientFactory()
 std::unique_ptr<KeyedService>
 SafeBrowsingClientFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   safe_browsing::RealTimeUrlLookupService* lookup_service =
-      RealTimeUrlLookupServiceFactory::GetForBrowserState(browser_state);
+      RealTimeUrlLookupServiceFactory::GetForProfile(profile);
   safe_browsing::HashRealTimeService* hash_real_time_service = nullptr;
   if (base::FeatureList::IsEnabled(safe_browsing::kHashPrefixRealTimeLookups)) {
-    hash_real_time_service =
-        HashRealTimeServiceFactory::GetForBrowserState(browser_state);
+    hash_real_time_service = HashRealTimeServiceFactory::GetForProfile(profile);
   }
   PrerenderService* prerender_service =
-      PrerenderServiceFactory::GetForBrowserState(browser_state);
+      PrerenderServiceFactory::GetForProfile(profile);
   return std::make_unique<SafeBrowsingClientImpl>(
       lookup_service, hash_real_time_service, prerender_service);
 }

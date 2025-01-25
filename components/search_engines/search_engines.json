@@ -15,7 +15,7 @@
     // Increment this if you change the data in ways that mean users with
     // existing data should get a new version. Otherwise, existing data may
     // continue to be used and updates made here will not always appear.
-    "kCurrentDataVersion": 10000155
+    "kCurrentDataVersion": 10000166
   },
 
   // The following engines are included in country lists and are added to the
@@ -65,6 +65,15 @@
       "search_url": "https://at.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
       "suggest_url": "https://at.search.yahoo.com/sugg/chrome?output=fxjson&command={searchTerms}",
       "favicon_url": "https://at.search.yahoo.com/favicon.ico",
+      "type": "SEARCH_ENGINE_YAHOO",
+      "id": 2
+    },
+    "yahoo_au": {
+      "name": "Yahoo!",
+      "keyword": "y",
+      "search_url": "https://au.search.yahoo.com/yhs/search?hspart=iry&hsimp=yhs-fullyhosted_009&type=dpp_vvldnu_00_00&param1=1&param2=pa%3Ddowncoll%26b%3DVivaldi&p={searchTerms}",
+      "suggest_url": "https://au.search.yahoo.com/sugg/chrome?output=fxjson&command={searchTerms}",
+      "favicon_url": "https://au.search.yahoo.com/favicon.ico",
       "type": "SEARCH_ENGINE_YAHOO",
       "id": 2
     },
@@ -341,7 +350,7 @@
       "id": 4
     },
     "startpage_com": {
-      "name": "Startpage.com",
+      "name": "Startpage",
       "keyword": "s",
       "favicon_url": "https://www.startpage.com/sp/cdn/favicons/favicon--default.ico",
       "search_url": "https://www.startpage.com/do/search?q={searchTerms}&segment=startpage.vivaldi",
@@ -723,12 +732,21 @@
       "type": "SEARCH_ENGINE_MAILRU",
       "id": 14
     },
+    "qwant_au": {
+      "name": "Qwant",
+      "keyword": "q",
+      "favicon_url":"https://www.qwant.com/public/favicon-32.c31d35a2488b8fc69760acb21042fb4b.png",
+      "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}&t=web",
+      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=en_AU",
+      "type": "VIVALDI_SEARCH_ENGINE_QWANT",
+      "id": 15
+    },
     "qwant_ca": {
       "name": "Qwant",
       "keyword": "q",
       "favicon_url":"https://www.qwant.com/public/favicon-32.c31d35a2488b8fc69760acb21042fb4b.png",
       "search_url": "https://www.qwant.com/?client=brz-vivaldi&q={searchTerms}&t=web",
-      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=ca_EN",
+      "suggest_url": "https://api.qwant.com/v3/suggest/?q={searchTerms}&client=opensearch&locale=en_CA",
       "type": "VIVALDI_SEARCH_ENGINE_QWANT",
       "id": 15
     },
@@ -888,30 +906,30 @@
       "google"
     ],
     "cs_CZ": [
-      "*bing",
+      "bing",
       "yahoo",
       "duckduckgo",
       "ecosia",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_cs",
       "google"
     ],
     "da_DK": [
-      "*bing",
+      "bing",
       "yahoo_dk",
       "duckduckgo",
       "ecosia",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_da",
       "google"
     ],
     "de_DE": [
-      "*bing",
+      "bing",
       "yahoo_de",
       "duckduckgo",
       "ecosia",
       "qwant_de",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_de",
       "google"
     ],
@@ -920,17 +938,16 @@
       "yahoo_at",
       "duckduckgo",
       "ecosia",
-      "*startpage_com",
-      "!startpage_com",
+      "*!startpage_com",
       "google",
       "wikipedia_de"
     ],
     "de_CH": [
-      "*bing",
+      "bing",
       "yahoo_ch",
       "duckduckgo",
       "ecosia",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_de",
       "google"
     ],
@@ -943,41 +960,51 @@
       "wikipedia_el",
       "google"
     ],
+    "en_AU": [
+      "bing",
+      "yahoo_au",
+      "duckduckgo",
+      "ecosia",
+      "qwant_au",
+      "*!startpage_com",
+      "wikipedia",
+      "google"
+    ],
     "en_CA": [
-      "*bing",
+      "bing",
       "yahoo_ca",
       "duckduckgo",
       "ecosia",
       "qwant_ca",
-      "!startpage_com",
+      "*!startpage_com",
       "google",
       "wikipedia"
     ],
     "en_GB": [
-      "*bing",
+      "bing",
       "yahoo_uk",
       "duckduckgo",
       "ecosia",
       "qwant_gb",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia",
       "google"
     ],
     "en_IE": [
-      "*bing",
+      "bing",
       "yahoo_ie",
       "duckduckgo",
       "ecosia",
-      "!startpage_com",
+      "*!startpage_com",
       "google",
       "wikipedia"
     ],
     "en_IN": [
-      "*bing",
+      "bing",
       "yahoo_in",
       "duckduckgo",
       "ecosia",
-      "!startpage_com",
+      "*!startpage_com",
       "google",
       "wikipedia"
     ],
@@ -992,40 +1019,40 @@
     ],
     "en_SG": [
       "yahoo_sg",
-      "*bing",
+      "bing",
       "duckduckgo",
-      "ecosia",
+      "*ecosia",
       "!startpage_com",
       "google",
       "wikipedia"
     ],
     "en_US": [
-      "*bing",
+      "bing",
       "yahoo_us",
       "duckduckgo",
       "yelp",
       "ecosia",
       "qwant_us",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia",
       "google"
     ],
     "es_ES": [
-      "*bing",
+      "bing",
       "yahoo_es",
       "duckduckgo",
       "ecosia",
       "qwant_es",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_es",
       "google"
     ],
     "es_AR": [
       "yahoo_ar",
-      "*bing",
+      "bing",
       "duckduckgo",
       "ecosia",
-      "!startpage_com",
+      "*!startpage_com",
       "google",
       "wikipedia_es"
     ],
@@ -1058,10 +1085,10 @@
     ],
     "es_MX": [
       "yahoo_mx",
-      "*bing",
+      "bing",
       "duckduckgo",
       "ecosia",
-      "!startpage_com",
+      "*!startpage_com",
       "google",
       "wikipedia_es"
     ],
@@ -1079,8 +1106,7 @@
       "yahoo_fi",
       "duckduckgo",
       "ecosia",
-      "*startpage_com",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_fi",
       "google"
     ],
@@ -1090,18 +1116,17 @@
       "duckduckgo",
       "ecosia",
       "qwant_fr",
-      "*startpage_com",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_fr",
       "google"
     ],
     "fr_FR": [
-      "*bing",
+      "bing",
       "yahoo_fr",
       "duckduckgo",
       "ecosia",
       "qwant_fr",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_fr",
       "google"
     ],
@@ -1115,10 +1140,10 @@
       "google"
     ],
     "hu_HU": [
-      "*bing",
+      "bing",
       "yahoo",
       "duckduckgo",
-      "ecosia",
+      "*ecosia",
       "!startpage_com",
       "wikipedia_hu",
       "google"
@@ -1133,12 +1158,12 @@
       "google"
     ],
     "it_IT": [
-      "*bing",
+      "bing",
       "yahoo_it",
       "duckduckgo",
       "ecosia",
       "qwant_it",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_it",
       "google"
     ],
@@ -1169,11 +1194,11 @@
       "google"
     ],
     "nb_NO": [
-      "*bing",
+      "bing",
       "yahoo_no",
       "duckduckgo",
       "ecosia",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_no",
       "google"
     ],
@@ -1182,8 +1207,7 @@
       "yahoo_nl",
       "duckduckgo",
       "ecosia",
-      "*startpage_com",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_nl",
       "google"
     ],
@@ -1192,43 +1216,42 @@
       "yahoo_nl",
       "duckduckgo",
       "ecosia",
-      "*startpage_com",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_nl",
       "google"
     ],
     "nn_NO": [
-      "*bing",
+      "bing",
       "yahoo_no",
       "duckduckgo",
       "ecosia",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_nn",
       "google"
     ],
     "pl_PL": [
-      "*bing",
+      "bing",
       "yahoo",
       "duckduckgo",
       "ecosia",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_pl",
       "google"
     ],
     "pt_BR": [
-      "*bing",
+      "bing",
       "yahoo_br",
       "duckduckgo",
       "ecosia",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_pt",
       "google"
     ],
     "pt_PT": [
-      "*bing",
+      "bing",
       "yahoo",
       "duckduckgo",
-      "ecosia",
+      "*ecosia",
       "!startpage_com",
       "wikipedia_pt",
       "google"
@@ -1247,25 +1270,24 @@
       "google",
       "wikipedia_ru",
       "duckduckgo",
-      "mail_ru",
       "ecosia",
       "!startpage_com",
       "wolfram"
     ],
     "sv_SE": [
-      "*bing",
+      "bing",
       "yahoo_se",
       "duckduckgo",
       "ecosia",
-      "!startpage_com",
+      "*!startpage_com",
       "wikipedia_se",
       "google"
     ],
     "sk_SK": [
-      "*bing",
+      "bing",
       "yahoo",
       "duckduckgo",
-      "ecosia",
+      "*ecosia",
       "!startpage_com",
       "wikipedia_sk",
       "google"
@@ -1295,8 +1317,8 @@
       "amazon",
       "wikipedia_tr",
       "ebay",
-      "*duckduckgo",
-      "ecosia",
+      "duckduckgo",
+      "*ecosia",
       "!startpage_com",
       "wolfram"
     ],
@@ -1319,10 +1341,10 @@
       "google"
     ],
     "zh_CN": [
-      "*bing",
+      "bing",
       "yahoo",
       "duckduckgo",
-      "ecosia",
+      "*ecosia",
       "!startpage_com",
       "wikipedia_zh",
       "google"
@@ -1372,6 +1394,7 @@
     ["de", "AT"],
     ["de", "CH"],
     ["el", "GR"],
+    ["en", "AU"],
     ["en", "CA"],
     ["en", "GB"],
     ["en", "IE"],

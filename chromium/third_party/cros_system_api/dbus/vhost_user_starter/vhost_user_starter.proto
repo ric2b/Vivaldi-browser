@@ -1,0 +1,66 @@
+// Copyright 2024 The ChromiumOS Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+syntax = "proto3";
+option optimize_for = LITE_RUNTIME;
+
+// This file defines messages used for starting vhost-user devices.
+package vm_tools.vhost_user_starter;
+
+// Defines a Uid/Gid mapping between a user namespace and the parent
+// namespace. The [in_id,in_id + range] in user namespace will be mapped to
+// [out_id,out_id + range] outside the user namespace(boundary is inclusive).
+message IdMapItem {
+  // The start of the range of IDs inside of user namespace
+  uint32 in_id = 1;
+  // The start of the range of IDs outside of user namespace
+  uint32 out_id = 2;
+  // The length of the range of user IDs that is mapped between
+  // the two user namespaces
+  uint32 range = 3;
+}
+
+// The options for configuring a directory to be shared
+// with the VM through virtio-fs. The flags respondes to
+// the --cfg parameter for "crosvm device fs" command.
+message VhostUserVirtioFsConfig {
+  string cache = 1;
+  uint32 timeout = 2;
+  bool rewrite_security_xattrs = 3;
+  bool ascii_casefold = 4;
+  bool writeback = 5;
+  bool posix_acl = 6;
+  uint32 negative_timeout = 7;
+  repeated uint32 privileged_quota_uids = 8;
+}
+
+// Encodes all information excepting socket-fd to start a vhost-user
+// virtio-fs device. Each field is a parameter of vhost-user fs deivice,
+// refer to https://crosvm.dev/book/devices/fs.html  for details.
+message StartVhostUserFsRequest {
+  // The path of host shared directory
+  string shared_dir = 1;
+
+  // The tag of vhost-user virtio-fs device
+  string tag = 2;
+
+  // The uid map used in minijail
+  repeated IdMapItem uid_map = 3;
+
+  // The gid map used in minijail
+  repeated IdMapItem gid_map = 4;
+
+  // The uid of the device process in the new user namespace created.
+  // Default value is 0 if not set
+  optional uint32 uid = 5;
+
+  // The gid of device process in the new user namespace created.
+  // Default value is 0 if not set
+  optional uint32 gid = 6;
+
+  // virtio-fs config option for the device process
+  VhostUserVirtioFsConfig cfg = 7;
+}
+
+message StartVhostUserFsResponse {}

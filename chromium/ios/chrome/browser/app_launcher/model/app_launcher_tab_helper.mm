@@ -93,7 +93,8 @@ bool AppLauncherTabHelper::IsAppUrl(const GURL& url) {
   return !(web::UrlHasWebScheme(url) ||
            web::GetWebClient()->IsAppSpecificURL(url) ||
            url.SchemeIs(url::kFileScheme) || url.SchemeIs(url::kAboutScheme) ||
-           url.SchemeIs(url::kBlobScheme));
+           url.SchemeIs(url::kBlobScheme) ||
+           url.SchemeIs(web::kMarketplaceKitScheme));
 }
 
 void AppLauncherTabHelper::SetDelegate(AppLauncherTabHelperDelegate* delegate) {
@@ -357,15 +358,11 @@ AppLauncherTabHelper::GetPolicyDecisionAndOptionalAppLaunchRequest(
   bool is_link_transition = ui::PageTransitionCoreTypeIs(
       request_info.transition_type, ui::PAGE_TRANSITION_LINK);
 
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(web_state_->GetBrowserState());
-
   if (!is_link_transition && original_pending_url.is_valid()) {
     // At this stage the navigation will be canceled in all cases. If this
     // was a redirection, the `source_url` may not have been reported to
     // ReadingListWebStateObserver. Report it to mark as read if needed.
-    ReadingListModel* model =
-        ReadingListModelFactory::GetForBrowserState(browser_state);
+    ReadingListModel* model = ReadingListModelFactory::GetForProfile(profile);
     if (model && model->loaded()) {
       model->SetReadStatusIfExists(original_pending_url, true);
     }

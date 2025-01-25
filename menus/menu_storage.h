@@ -31,16 +31,17 @@ class Menu_Node;
 
 class MenuLoadDetails {
  public:
+  enum Mode { kLoad, kResetById, kResetByName, kResetAll };
   explicit MenuLoadDetails(Menu_Node* mainmenu,
                            Menu_Control* control,
                            int64_t id,
                            bool force_bundle,
-                           bool is_reset);
+                           Mode mode);
   explicit MenuLoadDetails(Menu_Node* mainmenu,
                            Menu_Control* control,
                            const std::string& menu,
                            bool force_bundle,
-                           bool is_reset);
+                           Mode mode);
   ~MenuLoadDetails();
   MenuLoadDetails(const MenuLoadDetails&) = delete;
   MenuLoadDetails& operator=(const MenuLoadDetails&) = delete;
@@ -54,7 +55,7 @@ class MenuLoadDetails {
   const std::string& menu() { return menu_; }
   bool has_upgraded() const { return upgrade_root_.get() != nullptr; }
   bool force_bundle() const { return force_bundle_; }
-  bool is_reset() const { return is_reset_; }
+  Mode mode() const { return mode_; }
   std::unique_ptr<Menu_Node> release_mainmenu_node() {
     return std::move(mainmenu_node_);
   }
@@ -71,7 +72,7 @@ class MenuLoadDetails {
   std::unique_ptr<base::Value> upgrade_root_;
   int64_t id_;
   bool force_bundle_;
-  bool is_reset_;
+  Mode mode_;
   std::string menu_;
 };
 

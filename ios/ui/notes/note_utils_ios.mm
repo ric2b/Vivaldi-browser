@@ -189,7 +189,7 @@ MDCSnackbarMessage* CreateOrUpdateNoteWithToast(
     const GURL& url,
     const NoteNode* folder,
     vivaldi::NotesModel* note_model,
-    ChromeBrowserState* browser_state) {
+     ProfileIOS* profile) {
   std::u16string contentString = base::SysNSStringToUTF16(content);
 
   // Save the note information.
@@ -225,7 +225,7 @@ MDCSnackbarMessage* CreateNoteAtPositionWithToast(
     const vivaldi::NoteNode* folder,
     int position,
     vivaldi::NotesModel* note_model,
-    ChromeBrowserState* browser_state) {
+    ProfileIOS* profile) {
   std::u16string titleString = base::SysNSStringToUTF16(title);
 
   const vivaldi::NoteNode* node = note_model->AddNote(
@@ -242,7 +242,7 @@ MDCSnackbarMessage* UpdateNotePositionWithToast(
     const vivaldi::NoteNode* folder,
     size_t position,
     vivaldi::NotesModel* note_model,
-    ChromeBrowserState* browser_state) {
+    ProfileIOS* profile) {
   DCHECK(node);
   DCHECK(folder);
   DCHECK(!folder->HasAncestor(node));
@@ -271,7 +271,7 @@ void DeleteNotes(const std::set<const NoteNode*>& notes,
 MDCSnackbarMessage* DeleteNotesWithToast(
     const std::set<const NoteNode*>& nodes,
     vivaldi::NotesModel* model,
-    ChromeBrowserState* browser_state) {
+    ProfileIOS* profile) {
   size_t nodeCount = nodes.size();
   DCHECK_GT(nodeCount, 0u);
 
@@ -318,7 +318,7 @@ MDCSnackbarMessage* MoveNotesWithToast(
     const std::set<const NoteNode*>& nodes,
     vivaldi::NotesModel* model,
     const NoteNode* folder,
-    ChromeBrowserState* browser_state) {
+    ProfileIOS* profile) {
   size_t nodeCount = nodes.size();
   DCHECK_GT(nodeCount, 0u);
 

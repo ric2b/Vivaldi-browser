@@ -10,6 +10,7 @@
 <translation id="132390688737681464">保存して住所を自動入力する</translation>
 <translation id="1375198122581997741">バージョン情報</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> からデータが送信されませんでした。</translation>
+<translation id="1555191101192706055">アクセスしようとしたサイトでは、攻撃者がユーザーを騙してブラウジングに影響を与える（ホームページを変更する、アクセス先のサイトで余計な広告を表示するなど）有害なソフトウェアをインストールさせる可能性があります。</translation>
 <translation id="1559528461873125649">該当するファイルまたはフォルダーがありません</translation>
 <translation id="1640244768702815859"><ph name="BEGIN_LINK" />サイトのトップページにアクセス<ph name="END_LINK" />してみてください。</translation>
 <translation id="1645368109819982629">未対応のプロトコル</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォールを確認する<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">発行先: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">このサイトは安全に接続できません</translation>
+<translation id="2178904466768126352">アクセスしようとしたサイトでは、攻撃者がパスワード、写真、メッセージ、クレジット カード番号などを盗んだり削除したりする有害なソフトウェアをインストールする可能性があります。</translation>
 <translation id="2187317261103489799">検出（デフォルト）</translation>
 <translation id="2224337661447660594">インターネットに接続されていません</translation>
 <translation id="2283340219607151381">住所の保存して自動入力する</translation>
@@ -92,6 +94,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />ファイアウォールとウイルス対策の設定を確認する<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />ネットワーク診断を試す<ph name="END_LINK" />。</translation>
 <translation id="4235360514405112390">有効</translation>
+<translation id="4241830393007970744">アクセスしようとしたサイトでは、攻撃者がユーザーを騙してソフトウェアをインストールさせたり、パスワード、電話番号、クレジット カード番号などを開示させたりする可能性があります。</translation>
 <translation id="4250431568374086873">このサイトへの接続は完全には保護されていません</translation>
 <translation id="4265872034478892965">管理者によって許可</translation>
 <translation id="4305666528087210886">ファイルにアクセスできませんでした</translation>
@@ -102,6 +105,7 @@
 <translation id="4522570452068850558">詳細</translation>
 <translation id="4558551763791394412">拡張機能を無効にしてみてください。</translation>
 <translation id="4592951414987517459"><ph name="DOMAIN" /> への接続は新しい暗号スイートにより暗号化されています。</translation>
+<translation id="4598641255230617220">貼り付けて移動</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">接続が中断されました</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows のネットワーク診断を実行<ph name="END_LINK" /></translation>
@@ -111,6 +115,7 @@
 <translation id="4764776831041365478"><ph name="URL" /> のウェブページは一時的に停止しているか、新しいウェブアドレスに移動した可能性があります。</translation>
 <translation id="483241715238664915">警告をオンにする</translation>
 <translation id="4943872375798546930">見つかりません</translation>
+<translation id="5017554619425969104">コピーしたテキスト</translation>
 <translation id="5023310440958281426">管理者のポリシーを確認してください</translation>
 <translation id="5039804452771397117">許可</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{（1 個が使用中）}other{（# 個が使用中）}}</translation>
@@ -165,11 +170,11 @@
 <translation id="7108819624672055576">拡張機能によって許可</translation>
 <translation id="7111012039238467737">（有効）</translation>
 <translation id="7113310725918019676"><ph name="DOMAIN" /> からの <ph name="BLOCKED_TYPE" /> を許可</translation>
+<translation id="7126644664682723998">貼り付けて検索</translation>
 <translation id="7179323680825933600">支払い方法を保存して自動入力する</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ではセキュリティ規格が遵守されていません。</translation>
 <translation id="7219179957768738017">この接続には <ph name="SSL_VERSION" /> を使用しています。</translation>
 <translation id="7221855153210829124">通知の表示</translation>
-<translation id="7227747683324411744">アクセスしようとしているサイトでは、攻撃者がユーザーを騙してブラウジングに影響を与える（ホームページを変更する、アクセス先のサイトで余計な広告を表示するなど）有害なソフトウェアをインストールさせる可能性があります。</translation>
 <translation id="7353601530677266744">コマンドライン</translation>
 <translation id="7364115444476960850">Vivaldi の <ph name="BLOCKER_NAME" /> により、アクセスしようとしているページはブロックされました</translation>
 <translation id="7419106976560586862">プロファイルのパス</translation>
@@ -177,7 +182,6 @@
 <translation id="7518003948725431193">次のウェブページアドレスは見つかりませんでした: <ph name="URL" /></translation>
 <translation id="7549584377607005141">このウェブページを正しく表示するには、先ほど入力したデータが必要です。データは再送信できますが、このページで先ほど行った操作を繰り返すことになります。</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> では現在このリクエストを処理できません。</translation>
-<translation id="7605377493722372900">アクセスしようとしているサイトでは、攻撃者がパスワード、写真、メッセージ、クレジット カード番号などを盗んだり削除したりする有害なソフトウェアをインストールする可能性があります。</translation>
 <translation id="7662298039739062396">拡張機能によって指定される設定</translation>
 <translation id="7663736086183791259">証明書 <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">証明書</translation>
@@ -203,7 +207,6 @@
 <translation id="8288807391153049143">証明書を表示</translation>
 <translation id="8289355894181816810">確認方法がわからない場合は、ネットワーク管理者までお問い合わせください。</translation>
 <translation id="8332188693563227489"><ph name="HOST_NAME" /> へのアクセスが拒否されました</translation>
-<translation id="8422228580902424274">アクセスしようとしているサイトでは、攻撃者がユーザーを騙してソフトウェアをインストールさせたり、パスワード、電話番号、クレジット カード番号などを開示させたりする可能性があります。</translation>
 <translation id="8473863474539038330">住所やその他の情報</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> からの応答がタイムアウトしました。</translation>
 <translation id="8503813439785031346">ユーザー名</translation>

@@ -16,7 +16,6 @@ import org.chromium.base.ResettersForTesting;
 import org.chromium.base.StreamUtil;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.Token;
-import org.chromium.base.cached_flags.BooleanCachedFieldTrialParameter;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
@@ -28,6 +27,7 @@ import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabState;
 import org.chromium.chrome.browser.tab.TabUserAgent;
 import org.chromium.chrome.browser.tab.WebContentsState;
+import org.chromium.components.cached_flags.BooleanCachedFieldTrialParameter;
 
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -342,13 +342,10 @@ public class TabStateFileManager {
             } catch (EOFException eof) {
             }
             try {
-                boolean shouldPreserveNotUsed = stream.readBoolean();
+                // Skip obsolete shouldPreserve.
+                stream.readBoolean();
             } catch (EOFException eof) {
                 // Could happen if reading a version of TabState without this flag set.
-                Log.w(
-                        TAG,
-                        "Failed to read shouldPreserve flag from tab state. "
-                                + "Assuming shouldPreserve is false");
             }
             tabState.isIncognito = encrypted;
             try {
@@ -365,14 +362,14 @@ public class TabStateFileManager {
                 tabState.tabLaunchTypeAtCreation = stream.readInt();
                 if (tabState.tabLaunchTypeAtCreation < 0
                         || tabState.tabLaunchTypeAtCreation >= TabLaunchType.SIZE) {
-                    tabState.tabLaunchTypeAtCreation = null;
+                    tabState.tabLaunchTypeAtCreation = TabLaunchType.UNSET;
                 }
             } catch (EOFException eof) {
-                tabState.tabLaunchTypeAtCreation = null;
+                tabState.tabLaunchTypeAtCreation = TabLaunchType.UNSET;
                 Log.w(
                         TAG,
                         "Failed to read tab launch type at creation from tab state. "
-                                + "Assuming tab launch type is null");
+                                + "Assuming tab launch type is UNSET");
             }
             try {
                 tabState.rootId = stream.readInt();
@@ -413,6 +410,15 @@ public class TabStateFileManager {
                         TAG,
                         "Failed to read tabGroupId token from tab state."
                                 + " Assuming tabGroupId is null");
+            }
+            try {
+                tabState.tabHasSensitiveContent = stream.readBoolean();
+            } catch (EOFException eof) {
+                tabState.tabHasSensitiveContent = false;
+                Log.w(
+                        TAG,
+                        "Failed to read tabHasSensitiveContent from tab state. "
+                                + "Assuming tabHasSensitiveContent is false");
             }
             // If TabState was restored using legacy format and the FlatBuffer flag is on, that
             // indicates the TabState hasn't been migrated yet and should be.
@@ -519,6 +525,8 @@ public class TabStateFileManager {
                     isEncrypted,
                     cipherFactory);
             return true;
+        } catch (OutOfMemoryError e) {
+            Log.d(TAG, "OutOfMemoryError while saving TabState FlatBuffer file", e);
         } catch (Exception e) {
             // TODO(crbug.com/341122002) Add in metrics
             Log.d(TAG, "Error saving TabState FlatBuffer file", e);
@@ -597,8 +605,7 @@ public class TabStateFileManager {
             dataOutputStream.writeLong(-1); // Obsolete sync ID.
             dataOutputStream.writeBoolean(false); // Obsolete attribute |SHOULD_PRESERVE|.
             dataOutputStream.writeInt(state.themeColor);
-            dataOutputStream.writeInt(
-                    state.tabLaunchTypeAtCreation != null ? state.tabLaunchTypeAtCreation : -1);
+            dataOutputStream.writeInt(state.tabLaunchTypeAtCreation);
             dataOutputStream.writeInt(state.rootId);
             dataOutputStream.writeInt(state.userAgent);
             dataOutputStream.writeLong(state.lastNavigationCommittedTimestampMillis);
@@ -610,6 +617,7 @@ public class TabStateFileManager {
             }
             dataOutputStream.writeLong(tokenHigh);
             dataOutputStream.writeLong(tokenLow);
+            dataOutputStream.writeBoolean(state.tabHasSensitiveContent);
             long saveTime = SystemClock.elapsedRealtime() - startTime;
             RecordHistogram.recordTimesHistogram("Tabs.TabState.SaveTime", saveTime);
             RecordHistogram.recordTimesHistogram("Tabs.TabState.SaveTime.Legacy", saveTime);

@@ -25,6 +25,8 @@ namespace lens {
 
 namespace {
 
+using LatencyType = LensOverlayGen204Controller::LatencyType;
+
 constexpr int kMaxDownloadBytes = 1024 * 1024;
 
 // Task completion ids.
@@ -39,11 +41,26 @@ constexpr int kTextGleamsViewStartSemanticEventID = 234181;
 constexpr int kTextGleamsViewEndSemanticEventID = 234180;
 
 // Query parameter keys.
+constexpr char kEncodedAnalyticsIdParameter[] = "cad";
 constexpr char kGen204IdentifierQueryParameter[] = "plla";
-constexpr char kSemanticEventIdParameter[] = "rid";
-constexpr char kRequestTypeQueryParameter[] = "rt";
-constexpr char kFullPageObjectsFetchRequestType[] = "fpof";
-constexpr char kFullPageTranslateFetchRequestType[] = "fptf";
+constexpr char kLatencyRequestTypeQueryParameter[] = "rt";
+constexpr char kVisualInputTypeQueryParameter[] = "vit";
+// Event id param used for both semantic events and task completions.
+constexpr char kEventIdParameter[] = "rcid";
+
+// Request type parameter values.
+constexpr char kFullPageObjectsFetchLatencyId[] = "fpof";
+constexpr char kFullPageTranslateFetchLatencyId[] = "fptf";
+constexpr char kPageContentUploadLatencyId[] = "pcu";
+constexpr char kPartialPageContentUploadLatencyId[] = "ppcu";
+constexpr char kInteractionFetchLatencyId[] = "lif";
+constexpr char kFetchStickyClusterInfoLatencyId[] = "sct";
+constexpr char kInvocationToInitialClusterInfoRequestLatencyId[] = "cstcirs";
+constexpr char kInvocationToInitialFullObjectsRequestLatencyId[] = "cstiors";
+constexpr char kInvocationToInitialInteractionRequestLatencyId[] = "cstiirs";
+constexpr char kInvocationToInitialPageContentRequestLatencyId[] = "cstipcurs";
+constexpr char kInvocationToInitialPartialPageContentRequestLatencyId[] =
+    "cstippcurs";
 
 constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotationTag =
     net::DefineNetworkTrafficAnnotation("lens_overlay_gen204", R"(
@@ -94,6 +111,31 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotationTag =
         }
       )");
 
+std::string LatencyIdForType(LatencyType latency_type) {
+  switch (latency_type) {
+    case LatencyType::kInvocationToInitialClusterInfoRequestSent:
+      return kInvocationToInitialClusterInfoRequestLatencyId;
+    case LatencyType::kInvocationToInitialFullPageObjectsRequestSent:
+      return kInvocationToInitialFullObjectsRequestLatencyId;
+    case LatencyType::kInvocationToInitialInteractionRequestSent:
+      return kInvocationToInitialInteractionRequestLatencyId;
+    case LatencyType::kInvocationToInitialPageContentRequestSent:
+      return kInvocationToInitialPageContentRequestLatencyId;
+    case LatencyType::kInvocationToInitialPartialPageContentRequestSent:
+      return kInvocationToInitialPartialPageContentRequestLatencyId;
+    case LatencyType::kFullPageObjectsRequestFetchLatency:
+      return kFullPageObjectsFetchLatencyId;
+    case LatencyType::kFullPageTranslateRequestFetchLatency:
+      return kFullPageTranslateFetchLatencyId;
+    case LatencyType::kInteractionRequestFetchLatency:
+      return kInteractionFetchLatencyId;
+    case LatencyType::kPageContentUploadLatency:
+      return kPageContentUploadLatencyId;
+    case LatencyType::kPartialPageContentUploadLatency:
+      return kPartialPageContentUploadLatencyId;
+  }
+}
+
 }  // namespace
 
 LensOverlayGen204Controller::LensOverlayGen204Controller() = default;
@@ -109,22 +151,40 @@ void LensOverlayGen204Controller::OnQueryFlowStart(
 }
 
 void LensOverlayGen204Controller::SendLatencyGen204IfEnabled(
-    int64_t latency_ms,
-    bool is_translate_query) {
+    LatencyType latency_type,
+    base::TimeDelta latency_duration,
+    std::string vit_query_param_value,
+    std::optional<base::TimeDelta> cluster_info_latency,
+    std::optional<std::string> encoded_analytics_id) {
   if (profile_ && lens::features::GetLensOverlaySendLatencyGen204()) {
+    std::string cluster_info_latency_string =
+        cluster_info_latency.has_value() &&
+                latency_type == LatencyType::kFullPageObjectsRequestFetchLatency
+            ? base::StringPrintf(
+                  ",%s.%s", kFetchStickyClusterInfoLatencyId,
+                  base::NumberToString(cluster_info_latency->InMilliseconds())
+                      .c_str())
+            : "";
+    // PRIu64 and PRId64 are macros for formatting uint64_t and int64_t
+    // respectively, allowing us to bypass using NumberToString.
     std::string query = base::StringPrintf(
-        "gen_204?atyp=csi&%s=%s&%s=%s.%s&s=web",
-        kGen204IdentifierQueryParameter,
-        base::NumberToString(gen204_id_).c_str(), kRequestTypeQueryParameter,
-        is_translate_query ? kFullPageTranslateFetchRequestType
-                           : kFullPageObjectsFetchRequestType,
-        base::NumberToString(latency_ms).c_str());
+        "gen_204?atyp=csi&%s=%" PRIu64 "&%s=%s.%" PRId64 "%s&s=web&%s=%s",
+        kGen204IdentifierQueryParameter, gen204_id_,
+        kLatencyRequestTypeQueryParameter,
+        LatencyIdForType(latency_type).c_str(),
+        latency_duration.InMilliseconds(), cluster_info_latency_string,
+        kVisualInputTypeQueryParameter, vit_query_param_value);
     auto fetch_url = GURL(TemplateURLServiceFactory::GetForProfile(profile_)
                               ->search_terms_data()
                               .GoogleBaseURLValue())
                          .Resolve(query);
     fetch_url =
         lens::AppendInvocationSourceParamToURL(fetch_url, invocation_source_);
+    if (encoded_analytics_id.has_value()) {
+      fetch_url = net::AppendOrReplaceQueryParameter(
+          fetch_url, kEncodedAnalyticsIdParameter,
+          encoded_analytics_id.value());
+    }
     CheckMetricsConsentAndIssueGen204NetworkRequest(fetch_url);
   }
 }
@@ -157,9 +217,9 @@ void LensOverlayGen204Controller::SendTaskCompletionGen204IfEnabled(
         return;
     }
     std::string query = base::StringPrintf(
-        "gen_204?uact=4&%s=%s&rcid=%d&cad=%s", kGen204IdentifierQueryParameter,
-        base::NumberToString(gen204_id_).c_str(), task_id,
-        encoded_analytics_id.c_str());
+        "gen_204?uact=4&%s=%" PRIu64 "&%s=%d&%s=%s",
+        kGen204IdentifierQueryParameter, gen204_id_, kEventIdParameter, task_id,
+        kEncodedAnalyticsIdParameter, encoded_analytics_id.c_str());
     auto fetch_url = GURL(TemplateURLServiceFactory::GetForProfile(profile_)
                               ->search_terms_data()
                               .GoogleBaseURLValue())
@@ -183,7 +243,7 @@ void LensOverlayGen204Controller::SendSemanticEventGen204IfEnabled(
         break;
     }
     std::string query = base::StringPrintf(
-        "gen_204?%s=%d&zx=%" PRId64 "&%s=%" PRIu64, kSemanticEventIdParameter,
+        "gen_204?uact=1&%s=%d&zx=%" PRId64 "&%s=%" PRIu64, kEventIdParameter,
         event_id, base::Time::Now().InMillisecondsSinceUnixEpoch(),
         kGen204IdentifierQueryParameter, gen204_id_);
     auto fetch_url = GURL(TemplateURLServiceFactory::GetForProfile(profile_)

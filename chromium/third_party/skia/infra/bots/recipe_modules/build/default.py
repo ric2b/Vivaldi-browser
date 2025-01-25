@@ -102,7 +102,7 @@ def compile_fn(api, checkout_root, out_dir):
     # https://en.wikipedia.org/wiki/Xcode#Version_comparison_table
     # Use lowercase letters.
     # https://chrome-infra-packages.appspot.com/p/infra_internal/ios/xcode
-    XCODE_BUILD_VERSION = '15f31d' # Xcode 15.4
+    XCODE_BUILD_VERSION = '16a242d' # Xcode 16.0
     extra_cflags.append(
         '-DREBUILD_IF_CHANGED_xcode_build_version=%s' % XCODE_BUILD_VERSION)
     mac_toolchain_cmd = api.vars.workdir.joinpath(
@@ -259,6 +259,8 @@ def compile_fn(api, checkout_root, out_dir):
     args['skia_use_fontations'] = 'true'
     args['skia_use_freetype'] = 'true' # we compare with freetype in tests
     args['skia_use_system_freetype2'] = 'false'
+  if 'RustPNG' in extra_tokens:
+    args['skia_use_rust_png'] = 'true'
   if 'FreeType' in extra_tokens:
     args['skia_use_freetype'] = 'true'
     args['skia_use_system_freetype2'] = 'false'
@@ -402,7 +404,8 @@ def copy_build_products(api, src, dst):
             'Xcode.app', 'Contents', 'Developer', 'Toolchains',
             'XcodeDefault.xctoolchain', 'usr', 'lib', 'clang'),
         test_data=['11.0.0'])
-    assert len(xcode_clang_ver_dirs) == 1
+    # Allow both clang/16 and clang/16.0.0, so long as they are equivalent.
+    assert len({api.path.realpath(d) for d in xcode_clang_ver_dirs}) == 1
     dylib_dir = xcode_clang_ver_dirs[0].joinpath('lib', 'darwin')
     dylibs = api.file.glob_paths('find xSAN dylibs', dylib_dir,
                                  'libclang_rt.*san_osx_dynamic.dylib',

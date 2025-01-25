@@ -109,20 +109,19 @@ TEST(EncodeAPI, InvalidControlId) {
   EXPECT_EQ(AOM_CODEC_OK, aom_codec_destroy(&enc));
 }
 
-TEST(EncodeAPI, InitializeWithPreset) {
+TEST(EncodeAPI, TuneSsimulacra2NotAllIntra) {
   aom_codec_iface_t *iface = aom_codec_av1_cx();
-  aom_codec_ctx_t enc;
   aom_codec_enc_cfg_t cfg;
-  EXPECT_EQ(AOM_CODEC_OK,
-            aom_codec_enc_config_default(iface, &cfg, AOM_USAGE_REALTIME));
-  // AOM_CODEC_USE_PRESET is an experimental feature, so
-  // AOM_CODEC_USE_EXPERIMENTAL must also be set.
-  EXPECT_NE(AOM_CODEC_OK,
-            aom_codec_enc_init(&enc, iface, &cfg, AOM_CODEC_USE_PRESET));
-  EXPECT_EQ(AOM_CODEC_OK, aom_codec_enc_init(&enc, iface, &cfg,
-                                             AOM_CODEC_USE_EXPERIMENTAL |
-                                                 AOM_CODEC_USE_PRESET));
-  EXPECT_EQ(AOM_CODEC_OK, aom_codec_destroy(&enc));
+  ASSERT_EQ(aom_codec_enc_config_default(iface, &cfg, AOM_USAGE_REALTIME),
+            AOM_CODEC_OK);
+
+  aom_codec_ctx_t enc;
+  ASSERT_EQ(aom_codec_enc_init(&enc, iface, &cfg, 0), AOM_CODEC_OK);
+
+  ASSERT_EQ(aom_codec_control(&enc, AOME_SET_TUNING, AOM_TUNE_SSIMULACRA2),
+            AOM_CODEC_INCAPABLE);
+
+  ASSERT_EQ(aom_codec_destroy(&enc), AOM_CODEC_OK);
 }
 
 void EncodeSetSFrameOnFirstFrame(aom_img_fmt fmt, aom_codec_flags_t flag) {
@@ -982,6 +981,40 @@ TEST(EncodeAPI, AllIntraAndUsePsnr) {
       ASSERT_EQ(pkt->kind, AOM_CODEC_PSNR_PKT);
     }
   }
+
+  aom_img_free(image);
+  ASSERT_EQ(aom_codec_destroy(&enc), AOM_CODEC_OK);
+}
+
+TEST(EncodeAPI, AllIntraAndTuneSsimulacra2) {
+  aom_codec_iface_t *iface = aom_codec_av1_cx();
+  aom_codec_enc_cfg_t cfg;
+  ASSERT_EQ(aom_codec_enc_config_default(iface, &cfg, AOM_USAGE_ALL_INTRA),
+            AOM_CODEC_OK);
+
+  aom_codec_ctx_t enc;
+  ASSERT_EQ(aom_codec_enc_init(&enc, iface, &cfg, 0), AOM_CODEC_OK);
+
+  ASSERT_EQ(aom_codec_control(&enc, AOME_SET_TUNING, AOM_TUNE_SSIMULACRA2),
+            AOM_CODEC_OK);
+
+  aom_image_t *image = CreateGrayImage(AOM_IMG_FMT_I420, cfg.g_w, cfg.g_h);
+  ASSERT_NE(image, nullptr);
+
+  ASSERT_EQ(aom_codec_encode(&enc, image, 0, 1, 0), AOM_CODEC_OK);
+  const aom_codec_cx_pkt_t *pkt;
+  aom_codec_iter_t iter = nullptr;
+  pkt = aom_codec_get_cx_data(&enc, &iter);
+  ASSERT_NE(pkt, nullptr);
+  ASSERT_EQ(pkt->kind, AOM_CODEC_CX_FRAME_PKT);
+  pkt = aom_codec_get_cx_data(&enc, &iter);
+  ASSERT_EQ(pkt, nullptr);
+
+  // Flush the encoder.
+  ASSERT_EQ(aom_codec_encode(&enc, nullptr, 0, 0, 0), AOM_CODEC_OK);
+  iter = nullptr;
+  pkt = aom_codec_get_cx_data(&enc, &iter);
+  ASSERT_EQ(pkt, nullptr);
 
   aom_img_free(image);
   ASSERT_EQ(aom_codec_destroy(&enc), AOM_CODEC_OK);

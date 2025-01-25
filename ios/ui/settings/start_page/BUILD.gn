@@ -2,31 +2,33 @@
 
 source_set("start_page_settings") {
   sources = [
-    "vivaldi_start_page_settings_view_controller.h",
-    "vivaldi_start_page_settings_view_controller.mm",
+    "vivaldi_start_page_prefs_helper.h",
+    "vivaldi_start_page_prefs_helper.mm",
+    "vivaldi_start_page_prefs.h",
+    "vivaldi_start_page_prefs.mm",
+    "vivaldi_start_page_settings_consumer.h",
     "vivaldi_start_page_settings_coordinator.h",
     "vivaldi_start_page_settings_coordinator.mm",
     "vivaldi_start_page_settings_mediator.h",
     "vivaldi_start_page_settings_mediator.mm",
-    "vivaldi_start_page_settings_consumer.h",
-    "vivaldi_start_page_prefs.h",
-    "vivaldi_start_page_prefs.mm",
-    "vivaldi_start_page_prefs_helper.h",
-    "vivaldi_start_page_prefs_helper.mm",
+    "vivaldi_start_page_settings_view_controller.h",
+    "vivaldi_start_page_settings_view_controller.mm",
+    "vivaldi_start_page_start_item_type.h",
   ]
   deps = [
     "//base",
-    "//ui/base",
     "//components/prefs",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
-    "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/browser_state",
-    "//ios/chrome/browser/shared/model/prefs",
+    "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
+    "//ios/chrome/browser/shared/model/prefs",
+    "//ui/base",
     "//vivaldi/ios/ui/settings/start_page/layout_settings",
     "//vivaldi/ios/ui/settings/start_page/quick_settings",
+    "//vivaldi/ios/ui/settings/start_page/reopen_with",
+    "//vivaldi/ios/ui/settings/start_page/wallpaper_settings:wallpaper_settings_swift",
     "//vivaldi/ios/ui/settings/start_page/wallpaper_settings",
-    "//vivaldi/ios/ui/settings/start_page/wallpaper_settings:wallpaper_settings_swift"
   ]
 
   frameworks = [

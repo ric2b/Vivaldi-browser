@@ -32,7 +32,7 @@ option objc_class_prefix = "GNSHP";
 // in NearbyClearcutLogger (for android, or clearcut_event_logger as the
 // equivalence for Windows) for all events (may exclude settings), and
 // session_id for a pair of events (start and end of a session).
-// Next id: 67
+// Next id: 72
 enum EventType {
   UNKNOWN_EVENT_TYPE = 0;
 
@@ -294,6 +294,22 @@ enum EventType {
   // event types such as DESKTOP_TRANSFER_EVENT_SEND_TYPE_SELECT_A_DEVICE.
   SEND_DESKTOP_TRANSFER_EVENT = 66;
 
+  // Show accept button on Quick Share receive UI
+  WAITING_FOR_ACCEPT = 67;
+
+  // High quality event setup
+  HIGH_QUALITY_MEDIUM_SETUP = 68;
+
+  // RPC call status
+  RPC_CALL_STATUS = 69;
+
+  // A QR code sharing session has started
+  START_QR_CODE_SESSION = 70;
+
+  // A QR code URL has been opened in a web client/browser instead of in a
+  // native Quick Share app.
+  QR_CODE_OPENED_IN_WEB_CLIENT = 71;
+
   // LINT.ThenChange(//depot/google3/location/nearby/proto/nearby_event_codes.proto:SharingEventCode)
 }
 
@@ -304,6 +320,7 @@ enum EventCategory {
   SENDING_EVENT = 1;
   RECEIVING_EVENT = 2;
   SETTINGS_EVENT = 3;
+  RPC_EVENT = 4;
 }
 
 // Status of nearby sharing.
@@ -319,7 +336,7 @@ enum Visibility {
 
   CONTACTS_ONLY = 1;
   EVERYONE = 2;
-  SELECTED_CONTACTS_ONLY = 3;
+  SELECTED_CONTACTS_ONLY = 3 [deprecated = true];
   HIDDEN = 4;
   SELF_SHARE = 5;
 }
@@ -558,6 +575,12 @@ enum LogSource {
   DEBUG_DEVICES = 5;
   // Represents the device for Nearby Module Food.
   NEARBY_MODULE_FOOD_DEVICES = 6;
+  // Represents the device for BeTo Team Food.
+  BETO_DOGFOOD_DEVICES = 7;
+  // Represents the device for Nearby dog Food.
+  NEARBY_DOGFOOD_DEVICES = 8;
+  // Represents the device for Nearby Team Food.
+  NEARBY_TEAMFOOD_DEVICES = 9;
 }
 
 // The Fast Share server action name.
@@ -909,6 +932,13 @@ enum IdentityVerification {
   IDENTITY_VERIFICATION_NO_PHONE_NUMBER_VERIFIED = 1;
   IDENTITY_VERIFICATION_PHONE_NUMBER_VERIFIED_NOT_LINKED_TO_GAIA = 2;
   IDENTITY_VERIFICATION_PHONE_NUMBER_VERIFIED_LINKED_TO_QS_GAIA = 3;
+}
+
+enum ButtonStatus {
+  BUTTON_STATUS_UNKNOWN = 0;
+  BUTTON_STATUS_CLICK_ACCEPT = 1;
+  BUTTON_STATUS_CLICK_REJECT = 2;
+  BUTTON_STATUS_IGNORE = 3;
 }
 // LINT.ThenChange(
 //   //depot/google3/location/nearby/cpp/sharing/clients/dart/platform/lib/types/models.dart

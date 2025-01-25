@@ -9,14 +9,14 @@
 #include <vector>
 
 #include "ash/public/cpp/login_accelerators.h"
-#include "base/memory/raw_ptr.h"
 #include "chrome/browser/ash/app_mode/kiosk_app.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
 #include "chrome/browser/ash/app_mode/kiosk_controller.h"
-#include "chromeos/ash/components/kiosk/vision/internals_page_processor.h"
 #include "content/public/browser/web_contents.h"
 
 namespace ash {
+
+class AppLaunchSplashScreen;
 
 // Fake implementation of the `KioskController`. Instantiating this class
 // automatically sets the singleton returned by `KioskController::Get()`.
@@ -31,7 +31,8 @@ class FakeKioskController : public KioskController {
   std::optional<KioskApp> GetAutoLaunchApp() const override;
   void StartSession(const KioskAppId& app,
                     bool is_auto_launch,
-                    LoginDisplayHost* host) override;
+                    LoginDisplayHost* host,
+                    AppLaunchSplashScreen* splash_screen) override;
   void StartSessionAfterCrash(const KioskAppId& app, Profile* profile) override;
   bool IsSessionStarting() const override;
   void CancelSessionStart() override;
@@ -45,12 +46,6 @@ class FakeKioskController : public KioskController {
   kiosk_vision::TelemetryProcessor* GetKioskVisionTelemetryProcessor() override;
   kiosk_vision::InternalsPageProcessor* GetKioskVisionInternalsPageProcessor()
       override;
-
-  void SetKioskVisionTelemetryProcessor(
-      kiosk_vision::TelemetryProcessor* telemetry_processor);
-
- private:
-  raw_ptr<kiosk_vision::TelemetryProcessor> telemetry_processor_;
 };
 
 }  // namespace ash

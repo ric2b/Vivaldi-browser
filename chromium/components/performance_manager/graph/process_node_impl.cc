@@ -4,20 +4,26 @@
 
 #include "components/performance_manager/graph/process_node_impl.h"
 
+#include <optional>
 #include <utility>
 
 #include "base/check_op.h"
+#include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/trace_event/named_trigger.h"
 #include "components/performance_manager/graph/frame_node_impl.h"
 #include "components/performance_manager/graph/graph_impl.h"
 #include "components/performance_manager/graph/page_node_impl.h"
 #include "components/performance_manager/graph/worker_node_impl.h"
 #include "components/performance_manager/public/execution_context/execution_context_registry.h"
+#include "components/performance_manager/public/scenarios/performance_scenarios.h"
 #include "components/performance_manager/v8_memory/v8_context_tracker.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/content_switches.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 
 namespace performance_manager {
 
@@ -33,19 +39,14 @@ content::ProcessType ValidateBrowserChildProcessType(
   return process_type;
 }
 
-void FireBackgroundTracingTriggerOnUI(const std::string& trigger_name) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  base::trace_event::EmitNamedTrigger(
-      content::BackgroundTracingManager::kContentTriggerConfig);
-}
-
 }  // namespace
 
 ProcessNodeImpl::ProcessNodeImpl(BrowserProcessNodeTag tag)
     : ProcessNodeImpl(content::PROCESS_TYPE_BROWSER,
                       AnyChildProcessHostProxy{},
-                      base::TaskPriority::HIGHEST) {}
+                      base::TaskPriority::HIGHEST) {
+  tracing_track_.emplace(perfetto::ProcessTrack::Current());
+}
 
 ProcessNodeImpl::ProcessNodeImpl(RenderProcessHostProxy proxy,
                                  base::TaskPriority priority)
@@ -180,13 +181,31 @@ void ProcessNodeImpl::OnRemoteIframeDetached(
   }
 }
 
-void ProcessNodeImpl::FireBackgroundTracingTrigger(
-    const std::string& trigger_name) {
+void ProcessNodeImpl::RequestSharedPerformanceScenarioRegions(
+    uint64_t process_track_id,
+    RequestSharedPerformanceScenarioRegionsCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
-  content::GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(&FireBackgroundTracingTriggerOnUI, trigger_name));
+
+  // Should not be called for the Browser process, which already has a track.
+  // Otherwise, it's ok to overwrite `tracing_track_`, since processes can be
+  // re-initialized for the same ProcessNode (eg. after a crash).
+  // TODO(crbug.com/374302723): Rename the Mojo message that sets this, since
+  // the track ID is used for more than PerformanceScenarios now.
+  CHECK_NE(process_type_, content::PROCESS_TYPE_BROWSER);
+  tracing_track_.emplace(perfetto::Track::Global(process_track_id));
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kSingleProcess)) {
+    // The "child process" is actually running in the same process space. The
+    // global shared memory region is already mapped in, and the per-process
+    // shared memory region can't be used because regions for different
+    // "processes" would overwrite each other.
+    std::move(callback).Run(base::ReadOnlySharedMemoryRegion(),
+                            base::ReadOnlySharedMemoryRegion());
+    return;
+  }
+  std::move(callback).Run(GetGlobalSharedScenarioRegion(),
+                          GetSharedScenarioRegionForProcessNode(this));
 }
 
 content::ProcessType ProcessNodeImpl::GetProcessType() const {
@@ -241,6 +260,11 @@ uint64_t ProcessNodeImpl::GetResidentSetKb() const {
   return resident_set_kb_;
 }
 
+uint64_t ProcessNodeImpl::GetPrivateSwapKb() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return private_swap_kb_;
+}
+
 RenderProcessHostId ProcessNodeImpl::GetRenderProcessHostId() const {
   return GetRenderProcessHostProxy().render_process_host_id();
 }
@@ -281,6 +305,11 @@ ProcessNode::NodeSetView<WorkerNodeImpl*> ProcessNodeImpl::worker_nodes()
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   return NodeSetView<WorkerNodeImpl*>(worker_nodes_);
+}
+
+std::optional<perfetto::Track> ProcessNodeImpl::tracing_track() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return tracing_track_;
 }
 
 void ProcessNodeImpl::SetProcessExitStatus(int32_t exit_status) {
@@ -353,12 +382,6 @@ void ProcessNodeImpl::add_hosted_content_type(ContentType content_type) {
   hosted_content_types_.Put(content_type);
 }
 
-// static
-void ProcessNodeImpl::FireBackgroundTracingTriggerOnUIForTesting(
-    const std::string& trigger_name) {
-  FireBackgroundTracingTriggerOnUI(trigger_name);
-}
-
 base::WeakPtr<ProcessNodeImpl> ProcessNodeImpl::GetWeakPtrOnUIThread() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   return weak_this_;
@@ -384,6 +407,7 @@ void ProcessNodeImpl::SetProcessImpl(base::Process process,
   // process.
   private_footprint_kb_ = 0;
   resident_set_kb_ = 0;
+  private_swap_kb_ = 0;
 
   process_id_ = new_pid;
   launch_time_ = launch_time;

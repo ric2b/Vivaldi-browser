@@ -24,13 +24,17 @@ cast_core_proto_library("api_bindings_proto") {
 }
 
 cast_core_proto_library("cast_channel_proto") {
-    sources = ["cast_channel.proto"]
+    sources = [
+        "cast_channel.proto",
+    ]
     generate_javascript = true
     proto_in_dir = "//third_party/cast_core/public/src"
 }
 
 cast_core_proto_library("media_capabilities_proto") {
-    sources = ["media_capabilities.proto"]
+    sources = [
+        "media_capabilities.proto",
+    ]
     generate_javascript = true
     proto_in_dir = "//third_party/cast_core/public/src"
 }

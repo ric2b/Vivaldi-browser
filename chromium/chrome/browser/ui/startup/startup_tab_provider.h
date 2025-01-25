@@ -129,7 +129,9 @@ class StartupTabProviderImpl : public StartupTabProvider {
   // returns the specified tabs if so.
   static StartupTabs GetPreferencesTabsForState(
       const SessionStartupPref& pref,
-      bool profile_has_other_tabbed_browser);
+      bool profile_has_other_tabbed_browser,
+      Profile* profile = nullptr // Vivaldi
+    );
 
   // Determines whether startup preferences require the New Tab Page to be
   // explicitly specified. Session Restore does not expect the NTP to be passed.

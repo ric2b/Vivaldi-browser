@@ -24,7 +24,7 @@ class NetworkInterfaceConfig {
   bool HasAddressV4() const;
   bool HasAddressV6() const;
 
-  // Returns either the |address_v4_| or |address_v6_| depending which is
+  // Returns either the `address_v4_` or `address_v6_` depending which is
   // present, or the empty IPAddress if neither is present.
   const IPAddress& GetAddress() const;
 

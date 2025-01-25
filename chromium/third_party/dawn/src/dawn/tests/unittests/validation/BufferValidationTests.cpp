@@ -42,7 +42,7 @@ using testing::TestParamInfo;
 using testing::Values;
 using testing::WithParamInterface;
 
-using MockMapAsyncCallback = MockCppCallback<void (*)(wgpu::MapAsyncStatus, const char*)>;
+using MockMapAsyncCallback = MockCppCallback<void (*)(wgpu::MapAsyncStatus, wgpu::StringView)>;
 
 class BufferValidationTest : public ValidationTest {
   protected:
@@ -458,6 +458,18 @@ TEST_P(BufferMappingValidationTest, MapAsync_DestroyBeforeResult) {
 
     buffer.MapAsync(GetParam(), 0, 4, wgpu::CallbackMode::AllowProcessEvents, mockCb.Callback());
     buffer.Destroy();
+    WaitForAllOperations();
+}
+
+// Test map async but dropping the last reference before the result is ready.
+TEST_P(BufferMappingValidationTest, MapAsync_DroppedBeforeResult) {
+    wgpu::Buffer buffer = CreateBuffer(4);
+
+    MockMapAsyncCallback mockCb;
+    EXPECT_CALL(mockCb, Call(wgpu::MapAsyncStatus::Aborted, HasSubstr("destroyed"))).Times(1);
+
+    buffer.MapAsync(GetParam(), 0, 4, wgpu::CallbackMode::AllowProcessEvents, mockCb.Callback());
+    buffer = nullptr;
     WaitForAllOperations();
 }
 

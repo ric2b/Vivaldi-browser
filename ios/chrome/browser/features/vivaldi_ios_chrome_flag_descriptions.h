@@ -13,6 +13,9 @@ extern const char kShowTopSitesDescription[];
 extern const char kViewMarkdownAsHTMLName[];
 extern const char kkViewMarkdownAsHTMLDescription[];
 
+extern const char kShowNewSpeedDialDialog[];
+extern const char kShowNewSpeedDialDialogDescription[];
+
 // Please add names and descriptions above in alphabetical order.
 
 }  // namespace flag_descriptions

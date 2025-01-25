@@ -72,6 +72,7 @@ public class LocationBarLayout extends FrameLayout {
 
     /** Vivaldi */
     protected ImageButton mQrCodeButton;
+    protected ImageButton mReloadButton;
 
     public LocationBarLayout(Context context, AttributeSet attrs) {
         this(context, attrs, R.layout.location_bar);
@@ -101,8 +102,9 @@ public class LocationBarLayout extends FrameLayout {
                 getResources().getDimensionPixelOffset(R.dimen.location_bar_url_action_offset);
 
 
-        /** Vivaldi */
+        /* Vivaldi */
         mQrCodeButton = findViewById(R.id.qrcode_button);
+        mReloadButton = findViewById(R.id.reload_button);
         assert mQrCodeButton != null;
     }
 
@@ -141,7 +143,6 @@ public class LocationBarLayout extends FrameLayout {
      * @param urlCoordinator The coordinator for interacting with the url bar.
      * @param statusCoordinator The coordinator for interacting with the status icon.
      * @param locationBarDataProvider Provider of LocationBar data, e.g. url and title.
-     * @param searchEngineUtils Allows querying the state of the search engine logo feature.
      */
     @CallSuper
     public void initialize(
@@ -597,5 +598,9 @@ public class LocationBarLayout extends FrameLayout {
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return; // No camera on automotive, no QR button.
         mQrCodeButton.setVisibility(shouldShow ? VISIBLE : GONE);
     }
-    // End Vivaldi
+
+    /** Vivaldi */
+    void setReloadButtonVisibility(boolean shouldShow) {
+        mReloadButton.setVisibility(shouldShow ? VISIBLE : GONE);
+    }
 }

@@ -26,7 +26,7 @@ class MdnsReceiver {
     virtual void OnMessageReceived(const MdnsMessage& message) = 0;
   };
 
-  // MdnsReceiver does not own |socket| and |delegate|
+  // MdnsReceiver does not own `socket` and `delegate`
   // and expects that the lifetime of these objects exceeds the lifetime of
   // MdnsReceiver.
   explicit MdnsReceiver(const Config& config);

@@ -21,6 +21,7 @@
 #import "ios/chrome/browser/parcel_tracking/features.h"
 #import "ios/chrome/browser/parcel_tracking/parcel_tracking_opt_in_status.h"
 #import "ios/chrome/browser/power_bookmarks/model/power_bookmark_service_factory.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/sessions/model/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
@@ -38,17 +39,16 @@ ShoppingServiceFactory* ShoppingServiceFactory::GetInstance() {
 }
 
 // static
-ShoppingService* ShoppingServiceFactory::GetForBrowserState(
-    web::BrowserState* state) {
+ShoppingService* ShoppingServiceFactory::GetForProfile(ProfileIOS* profile) {
   return static_cast<ShoppingService*>(
-      GetInstance()->GetServiceForBrowserState(state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 // static
-ShoppingService* ShoppingServiceFactory::GetForBrowserStateIfExists(
-    web::BrowserState* state) {
+ShoppingService* ShoppingServiceFactory::GetForProfileIfExists(
+    ProfileIOS* profile) {
   return static_cast<ShoppingService*>(
-      GetInstance()->GetServiceForBrowserState(state, false));
+      GetInstance()->GetServiceForBrowserState(profile, false));
 }
 
 ShoppingServiceFactory::ShoppingServiceFactory()
@@ -67,13 +67,13 @@ ShoppingServiceFactory::ShoppingServiceFactory()
   DependsOn(SyncServiceFactory::GetInstance());
   DependsOn(ios::HistoryServiceFactory::GetInstance());
   DependsOn(IOSChromeTabRestoreServiceFactory::GetInstance());
+  DependsOn(ios::TemplateURLServiceFactory::GetInstance());
 }
 
 std::unique_ptr<KeyedService> ShoppingServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* state) const {
-  ChromeBrowserState* chrome_state =
-      ChromeBrowserState::FromBrowserState(state);
-  PrefService* pref_service = chrome_state ? chrome_state->GetPrefs() : nullptr;
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(state);
+  PrefService* pref_service = profile ? profile->GetPrefs() : nullptr;
 
   if (IsIOSParcelTrackingEnabled()) {
     RecordParcelTrackingOptInStatus(pref_service);
@@ -82,24 +82,25 @@ std::unique_ptr<KeyedService> ShoppingServiceFactory::BuildServiceInstanceFor(
   return std::make_unique<ShoppingService>(
       GetCurrentCountryCode(GetApplicationContext()->GetVariationsService()),
       GetApplicationContext()->GetApplicationLocale(),
-      ios::BookmarkModelFactory::GetForBrowserState(chrome_state),
-      OptimizationGuideServiceFactory::GetForProfile(chrome_state),
-      pref_service, IdentityManagerFactory::GetForProfile(chrome_state),
-      SyncServiceFactory::GetForBrowserState(chrome_state),
-      chrome_state->GetSharedURLLoaderFactory(),
+      ios::BookmarkModelFactory::GetForProfile(profile),
+      OptimizationGuideServiceFactory::GetForProfile(profile),
+      pref_service, IdentityManagerFactory::GetForProfile(profile),
+      SyncServiceFactory::GetForProfile(profile),
+      profile->GetSharedURLLoaderFactory(),
       SessionProtoDBFactory<commerce_subscription_db::
                                 CommerceSubscriptionContentProto>::GetInstance()
-          ->GetForBrowserState(chrome_state),
-      PowerBookmarkServiceFactory::GetForBrowserState(chrome_state), nullptr,
+          ->GetForProfile(profile),
+      PowerBookmarkServiceFactory::GetForProfile(profile), nullptr,
       nullptr, /**ProductSpecificationsService not currently used on iOS
                   b/329431295 */
       SessionProtoDBFactory<
           parcel_tracking_db::ParcelTrackingContent>::GetInstance()
-          ->GetForBrowserState(chrome_state),
-      ios::HistoryServiceFactory::GetForBrowserState(
-          chrome_state, ServiceAccessType::EXPLICIT_ACCESS),
+          ->GetForProfile(profile),
+      ios::HistoryServiceFactory::GetForProfile(
+          profile, ServiceAccessType::EXPLICIT_ACCESS),
       std::make_unique<commerce::WebExtractorImpl>(),
-      IOSChromeTabRestoreServiceFactory::GetForBrowserState(chrome_state));
+      IOSChromeTabRestoreServiceFactory::GetForProfile(profile),
+      ios::TemplateURLServiceFactory::GetForProfile(profile));
 }
 
 bool ShoppingServiceFactory::ServiceIsNULLWhileTesting() const {

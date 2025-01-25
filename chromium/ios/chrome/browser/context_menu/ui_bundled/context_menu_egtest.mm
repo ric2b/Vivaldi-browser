@@ -283,10 +283,7 @@ void TapOnContextMenuButton(id<GREYMatcher> context_menu_item_button) {
 void RelaunchAppWithInactiveTabs2WeeksEnabled() {
   AppLaunchConfiguration config;
   config.relaunch_policy = ForceRelaunchByCleanShutdown;
-  config.additional_args.push_back(
-      "--enable-features=" + std::string(kTabInactivityThreshold.name) + ":" +
-      kTabInactivityThresholdParameterName + "/" +
-      kTabInactivityThresholdTwoWeeksParam);
+  config.features_enabled.push_back(kInactiveTabsIPadFeature);
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
 }
 
@@ -304,7 +301,6 @@ void RelaunchAppWithInactiveTabs2WeeksEnabled() {
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
-  config.features_enabled.push_back(kTabGroupsInGrid);
   config.features_enabled.push_back(kTabGroupsIPad);
   config.features_enabled.push_back(kModernTabStrip);
   config.features_enabled.push_back(kShareInWebContextMenuIOS);
@@ -327,12 +323,12 @@ void RelaunchAppWithInactiveTabs2WeeksEnabled() {
   _setUpHistogramTesterCalled = true;
 }
 
-- (void)tearDown {
+- (void)tearDownHelper {
   if (_setUpHistogramTesterCalled) {
     GREYAssertNil([MetricsAppInterface releaseHistogramTester],
                   @"Failed to release histogram tester.");
   }
-  [super tearDown];
+  [super tearDownHelper];
 }
 
 // Tests that selecting "Open Image" from the context menu properly opens the

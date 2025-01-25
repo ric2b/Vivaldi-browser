@@ -11,11 +11,13 @@ import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import {
   type ClickOutsideDialogEvent,
-  Dialog as DialogElement,
+  type Dialog as DialogElement,
   DialogHorizontalAlignment,
   DialogVerticalPosition,
 } from './Dialog.js';
 import shortcutDialogStyles from './shortcutDialog.css.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
 
@@ -60,7 +62,6 @@ export interface ShortcutDialogData {
 }
 
 export class ShortcutDialog extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-shortcut-dialog`;
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #renderBound = this.#render.bind(this);
 
@@ -102,6 +103,10 @@ export class ShortcutDialog extends HTMLElement {
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
   }
 
+  #getKeysFromBinding(binding: string): string[] {
+    return binding.split(/[\s+]+/).map(word => word.trim());  // Split on one or more spaces or + symbols
+  }
+
   #render(): void {
     if (!ComponentHelpers.ScheduledRender.isScheduledRender(this)) {
       throw new Error('Shortcut dialog render was not scheduled');
@@ -109,8 +114,8 @@ export class ShortcutDialog extends HTMLElement {
 
     // clang-format off
     LitHtml.render(
-      LitHtml.html`
-      <${Buttons.Button.Button.litTagName}
+      html`
+      <devtools-button
         @click=${this.#showDialog}
         on-render=${ComponentHelpers.Directives.nodeRenderedCallback(node => {
           this.#showButton = node as Buttons.Button.Button;
@@ -120,10 +125,10 @@ export class ShortcutDialog extends HTMLElement {
           iconName: 'help',
           title: i18nString(UIStrings.showShortcutTitle),
         } as Buttons.Button.ButtonData}
-      ></${Buttons.Button.Button.litTagName}>
-      <${DialogElement.litTagName}
+      ></devtools-button>
+      <devtools-dialog
+        class="shortcuts-dialog"
         @clickoutsidedialog=${this.#closeDialog}
-        .showConnector=${true}
         .origin=${() => {
           if (!this.#showButton) {
             throw new Error('Button not found');
@@ -139,36 +144,34 @@ export class ShortcutDialog extends HTMLElement {
       >
         <div class="keybinds-category-header">
           <span class="keybinds-category-header-text">${i18nString(UIStrings.dialogTitle)}</span>
-          <${Buttons.Button.Button.litTagName}
+          <devtools-button
             @click=${this.#closeDialog}
-            class='close-icon'
             .data=${{
               variant: Buttons.Button.Variant.TOOLBAR,
               iconName: 'cross',
               title: i18nString(UIStrings.close),
             } as Buttons.Button.ButtonData}
             jslog=${VisualLogging.close().track({click: true})}
-          ></${Buttons.Button.Button.litTagName}>
+          ></devtools-button>
         </div>
         <ul class="keybinds-list">
           ${this.#shortcuts.map(shortcut =>
-            LitHtml.html`
+            html`
               <li class="keybinds-list-item">
-                <div class="keybinds-action-name keybinds-list-text">${shortcut.title}</div>
-                ${shortcut.bindings.map((binding, index) =>
-                  LitHtml.html`
-                    <div class="keybinds-shortcut keybinds-list-text">
-                      <span class="keybinds-key">${binding}</span>
-                    </div>
-                    ${shortcut.bindings.at(index + 1) ?
-                      LitHtml.html`<span class="keybinds-shortcut-separator"> - </span>`
-                      : LitHtml.nothing
-                    }
-                `)}
+                <div>${shortcut.title}</div>
+                ${shortcut.bindings.map(binding => {
+                  return html`
+                  <div class="keys-container">
+                    ${this.#getKeysFromBinding(binding).map(key => html`
+                        <span class="keybinds-key">${key}</span>
+                    `)}
+                  </div>
+                `;
+                  })}
               </li>`,
           )}
         </ul>
-      </${DialogElement.litTagName}>
+      </devtools-dialog>
       `,
       this.#shadow, {host: this});
     // clang-format on

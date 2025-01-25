@@ -210,6 +210,27 @@ public class TabPersistentStore {
                             saveTabListAsynchronously();
                         }
                     }
+
+                    @Override
+                    public void didSelectTab(Tab tab, int type, int lastId) {
+                        saveTabListAsynchronously();
+                    }
+
+                    @Override
+                    public void didMoveTab(Tab tab, int newIndex, int curIndex) {
+                        saveTabListAsynchronously();
+                    }
+
+                    @Override
+                    public void didAddTab(
+                            Tab tab, int type, int creationState, boolean markedForSelection) {
+                        saveTabListAsynchronously();
+                    }
+
+                    @Override
+                    public void tabRemoved(Tab tab) {
+                        saveTabListAsynchronously();
+                    }
                 };
         mTabModelSelector.getModel(false).addObserver(mTabModelObserver);
         mTabModelSelector.getModel(true).addObserver(mTabModelObserver);
@@ -532,7 +553,7 @@ public class TabPersistentStore {
     }
 
     @VisibleForTesting
-    void initializeRestoreVars(boolean ignoreIncognitoFiles) {
+    /* package */ void initializeRestoreVars(boolean ignoreIncognitoFiles) {
         mCancelNormalTabLoads = false;
         mCancelIncognitoTabLoads = ignoreIncognitoFiles;
         mNormalTabsRestored = new SparseIntArray();
@@ -834,6 +855,10 @@ public class TabPersistentStore {
         }
 
         if (tabState != null) {
+            if (tabState.contentsState != null) {
+                tabState.contentsState.setFallbackUrlForRestorationFailure(tabToRestore.url);
+            }
+
             @TabRestoreMethod int tabRestoreMethod = TabRestoreMethod.TAB_STATE;
             RecordHistogram.recordEnumeratedHistogram(
                     "Tabs.TabRestoreMethod", tabRestoreMethod, TabRestoreMethod.NUM_ENTRIES);
@@ -918,7 +943,7 @@ public class TabPersistentStore {
     public void clearState() {
         mPersistencePolicy.cancelCleanupInProgress();
 
-        mSequencedTaskRunner.postTask(
+        mSequencedTaskRunner.execute(
                 new Runnable() {
                     @Override
                     public void run() {
@@ -967,7 +992,8 @@ public class TabPersistentStore {
         }
     }
 
-    public void addTabToSaveQueue(Tab tab) {
+    @VisibleForTesting
+    /* package */ void addTabToSaveQueue(Tab tab) {
         addTabToSaveQueueIfApplicable(tab);
         saveNextTab();
     }
@@ -976,13 +1002,12 @@ public class TabPersistentStore {
      * @return Whether the specified tab is in any pending save operations.
      */
     @VisibleForTesting
-    boolean isTabPendingSave(Tab tab) {
+    /* package */ boolean isTabPendingSave(Tab tab) {
         return (mSaveTabTask != null && mSaveTabTask.mTab.equals(tab)) || mTabsToSave.contains(tab);
     }
 
     private void addTabToSaveQueueIfApplicable(Tab tab) {
         if (tab == null || tab.isDestroyed()) return;
-        TabStateAttributes tabStateAttributes = TabStateAttributes.from(tab);
         // @TabStateAttributes.DirtinessState
         // int dirtinessState = tabStateAttributes.getDirtinessState();
         if (mTabsToSave.contains(tab)
@@ -1333,8 +1358,6 @@ public class TabPersistentStore {
      * If a global max tab ID has not been computed and stored before, then check all the state
      * folders and calculate a new global max tab ID to be used. Must be called before any new tabs
      * are created.
-     *
-     * @throws IOException
      */
     private void checkAndUpdateMaxTabId() throws IOException {
         if (ChromeSharedPreferences.getInstance()
@@ -1525,8 +1548,8 @@ public class TabPersistentStore {
         }
     }
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     /** Migrate Tab to new FlatBuffer format. */
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     class MigrateTabTask extends AsyncTask<Void> {
         Tab mTab;
         int mId;
@@ -1771,7 +1794,7 @@ public class TabPersistentStore {
         if (mTabRestoreStartTime == INVALID_TIME) return;
 
         long duration = SystemClock.elapsedRealtime() - mTabRestoreStartTime;
-        RecordHistogram.recordMediumTimesHistogram(
+        RecordHistogram.deprecatedRecordMediumTimesHistogram(
                 "Tabs.Startup.RestoreDuration." + mClientTag, duration);
         int tabCount = mTabModelSelector.getTotalTabCount();
         if (tabCount != 0) {

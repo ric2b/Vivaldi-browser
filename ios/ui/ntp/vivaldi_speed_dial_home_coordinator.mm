@@ -14,8 +14,8 @@ using bookmarks::BookmarkModel;
   Browser* _browser;
   // Bookmark model in which meditor and speed dial home controller depends
   BookmarkModel* _bookmarkModel;
-  // Browser state in which meditor depends
-  ChromeBrowserState* _browserState;
+  // Profile in which meditor depends
+  ProfileIOS* _profile;
 }
 
 // View controller for the speed dial home/start page.
@@ -38,10 +38,8 @@ using bookmarks::BookmarkModel;
 
   if (self) {
     _browser = browser;
-    _browserState =
-        _browser->GetBrowserState()->GetOriginalChromeBrowserState();
-    _bookmarkModel =
-        ios::BookmarkModelFactory::GetForBrowserState(_browserState);
+    _profile = _browser->GetProfile()->GetOriginalProfile();
+    _bookmarkModel = ios::BookmarkModelFactory::GetForProfile(_profile);
   }
 
   return self;
@@ -62,8 +60,8 @@ using bookmarks::BookmarkModel;
   [navigationController.view layoutIfNeeded];
 
   self.mediator = [[VivaldiSpeedDialHomeMediator alloc]
-                      initWithBrowserState:_browserState
-                          bookmarkModel:_bookmarkModel];
+                      initWithProfile:_profile
+                        bookmarkModel:_bookmarkModel];
   self.mediator.consumer = controller;
   [self.mediator startMediating];
 
@@ -82,7 +80,7 @@ using bookmarks::BookmarkModel;
 
   _browser = nullptr;
   _bookmarkModel = nullptr;
-  _browserState = nullptr;
+  _profile = nullptr;
 }
 
 @end

@@ -5,15 +5,15 @@
 // @ts-nocheck TODO(crbug.com/348449529)
 
 import {TraceLoader} from '../../../../testing/TraceLoader.js';
-import * as TraceModel from '../../trace.js';
+import * as Trace from '../../trace.js';
 import * as Lantern from '../lantern.js';
-import {runTraceEngine, toLanternTrace} from '../testing/testing.js';
+import {runTrace, toLanternTrace} from '../testing/testing.js';
 
 const {NetworkAnalyzer} = Lantern.Core;
 
 async function createRequests(trace: Lantern.Types.Trace) {
-  const traceEngineData = await runTraceEngine(trace);
-  return TraceModel.LanternComputationData.createNetworkRequests(trace, traceEngineData);
+  const parsedTrace = await runTrace(trace);
+  return Trace.LanternComputationData.createNetworkRequests(trace, parsedTrace);
 }
 
 describe('NetworkAnalyzer', () => {
@@ -42,7 +42,7 @@ describe('NetworkAnalyzer', () => {
           connectionReused: false,
           networkRequestTime: 10,
           networkEndTime: 10,
-          transferSize: 0,
+          transferSize: 10000,
           protocol: opts.protocol || 'http/1.1',
           parsedURL: {scheme: url.match(/https?/)[0], securityOrigin: url.match(/.*\.com/)[0]},
           timing: opts.timing || null,
@@ -339,9 +339,9 @@ describe('NetworkAnalyzer', () => {
       );
     }
 
-    it('should return Infinity for no/missing records', () => {
-      assert.strictEqual(estimateThroughput([]), Infinity);
-      assert.strictEqual(estimateThroughput([createThroughputRecord(0, 0, {finished: false})]), Infinity);
+    it('should return null for no/missing records', () => {
+      assert.strictEqual(estimateThroughput([]), null);
+      assert.strictEqual(estimateThroughput([createThroughputRecord(0, 0, {finished: false})]), null);
     });
 
     it('should compute correctly for a basic waterfall', () => {

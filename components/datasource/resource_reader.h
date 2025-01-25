@@ -46,6 +46,8 @@ class ResourceReader {
   const uint8_t* data() const { return mapped_file_.data(); }
   size_t size() const { return mapped_file_.length(); }
 
+  base::span<const uint8_t> bytes() const { return mapped_file_.bytes(); }
+
   std::string_view as_string_view() const {
     return std::string_view(reinterpret_cast<const char*>(data()), size());
   }

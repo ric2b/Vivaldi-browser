@@ -18,7 +18,7 @@ import {DeprecationIssue} from './DeprecationIssue.js';
 import {FederatedAuthRequestIssue} from './FederatedAuthRequestIssue.js';
 import {GenericIssue} from './GenericIssue.js';
 import {HeavyAdIssue} from './HeavyAdIssue.js';
-import {type Issue, type IssueKind} from './Issue.js';
+import type {Issue, IssueKind} from './Issue.js';
 import {Events} from './IssuesManagerEvents.js';
 import {LowTextContrastIssue} from './LowTextContrastIssue.js';
 import {MixedContentIssue} from './MixedContentIssue.js';
@@ -129,7 +129,7 @@ const issueCodeHandlers = new Map<
  * Each issue reported by the backend can result in multiple `Issue` instances.
  * Handlers are simple functions hard-coded into a map.
  */
-function createIssuesFromProtocolIssue(
+export function createIssuesFromProtocolIssue(
     issuesModel: SDK.IssuesModel.IssuesModel, inspectorIssue: Protocol.Audits.InspectorIssue): Issue[] {
   const handler = issueCodeHandlers.get(inspectorIssue.code);
   if (handler) {

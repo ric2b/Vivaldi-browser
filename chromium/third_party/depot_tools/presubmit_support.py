@@ -1611,8 +1611,7 @@ def DoPostUploadExecuter(change, gerrit_obj, verbose):
         gerrit_obj: The GerritAccessor object.
         verbose: Prints debug info.
     """
-    python_version = 'Python %s' % sys.version_info.major
-    sys.stdout.write('Running %s post upload checks ...\n' % python_version)
+    sys.stdout.write('Running post upload checks ...\n')
     presubmit_files = ListRelevantPresubmitFiles(
         change.LocalPaths() + change.LocalSubmodules(), change.RepositoryRoot())
     if not presubmit_files and verbose:
@@ -1923,13 +1922,10 @@ def DoPresubmitChecks(change,
         1 if presubmit checks failed or 0 otherwise.
     """
     with setup_environ({'PYTHONDONTWRITEBYTECODE': '1'}):
-        python_version = 'Python %s' % sys.version_info.major
         if committing:
-            sys.stdout.write('Running %s presubmit commit checks ...\n' %
-                             python_version)
+            sys.stdout.write('Running presubmit commit checks ...\n')
         else:
-            sys.stdout.write('Running %s presubmit upload checks ...\n' %
-                             python_version)
+            sys.stdout.write('Running presubmit upload checks ...\n')
         start_time = time_time()
         presubmit_files = ListRelevantPresubmitFiles(
             change.AbsoluteLocalPaths() + change.AbsoluteLocalSubmodules(),
@@ -1987,18 +1983,16 @@ def DoPresubmitChecks(change,
                              total_time)
 
         if not should_prompt and not presubmits_failed:
-            sys.stdout.write('%s presubmit checks passed.\n\n' % python_version)
+            sys.stdout.write('presubmit checks passed.\n\n')
         elif should_prompt and not presubmits_failed:
-            sys.stdout.write('There were %s presubmit warnings. ' %
-                             python_version)
+            sys.stdout.write('There were presubmit warnings. ')
             if may_prompt:
                 presubmits_failed = not prompt_should_continue(
                     'Are you sure you wish to continue? (y/N): ')
             else:
                 sys.stdout.write('\n')
         else:
-            sys.stdout.write('There were %s presubmit errors.\n' %
-                             python_version)
+            sys.stdout.write('There were presubmit errors.\n')
 
         if json_output:
             # Write the presubmit results to json output
@@ -2133,7 +2127,7 @@ def _parse_change(parser, options):
         options.issue, options.patchset, options.author
     ]
 
-    if diff:
+    if diff is not None:
         return ProvidedDiffChange(*change_args, diff=diff)
     if change_scm == 'git':
         return GitChange(*change_args,
@@ -2203,7 +2197,7 @@ def _parse_unified_diff(diff):
 def _process_diff_file(diff_file):
     diff = gclient_utils.FileRead(diff_file)
     if not diff:
-        raise PresubmitFailure('diff file is empty')
+        return '', []
     return diff, _diffs_to_change_files(_parse_unified_diff(diff))
 
 

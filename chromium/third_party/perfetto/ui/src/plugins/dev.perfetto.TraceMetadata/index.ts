@@ -14,10 +14,12 @@
 
 import {NUM} from '../../trace_processor/query_result';
 import {Trace} from '../../public/trace';
-import {PerfettoPlugin, PluginDescriptor} from '../../public/plugin';
-import {SimpleSliceTrack} from '../../frontend/simple_slice_track';
+import {PerfettoPlugin} from '../../public/plugin';
+import {createQuerySliceTrack} from '../../public/lib/tracks/query_slice_track';
 import {TrackNode} from '../../public/workspace';
-class TraceMetadata implements PerfettoPlugin {
+
+export default class implements PerfettoPlugin {
+  static readonly id = 'dev.perfetto.TraceMetadata';
   async onTraceLoad(ctx: Trace): Promise<void> {
     const res = await ctx.engine.query(`
       select count() as cnt from (select 1 from clock_snapshot limit 1)
@@ -28,30 +30,22 @@ class TraceMetadata implements PerfettoPlugin {
     }
     const uri = `/clock_snapshots`;
     const title = 'Clock Snapshots';
+    const track = await createQuerySliceTrack({
+      trace: ctx,
+      uri,
+      data: {
+        sqlSource: `
+          select ts, 0 as dur, 'Snapshot' as name
+          from clock_snapshot
+          `,
+      },
+    });
     ctx.tracks.registerTrack({
       uri,
       title,
-      track: new SimpleSliceTrack(
-        ctx.engine,
-        {trackUri: uri},
-        {
-          data: {
-            sqlSource: `
-              select ts, 0 as dur, 'Snapshot' as name
-              from clock_snapshot
-            `,
-            columns: ['ts', 'dur', 'name'],
-          },
-          columns: {ts: 'ts', dur: 'dur', name: 'name'},
-          argColumns: [],
-        },
-      ),
+      track,
     });
-    ctx.workspace.insertChildInOrder(new TrackNode(uri, title));
+    const trackNode = new TrackNode({uri, title});
+    ctx.workspace.addChildInOrder(trackNode);
   }
 }
-
-export const plugin: PluginDescriptor = {
-  pluginId: 'dev.perfetto.TraceMetadata',
-  plugin: TraceMetadata,
-};

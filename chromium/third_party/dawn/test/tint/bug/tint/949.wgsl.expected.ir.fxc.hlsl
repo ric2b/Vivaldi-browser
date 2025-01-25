@@ -103,11 +103,11 @@ float3x3 transposeMat3_mf33_(inout float3x3 inMatrix) {
   float3 i1 = (0.0f).xxx;
   float3 i2 = (0.0f).xxx;
   float3x3 outMatrix = float3x3((0.0f).xxx, (0.0f).xxx, (0.0f).xxx);
-  float3 x_60 = inMatrix[0];
+  float3 x_60 = inMatrix[int(0)];
   i0 = x_60;
-  float3 x_64 = inMatrix[1];
+  float3 x_64 = inMatrix[int(1)];
   i1 = x_64;
-  float3 x_68 = inMatrix[2];
+  float3 x_68 = inMatrix[int(2)];
   i2 = x_68;
   float x_73 = i0.x;
   float x_75 = i1.x;
@@ -172,8 +172,7 @@ lightingInfo computeHemisphericLighting_vf3_vf3_vf4_vf3_vf3_vf3_f1_(inout float3
   float x_241 = specComp;
   float3 x_242 = specularColor;
   result.specular = (x_242 * x_241);
-  lightingInfo v_5 = result;
-  lightingInfo x_245 = v_5;
+  lightingInfo x_245 = result;
   return x_245;
 }
 
@@ -203,7 +202,7 @@ void main_1() {
   float2 vLastOffset = (0.0f).xx;
   float lastSampledHeight = 0.0f;
   float currSampledHeight = 0.0f;
-  int i = 0;
+  int i = int(0);
   float delta1 = 0.0f;
   float delta2 = 0.0f;
   float ratio = 0.0f;
@@ -276,8 +275,8 @@ void main_1() {
   float3 x_334 = mul(-(x_332), x_331);
   float3x3 x_337 = invTBN;
   float3 x_338 = output5;
-  float v_6 = length(float2(x_334[0u], x_334[1u]));
-  parallaxLimit = (v_6 / mul(-(x_338), x_337)[2u]);
+  float v_5 = length(float2(x_334[0u], x_334[1u]));
+  parallaxLimit = (v_5 / mul(-(x_338), x_337)[2u]);
   float x_345 = asfloat(x_269[9u].w);
   float x_346 = parallaxLimit;
   parallaxLimit = (x_346 * x_345);
@@ -292,8 +291,8 @@ void main_1() {
   float3 x_362 = output5;
   float3x3 x_365 = invTBN;
   float4 x_366 = v_output2;
-  float3 v_7 = mul(-(x_362), x_361);
-  numSamples = (15.0f + (dot(v_7, mul(float3(x_366[0u], x_366[1u], x_366[2u]), x_365)) * -11.0f));
+  float3 v_6 = mul(-(x_362), x_361);
+  numSamples = (15.0f + (dot(v_6, mul(float3(x_366[0u], x_366[1u], x_366[2u]), x_365)) * -11.0f));
   float x_374 = numSamples;
   stepSize = (1.0f / x_374);
   currRayHeight = 1.0f;
@@ -301,11 +300,11 @@ void main_1() {
   vLastOffset = (0.0f).xx;
   lastSampledHeight = 1.0f;
   currSampledHeight = 1.0f;
-  i = 0;
+  i = int(0);
   {
     while(true) {
       int x_388 = i;
-      if ((x_388 < 15)) {
+      if ((x_388 < int(15))) {
       } else {
         break;
       }
@@ -348,7 +347,7 @@ void main_1() {
       }
       {
         int x_441 = i;
-        i = (x_441 + 1);
+        i = (x_441 + int(1));
       }
       continue;
     }
@@ -400,8 +399,7 @@ void main_1() {
   param_16 = x_518;
   float x_520 = glossiness_1;
   param_17 = x_520;
-  lightingInfo v_8 = computeHemisphericLighting_vf3_vf3_vf4_vf3_vf3_vf3_f1_(param_11, param_12, param_13, param_14, param_15, param_16, param_17);
-  lightingInfo x_521 = v_8;
+  lightingInfo x_521 = computeHemisphericLighting_vf3_vf3_vf4_vf3_vf3_vf3_f1_(param_11, param_12, param_13, param_14, param_15, param_16, param_17);
   info = x_521;
   shadow = 1.0f;
   float3 x_523 = info.diffuse;
@@ -432,13 +430,13 @@ main_out main_inner(float2 vMainuv_param, float4 v_output1_param, bool gl_FrontF
   v_uv = v_uv_param;
   v_output2 = v_output2_param;
   main_1();
-  main_out v_9 = {glFragColor};
-  return v_9;
+  main_out v_7 = {glFragColor};
+  return v_7;
 }
 
 main_outputs main(main_inputs inputs) {
-  main_out v_10 = main_inner(inputs.vMainuv_param, inputs.v_output1_param, inputs.gl_FrontFacing_param, inputs.v_uv_param, inputs.v_output2_param);
-  main_outputs v_11 = {v_10.glFragColor_1};
-  return v_11;
+  main_out v_8 = main_inner(inputs.vMainuv_param, inputs.v_output1_param, inputs.gl_FrontFacing_param, inputs.v_uv_param, inputs.v_output2_param);
+  main_outputs v_9 = {v_8.glFragColor_1};
+  return v_9;
 }
 

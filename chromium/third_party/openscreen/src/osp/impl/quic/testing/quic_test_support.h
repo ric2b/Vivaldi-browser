@@ -28,7 +28,12 @@ namespace openscreen::osp {
 
 class MockServiceObserver : public ProtocolConnectionServiceObserver {
  public:
-  ~MockServiceObserver() override = default;
+  MockServiceObserver();
+  MockServiceObserver(const MockServiceObserver&) = delete;
+  MockServiceObserver& operator=(const MockServiceObserver&) = delete;
+  MockServiceObserver(MockServiceObserver&&) noexcept = delete;
+  MockServiceObserver& operator=(MockServiceObserver&&) noexcept = delete;
+  ~MockServiceObserver() override;
 
   MOCK_METHOD0(OnRunning, void());
   MOCK_METHOD0(OnStopped, void());
@@ -48,6 +53,10 @@ class MockServiceObserver : public ProtocolConnectionServiceObserver {
 class FakeQuicBridge {
  public:
   FakeQuicBridge(FakeTaskRunner& task_runner, ClockNowFunctionPtr now_function);
+  FakeQuicBridge(const FakeQuicBridge&) = delete;
+  FakeQuicBridge& operator=(const FakeQuicBridge&) = delete;
+  FakeQuicBridge(FakeQuicBridge&&) noexcept = delete;
+  FakeQuicBridge& operator=(FakeQuicBridge&&) noexcept = delete;
   ~FakeQuicBridge();
 
   const IPEndpoint kControllerEndpoint{{192, 168, 1, 3}, 4321};

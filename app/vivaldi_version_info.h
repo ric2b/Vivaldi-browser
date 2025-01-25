@@ -49,6 +49,7 @@
 namespace base {
 class Version;
 }
+class PrefService;
 
 namespace vivaldi {
 

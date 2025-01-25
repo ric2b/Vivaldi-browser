@@ -67,6 +67,7 @@
 #include "media/mojo/services/gpu_mojo_media_client.h"
 #include "media/mojo/services/mojo_video_encode_accelerator_provider.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "services/webnn/webnn_context_provider_impl.h"
 #include "skia/buildflags.h"
 #include "third_party/skia/include/gpu/ganesh/GrDirectContext.h"
 #include "third_party/skia/include/gpu/ganesh/gl/GrGLAssembleInterface.h"
@@ -109,10 +110,6 @@
 #endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if !BUILDFLAG(IS_CHROMEOS)
-#include "services/webnn/webnn_context_provider_impl.h"
-#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_WIN)
 #include "components/viz/common/overlay_state/win/overlay_state_service.h"
@@ -554,10 +551,21 @@ void GpuServiceImpl::InitializeWithHost(
     mojo::PendingRemote<mojom::GpuHost> pending_gpu_host,
     gpu::GpuProcessShmCount use_shader_cache_shm_count,
     scoped_refptr<gl::GLSurface> default_offscreen_surface,
+    mojom::GpuServiceCreationParamsPtr creation_params,
+#if BUILDFLAG(IS_ANDROID)
     gpu::SyncPointManager* sync_point_manager,
     gpu::SharedImageManager* shared_image_manager,
     gpu::Scheduler* scheduler,
+#endif
     base::WaitableEvent* shutdown_event) {
+#if !BUILDFLAG(IS_ANDROID)
+  // On platforms other than Android these objects are *always* created
+  // internally.
+  gpu::SyncPointManager* sync_point_manager = nullptr;
+  gpu::SharedImageManager* shared_image_manager = nullptr;
+  gpu::Scheduler* scheduler = nullptr;
+#endif
+
   DCHECK(main_runner_->BelongsToCurrentThread());
 
   mojo::Remote<mojom::GpuHost> gpu_host(std::move(pending_gpu_host));
@@ -584,17 +592,17 @@ void GpuServiceImpl::InitializeWithHost(
     // corresponding to a mailbox.
     const bool display_context_on_another_thread =
         features::IsDrDcEnabled() && !gpu_driver_bug_workarounds_.disable_drdc;
-    bool thread_safe_manager = display_context_on_another_thread;
-    // Raw draw needs to access shared image backing on the compositor thread.
-    thread_safe_manager |= features::IsUsingRawDraw();
-#if BUILDFLAG(IS_OZONE)
-    constexpr bool kAlwaysUseRealBufferTestingOnOzone = true;
-    thread_safe_manager |= kAlwaysUseRealBufferTestingOnOzone;
-#endif
-    thread_safe_manager |=
-        base::FeatureList::IsEnabled(features::kSharedBitmapToSharedImage);
+
+    // |display_context_on_another_thread|, features::IsUsingRawDraw(),
+    // kAlwaysUseRealBufferTestingOnOzone, and kSharedBitmapToSharedImage
+    // requires |thread_safe_manager| to be true.
+    bool thread_safe_manager = true;
     owned_shared_image_manager_ = std::make_unique<gpu::SharedImageManager>(
         thread_safe_manager, display_context_on_another_thread);
+#if BUILDFLAG(IS_OZONE)
+    owned_shared_image_manager_->SetSupportsOverlays(
+        creation_params->supports_overlays);
+#endif
     shared_image_manager = owned_shared_image_manager_.get();
   }
 
@@ -882,7 +890,8 @@ void GpuServiceImpl::CreateVideoEncodeAcceleratorProvider(
       std::move(vea_provider_receiver),
       base::BindRepeating(&media::GpuVideoEncodeAcceleratorFactory::CreateVEA),
       gpu_preferences_, gpu_channel_manager_->gpu_driver_bug_workarounds(),
-      gpu_info_.active_gpu(), std::move(runner));
+      gpu_info_.active_gpu(), std::move(runner),
+      media_gpu_channel_manager_->AsWeakPtr(), main_runner_);
 }
 
 void GpuServiceImpl::BindClientGmbInterface(
@@ -902,7 +911,6 @@ void GpuServiceImpl::BindClientGmbInterface(
       client_id, std::move(pending_receiver), this, io_runner_);
 }
 
-#if !BUILDFLAG(IS_CHROMEOS)
 void GpuServiceImpl::BindWebNNContextProvider(
     mojo::PendingReceiver<webnn::mojom::WebNNContextProvider> pending_receiver,
     int client_id) {
@@ -918,13 +926,13 @@ void GpuServiceImpl::BindWebNNContextProvider(
     // TODO(crbug.com/345352987): manage `WebNNContextProviderImpl` instance per
     // `client_id` in order to support memory metrics.
     webnn_context_provider_ = webnn::WebNNContextProviderImpl::Create(
-        GetContextState(), gpu_feature_info_, gpu_info_);
+        GetContextState(), gpu_feature_info_, gpu_info_,
+        base::BindOnce(&GpuServiceImpl::LoseAllContexts, weak_ptr_));
   }
 
   webnn_context_provider_->BindWebNNContextProvider(
       std::move(pending_receiver));
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 void GpuServiceImpl::CreateGpuMemoryBuffer(
     gfx::GpuMemoryBufferId id,
@@ -1081,13 +1089,6 @@ std::string GpuServiceImpl::GetShaderPrefixKey() {
     std::string build_fp =
         base::android::BuildInfo::GetInstance()->android_build_fp();
     shader_prefix_key_ += "-" + build_fp;
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-    // ChromeOS can update independently of Lacros and the GPU driver
-    // information is not enough to ensure blob compatibility. See
-    // crbug.com/1444684
-    std::string chromeos_version = base::SysInfo::OperatingSystemName() + " " +
-                                   base::SysInfo::OperatingSystemVersion();
-    shader_prefix_key_ += "-" + chromeos_version;
 #endif
   }
 

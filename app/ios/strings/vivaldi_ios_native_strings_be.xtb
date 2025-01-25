@@ -2,10 +2,13 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="be">
 <translation id="1016495303386450659">Нататка абноўленая</translation>
+<translation id="1033201038396796706">Праблемы з тэмай, цёмным рэжымам або частатой абнаўлення</translation>
 <translation id="1041637248958093184">Пошукавыя запыты, наведаныя сайты, файлы cookie і часовыя файлы не будуць захоўвацца ў Vivaldi, калі карыстацца прыватнымі ўкладкамі.</translation>
 <translation id="1066692930984703744">Каб паскорыць працу і зрабіць яе больш бяспечнай, уключыце блакаванне сачэння і рэкламы</translation>
 <translation id="1116694919640316211">Звесткі</translation>
 <translation id="1123707809902612118">Блакаванне сачэння і рэкламы</translation>
+<translation id="1134179431044204911">Мне нязручна карыстацца жэстамі і навігацыяй</translation>
+<translation id="1149336474099429879">Уключэнне хуткага доступу да пэўных вэб-сайтаў непасрэдна з адраснага радка, што памяншае колькасць націсканняў у параўнанні з сістэмай пошуку. Даведайцеся падрабязней пра [Дакладнае супадзенне]</translation>
 <translation id="1151972924205500581">Патрэбны пароль</translation>
 <translation id="1166425484559430538">Вашыя даныя зашыфраваныя. Каб іх расшыфраваць, увядзіце пароль шыфравання.</translation>
 <translation id="1173894706177603556">Змяніць назву</translation>
@@ -29,12 +32,18 @@
 <translation id="1381484244248892686">Вы можаце выкарыстоўваць захаваныя паролі на любой прыладзе. Яны захоўваюцца ў кіраўніку пароляў Vivaldi для <ph name="EMAIL" /></translation>
 <translation id="1383876407941801731">Пошук</translation>
 <translation id="1397515084080510783">Няма сінхранізаваных укладак</translation>
+<translation id="1401336397986481078">Дададзена ў</translation>
 <translation id="1410197035576869800">Значок праграмы</translation>
+<translation id="1430308140197327248">Паказваць поўны адрас</translation>
 <translation id="1430638949087011281">Без блакавання</translation>
 <translation id="1446108955355168157">Для абароны сінхранізаваных даных (паролі, закладкі, нататкі і іншае) стварыце пароль шыфравання. Мы не будзем мець да яго доступу.</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> нататак</translation>
 <translation id="1468415711258933398">Стандартная ўкладка</translation>
+<translation id="1470330357709335121">Vivaldi павольна працуе</translation>
 <translation id="1521731267649138856">ваш адрас пошты для аднаўлення.</translation>
+<translation id="1535446875484049224">Цёмны рэжым не працуе або выглядае нягегла</translation>
+<translation id="1567659716528258242">Прылада пераграваецца</translation>
+<translation id="156793582229023040">Мяне турбуе сачэнне або збор даных</translation>
 <translation id="1573784689611551537">Кіраванне спісамі блакавання</translation>
 <translation id="1577761519530347814">Сінхранізаваць захаваныя паролі</translation>
 <translation id="1644574205037202324">Гісторыя</translation>
@@ -42,18 +51,27 @@
 <translation id="1689333818294560261">Скарочаная назва</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />Умовы выкарыстання ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Палітыка прыватнасці ➔<ph name="END_LINK2" /></translation>
 <translation id="1717473843091433383">Прымусова ўжываць цёмную тэму да ўсіх вэб-сайтаў</translation>
+<translation id="1721265415699013829">Напішыце больш дакладна</translation>
 <translation id="173924678149983125">Увядзіце адрас спіса для імпартавання</translation>
 <translation id="1751280147639351837">Блакаванне сачэння і рэкламы</translation>
 <translation id="1752547299766512813">Захаваць паролі</translation>
 <translation id="1754797958074421486">Умовы выкарыстання</translation>
+<translation id="1763111582687651119">Уключыць скарочаныя назвы сістэм пошуку</translation>
 <translation id="1771413903824396513">Па скарочанай назве</translation>
+<translation id="1771605894228673800">Мне патрэбны ўбудаваны VPN</translation>
+<translation id="1800685789463945995">Vivaldi аварыйна закрываецца або завісае</translation>
 <translation id="1804522390855853698">Кітайская (<ph name="ORIGIN" />)</translation>
 <translation id="1807246157184219062">Светлая</translation>
 <translation id="1809939268435598390">Выдаліць каталог</translation>
 <translation id="1813686536470127172">Іншы каталог</translation>
 <translation id="1828800626900562968">Націсніце на значок "+" ніжэй, каб стварыць новую ўкладку.</translation>
 <translation id="1861262398884155592">Гэты каталог пусты</translation>
+<translation id="1921508034244765766">Vivaldi працуе павольна, аварыйна закрываецца або награе прыладу</translation>
 <translation id="1929299157575856072">ПРАДВЫЗНАЧАНЫ ЎЗРОВЕНЬ БЛАКАВАННЯ</translation>
+<translation id="1968240832686794952">Адкрыць выяву ў фонавай укладцы</translation>
+<translation id="1986733655397734221">Нічога з гэтага</translation>
+<translation id="1994506778397655062">Адкрыць у фонавай укладцы</translation>
+<translation id="1996915956617647318">Схаваць "Рэдагаванне"</translation>
 <translation id="2030706494969937066">Не ўдалося атрымаць уліковыя даныя. Увайдзіце зноў.</translation>
 <translation id="2034405583989639424">Рэдагаванне старонкі для хуткага адкрыцця</translation>
 <translation id="2048247880942380698">Арабская (<ph name="ORIGIN" />)</translation>
@@ -65,6 +83,7 @@
 <translation id="2272338747456392228">Акаўнт заблакаваны</translation>
 <translation id="2273327106802955778">Яшчэ параметры</translation>
 <translation id="2324160330092901720">Код пацвярджэння адпраўлены на <ph name="EMAIL_ID" /></translation>
+<translation id="2330644510603114741">Паводзіны ўкладкі</translation>
 <translation id="2336309953058658733">Ачысціць сметніцу</translation>
 <translation id="2359808026110333948">Далей</translation>
 <translation id="2386793615875593361">Абрана 1</translation>
@@ -85,35 +104,45 @@
 <translation id="261264557609353020">Пачатковая старонка</translation>
 <translation id="2619628557366098325">Партугальскі (<ph name="ORIGIN" />)</translation>
 <translation id="2620436844016719705">Сістэмная</translation>
+<translation id="2653659639078652383">Адправіць</translation>
 <translation id="2666092431469916601">Уверсе</translation>
 <translation id="2677862276555105603">Заблакавана
 рэкламы</translation>
 <translation id="2678542925523700624">Эстонскі (<ph name="ORIGIN" />)</translation>
+<translation id="2702801445560668637">Спіс чытання</translation>
 <translation id="2709516037105925701">Аўтазапаўненне</translation>
 <translation id="271033894570825754">Стварыць</translation>
+<translation id="2725892265692641195">Новы <ph name="ITEM_TYPE" /></translation>
 <translation id="2745324713975967671">Пароль для шыфравання</translation>
 <translation id="276436995507680929">Сінхранізаваць спіс чытання</translation>
 <translation id="2765217105034171413">Маленькі</translation>
 <translation id="2767124759205735526">Сінхранізаваць гісторыю і ўведзеныя URL-адрасы</translation>
+<translation id="2770868136620962117">Мы радыя гэта чуць!</translation>
 <translation id="2825232297853754349">Вам неабходна пагадзіцца з умовамі выкарыстання.</translation>
 <translation id="2842985007712546952">Бацькоўскі каталог</translation>
 <translation id="2843343418360315034">Венгерскі (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">Ініцыялізацыя сінхранізацыі...</translation>
+<translation id="2862504765180635001">Нам шкада гэта чуць!</translation>
 <translation id="2874111661876416905">Шукаць з дапамогай Vivaldi</translation>
 <translation id="2884735088411646852">Сартаванне</translation>
 <translation id="2898963176829412617">Новы каталог…</translation>
+<translation id="2918704853620385162">Адкрываць новую ўкладку пры закрыцці апошняй</translation>
 <translation id="2924890236896835588">Назва групы</translation>
+<translation id="294138200684170250">Блакаванне сачэння і рэкламы з наладамі сайта</translation>
 <translation id="2961573414320947355">Хочаце адкрываць усе спасылкі ў Vivaldi? Зрабіце яго прадвызначаным браўзерам.</translation>
 <translation id="3006429105107822794">Вам не трэба будзе запамінаць гэты пароль. Ён будзе захаваны ў кіраўніку пароляў Vivaldi.</translation>
 <translation id="3018244467214569202">Грэчаскі (<ph name="ORIGIN" />)</translation>
 <translation id="3029426144711327484">Старонкі для хуткага адкрыцця</translation>
 <translation id="3039671569659952257">Выдаліць каталог</translation>
+<translation id="3065031457538473619">Прыярытэт закладак пры аўтадапаўненні</translation>
 <translation id="3073196329485613487">Увайсці ў акаўнт</translation>
 <translation id="307859903981308731">Працягваючы, вы пагаджаецеся</translation>
 <translation id="3086746722712840547">нататка</translation>
 <translation id="3087734570205094154">Унізе</translation>
+<translation id="309084557304084991">Я не хачу папярэдне загружаных закладак і старонкі хуткага адкрыцця</translation>
 <translation id="3091563570137981919">Блакаванне сачэння і рэкламы</translation>
 <translation id="3134385238404760368">Няма нядаўніх укладак</translation>
+<translation id="3142562627629111859">Новая група</translation>
 <translation id="3157931365184549694">Аднавіць</translation>
 <translation id="3159285901314605198">Фонавая выява</translation>
 <translation id="3177673846235066154">Сервер адхіліў вашыя ўліковыя даныя.</translation>
@@ -130,6 +159,7 @@
 <translation id="3435896845095436175">Уключыць</translation>
 <translation id="3438160227308459316">Румынскі (<ph name="ORIGIN" />)</translation>
 <translation id="3451162533623145500">Стварыць акаўнт</translation>
+<translation id="3500626002244909877">Дзякуй, што знайшлі час і адправілі водгук!</translation>
 <translation id="3509379002674019679">Стварайце, захоўвайце і кіруйце сваімі паролямі, каб можна было лёгка ўваходзіць на сайты і ў праграмы.</translation>
 <translation id="3513566764071045027">Выйсці</translation>
 <translation id="3527085408025491307">Каталог</translation>
@@ -137,32 +167,47 @@
 <translation id="3601414719864711130">Па даце</translation>
 <translation id="3602290021589620013">Папярэдні прагляд</translation>
 <translation id="3607176258839749451">Не ўдалося зарэгістравацца. Паўтарыце спробу пазней.</translation>
+<translation id="3628734956995390149">{count, plural,
+          =1 {перамешчаная ў "{title}"}
+          other {{count} перамешчаныя ў "{title}"}}</translation>
+<translation id="3638687955382971136">Маштабаванне тэксту</translation>
 <translation id="3646647753063635401">Сінхранізаваць усе даныя, а таксама аўтаматычна ўключаць сінхранізацыю новых тыпаў даных</translation>
 <translation id="3682791711395736890">Паглядзець на сайце версію для камп'ютараў</translation>
-<translation id="3692650606013198282">Адкрыць у прыватным рэжыме</translation>
+<translation id="3689125468279190285">Паказваць кнопку пачатковай старонкі</translation>
 <translation id="3699026013955941879">Код ужо несапраўдны. Запытайце новы код актывацыі.</translation>
 <translation id="3700829948786686853">Вітаем у Vivaldi</translation>
+<translation id="3719826155360621982">Пачатковая старонка</translation>
+<translation id="373855430416507951">Знайсці на старонцы</translation>
+<translation id="3745190878148784130">Схаваць маштабаванне тэксту</translation>
 <translation id="3766350025418769949">Вы можаце выкарыстоўваць паролі, захаваныя ў кіраўніку пароляў Vivaldi, у іншых праграмах на вашым iPad.</translation>
+<translation id="3815158430926662417">Не ўдаецца ўвайсці ў акаўнт Vivaldi для сінхранізацыі</translation>
 <translation id="3817539520771282781">Па тыпу</translation>
+<translation id="383723620494271391">Хочаце яшчэ нешта дадаць?</translation>
 <translation id="3842727926262967527">Абраць месца размяшчэння панэлі ўкладак і адраснай панэлі.</translation>
 <translation id="3845564230651302310">Ужыванне новых налад блакавання…</translation>
 <translation id="3858860766373142691">Назва</translation>
 <translation id="3861379244432690245">Уключыць непасрэднае супастаўленне</translation>
 <translation id="3866249974567520381">Апісанне</translation>
 <translation id="3872195896030547485">Увядзіце сапраўдны адрас электроннай пошты.</translation>
+<translation id="3891045256838140223">Можаце расказаць нам, што зроблена няправільна?</translation>
 <translation id="3897092660631435901">Меню</translation>
 <translation id="3920366244737784074">Дадаць <ph name="ITEM_TYPE" /></translation>
 <translation id="3921585859122905677">Пазіцыя адраснай панэлі</translation>
 <translation id="3953599441418463312">Японскі (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Сачэнне заблакавана</translation>
 <translation id="3958433364221339259">Шукаць з дапамогай <ph name="SEARCH_ENGINE" /></translation>
+<translation id="3960532956440723967">Тэкст замалы або завялікі</translation>
+<translation id="3972953605944268742">Інтэрфейс карыстальніка заблытаны або грувасткі</translation>
+<translation id="3989040793235713489">Мне патрэбна больш параметраў для наладжвання тэмы</translation>
 <translation id="3997823869212225788">Увядзіце код з 6 лічбаў</translation>
 <translation id="4002066346123236978">Па назве</translation>
 <translation id="4032606071208172574">(Прадвызначана)</translation>
 <translation id="4048057312173843244">Тут з'явяцца сінхранізаваныя ўкладкі з іншых прылад. Увайдзіце ў сістэму сінхранізацыі, каб выкарыстоўваць гэтую службу.</translation>
+<translation id="4071269289580887166">Версія для камп'ютара</translation>
 <translation id="4073968054795398875">Не ўдалося сінхранізаваць. Будзе здзейснена яшчэ адна спроба...</translation>
 <translation id="4084682180776658562">Закладка</translation>
 <translation id="4096707694175478403">Панэль</translation>
+<translation id="4134597009271720826">Ацаніце праграму</translation>
 <translation id="414098425907666915">Прыватны пошук</translation>
 <translation id="4141861385728508836">Нарвежскі (<ph name="ORIGIN" />)</translation>
 <translation id="4145489350420416595">Невядомая памылка.</translation>
@@ -179,10 +224,13 @@
 заблакавана</translation>
 <translation id="4299298331965375737">Зрабіць Vivaldi прадвызначаным браўзерам?</translation>
 <translation id="4304224509867189079">Увайсці</translation>
+<translation id="4304752732957821175">Размяшчэнне кнопак бянтэжыць</translation>
+<translation id="4314476537497682637">Схаваць версію для камп'ютара</translation>
 <translation id="4316955624679873896">Закладка створана ў</translation>
 <translation id="432696242656678770">Расійскі (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Іспанскі (<ph name="ORIGIN" />)</translation>
 <translation id="4376661454588260127">В'етнамскі (<ph name="ORIGIN" />)</translation>
+<translation id="4380745054983890306">Мне патрэбна захоўваць старонкі як PDF</translation>
 <translation id="4394049700291259645">Адключыць</translation>
 <translation id="4413780690230851155">Выдаленне гісторыі прагляду</translation>
 <translation id="4452878871193896747">Інданезійскі (<ph name="ORIGIN" />)</translation>
@@ -194,8 +242,10 @@
 <translation id="4497115807425788318">Размяшчэнне</translation>
 <translation id="4507213865286211606">Памер мініяцюр папярэдняга прагляду</translation>
 <translation id="4515084385531683114">Паролі захаваныя ў кіраўніку пароляў на гэтай прыладзе.</translation>
+<translation id="4518934934246049498">Мы вельмі радыя, што вы карыстаецеся Vivaldi!</translation>
 <translation id="4525945044609022380">Гэты адрас электроннай пошты ўжо выкарыстоўваецца ў іншым акаўнце.</translation>
 <translation id="4526803704855831732">Прыватныя ўкладкі</translation>
+<translation id="4542001945479572846">Нешта яшчэ</translation>
 <translation id="4553717494760925411">Назад</translation>
 <translation id="4563480492836333884">Адрас электроннай пошты не пасуе. Абярыце іншы дамен.</translation>
 <translation id="457386861538956877">Яшчэ...</translation>
@@ -213,21 +263,28 @@
 <translation id="4727698999970341158">Ісландскі (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Абнавіць</translation>
 <translation id="4739712911308055817">Не атрымана</translation>
+<translation id="4749460556537826127">Мне патрэбна імпартаванне і экспартаванне пароляў і закладак</translation>
 <translation id="4750394297954878236">Прапановы</translation>
+<translation id="4759238208242260848">Спампоўванні</translation>
 <translation id="4759399863961855552">Парадак сартавання</translation>
 <translation id="4780953868408193639">Сачэнне
 заблакавана</translation>
 <translation id="4807415245238822255">Паролі павінны супадаць.</translation>
 <translation id="4818836520802586445">Колер падсвятлення</translation>
 <translation id="4821701638681626529">Vivaldi не запісвае гісторыю прагляду пры выкарыстанні прыватных укладак</translation>
+<translation id="4825714975043873206">Сайты загружаецца павольна або не адкрываюцца</translation>
 <translation id="4833044618885331665">Для выкарыстання сінхранізацыі трэба абнавіць Vivaldi.</translation>
+<translation id="484344804915260122">Мне патрэбны ўбудаваны перакладчык</translation>
 <translation id="484462545196658690">Аўтаматычна</translation>
 <translation id="4852383705713307704">Заблакавана
 рэкламы</translation>
+<translation id="4899260893220375866">Мне патрэбна больш кантролю над cookie і правамі доступу сайтаў</translation>
 <translation id="4903325570808402486">Сінхранізаваць налады Vivaldi (пакуль што не ўсе)</translation>
+<translation id="4925542198780948858">Кіраванне медыяфайламі працуе не так, як чакалася</translation>
 <translation id="4929196061847506605">Магутны. Персанальны. Прыватны.</translation>
 <translation id="4936710149174207991">Не сінхранізавана</translation>
 <translation id="4943266325467647391">Убудаваны ў Vivaldi сродак абароніць вас ад сачэння і рэкламы.</translation>
+<translation id="4950266778127803750">Паказваць кнопку X для ўкладак у фоне</translation>
 <translation id="495421405224926623">Я прачытаў(ла) і пагаджаюся з умовамі выкарыстання і палітыкай прыватнасці</translation>
 <translation id="497942794017668482">Заблакавана сачэння і рэкламы</translation>
 <translation id="4993477362660748586">Сінхранізацыя</translation>
@@ -240,8 +297,8 @@
 <translation id="5122095890854520072">Латышскі (<ph name="ORIGIN" />)</translation>
 <translation id="5153806174841856652">Не ўдалося ўвайсці</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Паўторна адправіць код<ph name="END_LINK" /></translation>
+<translation id="5166345991950198590">Паказваць сайты, якія часта наведваюцца</translation>
 <translation id="5191012692655103305">Атрыманне даных ўкладак і гісторыі...</translation>
-<translation id="5221269430020540672">Адкрыць выяву ў фонавай укладцы</translation>
 <translation id="5238642303473095117">Выдаліць даныя</translation>
 <translation id="5245732982828228444">Вашыя нататкі будуць тут</translation>
 <translation id="5249199221558969362">Калі ласка, увядзіце сапраўдны ўзрост.</translation>
@@ -255,10 +312,16 @@
 <translation id="5398772614898833570">Рэкламы заблакавана</translation>
 <translation id="5421638721143596928">Не ўдалося расшыфраваць уліковыя даныя. Увайдзіце зноў.</translation>
 <translation id="5439835075346716808">Рэгістрацыя з дадзенага IP-адраса часова заблакаваная. Паспрабуйце пазней.</translation>
+<translation id="5475116651001049780">Схаваць мабільную версію</translation>
 <translation id="5486261815000869482">Пацвердзіце пароль</translation>
 <translation id="5494016731375030300">Нядаўна закрытыя ўкладкі</translation>
+<translation id="5517833250460609673">Відэа або музыка няправільна прайграюцца</translation>
+<translation id="5519187824830275200">Схаваць "Дадаць у..."</translation>
+<translation id="5521914729572529753">Мяне турбуе прыватнасць і бяспека</translation>
 <translation id="5564687523685713029">Паказваць толькі групы</translation>
+<translation id="5577770221789895760">Абярыце, якую старонку трэба адкрываць пры націскання кнопкі "Пачатковая старонка".</translation>
 <translation id="5600792731098584229">Памер старонак для хуткага адкрыцця</translation>
+<translation id="5607445917275004427">Паказваць на адраснай панэлі поўны адрас замест дамена.</translation>
 <translation id="5639137028584114536">Ваша арганізацыя патрабуе прыватнай працы. У прыватным рэжыме ўкладкі не захоўваюцца.
          <ph name="BEGIN_LINK" />Даведацца больш<ph name="END_LINK" /></translation>
 <translation id="5684277895745049190">Спіс</translation>
@@ -275,23 +338,33 @@
 <translation id="5871497086027727873">Перамешчана 1 нататка</translation>
 <translation id="5898502570200301364">Вы можаце выкарыстоўваць паролі, захаваныя ў кіраўніку пароляў Vivaldi, у іншых праграмах на вашым iPhone.</translation>
 <translation id="5900160494089383343">Імя карыстальніка недаступнае.</translation>
+<translation id="5914847543920496660">Я аддаю перавагу свабодным праграмам з адкрытым кодам</translation>
+<translation id="591684450784861763">Дадаць старонку ў...</translation>
 <translation id="6005497458542935062">Перамясціць з каталога</translation>
+<translation id="6040304352785030331">Мне патрэбныя пашырэнні і дапаўненні</translation>
 <translation id="6042308850641462728">Яшчэ</translation>
 <translation id="6077943432358741146">Панэль хуткага адкрыцця</translation>
 <translation id="6079696972035130497">Без абмежаванняў</translation>
 <translation id="614539368862754027">Перамешчана <ph name="NUMBER_OF_SELECTED_NOTES" /> нататак</translation>
 <translation id="6147094071357011481">Нядаўна закрытыя ўкладкі недаступныя</translation>
+<translation id="6180515952840978051">Мне складана захоўваць сайты на старонцы хуткага адкрыцця</translation>
 <translation id="6193995664633100765">Індыйскі (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">Параметры выгляду вэб-сайта</translation>
+<translation id="6253990869902066991">Vivaldi нечакана перазагружае старонкі</translation>
 <translation id="6257488392933423163">Як HTML</translation>
 <translation id="6365929278691047681">Нямецкі (<ph name="ORIGIN" />)</translation>
+<translation id="638249699236255123">Сайт пашкоджаны або паказваецца некарэктна</translation>
+<translation id="6383855939619098095">Складана наладзіць старонку хуткага адкрыцця</translation>
 <translation id="6406506848690869874">Сінхранізацыя</translation>
+<translation id="641394169129472837">Абярыце, якую старонку трэба адкрываць пры націскання кнопкі "Новая ўкладка".</translation>
 <translation id="6438416544409849235">Абрана <ph name="NUMBER_OF_SELECTED_NOTES" /></translation>
+<translation id="6442584491342758233">Дакладнае супадзенне</translation>
 <translation id="6468130661190228905">Выбачайце, але пакуль што вы не можаце далучыцца да нашай супольнасці. Вам павінна быць не менш за 16 гадоў.</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Імпартаванне<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Рэзервовы ключ шыфравання</translation>
 <translation id="6527303717912515753">Падзяліцца</translation>
 <translation id="6535988230515403205">Польскі (<ph name="ORIGIN" />)</translation>
+<translation id="6536226749629478563">Мне патрэбна лепшае кіраванне паролямі</translation>
 <translation id="659351303388691480">Ачысціць даныя прагляду…</translation>
 <translation id="6602272356389933803">Выгляд і тэмы</translation>
 <translation id="6614744450826097546">Звесткі пра рэкламу</translation>
@@ -305,13 +378,14 @@
 <translation id="6703516503311038964">Я хачу атрымліваць навіны Vivaldi</translation>
 <translation id="6724024423419410528">Колеры</translation>
 <translation id="6745857330065678428">Атрымліваць колер падсвятлення са старонкі</translation>
-<translation id="6757792528048321576">Блакаванне сачэння і рэкламы</translation>
 <translation id="6798469570047202628">Няправільны пароль</translation>
 <translation id="681368974849482173">Нататка створаная</translation>
 <translation id="6830986331692390764">Выконваецца выдаленне даных сінхранізацыі. Калі ласка, пачакайце.</translation>
+<translation id="6838968771741416244">Падае больш падрабязныя звесткі пра ваш водгук</translation>
 <translation id="6875510405870945573">Абярыце пераважны ўзровень блакавання.</translation>
 <translation id="6887143077297974801">Не ўдалося пачаць сінхранізацыю.</translation>
 <translation id="691132463664340655">Тэма браўзера</translation>
+<translation id="6918338082370824763">Пазначаная старонка</translation>
 <translation id="6937750621455385628">Каб увайсці, выкарыстайце акаўнт Vivaldi.</translation>
 <translation id="6945221475159498467">Абраць</translation>
 <translation id="6946395294519639514">З дапамогай панэляў вы можаце мець хуткі доступ да інструментаў.</translation>
@@ -319,12 +393,18 @@
 <translation id="6951948201878750661">Націсніце, каб абраць колер</translation>
 <translation id="6967884871145366229">Кіраванне наладамі прыватнасці</translation>
 <translation id="6973630695168034713">Каталогі</translation>
+<translation id="6976865195058364361">Прыярытэт назваў закладак пры аўтадапаўненні</translation>
 <translation id="7006864796794806241">Аднавіць пароль</translation>
 <translation id="7029809446516969842">Паролі</translation>
 <translation id="7041964446309059643">Уласнаручна</translation>
 <translation id="7083011465470143310">Забылі <ph name="BEGIN_LINK" />пароль<ph name="END_LINK" />?</translation>
+<translation id="7083783675072250424">Складана кіраваць укладкамі</translation>
 <translation id="7110758301321962823">Аднаўленне імя карыстальніка</translation>
+<translation id="713792263829536729">Службы струменевай перадачы даных працуюць няправільна</translation>
 <translation id="7158507293261405349">Дадаць новую групу</translation>
+<translation id="718052827125696482">Экран не паварочваецца правільна</translation>
+<translation id="7180919683305939836">Мне патрэбныя функцыі на базе штучнага інтэлекту (падвядзенне вынікаў, чат і г. д.)</translation>
+<translation id="7182884564543065232">Пэўныя сайты не адкрываюцца</translation>
 <translation id="7192066917392691622">Ад большага да меншага</translation>
 <translation id="7194677467200983873">Час апошняй сінхранізацыі:</translation>
 <translation id="7203411967620588391">Рэдагаваць <ph name="ITEM_TYPE" /></translation>
@@ -335,23 +415,33 @@
 <translation id="7325310788570036874">Працуйце ў сеціве хутка і эфектыўна з дапамогай Vivaldi.</translation>
 <translation id="734110743815267231">Ізраільскі (<ph name="ORIGIN" />)</translation>
 <translation id="7347289093190902150">Адкрыць у прыватным рэжыме?</translation>
+<translation id="735361677607128142">Прапановы пошуку не працуюць</translation>
 <translation id="7362952245780030555">Звычайнае або спрошчанае пераключэнне ўкладак.</translation>
 <translation id="7379938540614588640">Нідэрландскі (<ph name="ORIGIN" />)</translation>
+<translation id="7386354767119759965">Мабільная версія</translation>
 <translation id="7388525939184421699">Дадаць новую крыніцу</translation>
+<translation id="7393145587390257456">Блакаванне рэкламы дрэнна працуе</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7417521636956146248">Спіс сістэм пошуку будзе скінуты да прадвызначаных налад, дададзеныя вамі сістэмы выдаляцца.</translation>
+<translation id="7451784507428459503">Відэа на YouTube не прайграюцца або прайграюцца дрэнна</translation>
 <translation id="7454640759045234067">Сачэнняў заблакавана</translation>
 <translation id="7461899062138731833">СПІСЫ</translation>
-<translation id="7490291412537629707">Адкрыць у новай фонавай укладцы</translation>
+<translation id="7473891865547856676">Не, дзякуй</translation>
+<translation id="749277285729135008">Факусаванне на адраснай панэлі новай укладкі</translation>
 <translation id="750493650310597496">Абрана 0</translation>
 <translation id="7525067979554623046">Стварыць</translation>
 <translation id="753732157349120914">Пераключальнік</translation>
+<translation id="7541018845757104937">Вельмі хутка разраджаецца батарэя</translation>
+<translation id="755410338177348055">Аўдыё або відэа буферызуецца або замірае</translation>
+<translation id="7562758693157424472">Ці можаце вы падзяліцца з намі сваімі думкамі?</translation>
 <translation id="7573518470897278603">Паглядзець на сайце версію для мабільных прылад</translation>
 <translation id="7574321014880720413">Дадаць сайт</translation>
 <translation id="7587132259180664054">Ліст паспяхова адпраўлены</translation>
 <translation id="7587287726969638956">Выгляд вэб-сайта</translation>
+<translation id="7593546601395782810">Схаваць нататкі</translation>
 <translation id="7602336701644200880">Не ўдалося адправіць ліст. Калі ласка, паспрабуйце зноў.</translation>
 <translation id="7606108789437688910">Адкрыць адрасы нататкі ў прыватных укладках</translation>
+<translation id="7616284412875773842">Расчараваны</translation>
 <translation id="7622661618259256505">Абярыце пароль з прынамсі 12 знакаў.</translation>
 <translation id="7658239707568436148">Скасаваць</translation>
 <translation id="767363698559661695">Абярыце стыль укладак</translation>
@@ -361,12 +451,17 @@
 <translation id="7732622593814325274">Кіраванне спісамі блакавання</translation>
 <translation id="7765158879357617694">Перамясціць</translation>
 <translation id="7771452384635174008">Выгляд</translation>
-<translation id="7791161131809889864">Адкрыць усё ў фоне</translation>
+<translation id="7781069478569868053">Новая ўкладка</translation>
+<translation id="7801111502975417831">Я хачу, каб відэа прайгравалася ў фоне</translation>
 <translation id="7801204999757211519">Ужо маеце акаўнт? <ph name="BEGIN_LINK" />Увайдзіце ➔<ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">Стварыць новую групу?</translation>
 <translation id="7914995060146784406">Рэдагаваць нататку</translation>
 <translation id="7925340978147141704">Паказаць пароль</translation>
+<translation id="7930665886069596866">Функцыя працуе няправільна</translation>
+<translation id="7931102520806266819">Адкрыць у прыватнай укладцы</translation>
 <translation id="8008214489230610096">Пацвердзіце рэзервовы адрас электроннай пошты</translation>
+<translation id="8038592796033755028">Прылады <ph name="USERNAME" /></translation>
+<translation id="8041093619605951337">Шчаслівы</translation>
 <translation id="8046542428651654244">Абнавіць мініяцюру</translation>
 <translation id="804786196054284061">Умовы выкарыстання Vivaldi</translation>
 <translation id="8053851743673939284">Французскі (<ph name="ORIGIN" />)</translation>
@@ -380,7 +475,6 @@
 <translation id="8142291334394582384">Змяніць парадак прапаноў пошуку</translation>
 <translation id="8147118677117542370">Пазначце свой узрост.</translation>
 <translation id="8165573437634525334">Даныя зашыфраваны паролем</translation>
-<translation id="8182979418912184986">Новая прыватная ўкладка</translation>
 <translation id="8237090677709100373">Адвольны код колеру</translation>
 <translation id="8257908958623224237">Канфлікт з іншымі данымі кліента.</translation>
 <translation id="8261506727792406068">Выдаліць</translation>
@@ -391,16 +485,17 @@
 <translation id="8304044605002588416">Наладзіць кнопку пачатковай старонкі</translation>
 <translation id="8326104954595890674">Новая прыватная ўкладка</translation>
 <translation id="8329813750766387010">Абноўлены: <ph name="DATE" /></translation>
+<translation id="8339701072035560935">Пустая старонка</translation>
 <translation id="8347535536909603600">Выдаліць папярэджанні cookie (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">Каб бачыць ўкладкі з іншых прылад, вам трэба ўключыць сінхранізацыю.</translation>
 <translation id="8366175803122817174">Адкрыць усе адрасы нататкі</translation>
-<translation id="8384409685584033392">Звесткі пра старонку</translation>
 <translation id="8395378633507873708">Адрасная панэль</translation>
 <translation id="839736845446313156">Рэгістрацыя</translation>
 <translation id="8414685983518053656">Нататкі</translation>
 <translation id="8423076545503792640">Не ўдалося выканаць запыт. Паўтарыце пазней.</translation>
 <translation id="8428213095426709021">Налады</translation>
 <translation id="8458397775385147834">1 нататка выдалена</translation>
+<translation id="8466547766474747336">Няма патрэбнай мне функцыі</translation>
 <translation id="8500459200727969761">Аднавіць убудаваныя спісы</translation>
 <translation id="8503813439785031346">Імя карыстальніка</translation>
 <translation id="8515808232153642813">Расшыфраваць</translation>
@@ -412,11 +507,13 @@
 <translation id="8675578805254882416">Атрыманне</translation>
 <translation id="8677007239430848917">Дадайце сваю першую нататку з дапамогай кнопкі "+" ніжэй</translation>
 <translation id="8684294196284714094">Гатовыя зрабіць Vivaldi сваім прадвызначаным браўзерам?</translation>
+<translation id="8696653005998192569">Не загружаюцца выявы або відэа на сайтах</translation>
 <translation id="8733945742171960420">Тут будуць паказвацца сайты, якія вы часцей за ўсё наведваеце.</translation>
 <translation id="8740815429790728127">Выдалена <ph name="NUMBER_OF_SELECTED_NOTES" /> нататак</translation>
 <translation id="8763006697839582351">Адкрыць у прыватным рэжыме Vivaldi</translation>
 <translation id="8765173886020357878">Прапановы пошуку</translation>
 <translation id="8804164990146287819">Палітыка прыватнасці</translation>
+<translation id="8805346136361295421">Схаваць пошук на старонцы</translation>
 <translation id="8818152010000655963">Шпалеры</translation>
 <translation id="8819841443522803117">Хочаце змяніць прадвызначаны браўзер? Паспрабуйце Vivaldi.</translation>
 <translation id="8820817407110198400">Закладкі</translation>
@@ -425,20 +522,29 @@
 <translation id="89390081013973080">Гатова! Час вырашыць, якія даныя трэба сінхранізаваць паміж прыладамі.</translation>
 <translation id="8964449607824577665">Без вашага бягучага пароля немагчыма будзе расшыфраваць даныя. Каб скінуць пароль, трэба выдаліць усе сінхранізаваныя даныя на серверы Vivaldi.</translation>
 <translation id="8965371804397726192">Пачаць сінхранізацыю ўсіх даных</translation>
+<translation id="8993821994276892302">{count, plural,
+          =1 {закладка перамешчаная ў "{title}"}
+          other {закладкі перамешчаныя ў "{title}"}}</translation>
 <translation id="9028089729841356743">Памылка сеткі.</translation>
 <translation id="9043882097999887291">Рэкламы
 заблакавана</translation>
 <translation id="9065203028668620118">Рэдагаванне</translation>
+<translation id="9077265667054763280">Сайты загружаюцца занадта павольна</translation>
 <translation id="9079251484401922158">Фінскі (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">1 нататка</translation>
 <translation id="9091665118798175641">Сінхранізаваць звесткі аўтазапаўнення</translation>
 <translation id="9097127519290088802">Патрабуецца пароль для шыфравання</translation>
+<translation id="9152984048904392513">Адкрыць усё ў фоне</translation>
 <translation id="9195659219948942754">Выкарыстоўвайце сінхранізацыю ў акаўнце Vivaldi</translation>
 <translation id="9212737146310746733">Персідскі (<ph name="ORIGIN" />)</translation>
 <translation id="9218693288527810093">Блакаванне сачэння</translation>
 <translation id="924053859552461110">Наладзіць пачатковую старонку</translation>
+<translation id="925891113183098411">Я маю праблемы з сінхранізацыяй даных паміж прыладамі</translation>
+<translation id="932327136139879170">Агульныя</translation>
 <translation id="937440209447114831">Сачэнне і рэклама не блакуюцца.</translation>
 <translation id="958688202859970851">Тут будуць паказвацца нядаўна закрытыя ўкладкі</translation>
 <translation id="984650419570014454">Код актывацыі мусіць складацца з 6 лічбаў.</translation>
+<translation id="987264212798334818">Агульныя</translation>
 <translation id="992440609313570947">Першы раз у Vivaldi? <ph name="BEGIN_LINK" />Стварыце акаўнт<ph name="END_LINK" /></translation>
+<translation id="998988732385109770">Складана карыстацца або кіраваць закладкамі</translation>
 </translationbundle>

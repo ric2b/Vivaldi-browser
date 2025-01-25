@@ -868,6 +868,7 @@ bool Device::drawAsTiledImageRect(SkCanvas* canvas,
                                                            sampling,
                                                            &paint,
                                                            constraint,
+                                                           /* sharpenMM= */ true,
                                                            cacheSize,
                                                            maxTextureSize);
 #if defined(GPU_TEST_UTILS)
@@ -886,6 +887,24 @@ void Device::drawOval(const SkRect& oval, const SkPaint& paint) {
         // TODO: This has wasted effort from the SkCanvas level since it instead converts rrects
         // that happen to be ovals into this, only for us to go right back to rrect.
         this->drawRRect(SkRRect::MakeOval(oval), paint);
+    }
+}
+
+void Device::drawArc(const SkArc& arc, const SkPaint& paint) {
+    // For sweeps >= 360°, simple fills and simple strokes without the center point or square caps
+    // are ovals. Culling these here simplifies the path processing in Shape.
+    if (!paint.getPathEffect() &&
+        SkScalarAbs(arc.sweepAngle()) >= 360.f &&
+        (paint.getStyle() == SkPaint::kFill_Style ||
+         (paint.getStyle() == SkPaint::kStroke_Style &&
+          // square caps can stick out from the shape so we can't do this with an rrect draw
+          paint.getStrokeCap() != SkPaint::kSquare_Cap &&
+          // non-wedge cases with strokes will draw lines to the center
+          !arc.isWedge()))) {
+        this->drawRRect(SkRRect::MakeOval(arc.oval()), paint);
+    } else {
+        this->drawGeometry(this->localToDeviceTransform(), Geometry(Shape(arc)),
+                           paint, SkStrokeRec(paint));
     }
 }
 
@@ -1289,7 +1308,8 @@ void Device::drawGeometry(const Transform& localToDevice,
                         sk_ref_sp(clip.shader()),
                         dstReadReq,
                         skipColorXform};
-    const bool dependsOnDst = paint_depends_on_dst(shading);
+    const bool dependsOnDst = paint_depends_on_dst(shading) ||
+                              clip.shader() || !clip.analyticClip().isEmpty();
 
     // Some shapes and styles combine multiple draws so the total render step count is split between
     // the main renderer and possibly a secondaryRenderer.
@@ -1568,6 +1588,34 @@ std::pair<const Renderer*, PathAtlas*> Device::chooseRenderer(const Transform& l
             return {renderers->nonAABounds(), nullptr};
         } else {
             return {renderers->analyticRRect(), nullptr};
+        }
+    }
+
+    if (!requireMSAA && shape.isArc() &&
+        SkScalarNearlyEqual(shape.arc().oval().width(), shape.arc().oval().height()) &&
+        SkScalarAbs(shape.arc().sweepAngle()) < 360.f &&
+        localToDevice.type() <= Transform::Type::kAffine) {
+        float maxScale, minScale;
+        std::tie(maxScale, minScale) = localToDevice.scaleFactors({0, 0});
+        if (SkScalarNearlyEqual(maxScale, minScale)) {
+            // Arc support depends on the style.
+            SkStrokeRec::Style recStyle = style.getStyle();
+            switch (recStyle) {
+                case SkStrokeRec::kStrokeAndFill_Style:
+                    // This produces a strange result that this op doesn't implement.
+                    break;
+                case SkStrokeRec::kFill_Style:
+                    return {renderers->circularArc(), nullptr};
+                case SkStrokeRec::kStroke_Style:
+                case SkStrokeRec::kHairline_Style:
+                    // Strokes that don't use the center point are supported with butt & round caps.
+                    bool isWedge = shape.arc().isWedge();
+                    bool isSquareCap = style.getCap() == SkPaint::kSquare_Cap;
+                    if (!isWedge && !isSquareCap) {
+                        return {renderers->circularArc(), nullptr};
+                    }
+                    break;
+            }
         }
     }
 

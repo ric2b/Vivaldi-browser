@@ -64,6 +64,7 @@ TEST_CONFIGS = [
     'webports',
     'with_branch_heads',
     'with_tags',
+    'ytdevinfra',
 ]
 
 DEPS_CONTENT = """

@@ -60,8 +60,8 @@ class MdnsResponder {
     virtual std::vector<MdnsRecord::ConstRef> GetPtrRecords(DnsClass clazz) = 0;
   };
 
-  // |record_handler|, |sender|, |receiver|, |task_runner|, |random_delay|, and
-  // |config| are expected to persist for the duration of this instance's
+  // `record_handler`, `sender`, `receiver`, `task_runner`, `random_delay`, and
+  // `config` are expected to persist for the duration of this instance's
   // lifetime.
   MdnsResponder(RecordHandler& record_handler,
                 MdnsProbeManager& ownership_handler,
@@ -80,7 +80,7 @@ class MdnsResponder {
   // multiple messages.
   class TruncatedQuery {
    public:
-    // |responder| and |task_runner| are expected to persist for the duration of
+    // `responder` and `task_runner` are expected to persist for the duration of
     // this instance's lifetime.
     TruncatedQuery(MdnsResponder& responder,
                    TaskRunner& task_runner,

@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Touch to Search は、Google が Vivaldi のデフォルトの検索エンジンとして設定されている場合にのみ利用できる機能です。選択した単語と現在のページをコンテキストとして Google 検索に送信します。 <ph name="BEGIN_LINK" /> 設定 <ph name="END_LINK" /> よりオンオフの切り替えが可能です。</translation>
 <translation id="1598449788754183301">通常タブとプライベートタブの切替</translation>
 <translation id="1644574205037202324">履歴</translation>
-<translation id="17513872634828108">開いているタブ</translation>
 <translation id="1829244130665387512">ページ内検索</translation>
 <translation id="1910514478706885609">新しいタブをタブスタック内で開く</translation>
 <translation id="1925021887439448749">カスタムウェブアドレスを入力</translation>
 <translation id="2038563949887743358">[デスクトップ版サイトを見る] をオンにします</translation>
-<translation id="2139186145475833000">ホーム画面に追加</translation>
 <translation id="2149973817440762519">ブックマークを編集</translation>
 <translation id="2306442503286132111">ブックマークを <ph name="FOLDER_NAME" /> フォルダーに保存しました</translation>
 <translation id="2433507940547922241">外観</translation>
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">現在のデバイスの言語</translation>
 <translation id="4167670741834902166">新しいプライベートタブ</translation>
 <translation id="4195643157523330669">新しいタブで開く</translation>
+<translation id="4225895483398857530">ツールバーショートカット</translation>
 <translation id="4243710787042215766">プライベートタブで開く</translation>
 <translation id="4304713468139749426">パスワードマネージャー</translation>
 <translation id="451872707440238414">ブックマークを検索</translation>
@@ -74,6 +73,7 @@ Touch to Search は、Google が Vivaldi のデフォルトの検索エンジン
 <translation id="8560602726703398413">リーディングリストはブックマークからアクセス可能です</translation>
 <translation id="85991616550051997">ホームに行く</translation>
 <translation id="8820817407110198400">ブックマーク</translation>
+<translation id="9042893549633094279">プライバシーとセキュリティ</translation>
 <translation id="9063523880881406963">[デスクトップ版サイトを見る] をオフにします</translation>
 <translation id="9080642952018487277">プライベートモードにする</translation>
 <translation id="96681097142096641">簡易版ページを表示しますか？</translation>

@@ -252,7 +252,6 @@ public class RequestDesktopUtilsUnitTest {
         when(mActivity.getResources()).thenReturn(mResources);
 
         TrackerFactory.setTrackerForTests(mTracker);
-        disableGlobalDefaultsExperimentFeatures();
 
         ShadowSysUtils.setMemoryInMB(7000);
         ShadowDisplayAndroid.setDisplayAndroid(mDisplayAndroid);
@@ -309,7 +308,7 @@ public class RequestDesktopUtilsUnitTest {
     public void testSetRequestDesktopSiteContentSettingsForUrl_DefaultBlock_Incognito() {
         // Incognito profile type.
         when(mProfile.isOffTheRecord()).thenReturn(true);
-        when(mProfile.isPrimaryOTRProfile()).thenReturn(true);
+        when(mProfile.isPrimaryOtrProfile()).thenReturn(true);
         mRdsDefaultValue = ContentSettingValues.BLOCK;
 
         RequestDesktopUtils.setRequestDesktopSiteContentSettingsForUrl(mProfile, mGoogleUrl, true);
@@ -329,7 +328,7 @@ public class RequestDesktopUtilsUnitTest {
     public void testSetRequestDesktopSiteContentSettingsForUrl_DefaultAllow_Incognito() {
         // Incognito profile type.
         when(mProfile.isOffTheRecord()).thenReturn(true);
-        when(mProfile.isPrimaryOTRProfile()).thenReturn(true);
+        when(mProfile.isPrimaryOtrProfile()).thenReturn(true);
         mRdsDefaultValue = ContentSettingValues.ALLOW;
 
         RequestDesktopUtils.setRequestDesktopSiteContentSettingsForUrl(mProfile, mGoogleUrl, false);
@@ -692,7 +691,7 @@ public class RequestDesktopUtilsUnitTest {
 
     @Test
     public void testMaybeShowDefaultEnableGlobalSettingMessage() {
-        when(mTracker.shouldTriggerHelpUI(FeatureConstants.REQUEST_DESKTOP_SITE_DEFAULT_ON_FEATURE))
+        when(mTracker.shouldTriggerHelpUi(FeatureConstants.REQUEST_DESKTOP_SITE_DEFAULT_ON_FEATURE))
                 .thenReturn(true);
 
         // Default-enable the global setting before the message is shown.
@@ -729,7 +728,7 @@ public class RequestDesktopUtilsUnitTest {
 
     @Test
     public void testMaybeShowDefaultEnableGlobalSettingMessage_DoNotShowIfSettingIsDisabled() {
-        when(mTracker.shouldTriggerHelpUI(FeatureConstants.REQUEST_DESKTOP_SITE_DEFAULT_ON_FEATURE))
+        when(mTracker.shouldTriggerHelpUi(FeatureConstants.REQUEST_DESKTOP_SITE_DEFAULT_ON_FEATURE))
                 .thenReturn(true);
 
         // Preference is set when the setting is default-enabled.
@@ -923,14 +922,5 @@ public class RequestDesktopUtilsUnitTest {
             }
         }
         FeatureList.setTestValues(mTestValues);
-    }
-
-    private void disableGlobalDefaultsExperimentFeatures() {
-        enableFeatureWithParams("RequestDesktopSiteDefaults", null, false);
-        enableFeatureWithParams("RequestDesktopSiteDefaultsControl", null, false);
-        enableFeatureWithParams("RequestDesktopSiteDefaultsControlCohort1", null, false);
-        enableFeatureWithParams("RequestDesktopSiteDefaultsEnabledCohort1", null, false);
-        enableFeatureWithParams("RequestDesktopSiteDefaultsControlCohort2", null, false);
-        enableFeatureWithParams("RequestDesktopSiteDefaultsEnabledCohort2", null, false);
     }
 }

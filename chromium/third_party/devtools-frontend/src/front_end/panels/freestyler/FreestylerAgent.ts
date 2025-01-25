@@ -4,13 +4,45 @@
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
+import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
+import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import * as LitHtml from '../../ui/lit-html/lit-html.js';
 
+import {
+  type ActionResponse,
+  AgentType,
+  AiAgent,
+  type AidaRequestOptions,
+  type ContextResponse,
+  ConversationContext,
+  debugLog,
+  isDebugMode,
+  type ParsedResponse,
+  ResponseType,
+  type SideEffectResponse,
+} from './AiAgent.js';
 import {ChangeManager} from './ChangeManager.js';
 import {ExtensionScope, FREESTYLER_WORLD_NAME} from './ExtensionScope.js';
 import {ExecutionError, FreestylerEvaluateAction, SideEffectError} from './FreestylerEvaluateAction.js';
+
+/*
+* Strings that don't need to be translated at this time.
+*/
+const UIStringsNotTranslate = {
+  /**
+   *@description Title for context details for Freestyler.
+   */
+  analyzingThePrompt: 'Analyzing the prompt',
+  /**
+   *@description Heading text for context details of Freestyler agent.
+   */
+  dataUsed: 'Data used',
+};
+
+const lockedString = i18n.i18n.lockedString;
 
 /* clang-format off */
 const preamble = `You are the most advanced CSS debugging assistant integrated into Chrome DevTools.
@@ -25,12 +57,12 @@ The user selected a DOM element in the browser's DevTools and sends a query abou
 * When presenting solutions, clearly distinguish between the primary cause and contributing factors.
 * Please answer only if you are sure about the answer. Otherwise, explain why you're not able to answer.
 * When answering, always consider MULTIPLE possible solutions.
+* You're also capable of executing the fix for the issue user mentioned. Reflect this in your suggestions.
+* Use \`window.getComputedStyle\` to gather **rendered** styles and make sure that you take the distinction between authored styles and computed styles into account.
+* **CRITICAL** Use \`window.getComputedStyle\` ALWAYS with property access, like \`window.getComputedStyle($0.parentElement)['color']\`.
 * **CRITICAL** Never assume a selector for the elements unless you verified your knowledge.
-* **Prioritize Modern Layout Techniques:** Whenever possible, favor CSS Grid and Flexbox for layout solutions. Avoid using \`position: absolute\` unless it's absolutely necessary or specifically requested by the user.
-* Utilize \`window.getComputedStyle\` to gather **rendered** styles and make sure that you take the distinction between authored styles and computed styles into account.
-* While giving suggestions, consider that \`setElementStyles\` function is not available in user's environment.
-* **CRITICAL** Use \`window.getComputedStyle\` ALWAYS with property access, like \`window.getComputedStyle($0.parentElement)['color']\`
 * **CRITICAL** Consider that \`data\` variable from the previous ACTION blocks are not available in a different ACTION block.
+* **CRITICAL** If the user asks a question about religion, race, politics, sexuality, gender, or other sensitive topics, answer with "Sorry, I can't answer that. I'm best at questions about debugging web pages."
 
 # Instructions
 You are going to answer to the query in these steps:
@@ -38,7 +70,7 @@ You are going to answer to the query in these steps:
 * TITLE
 * ACTION
 * ANSWER
-* FIXABLE
+* SUGGESTIONS
 Use THOUGHT to explain why you take the ACTION. Use TITLE to provide a short summary of the thought.
 Use ACTION to evaluate JavaScript code on the page to gather all the data needed to answer the query and put it inside the data variable - then return STOP.
 You have access to a special $0 variable referencing the current element in the scope of the JavaScript code.
@@ -48,7 +80,7 @@ Please run ACTION again if the information you received is not enough to answer 
 Please answer only if you are sure about the answer. Otherwise, explain why you're not able to answer.
 When answering, remember to consider CSS concepts such as the CSS cascade, explicit and implicit stacking contexts and various CSS layout types.
 When answering, always consider MULTIPLE possible solutions.
-After the ANSWER, output FIXABLE: true if the user request needs a fix using JavaScript or Web APIs and it has not been fixed previously.
+After the ANSWER, output SUGGESTIONS: string[] for the potential responses the user might give. Make sure that the array and the \`SUGGESTIONS: \` text is in the same line.
 
 If you need to set styles on an HTML element, always call the \`async setElementStyles(el: Element, styles: object)\` function.
 
@@ -104,92 +136,55 @@ STOP
 OBSERVATION: {"elementStyles":{"display":"block","visibility":"visible","position":"absolute","zIndex":"3","opacity":"1"},"parentStyles":{"display":"block","visibility":"visible","position":"relative","zIndex":"1","opacity":"1"},"overlappingElements":[{"tagName":"HTML","id":"","className":"","zIndex":"auto"},{"tagName":"BODY","id":"","className":"","zIndex":"auto"},{"tagName":"DIV","id":"","className":"container","zIndex":"auto"},{"tagName":"DIV","id":"","className":"background","zIndex":"2"}]}"
 
 ANSWER: Even though the popup itself has a z-index of 3, its parent container has position: relative and z-index: 1. This creates a new stacking context for the popup. Because the "background" div has a z-index of 2, which is higher than the stacking context of the popup, it is rendered on top, obscuring the popup.
-FIXABLE: true
+SUGGESTIONS: ["What is a stacking context?", "How can I change the stacking order?"]
 `;
 /* clang-format on */
 
-export const FIX_THIS_ISSUE_PROMPT = 'Fix this issue using JavaScript code execution';
+async function executeJsCode(
+    functionDeclaration: string, {throwOnSideEffect}: {throwOnSideEffect: boolean}): Promise<string> {
+  const selectedNode = UI.Context.Context.instance().flavor(SDK.DOMModel.DOMNode);
+  const target = selectedNode?.domModel().target() ?? UI.Context.Context.instance().flavor(SDK.Target.Target);
 
-export enum ResponseType {
-  THOUGHT = 'thought',
-  ACTION = 'action',
-  SIDE_EFFECT = 'side-effect',
-  ANSWER = 'answer',
-  ERROR = 'error',
-  QUERYING = 'querying',
-}
-
-export interface AnswerResponse {
-  type: ResponseType.ANSWER;
-  text: string;
-  rpcId?: number;
-  fixable: boolean;
-}
-
-export const enum ErrorType {
-  UNKNOWN = 'unknown',
-  MAX_STEPS = 'max-steps',
-}
-
-export interface ErrorResponse {
-  type: ResponseType.ERROR;
-  error: ErrorType;
-  rpcId?: number;
-}
-
-export interface ThoughtResponse {
-  type: ResponseType.THOUGHT;
-  thought: string;
-  title?: string;
-  rpcId?: number;
-}
-
-export interface SideEffectResponse {
-  type: ResponseType.SIDE_EFFECT;
-  code: string;
-  confirm: (confirm: boolean) => void;
-  rpcId?: number;
-}
-
-export interface ActionResponse {
-  type: ResponseType.ACTION;
-  code: string;
-  output: string;
-  canceled: boolean;
-  rpcId?: number;
-}
-
-export interface QueryResponse {
-  type: ResponseType.QUERYING;
-}
-
-export type ResponseData = AnswerResponse|ErrorResponse|ActionResponse|SideEffectResponse|ThoughtResponse|QueryResponse;
-
-// TODO: this should use the current execution context pased on the
-// node.
-async function executeJsCode(code: string, {throwOnSideEffect}: {throwOnSideEffect: boolean}): Promise<string> {
-  const target = UI.Context.Context.instance().flavor(SDK.Target.Target);
   if (!target) {
     throw new Error('Target is not found for executing code');
   }
 
   const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
-  const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
-  const pageAgent = target.pageAgent();
-  if (!resourceTreeModel?.mainFrame) {
+  const frameId = selectedNode?.frameId() ?? resourceTreeModel?.mainFrame?.id;
+
+  if (!frameId) {
     throw new Error('Main frame is not found for executing code');
   }
 
+  const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
+  const pageAgent = target.pageAgent();
+
   // This returns previously created world if it exists for the frame.
-  const {executionContextId} = await pageAgent.invoke_createIsolatedWorld(
-      {frameId: resourceTreeModel.mainFrame.id, worldName: FREESTYLER_WORLD_NAME});
+  const {executionContextId} = await pageAgent.invoke_createIsolatedWorld({frameId, worldName: FREESTYLER_WORLD_NAME});
   const executionContext = runtimeModel?.executionContext(executionContextId);
   if (!executionContext) {
     throw new Error('Execution context is not found for executing code');
   }
 
+  if (executionContext.debuggerModel.selectedCallFrame()) {
+    throw new ExecutionError('Cannot evaluate JavaScript because the execution is paused on a breakpoint.');
+  }
+
+  const result = await executionContext.evaluate(
+      {
+        expression: '$0',
+        returnByValue: false,
+        includeCommandLineAPI: true,
+      },
+      false, false);
+
+  if ('error' in result) {
+    throw new ExecutionError('Cannot find $0');
+  }
+
   try {
-    return await FreestylerEvaluateAction.execute(code, executionContext, {throwOnSideEffect});
+    return await FreestylerEvaluateAction.execute(
+        functionDeclaration, [result.object], executionContext, {throwOnSideEffect});
   } catch (err) {
     if (err instanceof ExecutionError) {
       return `Error: ${err.message}`;
@@ -199,13 +194,8 @@ async function executeJsCode(code: string, {throwOnSideEffect}: {throwOnSideEffe
   }
 }
 
-type HistoryChunk = {
-  text: string,
-  entity: Host.AidaClient.Entity,
-};
-
-const MAX_STEPS = 10;
 const MAX_OBSERVATION_BYTE_LENGTH = 25_000;
+const OBSERVATION_TIMEOUT = 5_000;
 
 type CreateExtensionScopeFunction = (changes: ChangeManager) => {
   install(): Promise<void>, uninstall(): Promise<void>,
@@ -220,68 +210,121 @@ type AgentOptions = {
   execJs?: typeof executeJsCode,
 };
 
-interface AidaRequestOptions {
-  input: string;
-  preamble?: string;
-  chatHistory?: Host.AidaClient.Chunk[];
-  /**
-   * @default false
-   */
-  serverSideLoggingEnabled?: boolean;
-  sessionId?: string;
+export class NodeContext extends ConversationContext<SDK.DOMModel.DOMNode> {
+  #node: SDK.DOMModel.DOMNode;
+
+  constructor(node: SDK.DOMModel.DOMNode) {
+    super();
+    this.#node = node;
+  }
+
+  getOrigin(): string {
+    const ownerDocument = this.#node.ownerDocument;
+    if (!ownerDocument) {
+      // The node is detached from a document.
+      return 'detached';
+    }
+    return new URL(ownerDocument.documentURL).origin;
+  }
+
+  getItem(): SDK.DOMModel.DOMNode {
+    return this.#node;
+  }
+
+  override getIcon(): HTMLElement {
+    return document.createElement('span');
+  }
+
+  override getTitle(): string|ReturnType<typeof LitHtml.Directives.until> {
+    return LitHtml.Directives.until(
+        Common.Linkifier.Linkifier.linkify(this.#node),
+    );
+  }
 }
 
 /**
  * One agent instance handles one conversation. Create a new agent
  * instance for a new conversation.
  */
-export class FreestylerAgent {
-  static buildRequest(opts: AidaRequestOptions): Host.AidaClient.AidaRequest {
+export class FreestylerAgent extends AiAgent<SDK.DOMModel.DOMNode> {
+  override type = AgentType.FREESTYLER;
+
+  readonly preamble = preamble;
+  readonly clientFeature = Host.AidaClient.ClientFeature.CHROME_FREESTYLER;
+  get userTier(): string|undefined {
     const config = Common.Settings.Settings.instance().getHostConfig();
-    const request: Host.AidaClient.AidaRequest = {
-      input: opts.input,
-      preamble: opts.preamble,
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      chat_history: opts.chatHistory,
-      client: Host.AidaClient.CLIENT_NAME,
-      options: {
-        temperature: config.devToolsFreestylerDogfood?.temperature ?? 0,
-        model_id: config.devToolsFreestylerDogfood?.modelId ?? undefined,
-      },
-      metadata: {
-        // TODO: disable logging based on query params.
-        disable_user_content_logging: !(opts.serverSideLoggingEnabled ?? false),
-        string_session_id: opts.sessionId,
-        user_tier: Host.AidaClient.convertToUserTierEnum(config.devToolsFreestylerDogfood?.userTier),
-      },
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      functionality_type: Host.AidaClient.FunctionalityType.CHAT,
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      client_feature: Host.AidaClient.ClientFeature.CHROME_FREESTYLER,
-    };
-    return request;
+
+    return config.devToolsFreestyler?.userTier;
+  }
+  get executionMode(): Root.Runtime.HostConfigFreestylerExecutionMode {
+    const config = Common.Settings.Settings.instance().getHostConfig();
+
+    return config.devToolsFreestyler?.executionMode ?? Root.Runtime.HostConfigFreestylerExecutionMode.ALL_SCRIPTS;
   }
 
-  static parseResponse(response: string):
-      {thought?: string, title?: string, action?: string, answer?: string, fixable: boolean} {
+  get options(): AidaRequestOptions {
+    const config = Common.Settings.Settings.instance().getHostConfig();
+    const temperature = config.devToolsFreestyler?.temperature;
+    const modelId = config.devToolsFreestyler?.modelId;
+
+    return {
+      temperature,
+      modelId,
+    };
+  }
+
+  override parseResponse(response: string): ParsedResponse {
+    // We're returning an empty answer to denote the erroneous case.
+    if (!response) {
+      return {answer: ''};
+    }
+
     const lines = response.split('\n');
     let thought: string|undefined;
     let title: string|undefined;
     let action: string|undefined;
     let answer: string|undefined;
-    let fixable = false;
+    let suggestions: [string, ...string[]]|undefined;
     let i = 0;
+
+    // If one of these is present, it means we're going to follow the instruction tags
+    // to parse the response. If none of these is present, we'll assume the whole `response`
+    // to be the `answer`.
+    const isDefiningInstructionStart = (line: string): boolean => {
+      const trimmed = line.trim();
+      return trimmed.startsWith('THOUGHT:') || trimmed.startsWith('ACTION') || trimmed.startsWith('ANSWER:');
+    };
+
     const isInstructionStart = (line: string): boolean => {
       const trimmed = line.trim();
-      return trimmed.startsWith('THOUGHT:') || trimmed.startsWith('OBSERVATION:') || trimmed.startsWith('TITLE:') ||
-          trimmed.startsWith('ACTION') || trimmed.startsWith('ANSWER:') || trimmed.startsWith('FIXABLE:');
+      return isDefiningInstructionStart(line) || trimmed.startsWith('OBSERVATION:') || trimmed.startsWith('TITLE:') ||
+          trimmed.startsWith('SUGGESTIONS:');
     };
+
+    // Sometimes agent answers with no "ANSWER: " tag at the start, and also does not
+    // include any "defining instructions". Then we use the whole `response` as the answer.
+    // However, that case sometimes includes `SUGGESTIONS: ` tag in the response which is then shown to the user.
+    // The block below ensures that the response we parse always contains a defining instruction tag.
+    const hasDefiningInstruction = lines.some(line => isDefiningInstructionStart(line));
+    if (!hasDefiningInstruction) {
+      return this.parseResponse(`ANSWER: ${response}`);
+    }
+
     while (i < lines.length) {
       const trimmed = lines[i].trim();
       if (trimmed.startsWith('THOUGHT:') && !thought) {
-        // TODO: multiline thoughts.
-        thought = trimmed.substring('THOUGHT:'.length).trim();
+        // Start with the initial `THOUGHT: text` line and move forward by one line.
+        const thoughtLines = [trimmed.substring('THOUGHT:'.length).trim()];
         i++;
+        // Move until we see a new instruction, otherwise we're still inside the `THOUGHT` block.
+        while (i < lines.length && !isInstructionStart(lines[i])) {
+          const trimmedLine = lines[i].trim();
+          if (trimmedLine) {
+            thoughtLines.push(trimmedLine);
+          }
+          i++;
+        }
+        thought = thoughtLines.join('\n');
       } else if (trimmed.startsWith('TITLE:')) {
         title = trimmed.substring('TITLE:'.length).trim();
         i++;
@@ -302,8 +345,14 @@ export class FreestylerAgent {
           }
           i++;
         }
-        // TODO: perhaps trying to parse with a Markdown parser would
-        // yield more reliable results.
+
+        // Sometimes the LLM puts the STOP response to the last line of the code block.
+        // Here, we check whether the last line ends with STOP keyword and if so, remove it
+        // from the last line.
+        const lastActionLine = actionLines[actionLines.length - 1];
+        if (lastActionLine && lastActionLine.endsWith('STOP')) {
+          actionLines[actionLines.length - 1] = lastActionLine.substring(0, lastActionLine.length - 'STOP'.length);
+        }
         action = actionLines.join('\n').replaceAll('```', '').replaceAll('``', '').trim();
       } else if (trimmed.startsWith('ANSWER:') && !answer) {
         const answerLines = [
@@ -320,40 +369,64 @@ export class FreestylerAgent {
         }
         answer = answerLines.join('\n').trim();
         i = j;
-      } else if (trimmed.startsWith('FIXABLE: true')) {
-        fixable = true;
+      } else if (trimmed.startsWith('SUGGESTIONS:')) {
+        try {
+          // TODO: Do basic validation this is an array with strings
+          suggestions = JSON.parse(trimmed.substring('SUGGESTIONS:'.length).trim());
+        } catch {
+        }
+
         i++;
       } else {
         i++;
       }
     }
-    // If we could not parse the parts, consider the response to be an
-    // answer.
-    if (!answer && !thought && !action) {
-      answer = response;
+
+    // Sometimes the answer will follow an action and a thought. In
+    // that case, we only use the action and the thought (if present)
+    // since the answer is not based on the observation resulted from
+    // the action.
+    if (action) {
+      return {
+        title,
+        thought,
+        action,
+      };
     }
-    return {thought, title, action, answer, fixable};
+
+    // If we have a thought and an answer we want to give priority
+    // to the answer as no observation is happening.
+    if (thought && !answer) {
+      return {
+        title,
+        thought,
+      };
+    }
+
+    return {
+      // If we could not parse the parts, consider the response to be an
+      // answer.
+      answer: answer || response,
+      suggestions,
+    };
   }
 
-  #aidaClient: Host.AidaClient.AidaClient;
-  #chatHistory: Map<number, HistoryChunk[]> = new Map();
-  #serverSideLoggingEnabled: boolean;
-
   #execJs: typeof executeJsCode;
-
   #confirmSideEffect: typeof Promise.withResolvers;
-  readonly #sessionId = crypto.randomUUID();
   #changes: ChangeManager;
   #createExtensionScope: CreateExtensionScopeFunction;
 
   constructor(opts: AgentOptions) {
-    this.#aidaClient = opts.aidaClient;
+    super({
+      aidaClient: opts.aidaClient,
+      serverSideLoggingEnabled: opts.serverSideLoggingEnabled,
+    });
+
     this.#changes = opts.changeManager || new ChangeManager();
     this.#execJs = opts.execJs ?? executeJsCode;
     this.#createExtensionScope = opts.createExtensionScope ?? ((changes: ChangeManager) => {
                                    return new ExtensionScope(changes);
                                  });
-    this.#serverSideLoggingEnabled = opts.serverSideLoggingEnabled ?? false;
     this.#confirmSideEffect = opts.confirmSideEffectForTest ?? (() => Promise.withResolvers());
     SDK.TargetManager.TargetManager.instance().addModelListener(
         SDK.ResourceTreeModel.ResourceTreeModel, SDK.ResourceTreeModel.Events.PrimaryPageChanged,
@@ -362,29 +435,6 @@ export class FreestylerAgent {
 
   onPrimaryPageChanged(): void {
     void this.#changes.clear();
-  }
-
-  get #getHistoryEntry(): Array<HistoryChunk> {
-    return [...this.#chatHistory.values()].flat();
-  }
-
-  get chatHistoryForTesting(): Array<HistoryChunk> {
-    return this.#getHistoryEntry;
-  }
-
-  async #aidaFetch(request: Host.AidaClient.AidaRequest): Promise<{response: string, rpcId: number|undefined}> {
-    let response = '';
-    let rpcId;
-    for await (const lastResult of this.#aidaClient.fetch(request)) {
-      response = lastResult.explanation;
-      rpcId = lastResult.metadata.rpcGlobalId ?? rpcId;
-      if (lastResult.metadata.attributionMetadata?.some(
-              meta => meta.attributionAction === Host.AidaClient.RecitationAction.BLOCK)) {
-        throw new Error('Attribution action does not allow providing the response');
-      }
-    }
-
-    return {response, rpcId};
   }
 
   async #generateObservation(
@@ -401,12 +451,10 @@ export class FreestylerAgent {
     sideEffect: boolean,
     canceled: boolean,
   }> {
-    const actionExpression = `{
-      const scope = {$0, $1, getEventListeners};
-      with (scope) {
-        ${action}
-        ;((typeof data !== "undefined") ? data : undefined)
-      }
+    const functionDeclaration = `async function ($0) {
+      ${action}
+      ;
+      return ((typeof data !== "undefined") ? data : undefined);
     }`;
     try {
       const runConfirmed = await confirm ?? Promise.resolve(true);
@@ -417,11 +465,18 @@ export class FreestylerAgent {
           canceled: true,
         };
       }
-      const result = await this.#execJs(
-          actionExpression,
-          {throwOnSideEffect},
-      );
+      const result = await Promise.race([
+        this.#execJs(
+            functionDeclaration,
+            {throwOnSideEffect},
+            ),
+        new Promise<never>((_, reject) => {
+          setTimeout(
+              () => reject(new Error('Script execution exceeded the maximum allowed time.')), OBSERVATION_TIMEOUT);
+        }),
+      ]);
       const byteCount = Platform.StringUtilities.countWtf8Bytes(result);
+      Host.userMetrics.freestylerEvalResponseSize(byteCount);
       if (byteCount > MAX_OBSERVATION_BYTE_LENGTH) {
         throw new Error('Output exceeded the maximum allowed length.');
       }
@@ -448,7 +503,7 @@ export class FreestylerAgent {
   }
 
   static async describeElement(element: SDK.DOMModel.DOMNode): Promise<string> {
-    let output = `\n* Its selector is \`${element.simpleSelector()}\``;
+    let output = `* Its selector is \`${element.simpleSelector()}\``;
     const childNodes = await element.getChildNodesPromise();
     if (childNodes) {
       const textChildNodes = childNodes.filter(childNode => childNode.nodeType() === Node.TEXT_NODE);
@@ -523,196 +578,100 @@ export class FreestylerAgent {
       }
     }
 
-    return output;
+    return output.trim();
   }
 
-  #runId = 0;
-  async * run(query: string, options: {
-    signal?: AbortSignal, selectedElement: SDK.DOMModel.DOMNode|null, isFixQuery: boolean,
-  }): AsyncGenerator<ResponseData, void, void> {
-    const structuredLog = [];
-    query = `${
-        options.selectedElement ?
-            `# Inspected element\n${
-                await FreestylerAgent.describeElement(options.selectedElement)}\n\n# User request\n\n` :
-            ''}QUERY: ${query}`;
-    const currentRunId = ++this.#runId;
-
-    options.signal?.addEventListener('abort', () => {
-      this.#chatHistory.delete(currentRunId);
-    });
-
-    for (let i = 0; i < MAX_STEPS; i++) {
-      yield {
-        type: ResponseType.QUERYING,
+  override async *
+      handleAction(action: string, rpcId?: number): AsyncGenerator<SideEffectResponse, ActionResponse, void> {
+    debugLog(`Action to execute: ${action}`);
+    if (this.executionMode === Root.Runtime.HostConfigFreestylerExecutionMode.NO_SCRIPTS) {
+      return {
+        type: ResponseType.ACTION,
+        code: action,
+        output: 'Error: JavaScript execution is currently disabled.',
+        canceled: true,
+        rpcId,
       };
+    }
 
-      const request = FreestylerAgent.buildRequest({
-        input: query,
-        preamble,
-        chatHistory: this.#chatHistory.size ? this.#getHistoryEntry : undefined,
-        serverSideLoggingEnabled: this.#serverSideLoggingEnabled,
-        sessionId: this.#sessionId,
-      });
-      let response: string;
-      let rpcId: number|undefined;
-      try {
-        const fetchResult = await this.#aidaFetch(request);
-        response = fetchResult.response;
-        rpcId = fetchResult.rpcId;
-      } catch (err) {
-        debugLog('Error calling the AIDA API', err);
-
-        if (options.signal?.aborted) {
-          break;
-        }
-
-        yield {
-          type: ResponseType.ERROR,
-          error: ErrorType.UNKNOWN,
-          rpcId,
-        };
-        break;
-      }
-
-      if (options.signal?.aborted) {
-        break;
-      }
-
-      debugLog(`Iteration: ${i}`, 'Request', request, 'Response', response);
-      structuredLog.push({
-        request: structuredClone(request),
-        response,
-      });
-
-      const addToHistory = (text: string): void => {
-        this.#chatHistory.set(currentRunId, [
-          ...currentRunEntries,
-          {
-            text: query,
-            entity: Host.AidaClient.Entity.USER,
-          },
-          {
-            text,
-            entity: Host.AidaClient.Entity.SYSTEM,
-          },
-        ]);
-      };
-      const currentRunEntries = this.#chatHistory.get(currentRunId) ?? [];
-      const {thought, title, action, answer, fixable} = FreestylerAgent.parseResponse(response);
-      // Sometimes the answer will follow an action and a thought. In
-      // that case, we only use the action and the thought (if present)
-      // since the answer is not based on the observation resulted from
-      // the action.
-      if (action) {
-        if (thought) {
-          addToHistory(`THOUGHT: ${thought}
-TITLE: ${title}
-ACTION
-${action}
-STOP`);
-          yield {
-            type: ResponseType.THOUGHT,
-            thought,
-            title,
-            rpcId,
-          };
-        } else {
-          addToHistory(`ACTION
-${action}
-STOP`);
-        }
-        debugLog(`Action to execute: ${action}`);
-        const scope = this.#createExtensionScope(this.#changes);
-        await scope.install();
-        try {
-          let result = await this.#generateObservation(action, {throwOnSideEffect: !options.isFixQuery});
-          debugLog(`Action result: ${JSON.stringify(result)}`);
-          if (result.sideEffect) {
-            const sideEffectConfirmationPromiseWithResolvers = this.#confirmSideEffect<boolean>();
-            if (isDebugMode()) {
-              window.dispatchEvent(new CustomEvent(
-                  'freestylersideeffect', {detail: {confirm: sideEffectConfirmationPromiseWithResolvers.resolve}}));
-            }
-
-            yield {
-              type: ResponseType.SIDE_EFFECT,
-              code: action,
-              confirm: sideEffectConfirmationPromiseWithResolvers.resolve,
-              rpcId,
-            };
-
-            result = await this.#generateObservation(action, {
-              throwOnSideEffect: false,
-              confirmExecJs: sideEffectConfirmationPromiseWithResolvers.promise,
-            });
-          }
-          yield {
+    const scope = this.#createExtensionScope(this.#changes);
+    await scope.install();
+    try {
+      let result = await this.#generateObservation(action, {throwOnSideEffect: true});
+      debugLog(`Action result: ${JSON.stringify(result)}`);
+      if (result.sideEffect) {
+        if (this.executionMode === Root.Runtime.HostConfigFreestylerExecutionMode.SIDE_EFFECT_FREE_SCRIPTS_ONLY) {
+          return {
             type: ResponseType.ACTION,
             code: action,
-            output: result.observation,
-            canceled: result.canceled,
+            output: 'Error: JavaScript execution that modifies the page is currently disabled.',
+            canceled: true,
             rpcId,
           };
-
-          query = `OBSERVATION: ${result.observation}`;
-        } finally {
-          await scope.uninstall();
         }
-      } else if (answer) {
-        addToHistory(`ANSWER: ${answer}`);
+
+        const sideEffectConfirmationPromiseWithResolvers = this.#confirmSideEffect<boolean>();
+        if (isDebugMode()) {
+          window.dispatchEvent(new CustomEvent(
+              'freestylersideeffect', {detail: {confirm: sideEffectConfirmationPromiseWithResolvers.resolve}}));
+        }
+
         yield {
-          type: ResponseType.ANSWER,
-          text: answer,
+          type: ResponseType.SIDE_EFFECT,
+          code: action,
+          confirm: (result: boolean) => {
+            sideEffectConfirmationPromiseWithResolvers.resolve(result);
+            Host.userMetrics.actionTaken(
+                result ? Host.UserMetrics.Action.AiAssistanceSideEffectConfirmed :
+                         Host.UserMetrics.Action.AiAssistanceSideEffectRejected,
+            );
+          },
           rpcId,
-          fixable,
         };
-        break;
-      } else {
-        addToHistory(response);
-        yield {
-          type: ResponseType.ERROR,
-          error: ErrorType.UNKNOWN,
-          rpcId,
-        };
-        break;
-      }
 
-      if (i === MAX_STEPS - 1) {
-        yield {
-          type: ResponseType.ERROR,
-          error: ErrorType.MAX_STEPS,
-        };
-        break;
+        result = await this.#generateObservation(action, {
+          throwOnSideEffect: false,
+          confirmExecJs: sideEffectConfirmationPromiseWithResolvers.promise,
+        });
       }
-    }
-    if (isDebugMode()) {
-      localStorage.setItem('freestylerStructuredLog', JSON.stringify(structuredLog));
-      window.dispatchEvent(new CustomEvent('freestylerdone'));
+      return {
+        type: ResponseType.ACTION,
+        code: action,
+        output: result.observation,
+        canceled: result.canceled,
+        rpcId,
+      };
+    } finally {
+      await scope.uninstall();
     }
   }
-}
 
-function isDebugMode(): boolean {
-  return Boolean(localStorage.getItem('debugFreestylerEnabled'));
-}
-
-function debugLog(...log: unknown[]): void {
-  if (!isDebugMode()) {
-    return;
+  override async *
+      handleContextDetails(selectedElement: ConversationContext<SDK.DOMModel.DOMNode>|null):
+          AsyncGenerator<ContextResponse, void, void> {
+    if (!selectedElement) {
+      return;
+    }
+    yield {
+      type: ResponseType.CONTEXT,
+      title: lockedString(UIStringsNotTranslate.analyzingThePrompt),
+      details: [{
+        title: lockedString(UIStringsNotTranslate.dataUsed),
+        text: await FreestylerAgent.describeElement(selectedElement.getItem()),
+      }],
+    };
   }
 
-  // eslint-disable-next-line no-console
-  console.log(...log);
-}
+  override async enhanceQuery(query: string, selectedElement: ConversationContext<SDK.DOMModel.DOMNode>|null):
+      Promise<string> {
+    const elementEnchantmentQuery = selectedElement ?
+        `# Inspected element\n\n${
+            await FreestylerAgent.describeElement(selectedElement.getItem())}\n\n# User request\n\n` :
+        '';
+    return `${elementEnchantmentQuery}QUERY: ${query}`;
+  }
 
-function setDebugFreestylerEnabled(enabled: boolean): void {
-  if (enabled) {
-    localStorage.setItem('debugFreestylerEnabled', 'true');
-  } else {
-    localStorage.removeItem('debugFreestylerEnabled');
+  override formatHistoryChunkAnswer(text: string): string {
+    return `ANSWER: ${text}`;
   }
 }
-
-// @ts-ignore
-globalThis.setDebugFreestylerEnabled = setDebugFreestylerEnabled;

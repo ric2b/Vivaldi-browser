@@ -2,70 +2,46 @@
 precision highp float;
 precision highp int;
 
+
 struct SB_RW_atomic {
   int arg_0;
 };
 
-struct SB_RW {
-  int arg_0;
-};
-
-layout(binding = 0, std430) buffer sb_rw_block_ssbo {
+layout(binding = 0, std430)
+buffer sb_rw_block_1_ssbo {
   SB_RW_atomic inner;
-} sb_rw;
-
+} v;
 void atomicOr_8d96a0() {
   int res = 0;
-  int x_9 = atomicOr(sb_rw.inner.arg_0, 1);
+  int x_9 = atomicOr(v.inner.arg_0, 1);
   res = x_9;
-  return;
 }
-
 void fragment_main_1() {
   atomicOr_8d96a0();
-  return;
 }
-
-void fragment_main() {
-  fragment_main_1();
-}
-
 void main() {
-  fragment_main();
-  return;
+  fragment_main_1();
 }
 #version 310 es
 
+
 struct SB_RW_atomic {
   int arg_0;
 };
 
-struct SB_RW {
-  int arg_0;
-};
-
-layout(binding = 0, std430) buffer sb_rw_block_ssbo {
+layout(binding = 0, std430)
+buffer sb_rw_block_1_ssbo {
   SB_RW_atomic inner;
-} sb_rw;
-
+} v;
 void atomicOr_8d96a0() {
   int res = 0;
-  int x_9 = atomicOr(sb_rw.inner.arg_0, 1);
+  int x_9 = atomicOr(v.inner.arg_0, 1);
   res = x_9;
-  return;
 }
-
 void compute_main_1() {
   atomicOr_8d96a0();
-  return;
 }
-
-void compute_main() {
-  compute_main_1();
-}
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  compute_main();
-  return;
+  compute_main_1();
 }

@@ -134,7 +134,7 @@ void ConnectionNamespaceHandler::OnMessage(VirtualConnectionRouter* router,
       MaybeGetString(value, JSON_EXPAND_FIND_CONSTANT_ARGS(kMessageKeyType));
   if (!type) {
     // TODO(btolsch): Some of these paths should have error reporting.  One
-    // possibility is to pass errors back through |router| so higher-level code
+    // possibility is to pass errors back through `router` so higher-level code
     // can decide whether to show an error to the user, stop talking to a
     // particular device, etc.
     return;

@@ -19,6 +19,13 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 @interface TranslateInfobarBannerOverlayMediator ()
 
 // The translate banner config from the request.
@@ -100,6 +107,13 @@
 
   UIImage* iconImage = CustomSymbolTemplateWithPointSize(
       kTranslateSymbol, kInfobarSymbolPointSize);
+
+  if (IsVivaldiRunning()) {
+    iconImage =
+        [CustomSymbolWithPointSize(vOverflowTranslate, kInfobarSymbolPointSize)
+            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } // End Vivaldi
+
   [self.consumer setIconImage:iconImage];
   [self.consumer setPresentsModal:YES];
   [self.consumer setTitleText:[self bannerTitleText]];
@@ -150,10 +164,8 @@
       return l10n_util::GetNSString(
           IDS_IOS_TRANSLATE_INFOBAR_TRANSLATE_TRY_AGAIN_ACTION);
     case translate::TranslateStep::TRANSLATE_STEP_NEVER_TRANSLATE:
-      NOTREACHED_IN_MIGRATION()
-          << "Translate infobar should not be presenting anything in "
-             "this state.";
-      return nil;
+      NOTREACHED() << "Translate infobar should not be presenting anything in "
+                      "this state.";
   }
 }
 

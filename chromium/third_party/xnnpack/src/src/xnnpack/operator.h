@@ -11,17 +11,21 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "xnnpack/allocator.h"
-#include "xnnpack/cache.h"
+#include "xnnpack.h"
+#include "xnnpack/common.h"
 #include "xnnpack/compute.h"
+#include "xnnpack/microfnptr.h"
 #include "xnnpack/microkernel-type.h"
 #include "xnnpack/microparams.h"
 #include "xnnpack/operator-type.h"
-#include "xnnpack/params.h"
 #include "pthreadpool.h"
 
 // Maximum number of pthreadpool parallelization invocations per operator.
 #define XNN_MAX_COMPUTE_INVOCATIONS 3
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct xnn_ukernel_conv2d {
   union {
@@ -50,7 +54,6 @@ struct xnn_ukernel_dwconv2d {
   union {
     xnn_dwconv2d_chw_ukernel_fn chw_fn;
   };
-  xnn_update_chw_params_fn update_params;
   uint8_t output_width_tile;
 };
 
@@ -130,22 +133,8 @@ enum xnn_run_state {
   xnn_run_state_needs_setup,
 };
 
-struct subconvolution_params {
-  void* weights;
-  size_t w_stride;
-  const void** indirection_buffer;
-  void* output;
-  size_t slice_width;
-  size_t slice_height;
-  size_t indirection_y_stride;
-  size_t indirection_x_stride;
-  // scaled_kernel_size := kernel_size * mr * sizeof(void*).
-  size_t scaled_kernel_size;
-};
-
-struct f16_f32acc_mean_params {
-  union xnn_f16_f32acc_scale_params f16_f32acc_scale;
-  union xnn_f32_f16_cvt_params cvt_params;
+struct f16_f32acc_reduce_params {
+  struct xnn_f16_f32acc_scale_params f16_f32acc_scale;
 };
 
 struct xnn_operator {
@@ -165,7 +154,6 @@ struct xnn_operator {
   size_t group_input_channels;
   size_t group_output_channels;
   size_t channels;
-  size_t max_tokens;
 
   uint32_t pad_value;
 
@@ -224,112 +212,60 @@ struct xnn_operator {
   struct subconvolution_params* subconvolution_buffer;
   uint32_t flags;
 
+  uint32_t log2_elementwise_element_size;
+  uint32_t log2_elementwise_input_size;
+  uint32_t log2_elementwise_output_size;
+
   union {
-    union xnn_f16_abs_params f16_abs;
-    union xnn_f16_default_params f16_default;
-    union xnn_f16_f32_cvt_params f16_f32_cvt;
-    union xnn_f16_hswish_params f16_hswish;
-    union xnn_f16_elu_params f16_elu;
-    union xnn_f16_lrelu_params f16_lrelu;
-    union xnn_f16_neg_params f16_neg;
-    union xnn_f16_sigmoid_params f16_sigmoid;
-    union xnn_f16_tanh_params f16_tanh;
-    union xnn_f32_default_params f32_default;
-    union xnn_f32_elu_params f32_elu;
-    union xnn_f32_lrelu_params f32_lrelu;
-    union xnn_f32_rnd_params f32_rnd;
-    union xnn_f32_rsqrt_params f32_rsqrt;
-    union xnn_f32_sigmoid_params f32_sigmoid;
-    union xnn_f32_sqrt_params f32_sqrt;
-    union xnn_f32_tanh_params f32_tanh;
-    // Parameters for Global Average Pooling in CHW layout
-    union xnn_f16_gavgpool_params f16_gavgpool;
-    union xnn_f32_gavgpool_params f32_gavgpool;
-    union xnn_f32_hswish_params f32_hswish;
-    // Pixelwise Average Pooling normally use f16_minmax_params, but also initialize
-    // f16_scaleminmax_params in case it needs to switch to Global Average Pooling operation.
-    struct {
-      union xnn_f16_minmax_params f16_minmax;
-      union xnn_f16_scaleminmax_params f16_scaleminmax;
-    };
-    struct f16_f32acc_mean_params mean_params;
+    union xnn_binary_uparams binary;
+    union xnn_unary_uparams unary;
+    struct xnn_f16_default_params f16_default;
+    struct xnn_f32_default_params f32_default;
+    union xnn_f16_minmax_params f16_minmax;
+    struct xnn_f16_scaleminmax_params f16_scaleminmax;
+    struct f16_f32acc_reduce_params reduce_params;
     // Pixelwise Average Pooling normally use f32_minmax_params, but also initialize
     // f32_scaleminmax_params in case it needs to switch to Global Average Pooling operation.
     struct {
       union xnn_f32_minmax_params f32_minmax;
-      union xnn_f32_scaleminmax_params f32_scaleminmax;
+      struct xnn_f32_scaleminmax_params f32_scaleminmax;
     };
-    struct {
-      union xnn_f32_scale_params f32_scale;
-    };
-    union xnn_f16_chw_params f16_chw;
-    union xnn_f32_chw_params f32_chw;
-    union xnn_f32_f16_cvt_params f32_f16_cvt;
-    union xnn_f32_qb4w_minmax_params f32_qb4w_minmax;
-    union xnn_f32_qc4w_minmax_params f32_qc4w_minmax;
-    union xnn_f32_qs8_cvt_params f32_qs8_cvt;
-    union xnn_f32_qu8_cvt_params f32_qu8_cvt;
-    union xnn_qs8_cvt_params qs8_cvt;
-    union xnn_qs8_f16_cvt_params qs8_f16_cvt;
-    union xnn_qs8_f32_cvt_params qs8_f32_cvt;
-    union xnn_qs16_qs8_cvt_params qs16_qs8_cvt;
-    union xnn_qu8_cvt_params qu8_cvt;
-    union xnn_qu8_f32_cvt_params qu8_f32_cvt;
+    struct xnn_f32_scale_params f32_scale;
+    union xnn_f16_minmax_params f16_chw;
+    union xnn_f32_minmax_params f32_chw;
+    struct xnn_f32_qb4w_minmax_params f32_qb4w_minmax;
+    struct xnn_f32_qc4w_minmax_params f32_qc4w_minmax;
     union xnn_qs8_conv_minmax_params qs8_conv_minmax;
     union xnn_qs8_qc8w_conv_minmax_params qs8_qc8w_conv_minmax;
-    // Average Pooling normally use qs8_avgpool_params, but also initialize qs8_gavgpool_params in case it needs to switch
-    // to Global Average Pooling operation.
-    struct {
-      union xnn_qs8_avgpool_minmax_params qs8_avgpool;
-      union xnn_qs8_avgpool_minmax_params qs8_gavgpool;
-    };
-    union xnn_qs8_add_minmax_params qs8_add;
-    union xnn_qs8_mul_minmax_params qs8_mul;
-    union xnn_qu8_add_minmax_params qu8_add;
-    union xnn_qu8_mul_minmax_params qu8_mul;
+    struct xnn_qs8_reduce_minmax_params qs8_reduce;
+    struct xnn_qu8_reduce_minmax_params qu8_reduce;
     union xnn_qu8_conv_minmax_params qu8_conv_minmax;
-    // Average Pooling normally use qu8_avgpool_params, but also initialize qu8_gavgpool_params in case it needs to switch
-    // to Global Average Pooling operation.
-    struct {
-      union xnn_qu8_avgpool_minmax_params qu8_avgpool;
-      union xnn_qu8_avgpool_minmax_params qu8_gavgpool;
-    };
-    union xnn_qs8_hswish_params qs8_hswish;
-    union xnn_qu8_hswish_params qu8_hswish;
-    union xnn_qs8_lrelu_params qs8_lrelu;
-    union xnn_qu8_lrelu_params qu8_lrelu;
-    union xnn_s8_minmax_params s8_minmax;
-    union xnn_s32_default_params s32_default;
-    union xnn_u8_minmax_params u8_minmax;
+    struct xnn_qu8_avgpool_minmax_params qu8_avgpool;
+    struct xnn_s8_minmax_params s8_minmax;
+    struct xnn_s32_default_params s32_default;
+    struct xnn_u8_minmax_params u8_minmax;
   } params;
   // Second set of params. Operators like Dynamic Fully Connected only decides on the specific config to use during
   // reshape, so it needs to keep two sets of params around. Configs can have different initialization functions.
   // We also use this to store parameters to binary operators. For most such operators, this is a copy of params,
   // but params need to be swapped for commutative ops with per-operand params.
   union {
-    union xnn_f16_expminus_params f16_expminus_params;
+    union xnn_binary_uparams binary;
+    struct xnn_f16_default_params f16_default;
     union xnn_f32_minmax_params f32_minmax;
-    union xnn_f32_expminus_params f32_expminus_params;
-    union xnn_f32_default_params f32_default;
-    union xnn_qs8_add_minmax_params qs8_add;
-    union xnn_qs8_mul_minmax_params qs8_mul;
-    union xnn_qu8_add_minmax_params qu8_add;
-    union xnn_qu8_mul_minmax_params qu8_mul;
-    union xnn_s8_minmax_params s8_minmax;
-    union xnn_u8_minmax_params u8_minmax;
+    struct xnn_f32_default_params f32_default;
+    struct xnn_s8_minmax_params s8_minmax;
+    struct xnn_u8_minmax_params u8_minmax;
   } params2;
   // Third set of params. Used by scaled dot attention operator.
   union {
-    union xnn_f16_default_params f16_rmax;
-    union xnn_f32_default_params f32_rmax;
+    struct xnn_f16_default_params f16_rmax;
+    struct xnn_f32_default_params f32_rmax;
   } params3;
   // Fourth set of params. Used by scaled dot attention operator.
   union {
-    union xnn_f16_tanh_params f16_tanh;
-    union xnn_f32_tanh_params f32_tanh;
+    union xnn_unary_uparams unary;
   } params4;
-  size_t num_post_operation_params;
-  void* post_operation_params;
   enum xnn_operator_type type;
   struct xnn_ukernel ukernel;
 
@@ -337,13 +273,13 @@ struct xnn_operator {
     const struct xnn_argmaxpool_config* argmaxpool_config;
     struct {
       const struct xnn_avgpool_config* avgpool_config;
-      const struct xnn_gavgpool_config* gavgpool_config;
       const struct xnn_pavgpool_config* pavgpool_config;
       const struct xnn_reduce_config* rdsum_config;
       const struct xnn_reduce_config* rsum_config;
       const struct xnn_unary_elementwise_config* cvt_config;
+      const struct xnn_unary_elementwise_config* s32_f32_cvt_config;
+      const struct xnn_unary_elementwise_config* u32_f32_cvt_config;
     };
-    const struct xnn_gavgpool_cw_config* gavgpool_cw_config;
     const struct xnn_ibilinear_chw_config* ibilinear_chw_config;
     const struct xnn_ibilinear_config* ibilinear_config;
     struct {
@@ -359,7 +295,6 @@ struct xnn_operator {
       };
     };  // For softmax operator.
     const struct xnn_maxpool_config* maxpool_config;
-    const struct xnn_prelu_config* prelu_config;
     const struct xnn_unpool_config* unpool_config;
     const struct xnn_zip_config* zip_config;
     struct {
@@ -369,7 +304,7 @@ struct xnn_operator {
     const struct xnn_x8_lut_config* lut_config;
     const struct xnn_cmul_config* cmul_config;
     const struct xnn_transpose_config* transpose_config;
-    const struct xnn_binary_elementwise_subconfig* binary_elementwise_subconfig;
+    const struct xnn_binary_elementwise_config* binary_elementwise_config;
     struct {
       const struct xnn_unary_elementwise_config* unary_elementwise_config;
       const struct xnn_reduce_config* rminmax_config;  // For dynamic quantization convert operator.
@@ -383,6 +318,7 @@ struct xnn_operator {
       enum xnn_attention_logits_cap_type cap_type;
       struct xnn_attention_logits_cap_tanh_params cap_params;
     } attention;  // For attention operator.
+    const struct xnn_pack_lh_config* pack_lh_config;
   };
 
   struct compute_parameters compute[XNN_MAX_COMPUTE_INVOCATIONS];
@@ -395,29 +331,27 @@ struct xnn_operator {
     struct {
       struct dwconv_context dwconv;
       struct dwconv_indirection_init_context dwconv_indirection_init;
-    };
+    } dwconv;
     struct elementwise_binary_context elementwise_binary;
     // PACKW GEMM GOI + GEMM are used together in Dynamic Fully Connected.
     struct {
       union {
         struct gemm_context gemm;
         struct scaled_dot_product_attention_context attention;
-      };
+      } gemm;
       struct packw_gemm_goi_context packw_gemm_goi;
       struct packw_gemm_gio_context packw_gemm_gio;
-    };
-    struct global_average_pooling_nwc_context global_average_pooling_nwc;
-    struct global_average_pooling_ncw_context global_average_pooling_ncw;
+      bool const_weights;
+    } gemm;
     struct {
       struct igemm_context igemm;
       struct conv2d_igemm_indirection_init_context conv2d_igemm_indirection_init;
-    };
+    } igemm;
     struct lut_contiguous_context lut_contiguous;
     struct lut_strided_context lut_strided;
     struct max_pooling_context max_pooling;
     struct pad_context pad;
     struct pixelwise_average_pooling_context pixelwise_average_pooling;
-    struct prelu_context prelu;
     struct reduce_context reduce;
     struct {
       struct resize_bilinear_context resize_bilinear;
@@ -439,6 +373,7 @@ struct xnn_operator {
     struct unpooling_context unpooling;
     struct vmulcaddc_context vmulcaddc;
     struct rope_context rope;
+    struct x32_pack_lh_context x32_pack_lh;
   } context;
 
   struct xnn_code_cache* code_cache;
@@ -451,3 +386,9 @@ XNN_INTERNAL enum xnn_status xnn_run_operator_with_index(
   size_t opdata_index,
   size_t operator_object_index,
   pthreadpool_t threadpool);
+
+XNN_INTERNAL enum xnn_operator_type xnn_reduce_operator_to_operator_type(enum xnn_reduce_operator op);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif

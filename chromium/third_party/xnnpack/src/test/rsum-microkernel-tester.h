@@ -17,8 +17,9 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include <fp16/fp16.h>
 #include "xnnpack.h"
+#include "xnnpack/buffer.h"
+#include "xnnpack/math.h"
 #include "xnnpack/microfnptr.h"
 #include "xnnpack/microparams.h"
 #include "xnnpack/requantization.h"
@@ -103,12 +104,12 @@ class RSumMicrokernelTester {
   }
 
   void Test(xnn_qs8_rsum_ukernel_fn rsum,
-      xnn_init_qs8_rsum_params_fn init_params) const {
+      xnn_init_qs8_rsum_params_fn init_params = nullptr) const {
     xnnpack::ReplicableRandomDevice rng;
     std::uniform_int_distribution<int32_t> i8dist(
       std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
 
-    std::vector<int8_t> input(batch_size() + XNN_EXTRA_BYTES / sizeof(int8_t));
+    xnnpack::Buffer<int8_t> input(batch_size() + XNN_EXTRA_BYTES / sizeof(int8_t));
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return i8dist(rng); });
 
@@ -120,8 +121,10 @@ class RSumMicrokernelTester {
       }
 
       // Prepare parameters
-      union xnn_qs8_rsum_params params;
-      init_params(&params);
+      struct xnn_qs8_rsum_params params;
+      if (init_params) {
+        init_params(&params);
+      }
 
       // Call optimized micro-kernel.
       int32_t output = output_init;
@@ -132,31 +135,65 @@ class RSumMicrokernelTester {
     }
   }
 
+  void Test(xnn_qu8_rsum_ukernel_fn rsum,
+      xnn_init_qs8_rsum_params_fn init_params = nullptr) const {
+    xnnpack::ReplicableRandomDevice rng;
+    std::uniform_int_distribution<uint32_t> u8dist(
+      std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
+
+    xnnpack::Buffer<uint8_t> input(batch_size() + XNN_EXTRA_BYTES / sizeof(uint8_t));
+    for (size_t iteration = 0; iteration < iterations(); iteration++) {
+      std::generate(input.begin(), input.end(), [&]() { return u8dist(rng); });
+
+      // Compute reference results.
+      // The accumulator is not initialized to zero to verify that the
+      // microkernel doesn't overwrite the output.
+      uint32_t output_init = u8dist(rng);
+      uint32_t output_ref = output_init;
+      for (size_t i = 0; i < batch_size(); i++) {
+        output_ref += uint32_t(input[i]);
+      }
+
+      // Prepare parameters
+      struct xnn_qs8_rsum_params params;
+      if (init_params) {
+        init_params(&params);
+      }
+
+      // Call optimized micro-kernel.
+      uint32_t output = output_init;
+      rsum(batch_size() * sizeof(uint8_t), input.data(), &output, &params);
+
+      // Verify results.
+      EXPECT_EQ(output_ref, output);
+    }
+  }
+
   void Test(xnn_f16_rsum_ukernel_fn rsum, xnn_init_f16_scale_params_fn init_params) const {
     xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.01f, 1.0f);
 
-    std::vector<uint16_t> input(batch_size() + XNN_EXTRA_BYTES / sizeof(uint16_t));
+    xnnpack::Buffer<xnn_float16> input(batch_size() + XNN_EXTRA_BYTES / sizeof(xnn_float16));
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
-      std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
+      std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
 
       // Compute reference results.
       float output_ref = 0.0f;
       for (size_t i = 0; i < batch_size(); i++) {
-        output_ref += fp16_ieee_to_fp32_value(input[i]);
+        output_ref += input[i];
       }
       output_ref *= scale();
 
       // Prepare parameters.
       xnn_f16_scale_params params;
-      init_params(&params, fp16_ieee_from_fp32_value(scale()));
+      init_params(&params, scale());
 
       // Call optimized micro-kernel.
-      uint16_t output = UINT16_C(0x7E00);  /* NaN */
-      rsum(batch_size() * sizeof(uint16_t), input.data(), &output, &params);
+      xnn_float16 output = std::nanf("");  /* NaN */
+      rsum(batch_size() * sizeof(xnn_float16), input.data(), &output, &params);
 
       // Verify results.
-      EXPECT_NEAR(fp16_ieee_to_fp32_value(output), output_ref, std::abs(output_ref) * 2.0e-3f)
+      EXPECT_NEAR(output, output_ref, std::abs(output_ref) * 4.0e-3f)
         << "with batch " << batch_size() << ", scale " << scale();
     }
   }
@@ -165,14 +202,14 @@ class RSumMicrokernelTester {
     xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.01f, 1.0f);
 
-    std::vector<uint16_t> input(batch_size() + XNN_EXTRA_BYTES / sizeof(uint16_t));
+    xnnpack::Buffer<xnn_float16> input(batch_size() + XNN_EXTRA_BYTES / sizeof(xnn_float16));
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
-      std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
+      std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
 
       // Compute reference results.
       float output_ref = 0.0f;
       for (size_t i = 0; i < batch_size(); i++) {
-        output_ref += fp16_ieee_to_fp32_value(input[i]);
+        output_ref += input[i];
       }
       output_ref *= scale();
 
@@ -182,7 +219,7 @@ class RSumMicrokernelTester {
 
       // Call optimized micro-kernel.
       float output = 0.f;
-      rsum(batch_size() * sizeof(uint16_t), input.data(), &output, &params);
+      rsum(batch_size() * sizeof(xnn_float16), input.data(), &output, &params);
 
       // Verify results.
       EXPECT_NEAR(output, output_ref, std::abs(output_ref) * 1.0e-5f)
@@ -194,12 +231,14 @@ class RSumMicrokernelTester {
     xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist(0.01f, 1.0f);
 
-    std::vector<float> input(batch_size() + XNN_EXTRA_BYTES / sizeof(float));
+    xnnpack::Buffer<float> input(batch_size() + XNN_EXTRA_BYTES / sizeof(float));
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
 
       // Compute reference results.
-      const double output_ref = std::accumulate(input.begin(), input.begin() + batch_size(), 0.0) * double(scale());
+      const double output_ref =
+          std::accumulate(input.begin(), input.begin() + batch_size(), 0.0) *
+          static_cast<double>(scale());
 
       // Prepare parameters.
       xnn_f32_scale_params params;

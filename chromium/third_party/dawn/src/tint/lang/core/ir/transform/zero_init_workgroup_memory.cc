@@ -32,7 +32,7 @@
 
 #include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/module.h"
-#include "src/tint/lang/core/ir/transform/common/referenced_module_vars.h"
+#include "src/tint/lang/core/ir/referenced_module_vars.h"
 #include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/utils/containers/reverse.h"
 
@@ -63,7 +63,7 @@ struct State {
     core::type::Manager& ty{ir.Types()};
 
     /// The mapping from functions to their transitively referenced workgroup variables.
-    ReferencedModuleVars referenced_module_vars_{
+    ReferencedModuleVars<Module> referenced_module_vars_{
         ir, [](const Var* var) {
             auto* view = var->Result(0)->Type()->As<type::MemoryView>();
             return view && view->AddressSpace() == AddressSpace::kWorkgroup;
@@ -133,8 +133,6 @@ struct State {
 
         // Get the local invocation index and the linearized workgroup size.
         auto* local_index = GetLocalInvocationIndex(func);
-        auto wgsizes = func->WorkgroupSize().value();
-        auto wgsize = wgsizes[0] * wgsizes[1] * wgsizes[2];
 
         // Insert instructions to zero-initialize every variable.
         b.InsertBefore(function_start, [&] {
@@ -150,6 +148,11 @@ struct State {
                         b.ExitIf(ifelse);
                     });
                 } else {
+                    auto wgsizes = func->WorkgroupSizeAsConst();
+                    TINT_ASSERT(wgsizes);
+
+                    auto wgsize = wgsizes.value()[0] * wgsizes.value()[1] * wgsizes.value()[2];
+
                     // Use a loop for arrayed stores.
                     b.LoopRange(ty, local_index, u32(count), u32(wgsize), [&](Value* index) {
                         for (auto& store : *element_stores) {
@@ -305,7 +308,7 @@ struct State {
 }  // namespace
 
 Result<SuccessType> ZeroInitWorkgroupMemory(Module& ir) {
-    auto result = ValidateAndDumpIfNeeded(ir, "ZeroInitWorkgroupMemory transform");
+    auto result = ValidateAndDumpIfNeeded(ir, "core.ZeroInitWorkgroupMemory");
     if (result != Success) {
         return result;
     }

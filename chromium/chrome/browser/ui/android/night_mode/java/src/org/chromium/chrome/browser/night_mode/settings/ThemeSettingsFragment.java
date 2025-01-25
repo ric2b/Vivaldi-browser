@@ -43,8 +43,6 @@ public class ThemeSettingsFragment extends ChromeBaseSettingsFragment
     // Vivaldi
     public static final String KEY_DARK_MODE_FOR_WEBPAGES = "dark_mode_for_webpages";
 
-    private boolean mWebContentsDarkModeEnabled;
-
     private final ObservableSupplierImpl<String> mPageTitle = new ObservableSupplierImpl<>();
 
     @Override

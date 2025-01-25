@@ -26,9 +26,7 @@ title: For Developers
             commands.
 *   Look at our [Git
             Cookbook](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/git_cookbook.md)
-            for a helpful walk-through, or the [Fast Intro to Git
-            Internals](/developers/fast-intro-to-git-internals) for a background
-            intro to git.
+            for a helpful walk-through.
 *   [Changelogs for Chromium and Blink](/developers/change-logs).
 
 #### Development Guides
@@ -237,7 +235,6 @@ Design documents
 
 *   [Getting around the source code
             directories](/developers/how-tos/getting-around-the-chrome-source-code)
-*   [Tech Talks: Videos & Presentations](/developers/tech-talk-videos)
 *   [Engineering design docs](/developers/design-documents)
 *   [User experience design docs](/user-experience)
 *   *Sharing design documents on Google drive: share on Chromium domain*

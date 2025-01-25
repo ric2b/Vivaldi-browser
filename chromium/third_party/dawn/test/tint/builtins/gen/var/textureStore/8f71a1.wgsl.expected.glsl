@@ -8,14 +8,8 @@ void textureStore_8f71a1() {
   ivec4 arg_2 = ivec4(1);
   imageStore(arg_0, arg_1, arg_2);
 }
-
-void fragment_main() {
-  textureStore_8f71a1();
-}
-
 void main() {
-  fragment_main();
-  return;
+  textureStore_8f71a1();
 }
 #version 310 es
 
@@ -25,13 +19,7 @@ void textureStore_8f71a1() {
   ivec4 arg_2 = ivec4(1);
   imageStore(arg_0, arg_1, arg_2);
 }
-
-void compute_main() {
-  textureStore_8f71a1();
-}
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  compute_main();
-  return;
+  textureStore_8f71a1();
 }

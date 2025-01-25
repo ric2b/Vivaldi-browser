@@ -53,10 +53,10 @@ class ExpandedValueBase {
     return static_cast<uint32_t>(value_);
   }
 
-  // Compute the greatest value less than or equal to |this| value whose lower
-  // bits are those of |x|.  The purpose of this method is to re-instantiate an
+  // Compute the greatest value less than or equal to `this` value whose lower
+  // bits are those of `x`.  The purpose of this method is to re-instantiate an
   // original value from its truncated form, usually when deserializing
-  // off-the-wire, when |this| value is known to be the greatest possible valid
+  // off-the-wire, when `this` value is known to be the greatest possible valid
   // value.
   //
   // Use case example: Start with an original 32-bit value of 0x000001fe (510
@@ -71,22 +71,22 @@ class ExpandedValueBase {
   template <typename ShortUnsigned>
   Subclass ExpandLessThanOrEqual(ShortUnsigned x) const {
     static_assert(!std::numeric_limits<ShortUnsigned>::is_signed,
-                  "|x| must be an unsigned integer.");
+                  "`x` must be an unsigned integer.");
     static_assert(std::numeric_limits<ShortUnsigned>::is_integer,
-                  "|x| must be an unsigned integer.");
+                  "`x` must be an unsigned integer.");
     static_assert(sizeof(ShortUnsigned) <= sizeof(FullWidthInteger),
-                  "|x| must fit within the FullWidthInteger.");
+                  "`x` must fit within the FullWidthInteger.");
 
     if (sizeof(ShortUnsigned) < sizeof(FullWidthInteger)) {
-      // Initially, the |result| is composed of upper bits from |value_| and
-      // lower bits from |x|.
+      // Initially, the `result` is composed of upper bits from `value_` and
+      // lower bits from `x`.
       const FullWidthInteger short_max =
           std::numeric_limits<ShortUnsigned>::max();
       FullWidthInteger result = (value_ & ~short_max) | x;
 
-      // If the |result| is larger than |value_|, decrement the upper bits by
-      // one.  In other words, |x| must always be interpreted as a truncated
-      // version of a value less than or equal to |value_|.
+      // If the `result` is larger than `value_`, decrement the upper bits by
+      // one.  In other words, `x` must always be interpreted as a truncated
+      // version of a value less than or equal to `value_`.
       if (result > value_)
         result -= short_max + 1;
 
@@ -101,8 +101,8 @@ class ExpandedValueBase {
     }
   }
 
-  // Compute the smallest value greater than |this| value whose lower bits are
-  // those of |x|.
+  // Compute the smallest value greater than `this` value whose lower bits are
+  // those of `x`.
   template <typename ShortUnsigned>
   Subclass ExpandGreaterThan(ShortUnsigned x) const {
     const Subclass maximum_possible_result(
@@ -110,8 +110,8 @@ class ExpandedValueBase {
     return maximum_possible_result.ExpandLessThanOrEqual(x);
   }
 
-  // Compute the value closest to |this| value whose lower bits are those of
-  // |x|.  The result is always within |max_distance_for_expansion()| of |this|
+  // Compute the value closest to `this` value whose lower bits are those of
+  // `x`.  The result is always within `max_distance_for_expansion()` of `this`
   // value.  The purpose of this method is to re-instantiate an original value
   // from its truncated form, usually when deserializing off-the-wire.  See
   // comments for ExpandLessThanOrEqual() above for further explanation.

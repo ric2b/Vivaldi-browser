@@ -169,10 +169,6 @@ class PLATFORM_EXPORT CanvasResource
   // snapshots not used in compositing (for instance to draw to another canvas).
   virtual scoped_refptr<StaticBitmapImage> Bitmap() = 0;
 
-  // Copies the contents of |image| to the resource's backing memory. Only
-  // CanvasResourceProvider and derivatives should call this.
-  virtual void TakeSkImage(sk_sp<SkImage> image) = 0;
-
   // Called when the resource is marked lost. Losing a resource does not mean
   // that the backing memory has been destroyed, since the resource itself keeps
   // a ref on that memory.
@@ -239,8 +235,7 @@ class PLATFORM_EXPORT CanvasResource
   // NOTE: Will be called only if SupportsAcceleratedCompositing() is false.
   virtual bool PrepareUnacceleratedTransferableResource(
       viz::TransferableResource* out_resource) {
-    NOTREACHED_IN_MIGRATION();
-    return false;
+    NOTREACHED();
   }
   const SkColorInfo& GetSkColorInfo() const { return info_; }
 
@@ -261,8 +256,7 @@ class PLATFORM_EXPORT CanvasResource
   // verified.
   virtual const gpu::SyncToken GetSyncTokenWithOptionalVerification(
       bool needs_verified_token) {
-    NOTREACHED_IN_MIGRATION();
-    return gpu::SyncToken();
+    NOTREACHED();
   }
 
   base::WeakPtr<CanvasResourceProvider> provider_;
@@ -290,7 +284,10 @@ class PLATFORM_EXPORT CanvasResourceSharedBitmap final : public CanvasResource {
   bool PrepareUnacceleratedTransferableResource(
       viz::TransferableResource* out_resource) final;
   gfx::Size Size() const final;
-  void TakeSkImage(sk_sp<SkImage> image) final;
+
+  // Copies the contents of |image| to the resource's backing memory.
+  void TakeSkImage(sk_sp<SkImage> image);
+
   scoped_refptr<StaticBitmapImage> Bitmap() final;
   bool OriginClean() const final { return is_origin_clean_; }
   void SetOriginClean(bool flag) final { is_origin_clean_ = flag; }
@@ -321,7 +318,6 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
       base::WeakPtr<WebGraphicsContext3DProviderWrapper>,
       base::WeakPtr<CanvasResourceProvider>,
       cc::PaintFlags::FilterQuality,
-      bool is_origin_top_left,
       bool is_accelerated,
       gpu::SharedImageUsageSet shared_image_usage_flags);
   ~CanvasResourceSharedImage() override;
@@ -330,16 +326,12 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
   bool SupportsAcceleratedCompositing() const override { return true; }
   bool IsValid() const final;
   gfx::Size Size() const final { return size_; }
-  bool IsOriginTopLeft() const final { return is_origin_top_left_; }
   scoped_refptr<StaticBitmapImage> Bitmap() final;
   void Transfer() final;
 
   bool OriginClean() const final { return is_origin_clean_; }
   void SetOriginClean(bool value) final { is_origin_clean_ = value; }
-  void TakeSkImage(sk_sp<SkImage> image) final { NOTREACHED_IN_MIGRATION(); }
   void NotifyResourceLost() final;
-  void BeginReadAccess();
-  void EndReadAccess();
   void BeginWriteAccess();
   void EndWriteAccess();
   GrBackendTexture CreateGrTexture() const;
@@ -352,9 +344,6 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
   }
 
   void WillDraw();
-  bool HasReadAccess() const {
-    return owning_thread_data().bitmap_image_read_refs > 0u;
-  }
   bool IsLost() const { return owning_thread_data().is_lost; }
   void CopyRenderingResultsToGpuMemoryBuffer(const sk_sp<SkImage>& image);
   bool UsesClientSharedImage() override { return true; }
@@ -406,7 +395,6 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
                             base::WeakPtr<WebGraphicsContext3DProviderWrapper>,
                             base::WeakPtr<CanvasResourceProvider>,
                             cc::PaintFlags::FilterQuality,
-                            bool is_origin_top_left,
                             bool is_accelerated,
                             gpu::SharedImageUsageSet shared_image_usage_flags);
 
@@ -438,7 +426,6 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
 
   // Accessed on any thread.
   const gfx::Size size_;
-  const bool is_origin_top_left_;
   const bool is_accelerated_;
   const bool is_overlay_candidate_;
   const bool supports_display_compositing_;
@@ -477,7 +464,6 @@ class PLATFORM_EXPORT ExternalCanvasResource final : public CanvasResource {
   void SetOriginClean(bool value) final { is_origin_clean_ = value; }
   gfx::Size Size() const final { return transferable_resource_.size; }
   bool IsOriginTopLeft() const final { return is_origin_top_left_; }
-  void TakeSkImage(sk_sp<SkImage> image) final;
   void NotifyResourceLost() override { resource_is_lost_ = true; }
 
   scoped_refptr<StaticBitmapImage> Bitmap() override;
@@ -533,7 +519,6 @@ class PLATFORM_EXPORT CanvasResourceSwapChain final : public CanvasResource {
   bool OriginClean() const final { return is_origin_clean_; }
   void SetOriginClean(bool value) final { is_origin_clean_ = value; }
   gfx::Size Size() const final { return size_; }
-  void TakeSkImage(sk_sp<SkImage> image) final;
   void NotifyResourceLost() override {
     // Used for single buffering mode which doesn't need to care about sync
     // token synchronization.

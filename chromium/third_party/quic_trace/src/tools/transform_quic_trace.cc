@@ -42,7 +42,7 @@ ABSL_FLAG(int64_t,
 
 namespace {
 
-using google::protobuf::util::JsonOptions;
+using google::protobuf::util::JsonPrintOptions;
 using google::protobuf::util::JsonStringToMessage;
 using google::protobuf::util::MessageToJsonString;
 
@@ -69,7 +69,7 @@ void OutputTrace(const quic_trace::Trace& trace) {
   }
 
   std::string output;
-  JsonOptions options;
+  JsonPrintOptions options;
   options.add_whitespace = absl::GetFlag(FLAGS_whitespace);
   MessageToJsonString(trace, &output, options);
   std::cout << output;

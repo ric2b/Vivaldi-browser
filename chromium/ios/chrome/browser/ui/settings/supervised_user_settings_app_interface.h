@@ -7,6 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
+#import "base/ios/block_types.h"
 #import "components/supervised_user/core/browser/supervised_user_utils.h"
 
 // The app interface for supervised user settings tests.
@@ -41,9 +42,6 @@
 // Adds the `url` to a supervised user's block-list.
 + (void)addWebsiteToBlockList:(NSURL*)host;
 
-// Marks the "first time banner" of the SU interstitial as not shown.
-+ (void)resetFirstTimeBanner;
-
 // Sets the behaviour of Safe Search filtering: it sets the default
 // response of the ClassifyUrl endpoint to allow or restrict all requests.
 // In order to use this method, use setUp/tearDown TestUrlLoaderFactoryHelper
@@ -53,12 +51,22 @@
 // Creates a TestUrlLoaderFactoryHelper singleton.
 + (void)setUpTestUrlLoaderFactoryHelper;
 
-// Tear down the TestUrlLoaderFactoryHelper singleton.
+// Tears down the TestUrlLoaderFactoryHelper singleton.
 + (void)tearDownTestUrlLoaderFactoryHelper;
+
+// Sets up the TestFamilyLinkBrowserStateHelper singleton.
++ (void)setUpTestFamilyLinkBrowserStateHelperWithResetIntent;
+
+// Tears down the TestFamilyLinkBrowserStateHelper singleton.
++ (void)tearDownTestFamilyLinkBrowserStateHelper;
 
 // Returns the number of Supervised User interstitials attached to the existing
 // web states.
 + (NSInteger)countSupervisedUserIntersitialsForExistingWebStates;
+
+// Seeds the Family Link BrowserState managed by the
+// TestFamilyLinkBrowserStateHelper singleton.
++ (void)seedFamilyLinkBrowserStateWithCompletion:(ProceduralBlock)completion;
 
 @end
 

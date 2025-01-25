@@ -74,3 +74,22 @@ void ExternalProcessImporterClient::OnExtensionsImportGroup(
   if (extensions_.size() == total_extensions_count_)
     bridge_->AddExtensions(extensions_);
 }
+
+void ExternalProcessImporterClient::OnTabImportStart(
+    uint32_t total_count) {
+  if (cancelled_)
+    return;
+
+  total_tab_count_ = total_count;
+  tabs_.reserve(total_count);
+}
+
+void ExternalProcessImporterClient::OnTabImportGroup(
+    const std::vector<ImportedTabEntry>& group) {
+  if (cancelled_)
+    return;
+
+  tabs_.insert(tabs_.end(), group.begin(), group.end());
+  if (tabs_.size() == total_tab_count_)
+    bridge_->AddOpenTabs(tabs_);
+}

@@ -369,7 +369,7 @@ FPDFPageObj_RemoveMark(FPDF_PAGEOBJECT page_object, FPDF_PAGEOBJECTMARK mark) {
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
 FPDFPageObjMark_GetName(FPDF_PAGEOBJECTMARK mark,
-                        void* buffer,
+                        FPDF_WCHAR* buffer,
                         unsigned long buflen,
                         unsigned long* out_buflen) {
   const CPDF_ContentMarkItem* pMarkItem =
@@ -398,7 +398,7 @@ FPDFPageObjMark_CountParams(FPDF_PAGEOBJECTMARK mark) {
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
 FPDFPageObjMark_GetParamKey(FPDF_PAGEOBJECTMARK mark,
                             unsigned long index,
-                            void* buffer,
+                            FPDF_WCHAR* buffer,
                             unsigned long buflen,
                             unsigned long* out_buflen) {
   if (!out_buflen)
@@ -456,7 +456,7 @@ FPDFPageObjMark_GetParamIntValue(FPDF_PAGEOBJECTMARK mark,
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
 FPDFPageObjMark_GetParamStringValue(FPDF_PAGEOBJECTMARK mark,
                                     FPDF_BYTESTRING key,
-                                    void* buffer,
+                                    FPDF_WCHAR* buffer,
                                     unsigned long buflen,
                                     unsigned long* out_buflen) {
   if (!out_buflen)
@@ -480,7 +480,7 @@ FPDFPageObjMark_GetParamStringValue(FPDF_PAGEOBJECTMARK mark,
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
 FPDFPageObjMark_GetParamBlobValue(FPDF_PAGEOBJECTMARK mark,
                                   FPDF_BYTESTRING key,
-                                  void* buffer,
+                                  unsigned char* buffer,
                                   unsigned long buflen,
                                   unsigned long* out_buflen) {
   if (!out_buflen)
@@ -579,7 +579,7 @@ FPDFPageObjMark_SetBlobParam(FPDF_DOCUMENT document,
                              FPDF_PAGEOBJECT page_object,
                              FPDF_PAGEOBJECTMARK mark,
                              FPDF_BYTESTRING key,
-                             void* value,
+                             const unsigned char* value,
                              unsigned long value_len) {
   if (!value && value_len > 0) {
     return false;
@@ -598,9 +598,7 @@ FPDFPageObjMark_SetBlobParam(FPDF_DOCUMENT document,
 
   // SAFETY: required from caller.
   pParams->SetNewFor<CPDF_String>(
-      key,
-      UNSAFE_BUFFERS(
-          pdfium::make_span(static_cast<const uint8_t*>(value), value_len)),
+      key, UNSAFE_BUFFERS(pdfium::make_span(value, value_len)),
       CPDF_String::DataType::kIsHex);
   pPageObj->SetDirty(true);
   return true;
@@ -630,6 +628,17 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFPageObj_GetType(FPDF_PAGEOBJECT page_object) {
   CPDF_PageObject* pPageObj = CPDFPageObjectFromFPDFPageObject(page_object);
   return pPageObj ? static_cast<int>(pPageObj->GetType())
                   : FPDF_PAGEOBJ_UNKNOWN;
+}
+
+FPDF_EXPORT FPDF_BOOL FPDFPageObj_SetIsActive(FPDF_PAGEOBJECT page_object,
+                                              FPDF_BOOL active) {
+  CPDF_PageObject* cpage_object = CPDFPageObjectFromFPDFPageObject(page_object);
+  if (!cpage_object) {
+    return false;
+  }
+
+  cpage_object->SetIsActive(active);
+  return true;
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFPage_GenerateContent(FPDF_PAGE page) {
@@ -1045,7 +1054,7 @@ FPDFPageObj_SetDashArray(FPDF_PAGEOBJECT page_object,
     dashes.reserve(dash_count);
     dashes.assign(dash_array, UNSAFE_TODO(dash_array + dash_count));
   }
-  pPageObj->mutable_graph_state().SetLineDash(dashes, phase, 1.0f);
+  pPageObj->mutable_graph_state().SetLineDash(dashes, phase);
   pPageObj->SetDirty(true);
   return true;
 }

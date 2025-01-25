@@ -8,6 +8,7 @@ update_template_instance("//ios/chrome/app:chrome") {
     "//vivaldi/sync:browser",
     "//vivaldi/ios/ui/notes:notes",
     "//vivaldi/vivapp:ios_vivaldi_resources",
+    "//vivaldi/ios/ui/feedback_prompt:vivaldi_feedback_prompt",
   ]
 }
 
@@ -91,6 +92,8 @@ update_target("//ios/chrome/browser/ui/settings:settings") {
     "//vivaldi/ios/ui/settings/appearance:vivaldi_appearance_settings",
     "//vivaldi/ios/ui/settings/custom_app_icon:vivaldi_custom_app_icon",
     "//vivaldi/ios/ui/settings/general:vivaldi_general_settings",
+    "//vivaldi/ios/ui/settings/pagezoom:vivaldi_pagezoom_settings",
+    "//vivaldi/ios/ui/settings/pagezoom/dialog:vivaldi_pagezoom_dialog",
     "//vivaldi/ios/ui/settings/resources:main_setting_assets",
     "//vivaldi/ios/ui/settings/resources:misc_assets",
     "//vivaldi/ios/ui/settings/search_engine:vivaldi_search_engine_settings",
@@ -191,4 +194,23 @@ if (ios_enable_search_widget_extension) {
       "//vivaldi/ios/ui/context_menu/resources:vivaldi_context_menu_assets",
     ]
   }
+}
+
+update_target("//components/sessions:shared") {
+  deps += [
+    "//vivaldi/components:panel",
+  ]
+}
+
+update_target("//ios/chrome/browser/translate/model:model") {
+  deps += [
+    "//vivaldi/ios/translate:ios_translate",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/partial_translate:partial_translate") {
+  deps += [
+    "//vivaldi/ios/ui/translate:vivaldi_translate",
+    "//vivaldi/ios/ui/translate:vivaldi_translate_swift",
+  ]
 }

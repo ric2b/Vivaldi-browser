@@ -87,6 +87,8 @@ type texture_storage_2d<F: texel_format, A: access>
 type texture_storage_2d_array<F: texel_format, A: access>
 type texture_storage_3d<F: texel_format, A: access>
 
+type rasterizer_ordered_texture_2d<F: texel_format>
+
 ////////////////////////////////////////////////////////////////////////////////
 // Type matchers                                                              //
 ////////////////////////////////////////////////////////////////////////////////
@@ -195,6 +197,16 @@ fn pack_clamp_s8(vec4<i32>) -> int8_t4_packed
 implicit(T: fi32_f16) fn sign(T) -> i32
 implicit(N: num, T: fi32_f16) fn sign(vec<N, T>) -> vec<N, i32>
 
+implicit(C: iu32) fn textureStore(texture: rasterizer_ordered_texture_2d<f32_texel_format>,
+                          coords: vec2<C>,
+                           value: vec4<f32>)
+implicit(C: iu32) fn textureStore(texture: rasterizer_ordered_texture_2d<i32_texel_format>,
+                          coords: vec2<C>,
+                           value: vec4<i32>)
+implicit(C: iu32) fn textureStore(texture: rasterizer_ordered_texture_2d<u32_texel_format>,
+                          coords: vec2<C>,
+                           value: vec4<u32>)
+
 implicit(C: iu32) fn textureStore(texture: texture_storage_1d<f32_texel_format, writable>,
                           coords: C,
                            value: vec4<f32>)
@@ -239,6 +251,12 @@ fn WaveGetLaneIndex() -> u32
 fn WaveGetLaneCount() -> u32
 implicit(T: fiu32_f16) fn WaveReadLaneAt(T, u32) -> T
 implicit(N: num, T: fiu32_f16) fn WaveReadLaneAt(vec<N, T>, u32) -> vec<N, T>
+
+implicit(T: f32_f16) fn modf(T, T) -> T
+implicit(N: num, T: f32_f16) fn modf(vec<N, T>, vec<N, T>) -> vec<N, T>
+
+implicit(T: f32_f16) fn frexp(T, T) -> T
+implicit(N: num, T: f32_f16) fn frexp(vec<N, T>, vec<N, T>) -> vec<N, T>
 
 ////////////////////////////////////////////////////////////////////////////////
 // Member Functions                                                           //
@@ -523,6 +541,10 @@ implicit(N: num, T: fiu32_f16) fn WaveReadLaneAt(vec<N, T>, u32) -> vec<N, T>
                                   location: vec2<i32>,
                               sample_index: i32) -> vec4<f32>
 
+@member_function implicit(F: f32_texel_format, C: iu32) fn Load(texture: rasterizer_ordered_texture_2d<F>, location: vec2<C>) -> vec4<f32>
+@member_function implicit(F: u32_texel_format, C: iu32) fn Load(texture: rasterizer_ordered_texture_2d<F>, location: vec2<C>) -> vec4<u32>
+@member_function implicit(F: i32_texel_format, C: iu32) fn Load(texture: rasterizer_ordered_texture_2d<F>, location: vec2<C>) -> vec4<i32>
+
 @member_function implicit(F: f32_texel_format, A: readable) fn Load(texture: texture_storage_1d<F, A>,
                                                           location: vec2<i32>) -> vec4<f32>
 @member_function implicit(F: f32_texel_format, A: readable) fn Load(texture: texture_storage_2d<F, A>,
@@ -617,24 +639,24 @@ implicit(N: num, T: fiu32_f16) fn WaveReadLaneAt(vec<N, T>, u32) -> vec<N, T>
                             coords: vec4<f32>) -> vec4<f32>
 @member_function fn Sample(texture: texture_depth_2d,
                            sampler: sampler,
-                            coords: vec2<f32>) -> f32
+                            coords: vec2<f32>) -> vec4<f32>
 @member_function fn Sample(texture: texture_depth_2d,
                            sampler: sampler,
                             coords: vec2<f32>,
-                            offset: vec2<i32>) -> f32
+                            offset: vec2<i32>) -> vec4<f32>
 @member_function fn Sample(texture: texture_depth_2d_array,
                            sampler: sampler,
-                            coords: vec3<f32>) -> f32
+                            coords: vec3<f32>) -> vec4<f32>
 @member_function fn Sample(texture: texture_depth_2d_array,
                            sampler: sampler,
                             coords: vec3<f32>,
-                            offset: vec2<i32>) -> f32
+                            offset: vec2<i32>) -> vec4<f32>
 @member_function fn Sample(texture: texture_depth_cube,
                            sampler: sampler,
-                            coords: vec3<f32>) -> f32
+                            coords: vec3<f32>) -> vec4<f32>
 @member_function fn Sample(texture: texture_depth_cube_array,
                            sampler: sampler,
-                            coords: vec4<f32>) -> f32
+                            coords: vec4<f32>) -> vec4<f32>
 
 @member_function fn SampleBias(texture: texture_2d<f32>,
                                sampler: sampler,
@@ -808,26 +830,26 @@ implicit(N: num, T: fiu32_f16) fn WaveReadLaneAt(vec<N, T>, u32) -> vec<N, T>
 @member_function fn SampleLevel(texture: texture_depth_2d,
                                 sampler: sampler,
                                  coords: vec2<f32>,
-                                  level: f32) -> f32
+                                  level: f32) -> vec4<f32>
 @member_function fn SampleLevel(texture: texture_depth_2d,
                                 sampler: sampler,
                                  coords: vec2<f32>,
                                  level: f32,
-                                 offset: vec2<i32>) -> f32
+                                 offset: vec2<i32>) -> vec4<f32>
 @member_function fn SampleLevel(texture: texture_depth_2d_array,
                                 sampler: sampler,
                                  coords: vec3<f32>,
-                                  level: f32) -> f32
+                                  level: f32) -> vec4<f32>
 @member_function fn SampleLevel(texture: texture_depth_2d_array,
                                 sampler: sampler,
                                  coords: vec3<f32>,
                                   level: f32,
-                                 offset: vec2<i32>) -> f32
+                                 offset: vec2<i32>) -> vec4<f32>
 @member_function fn SampleLevel(texture: texture_depth_cube,
                                 sampler: sampler,
                                  coords: vec3<f32>,
-                                  level: f32) -> f32
+                                  level: f32) -> vec4<f32>
 @member_function fn SampleLevel(texture: texture_depth_cube_array,
                                 sampler: sampler,
                                  coords: vec4<f32>,
-                                  level: f32) -> f32
+                                  level: f32) -> vec4<f32>

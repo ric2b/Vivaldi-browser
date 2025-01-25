@@ -34,7 +34,7 @@ class ReportingClient;
 
 class MdnsServiceImpl : public MdnsService, public UdpSocket::Client {
  public:
-  // |task_runner| and |reporting_client| must exist for the duration of this
+  // `task_runner` and `reporting_client` must exist for the duration of this
   // instance's life.
   MdnsServiceImpl(TaskRunner& task_runner,
                   ClockNowFunctionPtr now_function,

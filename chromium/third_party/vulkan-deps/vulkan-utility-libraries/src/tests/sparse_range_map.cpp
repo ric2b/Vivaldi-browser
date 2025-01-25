@@ -18,8 +18,8 @@ TEST(sparse_range_map, basic) {
 
     auto iter = map.find(42);
     ASSERT_NE(iter, map.end());
-    ASSERT_EQ(0, iter->first.begin);
-    ASSERT_EQ(100, iter->first.end);
+    ASSERT_EQ(0u, iter->first.begin);
+    ASSERT_EQ(100u, iter->first.end);
     ASSERT_EQ("first", iter->second);
 
     iter = map.find(501);
@@ -34,8 +34,8 @@ TEST(sparse_range_map, small) {
 
     auto iter = map.find(4);
     ASSERT_NE(iter, map.end());
-    ASSERT_EQ(0, iter->first.begin);
-    ASSERT_EQ(10, iter->first.end);
+    ASSERT_EQ(0u, iter->first.begin);
+    ASSERT_EQ(10u, iter->first.end);
     ASSERT_EQ("first", iter->second);
 
     iter = map.find(51);

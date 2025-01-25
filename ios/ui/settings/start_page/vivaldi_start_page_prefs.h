@@ -8,10 +8,12 @@
 #import "ios/ui/ntp/vivaldi_speed_dial_sorting_mode.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_column.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_style.h"
+#import "ios/ui/settings/start_page/vivaldi_start_page_start_item_type.h"
 
 namespace user_prefs {
 class PrefRegistrySyncable;
 }  // namespace user_prefs
+class PrefRegistrySimple;
 
 class PrefService;
 
@@ -20,12 +22,16 @@ class PrefService;
 
 /// Static variable declaration
 + (PrefService*)prefService;
++ (PrefService*)localPrefService;
 
 /// Static method to set the PrefService
 + (void)setPrefService:(PrefService *)pref;
++ (void)setLocalPrefService:(PrefService*)pref;
 
 /// Registers the feature preferences.
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry;
+
++ (void)registerLocalStatePrefs:(PrefRegistrySimple*)registry;
 
 #pragma mark - Getters
 /// Returns the speed dial sorting mode from prefs.
@@ -42,6 +48,12 @@ class PrefService;
 + (BOOL)showSpeedDials;
 /// Returns whether start page customize button is visible on the start page.
 + (BOOL)showStartPageCustomizeButton;
+
+/// Returns the option to open start page with.
++ (const VivaldiStartPageStartItemType)getReopenStartPageWithItem;
+
+/// Returns the last visited group index
++ (const NSInteger)getStartPageLastVisitedGroupIndex;
 
 /// Returns the startup wallpaper
 + (NSString*)getWallpaperName;
@@ -66,6 +78,12 @@ class PrefService;
 + (void)setShowSpeedDials:(BOOL)show;
 /// Sets whether start page customize button is visible on the start page.
 + (void)setShowStartPageCustomizeButton:(BOOL)show;
+
+/// Sets the option to open start page with.
++ (void)setReopenStartPageWithItem:(const VivaldiStartPageStartItemType)item;
+
+/// Sets the last visited group index
++ (void)setStartPageLastVisitedGroupIndex:(const NSInteger)index;
 
 /// Sets the wallpaper name for starup wallpaper
 + (void)setWallpaperName:(NSString*)name;

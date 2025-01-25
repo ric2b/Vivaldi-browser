@@ -38,7 +38,7 @@ MediaStreamAudioDestinationHandler::MediaStreamAudioDestinationHandler(
   SendLogMessage(__func__, "");
   source_.Lock()->SetAudioFormat(static_cast<int>(number_of_channels),
                                  node.context()->sampleRate());
-  SetInternalChannelCountMode(kExplicit);
+  SetInternalChannelCountMode(V8ChannelCountMode::Enum::kExplicit);
   Initialize();
 }
 
@@ -156,10 +156,11 @@ void MediaStreamAudioDestinationHandler::UpdatePullStatusIfNeeded() {
   }
 }
 
-void MediaStreamAudioDestinationHandler::SendLogMessage(const char* const func,
-                                                        const String& message) {
+void MediaStreamAudioDestinationHandler::SendLogMessage(
+    const char* const function_name,
+    const String& message) {
   WebRtcLogMessage(String::Format("[WA]MSADH::%s %s [this=0x%" PRIXPTR "]",
-                                  func, message.Utf8().c_str(),
+                                  function_name, message.Utf8().c_str(),
                                   reinterpret_cast<uintptr_t>(this))
                        .Utf8());
 }

@@ -213,11 +213,15 @@ message UpgradeArcContainerRequest {
 // ArcCroshServiceProvider in Chrome proxies and translates the message for
 // ArcCroshService.
 message ArcShellExecutionRequest {
+  // Supported shell commands to execute on ARC shell.
+  enum ArcShellCommand {
+    TOP = 0;
+    CPUINFO = 1;
+    MEMINFO = 2;
+  }
+
   // The requested command is executed on ARC shell.
-  // The request with unsupported command will be rejected and an error will be
-  // returned. It depends on the ARC side implementation whether flags and
-  // additional arguments are accepted.
-  repeated string command = 1;
+  optional ArcShellCommand command = 1;
 
   // User id of the requesting user.
   // Only request from the primary user is received in ArcCroshServiceProvider

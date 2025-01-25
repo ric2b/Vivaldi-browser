@@ -14,6 +14,10 @@
 #include "base/threading/scoped_blocking_call.h"
 #include "build/build_config.h"
 
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/content_uri_utils.h"
+#endif
+
 namespace base {
 namespace {
 
@@ -59,6 +63,20 @@ bool ShouldTrackVisitedDirectories(int file_type) {
 FileEnumerator::FileInfo::FileInfo() {
   memset(&stat_, 0, sizeof(stat_));
 }
+
+#if BUILDFLAG(IS_ANDROID)
+FileEnumerator::FileInfo::FileInfo(base::FilePath content_uri,
+                                   base::FilePath filename,
+                                   bool is_directory,
+                                   off_t size,
+                                   Time time)
+    : content_uri_(std::move(content_uri)), filename_(std::move(filename)) {
+  memset(&stat_, 0, sizeof(stat_));
+  stat_.st_mode = is_directory ? S_IFDIR : S_IFREG;
+  stat_.st_size = size;
+  stat_.st_mtime = time.ToTimeT();
+}
+#endif
 
 bool FileEnumerator::FileInfo::IsDirectory() const {
   return S_ISDIR(stat_.st_mode);
@@ -125,6 +143,18 @@ FileEnumerator::FileEnumerator(const FilePath& root_path,
   // INCLUDE_DOT_DOT must not be specified if recursive.
   DCHECK(!(recursive && (INCLUDE_DOT_DOT & file_type_)));
 
+#if BUILDFLAG(IS_ANDROID)
+  // Content-URIs have limited support.
+  if (root_path.IsContentUri()) {
+    CHECK_EQ(file_type_, FileType::FILES | FileType::DIRECTORIES);
+    // Get display-name of root path.
+    FileInfo root_info;
+    internal::ContentUriGetFileInfo(root_path, &root_info);
+    pending_subdirs_.push(
+        std::vector<std::string>({root_info.GetName().value()}));
+  }
+#endif
+
   if (file_type_ & FileType::NAMES_ONLY) {
     DCHECK(!recursive_);
     DCHECK_EQ(file_type_ & ~(FileType::NAMES_ONLY | FileType::INCLUDE_DOT_DOT),
@@ -156,6 +186,29 @@ FilePath FileEnumerator::Next() {
     root_path_ = pending_paths_.top();
     root_path_ = root_path_.StripTrailingSeparators();
     pending_paths_.pop();
+
+#if BUILDFLAG(IS_ANDROID)
+    if (root_path_.IsContentUri()) {
+      subdirs_ = pending_subdirs_.top();
+      pending_subdirs_.pop();
+      directory_entries_ = internal::ListContentUriDirectory(root_path_);
+      current_directory_entry_ = 0;
+      if (directory_entries_.empty()) {
+        continue;
+      }
+      if (recursive_) {
+        for (auto& info : directory_entries_) {
+          info.subdirs_ = subdirs_;
+          if (info.IsDirectory()) {
+            pending_paths_.push(info.content_uri_);
+            pending_subdirs_.push(subdirs_);
+            pending_subdirs_.top().push_back(info.GetName().value());
+          }
+        }
+      }
+      break;
+    }
+#endif
 
     DIR* dir = opendir(root_path_.value().c_str());
     if (!dir) {
@@ -247,6 +300,12 @@ FilePath FileEnumerator::Next() {
     if (folder_search_policy_ == FolderSearchPolicy::MATCH_ONLY)
       pattern_.clear();
   }
+
+#if BUILDFLAG(IS_ANDROID)
+  if (root_path_.IsContentUri()) {
+    return directory_entries_[current_directory_entry_].content_uri_;
+  }
+#endif
 
   return root_path_.Append(
       directory_entries_[current_directory_entry_].filename_);

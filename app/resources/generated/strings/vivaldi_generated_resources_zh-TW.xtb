@@ -28,7 +28,7 @@
 <translation id="1451375123200651445">網頁，單一檔案</translation>
 <translation id="1465176863081977902">複製音訊網址 (&amp;O)</translation>
 <translation id="1476607407192946488">語言設定 (&amp;L)</translation>
-<translation id="1546280085599573572">這個擴充功能已變更您點選首頁按鈕時所顯示的網頁。</translation>
+<translation id="1546280085599573572">此擴充功能已變更您點擊首頁按鈕時所顯示的頁面。</translation>
 <translation id="1552752544932680961">管理擴充功能</translation>
 <translation id="15662109988763471">選取的印表機無法使用或未正確安裝。請檢查您的印表機，或改選其它印表機。</translation>
 <translation id="1588438908519853928">一般</translation>
@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">無法載入擴充功能</translation>
 <translation id="383891835335927981">未針對任何網站設定縮放等級</translation>
 <translation id="385051799172605136">返回</translation>
+<translation id="3861977424605124250">啟動時顯示</translation>
 <translation id="3867944738977021751">憑證欄位</translation>
 <translation id="3905761538810670789">修復應用程式</translation>
 <translation id="3908501907586732282">啟用擴充功能</translation>
@@ -244,7 +245,7 @@
 <translation id="5059526285558225588">選擇要分享的內容</translation>
 <translation id="5063480226653192405">用量</translation>
 <translation id="5116628073786783676">另存音訊為 (&amp;V)…</translation>
-<translation id="5143374789336132547">「<ph name="EXTENSION_NAME" />」擴充功能已變更您點選首頁按鈕時所顯示的網頁。</translation>
+<translation id="5143374789336132547">擴充功能「<ph name="EXTENSION_NAME" />」已變更您點擊首頁按鈕時所顯示的頁面。</translation>
 <translation id="5154108062446123722">「<ph name="PRINTING_DESTINATION" />」進階設定</translation>
 <translation id="5154702632169343078">主旨</translation>
 <translation id="5171343362375269016">Swap 記憶體</translation>

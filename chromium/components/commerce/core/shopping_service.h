@@ -44,6 +44,7 @@
 
 class GURL;
 class PrefService;
+class TemplateURLService;
 
 template <typename T>
 class SessionProtoStorage;
@@ -223,7 +224,8 @@ class ShoppingService : public KeyedService,
           parcel_tracking_proto_db,
       history::HistoryService* history_service,
       std::unique_ptr<commerce::WebExtractor> web_extractor,
-      sessions::TabRestoreService* tab_restore_service);
+      sessions::TabRestoreService* tab_restore_service,
+      TemplateURLService* template_url_service);
   ~ShoppingService() override;
 
   ShoppingService(const ShoppingService&) = delete;
@@ -646,12 +648,6 @@ class ShoppingService : public KeyedService,
   void OnGetOnDemandProductInfo(const GURL& url,
                                 const std::optional<const ProductInfo>& info);
 
-  // TODO(b/362316113): Remove once history service is passed through handler
-  // constructor.
-  virtual void QueryHistoryForUrl(
-      const GURL& url,
-      history::HistoryService::QueryURLCallback callback);
-
   // The two-letter country code as detected on startup.
   std::string country_on_startup_;
 
@@ -735,8 +731,6 @@ class ShoppingService : public KeyedService,
   base::ScopedObservation<history::HistoryService,
                           history::HistoryServiceObserver>
       history_service_observation_{this};
-
-  const raw_ptr<history::HistoryService> history_service_;
 
   const raw_ptr<sessions::TabRestoreService> tab_restore_service_{nullptr};
 

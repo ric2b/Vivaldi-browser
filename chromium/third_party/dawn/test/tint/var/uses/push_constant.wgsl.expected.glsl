@@ -1,74 +1,53 @@
 #version 310 es
 
+
 struct a_block {
   int inner;
 };
 
-layout(location=0) uniform a_block a;
+layout(location = 0) uniform a_block v;
 void uses_a() {
-  int foo = a.inner;
+  int foo = v.inner;
 }
-
-void main1() {
-  uses_a();
-}
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  main1();
-  return;
+  uses_a();
 }
 #version 310 es
 
+
 struct a_block {
   int inner;
 };
 
-layout(location=0) uniform a_block a;
+layout(location = 0) uniform a_block v;
 void uses_a() {
-  int foo = a.inner;
+  int foo = v.inner;
 }
-
 void uses_uses_a() {
   uses_a();
 }
-
-void main2() {
-  uses_uses_a();
-}
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  main2();
-  return;
+  uses_uses_a();
 }
 #version 310 es
+
 
 struct b_block {
   int inner;
 };
 
-layout(location=0) uniform b_block b;
+layout(location = 0) uniform b_block v;
 void uses_b() {
-  int foo = b.inner;
+  int foo = v.inner;
 }
-
-void main3() {
-  uses_b();
-}
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  main3();
-  return;
+  uses_b();
 }
 #version 310 es
 
-void main4() {
-}
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  main4();
-  return;
 }

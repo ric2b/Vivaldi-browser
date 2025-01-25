@@ -93,6 +93,9 @@ static int lz4_decompress(AVCodecContext *avctx,
             } while (current == 255);
         }
 
+        if (bytestream2_get_bytes_left(gb) < num_literals)
+            return AVERROR_INVALIDDATA;
+
         if (pos + num_literals < HISTORY_SIZE) {
             bytestream2_get_buffer(gb, history + pos, num_literals);
             pos += num_literals;
@@ -243,7 +246,9 @@ static int decode_blocks(AVCodecContext *avctx, AVFrame *p,
 
         bytestream2_seek(&dgb, s->y_data_offset + row_offset, SEEK_SET);
 
-        init_get_bits8(&bit, dgb.buffer, bytestream2_get_bytes_left(&dgb));
+        ret = init_get_bits8(&bit, dgb.buffer, bytestream2_get_bytes_left(&dgb));
+        if (ret < 0)
+            return ret;
         for (int x = 0; x < avctx->width; x += 4) {
             unsigned item = bytestream2_get_le32(gb);
             unsigned y_min = item & 4095;

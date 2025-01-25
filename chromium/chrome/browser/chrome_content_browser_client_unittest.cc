@@ -28,6 +28,7 @@
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -50,7 +51,9 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/browsing_data/content/browsing_data_helper.h"
 #include "components/captive_portal/core/buildflags.h"
+#include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/pref_names.h"
 #include "components/file_access/scoped_file_access.h"
 #include "components/file_access/test/mock_scoped_file_access_delegate.h"
 #include "components/network_session_configurator/common/network_switches.h"
@@ -73,6 +76,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/navigation_simulator.h"
+#include "content/public/test/web_contents_tester.h"
 #include "crypto/crypto_buildflags.h"
 #include "media/media_buildflags.h"
 #include "net/base/url_util.h"
@@ -80,10 +84,12 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "services/network/test/test_network_context.h"
+#include "services/video_effects/public/cpp/video_effects_service_host.h"
 #include "services/video_effects/public/mojom/video_effects_processor.mojom.h"
 #include "services/video_effects/public/mojom/video_effects_service.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/common/switches.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -145,6 +151,11 @@
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/web_applications/web_app_utils.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
+#if BUILDFLAG(IS_WIN)
+#include "base/test/mock_entropy_provider.h"
+#include "chrome/test/base/scoped_metrics_service_for_synthetic_trials.h"
+#endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/web_applications/web_app.h"
@@ -715,7 +726,8 @@ TEST_F(ChromeContentBrowserClientTest, BindVideoEffectsProcessor) {
   mojo::Remote<video_effects::mojom::VideoEffectsService> service;
   video_effects::FakeVideoEffectsService fake_effects_service(
       service.BindNewPipeAndPassReceiver());
-  auto service_reset = SetVideoEffectsServiceRemoteForTesting(&service);
+  auto service_reset =
+      video_effects::SetVideoEffectsServiceRemoteForTesting(&service);
 
   std::unique_ptr<base::test::TestFuture<void>> effects_processor_future =
       fake_effects_service.GetEffectsProcessorCreationFuture();
@@ -1567,9 +1579,6 @@ TEST_F(DisableWebAuthnWithBrokenCertsTest, IgnoreCertificateErrorsFlag) {
 }
 
 TEST_F(ChromeContentBrowserClientTest, ShouldUseSpareRenderProcessHost) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      features::kTopChromeWebUIUsesSpareRenderer);
   using SpareProcessRefusedByEmbedderReason =
       content::ContentBrowserClient::SpareProcessRefusedByEmbedderReason;
   ChromeContentBrowserClient browser_client;
@@ -1582,11 +1591,6 @@ TEST_F(ChromeContentBrowserClientTest, ShouldUseSpareRenderProcessHost) {
   EXPECT_EQ(SpareProcessRefusedByEmbedderReason::NoProfile,
             browser_client.ShouldUseSpareRenderProcessHost(
                 nullptr, GURL("https://www.example.com")));
-
-  // Chrome top UI URL
-  EXPECT_EQ(SpareProcessRefusedByEmbedderReason::TopFrameChromeWebUI,
-            browser_client.ShouldUseSpareRenderProcessHost(
-                &profile_, GURL("chrome://test.top-chrome")));
 
 #if !BUILDFLAG(IS_ANDROID)
   // Chrome-search URL
@@ -1602,3 +1606,194 @@ TEST_F(ChromeContentBrowserClientTest, ShouldUseSpareRenderProcessHost) {
                 &profile_, GURL("chrome-extension://test-extension/")));
 #endif
 }
+
+#if BUILDFLAG(IS_WIN)
+class ChromeContentBrowserClientFieldTrialTest
+    : public ChromeContentBrowserClientTest {
+ protected:
+  ChromeContentBrowserClientFieldTrialTest() {
+    base::MockEntropyProvider entropy_provider(0.9);
+    trial_ = base::FieldTrialList::FactoryGetFieldTrial(
+        "UiaProviderWin", 100, "Default_1234", entropy_provider);
+  }
+
+  ChromeContentBrowserClient& client() { return client_; }
+
+ private:
+  ScopedTestingLocalState testing_local_state_{
+      TestingBrowserProcess::GetGlobal()};
+  ScopedMetricsServiceForSyntheticTrials metrics_service_{
+      TestingBrowserProcess::GetGlobal()};
+  ChromeContentBrowserClient client_;
+  scoped_refptr<base::FieldTrial> trial_;
+};
+
+TEST_F(ChromeContentBrowserClientFieldTrialTest,
+       OnUiaProviderRequestedNoStudy) {
+  client().OnUiaProviderRequested(false);
+  ASSERT_FALSE(variations::IsInSyntheticTrialGroup("UiaProviderActiveSynthetic",
+                                                   "Control"));
+  ASSERT_FALSE(variations::IsInSyntheticTrialGroup("UiaProviderActiveSynthetic",
+                                                   "Enabled"));
+}
+
+TEST_F(ChromeContentBrowserClientFieldTrialTest,
+       OnUiaProviderRequestedEnabled) {
+  base::test::ScopedFeatureList scoped_feature_list;
+
+  scoped_feature_list.InitFromCommandLine(
+      "UiaProvider<UiaProviderWin.Enabled_12345:k/v", {});
+  client().OnUiaProviderRequested(true);
+  ASSERT_FALSE(variations::IsInSyntheticTrialGroup("UiaProviderActiveSynthetic",
+                                                   "Control"));
+  ASSERT_TRUE(variations::IsInSyntheticTrialGroup("UiaProviderActiveSynthetic",
+                                                  "Enabled"));
+}
+
+TEST_F(ChromeContentBrowserClientFieldTrialTest,
+       OnUiaProviderRequestedControl) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitFromCommandLine(
+      "UiaProvider<UiaProviderWin.Control_12345:k/v", {});
+  client().OnUiaProviderRequested(false);
+  ASSERT_TRUE(variations::IsInSyntheticTrialGroup("UiaProviderActiveSynthetic",
+                                                  "Control"));
+  ASSERT_FALSE(variations::IsInSyntheticTrialGroup("UiaProviderActiveSynthetic",
+                                                   "Enabled"));
+}
+#endif  // BUILDFLAG(IS_WIN)
+
+class GrantCookieAccessDueToHeuristicTest
+    : public ChromeContentBrowserClientTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  void SetUp() override {
+    profile_.GetPrefs()->SetInteger(
+        prefs::kCookieControlsMode,
+        static_cast<int>(content_settings::CookieControlsMode::kLimited));
+    profile_.GetPrefs()->SetBoolean(prefs::kTrackingProtection3pcdEnabled,
+                                    true);
+
+    scoped_refptr<content::SiteInstance> site_instance =
+        content::SiteInstance::Create(&profile_);
+    web_contents_ = content::WebContentsTester::CreateTestWebContents(
+        &profile_, site_instance);
+  }
+
+  bool IgnoreSchemes() { return GetParam(); }
+
+  Profile* profile() { return &profile_; }
+  content::WebContents* web_contents() { return web_contents_.get(); }
+
+ private:
+  content::RenderViewHostTestEnabler rvh_test_enabler_;
+  std::unique_ptr<content::WebContents> web_contents_;
+};
+
+namespace {
+
+// Helper to easily create a StorageKey from a GURL.
+blink::StorageKey FirstPartyStorageKey(const GURL& url) {
+  return blink::StorageKey::CreateFirstParty(url::Origin::Create(url));
+}
+
+// Helper to easily create a SchemefulSite from a GURL.
+net::SchemefulSite SchemefulSite(const GURL& url) {
+  return net::SchemefulSite(url::Origin::Create(url));
+}
+
+// Return a copy of `url` with the scheme set to "http".
+GURL WithHttp(const GURL& url) {
+  GURL::Replacements replacements;
+  replacements.SetSchemeStr("http");
+  return url.ReplaceComponents(replacements);
+}
+
+// Return a copy of `url` with the port set to "999".
+GURL WithPort999(const GURL& url) {
+  GURL::Replacements replacements;
+  replacements.SetPortStr("999");
+  return url.ReplaceComponents(replacements);
+}
+
+}  // namespace
+
+TEST_P(GrantCookieAccessDueToHeuristicTest,
+       SchemefulSiteMatches_AccessAlwaysGranted) {
+  TestChromeContentBrowserClient client;
+
+  GURL top_level_url("https://www.toplevel.test/index.html");
+  GURL url("https://www.subresource.test/favicon.ico");
+
+  ASSERT_FALSE(client.IsFullCookieAccessAllowed(
+      profile(), web_contents(), url, FirstPartyStorageKey(top_level_url)));
+  client.GrantCookieAccessDueToHeuristic(
+      profile(), SchemefulSite(top_level_url), SchemefulSite(url),
+      base::Hours(1), IgnoreSchemes());
+  ASSERT_TRUE(client.IsFullCookieAccessAllowed(
+      profile(), web_contents(), url, FirstPartyStorageKey(top_level_url)));
+}
+
+TEST_P(GrantCookieAccessDueToHeuristicTest, SchemeMismatch_AccessMayBeGranted) {
+  TestChromeContentBrowserClient client;
+
+  GURL top_level_url("https://www.toplevel.test/index.html");
+  GURL url("https://www.subresource.test/favicon.ico");
+
+  client.GrantCookieAccessDueToHeuristic(
+      profile(), SchemefulSite(top_level_url), SchemefulSite(url),
+      base::Hours(1), IgnoreSchemes());
+  // Cookie access granted iff ignore_schemes=true:
+  ASSERT_EQ(client.IsFullCookieAccessAllowed(
+                profile(), web_contents(), WithHttp(url),
+                FirstPartyStorageKey(WithHttp(top_level_url))),
+            IgnoreSchemes());
+}
+
+TEST_P(GrantCookieAccessDueToHeuristicTest, PortMismatch_AccessAlwaysGranted) {
+  TestChromeContentBrowserClient client;
+
+  GURL top_level_url("https://www.toplevel.test/index.html");
+  GURL url("https://www.subresource.test/favicon.ico");
+
+  client.GrantCookieAccessDueToHeuristic(
+      profile(), SchemefulSite(top_level_url), SchemefulSite(url),
+      base::Hours(1), IgnoreSchemes());
+  ASSERT_TRUE(client.IsFullCookieAccessAllowed(
+      profile(), web_contents(), WithPort999(url),
+      FirstPartyStorageKey(WithPort999(top_level_url))));
+}
+
+TEST_P(GrantCookieAccessDueToHeuristicTest,
+       HostnameMismatch_AccessNeverGranted) {
+  TestChromeContentBrowserClient client;
+
+  GURL top_level_url("https://www.toplevel.test/index.html");
+  GURL url1("https://www.subresource.test/favicon.ico");
+  GURL url2("https://www.subresource.example/favicon.ico");
+
+  client.GrantCookieAccessDueToHeuristic(
+      profile(), SchemefulSite(top_level_url), SchemefulSite(url1),
+      base::Hours(1), IgnoreSchemes());
+  ASSERT_FALSE(client.IsFullCookieAccessAllowed(
+      profile(), web_contents(), url2, FirstPartyStorageKey(top_level_url)));
+}
+
+TEST_P(GrantCookieAccessDueToHeuristicTest,
+       TopLevelHostnameMismatch_AccessNeverGranted) {
+  TestChromeContentBrowserClient client;
+
+  GURL top_level_url1("https://www.toplevel.test/index.html");
+  GURL top_level_url2("https://www.toplevel.example/index.html");
+  GURL url("https://www.subresource.test/favicon.ico");
+
+  client.GrantCookieAccessDueToHeuristic(
+      profile(), SchemefulSite(top_level_url1), SchemefulSite(url),
+      base::Hours(1), IgnoreSchemes());
+  ASSERT_FALSE(client.IsFullCookieAccessAllowed(
+      profile(), web_contents(), url, FirstPartyStorageKey(top_level_url2)));
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         GrantCookieAccessDueToHeuristicTest,
+                         testing::Bool());

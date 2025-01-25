@@ -239,7 +239,7 @@ static av_cold int utvideo_encode_init(AVCodecContext *avctx)
      * - Compression mode (none/huff)
      * And write the flags.
      */
-    c->flags  = (c->slices - 1) << 24;
+    c->flags  = (c->slices - 1U) << 24;
     c->flags |= 0 << 11; // bit field to signal interlaced encoding mode
     c->flags |= c->compression;
 
@@ -675,5 +675,6 @@ const FFCodec ff_utvideo_encoder = {
                           AV_PIX_FMT_GBRP, AV_PIX_FMT_GBRAP, AV_PIX_FMT_YUV422P,
                           AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV444P, AV_PIX_FMT_NONE
                       },
+    .color_ranges   = AVCOL_RANGE_MPEG,
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
 };

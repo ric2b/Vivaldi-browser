@@ -160,9 +160,8 @@ bool PhoneFieldParser::LikelyAugmentedPhoneCountryCode(
   AutofillField* field = scanner->Cursor();
 
   // Return false if the field is not a selection box.
-  if (!MatchesFormControlType(
-          field->form_control_type(),
-          {FormControlType::kSelectOne, FormControlType::kSelectList})) {
+  if (!MatchesFormControlType(field->form_control_type(),
+                              {FormControlType::kSelectOne})) {
     return false;
   }
 
@@ -364,10 +363,8 @@ std::string PhoneFieldParser::GetJSONFieldType(RegexType phonetype_id) {
     case REGEX_EXTENSION:
       return "PHONE_EXTENSION";
     default:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
-  return std::string();
 }
 
 // static
@@ -390,7 +387,7 @@ bool PhoneFieldParser::ParsePhoneField(ParsingContext& context,
                         return MatchParams(p.attributes,
                 kDefaultMatchParamsWith<
         FormControlType::kInputTelephone, FormControlType::kInputNumber,
-        FormControlType::kSelectOne, FormControlType::kSelectList>.field_types);
+        FormControlType::kSelectOne>.field_types);
                       });
   }
 

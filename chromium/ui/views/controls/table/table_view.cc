@@ -28,6 +28,7 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/events/event.h"
@@ -172,7 +173,7 @@ class TableView::HighlightPathGenerator : public views::HighlightPathGenerator {
 
 TableView::TableView() : weak_factory_(this) {
   constexpr int kTextContext = style::CONTEXT_TABLE_ROW;
-  constexpr int kTextStyle = style::STYLE_PRIMARY;
+  constexpr int kTextStyle = style::STYLE_BODY_4;
   font_list_ = TypographyProvider::Get().GetFont(kTextContext, kTextStyle);
   row_height_ = LayoutProvider::GetControlHeightForFont(kTextContext,
                                                         kTextStyle, font_list_);
@@ -191,6 +192,14 @@ TableView::TableView() : weak_factory_(this) {
         return v->HasFocus() && !v->header_row_is_active_;
       }));
   GetViewAccessibility().SetRole(ax::mojom::Role::kListGrid);
+  GetViewAccessibility().SetName(
+      std::u16string(), ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
+  GetViewAccessibility().SetReadOnly(true);
+  GetViewAccessibility().SetDefaultActionVerb(
+      ax::mojom::DefaultActionVerb::kActivate);
+  GetViewAccessibility().SetTableRowCount(static_cast<int32_t>(GetRowCount()));
+  GetViewAccessibility().SetTableColumnCount(
+      static_cast<int32_t>(visible_columns_.size()));
 }
 
 TableView::TableView(ui::TableModel* model,
@@ -209,8 +218,10 @@ TableView::~TableView() {
 
 // static
 std::unique_ptr<ScrollView> TableView::CreateScrollViewWithTable(
-    std::unique_ptr<TableView> table) {
-  auto scroll_view = ScrollView::CreateScrollViewWithBorder();
+    std::unique_ptr<TableView> table,
+    bool has_border) {
+  auto scroll_view = has_border ? ScrollView::CreateScrollViewWithBorder()
+                                : std::make_unique<ScrollView>();
   auto* table_ptr = table.get();
   scroll_view->SetContents(std::move(table));
   table_ptr->CreateHeaderIfNecessary(scroll_view.get());
@@ -268,6 +279,9 @@ void TableView::SetColumns(const std::vector<ui::TableColumn>& columns) {
     visible_column.column = column;
     visible_columns_.push_back(visible_column);
   }
+
+  GetViewAccessibility().SetTableColumnCount(
+      static_cast<int32_t>(visible_columns_.size()));
 }
 
 void TableView::SetTableType(TableType table_type) {
@@ -356,6 +370,9 @@ void TableView::SetColumnVisibility(int id, bool is_visible) {
                 ? std::nullopt
                 : std::make_optional(visible_columns_.size() - 1));
     }
+
+    GetViewAccessibility().SetTableColumnCount(
+        static_cast<int32_t>(visible_columns_.size()));
   }
 
   UpdateVisibleColumnSizes();
@@ -739,20 +756,6 @@ std::u16string TableView::GetTooltipText(const gfx::Point& p) const {
   return model_->GetText(model_row, visible_columns_[column.value()].column.id);
 }
 
-void TableView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  // ID, class name and relative bounds are added by ViewAccessibility for all
-  // non-virtual views, so we don't need to add them here.
-  node_data->SetRestriction(ax::mojom::Restriction::kReadOnly);
-  node_data->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kActivate);
-  // Subclasses should overwrite the name with the control's associated label.
-  node_data->SetNameExplicitlyEmpty();
-
-  node_data->AddIntAttribute(ax::mojom::IntAttribute::kTableRowCount,
-                             static_cast<int32_t>(GetRowCount()));
-  node_data->AddIntAttribute(ax::mojom::IntAttribute::kTableColumnCount,
-                             static_cast<int32_t>(visible_columns_.size()));
-}
-
 bool TableView::HandleAccessibleAction(const ui::AXActionData& action_data) {
   const size_t row_count = GetRowCount();
   if (!row_count)
@@ -825,7 +828,7 @@ bool TableView::HandleAccessibleAction(const ui::AXActionData& action_data) {
 
     case ax::mojom::Action::kShowContextMenu:
       ShowContextMenu(GetBoundsInScreen().CenterPoint(),
-                      ui::MENU_SOURCE_KEYBOARD);
+                      ui::mojom::MenuSourceType::kKeyboard);
       break;
 
     default:
@@ -843,6 +846,7 @@ void TableView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
 
 void TableView::OnModelChanged() {
   selection_model_.Clear();
+  GetViewAccessibility().SetTableRowCount(static_cast<int32_t>(GetRowCount()));
   RebuildVirtualAccessibilityChildren();
   PreferredSizeChanged();
 }
@@ -938,6 +942,7 @@ void TableView::OnItemsRemoved(size_t start, size_t length) {
   for (size_t i = start; !virtual_children.empty() && i < start + length; i++)
     virtual_children[virtual_children.size() - 1]->RemoveFromParentView();
 
+  GetViewAccessibility().SetTableRowCount(static_cast<int32_t>(GetRowCount()));
   UpdateVirtualAccessibilityChildrenBounds();
   PreferredSizeChanged();
   NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged, true);
@@ -1144,6 +1149,7 @@ void TableView::SortItemsAndUpdateMapping(bool schedule_paint) {
     model_->ClearCollator();
   }
 
+  GetViewAccessibility().SetTableRowCount(static_cast<int32_t>(GetRowCount()));
   UpdateVirtualAccessibilityChildrenBounds();
 
   if (schedule_paint)
@@ -1201,10 +1207,11 @@ void TableView::AdjustCellBoundsForText(size_t visible_column_index,
 }
 
 void TableView::CreateHeaderIfNecessary(ScrollView* scroll_view) {
-  // Only create a header if there is more than one column or the title of the
+  // Only create a header if there is more than one column, or the title of the
   // only column is not empty.
-  if (header_ || (columns_.size() == 1 && columns_[0].title.empty()))
+  if (header_ || (columns_.size() == 1 && columns_[0].title.empty())) {
     return;
+  }
 
   header_ = scroll_view->SetHeader(
       std::make_unique<TableHeader>(weak_factory_.GetWeakPtr()));
@@ -1234,8 +1241,8 @@ void TableView::UpdateVisibleColumnSizes() {
 
   std::vector<int> sizes = views::CalculateTableColumnSizes(
       layout_width_, first_column_padding, header_->font_list(), font_list_,
-      std::max(cell_margin, TableHeader::kHorizontalPadding) * 2,
-      TableHeader::kSortIndicatorWidth, columns, model_);
+      std::max(cell_margin, header_->GetCellHorizontalPadding()) * 2,
+      header_->GetSortIndicatorWidth(), columns, model_);
   DCHECK_EQ(visible_columns_.size(), sizes.size());
   int x = 0;
   for (size_t i = 0; i < visible_columns_.size(); ++i) {
@@ -2046,6 +2053,16 @@ AXVirtualView* TableView::GetVirtualAccessibilityCell(
     size_t visible_column_index) const {
   return GetVirtualAccessibilityCellImpl(GetVirtualAccessibilityBodyRow(row),
                                          visible_column_index);
+}
+
+void TableView::SetHeaderStyle(const TableHeaderStyle& style) {
+  header_style_ = style;
+  if (header_) {
+    UpdateVisibleColumnSizes();
+    PreferredSizeChanged();
+    SchedulePaint();
+    header_->SchedulePaint();
+  }
 }
 
 AXVirtualView* TableView::GetVirtualAccessibilityCellImpl(

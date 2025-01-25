@@ -20,9 +20,16 @@ import {TabManager} from './tab';
 import {TrackManager} from './track';
 import {Timeline} from './timeline';
 import {Workspace, WorkspaceManager} from './workspace';
-import {LegacyDetailsPanel} from './details_panel';
 import {SelectionManager} from './selection';
 import {ScrollToArgs} from './scroll_helper';
+import {NoteManager} from './note';
+import {DisposableStack} from '../base/disposable_stack';
+
+// Lists all the possible event listeners using the key as the event name and
+// the type as the type of the callback.
+export interface EventListeners {
+  traceready: () => Promise<void> | void;
+}
 
 /**
  * The main API endpoint to interact programmaticaly with the UI and alter its
@@ -34,6 +41,7 @@ import {ScrollToArgs} from './scroll_helper';
  */
 export interface Trace extends App {
   readonly engine: Engine;
+  readonly notes: NoteManager;
   readonly timeline: Timeline;
   readonly tabs: TabManager;
   readonly tracks: TrackManager;
@@ -46,23 +54,45 @@ export interface Trace extends App {
   // selection.
   scrollTo(args: ScrollToArgs): void;
 
-  // TODO(primiano): remove this once the Legacy vs non-Legacy details panel is
-  // gone. This method is particularly problematic because the method called
-  // registerDetailsPanel in TabManagerImpl takes a non-Legacy DetailsPanel, but
-  // all plugins use a Legacy one. Keeping this as a bridge for now.
-  registerDetailsPanel(detailsPanel: LegacyDetailsPanel): void;
-
-  // Creates and shows a tab with a tabular result for the given query.
-  // TODO(primiano): I am not convinced this belongs here, this should probably
-  // go under public/lib/query_result_tab.ts as a utility function that takes
-  // Trace as an argument. However I need first to plumb App everywhere.
-  addQueryResultsTab(query: string, title: string): void;
-
   // Create a store mounted over the top of this plugin's persistent state.
   mountStore<T>(migrate: Migrate<T>): Store<T>;
+
+  // Returns the blob of the current trace file.
+  // If the trace is opened from a file or postmessage, the blob is returned
+  // immediately. If the trace is opened from URL, this causes a re-download of
+  // the trace. It will throw if traceInfo.downloadable === false.
+  getTraceFile(): Promise<Blob>;
+
+  // List of errors that were encountered while loading the trace by the TS
+  // code. These are on top of traceInfo.importErrors, which is a summary of
+  // what TraceProcessor reports on the stats table at import time.
+  get loadingErrors(): ReadonlyArray<string>;
 
   // When the trace is opened via postMessage deep-linking, returns the sub-set
   // of postMessageData.pluginArgs[pluginId] for the current plugin. If not
   // present returns undefined.
   readonly openerPluginArgs?: {[key: string]: unknown};
+
+  // Trace scoped disposables. Will be destroyed when the trace is unloaded.
+  readonly trash: DisposableStack;
+
+  // Register event listeners for trace-level events, e.g. trace ready
+  addEventListener<T extends keyof EventListeners>(
+    event: T,
+    callback: EventListeners[T],
+  ): void;
+}
+
+/**
+ * A convenience interface to inject the App in Mithril components.
+ * Example usage:
+ *
+ * class MyComponent implements m.ClassComponent<TraceAttrs> {
+ *   oncreate({attrs}: m.CVnodeDOM<AppAttrs>): void {
+ *     attrs.trace.engine.runQuery(...);
+ *   }
+ * }
+ */
+export interface TraceAttrs {
+  trace: Trace;
 }

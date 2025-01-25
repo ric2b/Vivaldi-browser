@@ -10,6 +10,9 @@ bundle_data_xcassets("appicons_assets") {
     "AppIcons.xcassets/img_appicon_final.imageset/official.png",
     "AppIcons.xcassets/img_appicon_final.imageset/official@2x.png",
     "AppIcons.xcassets/img_appicon_final.imageset/official@3x.png",
+    "AppIcons.xcassets/img_appicon_final.imageset/official_dark.png",
+    "AppIcons.xcassets/img_appicon_final.imageset/official_dark@2x.png",
+    "AppIcons.xcassets/img_appicon_final.imageset/official_dark@3x.png",
 
     # img_appicon_burgundy
     "AppIcons.xcassets/img_appicon_burgundy.imageset/Contents.json",

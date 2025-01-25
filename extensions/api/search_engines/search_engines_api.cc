@@ -3,12 +3,17 @@
 #include "extensions/api/search_engines/search_engines_api.h"
 
 #include "base/no_destructor.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "components/country_codes/country_codes.h"
 #include "components/prefs/pref_service.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/search_engines/search_engines_manager.h"
+#include "components/search_engines/search_engines_managers_factory.h"
+#include "components/search_engines/search_engines_prompt_manager.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/vivaldi_pref_names.h"
 #include "extensions/schema/search_engines.h"
@@ -49,21 +54,17 @@ std::string FromDisplay(const std::string& display_string) {
   return result;
 }
 
-void AddTemplateURLToResult(
+vivaldi::search_engines::TemplateURL TemplateURLToJSType(
     const TemplateURL* template_url,
-    bool force_read_only,
-    std::vector<vivaldi::search_engines::TemplateURL>& result) {
-  // We currently don't support these at all. Pretend they don't exist.
-  if (template_url->type() == TemplateURL::OMNIBOX_API_EXTENSION)
-    return;
-
+    bool force_read_only = false) {
   vivaldi::search_engines::TemplateURL result_turl;
   result_turl.read_only =
       force_read_only ||
       template_url->type() == TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION;
-  if (template_url->type() == TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION)
+  if (template_url->type() == TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION) {
     result_turl.extension_id = template_url->GetExtensionId();
-  result_turl.id = base::NumberToString(template_url->id());
+  }
+  result_turl.guid = template_url->sync_guid();
   result_turl.name = base::UTF16ToUTF8(template_url->short_name());
   result_turl.keyword = base::UTF16ToUTF8(template_url->keyword());
   result_turl.favicon_url = template_url->favicon_url().spec();
@@ -77,22 +78,21 @@ void AddTemplateURLToResult(
       ToDisplay(template_url->image_url_post_params());
   result_turl.prepopulate_id = template_url->prepopulate_id();
 
-  result.push_back(std::move(result_turl));
+  return result_turl;
 }
 
-// Finds and returns the template URL which has the provided |id|. The returned
-// template URL is owned by |service| and must not be deleted. It can be
-// invalidated by passing it back in some calls to |service| (i.e. Remove, at
-// the time of this writing)
-TemplateURL* GetTemplateURLById(TemplateURLService* service, TemplateURLID id) {
-  TemplateURLService::TemplateURLVector template_urls =
-      service->GetTemplateURLs();
-  const auto template_url_iter = std::find_if(
-      template_urls.begin(), template_urls.end(),
-      [id](const auto template_url) { return template_url->id() == id; });
-  if (template_url_iter == template_urls.end())
-    return nullptr;
-  return *template_url_iter;
+void AddTemplateURLToResult(
+    const TemplateURL* template_url,
+    bool force_read_only,
+    std::vector<vivaldi::search_engines::TemplateURL>& result) {
+  // We currently don't support these at all. Pretend they don't exist.
+  if (template_url->type() == TemplateURL::OMNIBOX_API_EXTENSION)
+    return;
+
+  vivaldi::search_engines::TemplateURL result_turl =
+      TemplateURLToJSType(template_url, force_read_only);
+
+  result.push_back(std::move(result_turl));
 }
 
 vivaldi::search_engines::SearchRequest BuildSearchRequest(
@@ -208,7 +208,7 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
   if (default_search) {
     if (!service->loaded())
       AddTemplateURLToResult(default_search, true, result.template_urls);
-    result.default_search = base::NumberToString(default_search->id());
+    result.default_search = default_search->sync_guid();
   }
 
   default_search = service->GetDefaultSearchProvider(
@@ -216,7 +216,7 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
   if (default_search) {
     if (!service->loaded())
       AddTemplateURLToResult(default_search, true, result.template_urls);
-    result.default_private = base::NumberToString(default_search->id());
+    result.default_private = default_search->sync_guid();
   }
 
   default_search = service->GetDefaultSearchProvider(
@@ -224,7 +224,7 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
   if (default_search) {
     if (!service->loaded())
       AddTemplateURLToResult(default_search, true, result.template_urls);
-    result.default_search_field = base::NumberToString(default_search->id());
+    result.default_search_field = default_search->sync_guid();
   }
 
   default_search = service->GetDefaultSearchProvider(
@@ -232,8 +232,7 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
   if (default_search) {
     if (!service->loaded())
       AddTemplateURLToResult(default_search, true, result.template_urls);
-    result.default_search_field_private =
-        base::NumberToString(default_search->id());
+    result.default_search_field_private = default_search->sync_guid();
   }
 
   default_search = service->GetDefaultSearchProvider(
@@ -241,7 +240,7 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
   if (default_search) {
     if (!service->loaded())
       AddTemplateURLToResult(default_search, true, result.template_urls);
-    result.default_speeddials = base::NumberToString(default_search->id());
+    result.default_speeddials = default_search->sync_guid();
   }
 
   default_search = service->GetDefaultSearchProvider(
@@ -249,8 +248,7 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
   if (default_search) {
     if (!service->loaded())
       AddTemplateURLToResult(default_search, true, result.template_urls);
-    result.default_speeddials_private =
-        base::NumberToString(default_search->id());
+    result.default_speeddials_private = default_search->sync_guid();
   }
 
   default_search = service->GetDefaultSearchProvider(
@@ -258,7 +256,7 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
   if (default_search) {
     if (!service->loaded())
       AddTemplateURLToResult(default_search, true, result.template_urls);
-    result.default_image = base::NumberToString(default_search->id());
+    result.default_image = default_search->sync_guid();
   }
 
   const auto checkSystemDefaultSearchEngine = [&]() {
@@ -266,10 +264,12 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
     const auto last_change_pref_path =
         vivaldiprefs::kSystemSearchEngineDefaultLastChange;
 
-    auto search_engines_manager = SearchEnginesManager::GetInstance();
-    if (!service->loaded() || !search_engines_manager->IsInitialized()) {
+    if (!service->loaded()) {
       return false;
     }
+
+    auto search_engines_manager =
+        SearchEnginesManagersFactory::GetInstance()->GetSearchEnginesManager();
 
     auto* prefs = Profile::FromBrowserContext(browser_context())->GetPrefs();
     const auto app_locale = prefs->GetString(prefs::kLanguageAtInstall);
@@ -278,11 +278,10 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
                      std::find(app_locale.begin(), app_locale.end(), '-'));
 
     const auto version = search_engines_manager->GetCurrentDataVersion();
-    SearchEnginesManager::EnginesInfo engines_info;
     const auto engines = search_engines_manager->GetEnginesByCountryId(
-        country_codes::GetCurrentCountryID(), lang, &engines_info);
+        country_codes::GetCurrentCountryID(), lang);
     const auto default_search_engine_id =
-        engines[engines_info.default_engine_index]->id;
+        engines.list[engines.default_index]->id;
 
     const bool engine_has_changed = [&]() {
       const int index = prefs->GetInteger(index_pref_path);
@@ -345,7 +344,7 @@ ExtensionFunction::ResponseAction SearchEnginesAddTemplateUrlFunction::Run() {
 
   return RespondNow(
       ArgumentList(vivaldi::search_engines::AddTemplateUrl::Results::Create(
-          template_url ? base::NumberToString(template_url->id()) : "")));
+          template_url ? template_url->sync_guid() : "")));
 }
 
 ExtensionFunction::ResponseAction
@@ -361,11 +360,7 @@ SearchEnginesRemoveTemplateUrlFunction::Run() {
     return RespondNow(Error(kTemplateServiceNotAvailable));
   }
 
-  TemplateURLID id;
-  if (!base::StringToInt64(params->id, &id))
-    return RespondNow(Error("id parameter invalid"));
-
-  TemplateURL* turl_to_remove = GetTemplateURLById(service, id);
+  TemplateURL* turl_to_remove = service->GetTemplateURLForGUID(params->guid);
 
   if (!turl_to_remove)
     return RespondNow(ArgumentList(
@@ -428,11 +423,8 @@ SearchEnginesUpdateTemplateUrlFunction::Run() {
     return RespondNow(Error(kTemplateServiceNotAvailable));
   }
 
-  TemplateURLID id;
-  if (!base::StringToInt64(params->template_url.id, &id))
-    return RespondNow(Error("id parameter invalid"));
-
-  TemplateURL* turl_to_update = GetTemplateURLById(service, id);
+  TemplateURL* turl_to_update =
+      service->GetTemplateURLForGUID(params->template_url.guid);
 
   if (!turl_to_update || IsCreatedByExtension(turl_to_update) ||
       params->template_url.keyword.empty() || params->template_url.url.empty())
@@ -465,25 +457,19 @@ ExtensionFunction::ResponseAction SearchEnginesMoveTemplateUrlFunction::Run() {
     return RespondNow(Error(kTemplateServiceNotAvailable));
   }
 
-  TemplateURLID id;
-  if (!base::StringToInt64(params->id, &id))
-    return RespondNow(Error("id parameter invalid"));
-
-  TemplateURL* turl_to_move = GetTemplateURLById(service, id);
+  TemplateURL* turl_to_move = service->GetTemplateURLForGUID(params->guid);
 
   if (!turl_to_move || IsCreatedByExtension(turl_to_move))
     return RespondNow(ArgumentList(
         vivaldi::search_engines::MoveTemplateUrl::Results::Create(false)));
 
   TemplateURL* successor = nullptr;
-  if (params->successor_id) {
-    TemplateURLID successor_id;
-    if (!base::StringToInt64(*params->successor_id, &successor_id))
-      return RespondNow(Error("successor_id parameter invalid"));
-    if (successor_id == id)
+  if (params->successor_guid) {
+    successor = service->GetTemplateURLForGUID(*params->successor_guid);
+    if (successor == turl_to_move) {
       return RespondNow(ArgumentList(
           vivaldi::search_engines::MoveTemplateUrl::Results::Create(false)));
-    successor = GetTemplateURLById(service, successor_id);
+    }
   }
 
   service->VivaldiMoveTemplateURL(turl_to_move, successor);
@@ -504,11 +490,7 @@ ExtensionFunction::ResponseAction SearchEnginesSetDefaultFunction::Run() {
     return RespondNow(Error(kTemplateServiceNotAvailable));
   }
 
-  TemplateURLID id;
-  if (!base::StringToInt64(params->id, &id))
-    return RespondNow(Error("id parameter invalid"));
-
-  TemplateURL* new_default = GetTemplateURLById(service, id);
+  TemplateURL* new_default = service->GetTemplateURLForGUID(params->guid);
 
   if (!new_default || IsCreatedByExtension(new_default))
     return RespondNow(ArgumentList(
@@ -554,11 +536,7 @@ ExtensionFunction::ResponseAction SearchEnginesGetSearchRequestFunction::Run() {
     return RespondNow(Error(kTemplateServiceNotAvailable));
   }
 
-  TemplateURLID id;
-  if (!base::StringToInt64(params->id, &id))
-    return RespondNow(Error("id parameter invalid"));
-
-  TemplateURL* template_url = GetTemplateURLById(service, id);
+  TemplateURL* template_url = service->GetTemplateURLForGUID(params->guid);
 
   if (!template_url)
     return RespondNow(Error("No search engine with this id"));
@@ -583,11 +561,7 @@ SearchEnginesGetSuggestRequestFunction::Run() {
     return RespondNow(Error(kTemplateServiceNotAvailable));
   }
 
-  TemplateURLID id;
-  if (!base::StringToInt64(params->id, &id))
-    return RespondNow(Error("id parameter invalid"));
-
-  TemplateURL* template_url = GetTemplateURLById(service, id);
+  TemplateURL* template_url = service->GetTemplateURLForGUID(params->guid);
 
   if (!template_url)
     return RespondNow(Error("No search engine with this id"));
@@ -601,8 +575,7 @@ SearchEnginesGetSuggestRequestFunction::Run() {
 
 ExtensionFunction::ResponseAction
 SearchEnginesRepairPrepopulatedTemplateUrlsFunction::Run() {
-  std::optional<
-      vivaldi::search_engines::RepairPrepopulatedTemplateUrls::Params>
+  std::optional<vivaldi::search_engines::RepairPrepopulatedTemplateUrls::Params>
       params(vivaldi::search_engines::RepairPrepopulatedTemplateUrls::Params::
                  Create(args()));
 
@@ -629,4 +602,53 @@ SearchEnginesRepairPrepopulatedTemplateUrlsFunction::Run() {
 
   return RespondNow(NoArguments());
 }
+
+ExtensionFunction::ResponseAction
+SearchEnginesGetSwitchPromptDataFunction::Run() {
+  vivaldi::search_engines::SwitchPromptData data;
+
+  auto* template_url_service = TemplateURLServiceFactory::GetForProfile(
+      Profile::FromBrowserContext(browser_context()));
+  adblock_filter::RuleService* rules_service =
+      adblock_filter::RuleServiceFactory::GetForBrowserContext(
+          browser_context());
+  auto* prefs = Profile::FromBrowserContext(browser_context())->GetPrefs();
+  if (!prefs || !template_url_service || !template_url_service->loaded() ||
+      !rules_service) {
+    return RespondNow(Error("Services not available for profile."));
+  }
+
+  const TemplateURL* current_search;
+  current_search = template_url_service->GetDefaultSearchProvider(
+      TemplateURLService::kDefaultSearchMain);
+
+  const auto maybe_default_search =
+      SearchEnginesManagersFactory::GetInstance()
+          ->GetSearchEnginesPromptManager()
+          ->GetDefaultSearchEngineToPrompt(prefs, template_url_service,
+                                           rules_service);
+
+  data.should_prompt = maybe_default_search != nullptr;
+  if (data.should_prompt) {
+    data.current_search_engine = TemplateURLToJSType(current_search);
+    data.partner_search_engine = TemplateURLToJSType(maybe_default_search);
+  }
+  return RespondNow(ArgumentList(
+      vivaldi::search_engines::GetSwitchPromptData::Results::Create(data)));
+}
+
+ExtensionFunction::ResponseAction
+SearchEnginesMarkSwitchPromptAsSeenFunction::Run() {
+  auto* prefs = Profile::FromBrowserContext(browser_context())->GetPrefs();
+  if (!prefs) {
+    return RespondNow(Error("PrefService is not valid for profile."));
+  }
+
+  SearchEnginesManagersFactory::GetInstance()
+      ->GetSearchEnginesPromptManager()
+      ->MarkCurrentPromptAsSeen(prefs);
+
+  return RespondNow(NoArguments());
+}
+
 }  // namespace extensions

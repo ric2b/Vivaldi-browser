@@ -297,6 +297,7 @@ void aom_dc_predictor_8x4_c(uint8_t *dst, ptrdiff_t stride,
   dc_predictor_rect(dst, stride, 8, 4, above, left, 2, DC_MULTIPLIER_1X2);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_dc_predictor_4x16_c(uint8_t *dst, ptrdiff_t stride,
                              const uint8_t *above, const uint8_t *left) {
   dc_predictor_rect(dst, stride, 4, 16, above, left, 2, DC_MULTIPLIER_1X4);
@@ -306,6 +307,7 @@ void aom_dc_predictor_16x4_c(uint8_t *dst, ptrdiff_t stride,
                              const uint8_t *above, const uint8_t *left) {
   dc_predictor_rect(dst, stride, 16, 4, above, left, 2, DC_MULTIPLIER_1X4);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_dc_predictor_8x16_c(uint8_t *dst, ptrdiff_t stride,
                              const uint8_t *above, const uint8_t *left) {
@@ -317,6 +319,7 @@ void aom_dc_predictor_16x8_c(uint8_t *dst, ptrdiff_t stride,
   dc_predictor_rect(dst, stride, 16, 8, above, left, 3, DC_MULTIPLIER_1X2);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_dc_predictor_8x32_c(uint8_t *dst, ptrdiff_t stride,
                              const uint8_t *above, const uint8_t *left) {
   dc_predictor_rect(dst, stride, 8, 32, above, left, 3, DC_MULTIPLIER_1X4);
@@ -326,6 +329,7 @@ void aom_dc_predictor_32x8_c(uint8_t *dst, ptrdiff_t stride,
                              const uint8_t *above, const uint8_t *left) {
   dc_predictor_rect(dst, stride, 32, 8, above, left, 3, DC_MULTIPLIER_1X4);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_dc_predictor_16x32_c(uint8_t *dst, ptrdiff_t stride,
                               const uint8_t *above, const uint8_t *left) {
@@ -337,6 +341,7 @@ void aom_dc_predictor_32x16_c(uint8_t *dst, ptrdiff_t stride,
   dc_predictor_rect(dst, stride, 32, 16, above, left, 4, DC_MULTIPLIER_1X2);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_dc_predictor_16x64_c(uint8_t *dst, ptrdiff_t stride,
                               const uint8_t *above, const uint8_t *left) {
   dc_predictor_rect(dst, stride, 16, 64, above, left, 4, DC_MULTIPLIER_1X4);
@@ -346,6 +351,7 @@ void aom_dc_predictor_64x16_c(uint8_t *dst, ptrdiff_t stride,
                               const uint8_t *above, const uint8_t *left) {
   dc_predictor_rect(dst, stride, 64, 16, above, left, 4, DC_MULTIPLIER_1X4);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_dc_predictor_32x64_c(uint8_t *dst, ptrdiff_t stride,
                               const uint8_t *above, const uint8_t *left) {
@@ -620,6 +626,7 @@ void aom_highbd_dc_predictor_8x4_c(uint16_t *dst, ptrdiff_t stride,
                            HIGHBD_DC_MULTIPLIER_1X2);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_highbd_dc_predictor_4x16_c(uint16_t *dst, ptrdiff_t stride,
                                     const uint16_t *above, const uint16_t *left,
                                     int bd) {
@@ -633,6 +640,7 @@ void aom_highbd_dc_predictor_16x4_c(uint16_t *dst, ptrdiff_t stride,
   highbd_dc_predictor_rect(dst, stride, 16, 4, above, left, bd, 2,
                            HIGHBD_DC_MULTIPLIER_1X4);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_highbd_dc_predictor_8x16_c(uint16_t *dst, ptrdiff_t stride,
                                     const uint16_t *above, const uint16_t *left,
@@ -648,6 +656,7 @@ void aom_highbd_dc_predictor_16x8_c(uint16_t *dst, ptrdiff_t stride,
                            HIGHBD_DC_MULTIPLIER_1X2);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_highbd_dc_predictor_8x32_c(uint16_t *dst, ptrdiff_t stride,
                                     const uint16_t *above, const uint16_t *left,
                                     int bd) {
@@ -661,6 +670,7 @@ void aom_highbd_dc_predictor_32x8_c(uint16_t *dst, ptrdiff_t stride,
   highbd_dc_predictor_rect(dst, stride, 32, 8, above, left, bd, 3,
                            HIGHBD_DC_MULTIPLIER_1X4);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_highbd_dc_predictor_16x32_c(uint16_t *dst, ptrdiff_t stride,
                                      const uint16_t *above,
@@ -676,6 +686,7 @@ void aom_highbd_dc_predictor_32x16_c(uint16_t *dst, ptrdiff_t stride,
                            HIGHBD_DC_MULTIPLIER_1X2);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_highbd_dc_predictor_16x64_c(uint16_t *dst, ptrdiff_t stride,
                                      const uint16_t *above,
                                      const uint16_t *left, int bd) {
@@ -689,6 +700,7 @@ void aom_highbd_dc_predictor_64x16_c(uint16_t *dst, ptrdiff_t stride,
   highbd_dc_predictor_rect(dst, stride, 64, 16, above, left, bd, 4,
                            HIGHBD_DC_MULTIPLIER_1X4);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_highbd_dc_predictor_32x64_c(uint16_t *dst, ptrdiff_t stride,
                                      const uint16_t *above,
@@ -730,6 +742,25 @@ void aom_highbd_dc_predictor_64x32_c(uint16_t *dst, ptrdiff_t stride,
 #endif  // CONFIG_AV1_HIGHBITDEPTH
 
 /* clang-format off */
+#if CONFIG_REALTIME_ONLY && !CONFIG_AV1_DECODER
+#define intra_pred_rectangular(type) \
+  intra_pred_sized(type, 4, 8) \
+  intra_pred_sized(type, 8, 4) \
+  intra_pred_sized(type, 8, 16) \
+  intra_pred_sized(type, 16, 8) \
+  intra_pred_sized(type, 16, 32) \
+  intra_pred_sized(type, 32, 16) \
+  intra_pred_sized(type, 32, 64) \
+  intra_pred_sized(type, 64, 32) \
+  intra_pred_highbd_sized(type, 4, 8) \
+  intra_pred_highbd_sized(type, 8, 4) \
+  intra_pred_highbd_sized(type, 8, 16) \
+  intra_pred_highbd_sized(type, 16, 8) \
+  intra_pred_highbd_sized(type, 16, 32) \
+  intra_pred_highbd_sized(type, 32, 16) \
+  intra_pred_highbd_sized(type, 32, 64) \
+  intra_pred_highbd_sized(type, 64, 32)
+#else
 #define intra_pred_rectangular(type) \
   intra_pred_sized(type, 4, 8) \
   intra_pred_sized(type, 8, 4) \
@@ -759,6 +790,7 @@ void aom_highbd_dc_predictor_64x32_c(uint16_t *dst, ptrdiff_t stride,
   intra_pred_highbd_sized(type, 32, 8) \
   intra_pred_highbd_sized(type, 16, 64) \
   intra_pred_highbd_sized(type, 64, 16)
+#endif // CONFIG_REALTIME_ONLY && !CONFIG_AV1_DECODER
 
 #define intra_pred_above_4x4(type) \
   intra_pred_sized(type, 8, 8) \

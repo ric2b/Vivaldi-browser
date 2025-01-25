@@ -35,7 +35,7 @@ RuleServiceFactory::~RuleServiceFactory() {}
 
 content::BrowserContext* RuleServiceFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
+  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 KeyedService* RuleServiceFactory::BuildServiceInstanceFor(

@@ -89,6 +89,7 @@
 <translation id="3587482841069643663">Toate</translation>
 <translation id="3678156199662914018">Extensie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Solicitare de partajare a ecranului de către <ph name="APP_NAME" /></translation>
+<translation id="3708684582558000260">Nu permite site-urilor închise să finalizeze trimiterea sau primirea datelor</translation>
 <translation id="3810973564298564668">Gestionare</translation>
 <translation id="3838085852053358637">Încărcarea extensiei a eșuat</translation>
 <translation id="383891835335927981">Nu a fost mărit sau micșorat niciun site web</translation>
@@ -116,6 +117,7 @@
 <translation id="4384652540891215547">Activați extensia</translation>
 <translation id="4409697491990005945">Margini</translation>
 <translation id="4423376891418188461">Restaurează setările</translation>
+<translation id="4593021220803146968">&amp;Accesați <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplicațiile și extensiile pot fi modificate numai de administrator (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">O extensie a modificat pagina care este afișată la deschiderea unei file noi.</translation>
 <translation id="4643612240819915418">Deschide vide&amp;oul într-o filă nouă</translation>
@@ -149,6 +151,7 @@
 <translation id="5623842676595125836">Jurnal</translation>
 <translation id="5677928146339483299">Blocat</translation>
 <translation id="5707185214361380026">Extensia nu a putut fi încărcată de la:</translation>
+<translation id="5713171467967533494">Deschide în browserul Vivaldi</translation>
 <translation id="5715711091495208045">Broker de plugin-uri: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Salvează ca PDF</translation>
 <translation id="5759728514498647443">Documentele pe care le trimiteți prin <ph name="APP_NAME" /> pentru a fi tipărite pot fi citite de <ph name="APP_NAME" />.</translation>

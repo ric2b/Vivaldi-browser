@@ -213,12 +213,13 @@ class LocalFrameUkmAggregatorTest : public testing::Test {
       LocalFrameUkmAggregator::MetricId target_metric,
       unsigned expected_num_entries) {
     base::TimeTicks start_time = Now();
-    test_task_runner_->FastForwardBy(base::Milliseconds(10));
-    base::TimeTicks end_time = Now();
-
     aggregator().BeginMainFrame();
-    aggregator().RecordForcedLayoutSample(reason, start_time, end_time);
-    aggregator().RecordEndOfFrameMetrics(start_time, end_time, 0, source_id(),
+    {
+      LocalFrameUkmAggregator::ScopedForcedLayoutTimer timer =
+          aggregator().GetScopedForcedLayoutTimer(reason);
+      test_task_runner_->FastForwardBy(base::Milliseconds(10));
+    }
+    aggregator().RecordEndOfFrameMetrics(start_time, Now(), 0, source_id(),
                                          &recorder());
     ResetAggregator();
 
@@ -1064,7 +1065,7 @@ class LocalFrameUkmAggregatorSyncScrollTest
       case SyncScrollPositionAccess::kSyncScrollDoesNotAccessScrollOffset:
         return "100";
     }
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
   std::string GenerateMutation() {
@@ -1086,7 +1087,7 @@ class LocalFrameUkmAggregatorSyncScrollTest
       case SyncScrollMutation::kSyncScrollMutatesNothing:
         return "";
     }
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
   std::string GenerateScrollHandler() {
@@ -1117,7 +1118,7 @@ class LocalFrameUkmAggregatorSyncScrollTest
       case SyncScrollHandlerStrategy::kSyncScrollNoEventHandler:
         return "";
     }
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
   ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>

@@ -202,6 +202,11 @@
             "$ref": "SidePanelInfo",
             "optional": true,
             "description": "contains sidepanel URL."
+          },
+          "blocked": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Whether the extension is blocked or not."
           }
         }
       },

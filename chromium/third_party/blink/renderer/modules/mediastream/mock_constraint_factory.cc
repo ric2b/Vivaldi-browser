@@ -26,8 +26,7 @@ MediaConstraints MockConstraintFactory::CreateMediaConstraints() const {
 }
 
 void MockConstraintFactory::DisableDefaultAudioConstraints() {
-  basic_.goog_echo_cancellation.SetExact(false);
-  basic_.goog_experimental_echo_cancellation.SetExact(false);
+  basic_.echo_cancellation.SetExact(false);
   basic_.goog_auto_gain_control.SetExact(false);
   basic_.goog_noise_suppression.SetExact(false);
   basic_.goog_noise_suppression.SetExact(false);
@@ -37,7 +36,7 @@ void MockConstraintFactory::DisableDefaultAudioConstraints() {
 }
 
 void MockConstraintFactory::DisableAecAudioConstraints() {
-  basic_.goog_echo_cancellation.SetExact(false);
+  basic_.echo_cancellation.SetExact(false);
 }
 
 void MockConstraintFactory::Reset() {

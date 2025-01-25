@@ -90,7 +90,8 @@ Context::Context(sk_sp<SharedContext> sharedContext,
     // SingleOwner object and it is declared last
     fResourceProvider = fSharedContext->makeResourceProvider(&fSingleOwner,
                                                              SK_InvalidGenID,
-                                                             options.fGpuBudgetInBytes);
+                                                             options.fGpuBudgetInBytes,
+                                                             /* avoidBufferAlloc= */ false);
     fMappedBufferManager = std::make_unique<ClientMappedBufferManager>(this->contextID());
 #if defined(GPU_TEST_UTILS)
     if (options.fOptionsPriv) {
@@ -509,7 +510,7 @@ void Context::asyncReadPixelsYUV420(std::unique_ptr<Recorder> recorder,
 
     float baseM[20];
     SkColorMatrix_RGB2YUV(yuvColorSpace, baseM);
-    SkMatrix texMatrix = SkMatrix::Translate(params.fSrcRect.fLeft, params.fSrcRect.fTop);
+    SkMatrix texMatrix = SkMatrix::Translate(-params.fSrcRect.fLeft, -params.fSrcRect.fTop);
 
     // This matrix generates (r,g,b,a) = (0, 0, 0, y)
     float yM[20];
@@ -531,7 +532,7 @@ void Context::asyncReadPixelsYUV420(std::unique_ptr<Recorder> recorder,
     }
 
     // The UV planes are at half resolution compared to Y and A in 4:2:0
-    texMatrix.preScale(0.5f, 0.5f);
+    texMatrix.postScale(0.5f, 0.5f);
 
     // This matrix generates (r,g,b,a) = (0, 0, 0, u)
     float uM[20];
@@ -685,8 +686,10 @@ Context::PixelTransferResult Context::transferPixels(Recorder* recorder,
                                                                             /*bufferOffset=*/0,
                                                                             rowBytes);
     const bool addTasksDirectly = !SkToBool(recorder);
-
-    if (!copyTask || (addTasksDirectly && !fQueueManager->addTask(copyTask.get(), this))) {
+    Protected contextIsProtected = fSharedContext->isProtected();
+    if (!copyTask || (addTasksDirectly && !fQueueManager->addTask(copyTask.get(),
+                                                                  this,
+                                                                  contextIsProtected))) {
         return {};
     } else if (!addTasksDirectly) {
         // Add the task to the Recorder instead of the QueueManager if that's been required for
@@ -694,7 +697,9 @@ Context::PixelTransferResult Context::transferPixels(Recorder* recorder,
         recorder->priv().add(std::move(copyTask));
     }
     sk_sp<SynchronizeToCpuTask> syncTask = SynchronizeToCpuTask::Make(buffer);
-    if (!syncTask || (addTasksDirectly && !fQueueManager->addTask(syncTask.get(), this))) {
+    if (!syncTask || (addTasksDirectly && !fQueueManager->addTask(syncTask.get(),
+                                                                  this,
+                                                                  contextIsProtected))) {
         return {};
     } else if (!addTasksDirectly) {
         recorder->priv().add(std::move(syncTask));

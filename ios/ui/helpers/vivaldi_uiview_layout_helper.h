@@ -95,10 +95,6 @@
 /// Returns safe bottom anchor
 - (NSLayoutYAxisAnchor*)safeBottomAnchor;
 
-/// Returns iPad orientation calculating the frame.
-/// Required when UIDeviceOrientation returns invalid orientation.
-- (BOOL)isiPadOrientationPortrait;
-
 @end
 
 #endif  // IOS_UI_HELPERS_VIVALDI_UIVIEW_LAYOUT_HELPER_H_

@@ -26,11 +26,16 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/hlo/ir/hlo_opcode.h"
-#include "xla/service/algebraic_simplifier.h"
+#include "xla/hlo/pass/hlo_pass_fix.h"
+#include "xla/hlo/pass/hlo_pass_pipeline.h"
+#include "xla/hlo/transforms/simplifiers/algebraic_simplifier.h"
+#include "xla/hlo/transforms/simplifiers/convert_mover.h"
+#include "xla/hlo/transforms/simplifiers/dot_dimension_merger.h"
+#include "xla/hlo/transforms/simplifiers/float_normalization.h"
+#include "xla/hlo/transforms/simplifiers/hlo_constant_folding.h"
+#include "xla/hlo/transforms/simplifiers/reshape_mover.h"
+#include "xla/hlo/transforms/simplifiers/tuple_simplifier.h"
 #include "xla/service/call_inliner.h"
-#include "xla/service/convert_mover.h"
-#include "xla/service/dot_dimension_merger.h"
-#include "xla/service/float_normalization.h"
 #include "xla/service/float_support.h"
 #include "xla/service/gpu/autotuning/autotuner_util.h"
 #include "xla/service/gpu/autotuning/conv_algorithm_picker.h"
@@ -47,15 +52,9 @@ limitations under the License.
 #include "xla/service/gpu/transforms/gpusolver_rewriter.h"
 #include "xla/service/gpu/transforms/sort_rewriter.h"
 #include "xla/service/gpu/transforms/triangular_solve_rewriter.h"
-#include "xla/service/hlo_constant_folding.h"
 #include "xla/service/hlo_module_config.h"
-#include "xla/service/hlo_pass_fix.h"
-#include "xla/service/hlo_pass_pipeline.h"
 #include "xla/service/hlo_verifier.h"
-#include "xla/service/reshape_mover.h"
-#include "xla/service/tuple_simplifier.h"
 #include "xla/stream_executor/device_description.h"
-#include "xla/stream_executor/device_memory_allocator.h"
 #include "xla/stream_executor/dnn.h"
 #include "xla/stream_executor/rocm/rocm_platform_id.h"
 #include "xla/stream_executor/semantic_version.h"
@@ -100,7 +99,6 @@ class ConvBfloat16Support : public FloatSupport {
 absl::Status AMDGPUCompiler::OptimizeHloConvolutionCanonicalization(
     HloModule* hlo_module, se::GpuComputeCapability gpu_version,
     se::dnn::VersionInfo dnn_version,
-    se::DeviceMemoryAllocator* device_allocator,
     const se::SemanticVersion& toolkit_version) {
   // Convert convolutions into CustomCalls to MIOpen, then canonicalize them
   // (PadInsertion).
@@ -219,7 +217,8 @@ bool AMDGPUCompiler::RequiresCollectiveScheduleLinearizer(
 }
 
 absl::Status AMDGPUCompiler::AddConvAndGemmAutotuningPasses(
-    HloPassPipeline* pipeline, HloModule* hlo_module,
+    HloPassPipeline* pipeline, const se::GpuComputeCapability& gpu_version,
+    const CompileOptions& options, HloModule* hlo_module,
     AutotuneConfig& autotune_config, tsl::thread::ThreadPool* thread_pool) {
   if (GpuConvAlgorithmPicker::IsEnabled(hlo_module)) {
     pipeline->AddPass<GpuConvAlgorithmPicker>(autotune_config);

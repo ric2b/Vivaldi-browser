@@ -307,10 +307,10 @@ class DiceWebSigninInterceptHandlerChromeSigninInterceptionTest
           WebSigninInterceptor::SigninInterceptionType::kChromeSignin);
     if (IsSupervisedUsersUiFeatureEnabled()) {
       feature_list_.InitWithFeatures(
-          {supervised_user::kCustomWebSignInInterceptForSupervisedUsersUi}, {});
+          {supervised_user::kCustomProfileStringsForSupervisedUsers}, {});
     } else {
       feature_list_.InitWithFeatures(
-          {}, {supervised_user::kCustomWebSignInInterceptForSupervisedUsersUi});
+          {}, {supervised_user::kCustomProfileStringsForSupervisedUsers});
     }
 
     AccountCapabilitiesTestMutator mutator(&intercepted_account.capabilities);
@@ -335,8 +335,9 @@ class DiceWebSigninInterceptHandlerChromeSigninInterceptionTest
         IsSupervisedUser() == signin::Tribool::kTrue) {
       title = l10n_util::GetStringUTF8(
           IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_TITLE_SUPERVISED);
-      subtitle = l10n_util::GetStringUTF8(
-          IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_SUBTITLE_SUPERVISED);
+      subtitle = l10n_util::GetStringFUTF8(
+          IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_SUBTITLE_SUPERVISED,
+          base::UTF8ToUTF16(intercepted_account.email));
     }
 
     EXPECT_EQ(*parameters.FindString("title"), title);

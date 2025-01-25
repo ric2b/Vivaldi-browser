@@ -222,7 +222,11 @@ BASE_FEATURE(
     // move the initialization earlier to chrome/app/chrome_main_delegate.cc.
     base::FEATURE_DISABLED_BY_DEFAULT
 #else
-    base::FEATURE_DISABLED_BY_DEFAULT // Vivaldi - disable UKM
+#if defined(VIVALDI_BUILD)
+    base::FEATURE_DISABLED_BY_DEFAULT  // Vivaldi - disable UKM
+#else
+    base::FEATURE_ENABLED_BY_DEFAULT
+#endif
 #endif  // BUILDFLAG(IS_FUCHSIA)
 );
 

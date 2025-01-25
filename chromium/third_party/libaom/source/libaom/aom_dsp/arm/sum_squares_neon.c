@@ -14,6 +14,7 @@
 
 #include "aom_dsp/arm/mem_neon.h"
 #include "aom_dsp/arm/sum_neon.h"
+#include "config/aom_config.h"
 #include "config/aom_dsp_rtcd.h"
 
 static inline uint64_t aom_sum_squares_2d_i16_4x4_neon(const int16_t *src,
@@ -474,6 +475,7 @@ uint64_t aom_var_2d_u8_neon(uint8_t *src, int src_stride, int width,
   return aom_var_2d_u8_c(src, src_stride, width, height);
 }
 
+#if CONFIG_AV1_HIGHBITDEPTH
 static inline uint64_t aom_var_2d_u16_4xh_neon(uint8_t *src, int src_stride,
                                                int width, int height) {
   uint16_t *src_u16 = CONVERT_TO_SHORTPTR(src);
@@ -572,3 +574,4 @@ uint64_t aom_var_2d_u16_neon(uint8_t *src, int src_stride, int width,
   }
   return aom_var_2d_u16_c(src, src_stride, width, height);
 }
+#endif  // CONFIG_AV1_HIGHBITDEPTH

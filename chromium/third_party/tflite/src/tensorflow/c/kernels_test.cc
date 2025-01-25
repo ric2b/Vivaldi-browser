@@ -111,12 +111,12 @@ static void MyDeleteFunc(void* kernel) {
 }
 
 namespace tensorflow {
-Status TF_TensorToTensor(const TF_Tensor* src, Tensor* dst);
+absl::Status TF_TensorToTensor(const TF_Tensor* src, Tensor* dst);
 
 static std::unique_ptr<OpKernel> GetFakeKernel(const char* device_name,
                                                const char* op_name,
                                                const char* node_name,
-                                               Status* status) {
+                                               absl::Status* status) {
   NodeDef def;
   def.set_op(op_name);
   def.set_name(node_name);
@@ -135,7 +135,7 @@ static std::unique_ptr<OpKernel> GetFakeKernel(const char* device_name,
 static std::unique_ptr<OpKernel> GetFakeKernel2(const char* device_name,
                                                 const char* op_name,
                                                 const char* node_name,
-                                                Status* status) {
+                                                absl::Status* status) {
   NodeDef def;
   def.set_op(op_name);
   def.set_name(node_name);
@@ -189,7 +189,7 @@ TEST(TestKernel, TestRegisterKernelBuilder) {
   }
 
   {
-    Status status;
+    absl::Status status;
     std::unique_ptr<OpKernel> kernel =
         GetFakeKernel(device_name, op_name, node_name, &status);
     TF_EXPECT_OK(status);
@@ -235,7 +235,7 @@ TEST(TestKernel, TF_RegisterKernelBuilderWithKernelDef) {
   }
 
   {
-    Status status;
+    absl::Status status;
     std::unique_ptr<OpKernel> kernel =
         GetFakeKernel(device_name, op_name, node_name, &status);
     TF_EXPECT_OK(status);
@@ -277,7 +277,7 @@ TEST(TestKernel, TestRegisterAsyncKernelBuilder) {
   }
 
   {
-    Status status;
+    absl::Status status;
     std::unique_ptr<OpKernel> kernel =
         GetFakeKernel(device_name, op_name, node_name, &status);
     TF_EXPECT_OK(status);
@@ -327,7 +327,8 @@ class TestKernelAttr : public ::testing::Test {
   ~TestKernelAttr() override {}
 
   std::unique_ptr<OpKernel> GetFakeKernelWithAttr(const char* op_name,
-                                                  AttrValue v, Status* status) {
+                                                  AttrValue v,
+                                                  absl::Status* status) {
     NodeDef def;
     def.set_op(op_name);
     def.set_name("FakeNode");
@@ -347,7 +348,7 @@ class TestKernelAttr : public ::testing::Test {
       EXPECT_EQ(TF_OK, TF_GetCode(status));
       TF_DeleteStatus(status);
     }
-    Status status;
+    absl::Status status;
     std::unique_ptr<OpKernel> kernel =
         GetFakeKernelWithAttr(op_name, v, &status);
     TF_EXPECT_OK(status);
@@ -867,13 +868,13 @@ TEST(TestKernel, TestInputAndOutputCount) {
 
     Tensor t(tensorflow::uint8(123));
 
-    gtl::InlinedVector<TensorValue, 4> inputs;
+    absl::InlinedVector<TensorValue, 4UL> inputs;
     // Simulate 2 inputs
     inputs.emplace_back(&t);
     inputs.emplace_back();
     p.inputs = inputs;
 
-    Status status;
+    absl::Status status;
     std::unique_ptr<OpKernel> kernel =
         GetFakeKernel(device_name, op_name, node_name, &status);
     TF_EXPECT_OK(status);
@@ -1350,7 +1351,7 @@ TEST_F(DeviceKernelOpTest, TestGetKernelInfo) {
     AllocatorAttributes alloc_attrs;
     p.output_attr_array = &alloc_attrs;
 
-    gtl::InlinedVector<TensorValue, 4> inputs;
+    absl::InlinedVector<TensorValue, 4UL> inputs;
     Tensor t0(1.0f);
     Tensor t1(2.0f);
     Tensor t2_0(2.0f);
@@ -1362,7 +1363,7 @@ TEST_F(DeviceKernelOpTest, TestGetKernelInfo) {
     inputs.emplace_back(&t2_1);
     inputs.emplace_back(&t2_2);
 
-    Status status;
+    absl::Status status;
     std::unique_ptr<OpKernel> kernel =
         GetFakeKernel2(device_name, op_name, node_name, &status);
     TF_EXPECT_OK(status);
@@ -1424,13 +1425,13 @@ TEST_F(DeviceKernelOpTest, TestForwardInputOrAllocateOutput) {
 
     Tensor t(123.0f);
 
-    gtl::InlinedVector<TensorValue, 4> inputs;
+    absl::InlinedVector<TensorValue, 4UL> inputs;
     // GetFakeKernel requires a NodeDef with two inputs
     inputs.emplace_back(&t);
     inputs.emplace_back();
     p.inputs = inputs;
 
-    Status status;
+    absl::Status status;
     std::unique_ptr<OpKernel> kernel =
         GetFakeKernel(device_name, op_name, node_name, &status);
     TF_EXPECT_OK(status);

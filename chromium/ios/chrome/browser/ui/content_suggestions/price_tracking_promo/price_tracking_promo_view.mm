@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/price_tracking_promo/price_tracking_promo_view.h"
 
+#import "base/i18n/rtl.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/content_suggestions/price_tracking_promo/price_tracking_promo_commands.h"
@@ -31,17 +32,17 @@ const CGFloat kGradientOverlayTopAlpha = 0.0;
 // Alpha for bottom of gradienet overlay.
 const CGFloat kGradientOverlayBottomAlpha = 0.14;
 
-// Inset for product image fallback from the UIImageView boundary.
-const CGFloat kProductImageFallbackInset = 10.0f;
-
 // Radius of background circle of product image fallback.
-const CGFloat kProductImageFallbackCornerRadius = 25.0;
+const CGFloat kProductImageFallbackCornerRadius = 18.0;
 
-// Height and width of product image fallback.
-const CGFloat kProductImageFallbackSize = 28.0;
+// Vertical margin between down trend symbol and circle around it.
+const CGFloat kProductImageFallbackVerticalMargin = 6.0;
 
-// Point size of product image fallback.
-const CGFloat kProductImageFallbackPointSize = 10.0;
+// Horizontal margin between down trend symbol and circle around it.
+const CGFloat kProductImageFallbackHorizontalMargin = 4.0;
+
+// Width and height of product image fallback
+const CGFloat kProductImageFallbackSize = 36.0;
 
 // Rounded corners of the product image radius
 const CGFloat kProductImageCornerRadius = 8.0;
@@ -52,6 +53,17 @@ const CGFloat kProductImageWidthHeight = 48.0;
 // Separator height.
 const CGFloat kSeparatorHeight = 0.5;
 
+// Properties for Favicon image.
+const CGFloat kFaviconImageViewCornerRadius = 2.0;
+const CGFloat kFaviconImageViewTrailingCornerRadius = 4.0;
+const CGFloat kFaviconImageViewHeightWidth = 10.0;
+
+// Properties for Favicon image container.
+const CGFloat kFaviconImageContainerCornerRadius = 3.0;
+const CGFloat kFaviconImageContainerTrailingCornerRadius = 6.0;
+const CGFloat kFaviconImageContainerHeightWidth = 15.0;
+const CGFloat kFaviconImageContainerTrailingMargin = -4.62;
+
 }  // namespace
 
 @implementation PriceTrackingPromoModuleView {
@@ -59,6 +71,8 @@ const CGFloat kSeparatorHeight = 0.5;
   UILabel* _descriptionLabel;
   UIButton* _allowButton;
   UIImageView* _productImageView;
+  UIImageView* _faviconImageView;
+  UIView* _faviconImageContainer;
   // To create a background circle around the fallback product image.
   UIImageView* _fallbackProductImageView;
   UIView* _productImage;
@@ -67,6 +81,23 @@ const CGFloat kSeparatorHeight = 0.5;
   UIStackView* _textStack;
   UIView* _separator;
   UITapGestureRecognizer* _tapRecognizer;
+}
+
+// Create a mask with radius applied to the trailing corner
+- (CAShapeLayer*)faviconMaskWithRadius:(CGFloat)trailingCornerRadius
+                      imageHeightWidth:(CGFloat)imageHeightWidth {
+  UIRectCorner bottomTrail =
+      base::i18n::IsRTL() ? UIRectCornerBottomLeft : UIRectCornerBottomRight;
+  CGSize cornerRadiusSize =
+      CGSizeMake(trailingCornerRadius, trailingCornerRadius);
+  UIBezierPath* bezierPath =
+      [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, imageHeightWidth,
+                                                         imageHeightWidth)
+                            byRoundingCorners:bottomTrail
+                                  cornerRadii:cornerRadiusSize];
+  CAShapeLayer* mask = [CAShapeLayer layer];
+  mask.path = bezierPath.CGPath;
+  return mask;
 }
 
 - (void)configureView:(PriceTrackingPromoItem*)config {
@@ -90,6 +121,7 @@ const CGFloat kSeparatorHeight = 0.5;
   _titleLabel.text = l10n_util::GetNSString(
       IDS_IOS_CONTENT_SUGGESTIONS_PRICE_TRACKING_PROMO_TITLE);
   _titleLabel.isAccessibilityElement = YES;
+  _titleLabel.accessibilityTraits |= UIAccessibilityTraitHeader;
 
   _descriptionLabel = [[UILabel alloc] init];
   _descriptionLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -113,7 +145,7 @@ const CGFloat kSeparatorHeight = 0.5;
   if (retrievedProductImage) {
     _productImageView = [[UIImageView alloc] init];
     _productImageView.image = retrievedProductImage;
-    _productImageView.contentMode = UIViewContentModeScaleAspectFit;
+    _productImageView.contentMode = UIViewContentModeScaleAspectFill;
     _productImageView.translatesAutoresizingMaskIntoConstraints = NO;
     _productImageView.layer.borderWidth = 0;
     _productImageView.layer.cornerRadius = kProductImageCornerRadius;
@@ -130,7 +162,43 @@ const CGFloat kSeparatorHeight = 0.5;
     _gradientOverlay.layer.cornerRadius = kProductImageCornerRadius;
     _gradientOverlay.layer.zPosition = 1;
 
-    [NSLayoutConstraint activateConstraints:@[
+    if (config.faviconImage) {
+      _faviconImageContainer = [[UIView alloc] init];
+      _faviconImageContainer.translatesAutoresizingMaskIntoConstraints = NO;
+      _faviconImageContainer.layer.borderWidth = 0;
+      _faviconImageContainer.backgroundColor =
+          [UIColor colorNamed:kBackgroundColor];
+      _faviconImageContainer.layer.cornerRadius =
+          kFaviconImageContainerCornerRadius;
+      _faviconImageContainer.layer.masksToBounds = YES;
+      // Apply bottom right radius mask
+      _faviconImageContainer.layer.mask =
+          [self faviconMaskWithRadius:kFaviconImageContainerTrailingCornerRadius
+                     imageHeightWidth:kFaviconImageContainerHeightWidth];
+
+      _faviconImageView = [[UIImageView alloc] init];
+      _faviconImageView.image = config.faviconImage;
+      _faviconImageView.contentMode = UIViewContentModeScaleAspectFill;
+      _faviconImageView.translatesAutoresizingMaskIntoConstraints = NO;
+      _faviconImageView.layer.borderWidth = 0;
+      _faviconImageView.layer.cornerRadius = kFaviconImageViewCornerRadius;
+      _faviconImageView.layer.masksToBounds = YES;
+      _faviconImageView.backgroundColor = [UIColor colorNamed:kBackgroundColor];
+      // Apply bottom right radius mask
+      _faviconImageView.layer.mask =
+          [self faviconMaskWithRadius:kFaviconImageViewTrailingCornerRadius
+                     imageHeightWidth:kFaviconImageViewHeightWidth];
+    }
+
+    [_productImage addSubview:_productImageView];
+    [_productImageView addSubview:_gradientOverlay];
+    if (_faviconImageContainer) {
+      [_productImage addSubview:_faviconImageContainer];
+      [_faviconImageContainer addSubview:_faviconImageView];
+    }
+
+    NSMutableArray* constraints = [[NSMutableArray alloc] init];
+    [constraints addObjectsFromArray:@[
       [_productImage.heightAnchor
           constraintEqualToConstant:kProductImageWidthHeight],
       [_productImage.widthAnchor
@@ -144,23 +212,47 @@ const CGFloat kSeparatorHeight = 0.5;
       [_gradientOverlay.widthAnchor
           constraintEqualToAnchor:_gradientOverlay.heightAnchor],
     ]];
+    if (_faviconImageContainer) {
+      [constraints addObjectsFromArray:@[
+        [_faviconImageContainer.heightAnchor
+            constraintEqualToConstant:kFaviconImageContainerHeightWidth],
+        [_faviconImageContainer.widthAnchor
+            constraintEqualToAnchor:_faviconImageContainer.heightAnchor],
+        [_faviconImageContainer.trailingAnchor
+            constraintEqualToAnchor:_productImage.trailingAnchor
+                           constant:kFaviconImageContainerTrailingMargin],
+        [_faviconImageContainer.bottomAnchor
+            constraintEqualToAnchor:_productImage.bottomAnchor
+                           constant:kFaviconImageContainerTrailingMargin],
+        [_faviconImageView.heightAnchor
+            constraintEqualToConstant:kFaviconImageViewHeightWidth],
+        [_faviconImageView.widthAnchor
+            constraintEqualToAnchor:_faviconImageView.heightAnchor],
+        [_faviconImageView.centerXAnchor
+            constraintEqualToAnchor:_faviconImageContainer.centerXAnchor],
+        [_faviconImageView.centerYAnchor
+            constraintEqualToAnchor:_faviconImageContainer.centerYAnchor],
+      ]];
+    }
 
-    [_productImage addSubview:_productImageView];
-    [_productImageView addSubview:_gradientOverlay];
+    [NSLayoutConstraint activateConstraints:constraints];
 
   } else {
     _fallbackProductImageView = [[UIImageView alloc] init];
-    _fallbackProductImageView.image = CustomSymbolWithPointSize(
-        kDownTrendSymbol, kProductImageFallbackPointSize);
+    UIImageSymbolConfiguration* fallbackImageConfig =
+        [UIImageSymbolConfiguration
+            configurationWithWeight:UIImageSymbolWeightLight];
+    _fallbackProductImageView.image =
+        CustomSymbolWithConfiguration(kDownTrendSymbol, fallbackImageConfig);
     _fallbackProductImageView.contentMode = UIViewContentModeScaleAspectFit;
     _fallbackProductImageView.translatesAutoresizingMaskIntoConstraints = NO;
     _fallbackProductImageView.layer.borderWidth = 0;
 
     [NSLayoutConstraint activateConstraints:@[
-      [_fallbackProductImageView.widthAnchor
+      [_productImage.heightAnchor
           constraintEqualToConstant:kProductImageFallbackSize],
-      [_fallbackProductImageView.widthAnchor
-          constraintEqualToAnchor:_fallbackProductImageView.heightAnchor],
+      [_productImage.widthAnchor
+          constraintEqualToConstant:kProductImageFallbackSize],
     ]];
 
     _productImage.layer.cornerRadius = kProductImageFallbackCornerRadius;
@@ -168,26 +260,39 @@ const CGFloat kSeparatorHeight = 0.5;
 
     [_productImage addSubview:_fallbackProductImageView];
 
-    AddSameConstraintsWithInset(_fallbackProductImageView, _productImage,
-                                kProductImageFallbackInset);
+    AddSameConstraintsWithInsets(
+        _fallbackProductImageView, _productImage,
+        NSDirectionalEdgeInsets{kProductImageFallbackVerticalMargin,
+                                kProductImageFallbackHorizontalMargin,
+                                kProductImageFallbackVerticalMargin,
+                                kProductImageFallbackHorizontalMargin});
   }
 
   _allowButton = [[UIButton alloc] init];
-  _allowButton.translatesAutoresizingMaskIntoConstraints = NO;
-  [_allowButton
-      setTitle:l10n_util::GetNSString(
-                   IDS_IOS_CONTENT_SUGGESTIONS_PRICE_TRACKING_PROMO_ALLOW)
-      forState:UIControlStateNormal];
+  UIButtonConfiguration* buttonConfiguration =
+      [UIButtonConfiguration plainButtonConfiguration];
+  buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsZero;
+  buttonConfiguration.titleLineBreakMode = NSLineBreakByTruncatingTail;
+  buttonConfiguration.attributedTitle = [[NSAttributedString alloc]
+      initWithString:l10n_util::GetNSString(
+                         IDS_IOS_CONTENT_SUGGESTIONS_PRICE_TRACKING_PROMO_ALLOW)
+          attributes:@{
+            NSFontAttributeName :
+                [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote]
+          }];
+  _allowButton.configuration = buttonConfiguration;
   [_allowButton setTitleColor:[UIColor colorNamed:kBlueColor]
                      forState:UIControlStateNormal];
-  _allowButton.titleLabel.font =
-      [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
   _allowButton.isAccessibilityElement = YES;
-  _allowButton.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+  _allowButton.titleLabel.numberOfLines = 1;
+  _allowButton.titleLabel.adjustsFontForContentSizeCategory = YES;
+
+  _allowButton.contentHorizontalAlignment =
+      UIControlContentHorizontalAlignmentTrailing;
+  _allowButton.accessibilityIdentifier = _allowButton.titleLabel.text;
   _tapRecognizer = [[UITapGestureRecognizer alloc]
       initWithTarget:self
               action:@selector(allowPriceTrackingTapped:)];
-
   [_allowButton addGestureRecognizer:_tapRecognizer];
 
   _separator = [[UIView alloc] init];
@@ -218,7 +323,7 @@ const CGFloat kSeparatorHeight = 0.5;
   AddSameConstraints(_contentStack, self);
   if (@available(iOS 17, *)) {
     NSArray<UITrait>* traits = TraitCollectionSetForTraits(
-        @[ UITraitPreferredContentSizeCategory.self ]);
+        @[ UITraitPreferredContentSizeCategory.class ]);
     [self registerForTraitChanges:traits
                        withAction:@selector(hideDescriptionOnTraitChange)];
   }
@@ -231,9 +336,6 @@ const CGFloat kSeparatorHeight = 0.5;
 - (void)hideDescriptionOnTraitChange {
   _descriptionLabel.hidden = self.traitCollection.preferredContentSizeCategory >
                              UIContentSizeCategoryExtraExtraLarge;
-  // Force a layout since the size of text components may have changed.
-  [self setNeedsLayout];
-  [self layoutIfNeeded];
 }
 
 #pragma mark - Testing category methods
@@ -247,7 +349,7 @@ const CGFloat kSeparatorHeight = 0.5;
 }
 
 - (NSString*)allowLabelTextForTesting {
-  return self->_allowButton.currentTitle;
+  return [self->_allowButton.configuration.attributedTitle string];
 }
 
 @end

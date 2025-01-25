@@ -14,6 +14,7 @@
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/RendererProvider.h"
+#include "src/gpu/graphite/ShaderInfo.h"
 #include "src/gpu/graphite/mtl/MtlGraphiteTypesPriv.h"
 #include "src/gpu/graphite/mtl/MtlGraphiteUtilsPriv.h"
 #include "src/gpu/graphite/mtl/MtlResourceProvider.h"
@@ -53,6 +54,8 @@ inline MTLVertexFormat attribute_type_to_mtlformat(VertexAttribType type) {
             return MTLVertexFormatInt3;
         case VertexAttribType::kInt4:
             return MTLVertexFormatInt4;
+        case VertexAttribType::kUInt2:
+            return MTLVertexFormatUInt2;
         case VertexAttribType::kByte:
             if (@available(macOS 10.13, iOS 11.0, tvOS 11.0, *)) {
                 return MTLVertexFormatChar;
@@ -261,11 +264,13 @@ static MTLRenderPipelineColorAttachmentDescriptor* create_color_attachment(
 
 } // anonymous namespace
 
-sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(const MtlSharedContext* sharedContext,
-                                                     MtlResourceProvider* resourceProvider,
-                                                     const RuntimeEffectDictionary* runtimeDict,
-                                                     const GraphicsPipelineDesc& pipelineDesc,
-                                                     const RenderPassDesc& renderPassDesc) {
+sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(
+        const MtlSharedContext* sharedContext,
+        MtlResourceProvider* resourceProvider,
+        const RuntimeEffectDictionary* runtimeDict,
+        const GraphicsPipelineDesc& pipelineDesc,
+        const RenderPassDesc& renderPassDesc,
+        SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags) {
     std::string vsMSL, fsMSL;
     SkSL::Program::Interface vsInterface, fsInterface;
 
@@ -281,16 +286,17 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(const MtlSharedContext* sha
     const bool useStorageBuffers = sharedContext->caps()->storageBufferSupport();
 
     UniquePaintParamsID paintID = pipelineDesc.paintParamsID();
-    FragSkSLInfo fsSkSLInfo = BuildFragmentSkSL(sharedContext->caps(),
-                                                sharedContext->shaderCodeDictionary(),
-                                                runtimeDict,
-                                                step,
-                                                paintID,
-                                                useStorageBuffers,
-                                                renderPassDesc.fWriteSwizzle);
-    std::string& fsSkSL = fsSkSLInfo.fSkSL;
-    const BlendInfo& blendInfo = fsSkSLInfo.fBlendInfo;
-    const bool localCoordsNeeded = fsSkSLInfo.fRequiresLocalCoords;
+
+    std::unique_ptr<ShaderInfo> shaderInfo = ShaderInfo::Make(sharedContext->caps(),
+                                                              sharedContext->shaderCodeDictionary(),
+                                                              runtimeDict,
+                                                              step,
+                                                              paintID,
+                                                              useStorageBuffers,
+                                                              renderPassDesc.fWriteSwizzle);
+
+    const std::string& fsSkSL = shaderInfo->fragmentSkSL();
+    const BlendInfo& blendInfo = shaderInfo->blendInfo();
     if (!SkSLToMSL(sharedContext->caps()->shaderCaps(),
                    fsSkSL,
                    SkSL::ProgramKind::kGraphiteFragment,
@@ -301,11 +307,7 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(const MtlSharedContext* sha
         return nullptr;
     }
 
-    VertSkSLInfo vsSkSLInfo = BuildVertexSkSL(sharedContext->caps()->resourceBindingRequirements(),
-                                              step,
-                                              useStorageBuffers,
-                                              localCoordsNeeded);
-    const std::string& vsSkSL = vsSkSLInfo.fSkSL;
+    const std::string& vsSkSL = shaderInfo->vertexSkSL();
     if (!SkSLToMSL(sharedContext->caps()->shaderCaps(),
                    vsSkSL,
                    SkSL::ProgramKind::kGraphiteVertex,
@@ -316,17 +318,20 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(const MtlSharedContext* sha
         return nullptr;
     }
 
-    auto vsLibrary = MtlCompileShaderLibrary(sharedContext, vsSkSLInfo.fLabel, vsMSL, errorHandler);
-    auto fsLibrary = MtlCompileShaderLibrary(sharedContext, fsSkSLInfo.fLabel, fsMSL, errorHandler);
+    auto vsLibrary =
+            MtlCompileShaderLibrary(sharedContext, shaderInfo->vsLabel(), vsMSL, errorHandler);
+    auto fsLibrary =
+            MtlCompileShaderLibrary(sharedContext, shaderInfo->fsLabel(), fsMSL, errorHandler);
 
     sk_cfp<id<MTLDepthStencilState>> dss =
             resourceProvider->findOrCreateCompatibleDepthStencilState(step->depthStencilSettings());
 
-    PipelineInfo pipelineInfo{vsSkSLInfo, fsSkSLInfo};
+    PipelineInfo pipelineInfo{*shaderInfo, pipelineCreationFlags};
 #if defined(GPU_TEST_UTILS)
     pipelineInfo.fNativeVertexShader = std::move(vsMSL);
     pipelineInfo.fNativeFragmentShader = std::move(fsMSL);
 #endif
+
     std::string pipelineLabel =
             GetPipelineLabel(sharedContext->shaderCodeDictionary(), renderPassDesc, step, paintID);
     return Make(sharedContext,

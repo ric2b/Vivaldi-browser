@@ -2,16 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {
-  type Phase,
-  type SyntheticBasedEvent,
-  type TraceEventArgs,
-  type TraceEventData,
-} from './TraceEvents.js';
+import type {Args, Event, Phase, SyntheticBased} from './TraceEvents.js';
 
 export type ExtensionEntryType = 'track-entry'|'marker';
 
-const extensionPalette = [
+export const extensionPalette = [
   'primary',
   'primary-light',
   'primary-dark',
@@ -22,6 +17,7 @@ const extensionPalette = [
   'tertiary-light',
   'tertiary-dark',
   'error',
+  'warning',
 ] as const;
 
 export type ExtensionColorFromPalette = typeof extensionPalette[number];
@@ -61,15 +57,15 @@ export interface ExtensionMarkerPayload extends ExtensionDataPayloadBase {
 /**
  * Synthetic events created for extension tracks.
  */
-export interface SyntheticExtensionTrackEntry extends SyntheticBasedEvent<Phase.COMPLETE> {
-  args: TraceEventArgs&ExtensionTrackEntryPayload;
+export interface SyntheticExtensionTrackEntry extends SyntheticBased<Phase.COMPLETE> {
+  args: Args&ExtensionTrackEntryPayload;
 }
 
 /**
  * Synthetic events created for extension marks.
  */
-export interface SyntheticExtensionMarker extends SyntheticBasedEvent<Phase.COMPLETE> {
-  args: TraceEventArgs&ExtensionMarkerPayload;
+export interface SyntheticExtensionMarker extends SyntheticBased<Phase.COMPLETE> {
+  args: Args&ExtensionMarkerPayload;
 }
 
 export type SyntheticExtensionEntry = SyntheticExtensionTrackEntry|SyntheticExtensionMarker;
@@ -89,7 +85,7 @@ export function isValidExtensionPayload(payload: {track?: string, dataType?: str
   return isExtensionPayloadMarker(payload) || isExtensionPayloadTrackEntry(payload);
 }
 
-export function isSyntheticExtensionEntry(entry: TraceEventData): entry is SyntheticExtensionEntry {
+export function isSyntheticExtensionEntry(entry: Event): entry is SyntheticExtensionEntry {
   return entry.cat === 'devtools.extension';
 }
 

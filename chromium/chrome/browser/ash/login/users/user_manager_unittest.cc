@@ -17,12 +17,14 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/users/avatar/user_image_manager_impl.h"
 #include "chrome/browser/ash/login/users/avatar/user_image_manager_registry.h"
-#include "chrome/browser/ash/login/users/chrome_user_manager_impl.h"
+#include "chrome/browser/ash/login/users/policy_user_manager_controller.h"
+#include "chrome/browser/ash/login/users/user_manager_delegate_impl.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
@@ -47,7 +49,7 @@
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user.h"
-#include "components/user_manager/user_manager_base.h"
+#include "components/user_manager/user_manager_impl.h"
 #include "components/user_manager/user_manager_pref_names.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/common/content_switches.h"
@@ -117,11 +119,6 @@ class UserManagerObserverTest : public user_manager::UserManager::Observer {
   int on_user_removed_call_count_ = 0;
 };
 
-class MockRemoveUserManager : public ChromeUserManagerImpl {
- public:
-  MOCK_CONST_METHOD1(AsyncRemoveCryptohome, void(const AccountId&));
-};
-
 class UserManagerTest : public testing::Test {
  public:
   UserManagerTest() {
@@ -156,13 +153,6 @@ class UserManagerTest : public testing::Test {
     TestingBrowserProcess::GetGlobal()->SetProfileManager(
         std::make_unique<FakeProfileManager>(temp_dir_.GetPath()));
 
-    // TODO(crbug.com/40276503): UserManager must be initialized before
-    // ProfileManager to align with the production behavior, but it currently
-    // cannot do so since ProfileManager is initialized by ChromeUserManagerImpl
-    // constroctor if ProfileManager is not initialized yet so
-    // FakeProfileManager set in this test will be not reflected to UserManager.
-    // For now reset UserManager after ProfileManager until ProfileHelper
-    // related refactor is completed.
     ResetUserManager();
 
     ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
@@ -205,14 +195,20 @@ class UserManagerTest : public testing::Test {
   }
 
   void ResetUserManager() {
-    // Initialize the UserManager singleton to a fresh ChromeUserManagerImpl
-    // instance.
+    // Initialize the UserManager singleton to a fresh UserManager instance.
     user_image_manager_registry_.reset();
+    policy_user_manager_controller_.reset();
     if (user_manager_) {
       user_manager_->Destroy();
       user_manager_.reset();
     }
-    user_manager_ = ChromeUserManagerImpl::CreateChromeUserManager();
+    user_manager_ = std::make_unique<user_manager::UserManagerImpl>(
+        std::make_unique<UserManagerDelegateImpl>(), local_state_->Get(),
+        CrosSettings::Get());
+    policy_user_manager_controller_ =
+        std::make_unique<PolicyUserManagerController>(
+            user_manager_.get(), ash::CrosSettings::Get(),
+            DeviceSettingsService::Get(), nullptr);
     user_image_manager_registry_ =
         std::make_unique<ash::UserImageManagerRegistry>(user_manager_.get());
     // Initialize `UserManager` after `UserImageManagerRegistry` creation to
@@ -220,7 +216,7 @@ class UserManagerTest : public testing::Test {
     // `BrowserProcessPlatformPart::InitializeUserManager()`
     user_manager_->Initialize();
 
-    // ChromeUserManagerImpl ctor posts a task to reload policies.
+    // PolicyUserManagerController ctor posts a task to reload policies.
     // Also ensure that all existing ongoing user manager tasks are completed.
     task_environment_.RunUntilIdle();
   }
@@ -289,14 +285,14 @@ class UserManagerTest : public testing::Test {
   }
 
   void RetrieveTrustedDevicePolicies() {
-    user_manager_->RetrieveTrustedDevicePolicies();
+    policy_user_manager_controller_->RetrieveTrustedDevicePolicies();
   }
 
  protected:
   // The call chain
   // - `ProfileRequiresPolicyUnknown`
-  // - `UserManagerBase::UserLoggedIn()`
-  // - `ChromeUserManagerImpl::NotifyOnLogin()`
+  // - `UserManagerImpl::UserLoggedIn()`
+  // - `UserManagerImpl::NotifyOnLogin()`
   // - `UserSessionManager::InitNonKioskExtensionFeaturesSessionType()`
   // calls
   // `extensions::SetCurrentFeatureSessionType(FeatureSessionType::kRegular)`
@@ -313,7 +309,8 @@ class UserManagerTest : public testing::Test {
   // local_state_ should be destructed after ProfileManager.
   std::unique_ptr<ScopedTestingLocalState> local_state_;
 
-  std::unique_ptr<ChromeUserManagerImpl> user_manager_;
+  std::unique_ptr<user_manager::UserManagerImpl> user_manager_;
+  std::unique_ptr<PolicyUserManagerController> policy_user_manager_controller_;
   std::unique_ptr<ash::UserImageManagerRegistry> user_image_manager_registry_;
   base::ScopedTempDir temp_dir_;
 };
@@ -634,7 +631,7 @@ TEST_F(UserManagerTest, ScreenLockAvailability) {
       false /* browser_restart */, false /* is_child */);
 
   TestingPrefServiceSimple prefs;
-  user_manager::UserManagerBase::RegisterProfilePrefs(prefs.registry());
+  user_manager::UserManagerImpl::RegisterProfilePrefs(prefs.registry());
   // To simplify the dependency, register the pref directly.
   // In production, this is registered in ash::PowerPrefs.
   prefs.registry()->RegisterBooleanPref(prefs::kAllowScreenLock, true);
@@ -691,10 +688,10 @@ TEST_F(UserManagerTest, RemoveDeprecatedArcKioskAccountOnStartUpByDefault) {
   EXPECT_EQ(0U, GetArcKioskAccountsWithSavedDataCount());
   EXPECT_EQ(0U, GetKnownUsersCount());
   histogram_tester.ExpectTotalCount(
-      user_manager::UserManagerBase::kDeprecatedArcKioskUsersHistogramName, 1);
+      user_manager::UserManagerImpl::kDeprecatedArcKioskUsersHistogramName, 1);
   histogram_tester.ExpectBucketCount(
-      user_manager::UserManagerBase::kDeprecatedArcKioskUsersHistogramName,
-      user_manager::UserManagerBase::DeprecatedArcKioskUserStatus::kDeleted,
+      user_manager::UserManagerImpl::kDeprecatedArcKioskUsersHistogramName,
+      user_manager::UserManagerImpl::DeprecatedArcKioskUserStatus::kDeleted,
       /* expected_count= */ 1);
 }
 
@@ -713,11 +710,40 @@ TEST_F(UserManagerTest,
   // The ARC kiosk user has not been removed, just hidden.
   EXPECT_EQ(1U, GetKnownUsersCount());
   histogram_tester.ExpectTotalCount(
-      user_manager::UserManagerBase::kDeprecatedArcKioskUsersHistogramName, 1);
+      user_manager::UserManagerImpl::kDeprecatedArcKioskUsersHistogramName, 1);
   histogram_tester.ExpectBucketCount(
-      user_manager::UserManagerBase::kDeprecatedArcKioskUsersHistogramName,
-      user_manager::UserManagerBase::DeprecatedArcKioskUserStatus::kHidden,
+      user_manager::UserManagerImpl::kDeprecatedArcKioskUsersHistogramName,
+      user_manager::UserManagerImpl::DeprecatedArcKioskUserStatus::kHidden,
       /* expected_count= */ 1);
+}
+
+// Test that profile prefs is available for `User` under its profile created
+// callback.
+TEST_F(UserManagerTest, ProfilePrefs) {
+  // Simulates login.
+  user_manager_->UserLoggedIn(kAccountId0, kAccountId0.GetUserEmail(),
+                              /*browser_restart=*/false,
+                              /*is_child=*/false);
+
+  // Adds a profile created callback and verifies profile prefs is available
+  // when the callback runs.
+  bool callback_called = false;
+  user_manager::User* user = user_manager_->GetActiveUser();
+  user->AddProfileCreatedObserver(base::BindLambdaForTesting([&]() {
+    EXPECT_NE(user->GetProfilePrefs(), nullptr);
+    callback_called = true;
+  }));
+
+  // Triggers profile created callback.
+  TestingPrefServiceSimple prefs;
+  user_manager::UserManagerImpl::RegisterProfilePrefs(prefs.registry());
+  user_manager_->OnUserProfileCreated(kAccountId0, &prefs);
+
+  // Profile created callback should be called.
+  EXPECT_TRUE(callback_called);
+
+  // Cleans up references to `prefs` since it will go out of scope.
+  user_manager_->OnUserProfileWillBeDestroyed(kAccountId0);
 }
 
 }  // namespace ash

@@ -4,27 +4,27 @@
   "SRCDIR": "../..",
 
   "app/native_resources/vivaldi_native_resources.grd": {
-    "includes": [60000],
-    "structures": [60100],
+    "includes": [62000],
+    "structures": [62100],
   },
   "app/native_resources/vivaldi_native_unscaled.grd": {
-    "includes": [60200],
-    "structures": [60300],
+    "includes": [62200],
+    "structures": [62300],
   },
   "extensions/vivaldi_extension_resources.grd": {
-    "includes": [60400],
-    "structures": [60500],
+    "includes": [62400],
+    "structures": [20500],
   },
   "app/installer/vivaldi_installer_strings.grd": {
-    "messages": [60600],
+    "messages": [62600],
   },
 
   # Long sections, hundreds of strings
   "app/native_resources/vivaldi_native_strings.grd": {
-    "messages": [61000],
+    "messages": [63000],
   },
   "app/android/vivaldi_android_strings.grd": {
-    "messages": [62000],
+    "messages": [64000],
   },
 
 

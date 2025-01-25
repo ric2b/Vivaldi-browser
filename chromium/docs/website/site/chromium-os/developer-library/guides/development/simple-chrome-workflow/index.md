@@ -93,7 +93,8 @@ sync`.
 To do this, simply add the board you're interested in to the `cros_boards`
 (device) or `cros_boards_with_qemu_images` (VM) [custom gclient var] of your
 `.gclient` file. For Googlers, be sure to include
-`"checkout_src_internal": True`.
+`"checkout_src_internal": True` and set up [reclient][reclient-googlers]
+to speed up builds.
 
 ```
 solutions = [
@@ -912,6 +913,7 @@ Some notes about the above:
 [api-keys]: https://www.chromium.org/developers/how-tos/api-keys
 [install-build-deps.py]: https://chromium.googlesource.com/chromium/src/+/HEAD/build/install-build-deps.py
 [reclient]: https://github.com/bazelbuild/reclient
+[reclient-googlers]: https://goto.google.com/chrome-linux-build#set-up-remote-execution
 [Chrome-related logs]: https://chromium.googlesource.com/chromium/src/+/lkgr/docs/chrome_os_logging.md
 [crbug.com/360342]: https://crbug.com/360342
 [crbug.com/403086]: https://crbug.com/403086

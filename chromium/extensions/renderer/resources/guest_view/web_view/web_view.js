@@ -23,7 +23,6 @@ function WebViewImpl(webviewElement) {
   this.pendingZoomFactor_ = null;
   this.userAgentOverride = null;
   this.setupElementProperties();
-  new WebViewEvents(this, this.viewInstanceId);
 }
 
 WebViewImpl.prototype.__proto__ = GuestViewContainer.prototype;
@@ -46,6 +45,8 @@ WebViewImpl.prototype.setupAttributes = function() {
     new WebViewAttributes.InspectTabIdAttribute(this);
   this.attributes[WebViewConstants.ATTRIBUTE_TAB_ID] =
     new WebViewAttributes.TabIdAttribute(this);
+  this.attributes[WebViewConstants.ATTRIBUTE_PARENT_TAB_ID] =
+    new WebViewAttributes.ParentTabIdAttribute(this);
   this.attributes[WebViewConstants.ATTRIBUTE_WASTYPED] =
     new WebViewAttributes.WasTypedAttribute(this);
   this.attributes[WebViewConstants.ATTRIBUTE_VIEW_TYPE] =
@@ -61,6 +62,10 @@ WebViewImpl.prototype.setupAttributes = function() {
     this.attributes[attribute] =
         new WebViewAttributes.AutosizeDimensionAttribute(attribute, this);
   }
+};
+
+WebViewImpl.prototype.setupEvents = function() {
+  new WebViewEvents(this);
 };
 
 // Initiates navigation once the <webview> element is attached to the DOM.
@@ -154,6 +159,12 @@ WebViewImpl.prototype.createGuest = function() {
     }
 
     const tab_id_str = this.attributes[WebViewConstants.ATTRIBUTE_TAB_ID].getValue();
+    const parent_tab_id = this.attributes[WebViewConstants.ATTRIBUTE_PARENT_TAB_ID].getValue();
+
+    if (parent_tab_id) {
+      params['parent_tab_id'] = Number(parent_tab_id);
+    }
+
     if (tab_id_str) {
       const tab_id = Number(tab_id_str);
       if (Number.isInteger(tab_id)) {

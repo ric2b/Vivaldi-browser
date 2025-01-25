@@ -55,7 +55,7 @@ class RuleServiceImpl : public RuleService, public RuleManager::Observer {
   IndexBuildResult GetRulesIndexBuildResult(RuleGroup group) override;
   RuleManager* GetRuleManager() override;
   KnownRuleSourcesHandler* GetKnownSourcesHandler() override;
-  TabHandler* GetTabHandler() override;
+  StateAndLogs* GetStateAndLogs() override;
   void SetIncognitoBrowserState(web::BrowserState* browser_state) override;
 
   // Implementing KeyedService

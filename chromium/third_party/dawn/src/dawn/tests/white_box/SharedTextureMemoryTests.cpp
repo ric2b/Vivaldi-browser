@@ -33,9 +33,12 @@
 #include <vector>
 
 #include "dawn/tests/MockCallback.h"
+#include "dawn/tests/StringViewMatchers.h"
 #include "dawn/utils/ComboRenderPipelineDescriptor.h"
 #include "dawn/utils/TextureUtils.h"
 #include "dawn/utils/WGPUHelpers.h"
+
+using testing::SizedStringMatches;
 
 namespace dawn {
 
@@ -150,12 +153,12 @@ wgpu::SharedFence SharedTextureMemoryTestBackend::ImportFenceTo(const wgpu::Devi
             fenceDesc.nextInChain = &vkDesc;
             return importingDevice.ImportSharedFence(&fenceDesc);
         }
-        case wgpu::SharedFenceType::VkSemaphoreSyncFD: {
-            wgpu::SharedFenceVkSemaphoreSyncFDExportInfo vkExportInfo;
+        case wgpu::SharedFenceType::SyncFD: {
+            wgpu::SharedFenceSyncFDExportInfo vkExportInfo;
             exportInfo.nextInChain = &vkExportInfo;
             fence.ExportInfo(&exportInfo);
 
-            wgpu::SharedFenceVkSemaphoreSyncFDDescriptor vkDesc;
+            wgpu::SharedFenceSyncFDDescriptor vkDesc;
             vkDesc.handle = vkExportInfo.handle;
 
             wgpu::SharedFenceDescriptor fenceDesc;
@@ -790,11 +793,11 @@ TEST_P(SharedTextureMemoryNoFeatureTests, CreationWithoutFeature) {
     const auto& memories =
         GetParam().mBackend->CreateSharedTextureMemories(device, GetParam().mLayerCount);
 
-    MockCppCallback<void (*)(wgpu::PopErrorScopeStatus, wgpu::ErrorType, const char*)>
+    MockCppCallback<void (*)(wgpu::PopErrorScopeStatus, wgpu::ErrorType, wgpu::StringView)>
         popErrorScopeCallback;
     EXPECT_CALL(popErrorScopeCallback,
                 Call(wgpu::PopErrorScopeStatus::Success, wgpu::ErrorType::Validation,
-                     HasSubstr("is not enabled")));
+                     SizedStringMatches(HasSubstr("is not enabled"))));
 
     device.PopErrorScope(wgpu::CallbackMode::AllowProcessEvents, popErrorScopeCallback.Callback());
 
@@ -826,6 +829,9 @@ TEST_P(SharedTextureMemoryTests, ImportSharedTextureMemoryNoChain) {
 // Test that it is an error to import a shared fence with no chained struct.
 // Also test that ExportInfo reports an Undefined type for the error fence.
 TEST_P(SharedTextureMemoryTests, ImportSharedFenceNoChain) {
+    // TODO(dawn/42241435): No shared texture memory extensions are supported yet.
+    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
+
     wgpu::SharedFenceDescriptor desc;
     ASSERT_DEVICE_ERROR_MSG(wgpu::SharedFence fence = device.ImportSharedFence(&desc),
                             HasSubstr("chain"));
@@ -2239,6 +2245,9 @@ TEST_P(SharedTextureMemoryTests, RenderThenLoseOrDestroyDeviceBeforeEndAccessThe
     // Not supported if using the same device. Not possible to lose one without losing the other.
     DAWN_TEST_UNSUPPORTED_IF(GetParam().mBackend->UseSameDevice());
 
+    // TODO(dawn/42241435): No shared texture memory extensions are supported yet.
+    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
+
     // crbug.com/358166479
     DAWN_SUPPRESS_TEST_IF(IsLinux() && IsNvidia() && IsVulkan());
 
@@ -2305,6 +2314,9 @@ TEST_P(SharedTextureMemoryTests, RenderThenLoseOrDestroyDeviceBeforeEndAccessThe
 // Reads should happen strictly after the writes. The final write should wait for the reads.
 TEST_P(SharedTextureMemoryTests, SeparateDevicesWriteThenConcurrentReadThenWrite) {
     DAWN_TEST_UNSUPPORTED_IF(!GetParam().mBackend->SupportsConcurrentRead());
+
+    // TODO(dawn/42241435): No shared texture memory extensions are supported yet.
+    DAWN_TEST_UNSUPPORTED_IF(IsOpenGLES());
 
     // crbug.com/358166479
     DAWN_SUPPRESS_TEST_IF(IsLinux() && IsNvidia() && IsVulkan());
@@ -2589,6 +2601,9 @@ TEST_P(SharedTextureMemoryTests, SameDeviceWriteThenConcurrentReadThenWrite) {
 
 // Test that textures created from SharedTextureMemory may perform sRGB reinterpretation.
 TEST_P(SharedTextureMemoryTests, SRGBReinterpretation) {
+    // Format reinterpretation is not available in compatibility mode.
+    DAWN_SUPPRESS_TEST_IF(IsCompatibilityMode());
+
     // crbug.com/358166479
     DAWN_SUPPRESS_TEST_IF(IsLinux() && IsNvidia() && IsVulkan());
 
@@ -2814,7 +2829,7 @@ TEST_P(SharedTextureMemoryVulkanTests, SingleFenceFeature) {
     wgpu::Adapter adapter(GetAdapter().Get());
     for (wgpu::FeatureName f : {
              wgpu::FeatureName::SharedFenceVkSemaphoreOpaqueFD,
-             wgpu::FeatureName::SharedFenceVkSemaphoreSyncFD,
+             wgpu::FeatureName::SharedFenceSyncFD,
              wgpu::FeatureName::SharedFenceVkSemaphoreZirconHandle,
          }) {
         if (adapter.HasFeature(f)) {

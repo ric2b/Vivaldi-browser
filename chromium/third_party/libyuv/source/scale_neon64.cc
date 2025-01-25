@@ -101,12 +101,12 @@ void ScaleRowDown4_NEON(const uint8_t* src_ptr,
                         uint8_t* dst_ptr,
                         int dst_width) {
   (void)src_stride;
-  asm volatile (
+  asm volatile(
       "1:                                        \n"
-      "ld4         {v0.8b,v1.8b,v2.8b,v3.8b}, [%0], #32 \n"  // src line 0
-      "subs        %w2, %w2, #8                  \n"  // 8 processed per loop
+      "ld4         {v0.16b,v1.16b,v2.16b,v3.16b}, [%0], #64 \n"  // src line 0
+      "subs        %w2, %w2, #16                 \n"  // 16 processed per loop
       "prfm        pldl1keep, [%0, 448]          \n"  // prefetch 7 lines ahead
-      "st1         {v2.8b}, [%1], #8             \n"
+      "st1         {v2.16b}, [%1], #16           \n"
       "b.gt        1b                            \n"
       : "+r"(src_ptr),   // %0
         "+r"(dst_ptr),   // %1
@@ -155,27 +155,42 @@ void ScaleRowDown4Box_NEON(const uint8_t* src_ptr,
       : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7");
 }
 
-// Down scale from 4 to 3 pixels. Use the neon multilane read/write
-// to load up the every 4th pixel into a 4 different registers.
-// Point samples 32 pixels to 24 pixels.
+static const uvec8 kShuf34_0 = {
+    0, 1, 3, 4, 5, 7, 8, 9, 11, 12, 13, 15, 16, 17, 19, 20,
+};
+static const uvec8 kShuf34_1 = {
+    5, 7, 8, 9, 11, 12, 13, 15, 16, 17, 19, 20, 21, 23, 24, 25,
+};
+static const uvec8 kShuf34_2 = {
+    11, 12, 13, 15, 16, 17, 19, 20, 21, 23, 24, 25, 27, 28, 29, 31,
+};
+
+// Down scale from 4 to 3 pixels. Point samples 64 pixels to 48 pixels.
 void ScaleRowDown34_NEON(const uint8_t* src_ptr,
                          ptrdiff_t src_stride,
                          uint8_t* dst_ptr,
                          int dst_width) {
   (void)src_stride;
-  asm volatile (
-      "1:                                        \n"
-      "ld4         {v0.8b,v1.8b,v2.8b,v3.8b}, [%0], #32 \n"  // src line 0
-      "subs        %w2, %w2, #24                 \n"
-      "mov         v2.16b, v3.16b                \n"  // order v0,v1,v2
-      "prfm        pldl1keep, [%0, 448]          \n"  // prefetch 7 lines ahead
-      "st3         {v0.8b,v1.8b,v2.8b}, [%1], #24 \n"
-      "b.gt        1b                            \n"
-      : "+r"(src_ptr),   // %0
-        "+r"(dst_ptr),   // %1
-        "+r"(dst_width)  // %2
-      :
-      : "memory", "cc", "v0", "v1", "v2", "v3");
+  asm volatile(
+      "ld1         {v29.16b}, [%[kShuf34_0]]                        \n"
+      "ld1         {v30.16b}, [%[kShuf34_1]]                        \n"
+      "ld1         {v31.16b}, [%[kShuf34_2]]                        \n"
+      "1:                                                           \n"
+      "ld1         {v0.16b,v1.16b,v2.16b,v3.16b}, [%[src_ptr]], #64 \n"
+      "subs        %w[width], %w[width], #48                        \n"
+      "tbl         v0.16b, {v0.16b, v1.16b}, v29.16b                \n"
+      "prfm        pldl1keep, [%[src_ptr], 448]                     \n"
+      "tbl         v1.16b, {v1.16b, v2.16b}, v30.16b                \n"
+      "tbl         v2.16b, {v2.16b, v3.16b}, v31.16b                \n"
+      "st1         {v0.16b,v1.16b,v2.16b}, [%[dst_ptr]], #48        \n"
+      "b.gt        1b                                               \n"
+      : [src_ptr] "+r"(src_ptr),      // %[src_ptr]
+        [dst_ptr] "+r"(dst_ptr),      // %[dst_ptr]
+        [width] "+r"(dst_width)       // %[width]
+      : [kShuf34_0] "r"(&kShuf34_0),  // %[kShuf34_0]
+        [kShuf34_1] "r"(&kShuf34_1),  // %[kShuf34_1]
+        [kShuf34_2] "r"(&kShuf34_2)   // %[kShuf34_2]
+      : "memory", "cc", "v0", "v1", "v2", "v3", "v29", "v30", "v31");
 }
 
 void ScaleRowDown34_0_Box_NEON(const uint8_t* src_ptr,
@@ -1160,21 +1175,20 @@ void ScaleARGBRowDown2_NEON(const uint8_t* src_ptr,
                             uint8_t* dst,
                             int dst_width) {
   (void)src_stride;
-  asm volatile (
-      "1:                                        \n"
-      // load 16 ARGB pixels with even pixels into q0/q2, odd into q1/q3
-      "ld4         {v0.4s,v1.4s,v2.4s,v3.4s}, [%0], #64 \n"
-      "subs        %w2, %w2, #8                  \n"  // 8 processed per loop
-      "mov         v2.16b, v3.16b                \n"
-      "prfm        pldl1keep, [%0, 448]          \n"  // prefetch 7 lines ahead
-      "st2         {v1.4s,v2.4s}, [%1], #32      \n"  // store 8 odd pixels
-      "b.gt        1b                            \n"
-      : "+r"(src_ptr),   // %0
-        "+r"(dst),       // %1
-        "+r"(dst_width)  // %2
+  asm volatile(
+      "1:                                                      \n"
+      "ld1         {v0.4s, v1.4s, v2.4s, v3.4s}, [%[src]], #64 \n"
+      "subs        %w[width], %w[width], #8                    \n"
+      "prfm        pldl1keep, [%[src], 448]                    \n"
+      "uzp2        v0.4s, v0.4s, v1.4s                         \n"
+      "uzp2        v1.4s, v2.4s, v3.4s                         \n"
+      "st1         {v0.4s, v1.4s}, [%[dst]], #32               \n"
+      "b.gt        1b                                          \n"
+      : [src] "+r"(src_ptr),     // %[src]
+        [dst] "+r"(dst),         // %[dst]
+        [width] "+r"(dst_width)  // %[width]
       :
-      : "memory", "cc", "v0", "v1", "v2", "v3"  // Clobber List
-  );
+      : "memory", "cc", "v0", "v1", "v2", "v3");
 }
 
 void ScaleARGBRowDown2Linear_NEON(const uint8_t* src_argb,
@@ -1182,23 +1196,24 @@ void ScaleARGBRowDown2Linear_NEON(const uint8_t* src_argb,
                                   uint8_t* dst_argb,
                                   int dst_width) {
   (void)src_stride;
-  asm volatile (
+  const uint8_t* src_argb1 = src_argb + 32;
+  asm volatile(
       "1:                                        \n"
-      // load 16 ARGB pixels with even pixels into q0/q2, odd into q1/q3
-      "ld4         {v0.4s,v1.4s,v2.4s,v3.4s}, [%0], #64 \n"
-      "subs        %w2, %w2, #8                  \n"  // 8 processed per loop
-
-      "urhadd      v0.16b, v0.16b, v1.16b        \n"  // rounding half add
-      "prfm        pldl1keep, [%0, 448]          \n"  // prefetch 7 lines ahead
-      "urhadd      v1.16b, v2.16b, v3.16b        \n"
-      "st2         {v0.4s,v1.4s}, [%1], #32      \n"  // store 8 pixels
-      "b.gt        1b                            \n"
-      : "+r"(src_argb),  // %0
-        "+r"(dst_argb),  // %1
-        "+r"(dst_width)  // %2
+      "ld2     {v0.4s, v1.4s}, [%[src]]          \n"
+      "add     %[src], %[src], #64               \n"
+      "ld2     {v2.4s, v3.4s}, [%[src1]]         \n"
+      "add     %[src1], %[src1], #64             \n"
+      "urhadd  v0.16b, v0.16b, v1.16b            \n"
+      "urhadd  v1.16b, v2.16b, v3.16b            \n"
+      "subs    %w[width], %w[width], #8          \n"
+      "st1     {v0.16b, v1.16b}, [%[dst]], #32   \n"
+      "b.gt    1b                                \n"
+      : [src] "+r"(src_argb),    // %[src]
+        [src1] "+r"(src_argb1),  // %[src1]
+        [dst] "+r"(dst_argb),    // %[dst]
+        [width] "+r"(dst_width)  // %[width]
       :
-      : "memory", "cc", "v0", "v1", "v2", "v3"  // Clobber List
-  );
+      : "memory", "cc", "v0", "v1", "v2", "v3");
 }
 
 void ScaleARGBRowDown2Box_NEON(const uint8_t* src_ptr,
@@ -1269,7 +1284,7 @@ void ScaleARGBRowDownEvenBox_NEON(const uint8_t* src_argb,
                                   int src_stepx,
                                   uint8_t* dst_argb,
                                   int dst_width) {
-  asm volatile (
+  asm volatile(
       "add         %1, %1, %0                    \n"
       "1:                                        \n"
       "ld1         {v0.8b}, [%0], %4             \n"  // Read 4 2x2 -> 2x1
@@ -1285,26 +1300,24 @@ void ScaleARGBRowDownEvenBox_NEON(const uint8_t* src_argb,
       "uaddl       v4.8h, v4.8b, v5.8b           \n"
       "uaddl       v6.8h, v6.8b, v7.8b           \n"
       "prfm        pldl1keep, [%0, 448]          \n"  // prefetch 7 lines ahead
-      "mov         v16.d[1], v0.d[1]             \n"  // ab_cd -> ac_bd
-      "mov         v0.d[1], v2.d[0]              \n"
-      "mov         v2.d[0], v16.d[1]             \n"
-      "mov         v16.d[1], v4.d[1]             \n"  // ef_gh -> eg_fh
-      "mov         v4.d[1], v6.d[0]              \n"
-      "mov         v6.d[0], v16.d[1]             \n"
+      "zip1        v1.2d, v0.2d, v2.2d           \n"
+      "zip2        v2.2d, v0.2d, v2.2d           \n"
+      "zip1        v5.2d, v4.2d, v6.2d           \n"
+      "zip2        v6.2d, v4.2d, v6.2d           \n"
       "prfm        pldl1keep, [%1, 448]          \n"
-      "add         v0.8h, v0.8h, v2.8h           \n"  // (a+b)_(c+d)
-      "add         v4.8h, v4.8h, v6.8h           \n"  // (e+f)_(g+h)
+      "add         v0.8h, v1.8h, v2.8h           \n"  // (a+b)_(c+d)
+      "add         v4.8h, v5.8h, v6.8h           \n"  // (e+f)_(g+h)
       "rshrn       v0.8b, v0.8h, #2              \n"  // first 2 pixels.
-      "rshrn2      v0.16b, v4.8h, #2             \n"  // next 2 pixels.
+      "rshrn       v1.8b, v4.8h, #2              \n"  // next 2 pixels.
       "subs        %w3, %w3, #4                  \n"  // 4 pixels per loop.
-      "st1         {v0.16b}, [%2], #16           \n"
+      "stp         d0, d1, [%2], #16             \n"
       "b.gt        1b                            \n"
       : "+r"(src_argb),                // %0
         "+r"(src_stride),              // %1
         "+r"(dst_argb),                // %2
         "+r"(dst_width)                // %3
       : "r"((int64_t)(src_stepx * 4))  // %4
-      : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v16");
+      : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7");
 }
 
 // TODO(Yang Zhang): Investigate less load instructions for

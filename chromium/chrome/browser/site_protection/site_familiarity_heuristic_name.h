@@ -21,7 +21,9 @@ enum class SiteFamiliarityHeuristicName {
   kSiteEngagementScoreGte10 = 6,
   kSiteEngagementScoreExists = 7,
   kNoVisitsToAnySiteMoreThanADayAgo = 8,
-  kMaxValue = kNoVisitsToAnySiteMoreThanADayAgo,
+  kGlobalAllowlistNotReady = 9,
+  kFamiliarLikelyPreviouslyUnfamiliar = 10,
+  kMaxValue = kFamiliarLikelyPreviouslyUnfamiliar,
 };
 
 // Subset of SiteFamiliarityHeuristicName for heuristics related to navigation
@@ -31,6 +33,7 @@ enum class SiteFamiliarityHistoryHeuristicName {
   kVisitedMoreThanADayAgo = 1,
   kVisitedMoreThanFourHoursAgo = 2,
   kNoVisitsToAnySiteMoreThanADayAgo = 3,
+  kVisitedMoreThanADayAgoPreviouslyUnfamiliar = 4,
 };
 
 }  // namespace site_protection

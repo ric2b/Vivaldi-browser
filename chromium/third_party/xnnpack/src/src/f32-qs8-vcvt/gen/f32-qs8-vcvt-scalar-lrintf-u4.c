@@ -19,17 +19,17 @@ void xnn_f32_qs8_vcvt_ukernel__scalar_lrintf_u4(
     size_t batch,
     const float* input,
     int8_t* output,
-    const union xnn_f32_qs8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_qs8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const float vscale = params->scalar_lrintf.scale;
-  const float voutput_min_less_zero_point = params->scalar_lrintf.output_min_less_zero_point;
-  const float voutput_max_less_zero_point = params->scalar_lrintf.output_max_less_zero_point;
-  const int32_t voutput_zero_point = params->scalar_lrintf.output_zero_point;
+  const float vscale = params->scalar.scale;
+  const float voutput_min_less_zero_point = (float) ((int32_t) -128 - (int32_t) params->scalar.output_zero_point);
+  const float voutput_max_less_zero_point = (float) ((int32_t) 127 - (int32_t) params->scalar.output_zero_point);
+  const int32_t voutput_zero_point = params->scalar.output_zero_point;
 
   for (; batch >= 4 * sizeof(float); batch -= 4 * sizeof(float)) {
     float vx0 = input[0];

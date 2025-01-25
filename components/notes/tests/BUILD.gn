@@ -7,6 +7,5 @@ source_set("notes") {
   ]
   deps = [
     "//base",
-    "//base:logging_buildflags"
   ]
 }

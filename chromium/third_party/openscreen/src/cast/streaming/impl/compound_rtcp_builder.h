@@ -10,10 +10,10 @@
 #include <utility>
 #include <vector>
 
-#include "cast/streaming/public/constants.h"
-#include "cast/streaming/public/frame_id.h"
 #include "cast/streaming/impl/rtcp_common.h"
 #include "cast/streaming/impl/rtp_defines.h"
+#include "cast/streaming/public/constants.h"
+#include "cast/streaming/public/frame_id.h"
 #include "platform/base/span.h"
 
 namespace openscreen::cast {
@@ -43,7 +43,7 @@ class CompoundRtcpBuilder {
   explicit CompoundRtcpBuilder(RtcpSession& session);
   ~CompoundRtcpBuilder();
 
-  // Gets/Sets the checkpoint |frame_id| that will be included in built RTCP
+  // Gets/Sets the checkpoint `frame_id` that will be included in built RTCP
   // packets. This value indicates to the sender that all of the packets for all
   // frames up to and including the given frame have been successfully received.
   FrameId checkpoint_frame() const { return checkpoint_frame_id_; }
@@ -74,25 +74,25 @@ class CompoundRtcpBuilder {
   // Include detailed feedback about wholly-received frames, whole missing
   // frames, and partially-received frames (specific missing packets) in ONLY
   // the next built RTCP packet. The data will be included in a best-effort
-  // fashion, depending on the size of the |buffer| passed to the next call to
+  // fashion, depending on the size of the `buffer` passed to the next call to
   // BuildPacket(). This replaces prior feedback data if BuildPacket() was not
   // called in the meantime (since only the most up-to-date version of the
   // Receiver's state is relevant to the Sender).
   //
   // The elements in the lists are assumed to be monotonically increasing:
-  // |packet_nacks| indicates specific packets that have not yet been received,
+  // `packet_nacks` indicates specific packets that have not yet been received,
   // or may use kAllPacketsLost to indicate that no packets have been received
-  // for a frame. |frame_acks| indicates which frames after the checkpoint frame
+  // for a frame. `frame_acks` indicates which frames after the checkpoint frame
   // have been fully received.
   void IncludeFeedbackInNextPacket(std::vector<PacketNack> packet_nacks,
                                    std::vector<FrameId> frame_acks);
 
-  // Builds a compound RTCP packet and returns the portion of the |buffer| that
+  // Builds a compound RTCP packet and returns the portion of the `buffer` that
   // was used. The buffer's size must be at least kRequiredBufferSize, but
   // should generally be the maximum packet size (see discussion in
   // rtp_defines.h), to avoid dropping any ACK/NACK feedback.
   //
-  // |send_time| specifies the when the resulting packet will be sent. This
+  // `send_time` specifies the when the resulting packet will be sent. This
   // should be monotonically increasing so the consuming side (the Sender) can
   // determine the chronological ordering of RTCP packets. The Sender might also
   // use this to estimate round-trip times over the network.
@@ -106,7 +106,7 @@ class CompoundRtcpBuilder {
 
  private:
   // Helper methods called by BuildPacket() to append one RTCP packet to the
-  // |buffer| that will ultimately contain a "compound RTCP packet."
+  // `buffer` that will ultimately contain a "compound RTCP packet."
   void AppendReceiverReportPacket(ByteBuffer& buffer);
   void AppendReceiverReferenceTimeReportPacket(Clock::time_point send_time,
                                                ByteBuffer& buffer);

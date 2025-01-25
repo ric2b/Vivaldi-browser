@@ -13,8 +13,8 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include <fp16/fp16.h>
 #include "xnnpack.h"
+#include "xnnpack/math.h"
 #include "xnnpack/node-type.h"
 #include "xnnpack/operator.h"
 #include "xnnpack/subgraph.h"
@@ -22,7 +22,7 @@
 
 using SpaceToDepth2DTestQS8 = UnaryTest<int8_t, int8_t, /*min_dim=*/4, /*max_dim=*/4>;
 using SpaceToDepth2DTestQU8 = UnaryTest<uint8_t, uint8_t, /*min_dim=*/4, /*max_dim=*/4>;
-using SpaceToDepth2DTestF16 = UnaryTest<uint16_t, uint16_t, /*min_dim=*/4, /*max_dim=*/4>;
+using SpaceToDepth2DTestF16 = UnaryTest<xnn_float16, xnn_float16, /*min_dim=*/4, /*max_dim=*/4>;
 using SpaceToDepth2DTestF32 = UnaryTest<float, float, /*min_dim=*/4, /*max_dim=*/4>;
 
 TEST_F(SpaceToDepth2DTestQS8, define)
@@ -228,8 +228,6 @@ TEST_F(SpaceToDepth2DTestQS8, matches_operator_api)
   size_t batch_size = dims[0];
 
   std::generate(input.begin(), input.end(), [&]() { return u8dist(rng); });
-  std::fill(operator_output.begin(), operator_output.end(), INT8_C(0xA5));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), INT8_C(0xA6));
 
   // Call operator API.
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
@@ -307,8 +305,6 @@ TEST_F(SpaceToDepth2DTestQU8, matches_operator_api)
   size_t batch_size = dims[0];
 
   std::generate(input.begin(), input.end(), [&]() { return u8dist(rng); });
-  std::fill(operator_output.begin(), operator_output.end(), UINT8_C(0xA5));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT8_C(0xA5));
 
   // Call operator API.
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
@@ -380,9 +376,7 @@ TEST_F(SpaceToDepth2DTestF16, matches_operator_api)
   size_t input_width = dims[2];
   size_t batch_size = dims[0];
 
-  std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
-  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
 
   // Call operator API.
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
@@ -454,8 +448,6 @@ TEST_F(SpaceToDepth2DTestF32, matches_operator_api)
   size_t batch_size = dims[0];
 
   std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
-  std::fill(operator_output.begin(), operator_output.end(), nanf(""));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), nanf(""));
 
   // Call operator API.
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));

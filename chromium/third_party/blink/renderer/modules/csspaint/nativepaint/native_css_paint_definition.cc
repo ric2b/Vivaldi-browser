@@ -49,7 +49,8 @@ Animation* NativeCssPaintDefinition::GetAnimationForProperty(
   // this element.
   unsigned count = 0;
   for (const auto& animation : element->GetElementAnimations()->Animations()) {
-    if (animation.key->CalculateAnimationPlayState() == Animation::kIdle ||
+    if (animation.key->CalculateAnimationPlayState() ==
+            V8AnimationPlayState::Enum::kIdle ||
         !animation.key->Affects(*element, property)) {
       continue;
     }
@@ -64,11 +65,11 @@ Animation* NativeCssPaintDefinition::GetAnimationForProperty(
   // type only. Fall back to the main thread if it is not composite:replace.
   const AnimationEffect* effect = compositable_animation->effect();
 
-  // TODO(crbug.com/1429770): Paint worklet animations do not presently work
-  // with positive delays, so don't composite them for the moment. This should
-  // be removed when the issue is resolved.
+  // TODO(crbug.com/1429770): Implement positive delay fix for bgcolor.
   if (effect->SpecifiedTiming().start_delay.AsTimeValue().InSecondsF() > 0.f) {
-    return nullptr;
+    if (property.PropertyID() != CSSPropertyID::kClipPath) {
+      return nullptr;
+    }
   }
 
   DCHECK(effect->IsKeyframeEffect());

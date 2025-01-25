@@ -6,7 +6,7 @@
 #include "base/no_destructor.h"
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 
-class ChromeBrowserState;
+class ProfileIOS;
 
 namespace vivaldi {
 
@@ -14,8 +14,7 @@ class VivaldiAccountManager;
 
 class VivaldiAccountManagerFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static VivaldiAccountManager* GetForBrowserState(
-      ChromeBrowserState* browser_state);
+  static VivaldiAccountManager* GetForProfile(ProfileIOS* profile);
   static VivaldiAccountManagerFactory* GetInstance();
 
  private:

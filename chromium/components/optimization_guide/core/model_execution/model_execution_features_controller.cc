@@ -16,6 +16,7 @@
 #include "components/optimization_guide/core/model_execution/feature_keys.h"
 #include "components/optimization_guide/core/model_execution/model_execution_features.h"
 #include "components/optimization_guide/core/model_execution/model_execution_prefs.h"
+#include "components/optimization_guide/core/model_execution/performance_class.h"
 #include "components/optimization_guide/core/optimization_guide_prefs.h"
 #include "components/optimization_guide/core/optimization_guide_switches.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
@@ -209,15 +210,23 @@ bool ModelExecutionFeaturesController::ShouldFeatureBeCurrentlyEnabledForUser(
 }
 
 bool ModelExecutionFeaturesController::
+    ShouldFeatureAllowModelExecutionForSignedInUser(
+        optimization_guide::UserVisibleFeatureKey feature) const {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  // Check common things like enterprise policy, etc. first. The basic feature
+  // with `allow_unsigned_user` true is more permissive. This check adds the
+  // additional requirement that user is signed in and allowed execution.
+  // This is needed by kHistorySearch feature to gate answer generation
+  // on account details while allowing all users (including unsigned users)
+  // access to basic embeddings search functionality.
+  return ShouldFeatureBeCurrentlyEnabledForUser(feature) &&
+         ShouldModelExecutionBeAllowedForUser();
+}
+
+bool ModelExecutionFeaturesController::
     ShouldFeatureBeCurrentlyAllowedForLogging(
         const MqlsFeatureMetadata* metadata) const {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  std::optional<UserVisibleFeatureKey> feature_key =
-      metadata->user_visible_feature_key();
-  if (feature_key && !ShouldFeatureBeCurrentlyEnabledForUser(*feature_key)) {
-    return false;
-  }
-
   // For dogfood users only, allow the relevant chrome://flags option to
   // override the default enterprise policy.
   bool has_logging_force_enabled =
@@ -248,16 +257,9 @@ ModelExecutionFeaturesController::GetCurrentUserValidityResult(
       !base::Contains(features_allowed_for_unsigned_user_, feature);
 
   if (require_account) {
-    // Sign-in check.
-    if (!is_signed_in_) {
-      return ModelExecutionFeaturesController::UserValidityResult::
-          kInvalidUnsignedUser;
-    }
-
-    // Check user account is allowed to use model execution, when signed-in.
-    if (!account_allows_model_execution_features_) {
-      return ModelExecutionFeaturesController::UserValidityResult::
-          kInvalidModelExecutionCapability;
+    UserValidityResult signin_checks_result = PerformSigninChecks();
+    if (signin_checks_result != UserValidityResult::kValid) {
+      return signin_checks_result;
     }
   }
 
@@ -274,6 +276,26 @@ ModelExecutionFeaturesController::GetCurrentUserValidityResult(
   return ModelExecutionFeaturesController::UserValidityResult::kValid;
 }
 
+ModelExecutionFeaturesController::UserValidityResult
+ModelExecutionFeaturesController::PerformSigninChecks() const {
+  // Sign-in check.
+  if (!is_signed_in_) {
+    return UserValidityResult::kInvalidUnsignedUser;
+  }
+
+  // Check user account is allowed to use model execution, when signed-in.
+  if (!account_allows_model_execution_features_) {
+    return UserValidityResult::kInvalidModelExecutionCapability;
+  }
+
+  return UserValidityResult::kValid;
+}
+
+bool ModelExecutionFeaturesController::ShouldModelExecutionBeAllowedForUser()
+    const {
+  return PerformSigninChecks() == UserValidityResult::kValid;
+}
+
 ModelExecutionFeaturesController::SettingsVisibilityResult
 ModelExecutionFeaturesController::ShouldHideHistorySearch() const {
 #if !BUILDFLAG(BUILD_TFLITE_WITH_XNNPACK)
@@ -285,20 +307,12 @@ ModelExecutionFeaturesController::ShouldHideHistorySearch() const {
   }
 
   // Performance class check.
-  std::string allowed_classes_string =
-      features::internal::kPerformanceClassListForHistorySearch.Get();
-  if (allowed_classes_string == "*" || allowed_classes_string.empty()) {
-    return SettingsVisibilityResult::kUnknown;
+  if (!IsPerformanceClassCompatible(
+          features::internal::kPerformanceClassListForHistorySearch.Get(),
+          PerformanceClassFromPref(*local_state_))) {
+    return SettingsVisibilityResult::kNotVisibleHardwareUnsupported;
   }
-
-  int perf_class = local_state_->GetInteger(
-      model_execution::prefs::localstate::kOnDevicePerformanceClass);
-  std::vector<std::string_view> allowed_classes_list = base::SplitStringPiece(
-      allowed_classes_string, ",", base::WhitespaceHandling::TRIM_WHITESPACE,
-      base::SplitResult::SPLIT_WANT_NONEMPTY);
-  return base::Contains(allowed_classes_list, base::ToString(perf_class))
-             ? SettingsVisibilityResult::kUnknown
-             : SettingsVisibilityResult::kNotVisibleHardwareUnsupported;
+  return SettingsVisibilityResult::kUnknown;
 #endif
 }
 
@@ -507,6 +521,11 @@ void ModelExecutionFeaturesController::ResetInvalidFeaturePrefs() {
           static_cast<int>(prefs::FeatureOptInState::kNotInitialized));
     }
   }
+}
+
+void ModelExecutionFeaturesController::AllowUnsignedUserForTesting(
+    UserVisibleFeatureKey feature) {
+  features_allowed_for_unsigned_user_.insert(feature);
 }
 
 void ModelExecutionFeaturesController::OnMainToggleSettingStatePrefChanged() {

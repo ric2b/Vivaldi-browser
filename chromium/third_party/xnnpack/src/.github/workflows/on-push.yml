@@ -1,19 +1,11 @@
 name: Test Latest Push
+
 on:
   push:
-    paths:
-      - '**.S'
-      - '**.c'
-      - '**.cc'
-      - '**.h'
-      - 'BUILD.bazel'
-      - 'build_config/BUILD.bazel'
-      - '**.bzl'
-      - 'CMakeLists.txt'
-      - 'cmake/**'
-      - 'scripts/build-*.sh'
-      - '.github/**/*.yml'
-      - 'WORKSPACE'
+    branches-ignore:
+      - master
+  workflow_dispatch:
+
 jobs:
   build-and-test:
     uses: ./.github/workflows/build.yml

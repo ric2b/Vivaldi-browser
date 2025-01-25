@@ -39,9 +39,8 @@ typedef void (^ProceduralBlockWithBlockWithItemArray)(
   if (self) {
     DCHECK(browser);
     self.browser = browser;
-    ChromeBrowserState* browserState = browser->GetBrowserState();
-    self.notesModel =
-        vivaldi::NotesModelFactory::GetForBrowserState(browserState);
+    ProfileIOS* profile = browser->GetProfile();
+    self.notesModel = vivaldi::NotesModelFactory::GetForProfile(profile);
   }
   return self;
 }

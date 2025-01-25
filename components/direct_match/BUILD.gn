@@ -1,5 +1,9 @@
 # Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
 
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
 source_set("direct_match") {
   sources = [
     "direct_match_service.cc",
@@ -26,6 +30,19 @@ static_library("browser") {
     ":direct_match",
     "//base",
   ]
+  if (is_android) {
+    sources += [
+      "direct_match_bridge.h",
+      "direct_match_bridge.cc"
+    ]
+
+    deps += [
+        "//chrome/android:jni_headers",
+        "//chrome/android:chrome_jni_headers",
+        "//vivaldi/app:vivaldi_native_resources",
+        "//content/public/browser",
+     ]
+  }
 }
 
 source_set("unit_tests") {

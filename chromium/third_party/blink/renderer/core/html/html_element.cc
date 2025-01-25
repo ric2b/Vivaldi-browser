@@ -92,7 +92,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_label_element.h"
-#include "third_party/blink/renderer/core/html/forms/html_listbox_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/forms/labels_node_list.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 #include "third_party/blink/renderer/core/html/html_bdi_element.h"
@@ -662,6 +662,8 @@ AttributeTriggers* HTMLElement::TriggersForAttributeName(
        nullptr},
 
       // Begin ARIA attributes.
+      {html_names::kAriaActionsAttr, WebFeature::kARIAActionsAttribute,
+       kNoEvent, nullptr},
       {html_names::kAriaActivedescendantAttr,
        WebFeature::kARIAActiveDescendantAttribute, kNoEvent, nullptr},
       {html_names::kAriaAtomicAttr, WebFeature::kARIAAtomicAttribute, kNoEvent,
@@ -1205,14 +1207,6 @@ PopoverValueType GetPopoverTypeFromAttributeValue(const AtomicString& value) {
 }  // namespace
 
 void HTMLElement::UpdatePopoverAttribute(const AtomicString& value) {
-  if (auto* listbox = DynamicTo<HTMLListboxElement>(this)) {
-    if (listbox->OwnerSelectList()) {
-      CHECK(RuntimeEnabledFeatures::HTMLSelectListElementEnabled());
-      // Selectlist listboxes manage their own popover state.
-      return;
-    }
-  }
-
   PopoverValueType type = GetPopoverTypeFromAttributeValue(value);
   if (type == PopoverValueType::kManual &&
       !EqualIgnoringASCIICase(value, keywords::kManual)) {
@@ -1241,6 +1235,16 @@ void HTMLElement::UpdatePopoverAttribute(const AtomicString& value) {
   }
   if (type == PopoverValueType::kNone) {
     if (HasPopoverAttribute()) {
+      if (RuntimeEnabledFeatures::CustomizableSelectEnabled() &&
+          !RuntimeEnabledFeatures::PopoverAnchorRelationshipsEnabled()) {
+        // CustomizableSelect allows the implicit anchor to be set but only for
+        // the UA ::picker(select) popover, which will never have its popover
+        // attribute removed and therefore never hit this code path.
+        DCHECK_EQ(implicitAnchor(), nullptr);
+      }
+      if (RuntimeEnabledFeatures::PopoverAnchorRelationshipsEnabled()) {
+        SetImplicitAnchor(nullptr);
+      }
       // If the popover attribute is being removed, remove the PopoverData.
       RemovePopoverData();
     }
@@ -1258,7 +1262,7 @@ void HTMLElement::UpdatePopoverAttribute(const AtomicString& value) {
       UseCounter::Count(GetDocument(), WebFeature::kPopoverTypeManual);
       break;
     case PopoverValueType::kNone:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
   CHECK_EQ(type, GetPopoverTypeFromAttributeValue(
                      FastGetAttribute(html_names::kPopoverAttr)));
@@ -1320,12 +1324,17 @@ bool HTMLElement::IsPopoverReady(PopoverTriggerAction action,
     }
   };
 
-  auto* listbox = DynamicTo<HTMLListboxElement>(this);
-  bool is_selectlist_listbox = listbox && listbox->OwnerSelectList();
-  if (!HasPopoverAttribute() && !is_selectlist_listbox) {
+  if (!HasPopoverAttribute()) {
     maybe_throw_exception(DOMExceptionCode::kNotSupportedError,
                           "Not supported on elements that do not have a valid "
                           "value for the 'popover' attribute.");
+    return false;
+  }
+  if (!GetDocument().IsActive() &&
+      RuntimeEnabledFeatures::TopLayerInactiveDocumentExceptionsEnabled()) {
+    maybe_throw_exception(
+        DOMExceptionCode::kInvalidStateError,
+        "Invalid for popovers within documents that are not fully active.");
     return false;
   }
   if (action == PopoverTriggerAction::kShow &&
@@ -1593,7 +1602,20 @@ void HTMLElement::ShowPopoverInternal(Element* invoker,
   // Make the popover match `:popover-open` and remove `display:none` styling:
   GetPopoverData()->setVisibilityState(PopoverVisibilityState::kShowing);
   GetPopoverData()->setInvoker(invoker);
+  if (RuntimeEnabledFeatures::PopoverAnchorRelationshipsEnabled() ||
+      (RuntimeEnabledFeatures::CustomizableSelectEnabled() &&
+       HTMLSelectElement::IsPopoverForAppearanceBase(this))) {
+    SetImplicitAnchor(invoker);
+  }
+
   PseudoStateChanged(CSSSelector::kPseudoPopoverOpen);
+  if (HTMLSelectElement::IsPopoverForAppearanceBase(this)) {
+    // If this element is the ::picker(select) popover, then we need to
+    // invalidate the select element's :open pseudo-class at the same time as
+    // :popover-open https://issues.chromium.org/issues/375004874
+    OwnerShadowHost()->PseudoStateChanged(CSSSelector::kPseudoOpen);
+  }
+
   CHECK(!original_document.AllOpenPopovers().Contains(this));
   original_document.AllOpenPopovers().insert(this);
 
@@ -1697,8 +1719,7 @@ void HTMLElement::HideAllPopoversUntil(
       }
       last_to_hide = *it;
     }
-    NOTREACHED_IN_MIGRATION() << "ancestor must be in the stack";
-    return nullptr;
+    NOTREACHED() << "ancestor must be in the stack";
   };
 
   auto hide_stack_until = [&find_last_to_hide, &focus_behavior,
@@ -1902,7 +1923,15 @@ void HTMLElement::HidePopoverInternal(
 
   // Re-apply display:none, and stop matching `:popover-open`.
   GetPopoverData()->setVisibilityState(PopoverVisibilityState::kHidden);
+
   PseudoStateChanged(CSSSelector::kPseudoPopoverOpen);
+  if (HTMLSelectElement::IsPopoverForAppearanceBase(this)) {
+    // If this element is the ::picker(select) popover, then we need to
+    // invalidate the select element's :open pseudo-class at the same time as
+    // :popover-open https://issues.chromium.org/issues/375004874
+    OwnerShadowHost()->PseudoStateChanged(CSSSelector::kPseudoOpen);
+  }
+
   document.AllOpenPopovers().erase(this);
 
   Element* previously_focused_element =
@@ -1916,15 +1945,6 @@ void HTMLElement::HidePopoverInternal(
       previously_focused_element->Focus(FocusParams(
           SelectionBehaviorOnFocus::kRestore, mojom::blink::FocusType::kScript,
           /*capabilities=*/nullptr, focus_options));
-    }
-  }
-
-  if (auto* selectlist =
-          DynamicTo<HTMLSelectListElement>(internalImplicitAnchor())) {
-    // internalImplicitAnchor() is set on both the <selectlist> listbox
-    // and the <selectlist> autofill preview popover.
-    if (selectlist->ListBoxPart() == this) {
-      selectlist->ListboxWasClosed();
     }
   }
 
@@ -2043,7 +2063,9 @@ const HTMLElement* NearestTargetPopoverForInvoker(
         if (!form_element) {
           return nullptr;
         }
-        auto* target_element = form_element->commandForElement();
+        auto* button_element = DynamicTo<HTMLButtonElement>(form_element);
+        auto* target_element =
+            button_element ? button_element->commandForElement() : nullptr;
 
         return target_element
                    ? DynamicTo<HTMLElement>(target_element)
@@ -2355,16 +2377,22 @@ void HTMLElement::HoveredElementChanged(Element* old_element,
   }
 }
 
-void HTMLElement::SetInternalImplicitAnchor(HTMLElement* element) {
-  CHECK(RuntimeEnabledFeatures::HTMLSelectListElementEnabled() ||
-        RuntimeEnabledFeatures::StylableSelectEnabled());
+void HTMLElement::SetImplicitAnchor(Element* element) {
+  CHECK(RuntimeEnabledFeatures::CustomizableSelectEnabled() ||
+        RuntimeEnabledFeatures::PopoverAnchorRelationshipsEnabled());
   CHECK(HasPopoverAttribute());
-  GetPopoverData()->setInternalImplicitAnchor(element);
+  if (auto* old_implicit_anchor =
+          GetPopoverData() ? GetPopoverData()->implicitAnchor() : nullptr) {
+    old_implicit_anchor->DecrementImplicitlyAnchoredElementCount();
+  }
+  GetPopoverData()->setImplicitAnchor(element);
+  if (element) {
+    element->IncrementImplicitlyAnchoredElementCount();
+  }
 }
 
-HTMLElement* HTMLElement::internalImplicitAnchor() const {
-  return GetPopoverData() ? GetPopoverData()->internalImplicitAnchor()
-                          : nullptr;
+Element* HTMLElement::implicitAnchor() const {
+  return GetPopoverData() ? GetPopoverData()->implicitAnchor() : nullptr;
 }
 
 bool HTMLElement::DispatchFocusEvent(
@@ -2375,9 +2403,9 @@ bool HTMLElement::DispatchFocusEvent(
                                      source_capabilities);
 }
 
-bool HTMLElement::IsValidCommand(HTMLElement& invoker,
-                                 CommandEventType command) {
-  return Element::IsValidCommand(invoker, command) ||
+bool HTMLElement::IsValidBuiltinCommand(HTMLElement& invoker,
+                                        CommandEventType command) {
+  return Element::IsValidBuiltinCommand(invoker, command) ||
          command == CommandEventType::kTogglePopover ||
          command == CommandEventType::kHidePopover ||
          command == CommandEventType::kShowPopover ||
@@ -2389,7 +2417,7 @@ bool HTMLElement::IsValidCommand(HTMLElement& invoker,
 
 bool HTMLElement::HandleCommandInternal(HTMLElement& invoker,
                                         CommandEventType command) {
-  CHECK(IsValidCommand(invoker, command));
+  CHECK(IsValidBuiltinCommand(invoker, command));
 
   if (Element::HandleCommandInternal(invoker, command)) {
     return true;
@@ -2436,31 +2464,10 @@ bool HTMLElement::HandleCommandInternal(HTMLElement& invoker,
         /*exception_state=*/nullptr);
     return true;
   } else if (can_show) {
-    // TODO(crbug.com/1121840)
-    // HandleCommandInternal is called for both `popovertarget` and
-    // `commandfor`. `popovertarget` has one small additional behavior
-    // though; a `<selectlist>` can have a `popovertarget` button. The behavior
-    // for `<selectlist>` for `commandfor` should be handled in
-    // `HTMLSelectListElement::HandleCommandInternal`, but the `popovertarget`
-    // logic follows a slightly different path, and so for now lives here.
-    // The logic checks to see if the invoker was a popovertarget invoker that
-    // is intending to invoke a selectlist element, and opens the ListBox in
-    // that case.
-    auto* button = DynamicTo<HTMLButtonElement>(invoker);
-    HTMLSelectListElement* selectlist =
-        button && button->popoverTargetElement().popover &&
-                RuntimeEnabledFeatures::HTMLSelectListElementEnabled()
-            ? button->OwnerSelectList()
-            : nullptr;
-    if (selectlist) {
-      if (!selectlist->IsDisabledFormControl()) {
-        selectlist->OpenListbox();
-        return true;
-      }
-    } else {
-      InvokePopover(invoker);
-      return true;
-    }
+    // TODO(crbug.com/1121840) HandleCommandInternal is called for both
+    // `popovertarget` and `commandfor`.
+    InvokePopover(invoker);
+    return true;
   }
 
   if (!RuntimeEnabledFeatures::HTMLInvokeActionsV2Enabled()) {
@@ -2505,7 +2512,6 @@ bool HTMLElement::HandleCommandInternal(HTMLElement& invoker,
 }
 
 const AtomicString& HTMLElement::autocapitalize() const {
-  DEFINE_STATIC_LOCAL(const AtomicString, kOff, ("off"));
   DEFINE_STATIC_LOCAL(const AtomicString, kNone, ("none"));
   DEFINE_STATIC_LOCAL(const AtomicString, kCharacters, ("characters"));
   DEFINE_STATIC_LOCAL(const AtomicString, kWords, ("words"));
@@ -2516,8 +2522,9 @@ const AtomicString& HTMLElement::autocapitalize() const {
     return g_empty_atom;
 
   if (EqualIgnoringASCIICase(value, kNone) ||
-      EqualIgnoringASCIICase(value, kOff))
+      EqualIgnoringASCIICase(value, keywords::kOff)) {
     return kNone;
+  }
   if (EqualIgnoringASCIICase(value, kCharacters))
     return kCharacters;
   if (EqualIgnoringASCIICase(value, kWords))

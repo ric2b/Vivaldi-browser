@@ -20,8 +20,6 @@ const messages: Freestyler.ChatMessage[] = [
   },
   {
     entity: Freestyler.ChatMessageEntity.MODEL,
-    suggestingFix: true,
-    aborted: false,
     steps: [
       {
         isLoading: false,
@@ -44,19 +42,21 @@ const component = new Freestyler.FreestylerChatUi({
   onTextSubmit: noop,
   onInspectElementClick: noop,
   onFeedbackSubmit: noop,
-  onAcceptConsentClick: noop,
   onCancelClick: noop,
-  onFixThisIssueClick: noop,
+  onContextClick: noop,
+  onNewConversation: noop,
   inspectElementToggled: false,
   state: Freestyler.State.CHAT_VIEW,
   aidaAvailability: Host.AidaClient.AidaAccessPreconditions.AVAILABLE,
   messages,
-  selectedElement: {} as unknown as SDK.DOMModel.DOMNode,
-  selectedNetworkRequest: {} as unknown as SDK.NetworkRequest.NetworkRequest,
+  selectedContext: new Freestyler.NodeContext({} as unknown as SDK.DOMModel.DOMNode),
   agentType: Freestyler.AgentType.FREESTYLER,
   isLoading: false,
   canShowFeedbackForm: false,
   userInfo: {},
+  blockedByCrossOrigin: false,
+  isReadOnly: false,
+  stripLinks: false,
 });
 
 document.getElementById('container')?.appendChild(component);

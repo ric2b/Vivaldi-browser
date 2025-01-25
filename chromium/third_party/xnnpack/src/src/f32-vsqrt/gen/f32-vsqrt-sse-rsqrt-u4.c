@@ -40,7 +40,7 @@ void xnn_f32_vsqrt_ukernel__sse_rsqrt_u4(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_sqrt_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -48,8 +48,8 @@ void xnn_f32_vsqrt_ukernel__sse_rsqrt_u4(
   assert(output != NULL);
 
   // Constants for the Newton-Raphson iteration.
-  const __m128 vthree = _mm_load_ps(params->sse.three);
-  const __m128 vhalf = _mm_load_ps(params->sse.half);
+  const __m128 vthree = _mm_set1_ps(3.0f);
+  const __m128 vhalf = _mm_set1_ps(0.5f);
 
   for (; batch >= 4 * sizeof(float); batch -= 4 * sizeof(float)) {
     const __m128 vx = _mm_loadu_ps(input);

@@ -595,8 +595,9 @@ DISPOSITION:descriptions=0
 DISPOSITION:metadata=0
 DISPOSITION:dependent=0
 DISPOSITION:still_image=0
-TAG:E=mc²
+DISPOSITION:multilayer=0
 TAG:encoder=Lavc pcm_s16le
+TAG:E=mc²
 [/STREAM]
 [STREAM]
 index=1
@@ -655,9 +656,10 @@ DISPOSITION:descriptions=0
 DISPOSITION:metadata=0
 DISPOSITION:dependent=0
 DISPOSITION:still_image=0
+DISPOSITION:multilayer=0
+TAG:encoder=Lavc rawvideo
 TAG:title=foobar
 TAG:duration_ts=field-and-tags-conflict-attempt
-TAG:encoder=Lavc rawvideo
 [/STREAM]
 [STREAM]
 index=2
@@ -716,6 +718,7 @@ DISPOSITION:descriptions=0
 DISPOSITION:metadata=0
 DISPOSITION:dependent=0
 DISPOSITION:still_image=0
+DISPOSITION:multilayer=0
 TAG:encoder=Lavc rawvideo
 [/STREAM]
 [FORMAT]

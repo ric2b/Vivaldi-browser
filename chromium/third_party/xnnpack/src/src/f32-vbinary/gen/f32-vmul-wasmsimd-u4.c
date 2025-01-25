@@ -20,14 +20,13 @@ void xnn_f32_vmul_ukernel__wasmsimd_u4(
     const float* input_a,
     const float* input_b,
     float* output,
-    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
   assert(input_a != NULL);
   assert(input_b != NULL);
   assert(output != NULL);
-
 
   for (; batch >= 4 * sizeof(float); batch -= 4 * sizeof(float)) {
     const v128_t va = wasm_v128_load(input_a);
@@ -38,7 +37,6 @@ void xnn_f32_vmul_ukernel__wasmsimd_u4(
 
     v128_t vacc = wasm_f32x4_mul(va, vb);
 
-
     wasm_v128_store(output, vacc);
     output += 4;
   }
@@ -47,7 +45,6 @@ void xnn_f32_vmul_ukernel__wasmsimd_u4(
     const v128_t vb = wasm_v128_load(input_b);
 
     v128_t vacc = wasm_f32x4_mul(va, vb);
-
 
     if (batch & (2 * sizeof(float))) {
       wasm_v128_store64_lane(output, vacc, 0);

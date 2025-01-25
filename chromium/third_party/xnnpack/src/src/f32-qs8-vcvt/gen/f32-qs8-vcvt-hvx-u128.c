@@ -16,18 +16,17 @@ void xnn_f32_qs8_vcvt_ukernel__hvx_u128(
     size_t batch,
     const float* input,
     int8_t* output,
-    const union xnn_f32_qs8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f32_qs8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const HVX_Vector vscale = xnn_set1_f32(params->hvx.scale);
-  const HVX_Vector vmagic_bias = xnn_set1_f32(params->hvx.magic_bias);
-  const HVX_Vector vmagic_bias_less_zero_point = Q6_V_vsplat_R(*((int32_t *) &params->hvx.magic_bias_less_zero_point));
-  const HVX_Vector voutput_min = Q6_Vb_vsplat_R(*((int8_t *) &params->hvx.output_min));
-  const HVX_Vector voutput_max = Q6_Vb_vsplat_R(*((int8_t *) &params->hvx.output_max));
+  const HVX_Vector vscale = xnn_set1_f32(params->scalar.scale);
+  const HVX_Vector vmagic_bias = xnn_set1_f32(12582912.0f);
+  const HVX_Vector vmagic_bias_less_zero_point = Q6_V_vsplat_R(INT32_C(0x4B400000) - (int32_t) params->scalar.output_zero_point);
+  XNN_FORCE_REALIZATION(vmagic_bias);
   for (; batch >= 128 * sizeof(float); batch -= 128 * sizeof(float)) {
     HVX_Vector vx0 = xnn_loadu_f32(input);
     HVX_Vector vx1 = xnn_loadu_f32(input + 32);
@@ -52,9 +51,6 @@ void xnn_f32_qs8_vcvt_ukernel__hvx_u128(
     // narrowing 16-bit to 8-bit
     HVX_Vector vy0 = Q6_Vb_vpack_VhVh_sat(vacc_h1, vacc_h0);
 
-    vy0 = Q6_Vb_vmax_VbVb(voutput_min, vy0);
-    vy0 = Q6_Vb_vmin_VbVb(voutput_max, vy0);
-
     *((HVX_UVector *) output) = vy0;
     output += 128;
   }
@@ -69,9 +65,6 @@ void xnn_f32_qs8_vcvt_ukernel__hvx_u128(
     const HVX_Vector vacc_h = Q6_Vh_vpack_VwVw_sat(vacc, vacc);
 
     HVX_Vector vy = Q6_Vb_vpack_VhVh_sat(vacc_h, vacc_h);
-
-    vy = Q6_Vb_vmax_VbVb(voutput_min, vy);
-    vy = Q6_Vb_vmin_VbVb(voutput_max, vy);
 
     Q6_V_vstu_variable(output, 32, vy);
     output += 32;
@@ -88,9 +81,6 @@ void xnn_f32_qs8_vcvt_ukernel__hvx_u128(
     const HVX_Vector vacc_h = Q6_Vh_vpack_VwVw_sat(vacc, vacc);
 
     HVX_Vector vy = Q6_Vb_vpack_VhVh_sat(vacc_h, vacc_h);
-
-    vy = Q6_Vb_vmax_VbVb(voutput_min, vy);
-    vy = Q6_Vb_vmin_VbVb(voutput_max, vy);
 
     // Since the output data type is int8_t,
     // we simply determine the number of elements using batch >> 2

@@ -20,9 +20,10 @@
 
 #include "libavutil/random_seed.h"
 #include "libavutil/opt.h"
+#include "libavutil/vulkan_spirv.h"
 #include "vulkan_filter.h"
-#include "vulkan_spirv.h"
-#include "internal.h"
+
+#include "filters.h"
 #include "framesync.h"
 #include "video.h"
 
@@ -31,10 +32,9 @@ typedef struct OverlayVulkanContext {
     FFFrameSync fs;
 
     int initialized;
-    FFVulkanPipeline pl;
     FFVkExecPool e;
     FFVkQueueFamilyCtx qf;
-    FFVkSPIRVShader shd;
+    FFVulkanShader shd;
     VkSampler sampler;
 
     /* Push constants / options */
@@ -91,7 +91,7 @@ static av_cold int init_filter(AVFilterContext *ctx)
     const int planes = av_pix_fmt_count_planes(s->vkctx.output_format);
     const int ialpha = av_pix_fmt_desc_get(s->vkctx.input_format)->flags & AV_PIX_FMT_FLAG_ALPHA;
     const AVPixFmtDescriptor *pix_desc = av_pix_fmt_desc_get(s->vkctx.output_format);
-    FFVkSPIRVShader *shd = &s->shd;
+    FFVulkanShader *shd = &s->shd;
     FFVkSPIRVCompiler *spv;
     FFVulkanDescriptorSetBinding *desc;
 
@@ -104,10 +104,11 @@ static av_cold int init_filter(AVFilterContext *ctx)
     ff_vk_qf_init(vkctx, &s->qf, VK_QUEUE_COMPUTE_BIT);
     RET(ff_vk_exec_pool_init(vkctx, &s->qf, &s->e, s->qf.nb_queues*4, 0, 0, 0, NULL));
     RET(ff_vk_init_sampler(vkctx, &s->sampler, 1, VK_FILTER_NEAREST));
-    RET(ff_vk_shader_init(&s->pl, &s->shd, "overlay_compute",
-                          VK_SHADER_STAGE_COMPUTE_BIT, 0));
-
-    ff_vk_shader_set_compute_sizes(&s->shd, 32, 32, 1);
+    RET(ff_vk_shader_init(vkctx, &s->shd, "overlay",
+                          VK_SHADER_STAGE_COMPUTE_BIT,
+                          NULL, 0,
+                          32, 32, 1,
+                          0));
 
     GLSLC(0, layout(push_constant, std430) uniform pushConstants {        );
     GLSLC(1,    ivec2 o_offset[3];                                        );
@@ -115,8 +116,8 @@ static av_cold int init_filter(AVFilterContext *ctx)
     GLSLC(0, };                                                           );
     GLSLC(0,                                                              );
 
-    ff_vk_add_push_constant(&s->pl, 0, sizeof(s->opts),
-                            VK_SHADER_STAGE_COMPUTE_BIT);
+    ff_vk_shader_add_push_const(&s->shd, 0, sizeof(s->opts),
+                                VK_SHADER_STAGE_COMPUTE_BIT);
 
     desc = (FFVulkanDescriptorSetBinding []) {
         {
@@ -138,7 +139,7 @@ static av_cold int init_filter(AVFilterContext *ctx)
         {
             .name       = "output_img",
             .type       = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-            .mem_layout = ff_vk_shader_rep_fmt(s->vkctx.output_format),
+            .mem_layout = ff_vk_shader_rep_fmt(s->vkctx.output_format, FF_VK_REP_FLOAT),
             .mem_quali  = "writeonly",
             .dimensions = 2,
             .elems      = planes,
@@ -146,7 +147,7 @@ static av_cold int init_filter(AVFilterContext *ctx)
         },
     };
 
-    RET(ff_vk_pipeline_descriptor_set_add(vkctx, &s->pl, shd, desc, 3, 0, 0));
+    RET(ff_vk_shader_add_descriptor_set(vkctx, &s->shd, desc, 3, 0, 0));
 
     GLSLD(   overlay_noalpha                                              );
     GLSLD(   overlay_alpha                                                );
@@ -162,12 +163,11 @@ static av_cold int init_filter(AVFilterContext *ctx)
     GLSLC(1,     }                                                        );
     GLSLC(0, }                                                            );
 
-    RET(spv->compile_shader(spv, ctx, shd, &spv_data, &spv_len, "main",
+    RET(spv->compile_shader(vkctx, spv, shd, &spv_data, &spv_len, "main",
                             &spv_opaque));
-    RET(ff_vk_shader_create(vkctx, shd, spv_data, spv_len, "main"));
+    RET(ff_vk_shader_link(vkctx, shd, spv_data, spv_len, "main"));
 
-    RET(ff_vk_init_compute_pipeline(vkctx, &s->pl, shd));
-    RET(ff_vk_exec_pipeline_register(vkctx, &s->e, &s->pl));
+    RET(ff_vk_shader_register_exec(vkctx, &s->e, &s->shd));
 
     s->opts.o_offset[0] = s->overlay_x;
     s->opts.o_offset[1] = s->overlay_y;
@@ -232,7 +232,7 @@ static int overlay_vulkan_blend(FFFrameSync *fs)
         goto fail;
     }
 
-    RET(ff_vk_filter_process_Nin(&s->vkctx, &s->e, &s->pl,
+    RET(ff_vk_filter_process_Nin(&s->vkctx, &s->e, &s->shd,
                                  out, (AVFrame *[]){ input_main, input_overlay }, 2,
                                  s->sampler, &s->opts, sizeof(s->opts)));
 
@@ -287,7 +287,6 @@ static void overlay_vulkan_uninit(AVFilterContext *avctx)
     FFVulkanFunctions *vk = &vkctx->vkfn;
 
     ff_vk_exec_pool_free(vkctx, &s->e);
-    ff_vk_pipeline_free(vkctx, &s->pl);
     ff_vk_shader_free(vkctx, &s->shd);
 
     if (s->sampler)

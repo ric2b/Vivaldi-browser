@@ -97,8 +97,7 @@ network::mojom::CSPDirectiveName LinkAsAttributeToCSPDirective(
     case network::mojom::LinkAsAttribute::kFetch:
       return network::mojom::CSPDirectiveName::ConnectSrc;
   }
-  NOTREACHED_IN_MIGRATION();
-  return network::mojom::CSPDirectiveName::Unknown;
+  NOTREACHED();
 }
 
 bool CheckContentSecurityPolicyForPreload(
@@ -117,8 +116,9 @@ bool CheckContentSecurityPolicyForPreload(
            network::CSPFallbackDirective(effective_directive, directive)) {
     for (auto& policy : content_security_policies) {
       const auto& it = policy->directives.find(effective_directive);
-      if (it == policy->directives.end())
+      if (it == policy->directives.end()) {
         continue;
+      }
 
       if (!network::CheckCSPSourceList(directive, *it->second, link->href,
                                        *(policy->self_origin),
@@ -174,8 +174,7 @@ network::mojom::RequestMode CalculateRequestMode(
     case network::mojom::CrossOriginAttribute::kUseCredentials:
       return network::mojom::RequestMode::kCors;
   }
-  NOTREACHED_IN_MIGRATION();
-  return network::mojom::RequestMode::kSameOrigin;
+  NOTREACHED();
 }
 
 network::mojom::CredentialsMode CalculateCredentialsMode(
@@ -194,8 +193,7 @@ network::mojom::CredentialsMode CalculateCredentialsMode(
     case network::mojom::CrossOriginAttribute::kAnonymous:
       return network::mojom::CredentialsMode::kSameOrigin;
   }
-  NOTREACHED_IN_MIGRATION();
-  return network::mojom::CredentialsMode::kOmit;
+  NOTREACHED();
 }
 
 }  // namespace
@@ -253,8 +251,9 @@ bool NavigationEarlyHintsManager::PreconnectEntry::operator==(
 
 bool NavigationEarlyHintsManager::PreconnectEntry::operator<(
     const PreconnectEntry& other) const {
-  if (origin == other.origin)
+  if (origin == other.origin) {
     return cross_origin < other.cross_origin;
+  }
   return origin < other.origin;
 }
 
@@ -309,8 +308,9 @@ class NavigationEarlyHintsManager::PreloadURLLoaderClient
       return;
     }
 
-    if (!body)
+    if (!body) {
       return;
+    }
 
     if (response_body_drainer_) {
       mojo::ReportBadMessage("NEHM_BAD_RESPONSE_BODY");
@@ -324,7 +324,7 @@ class NavigationEarlyHintsManager::PreloadURLLoaderClient
   void OnUploadProgress(int64_t current_position,
                         int64_t total_size,
                         OnUploadProgressCallback callback) override {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
   void OnTransferSizeUpdated(int32_t transfer_size_diff) override {
     network::RecordOnTransferSizeUpdatedUMA(
@@ -349,10 +349,12 @@ class NavigationEarlyHintsManager::PreloadURLLoaderClient
   }
 
   bool CanCompletePreload() {
-    if (result_.was_canceled)
+    if (result_.was_canceled) {
       return true;
-    if (result_.error_code.has_value() && !response_body_drainer_)
+    }
+    if (result_.error_code.has_value() && !response_body_drainer_) {
       return true;
+    }
     return false;
   }
 
@@ -432,10 +434,11 @@ bool NavigationEarlyHintsManager::HasInflightPreloads() const {
 void NavigationEarlyHintsManager::WaitForPreloadsFinishedForTesting(
     base::OnceCallback<void(PreloadedResources)> callback) {
   DCHECK(!preloads_completion_callback_for_testing_);
-  if (inflight_preloads_.empty())
+  if (inflight_preloads_.empty()) {
     std::move(callback).Run(preloaded_resources_);
-  else
+  } else {
     preloads_completion_callback_for_testing_ = std::move(callback);
+  }
 }
 
 void NavigationEarlyHintsManager::SetNetworkContextForTesting(
@@ -447,8 +450,9 @@ void NavigationEarlyHintsManager::SetNetworkContextForTesting(
 
 network::mojom::NetworkContext*
 NavigationEarlyHintsManager::GetNetworkContext() {
-  if (network_context_for_testing_)
+  if (network_context_for_testing_) {
     return network_context_for_testing_;
+  }
 
   return storage_partition_->GetNetworkContext();
 }
@@ -457,16 +461,19 @@ void NavigationEarlyHintsManager::MaybePreconnect(
     const network::mojom::LinkHeaderPtr& link) {
   was_resource_hints_received_ = true;
 
-  if (!ShouldHandleResourceHints(link))
+  if (!ShouldHandleResourceHints(link)) {
     return;
+  }
 
   PreconnectEntry entry(url::Origin::Create(link->href), link->cross_origin);
-  if (preconnect_entries_.contains(entry))
+  if (preconnect_entries_.contains(entry)) {
     return;
+  }
 
   network::mojom::NetworkContext* network_context = GetNetworkContext();
-  if (!network_context)
+  if (!network_context) {
     return;
+  }
 
   bool allow_credentials =
       link->cross_origin != network::mojom::CrossOriginAttribute::kAnonymous;
@@ -474,7 +481,9 @@ void NavigationEarlyHintsManager::MaybePreconnect(
       /*num_streams=*/1, link->href,
       allow_credentials ? network::mojom::CredentialsMode::kInclude
                         : network::mojom::CredentialsMode::kOmit,
-      isolation_info_.network_anonymization_key());
+      isolation_info_.network_anonymization_key(),
+      net::MutableNetworkTrafficAnnotationTag(
+          kEarlyHintsPreloadTrafficAnnotation));
   preconnect_entries_.insert(std::move(entry));
 }
 
@@ -489,8 +498,9 @@ void NavigationEarlyHintsManager::MaybePreloadHintedResource(
 
   was_resource_hints_received_ = true;
 
-  if (!ShouldHandleResourceHints(link))
+  if (!ShouldHandleResourceHints(link)) {
     return;
+  }
 
   // Step 2. If options's destination is not a destination, then return null.
   // https://html.spec.whatwg.org/multipage/semantics.html#create-a-link-request
@@ -500,8 +510,9 @@ void NavigationEarlyHintsManager::MaybePreloadHintedResource(
     return;
   }
 
-  if (!CheckContentSecurityPolicyForPreload(link, content_security_policies))
+  if (!CheckContentSecurityPolicyForPreload(link, content_security_policies)) {
     return;
+  }
 
   if (inflight_preloads_.contains(link->href) ||
       preloaded_resources_.contains(link->href)) {
@@ -554,8 +565,9 @@ void NavigationEarlyHintsManager::MaybePreloadHintedResource(
 
 bool NavigationEarlyHintsManager::ShouldHandleResourceHints(
     const network::mojom::LinkHeaderPtr& link) {
-  if (!link->href.SchemeIsHTTPOrHTTPS())
+  if (!link->href.SchemeIsHTTPOrHTTPS()) {
     return false;
+  }
   return true;
 }
 

@@ -2,20 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/platform/bindings/parkable_string.h"
 
 #include <array>
 #include <string_view>
 
 #include "base/check_op.h"
+#include "base/compiler_specific.h"
+#include "base/containers/checked_iterators.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_span.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -144,6 +142,8 @@ class NullableCharBuffer final {
   STACK_ALLOCATED();
 
  public:
+  using iterator = base::CheckedContiguousIterator<const char>;
+
   explicit NullableCharBuffer(size_t size) {
     data_ = reinterpret_cast<char*>(
         WTF::Partitions::BufferPartition()
@@ -161,8 +161,22 @@ class NullableCharBuffer final {
   }
 
   // May return nullptr.
-  char* data() const { return data_; }
+  char* data() { return data_; }
+  const char* data() const { return data_; }
   size_t size() const { return size_; }
+
+  // Iterators, so this type meets the requirements of
+  // `std::ranges::contiguous_range`.
+  iterator begin() const {
+    // SAFETY: The constructor allocates `size_` bytes at `data_`, which are not
+    // freed until destruction, and the members are not changed after
+    // construction.
+    return UNSAFE_BUFFERS(iterator(data_, data_ + size_));
+  }
+  iterator end() const {
+    // SAFETY: As in `begin()` above.
+    return UNSAFE_BUFFERS(iterator(data_, data_ + size_, data_ + size_));
+  }
 
  private:
   char* data_;
@@ -177,14 +191,12 @@ class NullableCharBuffer final {
 struct BackgroundTaskParams final {
   BackgroundTaskParams(
       scoped_refptr<ParkableStringImpl> string,
-      const void* data,
-      size_t size,
+      base::span<const uint8_t> data,
       std::unique_ptr<ReservedChunk> reserved_chunk,
       scoped_refptr<base::SingleThreadTaskRunner> callback_task_runner)
       : callback_task_runner(callback_task_runner),
         string(std::move(string)),
         data(data),
-        size(size),
         reserved_chunk(std::move(reserved_chunk)) {}
 
   BackgroundTaskParams(const BackgroundTaskParams&) = delete;
@@ -193,8 +205,7 @@ struct BackgroundTaskParams final {
 
   const scoped_refptr<base::SingleThreadTaskRunner> callback_task_runner;
   const scoped_refptr<ParkableStringImpl> string;
-  raw_ptr<const void> data;
-  const size_t size;
+  base::raw_span<const uint8_t> data;
   std::unique_ptr<ReservedChunk> reserved_chunk;
 };
 
@@ -259,14 +270,11 @@ ParkableStringImpl::HashString(StringImpl* string) {
   DigestValue digest_result;
 
   Digestor digestor(kHashAlgorithmSha256);
-  digestor.Update(base::make_span(static_cast<const uint8_t*>(string->Bytes()),
-                                  string->CharactersSizeInBytes()));
+  digestor.Update(string->RawByteSpan());
   // Also include encoding in the digest, otherwise two strings with identical
   // byte content but different encoding will be assumed equal, leading to
   // crashes when one is replaced by the other one.
-  std::array<uint8_t, 1> is_8bit;
-  is_8bit[0] = string->Is8Bit();
-  digestor.Update(is_8bit);
+  UpdateDigestWithEncoding(&digestor, string->Is8Bit());
   digestor.Finish(digest_result);
 
   // The only case where this can return false in BoringSSL is an allocation
@@ -280,6 +288,14 @@ ParkableStringImpl::HashString(StringImpl* string) {
   // Unless SHA256 is... not 256 bits?
   DCHECK(digest_result.size() == kDigestSize);
   return std::make_unique<SecureDigest>(digest_result);
+}
+
+// static
+void ParkableStringImpl::UpdateDigestWithEncoding(Digestor* digestor,
+                                                  bool is_8bit) {
+  std::array<uint8_t, 1> extra_data;
+  extra_data[0] = is_8bit ? 1 : 0;
+  digestor->Update(extra_data);
 }
 
 // static
@@ -632,7 +648,7 @@ String ParkableStringImpl::UnparkInternal() {
     metadata_->compressed_->Grow(
         base::checked_cast<wtf_size_t>(metadata_->on_disk_metadata_->size()));
     manager.data_allocator().Read(*metadata_->on_disk_metadata_,
-                                  metadata_->compressed_->data());
+                                  *metadata_->compressed_);
     disk_elapsed = disk_read_timer.Elapsed();
     RecordStatistics(metadata_->on_disk_metadata_->size(), disk_elapsed,
                      ParkingAction::kRead);
@@ -643,22 +659,20 @@ String ParkableStringImpl::UnparkInternal() {
       reinterpret_cast<const char*>(metadata_->compressed_->data()),
       metadata_->compressed_->size() * sizeof(uint8_t));
   String uncompressed;
-  std::string_view uncompressed_string_piece;
-  size_t size = CharactersSizeInBytes();
-  char* char_data;
+  base::span<char> chars;
   if (is_8bit()) {
-    LChar* data;
+    base::span<LChar> data;
     uncompressed = String::CreateUninitialized(length(), data);
-    char_data = reinterpret_cast<char*>(data);
+    chars = base::as_writable_chars(data);
   } else {
-    UChar* data;
+    base::span<UChar> data;
     uncompressed = String::CreateUninitialized(length(), data);
-    char_data = reinterpret_cast<char*>(data);
+    chars = base::as_writable_chars(data);
   }
-  uncompressed_string_piece = std::string_view(char_data, size);
 
   switch (GetCompressionAlgorithm()) {
     case CompressionAlgorithm::kZlib: {
+      const auto uncompressed_string_piece = base::as_string_view(chars);
       // If the buffer size is incorrect, then we have a corrupted data issue,
       // and in such case there is nothing else to do than crash.
       CHECK_EQ(compression::GetUncompressedSize(compressed_string_piece),
@@ -676,7 +690,8 @@ String ParkableStringImpl::UnparkInternal() {
         // us crash anywhere else.
         OOM_CRASH(uncompressed_string_piece.size());
       }
-    } break;
+      break;
+    }
     case CompressionAlgorithm::kSnappy: {
       size_t uncompressed_size;
 
@@ -685,9 +700,9 @@ String ParkableStringImpl::UnparkInternal() {
       CHECK(snappy::GetUncompressedLength(compressed_string_piece.data(),
                                           compressed_string_piece.size(),
                                           &uncompressed_size));
-      CHECK_EQ(uncompressed_size, size);
+      CHECK_EQ(uncompressed_size, chars.size());
       CHECK(snappy::RawUncompress(compressed_string_piece.data(),
-                                  compressed_string_piece.size(), char_data))
+                                  compressed_string_piece.size(), chars.data()))
           << "Decompression failed, corrupted data?";
       break;
     }
@@ -698,14 +713,13 @@ String ParkableStringImpl::UnparkInternal() {
       // The CHECK()s below indicate memory corruption, terminate.
       CHECK_NE(content_size, ZSTD_CONTENTSIZE_UNKNOWN);
       CHECK_NE(content_size, ZSTD_CONTENTSIZE_ERROR);
-      CHECK_EQ(content_size, static_cast<uint64_t>(size));
+      CHECK_EQ(content_size, static_cast<uint64_t>(chars.size()));
 
       size_t uncompressed_size = ZSTD_decompress(
-          const_cast<char*>(uncompressed_string_piece.data()),
-          uncompressed_string_piece.size(), compressed_string_piece.data(),
+          chars.data(), chars.size(), compressed_string_piece.data(),
           compressed_string_piece.size());
       CHECK(!ZSTD_isError(uncompressed_size));
-      CHECK_EQ(uncompressed_size, size);
+      CHECK_EQ(uncompressed_size, chars.size());
       break;
     }
 #endif  // BUILDFLAG(HAS_ZSTD_COMPRESSION)
@@ -732,8 +746,8 @@ void ParkableStringImpl::PostBackgroundCompressionTask() {
   DCHECK(manager.task_runner()->BelongsToCurrentThread());
   // |params| keeps |this| alive until |OnParkingCompleteOnMainThread()|.
   auto params = std::make_unique<BackgroundTaskParams>(
-      this, string_.Bytes(), string_.CharactersSizeInBytes(),
-      /* reserved_chunk */ nullptr, manager.task_runner());
+      this, string_.RawByteSpan(), /* reserved_chunk */ nullptr,
+      manager.task_runner());
   worker_pool::PostTask(
       FROM_HERE, {base::TaskPriority::BEST_EFFORT},
       CrossThreadBindOnce(&ParkableStringImpl::CompressInBackground,
@@ -748,7 +762,8 @@ void ParkableStringImpl::CompressInBackground(
       [&](perfetto::EventContext ctx) {
         auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
         auto* data = event->set_parkable_string_compress_in_background();
-        data->set_size_bytes(base::saturated_cast<int32_t>(params->size));
+        data->set_size_bytes(
+            base::saturated_cast<int32_t>(params->data.size()));
       });
 
   base::ElapsedTimer timer;
@@ -765,8 +780,7 @@ void ParkableStringImpl::CompressInBackground(
   // Compression touches the string.
   AsanUnpoisonString(params->string->string_);
   bool ok;
-  std::string_view data(reinterpret_cast<const char*>(params->data.get()),
-                        params->size);
+  std::string_view data = base::as_string_view(params->data);
   std::unique_ptr<Vector<uint8_t>> compressed;
 
   // This runs in background, making CPU starvation likely, and not an issue.
@@ -794,17 +808,17 @@ void ParkableStringImpl::CompressInBackground(
     size_t buffer_size;
     switch (GetCompressionAlgorithm()) {
       case CompressionAlgorithm::kZlib:
-        buffer_size = params->size;
+        buffer_size = data.size();
         break;
       case CompressionAlgorithm::kSnappy:
         // Contrary to other compression algorithms, snappy requires the buffer
         // to be at least this size, rather than aborting if the provided buffer
         // is too small.
-        buffer_size = snappy::MaxCompressedLength(params->size);
+        buffer_size = snappy::MaxCompressedLength(data.size());
         break;
 #if BUILDFLAG(HAS_ZSTD_COMPRESSION)
       case CompressionAlgorithm::kZstd:
-        buffer_size = ZSTD_compressBound(params->size);
+        buffer_size = ZSTD_compressBound(data.size());
         break;
 #endif
     }
@@ -819,19 +833,19 @@ void ParkableStringImpl::CompressInBackground(
                                          &compressed_size, nullptr, nullptr);
           break;
         case CompressionAlgorithm::kSnappy:
-          snappy::RawCompress(data.data(), params->size, buffer.data(),
+          snappy::RawCompress(data.data(), data.size(), buffer.data(),
                               &compressed_size);
-          if (compressed_size > params->size) {
+          if (compressed_size > data.size()) {
             ok = false;
           }
           break;
 #if BUILDFLAG(HAS_ZSTD_COMPRESSION)
         case CompressionAlgorithm::kZstd:
-          compressed_size = ZSTD_compress(
-              buffer.data(), buffer.size(), data.data(), params->size,
-              features::kZstdCompressionLevel.Get());
-          ok = !ZSTD_isError(compressed_size) &&
-               (compressed_size < params->size);
+          compressed_size =
+              ZSTD_compress(buffer.data(), buffer.size(), data.data(),
+                            data.size(), features::kZstdCompressionLevel.Get());
+          ok =
+              !ZSTD_isError(compressed_size) && (compressed_size < data.size());
           break;
 #endif  // BUILDFLAG(HAS_ZSTD_COMPRESSION)
       }
@@ -851,7 +865,7 @@ void ParkableStringImpl::CompressInBackground(
   base::TimeDelta thread_elapsed = thread_timer.Elapsed();
 
   auto* task_runner = params->callback_task_runner.get();
-  size_t size = params->size;
+  size_t size = data.size();
   PostCrossThreadTask(
       *task_runner, FROM_HERE,
       CrossThreadBindOnce(
@@ -894,7 +908,7 @@ void ParkableStringImpl::OnParkingCompleteOnMainThread(
   if (CanParkNow() && metadata_->compressed_) {
     // Prevent `data` from dangling, since it points to the uncompressed data
     // freed below.
-    params->data = nullptr;
+    params->data = {};
     DiscardUncompressedData();
   } else {
     metadata_->state_ = State::kUnparked;
@@ -915,8 +929,8 @@ void ParkableStringImpl::PostBackgroundWritingTask(
   if (!has_on_disk_data() && data_allocator.may_write()) {
     metadata_->background_task_in_progress_ = true;
     auto params = std::make_unique<BackgroundTaskParams>(
-        this, metadata_->compressed_->data(), metadata_->compressed_->size(),
-        std::move(reserved_chunk), manager.task_runner());
+        this, *metadata_->compressed_, std::move(reserved_chunk),
+        manager.task_runner());
     worker_pool::PostTask(
         FROM_HERE, {base::MayBlock()},
         CrossThreadBindOnce(&ParkableStringImpl::WriteToDiskInBackground,
@@ -933,7 +947,7 @@ void ParkableStringImpl::WriteToDiskInBackground(
   auto metadata =
       data_allocator->Write(std::move(params->reserved_chunk), params->data);
   base::TimeDelta elapsed = timer.Elapsed();
-  RecordStatistics(params->size, elapsed, ParkingAction::kWritten);
+  RecordStatistics(params->data.size(), elapsed, ParkingAction::kWritten);
 
   auto* task_runner = params->callback_task_runner.get();
   PostCrossThreadTask(
@@ -972,7 +986,7 @@ void ParkableStringImpl::OnWritingCompleteOnMainThread(
   if (metadata_->state_ == State::kParked) {
     // Prevent `data` from dangling, since it points to the compressed data
     // freed below.
-    params->data = nullptr;
+    params->data = {};
     DiscardCompressedData();
     DCHECK_EQ(metadata_->state_, State::kOnDisk);
   }

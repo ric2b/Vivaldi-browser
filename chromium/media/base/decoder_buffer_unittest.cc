@@ -20,6 +20,7 @@
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "media/base/test_data_util.h"
+#include "media/base/test_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace media {
@@ -41,8 +42,29 @@ TEST(DecoderBufferTest, Constructors) {
 }
 
 TEST(DecoderBufferTest, CreateEOSBuffer) {
-  scoped_refptr<DecoderBuffer> buffer(DecoderBuffer::CreateEOSBuffer());
+  auto buffer = DecoderBuffer::CreateEOSBuffer();
   EXPECT_TRUE(buffer->end_of_stream());
+  EXPECT_FALSE(buffer->next_config());
+
+  buffer = DecoderBuffer::CreateEOSBuffer(TestAudioConfig::Normal());
+  EXPECT_TRUE(buffer->end_of_stream());
+  ASSERT_TRUE(buffer->next_config());
+  {
+    auto config = buffer->next_config().value();
+    auto* ac = absl::get_if<AudioDecoderConfig>(&config);
+    ASSERT_TRUE(ac);
+    EXPECT_TRUE(ac->Matches(TestAudioConfig::Normal()));
+  }
+
+  buffer = DecoderBuffer::CreateEOSBuffer(TestVideoConfig::Normal());
+  EXPECT_TRUE(buffer->end_of_stream());
+  ASSERT_TRUE(buffer->next_config());
+  {
+    auto config = buffer->next_config().value();
+    auto* vc = absl::get_if<VideoDecoderConfig>(&config);
+    ASSERT_TRUE(vc);
+    EXPECT_TRUE(vc->Matches(TestVideoConfig::Normal()));
+  }
 }
 
 TEST(DecoderBufferTest, CopyFrom) {
@@ -242,13 +264,23 @@ TEST(DecoderBufferTest, SideData) {
 
   buffer->WritableSideData().secure_handle = kSecureHandle;
   buffer->WritableSideData().spatial_layers = kSpatialLayers;
-  buffer->WritableSideData().alpha_data = kAlphaData;
+  buffer->WritableSideData().alpha_data =
+      base::HeapArray<uint8_t>::CopiedFrom(kAlphaData);
   EXPECT_TRUE(buffer->has_side_data());
   EXPECT_EQ(buffer->side_data()->secure_handle, kSecureHandle);
   EXPECT_EQ(buffer->side_data()->spatial_layers, kSpatialLayers);
-  EXPECT_EQ(buffer->side_data()->alpha_data, kAlphaData);
+  EXPECT_EQ(buffer->side_data()->alpha_data.as_span(), base::span(kAlphaData));
 
-  buffer->set_side_data(std::nullopt);
+  auto cloned_side_data = buffer->side_data()->Clone();
+
+  EXPECT_EQ(buffer->side_data()->secure_handle,
+            cloned_side_data->secure_handle);
+  EXPECT_EQ(buffer->side_data()->spatial_layers,
+            cloned_side_data->spatial_layers);
+  EXPECT_EQ(buffer->side_data()->alpha_data.as_span(),
+            cloned_side_data->alpha_data.as_span());
+
+  buffer->set_side_data(nullptr);
   EXPECT_FALSE(buffer->has_side_data());
 }
 

@@ -51,9 +51,6 @@ class GPU_EXPORT GpuChannelEstablishFactory {
   virtual void EstablishGpuChannel(GpuChannelEstablishedCallback callback) = 0;
   virtual scoped_refptr<GpuChannelHost> EstablishGpuChannelSync() = 0;
   virtual GpuMemoryBufferManager* GetGpuMemoryBufferManager() = 0;
-
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  virtual void SetForceAllowAccessToGpu(bool enable) = 0;
 };
 
 // Encapsulates an IPC channel between the client and one GPU process.
@@ -151,6 +148,15 @@ class GPU_EXPORT GpuChannelHost
       std::vector<SyncToken> sync_token_dependencies,
       uint64_t release_count,
       base::OnceCallback<void(bool)> callback);
+  void CopyNativeGmbToSharedMemorySync(
+      gfx::GpuMemoryBufferHandle buffer_handle,
+      base::UnsafeSharedMemoryRegion memory_region,
+      bool* status);
+  void CopyNativeGmbToSharedMemoryAsync(
+      gfx::GpuMemoryBufferHandle buffer_handle,
+      base::UnsafeSharedMemoryRegion memory_region,
+      base::OnceCallback<void(bool)> callback);
+  bool IsConnected();
 #endif
 
   // Crashes the GPU process. This functionality is added here because

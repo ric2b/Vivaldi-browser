@@ -23,7 +23,7 @@ void xnn_f32_qc4w_gemm_minmax_ukernel_1x4__scalar(
     float* restrict c,
     size_t cm_stride,
     size_t cn_stride,
-    const union xnn_f32_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_qc4w_minmax_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(mr != 0);
   assert(mr <= 1);
@@ -39,7 +39,7 @@ void xnn_f32_qc4w_gemm_minmax_ukernel_1x4__scalar(
 
   const float vmin = params->scalar.min;
   const float vmax = params->scalar.max;
-  const int32_t vminus_kernel_zero_point = params->scalar.minus_kernel_zero_point;
+  const int32_t vminus_kernel_zero_point = -params->scalar.kernel_zero_point;
   do {
     float vacc00 = ((const float*)w)[0];
     float vacc01 = ((const float*)w)[1];

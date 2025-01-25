@@ -60,18 +60,6 @@ bool QuicServer::Resume() {
   return ResumeImpl();
 }
 
-ProtocolConnectionEndpoint::State QuicServer::GetState() {
-  return state_;
-}
-
-MessageDemuxer& QuicServer::GetMessageDemuxer() {
-  return demuxer_;
-}
-
-InstanceRequestIds& QuicServer::GetInstanceRequestIds() {
-  return instance_request_ids_;
-}
-
 std::unique_ptr<ProtocolConnection> QuicServer::CreateProtocolConnection(
     uint64_t instance_id) {
   return CreateProtocolConnectionImpl(instance_id);
@@ -79,10 +67,6 @@ std::unique_ptr<ProtocolConnection> QuicServer::CreateProtocolConnection(
 
 std::string QuicServer::GetAgentFingerprint() {
   return GetAgentCertificate().GetAgentFingerprint();
-}
-
-std::string QuicServer::GetAuthToken() {
-  return auth_token_;
 }
 
 void QuicServer::OnClientCertificates(std::string_view instance_name,

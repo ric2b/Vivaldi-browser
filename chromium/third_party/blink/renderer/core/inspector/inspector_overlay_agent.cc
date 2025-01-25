@@ -648,15 +648,7 @@ protocol::Response InspectorOverlayAgent::setShowViewportSizeOnResize(
   return protocol::Response::Success();
 }
 
-// TODO(crbug.com/365125825): Deprecate old ShowWebVitals method and API.
 protocol::Response InspectorOverlayAgent::setShowWebVitals(bool show) {
-  show_web_vitals_.Set(show);
-  if (show) {
-    protocol::Response response = CompositingEnabled();
-    if (!response.IsSuccess()) {
-      return response;
-    }
-  }
   return protocol::Response::Success();
 }
 
@@ -1499,8 +1491,7 @@ void InspectorOverlayAgent::EvaluateInOverlay(
   std::vector<uint8_t> json;
   ConvertCBORToJSON(SpanFrom(command->Serialize()), &json);
   ClassicScript::CreateUnspecifiedScript(
-      "dispatch(" +
-          String(reinterpret_cast<const char*>(json.data()), json.size()) + ")",
+      "dispatch(" + String(base::span(json)) + ")",
       ScriptSourceLocationType::kInspector)
       ->RunScript(To<LocalFrame>(OverlayMainFrame())->DomWindow(),
                   ExecuteScriptPolicy::kExecuteScriptWhenScriptsDisabled);

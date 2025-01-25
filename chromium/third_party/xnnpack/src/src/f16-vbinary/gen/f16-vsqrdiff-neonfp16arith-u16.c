@@ -17,10 +17,10 @@
 
 void xnn_f16_vsqrdiff_ukernel__neonfp16arith_u16(
     size_t batch,
-    const void* restrict input_a,
-    const void* restrict input_b,
-    void* restrict output,
-    const union xnn_f16_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const xnn_float16* restrict input_a,
+    const xnn_float16* restrict input_b,
+    xnn_float16* restrict output,
+    const struct xnn_f16_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(uint16_t) == 0);
@@ -31,7 +31,6 @@ void xnn_f16_vsqrdiff_ukernel__neonfp16arith_u16(
   const uint16_t* a = (const uint16_t*) input_a;
   const uint16_t* b = (const uint16_t*) input_b;
   uint16_t* o = (uint16_t*) output;
-
 
   for (; batch >= 16 * sizeof(uint16_t); batch -= 16 * sizeof(uint16_t)) {
     const float16x8_t va01234567 = vreinterpretq_f16_u16(vld1q_u16(a)); a += 8;
@@ -44,7 +43,6 @@ void xnn_f16_vsqrdiff_ukernel__neonfp16arith_u16(
 
     vy01234567 = vmulq_f16(vy01234567, vy01234567);
     vy456789AB = vmulq_f16(vy456789AB, vy456789AB);
-
 
     vst1q_u16(o, vreinterpretq_u16_f16(vy01234567)); o += 8;
     vst1q_u16(o, vreinterpretq_u16_f16(vy456789AB)); o += 8;

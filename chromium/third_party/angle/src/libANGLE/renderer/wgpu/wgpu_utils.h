@@ -153,6 +153,8 @@ enum class RenderPassClosureReason
     GLFinish,
     EGLSwapBuffers,
     GLReadPixels,
+    IndexRangeReadback,
+    VertexArrayStreaming,
 
     InvalidEnum,
     EnumCount = InvalidEnum,
@@ -243,7 +245,8 @@ bool IsWgpuError(WGPUBufferMapAsyncStatus mapBufferStatus);
 bool IsStripPrimitiveTopology(wgpu::PrimitiveTopology topology);
 
 // Required alignments for buffer sizes and mapping
-constexpr size_t kBufferSizeAlignment      = 4;
+constexpr size_t kBufferSizeAlignment         = 4;
+constexpr size_t kBufferCopyToBufferAlignment = 4;
 constexpr size_t kBufferMapSizeAlignment   = kBufferSizeAlignment;
 constexpr size_t kBufferMapOffsetAlignment = 8;
 
@@ -273,6 +276,8 @@ wgpu::ColorWriteMask GetColorWriteMask(bool r, bool g, bool b, bool a);
 
 wgpu::CompareFunction getCompareFunc(const GLenum glCompareFunc);
 wgpu::StencilOperation getStencilOp(const GLenum glStencilOp);
+
+uint32_t GetFirstIndexForDrawCall(gl::DrawElementsType indexType, const void *indices);
 }  // namespace gl_wgpu
 
 // Number of reserved binding slots to implement the default uniform block
@@ -280,7 +285,9 @@ constexpr uint32_t kReservedPerStageDefaultUniformSlotCount = 0;
 
 }  // namespace rx
 
-#define ANGLE_WGPU_WRAPPER_OBJECTS_X(PROC) PROC(RenderPipeline)
+#define ANGLE_WGPU_WRAPPER_OBJECTS_X(PROC) \
+    PROC(Buffer)                           \
+    PROC(RenderPipeline)
 
 // Add a hash function for all wgpu cpp wrappers that hashes the underlying C object pointer.
 #define ANGLE_WGPU_WRAPPER_OBJECT_HASH(OBJ)               \

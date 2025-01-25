@@ -31,9 +31,11 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_SELECTOR_CHECKER_H_
 
 #include <limits>
+
 #include "base/dcheck_is_on.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_selector.h"
+#include "third_party/blink/renderer/core/css/resolver/element_resolve_context.h"
 #include "third_party/blink/renderer/core/css/resolver/match_flags.h"
 #include "third_party/blink/renderer/core/css/style_request.h"
 #include "third_party/blink/renderer/core/css/style_scope.h"
@@ -134,12 +136,30 @@ class CORE_EXPORT SelectorChecker {
    public:
     // Initial selector constructor
     explicit SelectorCheckingContext(Element* element) : element(element) {}
+    explicit SelectorCheckingContext(
+        const ElementResolveContext& element_context)
+        : element(&element_context.GetUltimateOriginatingElementOrSelf()),
+          pseudo_element(element_context.GetPseudoElement()),
+          pseudo_element_ancestors(
+              element_context.GetPseudoElementAncestors()) {}
+
+    // If matching for real element, returns that element;
+    // Otherwise, matching is for pseudo element, returns
+    // pseudo element ancestor at `index`, or the last pseudo element ancestor,
+    // if `index` is greater than the size of ancestors array (to collect
+    // pseudo elements styles).
+    // Note: `index` == kNotFound means matching is yet being done for real
+    // element.
+    Element& GetElementForMatching(wtf_size_t index) const;
 
     // Group fields by type to avoid perf test regression.
     // https://crrev.com/c/3362008
     const CSSSelector* selector = nullptr;
 
-    // Used to match the :scope pseudo-class.
+    // TODO(dbaron): I'm suspicious of how accurate the comments describing
+    // the following three members are.  We should review them for accuracy.
+    // Used to match the :scope pseudo-class.  It also tells us which
+    // TreeScope the selectors are associated with.
     const ContainerNode* scope = nullptr;
     // If `style_scope` is specified, that is used to match the :scope
     // pseudo-class instead (and `scope` is ignored).
@@ -153,16 +173,18 @@ class CORE_EXPORT SelectorChecker {
     ContainerNode* relative_anchor_element = nullptr;
 
     AtomicString* pseudo_argument = nullptr;
+    // The pseudo element type of pseudo element we are matching styles for.
     PseudoId pseudo_id = kPseudoIdNone;
+    // The last pseudo element selector we saw. This is not necessarily the
+    // pseudo_id above since we may have nested pseudo elements. Also, this may
+    // be the pseudo element selector we are looking at while matching styles
+    // for the originating element.
+    PseudoId previously_matched_pseudo_element = kPseudoIdNone;
     Impact impact = Impact::kSubject;
 
     bool is_sub_selector = false;
     bool in_rightmost_compound = true;
     bool has_scrollbar_pseudo = false;
-    bool has_selection_pseudo = false;
-    bool has_search_text_pseudo = false;
-    bool has_scroll_marker_pseudo = false;
-    bool has_column_pseudo = false;
     bool treat_shadow_host_as_normal_scope = false;
     bool in_nested_complex_selector = false;
     // If true, elements that are links will match :visited. Otherwise,
@@ -179,6 +201,17 @@ class CORE_EXPORT SelectorChecker {
     bool is_inside_has_pseudo_class = false;
     // Affects whether or not :current matches after a ::search-text.
     bool search_text_request_is_current = false;
+    // Real PseudoElement that we match for. `element` will be its originating
+    // element, but `element` is only needed for matching. The rules will be
+    // saved on `pseudo_element`.
+    // Is null if matching is for real element.
+    Element* pseudo_element = nullptr;
+    // Pseudo element ancestors array for PseudoElement rule matching (including
+    // the nested ones), read more in ElementResolveContext.
+    // Includes the pseudo_element as last entry and all originating pseudo
+    // elements up the tree (doesn't include real originating element, which
+    // would be `element`). Is empty if matching is for real element.
+    base::span<Element* const> pseudo_element_ancestors;
   };
 
   struct MatchResult {
@@ -191,6 +224,20 @@ class CORE_EXPORT SelectorChecker {
     }
 
     PseudoId dynamic_pseudo{kPseudoIdNone};
+
+    // Index of the current pseudo element ancestor, used for PseudoElement
+    // matching. See comments above for pseudo_element_ancestors.
+    // kNotFound means matching is yet being done for real element.
+    // When matching for e.g. div::column::scroll-marker, ::column is index 0
+    // and ::scroll-marker is index 1.
+    wtf_size_t pseudo_ancestor_index{kNotFound};
+    // Note: can become equal to ancestors array size, meaning we match
+    // pseudo style for pseudo_element. If increased further, selector
+    // matching is failed in SelectorChecker code.
+    void DescendToNextPseudoElement() {
+      pseudo_ancestor_index =
+          pseudo_ancestor_index == kNotFound ? 0u : pseudo_ancestor_index + 1u;
+    }
 
     // Comes from an AtomicString, but not stored as one to avoid
     // the cost of checking the refcount on cleaning up from every
@@ -254,7 +301,9 @@ class CORE_EXPORT SelectorChecker {
     STACK_ALLOCATED();
 
    public:
-    explicit SubResult(MatchResult& parent) : parent_(parent) {}
+    explicit SubResult(MatchResult& parent) : parent_(parent) {
+      pseudo_ancestor_index = parent_.pseudo_ancestor_index;
+    }
     ~SubResult() {
       parent_.flags |= flags;
       // Propagate proximity from nested selectors which refer to a parent
@@ -275,6 +324,22 @@ class CORE_EXPORT SelectorChecker {
       // lists do not produce any (non-max) proximity values; it can only happen
       // with the nesting selector (&).
       parent_.proximity = std::min(parent_.proximity, proximity);
+      PropagatePseudoAncestorIndex();
+    }
+    void PropagatePseudoAncestorIndex() {
+      // Propagate only useful change in index, which is either:
+      // a) kNotFound -> 0;
+      // b) increasing index value.
+      // Propagating is needed to later check that we've reached the end of
+      // the ancestors array, meaning that the selector matches the full
+      // ancestors chain.
+      if (pseudo_ancestor_index != kNotFound) {
+        parent_.pseudo_ancestor_index =
+            parent_.pseudo_ancestor_index == kNotFound
+                ? pseudo_ancestor_index
+                : std::max(pseudo_ancestor_index,
+                           parent_.pseudo_ancestor_index);
+      }
     }
 
    private:
@@ -289,7 +354,7 @@ class CORE_EXPORT SelectorChecker {
   }
 
   static bool MatchesFocusPseudoClass(const Element&,
-                                      bool has_scroll_marker_pseudo);
+                                      PseudoId matching_for_pseudo_element);
   static bool MatchesFocusVisiblePseudoClass(const Element&);
   static bool MatchesSelectorFragmentAnchorPseudoClass(const Element&);
 
@@ -440,7 +505,8 @@ class CORE_EXPORT EasySelectorChecker {
                                            const QualifiedName& attr);
   ALWAYS_INLINE static bool AttributeMatches(const Element& element,
                                              const QualifiedName& attr,
-                                             const AtomicString& value);
+                                             const AtomicString& value,
+                                             bool insensitive_match);
   ALWAYS_INLINE static bool AttributeItemHasName(
       const Attribute& attribute_item,
       const Element& element,

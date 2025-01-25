@@ -13,23 +13,23 @@
 namespace direct_match {
 
 // static
-DirectMatchService* DirectMatchServiceFactory::GetForBrowserState(
-   ChromeBrowserState* browser_state) {
+DirectMatchService* DirectMatchServiceFactory::GetForProfile(
+  ProfileIOS* profile) {
   return static_cast<DirectMatchService*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 // static
-DirectMatchService* DirectMatchServiceFactory::GetForBrowserStateIfExists(
-   ChromeBrowserState* browser_state) {
+DirectMatchService* DirectMatchServiceFactory::GetForProfileIfExists(
+   ProfileIOS* profile) {
   // Since this is called as part of destroying the browser state, we need this
   // extra test to avoid running into code that tests whether the browser state
   // is still valid.
-  if (!GetInstance()->IsServiceCreated(browser_state)) {
+  if (!GetInstance()->IsServiceCreated(profile)) {
     return nullptr;
   }
   return static_cast<DirectMatchService*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, false));
+      GetInstance()->GetServiceForBrowserState(profile, false));
 }
 
 // static

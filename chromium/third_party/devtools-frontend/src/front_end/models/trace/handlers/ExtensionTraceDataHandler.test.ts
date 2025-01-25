@@ -2,67 +2,71 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as TraceModel from '../trace.js';
+import * as Trace from '../trace.js';
+
+let idCounter = 0;
+export type ExtensionTestData = {
+  detail: {devtools?: Trace.Types.Extensions.ExtensionDataPayload},
+  name: string,
+  ts: number,
+  dur?: number,
+};
+function makeTimingEventWithExtensionData({name, ts: tsMicro, detail, dur: durMicro}: ExtensionTestData):
+    Trace.Types.Events.Event[] {
+  const isMark = durMicro === undefined;
+  const currentId = idCounter++;
+  const traceEventBase = {
+    cat: 'blink.user_timing',
+    pid: Trace.Types.Events.ProcessID(2017),
+    tid: Trace.Types.Events.ThreadID(259),
+    id2: {local: `${currentId}`},
+  };
+
+  const stringDetail = JSON.stringify(detail);
+  const args = isMark ? {data: {detail: stringDetail}} : {detail: stringDetail};
+  const firstEvent = {
+    args,
+    name,
+    ph: isMark ? Trace.Types.Events.Phase.INSTANT : Trace.Types.Events.Phase.ASYNC_NESTABLE_START,
+    ts: Trace.Types.Timing.MicroSeconds(tsMicro),
+    ...traceEventBase,
+  } as Trace.Types.Events.Event;
+  if (isMark) {
+    return [firstEvent];
+  }
+  return [
+    firstEvent,
+    {
+      name,
+      ...traceEventBase,
+      ts: Trace.Types.Timing.MicroSeconds(tsMicro + (durMicro || 0)),
+      ph: Trace.Types.Events.Phase.ASYNC_NESTABLE_END,
+    },
+  ];
+}
+export async function createTraceExtensionDataFromTestInput(extensionData: ExtensionTestData[]):
+    Promise<Trace.Handlers.ModelHandlers.ExtensionTraceData.ExtensionTraceData> {
+  const events = extensionData.flatMap(makeTimingEventWithExtensionData).sort((e1, e2) => e1.ts - e2.ts);
+  Trace.Helpers.SyntheticEvents.SyntheticEventsManager.createAndActivate(events);
+
+  Trace.Handlers.ModelHandlers.UserTimings.reset();
+  for (const event of events) {
+    Trace.Handlers.ModelHandlers.UserTimings.handleEvent(event);
+  }
+  await Trace.Handlers.ModelHandlers.UserTimings.finalize();
+
+  Trace.Handlers.ModelHandlers.ExtensionTraceData.reset();
+  // ExtensionTraceData handler doesn't need to handle events since
+  // it only consumes the output of the user timings handler.
+  await Trace.Handlers.ModelHandlers.ExtensionTraceData.finalize();
+  return Trace.Handlers.ModelHandlers.ExtensionTraceData.data();
+}
 
 describe('ExtensionTraceDataHandler', function() {
-  let extensionHandlerOutput: TraceModel.Handlers.ModelHandlers.ExtensionTraceData.ExtensionTraceData;
-
-  let idCounter = 0;
-  type ExtensionTestData =
-      {detail: {devtools?: TraceModel.Types.Extensions.ExtensionDataPayload}, name: string, ts: number, dur?: number};
-  function makeTimingEventWithExtensionData({name, ts: tsMicro, detail, dur: durMicro}: ExtensionTestData):
-      TraceModel.Types.TraceEvents.TraceEventData[] {
-    const isMark = durMicro === undefined;
-    const currentId = idCounter++;
-    const traceEventBase = {
-      cat: 'blink.user_timing',
-      pid: TraceModel.Types.TraceEvents.ProcessID(2017),
-      tid: TraceModel.Types.TraceEvents.ThreadID(259),
-      id2: {local: `${currentId}`},
-    };
-
-    const stringDetail = JSON.stringify(detail);
-    const args = isMark ? {data: {detail: stringDetail}} : {detail: stringDetail};
-    const firstEvent = {
-      args,
-      name,
-      ph: isMark ? TraceModel.Types.TraceEvents.Phase.INSTANT : TraceModel.Types.TraceEvents.Phase.ASYNC_NESTABLE_START,
-      ts: TraceModel.Types.Timing.MicroSeconds(tsMicro),
-      ...traceEventBase,
-    } as TraceModel.Types.TraceEvents.TraceEventData;
-    if (isMark) {
-      return [firstEvent];
-    }
-    return [
-      firstEvent,
-      {
-        name,
-        ...traceEventBase,
-        ts: TraceModel.Types.Timing.MicroSeconds(tsMicro + (durMicro || 0)),
-        ph: TraceModel.Types.TraceEvents.Phase.ASYNC_NESTABLE_END,
-      },
-    ];
-  }
-  async function createTraceExtensionDataFromTestInput(extensionData: ExtensionTestData[]):
-      Promise<TraceModel.Handlers.ModelHandlers.ExtensionTraceData.ExtensionTraceData> {
-    const events = extensionData.flatMap(makeTimingEventWithExtensionData).sort((e1, e2) => e1.ts - e2.ts);
-    TraceModel.Helpers.SyntheticEvents.SyntheticEventsManager.createAndActivate(events);
-
-    TraceModel.Handlers.ModelHandlers.UserTimings.reset();
-    for (const event of events) {
-      TraceModel.Handlers.ModelHandlers.UserTimings.handleEvent(event);
-    }
-    await TraceModel.Handlers.ModelHandlers.UserTimings.finalize();
-
-    TraceModel.Handlers.ModelHandlers.ExtensionTraceData.reset();
-    // ExtensionTraceData handler doesn't need to handle events since
-    // it only consumes the output of the user timings handler.
-    await TraceModel.Handlers.ModelHandlers.ExtensionTraceData.finalize();
-    return TraceModel.Handlers.ModelHandlers.ExtensionTraceData.data();
-  }
+  let extensionHandlerOutput: Trace.Handlers.ModelHandlers.ExtensionTraceData.ExtensionTraceData;
 
   function createTraceExtensionDataExample():
-      Promise<TraceModel.Handlers.ModelHandlers.ExtensionTraceData.ExtensionTraceData> {
+      Promise<Trace.Handlers.ModelHandlers.ExtensionTraceData.ExtensionTraceData> {
     const extensionData = [
       {
         detail: {
@@ -115,7 +119,7 @@ describe('ExtensionTraceDataHandler', function() {
       {
         detail: {
           devtools: {
-            dataType: 'invalid-type' as TraceModel.Types.Extensions.ExtensionDataPayload['dataType'],
+            dataType: 'invalid-type' as Trace.Types.Extensions.ExtensionDataPayload['dataType'],
             track: 'Another Extension Track',
           },
         },
@@ -142,16 +146,16 @@ describe('ExtensionTraceDataHandler', function() {
       assert.lengthOf(extensionHandlerOutput.extensionTrackData, 2);
     });
     it('parses track data correctly', async () => {
-      assert.lengthOf(extensionHandlerOutput.extensionTrackData[0].entriesByTrack['An Extension Track'], 2);
-      assert.strictEqual(extensionHandlerOutput.extensionTrackData[0].name, 'An Extension Track');
+      assert.lengthOf(extensionHandlerOutput.extensionTrackData[1].entriesByTrack['An Extension Track'], 2);
+      assert.strictEqual(extensionHandlerOutput.extensionTrackData[1].name, 'An Extension Track');
 
-      assert.lengthOf(extensionHandlerOutput.extensionTrackData[1].entriesByTrack['Another Extension Track'], 1);
-      assert.strictEqual(extensionHandlerOutput.extensionTrackData[1].name, 'Another Extension Track');
+      assert.lengthOf(extensionHandlerOutput.extensionTrackData[0].entriesByTrack['Another Extension Track'], 1);
+      assert.strictEqual(extensionHandlerOutput.extensionTrackData[0].name, 'Another Extension Track');
     });
 
     it('gets data from individual entries', async () => {
       const {tooltipText, track, properties} =
-          extensionHandlerOutput.extensionTrackData[1].entriesByTrack['Another Extension Track'][0].args;
+          extensionHandlerOutput.extensionTrackData[0].entriesByTrack['Another Extension Track'][0].args;
       assert.strictEqual(tooltipText, 'A hint if needed');
       assert.strictEqual(track, 'Another Extension Track');
       assert.strictEqual(JSON.stringify(properties), '[["Description","Something"],["Tip","A tip to improve this"]]');
@@ -191,7 +195,7 @@ describe('ExtensionTraceDataHandler', function() {
     });
 
     it('discards markers whose details are not valid stringified JSON', async () => {
-      const performanceMarkEvent: TraceModel.Types.TraceEvents.TraceEventPerformanceMark = {
+      const performanceMarkEvent: Trace.Types.Events.PerformanceMark = {
         args: {
           data: {
             detail: 'this-is-not-json',
@@ -199,14 +203,14 @@ describe('ExtensionTraceDataHandler', function() {
         },
         name: 'test-perf-mark',
         cat: 'blink.user_timing',
-        ph: TraceModel.Types.TraceEvents.Phase.INSTANT,
-        pid: TraceModel.Types.TraceEvents.ProcessID(1),
-        tid: TraceModel.Types.TraceEvents.ThreadID(1),
-        ts: TraceModel.Types.Timing.MicroSeconds(100),
+        ph: Trace.Types.Events.Phase.INSTANT,
+        pid: Trace.Types.Events.ProcessID(1),
+        tid: Trace.Types.Events.ThreadID(1),
+        ts: Trace.Types.Timing.MicroSeconds(100),
       };
 
       assert.isNull(
-          TraceModel.Handlers.ModelHandlers.ExtensionTraceData.extensionDataInTiming(performanceMarkEvent),
+          Trace.Handlers.ModelHandlers.ExtensionTraceData.extensionDataInTiming(performanceMarkEvent),
       );
     });
 
@@ -257,7 +261,7 @@ describe('ExtensionTraceDataHandler', function() {
           detail: {
             devtools: {
               color: 'error',
-              dataType: 'invalid' as TraceModel.Types.Extensions.ExtensionDataPayload['dataType'],
+              dataType: 'invalid' as Trace.Types.Extensions.ExtensionDataPayload['dataType'],
             },
           },
           name: 'A custom mark',
@@ -352,10 +356,13 @@ describe('ExtensionTraceDataHandler', function() {
       ];
 
       const extensionHandlerOutput =
-          await createTraceExtensionDataFromTestInput(extensionDevToolsObjects.map(devtools => ({
+          await createTraceExtensionDataFromTestInput(extensionDevToolsObjects.map((devtools, i) => ({
                                                                                      detail: {devtools},
                                                                                      name: 'A measurement',
-                                                                                     ts: 100,
+                                                                                     // Use different timestamps
+                                                                                     // to prevent event switching
+                                                                                     // due to equal start and end.
+                                                                                     ts: 100 + i,
                                                                                      dur: 100,
                                                                                    })));
       assert.strictEqual(extensionHandlerOutput.extensionTrackData.length, 4);

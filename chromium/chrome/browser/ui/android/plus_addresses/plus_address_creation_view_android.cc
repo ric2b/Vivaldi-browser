@@ -8,11 +8,12 @@
 #include "base/feature_list.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/types/cxx23_to_underlying.h"
 #include "chrome/browser/ui/android/plus_addresses/plus_address_creation_controller_android.h"
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
 #include "components/plus_addresses/features.h"
+#include "components/plus_addresses/grit/plus_addresses_strings.h"
 #include "components/plus_addresses/plus_address_types.h"
-#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
@@ -71,38 +72,40 @@ ScopedJavaLocalRef<jobject> GetNormatStateUiInfo(
       IDS_PLUS_ADDRESS_BOTTOMSHEET_PROPOSED_PLUS_ADDRESS_PLACEHOLDER_ANDROID);
   std::u16string plus_address_modal_ok =
       l10n_util::GetStringUTF16(IDS_PLUS_ADDRESS_BOTTOMSHEET_OK_TEXT_ANDROID);
-  std::u16string error_report_instruction = l10n_util::GetStringUTF16(
-      IDS_PLUS_ADDRESS_BOTTOMSHEET_REPORT_ERROR_INSTRUCTION_ANDROID);
 
   GURL learn_more_url = GURL(features::kPlusAddressLearnMoreUrl.Get());
-
-  GURL error_report_url = GURL(features::kPlusAddressErrorReportUrl.Get());
 
   return Java_PlusAddressCreationNormalStateInfo_Constructor(
       env, title, formatted_description, formatted_notice,
       proposed_plus_address_placeholder, plus_address_modal_ok,
-      plus_address_modal_cancel, error_report_instruction, learn_more_url,
-      error_report_url);
-}
-
-ScopedJavaLocalRef<jobject> GetReserveErrorStateInfo() {
-  if (!base::FeatureList::IsEnabled(
-          features::kPlusAddressAndroidErrorStatesEnabled)) {
-    return ScopedJavaLocalRef<jobject>();
-  }
-  return Java_PlusAddressCreationErrorStateInfo_Constructor(
-      base::android::AttachCurrentThread(),
-      l10n_util::GetStringUTF16(
-          IDS_PLUS_ADDRESS_BOTTOMSHEET_RESERVE_ERROR_TITLE_ANDROID),
-      l10n_util::GetStringUTF16(
-          IDS_PLUS_ADDRESS_BOTTOMSHEET_RESERVE_ERROR_DESCRIPTION_ANDROID),
-      l10n_util::GetStringUTF16(
-          IDS_PLUS_ADDRESS_BOTTOMSHEET_RESERVE_ERROR_OK_BUTTON_ANDROID),
-      l10n_util::GetStringUTF16(
-          IDS_PLUS_ADDRESS_BOTTOMSHEET_RESERVE_ERROR_CANCEL_BUTTON_ANDROID));
+      plus_address_modal_cancel, learn_more_url);
 }
 
 }  // namespace
+
+PlusAddressCreationErrorStateInfo::PlusAddressCreationErrorStateInfo(
+    PlusAddressCreationBottomSheetErrorType error_type,
+    std::u16string title,
+    std::u16string description,
+    std::u16string ok_text,
+    std::u16string cancel_text)
+    : error_type(error_type),
+      title(title),
+      description(description),
+      ok_text(ok_text),
+      cancel_text(cancel_text) {}
+
+PlusAddressCreationErrorStateInfo::~PlusAddressCreationErrorStateInfo() =
+    default;
+
+PlusAddressCreationErrorStateInfo::PlusAddressCreationErrorStateInfo(
+    const PlusAddressCreationErrorStateInfo&) = default;
+PlusAddressCreationErrorStateInfo::PlusAddressCreationErrorStateInfo(
+    PlusAddressCreationErrorStateInfo&&) = default;
+PlusAddressCreationErrorStateInfo& PlusAddressCreationErrorStateInfo::operator=(
+    const PlusAddressCreationErrorStateInfo&) = default;
+PlusAddressCreationErrorStateInfo& PlusAddressCreationErrorStateInfo::operator=(
+    PlusAddressCreationErrorStateInfo&&) = default;
 
 PlusAddressCreationViewAndroid::PlusAddressCreationViewAndroid(
     base::WeakPtr<PlusAddressCreationController> controller)
@@ -133,6 +136,12 @@ void PlusAddressCreationViewAndroid::ShowInit(
       refresh_supported);
 }
 
+void PlusAddressCreationViewAndroid::TryAgainToReservePlusAddress(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  controller_->TryAgainToReservePlusAddress();
+}
+
 void PlusAddressCreationViewAndroid::OnRefreshClicked(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
@@ -157,37 +166,37 @@ void PlusAddressCreationViewAndroid::PromptDismissed(
   controller_->OnDialogDestroyed();
 }
 
-void PlusAddressCreationViewAndroid::ShowReserveResult(
-    const PlusProfileOrError& maybe_plus_profile) {
+void PlusAddressCreationViewAndroid::ShowReservedProfile(
+    const PlusProfile& reserved_profile) {
   if (!java_object_) {
     return;
   }
-  JNIEnv* env = base::android::AttachCurrentThread();
-  if (maybe_plus_profile.has_value()) {
-    ScopedJavaLocalRef<jstring> j_proposed_plus_address =
-        base::android::ConvertUTF8ToJavaString(
-            env, *maybe_plus_profile->plus_address);
-    Java_PlusAddressCreationViewBridge_updateProposedPlusAddress(
-        env, java_object_, j_proposed_plus_address);
-  } else {
-    Java_PlusAddressCreationViewBridge_showError(env, java_object_,
-                                                 GetReserveErrorStateInfo());
-  }
+  Java_PlusAddressCreationViewBridge_updateProposedPlusAddress(
+      base::android::AttachCurrentThread(), java_object_,
+      *reserved_profile.plus_address);
 }
 
-void PlusAddressCreationViewAndroid::ShowConfirmResult(
-    const PlusProfileOrError& maybe_plus_profile) {
+void PlusAddressCreationViewAndroid::FinishConfirm() {
   if (!java_object_) {
     return;
   }
-  JNIEnv* env = base::android::AttachCurrentThread();
-  if (maybe_plus_profile.has_value()) {
-    Java_PlusAddressCreationViewBridge_finishConfirm(env, java_object_);
-  } else {
-    // TODO: crbug.com/354881207 - Pass a proper confirm  error information.
-    Java_PlusAddressCreationViewBridge_showError(env, java_object_,
-                                                 ScopedJavaLocalRef<jobject>());
+  Java_PlusAddressCreationViewBridge_finishConfirm(
+      base::android::AttachCurrentThread(), java_object_);
+}
+
+void PlusAddressCreationViewAndroid::ShowError(
+    PlusAddressCreationErrorStateInfo error_info) {
+  if (!java_object_) {
+    return;
   }
+  ScopedJavaLocalRef<jobject> error_info_java_object;
+  error_info_java_object = Java_PlusAddressCreationErrorStateInfo_Constructor(
+      base::android::AttachCurrentThread(),
+      base::to_underlying(error_info.error_type), error_info.title,
+      error_info.description, error_info.ok_text, error_info.cancel_text);
+  Java_PlusAddressCreationViewBridge_showError(
+      base::android::AttachCurrentThread(), java_object_,
+      error_info_java_object);
 }
 
 void PlusAddressCreationViewAndroid::HideRefreshButton() {

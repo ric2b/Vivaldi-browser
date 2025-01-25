@@ -33,8 +33,7 @@ class SyncEngineImpl;
 class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
                           public SyncManager::Observer {
  public:
-  using AllNodesCallback =
-      base::OnceCallback<void(const DataType, base::Value::List)>;
+  using AllNodesCallback = base::OnceCallback<void(base::Value::List)>;
 
   // Struct that allows passing back data upon init, for data previously
   // produced by SyncEngineBackend (which doesn't itself have the ability to
@@ -151,7 +150,6 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
   void DoShutdown(ShutdownReason reason);
 
   // Configuration methods that must execute on sync loop.
-  void DoPurgeDisabledTypes(const DataTypeSet& to_purge);
   void DoConfigureSyncer(DataTypeConfigurer::ConfigureParams params);
   void DoFinishConfigureDataTypes(
       DataTypeSet types_to_config,
@@ -170,10 +168,9 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
       const std::string& payload,
       const DataTypeSet& interested_data_types);
 
-  // Returns a Value::List representing Nigori node.
+  // Functions to deal with NIGORI, resembling DataTypeController APIs.
+  void DoClearNigoriDataForMigration();
   void GetNigoriNodeForDebugging(AllNodesCallback callback);
-
-  // Record histograms related to Nigori data type.
   void RecordNigoriMemoryUsageAndCountsHistograms();
 
   bool HasUnsyncedItemsForTest() const;

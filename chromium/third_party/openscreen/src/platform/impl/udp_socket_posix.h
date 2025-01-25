@@ -53,14 +53,14 @@ class UdpSocketPosix : public UdpSocket {
   void ReceiveMessage();
 
  private:
-  // Helper to close the socket if |error| is fatal, in addition to dispatching
-  // an Error to the |client_|.
+  // Helper to close the socket if `error` is fatal, in addition to dispatching
+  // an Error to the `client_`.
   void OnError(Error::Code error);
 
   bool is_closed() const { return handle_.fd < 0; }
   void Close();
 
-  // Task runner to use for queuing |client_| callbacks.
+  // Task runner to use for queuing `client_` callbacks.
   TaskRunner& task_runner_;
 
   // Client to use for callbacks. This can be nullptr if the user does not want

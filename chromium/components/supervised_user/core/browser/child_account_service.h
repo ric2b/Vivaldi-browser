@@ -101,8 +101,7 @@ class ChildAccountService : public KeyedService,
   void OnPrimaryAccountChanged(
       const signin::PrimaryAccountChangeEvent& event_details) override;
   void OnExtendedAccountInfoUpdated(const AccountInfo& info) override;
-  void OnRefreshTokenUpdatedForAccount(
-      const CoreAccountInfo& account_info) override;
+  void OnRefreshTokenUpdatedForAccount(const CoreAccountInfo& account_info) override;
   void OnErrorStateOfRefreshTokenUpdatedForAccount(
       const CoreAccountInfo& account_info,
       const GoogleServiceAuthError& error,

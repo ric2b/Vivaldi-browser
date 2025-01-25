@@ -100,7 +100,7 @@ constexpr int kSupportedRemotingVersion = 2;
 // are required to implement the following codecs to be Cast V2 compliant: H264,
 // VP8, AAC, Opus. Senders have to implement at least one codec from this
 // list for audio or video to start a session.
-// |kNotSpecified| is used in remoting to indicate that the stream is being
+// `kNotSpecified` is used in remoting to indicate that the stream is being
 // remoted and is not specified as part of the OFFER message (indicated as
 // "REMOTE_AUDIO" or "REMOTE_VIDEO").
 enum class AudioCodec { kAac, kOpus, kNotSpecified };

@@ -12,10 +12,10 @@
 namespace vivaldi {
 
 // static
-sync_notes::NoteSyncService* NoteSyncServiceFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+sync_notes::NoteSyncService* NoteSyncServiceFactory::GetForProfile(
+   ProfileIOS* profile) {
   return static_cast<sync_notes::NoteSyncService*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 // static
@@ -35,10 +35,9 @@ NoteSyncServiceFactory::~NoteSyncServiceFactory() {}
 
 std::unique_ptr<KeyedService> NoteSyncServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   auto note_sync_service = std::make_unique<sync_notes::NoteSyncService>(
-      SyncedFileStoreFactory::GetForBrowserState(browser_state),
+      SyncedFileStoreFactory::GetForProfile(profile),
       syncer::WipeModelUponSyncDisabledBehavior::kNever);
   return note_sync_service;
 }

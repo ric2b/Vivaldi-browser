@@ -7,6 +7,8 @@
 
 #import <Foundation/Foundation.h>
 
+#import "base/time/time.h"
+
 // Sign-in result returned Sign-in result.
 typedef NS_ENUM(NSUInteger, SigninCoordinatorResult) {
   // Sign-in has been canceled by the user or by another reason.
@@ -20,6 +22,11 @@ typedef NS_ENUM(NSUInteger, SigninCoordinatorResult) {
   // Sign-in did not complete because it is disabled. This can happen if
   // enterprise policies are updated after sign-in is started.
   SigninCoordinatorResultDisabled,
+  // Sign-in cannot start as the UI is not available. In this case, no
+  // SigninCoordinator object is created.
+  // Only triggered by `SceneController` when processing a ShowSigninCommand
+  // and when the UI is not ready to present any signin coordinator.
+  SigninCoordinatorUINotAvailable,
 };
 
 // User's signed-in state as defined by AuthenticationService.
@@ -131,5 +138,10 @@ extern const char* const kUMASSORecallPromoAction;
 extern const char* const kUMASSORecallAccountsAvailable;
 // Name of the histogram recording how many times the promo has been shown.
 extern const char* const kUMASSORecallPromoSeenCount;
+
+// Default timeout to wait for fetching account capabilities, which determine
+// minor mode restrictions status.
+inline constexpr base::TimeDelta kMinorModeRestrictionsFetchDeadline =
+    base::Milliseconds(500);
 
 #endif  // IOS_CHROME_BROWSER_UI_AUTHENTICATION_SIGNIN_SIGNIN_CONSTANTS_H_

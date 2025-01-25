@@ -174,11 +174,6 @@ bool ElementInnerTextCollector::IsDisplayBlockLevel(const Node& node) {
   // we should check at first.
   if (layout_object->IsAtomicInlineLevel())
     return false;
-  if (layout_object->IsRubyText()) {
-    // RT isn't consider as block-level.
-    // e.g. <ruby>abc<rt>def</rt>.innerText == "abcdef"
-    return false;
-  }
   // Note: CAPTION is associated to |LayoutTableCaption| in LayoutNG or
   // |LayoutBlockFlow| in legacy layout.
   return true;
@@ -245,7 +240,7 @@ void ElementInnerTextCollector::ProcessLayoutText(const LayoutText& layout_text,
   if (layout_text.HasEmptyText()) {
     return;
   }
-  if (layout_text.Style()->UsedVisibility() != EVisibility::kVisible) {
+  if (layout_text.Style()->Visibility() != EVisibility::kVisible) {
     // TODO(editing-dev): Once we make ::first-letter don't apply "visibility",
     // we should get rid of this if-statement. http://crbug.com/866744
     return;
@@ -282,8 +277,8 @@ void ElementInnerTextCollector::ProcessNode(const Node& node) {
 
   // 3. If node's computed value of 'visibility' is not 'visible', then return
   // items.
-  const ComputedStyle* style = node.GetComputedStyle();
-  if (style && style->UsedVisibility() != EVisibility::kVisible) {
+  const ComputedStyle* style = node.GetComputedStyleForElementOrLayoutObject();
+  if (style && style->Visibility() != EVisibility::kVisible) {
     return ProcessChildren(node);
   }
 

@@ -11,10 +11,10 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/constants/web_app_id_constants.h"
 #include "base/containers/extend.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/json/json_reader.h"
-#include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/input_method/editor_consent_enums.h"
 #include "chrome/browser/ash/input_method/input_methods_by_language.h"
 #include "chrome/browser/ash/input_method/url_utils.h"
@@ -24,8 +24,8 @@
 #include "chrome/browser/manta/manta_service_factory.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "chromeos/ash/components/file_manager/app_id.h"
 #include "chromeos/components/kiosk/kiosk_utils.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/base/window_properties.h"
@@ -213,15 +213,15 @@ bool IsAppAllowed(std::string_view app_id) {
           extension_misc::kGoogleDocsDemoAppId,
           extension_misc::kGoogleSheetsDemoAppId,
           extension_misc::kGoogleSlidesDemoAppId,
-          web_app::kGmailAppId,
-          web_app::kGoogleChatAppId,
-          web_app::kGoogleMeetAppId,
-          web_app::kGoogleDocsAppId,
-          web_app::kGoogleSlidesAppId,
-          web_app::kGoogleSheetsAppId,
-          web_app::kGoogleDriveAppId,
-          web_app::kGoogleKeepAppId,
-          web_app::kGoogleCalendarAppId,
+          ash::kGmailAppId,
+          ash::kGoogleChatAppId,
+          ash::kGoogleMeetAppId,
+          ash::kGoogleDocsAppId,
+          ash::kGoogleSlidesAppId,
+          ash::kGoogleSheetsAppId,
+          ash::kGoogleDriveAppId,
+          ash::kGoogleKeepAppId,
+          ash::kGoogleCalendarAppId,
       });
 
   return base::FeatureList::IsEnabled(features::kOrcaOnWorkspace) ||

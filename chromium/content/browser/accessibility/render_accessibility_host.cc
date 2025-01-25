@@ -11,6 +11,7 @@
 #include "base/task/thread_pool.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_thread.h"
+#include "mojo/public/cpp/bindings/message.h"
 
 namespace content {
 
@@ -23,7 +24,17 @@ RenderAccessibilityHost::RenderAccessibilityHost(
 RenderAccessibilityHost::~RenderAccessibilityHost() = default;
 
 void RenderAccessibilityHost::HandleAXEvents(
+    const ui::AXUpdatesAndEvents& updates_and_events,
+    const ui::AXLocationAndScrollUpdates& location_and_scroll_updates,
+    uint32_t reset_token,
+    HandleAXEventsCallback callback) {
+  NOTREACHED() << "Non-const ref version of this method should be used as a "
+                  "performance optimization.";
+}
+
+void RenderAccessibilityHost::HandleAXEvents(
     ui::AXUpdatesAndEvents& updates_and_events,
+    ui::AXLocationAndScrollUpdates& location_and_scroll_updates,
     uint32_t reset_token,
     HandleAXEventsCallback callback) {
   // Post the HandleAXEvents task onto the UI thread, and then when that
@@ -33,17 +44,27 @@ void RenderAccessibilityHost::HandleAXEvents(
       FROM_HERE,
       base::BindOnce(&RenderFrameHostImpl::HandleAXEvents,
                      render_frame_host_impl_, tree_id_,
-                     std::move(updates_and_events), reset_token),
+                     std::move(updates_and_events),
+                     std::move(location_and_scroll_updates), reset_token,
+                     mojo::GetBadMessageCallback()),
       std::move(callback));
 }
 
 void RenderAccessibilityHost::HandleAXLocationChanges(
-    std::vector<blink::mojom::LocationChangesPtr> changes,
+    const ui::AXLocationAndScrollUpdates& changes,
+    uint32_t reset_token) {
+  NOTREACHED() << "Non-const ref version of this method should be used as a "
+                  "performance optimization.";
+}
+
+void RenderAccessibilityHost::HandleAXLocationChanges(
+    ui::AXLocationAndScrollUpdates& changes,
     uint32_t reset_token) {
   GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE, base::BindOnce(&RenderFrameHostImpl::HandleAXLocationChanges,
-                                render_frame_host_impl_, tree_id_,
-                                std::move(changes), reset_token));
+      FROM_HERE,
+      base::BindOnce(&RenderFrameHostImpl::HandleAXLocationChanges,
+                     render_frame_host_impl_, tree_id_, std::move(changes),
+                     reset_token, mojo::GetBadMessageCallback()));
 }
 
 }  // namespace content

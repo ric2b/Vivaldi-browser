@@ -13,6 +13,14 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 
+namespace {
+
+const char kMobilePromoQRCodeURL[] =
+    "https://apps.apple.com/app/apple-store/"
+    "id535886823?pt=9008&ct=desktop-chr-ntp&mt=8";
+
+}  // namespace
+
 namespace ntp_features {
 
 // If enabled, shows a confirm dialog before removing search suggestions from
@@ -84,7 +92,7 @@ BASE_FEATURE(kNtpBackgroundImageErrorDetection,
 // If enabled, calendar module will be shown.
 BASE_FEATURE(kNtpCalendarModule,
              "NtpCalendarModule",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, chrome cart module will be shown.
 BASE_FEATURE(kNtpChromeCartModule,
@@ -114,7 +122,7 @@ BASE_FEATURE(kNtpDriveModuleSegmentation,
 // If enabled, six files show in the NTP Drive module, instead of three.
 BASE_FEATURE(kNtpDriveModuleShowSixFiles,
              "NtpDriveModuleShowSixFiles",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, logo will be shown.
 // This is a kill switch. Keep indefinitely.
@@ -137,11 +145,6 @@ BASE_FEATURE(kNtpMiddleSlotPromoDismissal,
 BASE_FEATURE(kNtpModulesLoadTimeoutMilliseconds,
              "NtpModulesLoadTimeoutMilliseconds",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If true, extends width of modules if space allows.
-BASE_FEATURE(kNtpWideModules,
-             "NtpWideModules",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Dummy feature to set param "NtpModulesOrderParam".
 // This is used for an emergency Finch param. Keep indefinitely.
@@ -225,12 +228,6 @@ BASE_FEATURE(kNtpFeedModule,
              "NtpFeedModule",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// If enabled, Google Lens image search will call Lens v3 direct upload
-// endpoint instead of uploading to Scotty.
-BASE_FEATURE(kNtpLensDirectUpload,
-             "NtpLensDirectUpload",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // If enabled, SafeBrowsing module will be shown to a target user.
 BASE_FEATURE(kNtpSafeBrowsingModule,
              "NtpSafeBrowsingModule",
@@ -290,6 +287,16 @@ BASE_FEATURE(kNtpWallpaperSearchButtonHideCondition,
 // This is used for an emergency Finch param. Keep indefinitely.
 BASE_FEATURE(kNtpWallpaperSearchButtonAnimationShownThreshold,
              "NtpWallpaperSearchButtonAnimationShownThreshold",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Feature to control the display of a mobile promo on the NTP.
+BASE_FEATURE(kNtpMobilePromo,
+             "NtpMobilePromo",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, the Microsoft Authentication module will be shown.
+BASE_FEATURE(kNtpMicrosoftAuthenticationModule,
+             "NtpMicrosoftAuthenticationModule",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kNtpModuleIgnoredCriteriaThreshold[] =
@@ -355,6 +362,7 @@ const char kNtpWallpaperSearchButtonHideConditionParam[] =
 const char kNtpWallpaperSearchButtonAnimationShownThresholdParam[] =
     "NtpWallpaperSearchButtonAnimationShownThresholdParam";
 const char kWallpaperSearchHatsDelayParam[] = "WallpaperSearchHatsDelayParam";
+const char kNtpMobilePromoTargetUrlParam[] = "NtpMobilePromoTargetUrlParam";
 
 const base::FeatureParam<std::string> kNtpCalendarModuleExperimentParam(
     &ntp_features::kNtpCalendarModule,
@@ -363,7 +371,7 @@ const base::FeatureParam<std::string> kNtpCalendarModuleExperimentParam(
 const base::FeatureParam<int> kNtpCalendarModuleMaxEventsParam(
     &ntp_features::kNtpCalendarModule,
     "NtpCalendarModuleMaxEventsParam",
-    6);
+    5);
 const base::FeatureParam<base::TimeDelta> kNtpCalendarModuleWindowEndDeltaParam(
     &ntp_features::kNtpCalendarModule,
     "NtpCalendarModuleWindowEndDeltaParam",
@@ -381,6 +389,10 @@ const base::FeatureParam<bool> kNtpRealboxCr23SteadyStateShadow(
     &ntp_features::kRealboxCr23Theming,
     "kNtpRealboxCr23SteadyStateShadow",
     false);
+const base::FeatureParam<int> kNtpMobilePromoImpressionLimit(
+    &ntp_features::kNtpMobilePromo,
+    "kNtpMobilePromoImpressionLimit",
+    10);
 
 base::TimeDelta GetModulesLoadTimeout() {
   std::string param_value = base::GetFieldTrialParamValueByFeature(
@@ -422,6 +434,13 @@ int GetWallpaperSearchButtonAnimationShownThreshold() {
 int GetWallpaperSearchButtonHideCondition() {
   return base::GetFieldTrialParamByFeatureAsInt(
       kNtpWallpaperSearchButtonHideCondition,
-      kNtpWallpaperSearchButtonHideConditionParam, 0);
+      kNtpWallpaperSearchButtonHideConditionParam, 2);
+}
+
+std::string GetMobilePromoTargetURL() {
+  std::string field_trial_url = base::GetFieldTrialParamValueByFeature(
+      ntp_features::kNtpMobilePromo,
+      ntp_features::kNtpMobilePromoTargetUrlParam);
+  return (field_trial_url.empty()) ? kMobilePromoQRCodeURL : field_trial_url;
 }
 }  // namespace ntp_features

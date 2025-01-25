@@ -50,7 +50,6 @@ class MODULES_EXPORT MLContext : public ScriptWrappable {
       ExecutionContext* execution_context,
       const V8MLDeviceType device_type,
       const V8MLPowerPreference power_preference,
-      const unsigned int num_threads,
       webnn::mojom::blink::CreateContextSuccessPtr create_context_success);
 
   MLContext(const MLContext&) = delete;
@@ -60,7 +59,6 @@ class MODULES_EXPORT MLContext : public ScriptWrappable {
 
   V8MLDeviceType GetDeviceType() const;
   V8MLPowerPreference GetPowerPreference() const;
-  unsigned int GetNumThreads() const;
 
   const webnn::ContextProperties& GetProperties() { return properties_; }
 
@@ -83,35 +81,16 @@ class MODULES_EXPORT MLContext : public ScriptWrappable {
                                        const MLTensorDescriptor* descriptor,
                                        ExceptionState& exception_state);
 
-  // Writes data specified by array buffer view from offset in elements.
+  // Writes data specified by an array buffer view.
   void writeTensor(ScriptState* script_state,
                    MLTensor* dst_tensor,
                    const MaybeShared<DOMArrayBufferView>& src_data,
-                   uint64_t src_element_offset,
                    ExceptionState& exception_state);
 
-  // Writes data specified by array buffer view from offset and size in
-  // elements.
-  void writeTensor(ScriptState* script_state,
-                   MLTensor* dst_tensor,
-                   const MaybeShared<DOMArrayBufferView>& src_data,
-                   uint64_t src_element_offset,
-                   uint64_t src_element_count,
-                   ExceptionState& exception_state);
-
-  // Writes array tensor data from offset in bytes.
+  // Writes data specified by an array buffer.
   void writeTensor(ScriptState* script_state,
                    MLTensor* dst_tensor,
                    const DOMArrayBufferBase* src_data,
-                   uint64_t src_byte_offset,
-                   ExceptionState& exception_state);
-
-  // Writes array tensor data from offset and size in bytes.
-  void writeTensor(ScriptState* script_state,
-                   MLTensor* dst_tensor,
-                   const DOMArrayBufferBase* src_data,
-                   uint64_t src_byte_offset,
-                   uint64_t src_byte_size,
                    ExceptionState& exception_state);
 
   ScriptPromise<DOMArrayBuffer> readTensor(ScriptState* script_state,
@@ -149,17 +128,11 @@ class MODULES_EXPORT MLContext : public ScriptWrappable {
   void OnLost(uint32_t custom_reason, const std::string& description);
 
   // Validate and write ArrayBuffer data to hardware accelerated OS
-  // machine learning buffers in the WebNN Service.
+  // machine learning tensors in the WebNN Service.
   // `src_data` is the source span of the array buffer data.
-  // `src_element_offset` is the start of the data to write from in the span.
-  // `src_element_count` is optional to denote when the entire span will be
-  // written.
   void WriteWebNNTensor(ScriptState* script_state,
                         MLTensor* dst_tensor,
                         base::span<const uint8_t> src_data,
-                        uint64_t src_element_offset,
-                        unsigned src_data_type_size_bytes,
-                        std::optional<uint64_t> src_element_count,
                         ExceptionState& exception_state);
 
   void DidCreateWebNNTensor(ScopedMLTrace scoped_trace,
@@ -170,7 +143,6 @@ class MODULES_EXPORT MLContext : public ScriptWrappable {
 
   V8MLDeviceType device_type_;
   V8MLPowerPreference power_preference_;
-  unsigned int num_threads_;
 
   Member<LostProperty> lost_property_;
 
@@ -188,7 +160,7 @@ class MODULES_EXPORT MLContext : public ScriptWrappable {
 
   HeapHashSet<WeakMember<MLGraph>> graphs_;
   HeapHashSet<WeakMember<MLGraphBuilder>> graph_builders_;
-  HeapHashSet<WeakMember<MLTensor>> buffers_;
+  HeapHashSet<WeakMember<MLTensor>> tensors_;
 };
 
 }  // namespace blink

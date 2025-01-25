@@ -159,8 +159,7 @@ bool IsUrlInLocalDatabase(const BrowsingHistoryService::HistoryEntry& entry) {
     case BrowsingHistoryService::HistoryEntry::EntryType::COMBINED_ENTRY:
       return true;
   }
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 // Helper function to check if entry is present in user remote data (server-side
@@ -175,8 +174,7 @@ bool IsEntryInRemoteUserData(
     case BrowsingHistoryService::HistoryEntry::EntryType::COMBINED_ENTRY:
       return true;
   }
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 // Expected URL types for `UrlIdentity::CreateFromUrl()`.
@@ -402,8 +400,7 @@ void BrowsingHistoryHandler::HandleQueryHistory(const base::Value::List& args) {
 
   const base::Value& count = args[2];
   if (!count.is_int()) {
-    NOTREACHED_IN_MIGRATION() << "Failed to convert argument 2.";
-    return;
+    NOTREACHED() << "Failed to convert argument 2.";
   }
 
   std::optional<double> begin_timestamp;
@@ -463,16 +460,14 @@ void BrowsingHistoryHandler::HandleRemoveVisits(const base::Value::List& args) {
   for (size_t i = 0; i < list.size(); ++i) {
     // Each argument is a dictionary with properties "url" and "timestamps".
     if (!list[i].is_dict()) {
-      NOTREACHED_IN_MIGRATION() << "Unable to extract arguments";
-      return;
+      NOTREACHED() << "Unable to extract arguments";
     }
 
     const std::string* url_ptr = list[i].GetDict().FindString("url");
     const base::Value::List* timestamps_ptr =
         list[i].GetDict().FindList("timestamps");
     if (!url_ptr || !timestamps_ptr) {
-      NOTREACHED_IN_MIGRATION() << "Unable to extract arguments";
-      return;
+      NOTREACHED() << "Unable to extract arguments";
     }
 
     DCHECK_GT(timestamps_ptr->size(), 0U);
@@ -481,8 +476,7 @@ void BrowsingHistoryHandler::HandleRemoveVisits(const base::Value::List& args) {
 
     for (const base::Value& timestamp : *timestamps_ptr) {
       if (!timestamp.is_double() && !timestamp.is_int()) {
-        NOTREACHED_IN_MIGRATION() << "Unable to extract visit timestamp.";
-        continue;
+        NOTREACHED() << "Unable to extract visit timestamp.";
       }
 
       base::Time visit_time =

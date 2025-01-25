@@ -326,7 +326,7 @@ class InlinedStringBuffer {
       CharType* begin = inlined->data();
       DCHECK_LE(begin, end);
       DCHECK_LT(end, begin + inlined->size());
-      return String(begin, static_cast<size_t>(end - begin));
+      return String(base::span(*inlined).subspan(0, end - begin));
     } else {
       auto& outlined = std::get<OutlinedArray>(buffer_);
       DCHECK_EQ(begin(), outlined.Characters());
@@ -345,8 +345,7 @@ class InlinedStringBuffer {
 };
 }  // namespace
 
-String TextCodecUTF8::Decode(const char* bytes,
-                             wtf_size_t length,
+String TextCodecUTF8::Decode(base::span<const uint8_t> bytes,
                              FlushBehavior flush,
                              bool stop_on_error,
                              bool& saw_error) {
@@ -356,10 +355,10 @@ String TextCodecUTF8::Decode(const char* bytes,
   // That includes all bytes in the partial-sequence buffer because
   // each byte in an invalid sequence will turn into a replacement character.
   InlinedStringBuffer<LChar> buffer(
-      base::CheckAdd(partial_sequence_size_, length).ValueOrDie());
+      base::CheckAdd(partial_sequence_size_, bytes.size()).ValueOrDie());
 
-  const uint8_t* source = reinterpret_cast<const uint8_t*>(bytes);
-  const uint8_t* end = source + length;
+  const uint8_t* source = bytes.data();
+  const uint8_t* end = source + bytes.size();
   const uint8_t* aligned_end = AlignToMachineWord(end);
   LChar* destination = buffer.begin();
 
@@ -438,7 +437,7 @@ String TextCodecUTF8::Decode(const char* bytes,
 
 upConvertTo16Bit:
   InlinedStringBuffer<UChar> buffer16(
-      base::CheckAdd(partial_sequence_size_, length).ValueOrDie());
+      base::CheckAdd(partial_sequence_size_, bytes.size()).ValueOrDie());
 
   UChar* destination16 = buffer16.begin();
 
@@ -523,14 +522,14 @@ upConvertTo16Bit:
 }
 
 template <typename CharType>
-std::string TextCodecUTF8::EncodeCommon(const CharType* characters,
-                                        wtf_size_t length) {
+std::string TextCodecUTF8::EncodeCommon(base::span<const CharType> characters) {
   // The maximum number of UTF-8 bytes needed per UTF-16 code unit is 3.
   // BMP characters take only one UTF-16 code unit and can take up to 3 bytes
   // (3x).
   // Non-BMP characters take two UTF-16 code units and can take up to 4 bytes
   // (2x).
-  CHECK_LE(length, std::numeric_limits<wtf_size_t>::max() / 3);
+  CHECK_LE(characters.size(), std::numeric_limits<wtf_size_t>::max() / 3);
+  const wtf_size_t length = static_cast<wtf_size_t>(characters.size());
   Vector<uint8_t> bytes(length * 3);
 
   wtf_size_t i = 0;
@@ -551,16 +550,16 @@ std::string TextCodecUTF8::EncodeCommon(const CharType* characters,
 
 template <typename CharType>
 TextCodec::EncodeIntoResult TextCodecUTF8::EncodeIntoCommon(
-    const CharType* characters,
-    wtf_size_t length,
-    unsigned char* destination,
-    size_t capacity) {
+    base::span<const CharType> source,
+    base::span<uint8_t> destination) {
+  const auto* characters = source.data();
+  const wtf_size_t length = base::checked_cast<wtf_size_t>(source.size());
   TextCodec::EncodeIntoResult encode_into_result{0, 0};
 
   wtf_size_t i = 0;
   wtf_size_t previous_code_unit_index = 0;
   bool is_error = false;
-  while (i < length && encode_into_result.bytes_written < capacity &&
+  while (i < length && encode_into_result.bytes_written < destination.size() &&
          !is_error) {
     UChar32 character;
     previous_code_unit_index = i;
@@ -569,7 +568,7 @@ TextCodec::EncodeIntoResult TextCodecUTF8::EncodeIntoCommon(
     // surrogate is encountered. See comment in EncodeCommon() for more info.
     if (0xD800 <= character && character <= 0xDFFF)
       character = kReplacementCharacter;
-    U8_APPEND(destination, encode_into_result.bytes_written, capacity,
+    U8_APPEND(destination, encode_into_result.bytes_written, destination.size(),
               character, is_error);
   }
 
@@ -585,32 +584,26 @@ TextCodec::EncodeIntoResult TextCodecUTF8::EncodeIntoCommon(
   return encode_into_result;
 }
 
-std::string TextCodecUTF8::Encode(const UChar* characters,
-                                  wtf_size_t length,
+std::string TextCodecUTF8::Encode(base::span<const UChar> characters,
                                   UnencodableHandling) {
-  return EncodeCommon(characters, length);
+  return EncodeCommon(characters);
 }
 
-std::string TextCodecUTF8::Encode(const LChar* characters,
-                                  wtf_size_t length,
+std::string TextCodecUTF8::Encode(base::span<const LChar> characters,
                                   UnencodableHandling) {
-  return EncodeCommon(characters, length);
+  return EncodeCommon(characters);
 }
 
 TextCodec::EncodeIntoResult TextCodecUTF8::EncodeInto(
-    const UChar* characters,
-    wtf_size_t length,
-    unsigned char* destination,
-    size_t capacity) {
-  return EncodeIntoCommon(characters, length, destination, capacity);
+    base::span<const UChar> characters,
+    base::span<uint8_t> destination) {
+  return EncodeIntoCommon(characters, destination);
 }
 
 TextCodec::EncodeIntoResult TextCodecUTF8::EncodeInto(
-    const LChar* characters,
-    wtf_size_t length,
-    unsigned char* destination,
-    size_t capacity) {
-  return EncodeIntoCommon(characters, length, destination, capacity);
+    base::span<const LChar> characters,
+    base::span<uint8_t> destination) {
+  return EncodeIntoCommon(characters, destination);
 }
 
 }  // namespace WTF

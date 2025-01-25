@@ -8,6 +8,8 @@
 // - Christophe Riccio <christophe@lunarg.com>
 #include "vulkan/layer/vk_layer_settings.hpp"
 
+#include <cstdlib>
+
 static std::string Merge(const std::vector<std::string> &strings) {
     std::string result;
 

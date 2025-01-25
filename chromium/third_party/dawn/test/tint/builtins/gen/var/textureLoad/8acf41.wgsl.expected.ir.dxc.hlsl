@@ -137,19 +137,14 @@ tint_ExternalTextureParams v_39(uint start_byte_offset) {
   uint4 v_56 = arg_0_params[((256u + start_byte_offset) / 16u)];
   uint2 v_57 = ((((((256u + start_byte_offset) % 16u) / 4u) == 2u)) ? (v_56.zw) : (v_56.xy));
   uint4 v_58 = arg_0_params[((264u + start_byte_offset) / 16u)];
-  tint_GammaTransferParams v_59 = v_43;
-  tint_GammaTransferParams v_60 = v_44;
-  tint_ExternalTextureParams v_61 = {v_40, v_41, v_42, v_59, v_60, v_45, v_46, v_47, v_49, v_51, v_53, v_55, v_57, asfloat(((((((264u + start_byte_offset) % 16u) / 4u) == 2u)) ? (v_58.zw) : (v_58.xy)))};
-  return v_61;
+  tint_ExternalTextureParams v_59 = {v_40, v_41, v_42, v_43, v_44, v_45, v_46, v_47, v_49, v_51, v_53, v_55, v_57, asfloat(((((((264u + start_byte_offset) % 16u) / 4u) == 2u)) ? (v_58.zw) : (v_58.xy)))};
+  return v_59;
 }
 
 float4 textureLoad_8acf41() {
-  int2 arg_1 = (1).xx;
-  Texture2D<float4> v_62 = arg_0_plane0;
-  Texture2D<float4> v_63 = arg_0_plane1;
-  tint_ExternalTextureParams v_64 = v_39(0u);
-  tint_ExternalTextureParams v_65 = v_64;
-  float4 res = tint_TextureLoadExternal(v_62, v_63, v_65, uint2(arg_1));
+  int2 arg_1 = (int(1)).xx;
+  tint_ExternalTextureParams v_60 = v_39(0u);
+  float4 res = tint_TextureLoadExternal(arg_0_plane0, arg_0_plane1, v_60, uint2(arg_1));
   return res;
 }
 
@@ -166,15 +161,13 @@ VertexOutput vertex_main_inner() {
   VertexOutput tint_symbol = (VertexOutput)0;
   tint_symbol.pos = (0.0f).xxxx;
   tint_symbol.prevent_dce = textureLoad_8acf41();
-  VertexOutput v_66 = tint_symbol;
-  return v_66;
+  VertexOutput v_61 = tint_symbol;
+  return v_61;
 }
 
 vertex_main_outputs vertex_main() {
-  VertexOutput v_67 = vertex_main_inner();
-  VertexOutput v_68 = v_67;
-  VertexOutput v_69 = v_67;
-  vertex_main_outputs v_70 = {v_69.prevent_dce, v_68.pos};
-  return v_70;
+  VertexOutput v_62 = vertex_main_inner();
+  vertex_main_outputs v_63 = {v_62.prevent_dce, v_62.pos};
+  return v_63;
 }
 

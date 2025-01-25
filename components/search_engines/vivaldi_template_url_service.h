@@ -11,7 +11,8 @@ class TemplateURL;
 
 namespace vivaldi {
 
-std::string VivaldiGetPositionSuffix(const TemplateURL* template_url);
+syncer::UniquePosition::Suffix VivaldiGetPositionSuffix(
+    const TemplateURL* template_url);
 const char* VivaldiGetDefaultProviderGuidPrefForType(
   TemplateURLService::DefaultSearchType type);
 

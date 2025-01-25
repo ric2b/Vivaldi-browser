@@ -64,8 +64,7 @@ const char* GetCorporaString(FilesListCorpora corpora) {
     case FilesListCorpora::ALL_TEAM_DRIVES:
       return kCorporaAllTeamDrives;
   }
-  NOTREACHED_IN_MIGRATION();
-  return kCorporaDefault;
+  NOTREACHED();
 }
 
 }  // namespace
@@ -271,8 +270,8 @@ GURL DriveApiUrlGenerator::GetInitiateUploadExistingFileUrl(
   return url;
 }
 
-GURL DriveApiUrlGenerator::GetMultipartUploadNewFileUrl(
-    bool set_modified_date) const {
+GURL DriveApiUrlGenerator::GetMultipartUploadNewFileUrl(bool set_modified_date,
+                                                        bool convert) const {
   GURL url = AddMultipartUploadParam(
       base_url_.Resolve(kDriveV2UploadNewFileUrl));
 
@@ -280,6 +279,9 @@ GURL DriveApiUrlGenerator::GetMultipartUploadNewFileUrl(
   // setModifiedDate is "false" by default.
   if (set_modified_date)
     url = net::AppendOrReplaceQueryParameter(url, "setModifiedDate", "true");
+  if (convert) {
+    url = net::AppendOrReplaceQueryParameter(url, "convert", "true");
+  }
 
   return url;
 }

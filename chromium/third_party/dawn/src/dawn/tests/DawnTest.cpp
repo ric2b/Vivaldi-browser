@@ -43,6 +43,7 @@
 #include "dawn/common/Log.h"
 #include "dawn/common/Math.h"
 #include "dawn/common/Platform.h"
+#include "dawn/common/StringViewUtils.h"
 #include "dawn/common/SystemUtils.h"
 #include "dawn/dawn_proc.h"
 #include "dawn/native/Device.h"
@@ -746,7 +747,7 @@ DawnTestBase::DawnTestBase(const AdapterTestParam& param) : mParam(param) {
                         info.deviceID == param.adapterProperties.deviceID &&
                         info.vendorID == param.adapterProperties.vendorID &&
                         info.adapterType == param.adapterProperties.adapterType &&
-                        strcmp(info.device, param.adapterProperties.name.c_str()) == 0);
+                        std::string_view(info.device) == param.adapterProperties.name);
             });
         DAWN_ASSERT(it != adapters.end());
         gCurrentTest->mBackendAdapter = *it;
@@ -754,7 +755,7 @@ DawnTestBase::DawnTestBase(const AdapterTestParam& param) : mParam(param) {
         WGPUAdapter cAdapter = it->Get();
         DAWN_ASSERT(cAdapter);
         native::GetProcs().adapterAddRef(cAdapter);
-        callbackInfo.callback(WGPURequestAdapterStatus_Success, cAdapter, nullptr,
+        callbackInfo.callback(WGPURequestAdapterStatus_Success, cAdapter, kEmptyOutputStringView,
                               callbackInfo.userdata1, callbackInfo.userdata2);
 
         // Returning a placeholder future that we should never be waiting on.
@@ -778,7 +779,7 @@ DawnTestBase::DawnTestBase(const AdapterTestParam& param) : mParam(param) {
         DAWN_ASSERT(cDevice != nullptr);
 
         gCurrentTest->mLastCreatedBackendDevice = cDevice;
-        callbackInfo.callback(WGPURequestDeviceStatus_Success, cDevice, nullptr,
+        callbackInfo.callback(WGPURequestDeviceStatus_Success, cDevice, kEmptyOutputStringView,
                               callbackInfo.userdata1, callbackInfo.userdata2);
 
         // Returning a placeholder future that we should never be waiting on.
@@ -1072,14 +1073,13 @@ wgpu::SupportedLimits DawnTestBase::GetSupportedLimits() {
 
 bool DawnTestBase::SupportsFeatures(const std::vector<wgpu::FeatureName>& features) {
     DAWN_ASSERT(mBackendAdapter);
-    std::vector<wgpu::FeatureName> supportedFeatures;
-    uint32_t count = native::GetProcs().adapterEnumerateFeatures(mBackendAdapter.Get(), nullptr);
-    supportedFeatures.resize(count);
-    native::GetProcs().adapterEnumerateFeatures(
-        mBackendAdapter.Get(), reinterpret_cast<WGPUFeatureName*>(&supportedFeatures[0]));
+    wgpu::SupportedFeatures supportedFeatures;
+    native::GetProcs().adapterGetFeatures(
+        mBackendAdapter.Get(), reinterpret_cast<WGPUSupportedFeatures*>(&supportedFeatures));
 
     std::unordered_set<wgpu::FeatureName> supportedSet;
-    for (wgpu::FeatureName f : supportedFeatures) {
+    for (uint32_t i = 0; i < supportedFeatures.featureCount; ++i) {
+        wgpu::FeatureName f = supportedFeatures.features[i];
         supportedSet.insert(f);
     }
 
@@ -1180,7 +1180,7 @@ wgpu::Device DawnTestBase::CreateDevice(std::string isolationKey) {
 
     adapter.RequestDevice(&deviceDesc, wgpu::CallbackMode::AllowSpontaneous,
                           [&apiDevice](wgpu::RequestDeviceStatus, wgpu::Device result,
-                                       const char*) { apiDevice = std::move(result); });
+                                       wgpu::StringView) { apiDevice = std::move(result); });
     FlushWire();
     DAWN_ASSERT(apiDevice);
 
@@ -1190,19 +1190,20 @@ wgpu::Device DawnTestBase::CreateDevice(std::string isolationKey) {
         .Times(AtMost(1));
 
     apiDevice.SetLoggingCallback(
-        [](WGPULoggingType type, char const* message, void*) {
+        [](WGPULoggingType type, WGPUStringView message, void*) {
+            std::string_view view = {message.data, message.length};
             switch (type) {
                 case WGPULoggingType_Verbose:
-                    DebugLog() << message;
+                    DebugLog() << view;
                     break;
                 case WGPULoggingType_Warning:
-                    WarningLog() << message;
+                    WarningLog() << view;
                     break;
                 case WGPULoggingType_Error:
-                    ErrorLog() << message;
+                    ErrorLog() << view;
                     break;
                 default:
-                    InfoLog() << message;
+                    InfoLog() << view;
                     break;
             }
         },
@@ -1237,7 +1238,7 @@ void DawnTestBase::SetUp() {
     // RequestAdapter is overriden to ignore RequestAdapterOptions, and select based on test params.
     instance.RequestAdapter(
         nullptr, wgpu::CallbackMode::AllowSpontaneous,
-        [](wgpu::RequestAdapterStatus status, wgpu::Adapter result, char const* message,
+        [](wgpu::RequestAdapterStatus status, wgpu::Adapter result, wgpu::StringView message,
            wgpu::Adapter* userdata) -> void { *userdata = std::move(result); },
         &adapter);
     FlushWire();
@@ -1673,7 +1674,7 @@ void DawnTestBase::MapAsyncAndWait(const wgpu::Buffer& buffer,
     if (!UsesWire()) {
         // We use a new mock callback here so that the validation on the call happens as soon as the
         // scope of this call ends.
-        MockCppCallback<void (*)(wgpu::MapAsyncStatus, const char*)> mockCb;
+        MockCppCallback<void (*)(wgpu::MapAsyncStatus, wgpu::StringView)> mockCb;
         EXPECT_CALL(mockCb, Call(wgpu::MapAsyncStatus::Success, _)).Times(1);
 
         ASSERT_EQ(
@@ -1684,7 +1685,7 @@ void DawnTestBase::MapAsyncAndWait(const wgpu::Buffer& buffer,
     } else {
         bool done = false;
         buffer.MapAsync(mapMode, offset, size, wgpu::CallbackMode::AllowProcessEvents,
-                        [&done](wgpu::MapAsyncStatus status, const char*) {
+                        [&done](wgpu::MapAsyncStatus status, wgpu::StringView) {
                             ASSERT_EQ(status, wgpu::MapAsyncStatus::Success);
                             done = true;
                         });
@@ -1763,7 +1764,7 @@ void DawnTestBase::MapSlotsSynchronously() {
 
         slot.buffer.MapAsync(wgpu::MapMode::Read, 0, wgpu::kWholeMapSize,
                              wgpu::CallbackMode::AllowProcessEvents,
-                             [this, &slot](wgpu::MapAsyncStatus status, const char*) {
+                             [this, &slot](wgpu::MapAsyncStatus status, wgpu::StringView) {
                                  DAWN_ASSERT(status == wgpu::MapAsyncStatus::Success);
                                  Mutex::AutoLock lg(&mMutex);
 

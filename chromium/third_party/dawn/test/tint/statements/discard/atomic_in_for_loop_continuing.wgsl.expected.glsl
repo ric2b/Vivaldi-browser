@@ -2,52 +2,46 @@
 precision highp float;
 precision highp int;
 
-int tint_ftoi(float v) {
-  return ((v <= 2147483520.0f) ? ((v < -2147483648.0f) ? (-2147483647 - 1) : int(v)) : 2147483647);
-}
-
-bool tint_discarded = false;
-layout(location = 0) in float tint_symbol_2;
-layout(location = 1) in vec2 coord_1;
-layout(location = 0) out int value;
-layout(binding = 2, std430) buffer a_block_ssbo {
+layout(binding = 2, std430)
+buffer a_block_1_ssbo {
   int inner;
-} a;
-
+} v;
+bool continue_execution = true;
 uniform highp sampler2D t_s;
-
-int foo(float tint_symbol, vec2 coord) {
+layout(location = 0) in float foo_loc0_Input;
+layout(location = 1) in vec2 foo_loc1_Input;
+layout(location = 0) out int foo_loc0_Output;
+int tint_f32_to_i32(float value) {
+  return mix(2147483647, mix((-2147483647 - 1), int(value), (value >= -2147483648.0f)), (value <= 2147483520.0f));
+}
+int foo_inner(float tint_symbol, vec2 coord) {
   if ((tint_symbol == 0.0f)) {
-    tint_discarded = true;
+    continue_execution = false;
   }
-  vec4 tint_symbol_1 = texture(t_s, coord);
-  int result = tint_ftoi(tint_symbol_1.x);
+  int result = tint_f32_to_i32(texture(t_s, coord)[0u]);
   {
     int i = 0;
-    while (true) {
-      if (!((i < 10))) {
+    while(true) {
+      if ((i < 10)) {
+      } else {
         break;
       }
+      result = (result + i);
       {
-        result = (result + i);
-      }
-      {
-        int tint_symbol_3 = 0;
-        if (!(tint_discarded)) {
-          tint_symbol_3 = atomicAdd(a.inner, 1);
+        int v_1 = 0;
+        if (continue_execution) {
+          v_1 = atomicAdd(v.inner, 1);
         }
-        i = tint_symbol_3;
+        i = v_1;
       }
+      continue;
     }
+  }
+  if (!(continue_execution)) {
+    discard;
   }
   return result;
 }
-
 void main() {
-  int inner_result = foo(tint_symbol_2, coord_1);
-  value = inner_result;
-  if (tint_discarded) {
-    discard;
-  }
-  return;
+  foo_loc0_Output = foo_inner(foo_loc0_Input, foo_loc1_Input);
 }

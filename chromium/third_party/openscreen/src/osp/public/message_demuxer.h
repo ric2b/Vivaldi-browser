@@ -12,10 +12,9 @@
 #include "osp/msgs/osp_messages.h"
 #include "platform/api/time.h"
 #include "platform/base/error.h"
+#include "platform/base/span.h"
 
 namespace openscreen::osp {
-
-class QuicStream;
 
 // This class separates QUIC stream data into CBOR messages by reading a type
 // prefix from the stream and passes those messages to any callback matching the
@@ -25,7 +24,12 @@ class MessageDemuxer {
  public:
   class MessageCallback {
    public:
-    virtual ~MessageCallback() = default;
+    MessageCallback();
+    MessageCallback(const MessageCallback&) = delete;
+    MessageCallback& operator=(const MessageCallback&) = delete;
+    MessageCallback(MessageCallback&&) noexcept = default;
+    MessageCallback& operator=(MessageCallback&&) noexcept = default;
+    virtual ~MessageCallback();
 
     // `buffer` contains data for a message of type `message_type`.  However,
     // the data may be incomplete, in which case the callback should return an
@@ -71,6 +75,10 @@ class MessageDemuxer {
   static constexpr size_t kDefaultBufferLimit = 1 << 16;
 
   MessageDemuxer(ClockNowFunctionPtr now_function, size_t buffer_limit);
+  MessageDemuxer(const MessageDemuxer&) = delete;
+  MessageDemuxer& operator=(const MessageDemuxer&) = delete;
+  MessageDemuxer(MessageDemuxer&&) noexcept = delete;
+  MessageDemuxer& operator=(MessageDemuxer&&) noexcept = delete;
   ~MessageDemuxer();
 
   // Starts watching for messages of type `message_type` from the instance
@@ -108,13 +116,13 @@ class MessageDemuxer {
       uint64_t connection_id,
       std::map<uint64_t, std::map<msgs::Type, MessageCallback*>>::iterator
           instance_entry,
-      std::vector<uint8_t>* buffer);
+      std::vector<uint8_t>& buffer);
 
   HandleStreamBufferResult HandleStreamBuffer(
       uint64_t instance_id,
       uint64_t connection_id,
       std::map<msgs::Type, MessageCallback*>* message_callbacks,
-      std::vector<uint8_t>* buffer);
+      std::vector<uint8_t>& buffer);
 
   const ClockNowFunctionPtr now_function_;
   const size_t buffer_limit_;
@@ -127,11 +135,11 @@ class MessageDemuxer {
 
 class MessageTypeDecoder {
  public:
-  static ErrorOr<msgs::Type> DecodeType(const std::vector<uint8_t>& buffer,
+  static ErrorOr<msgs::Type> DecodeType(ByteView buffer,
                                         size_t* num_bytes_decoded);
 
  private:
-  static ErrorOr<uint64_t> DecodeVarUint(const std::vector<uint8_t>& buffer,
+  static ErrorOr<uint64_t> DecodeVarUint(ByteView buffer,
                                          size_t* num_bytes_decoded);
 };
 

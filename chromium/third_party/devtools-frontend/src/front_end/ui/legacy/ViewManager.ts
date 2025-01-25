@@ -11,11 +11,11 @@ import * as IconButton from '../components/icon_button/icon_button.js';
 import * as VisualLogging from '../visual_logging/visual_logging.js';
 
 import * as ARIAUtils from './ARIAUtils.js';
-import {type ContextMenu} from './ContextMenu.js';
+import type {ContextMenu} from './ContextMenu.js';
 import {type EventData, Events as TabbedPaneEvents, TabbedPane} from './TabbedPane.js';
 import {type ItemsProvider, Toolbar, type ToolbarItem, ToolbarMenuButton} from './Toolbar.js';
 import {createTextChild} from './UIUtils.js';
-import {type TabbedViewLocation, type View, type ViewLocation} from './View.js';
+import type {TabbedViewLocation, View, ViewLocation} from './View.js';
 import viewContainersStyles from './viewContainers.css.legacy.js';
 import {
   getLocalizedViewLocationCategory,
@@ -44,6 +44,7 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 export const defaultOptionsForTabs = {
   security: true,
+  freestyler: true,
 };
 
 export class PreRegisteredView implements View {
@@ -709,8 +710,9 @@ class TabbedLocation extends Location implements TabbedViewLocation {
         continue;
       }
 
+      const isPreviewFeature = view.isPreviewFeature();
       contextMenu.defaultSection().appendItem(
-          title, this.showView.bind(this, view, undefined, true), {jslogContext: view.viewId()});
+          title, this.showView.bind(this, view, undefined, true), {isPreviewFeature, jslogContext: view.viewId()});
     }
   }
 

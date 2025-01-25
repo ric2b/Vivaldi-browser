@@ -806,24 +806,6 @@ Affects:
     libavutil/x86/tx_float.asm
 
 ------------------------------------------------------------------
-commit c061281207072075c3f8c4b16895be3b6567e581
-Author: Ted Meyer <tmathmeyer@chromium.org>
-Date:   Tue Apr 2 14:26:12 2024 -0700
-
-    Add AAC_xHE case to aacdec_template.c for demuxing
-
-    The parser needs to be able to be created when demuxing, otherwise the
-    channel count and layout can't be successfully generated.
-
-    Bug: 330573128
-    Change-Id: Ib1404541e7cde321131efa6fcd2f991e398fe7b9
-    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5406620
-    Reviewed-by: Frank Liberato <liberato@chromium.org>
-
-Affects:
-    libavcodec/aac/aacdec.c
-
-------------------------------------------------------------------
 commit bdcb0b447f433de3b69f0252732791b9f7e26f37
 Author: Ted Meyer <tmathmeyer@chromium.org>
 Date:   Tue Apr 2 18:49:30 2024 -0700
@@ -867,4 +849,191 @@ Date:   Mon Apr 22 22:21:36 2024 +0000
 
 Affects:
     libavutil/x86/x86inc.asm
+
+------------------------------------------------------------------
+commit d941d9677bb4802f01750fd908ec284fb72c84df
+Author: Dan Sanders <sandersd@chromium.org>
+Date:   Thu Jun 20 12:09:26 2024 -0700
+
+    Use saturated subtraction in mov_get_skip_samples()
+
+    Bug: 333605001
+    Change-Id: I548d76e111baebe268c21866a3b83b824e30d10a
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5646169
+    Reviewed-by: Dale Curtis <dalecurtis@chromium.org>
+
+Affects:
+    libavformat/mov.c
+
+------------------------------------------------------------------
+commit 594bc6d3246fe6b293f253d07c8905c578cb75c9
+Author: Dale Curtis <dalecurtis@chromium.org>
+Date:   Tue Jul 30 16:32:24 2024 +0000
+
+    Add AVFMT_FLAG_NOVIDEOPARSE so video parsers can be disabled.
+
+    This allows us to remove parsing for video codecs w/o changing the
+    build configuration just yet. If this ships successfully we can
+    remove video parsers from the build config and this patch.
+
+    R=sandersd
+
+    Bug: 355485812
+    Change-Id: Id9ffd4d8c1e989b0ddcfb6e5f5e9c63ea96bf7c4
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5750102
+    Reviewed-by: Dan Sanders <sandersd@chromium.org>
+
+Affects:
+    libavformat/avformat.h
+    libavformat/demux.c
+
+------------------------------------------------------------------
+commit 26f9ca48dc8f1dc37d1b47c7c79358cb65a53f53
+Author: Dale Curtis <dalecurtis@chromium.org>
+Date:   Tue Jul 30 19:25:12 2024 +0000
+
+    Leave vp9 parser enabled. Only allow H.264 parser control.
+
+    Unfortunately, we do need the vp9 parser to get the profile. Unlike
+    H.264 extradata isn't required, so we have no means to get the
+    right profile w/o ffmpeg parsers.
+
+    R=sandersd
+
+    Bug: 355485812
+    Change-Id: I3bfcdb5f7401a15f5043cfe19faa01fa82c3fce8
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5750054
+    Reviewed-by: Dan Sanders <sandersd@chromium.org>
+
+Affects:
+    libavformat/avformat.h
+    libavformat/demux.c
+
+------------------------------------------------------------------
+commit ae639da286e6b99393d03f87baa6badbdc63730a
+Author: Dale Curtis <dalecurtis@chromium.org>
+Date:   Tue Aug 13 21:49:29 2024 +0000
+
+    Allocate H.274 film grain metadata dynamically. Saves ~779kb.
+
+    Film grain support adds a huge amount of overhead to the H264Context
+    structure for a feature that is rarely used. On low end devices or
+    pages that have lots of media this bloats memory usage rapidly.
+
+    This changes the static film grain metadata allocations to be dynamic
+    which reduces the H264Context size from 851808 bytes to 53444 bytes.
+
+    This is slightly different than the version upstreamed in that it
+    doesn't apply the hevc changes, but we don't need those in Chrome.
+
+    R=tguilbert
+
+    Bug: https://crbug.com/359358875
+    Change-Id: I0269324edc2d58ef5a645c4585d903c1d01a1a00
+    Signed-off-by: Dale Curtis <dalecurtis@chromium.org>
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5786487
+    Reviewed-by: Thomas Guilbert <tguilbert@chromium.org>
+
+Affects:
+    libavcodec/h2645_sei.c
+    libavcodec/h2645_sei.h
+    libavcodec/h264_picture.c
+    libavcodec/h264_sei.c
+    libavcodec/h264_slice.c
+    libavcodec/h264dec.c
+    libavcodec/h264dec.h
+
+------------------------------------------------------------------
+commit 468b9c8a52555953618ba1677fffb0a778dd6d87
+Author: Ho Cheung <hocheung@chromium.org>
+Date:   Sun Sep 1 08:43:04 2024 +0800
+
+    [libavcodec] Check nullptr to fix crash in hevcdec
+
+    The previous CL forgot to check nullptr and caused
+    a crash in hevcdec. This CL fixes this crash.
+
+    Bug: chromium:362007482
+    Change-Id: I67a2c36318f7b188e81ad453b1e6466743d85351
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5825845
+    Reviewed-by: Dale Curtis <dalecurtis@chromium.org>
+
+Affects:
+    libavcodec/hevc/hevcdec.c
+
+------------------------------------------------------------------
+commit d4258358c7672ae3ccaac0ffb16c5169bbff273c
+Merge: 91903c28af dc11c12b64
+Author: Dan Sanders <sandersd@chromium.org>
+Date:   Fri Sep 20 19:22:41 2024 +0000
+
+    Merge remote-tracking branch 'upstream/master' into sushi-2024-09-19-19-04-27
+
+Affects:
+    libavcodec/h264dec.c
+    libavcodec/hevc/hevcdec.c
+    libavformat/matroskadec.c
+
+------------------------------------------------------------------
+commit ce4bada8b24734982a48448dcafcf9897df7f06e
+Author: Dan Sanders <sandersd@chromium.org>
+Date:   Tue Sep 24 17:17:39 2024 +0000
+
+    Use full paths in libavcodec/opus
+
+Affects:
+    libavcodec/opus/parse.c
+    libavcodec/opus/parser.c
+
+------------------------------------------------------------------
+commit 30735bb16a66e84d6324b5858eef314822b6d419
+Author: Dan Sanders <sandersd@chromium.org>
+Date:   Wed Sep 25 17:57:29 2024 +0000
+
+    Disable xHE AAC specific config parser
+
+    This parser does not recognize our test streams. Revert to the generic
+    AAC parser, which does.
+
+    Bug: 369237342, 353279142
+    Change-Id: I39e7093a54e7c0dc66cfb74401ce3548457a69d5
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5891970
+    Reviewed-by: Dale Curtis <dalecurtis@chromium.org>
+
+Affects:
+    libavcodec/aac/aacdec.c
+
+------------------------------------------------------------------
+commit 686d6944501a6ee9c849581e3fe343273d4af3f6
+Author: Dan Sanders <sandersd@chromium.org>
+Date:   Tue Oct 1 12:09:08 2024 -0700
+
+    Fix lookup of film_grain_characteristics
+
+    This should not be taking an address now that the field is a pointer.
+
+    Bug: 369956909
+    Change-Id: I502a859885741635436910ba6219147b25761606
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5901863
+    Reviewed-by: Dale Curtis <dalecurtis@chromium.org>
+
+Affects:
+    libavcodec/h2645_sei.c
+
+------------------------------------------------------------------
+commit 99f17d50d3b4d28740ebc6fb092050363113fce9
+Author: Eugene Zemtsov <eugene@chromium.org>
+Date:   Mon Oct 21 16:22:36 2024 -0700
+
+    Fix incorrect enum type used for a local variable
+
+    It's AVPacketSideDataType, not AVFrameSideDataType.
+
+    Bug: https://issues.chromium.org/issues/374797732
+    Change-Id: If75702c6d639ca63827cc3370477de00544d3c0f
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5950926
+    Reviewed-by: Ted (Chromium) Meyer <tmathmeyer@chromium.org>
+
+Affects:
+    libavcodec/decode.c
 

@@ -20,15 +20,20 @@ void xnn_qs8_vcvt_ukernel__sse2_u16(
     size_t batch,
     const int8_t* input,
     int8_t* output,
-    const union xnn_qs8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_qs8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(int8_t) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const __m128i vmultiplier = _mm_load_si128((const __m128i*) params->sse2.multiplier);
-  const __m128i vbias = _mm_load_si128((const __m128i*) params->sse2.bias);
+  const __m128i vmultiplier = _mm_set1_epi16(-params->scalar.multiplier);
+  const __m128i vbias = _mm_set1_epi32(
+      (int32_t) (((uint32_t) (int32_t) params->scalar.output_zero_point) << 8) -
+      (int32_t) params->scalar.multiplier * (int32_t) params->scalar.input_zero_point + 
+      INT32_C(0x80));
+  XNN_FORCE_REALIZATION(vmultiplier);
+  XNN_FORCE_REALIZATION(vbias);
   for (; batch >= 16 * sizeof(int8_t); batch -= 16 * sizeof(int8_t)) {
     const __m128i vx0 = _mm_loadu_si128((const __m128i*) input);
     input += 16;

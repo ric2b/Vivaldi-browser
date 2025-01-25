@@ -46,17 +46,41 @@ class CPDF_TextPage {
   class CharInfo {
    public:
     CharInfo();
+    CharInfo(CharType char_type,
+             uint32_t char_code,
+             wchar_t unicode,
+             CFX_PointF origin,
+             CFX_FloatRect char_box,
+             CFX_Matrix matrix,
+             CPDF_TextObject* text_object);
     CharInfo(const CharInfo&);
     ~CharInfo();
 
-    int m_Index = 0;
-    uint32_t m_CharCode = 0;
-    wchar_t m_Unicode = 0;
-    CharType m_CharType = CharType::kNormal;
-    CFX_PointF m_Origin;
-    CFX_FloatRect m_CharBox;
-    UnownedPtr<CPDF_TextObject> m_pTextObj;
-    CFX_Matrix m_Matrix;
+    CharType char_type() const { return char_type_; }
+    void set_char_type(CharType char_type) { char_type_ = char_type; }
+
+    uint32_t char_code() const { return char_code_; }
+
+    wchar_t unicode() const { return unicode_; }
+    void set_unicode(wchar_t unicode) { unicode_ = unicode; }
+
+    const CFX_PointF& origin() const { return origin_; }
+
+    const CFX_FloatRect& char_box() const { return char_box_; }
+
+    const CFX_Matrix& matrix() const { return matrix_; }
+
+    const CPDF_TextObject* text_object() const { return text_object_; }
+    CPDF_TextObject* text_object() { return text_object_; }
+
+   private:
+    CharType char_type_ = CharType::kNormal;
+    wchar_t unicode_ = 0;  // Above `char_code_` to potentially pack tighter.
+    uint32_t char_code_ = 0;
+    CFX_PointF origin_;
+    CFX_FloatRect char_box_;
+    CFX_Matrix matrix_;
+    UnownedPtr<CPDF_TextObject> text_object_;
   };
 
   CPDF_TextPage(const CPDF_Page* pPage, bool rtl);
@@ -116,16 +140,24 @@ class CPDF_TextPage {
   bool IsHyphen(wchar_t curChar) const;
   void ProcessObject();
   void ProcessFormObject(CPDF_FormObject* pFormObj,
-                         const CFX_Matrix& formMatrix);
+                         const CFX_Matrix& form_matrix);
   void ProcessTextObject(const TransformedTextObject& obj);
   void ProcessTextObject(CPDF_TextObject* pTextObj,
-                         const CFX_Matrix& formMatrix,
+                         const CFX_Matrix& form_matrix,
                          const CPDF_PageObjectHolder* pObjList,
                          CPDF_PageObjectHolder::const_iterator ObjPos);
   GenerateCharacter ProcessInsertObject(const CPDF_TextObject* pObj,
-                                        const CFX_Matrix& formMatrix);
+                                        const CFX_Matrix& form_matrix);
+  // Returns whether to continue or not.
+  bool ProcessGenerateCharacter(GenerateCharacter type,
+                                const CPDF_TextObject* text_object,
+                                const CFX_Matrix& form_matrix);
+  void ProcessTextObjectItems(CPDF_TextObject* text_object,
+                              const CFX_Matrix& form_matrix,
+                              const CFX_Matrix& matrix);
   const CharInfo* GetPrevCharInfo() const;
-  std::optional<CharInfo> GenerateCharInfo(wchar_t unicode);
+  std::optional<CharInfo> GenerateCharInfo(wchar_t unicode,
+                                           const CFX_Matrix& form_matrix);
   bool IsSameAsPreTextObject(CPDF_TextObject* pTextObj,
                              const CPDF_PageObjectHolder* pObjList,
                              CPDF_PageObjectHolder::const_iterator iter) const;
@@ -140,7 +172,9 @@ class CPDF_TextPage {
   TextOrientation GetTextObjectWritingMode(
       const CPDF_TextObject* pTextObj) const;
   TextOrientation FindTextlineFlowOrientation() const;
-  void AppendGeneratedCharacter(wchar_t unicode, const CFX_Matrix& formMatrix);
+  void AppendGeneratedCharacter(wchar_t unicode,
+                                const CFX_Matrix& form_matrix,
+                                bool use_temp_buffer);
   void SwapTempTextBuf(size_t iCharListStartAppend, size_t iBufStartAppend);
   WideString GetTextByPredicate(
       const std::function<bool(const CharInfo&)>& predicate) const;

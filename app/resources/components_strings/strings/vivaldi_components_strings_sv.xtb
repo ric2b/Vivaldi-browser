@@ -10,6 +10,7 @@
 <translation id="132390688737681464">Spara och fyll i adresser</translation>
 <translation id="1375198122581997741">Om version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> skickade ingen data.</translation>
+<translation id="1555191101192706055">Angripare på webbplatsen du försökte besöka kan lura dig att installera skadlig programvara som påverkar hur du surfar – till exempel genom att ändra din startsida eller visa dig extra annonser på webbplatser du besöker.</translation>
 <translation id="1559528461873125649">Filen eller katalogen finns inte</translation>
 <translation id="1640244768702815859">Försök <ph name="BEGIN_LINK" />besöka webbplatsens startsida<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protokoll som ej stöds</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrollerar mellanservern (proxyn) och brandväggen<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Utfärdat till: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Webbplatsen kan inte tillhandahålla en säker anslutning</translation>
+<translation id="2178904466768126352">Angripare på webbplatsen du försökte besöka kan installera skadlig programvara som stjäl eller raderar saker som dina lösenord, foton, meddelanden eller kreditkortsnummer.</translation>
 <translation id="2187317261103489799">Identifiera (standard)</translation>
 <translation id="2224337661447660594">Inget internet</translation>
 <translation id="2283340219607151381">Spara och fyll i adresser</translation>
@@ -92,6 +94,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Kontrollera inställningar för brandvägg och antivirusprogram<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Testa att köra nätverksdiagnostik<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Giltigt</translation>
+<translation id="4241830393007970744">Angripare på webbplatsen du försökte besöka kan lura dig att installera programvara eller avslöja saker som dina lösenord, telefon- eller kreditkortsnummer.</translation>
 <translation id="4250431568374086873">Anslutningen till den här webbplatsen är inte helt säker</translation>
 <translation id="4265872034478892965">Beviljades av administratören</translation>
 <translation id="4305666528087210886">Din fil gick inte att komma åt</translation>
@@ -102,6 +105,7 @@
 <translation id="4522570452068850558">Detaljer</translation>
 <translation id="4558551763791394412">Testa att inaktivera tilläggen.</translation>
 <translation id="4592951414987517459">Anslutningen till <ph name="DOMAIN" /> är krypterad med en modern krypteringssvit.</translation>
+<translation id="4598641255230617220">Klistra in och gå</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Anslutningen avbröts</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Kör Windows nätverksdiagnostik<ph name="END_LINK" /></translation>
@@ -111,6 +115,7 @@
 <translation id="4764776831041365478">Webbsidan på <ph name="URL" /> kan ligga nere för tillfället eller kan ha flyttats permanent till en ny webbadress.</translation>
 <translation id="483241715238664915">Slå på varningar</translation>
 <translation id="4943872375798546930">Inga resultat</translation>
+<translation id="5017554619425969104">Texten som du kopierade</translation>
 <translation id="5023310440958281426">Kontrollera administratörsprinciperna</translation>
 <translation id="5039804452771397117">Tillåt</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1 {(1 används)} other {(# används)}}</translation>
@@ -165,11 +170,11 @@
 <translation id="7108819624672055576">Beviljades av ett tillägg</translation>
 <translation id="7111012039238467737">(Giltigt)</translation>
 <translation id="7113310725918019676">Tillåt <ph name="BLOCKED_TYPE" /> från <ph name="DOMAIN" /></translation>
+<translation id="7126644664682723998">Klistra in och sök</translation>
 <translation id="7179323680825933600">Spara och fyll i betalningsmetoder</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> följer inte säkerhetsstandarderna.</translation>
 <translation id="7219179957768738017">För anslutningen används <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Visa aviseringar</translation>
-<translation id="7227747683324411744">Angripare på webbplatsen du försöker besöka kan lura dig att installera skadlig programvara som påverkar hur du surfar – till exempel genom att ändra din startsida eller visa dig extra annonser på webbplatser du besöker.</translation>
 <translation id="7353601530677266744">Kommandorad</translation>
 <translation id="7364115444476960850">Sidan du försökte komma åt blockerades av Vivaldis <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profilsökväg</translation>
@@ -177,7 +182,6 @@
 <translation id="7518003948725431193">Det fanns ingen webbsida på webbadressen: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Den här webbsidan kräver uppgifter som du har angett tidigare för att kunna visas korrekt. Du kan skicka uppgifterna igen, men om du gör det upprepas de åtgärder som har utförts av sidan tidigare.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kan för närvarande inte hantera förfrågan.</translation>
-<translation id="7605377493722372900">Angripare på webbplatsen du försöker besöka kan installera skadlig programvara som stjäl eller raderar saker som ditt lösenord, foton, meddelanden eller kreditkortsnummer.</translation>
 <translation id="7662298039739062396">Inställningen styrs av ett tillägg</translation>
 <translation id="7663736086183791259">Certifikat <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">Certifikat</translation>
@@ -203,7 +207,6 @@
 <translation id="8288807391153049143">Visa certifikat</translation>
 <translation id="8289355894181816810">Kontakta din nätverksadministratör om du är osäker på vad det här innebär.</translation>
 <translation id="8332188693563227489">Åtkomst nekades till <ph name="HOST_NAME" /></translation>
-<translation id="8422228580902424274">Angripare på webbplatsen du försöker besöka kan lura dig att installera programvara eller avslöja saker som ditt lösenord, telefon eller kreditkortsnummer.</translation>
 <translation id="8473863474539038330">Adresser och annat</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> tog för lång tid på sig att svara.</translation>
 <translation id="8503813439785031346">Användarnamn</translation>

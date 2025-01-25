@@ -188,6 +188,7 @@ void av1_loop_filter_frame_mt(YV12_BUFFER_CONFIG *frame, struct AV1Common *cm,
                               AVxWorker *workers, int num_workers,
                               AV1LfSync *lf_sync, int lpf_opt_level);
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void av1_loop_restoration_filter_frame_mt(YV12_BUFFER_CONFIG *frame,
                                           struct AV1Common *cm,
                                           int optimized_lr, AVxWorker *workers,
@@ -197,6 +198,8 @@ void av1_loop_restoration_dealloc(AV1LrSync *lr_sync);
 void av1_loop_restoration_alloc(AV1LrSync *lr_sync, AV1_COMMON *cm,
                                 int num_workers, int num_rows_lr,
                                 int num_planes, int width);
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
+
 int av1_get_intrabc_extra_top_right_sb_delay(const AV1_COMMON *cm);
 
 void av1_thread_loop_filter_rows(

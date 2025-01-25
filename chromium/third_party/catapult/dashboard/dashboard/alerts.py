@@ -6,7 +6,9 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+from httplib2 import http
 import json
+import logging
 import six
 
 from google.appengine.datastore.datastore_query import Cursor
@@ -51,10 +53,55 @@ def AlertsHandlerPost():
   Outputs:
     JSON data for an XHR request to show a table of alerts.
   """
+  anomalies, next_cursor, count, err_msg, err_code = _GetAlerts()
+
+  if err_msg:
+    return make_response(json.dumps({'error': err_msg}), err_code)
+
+  values = {
+      'anomaly_list': AnomalyDicts(anomalies),
+      'anomaly_count': count,
+      'sheriff_list': _GetSheriffList(),
+      'anomaly_cursor':
+          (six.ensure_str(next_cursor.urlsafe()) if next_cursor else None),
+      'show_more_anomalies': next_cursor != None,
+  }
+  request_handler.RequestHandlerGetDynamicVariables(values)
+  return make_response(json.dumps(values))
+
+
+def SkiaAlertsHandlerGet():
+  logging.debug('[SkiaTriage] Request for getting alerts: %s', request)
+
+  anomalies, next_cursor, _, err_msg, err_code = _GetAlerts(skia=True)
+  if err_msg:
+    return make_response(json.dumps({'error': err_msg}), err_code)
+
+  values = {
+      'anomaly_list':
+          AnomalyDicts(anomalies, skia=True),
+      'anomaly_cursor':
+          (six.ensure_str(next_cursor.urlsafe()) if next_cursor else ''),
+  }
+  return make_response(json.dumps(values))
+
+
+def _GetAlerts(skia=False):
+  """ Helper function to load alerts.
+  """
   sheriff_name = request.values.get('sheriff', None)
   if sheriff_name and not _SheriffIsFound(sheriff_name):
-    return make_response(
-        json.dumps({'error': 'Sheriff "%s" not found.' % sheriff_name}))
+    return (None, None, None, 'Sheriff "%s" not found.' % sheriff_name,
+            http.HTTPStatus.BAD_REQUEST.value)
+
+  masters, internal_only = None, None
+  if skia:
+    host = request.values.get('host', None)
+    if not host:
+      return (None, None, None,
+              'No host found in request to filter anomlies for skia instaces',
+              http.HTTPStatus.BAD_REQUEST.value)
+    masters, internal_only = skia_helper.GetMastersAndInternalOnlyForHost(host)
 
   # Cursors are used to fetch paged queries. If none is supplied, then the
   # first 500 alerts will be returned. If a cursor is given, the next
@@ -87,19 +134,11 @@ def AlertsHandlerPost():
       is_improvement=is_improvement,
       recovered=recovered,
       count_limit=_MAX_ANOMALIES_TO_COUNT,
-      limit=max_anomalies_to_show).get_result()
+      limit=max_anomalies_to_show,
+      master_names=masters,
+      internal_only=internal_only).get_result()
 
-  values = {
-      'anomaly_list': AnomalyDicts(anomalies),
-      'anomaly_count': count,
-      'sheriff_list': _GetSheriffList(),
-      'anomaly_cursor':
-          (six.ensure_str(next_cursor.urlsafe()) if next_cursor else None),
-      'show_more_anomalies': next_cursor != None,
-  }
-  request_handler.RequestHandlerGetDynamicVariables(values)
-  return make_response(json.dumps(values))
-
+  return anomalies, next_cursor, count, None, None
 
 def _SheriffIsFound(sheriff_name):
   """Checks whether the sheriff can be found for the current user."""
@@ -110,20 +149,24 @@ def _SheriffIsFound(sheriff_name):
 
 def _GetSheriffList():
   """Returns a list of sheriff names for all sheriffs in the datastore."""
+  if utils.IsStagingEnvironment():
+    return []
+
   client = sheriff_config_client.GetSheriffConfigClient()
   subscriptions, _ = client.List(check=True)
   return [s.name for s in subscriptions]
 
 
-def AnomalyDicts(anomalies, v2=False):
+def AnomalyDicts(anomalies, v2=False, skia=False):
   """Makes a list of dicts with properties of Anomaly entities."""
   bisect_statuses = _GetBisectStatusDict(anomalies)
   return [
-      GetAnomalyDict(a, bisect_statuses.get(a.bug_id), v2) for a in anomalies
+      GetAnomalyDict(a, bisect_statuses.get(a.bug_id), v2, skia)
+      for a in anomalies
   ]
 
 
-def GetAnomalyDict(anomaly_entity, bisect_status=None, v2=False):
+def GetAnomalyDict(anomaly_entity, bisect_status=None, v2=False, skia=False):
   """Returns a dictionary for an Anomaly which can be encoded as JSON.
 
   Args:
@@ -145,16 +188,27 @@ def GetAnomalyDict(anomaly_entity, bisect_status=None, v2=False):
       'bug_id': anomaly_entity.bug_id,
       'project_id': project_id,
       'dashboard_link': dashboard_link,
-      'end_revision': anomaly_entity.end_revision,
-      'improvement': anomaly_entity.is_improvement,
       'key': six.ensure_str(anomaly_entity.key.urlsafe()),
       'median_after_anomaly': anomaly_entity.median_after_anomaly,
       'median_before_anomaly': anomaly_entity.median_before_anomaly,
       'recovered': anomaly_entity.recovered,
-      'start_revision': anomaly_entity.start_revision,
       'units': anomaly_entity.units,
       'new_url': new_url
   }
+  # On the Skia anomaly table, the anomaly model expects different properties.
+  # Here we send some properties in different property name, or converge
+  # multiple into on.
+  if skia:
+    dct['id'] = anomaly_entity.key.integer_id(
+    ) or 0  # skia expected integet id.
+    dct['test_path'] = test_path
+    dct['is_improvement'] = anomaly_entity.is_improvement
+    dct['start_revision'] = anomaly_entity.display_start or anomaly_entity.start_revision
+    dct['end_revision'] = anomaly_entity.display_end or anomaly_entity.end_revision
+  else:
+    dct['improvement'] = anomaly_entity.is_improvement
+    dct['start_revision'] = anomaly_entity.start_revision
+    dct['end_revision'] = anomaly_entity.end_revision
 
   if v2:
     bug_labels = set()
@@ -207,3 +261,11 @@ def _GetBisectStatusDict(anomalies):
   bug_id_list = {a.bug_id for a in anomalies if a.bug_id and a.bug_id > 0}
   bugs = ndb.get_multi(ndb.Key('Bug', b) for b in bug_id_list)
   return {b.key.id(): b.latest_bisect_status for b in bugs if b}
+
+
+def SkiaLoadSheriffConfigsHandlerGet():
+  try:
+    sheriff_config_names = _GetSheriffList()
+  except sheriff_config_client.InternalServerError as e:
+    return make_response(json.dumps({'error': str(e)}))
+  return make_response(json.dumps({'sheriff_list': sheriff_config_names}))

@@ -16,7 +16,7 @@ namespace openscreen::cast {
 
 // Information about the display the receiver is attached to.
 struct Display {
-  // Returns true if all configurations supported by |other| are also
+  // Returns true if all configurations supported by `other` are also
   // supported by this instance.
   bool IsSupersetOf(const Display& other) const;
 
@@ -34,14 +34,14 @@ struct Display {
 
 // Codec-specific audio limits for playback.
 struct AudioLimits {
-  // Returns true if all configurations supported by |other| are also
+  // Returns true if all configurations supported by `other` are also
   // supported by this instance.
   bool IsSupersetOf(const AudioLimits& other) const;
 
   // Whether or not these limits apply to all codecs.
   bool applies_to_all_codecs = false;
 
-  // Audio codec these limits apply to. Note that if |applies_to_all_codecs|
+  // Audio codec these limits apply to. Note that if `applies_to_all_codecs`
   // is true this field is ignored.
   AudioCodec codec;
 
@@ -63,14 +63,14 @@ struct AudioLimits {
 
 // Codec-specific video limits for playback.
 struct VideoLimits {
-  // Returns true if all configurations supported by |other| are also
+  // Returns true if all configurations supported by `other` are also
   // supported by this instance.
   bool IsSupersetOf(const VideoLimits& other) const;
 
   // Whether or not these limits apply to all codecs.
   bool applies_to_all_codecs = false;
 
-  // Video codec these limits apply to. Note that if |applies_to_all_codecs|
+  // Video codec these limits apply to. Note that if `applies_to_all_codecs`
   // is true this field is ignored.
   VideoCodec codec;
 
@@ -96,13 +96,13 @@ struct VideoLimits {
 // remoting streams. These properties are based on the current control
 // protocol and allow remoting with current senders.
 struct RemotingConstraints {
-  // Returns true if all configurations supported by |other| are also
+  // Returns true if all configurations supported by `other` are also
   // supported by this instance.
   bool IsSupersetOf(const RemotingConstraints& other) const;
 
   // Current remoting senders take an "all or nothing" support for audio
   // codec support. While Opus and AAC support is handled in our Constraints'
-  // |audio_codecs| property, support for the following codecs must be
+  // `audio_codecs` property, support for the following codecs must be
   // enabled or disabled all together:
   // MP3
   // PCM, including Mu-Law, S16BE, S24BE, and ALAW variants
@@ -118,7 +118,7 @@ struct RemotingConstraints {
   bool supports_chrome_audio_codecs = false;
 
   // Current remoting senders assume that the receiver supports 4K for all
-  // video codecs supplied in |video_codecs|, or none of them.
+  // video codecs supplied in `video_codecs`, or none of them.
   bool supports_4k = false;
 };
 
@@ -140,7 +140,7 @@ class ReceiverConstraints {
   ReceiverConstraints& operator=(ReceiverConstraints&&) noexcept;
   ReceiverConstraints& operator=(const ReceiverConstraints&);
 
-  // Returns true if all configurations supported by |other| are also
+  // Returns true if all configurations supported by `other` are also
   // supported by this instance.
   //
   // TODO(crbug.com/1356762): Implement receiver-side session renegotation
@@ -157,7 +157,7 @@ class ReceiverConstraints {
   // Optional limitation fields that help the sender provide a delightful
   // cast experience. Although optional, highly recommended.
   // NOTE: embedders that wish to apply the same limits for all codecs can
-  // pass a vector of size 1 with the |applies_to_all_codecs| field set to
+  // pass a vector of size 1 with the `applies_to_all_codecs` field set to
   // true.
   std::vector<AudioLimits> audio_limits;
   std::vector<VideoLimits> video_limits;

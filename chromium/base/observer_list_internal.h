@@ -6,6 +6,7 @@
 #define BASE_OBSERVER_LIST_INTERNAL_H_
 
 #include <string>
+#include <type_traits>
 
 #include "base/base_export.h"
 #include "base/check.h"

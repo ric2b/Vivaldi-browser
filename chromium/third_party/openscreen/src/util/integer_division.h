@@ -9,7 +9,7 @@
 
 namespace openscreen {
 
-// Returns CEIL(num ÷ denom). |denom| must not equal zero. This function is
+// Returns CEIL(num ÷ denom). `denom` must not equal zero. This function is
 // compatible with any integer-like type, including the integer-based
 // std::chrono duration types.
 //
@@ -27,7 +27,7 @@ constexpr auto DivideRoundingUp(Integer num, Integer denom) {
 }
 
 // Same as DivideRoundingUp(), except is more-efficient for hot code paths that
-// know |num| is always greater or equal to zero, and |denom| is always greater
+// know `num` is always greater or equal to zero, and `denom` is always greater
 // than zero.
 template <typename Integer>
 constexpr Integer DividePositivesRoundingUp(Integer num, Integer denom) {
@@ -35,7 +35,7 @@ constexpr Integer DividePositivesRoundingUp(Integer num, Integer denom) {
                                                                       denom);
 }
 
-// Divides |num| by |denom|, and rounds to the nearest integer (exactly halfway
+// Divides `num` by `denom`, and rounds to the nearest integer (exactly halfway
 // between integers will round to the higher integer). This function is
 // compatible with any integer-like type, including the integer-based
 // std::chrono duration types.
@@ -54,7 +54,7 @@ constexpr auto DivideRoundingNearest(Integer num, Integer denom) {
 }
 
 // Same as DivideRoundingNearest(), except is more-efficient for hot code paths
-// that know |num| is always greater or equal to zero, and |denom| is always
+// that know `num` is always greater or equal to zero, and `denom` is always
 // greater than zero.
 template <typename Integer>
 constexpr Integer DividePositivesRoundingNearest(Integer num, Integer denom) {

@@ -13,6 +13,7 @@
 <translation id="1859234291848436338">Напрямок письма</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> ТБ/с</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> МБ</translation>
+<translation id="3240426699337459095">Скопійовано</translation>
 <translation id="3291688615589870984">{DAYS,plural, =1{1 день}one{# день}few{# дні}many{# днів}other{# дня}}</translation>
 <translation id="335581015389089642">Озвучування</translation>
 <translation id="3600566671520689681">{DAYS,plural, =1{Залишився 1 день}one{Залишився # день}few{Залишилося # дні}many{Залишилося # днів}other{Залишилося # дня}}</translation>

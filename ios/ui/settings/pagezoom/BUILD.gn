@@ -1,0 +1,59 @@
+# Copyright 2024-25 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/apple/swift_source_set.gni")
+
+source_set("vivaldi_pagezoom_settings") {
+  sources = [
+    "vivaldi_pagezoom_settings_consumer.h",
+    "vivaldi_pagezoom_settings_coordinator.h",
+    "vivaldi_pagezoom_settings_coordinator.mm",
+    "vivaldi_pagezoom_settings_mediator.h",
+    "vivaldi_pagezoom_settings_mediator.mm",
+    "vivaldi_pagezoom_settings_prefs.h",
+    "vivaldi_pagezoom_settings_prefs.mm",
+  ]
+
+  deps = [
+    ":vivaldi_pagezoom_settings_swift",
+    "//base",
+    "//ui/base",
+    "//components/prefs",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/shared/model/prefs",
+    "//ios/chrome/browser/shared/model/prefs:pref_names",
+    "//ios/chrome/browser/shared/model/utils",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework"
+  ]
+}
+
+swift_source_set("vivaldi_pagezoom_settings_swift") {
+  bridge_header = "vivaldi_pagezoom_settings_swift_bridge.h"
+  sources = [
+    "vivaldi_pagezoom_settings_constants.swift",
+    "vivaldi_pagezoom_settings_state.swift",
+    "vivaldi_pagezoom_settings_view_provider.swift",
+    "vivaldi_pagezoom_settings_view.swift",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/base",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/common/ui/colors:swift",
+    "//vivaldi/ios/ui/helpers:helpers_swift",
+    "//vivaldi/ios/ui/custom_views:custom_views_swift",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+    "SwiftUI.framework",
+    "Combine.framework",
+  ]
+}

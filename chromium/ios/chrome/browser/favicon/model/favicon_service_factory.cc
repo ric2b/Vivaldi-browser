@@ -15,12 +15,11 @@
 namespace {
 
 std::unique_ptr<KeyedService> BuildFaviconService(web::BrowserState* context) {
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   return std::make_unique<favicon::FaviconServiceImpl>(
       std::make_unique<FaviconClientImpl>(),
-      ios::HistoryServiceFactory::GetForBrowserState(
-          browser_state, ServiceAccessType::EXPLICIT_ACCESS));
+      ios::HistoryServiceFactory::GetForProfile(
+          profile, ServiceAccessType::EXPLICIT_ACCESS));
 }
 
 }  // namespace
@@ -28,21 +27,20 @@ std::unique_ptr<KeyedService> BuildFaviconService(web::BrowserState* context) {
 namespace ios {
 
 // static
-favicon::FaviconService* FaviconServiceFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state,
+favicon::FaviconService* FaviconServiceFactory::GetForProfile(
+    ProfileIOS* profile,
     ServiceAccessType access_type) {
-  if (!browser_state->IsOffTheRecord()) {
+  if (!profile->IsOffTheRecord()) {
     return static_cast<favicon::FaviconService*>(
-        GetInstance()->GetServiceForBrowserState(browser_state, true));
+        GetInstance()->GetServiceForBrowserState(profile, true));
   } else if (access_type == ServiceAccessType::EXPLICIT_ACCESS) {
     return static_cast<favicon::FaviconService*>(
-        GetInstance()->GetServiceForBrowserState(
-            browser_state->GetOriginalChromeBrowserState(), true));
+        GetInstance()->GetServiceForBrowserState(profile->GetOriginalProfile(),
+                                                 true));
   }
 
-  // ChromeBrowserState is OffTheRecord without access.
-  NOTREACHED_IN_MIGRATION() << "ChromeBrowserState is OffTheRecord";
-  return nullptr;
+  // ProfileIOS is OffTheRecord without access.
+  NOTREACHED() << "ProfileIOS is OffTheRecord";
 }
 
 // static

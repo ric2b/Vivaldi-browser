@@ -38,16 +38,16 @@ class PlatformClientPosix {
  public:
   // Initializes the platform implementation.
   //
-  // |networking_loop_interval| sets the minimum amount of time that should pass
+  // `networking_loop_interval` sets the minimum amount of time that should pass
   // between iterations of the loop used to handle networking operations. Higher
   // values will result in less time being spent on these operations, but also
   // less performant networking operations. Be careful setting values larger
   // than a few hundred microseconds.
   //
-  // |networking_operation_timeout| sets how much time may be spent on a
+  // `networking_operation_timeout` sets how much time may be spent on a
   // single networking operation type.
   //
-  // |task_runner| is a client-provided TaskRunner implementation.
+  // `task_runner` is a client-provided TaskRunner implementation.
   static void Create(Clock::duration networking_operation_timeout,
                      std::unique_ptr<TaskRunnerImpl> task_runner);
 

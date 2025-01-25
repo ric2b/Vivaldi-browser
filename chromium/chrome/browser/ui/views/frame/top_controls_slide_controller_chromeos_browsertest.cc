@@ -20,7 +20,6 @@
 #include "base/strings/safe_sprintf.h"
 #include "base/test/test_future.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "cc/base/math_util.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -49,6 +48,7 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display.h"
 #include "ui/display/display_switches.h"
@@ -172,8 +172,7 @@ class TestController : public TopControlsSlideController {
 
   void SetShownRatio(content::WebContents* contents, float ratio) override {
     real_controller_->SetShownRatio(contents, ratio);
-    for (auto& observer : observers_)
-      observer.OnShownRatioChanged(ratio);
+    observers_.Notify(&TestControllerObserver::OnShownRatioChanged, ratio);
   }
 
   void OnBrowserFullscreenStateWillChange(bool new_fullscreen_state) override {
@@ -187,8 +186,8 @@ class TestController : public TopControlsSlideController {
 
   void SetTopControlsGestureScrollInProgress(bool in_progress) override {
     real_controller_->SetTopControlsGestureScrollInProgress(in_progress);
-    for (auto& observer : observers_)
-      observer.OnGestureScrollInProgressChanged(in_progress);
+    observers_.Notify(&TestControllerObserver::OnGestureScrollInProgressChanged,
+                      in_progress);
   }
 
   bool IsTopControlsGestureScrollInProgress() const override {
@@ -579,7 +578,7 @@ IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest, DisabledForHostedApps) {
   Browser::CreateParams params = Browser::CreateParams::CreateForApp(
       "test_browser_app", true /* trusted_source */, gfx::Rect(),
       browser()->profile(), true);
-  params.initial_show_state = ui::SHOW_STATE_DEFAULT;
+  params.initial_show_state = ui::mojom::WindowShowState::kDefault;
   Browser* browser = Browser::Create(params);
   AddBlankTabAndShow(browser);
 

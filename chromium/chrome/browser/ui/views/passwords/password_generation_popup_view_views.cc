@@ -311,7 +311,7 @@ void PasswordGenerationPopupViewViews::GeneratedPasswordBox::Init(
   DCHECK(!password_label_);
   password_label_ = AddChildView(std::make_unique<views::Label>(
       controller_->password(), views::style::CONTEXT_DIALOG_BODY_TEXT,
-      STYLE_SECONDARY_MONOSPACED));
+      views::style::STYLE_SECONDARY_MONOSPACED));
   layout->SetFlexForView(password_label_, 1);
   UpdateAccessibleNameAndDescription();
 }
@@ -376,6 +376,7 @@ PasswordGenerationPopupViewViews::PasswordGenerationPopupViewViews(
   // `autofill::PopupViewViews`. See crrev.com/c/2545285 for details.
   // Consider using a more appropriate role (e.g. kMenuListPopup or similar).
   GetViewAccessibility().SetRole(ax::mojom::Role::kListBox);
+  UpdateInvisibleAccessibleState();
   UpdateExpandedCollapsedAccessibleState();
 }
 
@@ -396,6 +397,7 @@ void PasswordGenerationPopupViewViews::Hide() {
   // always be non null there, so there is no need to update the accessible
   // state there.
   UpdateExpandedCollapsedAccessibleState();
+  UpdateInvisibleAccessibleState();
   if (password_view_) {
     password_view_->reset_controller();
   }
@@ -506,8 +508,12 @@ void PasswordGenerationPopupViewViews::CreateLayoutAndChildren() {
       gfx::Insets::VH(kVerticalPadding, kHorizontalMargin)));
 }
 
-void PasswordGenerationPopupViewViews::UpdateExpandedCollapsedAccessibleState()
-    const {
+void PasswordGenerationPopupViewViews::UpdateInvisibleAccessibleState() {
+  GetViewAccessibility().SetIsInvisible(!controller_ ? true : false);
+}
+
+void PasswordGenerationPopupViewViews::
+    UpdateExpandedCollapsedAccessibleState() {
   if (controller_) {
     GetViewAccessibility().SetIsExpanded();
   } else {
@@ -550,6 +556,20 @@ PasswordGenerationPopupView* PasswordGenerationPopupView::Create(
 const views::ViewAccessibility&
 PasswordGenerationPopupViewViews::GetPasswordViewViewAccessibilityForTest() {
   return password_view_->GetViewAccessibility();
+}
+
+const views::ViewAccessibility&
+PasswordGenerationPopupViewViews::GetAcceptButtonViewAccessibilityForTest() {
+  return static_cast<NudgePasswordButtons*>(nudge_password_buttons_view_)
+      ->GetAcceptButton()
+      ->GetViewAccessibility();
+}
+
+const views::ViewAccessibility&
+PasswordGenerationPopupViewViews::GetCancelButtonViewAccessibilityForTest() {
+  return static_cast<NudgePasswordButtons*>(nudge_password_buttons_view_)
+      ->GetCancelButton()
+      ->GetViewAccessibility();
 }
 
 BEGIN_METADATA(PasswordGenerationPopupViewViews)

@@ -163,7 +163,7 @@ TEST(ReceiverConstraintsTest, ReceiverConstraintsIsSupersetOf) {
   EXPECT_TRUE(first.IsSupersetOf(second));
   EXPECT_TRUE(second.IsSupersetOf(first));
 
-  // Modified |display_description|.
+  // Modified `display_description`.
   first.display_description = std::make_unique<Display>();
   first.display_description->dimensions = {1920, 1080, {kDefaultFrameRate, 1}};
   EXPECT_FALSE(first.IsSupersetOf(second));
@@ -175,7 +175,7 @@ TEST(ReceiverConstraintsTest, ReceiverConstraintsIsSupersetOf) {
   EXPECT_TRUE(second.IsSupersetOf(first));
   second = first;
 
-  // Modified |remoting|.
+  // Modified `remoting`.
   first.remoting = std::make_unique<RemotingConstraints>();
   EXPECT_TRUE(first.IsSupersetOf(second));
   EXPECT_FALSE(second.IsSupersetOf(first));
@@ -186,7 +186,7 @@ TEST(ReceiverConstraintsTest, ReceiverConstraintsIsSupersetOf) {
   EXPECT_TRUE(second.IsSupersetOf(first));
   second = first;
 
-  // Modified |video_codecs|.
+  // Modified `video_codecs`.
   first.video_codecs = {VideoCodec::kVp8, VideoCodec::kVp9};
   second.video_codecs = {};
   EXPECT_TRUE(first.IsSupersetOf(second));
@@ -199,7 +199,7 @@ TEST(ReceiverConstraintsTest, ReceiverConstraintsIsSupersetOf) {
   EXPECT_FALSE(second.IsSupersetOf(first));
   first = second;
 
-  // Modified |audio_codecs|.
+  // Modified `audio_codecs`.
   first.audio_codecs = {AudioCodec::kOpus};
   second.audio_codecs = {};
   EXPECT_TRUE(first.IsSupersetOf(second));
@@ -212,7 +212,7 @@ TEST(ReceiverConstraintsTest, ReceiverConstraintsIsSupersetOf) {
   EXPECT_FALSE(second.IsSupersetOf(first));
   first = second;
 
-  // Modified |video_limits|.
+  // Modified `video_limits`.
   first.video_limits.push_back({true, VideoCodec::kVp8});
   EXPECT_TRUE(first.IsSupersetOf(second));
   EXPECT_TRUE(second.IsSupersetOf(first));
@@ -234,7 +234,7 @@ TEST(ReceiverConstraintsTest, ReceiverConstraintsIsSupersetOf) {
   EXPECT_TRUE(second.IsSupersetOf(first));
   second = first;
 
-  // Modified |audio_limits|.
+  // Modified `audio_limits`.
   first.audio_limits.push_back({true, AudioCodec::kOpus});
   EXPECT_TRUE(first.IsSupersetOf(second));
   EXPECT_TRUE(second.IsSupersetOf(first));

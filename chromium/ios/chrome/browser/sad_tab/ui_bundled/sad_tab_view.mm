@@ -343,6 +343,11 @@ NSString* const kMessageTextViewBulletRTLFormat = @"\u202E%@\u202C";
 
     // Add link to footer.
     NSURL* linkURL = net::NSURLWithGURL(GURL(kCrashReasonURL));
+
+    if (IsVivaldiRunning()) {
+      linkURL = net::NSURLWithGURL(GURL(vVivaldiCrashReasonURL));
+    } // End Vivaldi
+
     NSDictionary<NSAttributedStringKey, id>* linkAttributes = @{
       NSForegroundColorAttributeName : [UIColor colorNamed:kBlueColor],
       NSLinkAttributeName : linkURL,

@@ -18,10 +18,10 @@ UrlLanguageHistogramFactory* UrlLanguageHistogramFactory::GetInstance() {
 }
 
 // static
-language::UrlLanguageHistogram* UrlLanguageHistogramFactory::GetForBrowserState(
-    ChromeBrowserState* const state) {
+language::UrlLanguageHistogram* UrlLanguageHistogramFactory::GetForProfile(
+    ProfileIOS* const profile) {
   return static_cast<language::UrlLanguageHistogram*>(
-      GetInstance()->GetServiceForBrowserState(state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 UrlLanguageHistogramFactory::UrlLanguageHistogramFactory()
@@ -34,10 +34,8 @@ UrlLanguageHistogramFactory::~UrlLanguageHistogramFactory() {}
 std::unique_ptr<KeyedService>
 UrlLanguageHistogramFactory::BuildServiceInstanceFor(
     web::BrowserState* const context) const {
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
-  return std::make_unique<language::UrlLanguageHistogram>(
-      browser_state->GetPrefs());
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
+  return std::make_unique<language::UrlLanguageHistogram>(profile->GetPrefs());
 }
 
 void UrlLanguageHistogramFactory::RegisterBrowserStatePrefs(

@@ -579,6 +579,7 @@ TEST_F(PasswordStoreAndroidAccountBackendTest,
   const JobId kGetLoginsJobId{13387};
   EXPECT_CALL(*bridge_helper(), GetAllLogins).WillOnce(Return(kGetLoginsJobId));
   backend().RemoveLoginsCreatedBetweenAsync(FROM_HERE, delete_begin, delete_end,
+                                            base::OnceCallback<void(bool)>(),
                                             mock_deletion_reply.Get());
 
   // Imitate login retrieval and check that it triggers the removal of matching
@@ -1902,6 +1903,7 @@ TEST_F(PasswordStoreAndroidAccountBackendTest,
 
   base::MockCallback<PasswordChangesOrErrorReply> mock_reply;
   backend().RemoveLoginsCreatedBetweenAsync(FROM_HERE, delete_begin, delete_end,
+                                            base::OnceCallback<void(bool)>(),
                                             mock_reply.Get());
 
   EXPECT_CALL(mock_reply,
@@ -2261,7 +2263,13 @@ INSTANTIATE_TEST_SUITE_P(
          std::make_pair(AndroidBackendAPIErrorCode::kAuthErrorUnresolvable,
                         PasswordStoreBackendErrorType::kAuthErrorUnresolvable),
          std::make_pair(AndroidBackendAPIErrorCode::kKeyRetrievalRequired,
-                        PasswordStoreBackendErrorType::kKeyRetrievalRequired)}),
+                        PasswordStoreBackendErrorType::kKeyRetrievalRequired),
+         std::make_pair(AndroidBackendAPIErrorCode::kEmptySecurityDomain,
+                        PasswordStoreBackendErrorType::kEmptySecurityDomain),
+         std::make_pair(
+             AndroidBackendAPIErrorCode::kIrretrievableSecurityDomain,
+             PasswordStoreBackendErrorType::kIrretrievableSecurityDomain)}),
+
     [](const ::testing::TestParamInfo<
         std::pair<AndroidBackendAPIErrorCode, PasswordStoreBackendErrorType>>&
            info) {

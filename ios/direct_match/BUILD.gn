@@ -2,6 +2,8 @@
 
 source_set("direct_match") {
   sources = [
+    "direct_match_service_bridge.h",
+    "direct_match_service_bridge.mm",
     "direct_match_service_factory.h",
     "direct_match_service_factory.mm",
   ]

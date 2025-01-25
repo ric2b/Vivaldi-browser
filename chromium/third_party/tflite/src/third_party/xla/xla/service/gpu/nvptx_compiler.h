@@ -29,17 +29,16 @@ limitations under the License.
 #include "absl/synchronization/mutex.h"
 #include "llvm/IR/Module.h"
 #include "xla/autotune_results.pb.h"
+#include "xla/hlo/analysis/hlo_dataflow_analysis.h"
 #include "xla/hlo/ir/hlo_module.h"
+#include "xla/hlo/pass/hlo_pass_pipeline.h"
 #include "xla/pjrt/distributed/key_value_store_interface.h"
 #include "xla/service/gpu/autotuning/autotuner_util.h"
 #include "xla/service/gpu/gpu_compiler.h"
 #include "xla/service/gpu/ir_emission_utils.h"
-#include "xla/service/hlo_dataflow_analysis.h"
 #include "xla/service/hlo_module_config.h"
-#include "xla/service/hlo_pass_pipeline.h"
 #include "xla/stream_executor/cuda/ptx_linking_method.h"
 #include "xla/stream_executor/device_description.h"
-#include "xla/stream_executor/device_memory_allocator.h"
 #include "xla/stream_executor/dnn.h"
 #include "xla/stream_executor/semantic_version.h"
 #include "xla/stream_executor/stream_executor.h"
@@ -59,7 +58,6 @@ class NVPTXCompiler : public GpuCompiler {
   absl::Status OptimizeHloConvolutionCanonicalization(
       HloModule* hlo_module, se::GpuComputeCapability gpu_version,
       se::dnn::VersionInfo dnn_version,
-      se::DeviceMemoryAllocator* device_allocator,
       const se::SemanticVersion& toolkit_version) override;
 
   absl::Status OptimizeHloPostLayoutAssignment(
@@ -71,7 +69,8 @@ class NVPTXCompiler : public GpuCompiler {
       const HloModule* module, se::StreamExecutor* stream_exec) override;
 
   absl::Status AddConvAndGemmAutotuningPasses(
-      HloPassPipeline* pipeline, HloModule* hlo_module,
+      HloPassPipeline* pipeline, const se::GpuComputeCapability& gpu_version,
+      const CompileOptions& options, HloModule* hlo_module,
       AutotuneConfig& autotune_config,
       tsl::thread::ThreadPool* thread_pool) override;
 

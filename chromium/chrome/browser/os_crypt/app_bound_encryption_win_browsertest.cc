@@ -32,6 +32,7 @@
 #include "chrome/elevation_service/elevator.h"
 #include "chrome/install_static/test/scoped_install_details.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/windows_services/service_program/test_support/scoped_log_grabber.h"
 #include "components/os_crypt/async/browser/os_crypt_async.h"
 #include "components/os_crypt/sync/os_crypt.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
@@ -88,7 +89,7 @@ class AppBoundEncryptionWinTest : public InProcessBrowserTest {
   void SetUp() override {
     if (base::GetCurrentProcessIntegrityLevel() != base::HIGH_INTEGRITY)
       GTEST_SKIP() << "Elevation is required for this test.";
-    maybe_uninstall_service_ = InstallService();
+    maybe_uninstall_service_ = InstallService(log_grabber_);
     EXPECT_TRUE(maybe_uninstall_service_.has_value());
     InProcessBrowserTest::SetUp();
   }
@@ -100,6 +101,7 @@ class AppBoundEncryptionWinTest : public InProcessBrowserTest {
   base::HistogramTester histogram_tester_;
 
  private:
+  ScopedLogGrabber log_grabber_;
   install_static::ScopedInstallDetails scoped_install_details_;
   std::optional<base::ScopedClosureRunner> maybe_uninstall_service_;
 };
@@ -148,11 +150,6 @@ IN_PROC_BROWSER_TEST_F(AppBoundEncryptionWinTest, EncryptDecryptInvalid) {
 // browser in the PRE_ test stores the "Test Key" with App-Bound encryption and
 // the second stage of the test verifies it can be retrieved successfully.
 IN_PROC_BROWSER_TEST_F(AppBoundEncryptionWinTest, PRE_MetricsTest) {
-  if (!base::FeatureList::IsEnabled(
-          features::kRegisterAppBoundEncryptionProvider)) {
-    GTEST_SKIP() << "Metrics only reported if provider is registered.";
-  }
-
   histogram_tester_.ExpectUniqueSample(
       "OSCrypt.AppBoundEncryption.SupportLevel", SupportLevel::kSupported, 1);
 
@@ -165,11 +162,6 @@ IN_PROC_BROWSER_TEST_F(AppBoundEncryptionWinTest, PRE_MetricsTest) {
 
 IN_PROC_BROWSER_TEST_F(AppBoundEncryptionWinTest, MetricsTest) {
   ASSERT_TRUE(install_static::IsSystemInstall());
-
-  if (!base::FeatureList::IsEnabled(
-          features::kRegisterAppBoundEncryptionProvider)) {
-    GTEST_SKIP() << "Metrics only reported if provider is registered.";
-  }
 
   // These histograms are recorded on a background worker thread, so the test
   // needs to wait until this task completes and the histograms are recorded.

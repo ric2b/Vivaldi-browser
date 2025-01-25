@@ -318,25 +318,27 @@ const s_copyBufferToTextureViaRenderPipelines = new WeakMap<
 function copyBufferToTextureViaRender(
   t: GPUTest,
   encoder: GPUCommandEncoder,
-  source: GPUImageCopyBuffer,
-  dest: GPUImageCopyTexture,
+  source: GPUTexelCopyBufferInfo,
+  sourceFormat: GPUTextureFormat,
+  dest: GPUTexelCopyTextureInfo,
   size: GPUExtent3D
 ) {
-  const { format, sampleCount } = dest.texture;
+  const { format: textureFormat, sampleCount } = dest.texture;
   const origin = reifyOrigin3D(dest.origin ?? [0]);
   const copySize = reifyExtent3D(size);
 
-  const msInfo = kLoadValueFromStorageInfo[format];
+  const msInfo = kLoadValueFromStorageInfo[sourceFormat];
   assert(!!msInfo);
   const { useFragDepth, discardWithStencil } = msInfo;
 
   const { device } = t;
   const numBlits = discardWithStencil ? 8 : 1;
   for (let blitCount = 0; blitCount < numBlits; ++blitCount) {
-    const code = getCopyBufferToTextureViaRenderCode(format);
+    const code = getCopyBufferToTextureViaRenderCode(sourceFormat);
     const stencilWriteMask = 1 << blitCount;
     const id = JSON.stringify({
-      format,
+      textureFormat,
+      sourceFormat,
       useFragDepth,
       stencilWriteMask,
       discardWithStencil,
@@ -350,7 +352,7 @@ function copyBufferToTextureViaRender(
     if (!pipeline) {
       const module = device.createShaderModule({ code });
       pipeline = device.createRenderPipeline({
-        label: `blitCopyFor-${format}`,
+        label: `blitCopyFor-${textureFormat}`,
         layout: 'auto',
         vertex: { module },
         ...(discardWithStencil
@@ -362,7 +364,7 @@ function copyBufferToTextureViaRender(
               depthStencil: {
                 depthWriteEnabled: false,
                 depthCompare: 'always',
-                format,
+                format: textureFormat,
                 stencilWriteMask,
                 stencilFront: {
                   passOp: 'replace',
@@ -378,13 +380,13 @@ function copyBufferToTextureViaRender(
               depthStencil: {
                 depthWriteEnabled: true,
                 depthCompare: 'always',
-                format,
+                format: textureFormat,
               },
             }
           : {
               fragment: {
                 module,
-                targets: [{ format }],
+                targets: [{ format: textureFormat }],
               },
             }),
         primitive: {
@@ -395,7 +397,7 @@ function copyBufferToTextureViaRender(
       pipelines.set(id, pipeline);
     }
 
-    const info = kTextureFormatInfo[format];
+    const info = kTextureFormatInfo[sourceFormat];
     const uniforms = new Uint32Array([
       copySize.height, //  numTexelRows: u32,
       source.bytesPerRow!, //  bytesPerRow: u32,
@@ -445,6 +447,7 @@ function copyBufferToTextureViaRender(
                 depthClearValue: 0,
                 depthLoadOp: 'clear',
                 depthStoreOp: 'store',
+                stencilReadOnly: true,
               },
             }
           : {
@@ -490,17 +493,19 @@ function copyBufferToTextureViaRender(
 export function createTextureFromTexelViews(
   t: GPUTest,
   texelViews: TexelView[],
-  desc: Omit<GPUTextureDescriptor, 'format'>
+  desc: Omit<GPUTextureDescriptor, 'format'> & { format?: GPUTextureFormat }
 ): GPUTexture {
   // All texel views must be the same format for mipmaps.
   assert(texelViews.length > 0 && texelViews.every(e => e.format === texelViews[0].format));
-  const format = texelViews[0].format;
+  const viewsFormat = texelViews[0].format;
+  const textureFormat = desc.format ?? viewsFormat;
+  const isTextureFormatDifferentThanTexelViewFormat = textureFormat !== viewsFormat;
   const { width, height, depthOrArrayLayers } = reifyExtent3D(desc.size);
 
   // Create the texture and then initialize each mipmap level separately.
   const texture = t.createTextureTracked({
     ...desc,
-    format,
+    format: textureFormat,
     usage: desc.usage | GPUTextureUsage.COPY_DST,
     mipLevelCount: texelViews.length,
   });
@@ -513,9 +518,14 @@ export function createTextureFromTexelViews(
       bytesPerRow,
       rowsPerImage,
       mipSize: [mipWidth, mipHeight, mipDepthOrArray],
-    } = getTextureCopyLayout(format, desc.dimension ?? '2d', [width, height, depthOrArrayLayers], {
-      mipLevel,
-    });
+    } = getTextureCopyLayout(
+      viewsFormat,
+      desc.dimension ?? '2d',
+      [width, height, depthOrArrayLayers],
+      {
+        mipLevel,
+      }
+    );
 
     // Create a staging buffer to upload the texture mip level contents.
     const stagingBuffer = t.createBufferTracked({
@@ -535,11 +545,16 @@ export function createTextureFromTexelViews(
     });
     stagingBuffer.unmap();
 
-    if (texture.sampleCount > 1 || isDepthOrStencilTextureFormat(format)) {
+    if (
+      isTextureFormatDifferentThanTexelViewFormat ||
+      texture.sampleCount > 1 ||
+      isDepthOrStencilTextureFormat(textureFormat)
+    ) {
       copyBufferToTextureViaRender(
         t,
         commandEncoder,
         { buffer: stagingBuffer, bytesPerRow, rowsPerImage },
+        viewsFormat,
         { texture, mipLevel },
         [mipWidth, mipHeight, mipDepthOrArray]
       );

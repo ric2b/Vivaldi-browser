@@ -36,6 +36,14 @@
   return [VivaldiStartPagePrefs showStartPageCustomizeButton];
 }
 
++ (const VivaldiStartPageStartItemType)getReopenStartPageWithItem {
+  return [VivaldiStartPagePrefs getReopenStartPageWithItem];
+}
+
++ (const NSInteger)getStartPageLastVisitedGroupIndex {
+  return [VivaldiStartPagePrefs getStartPageLastVisitedGroupIndex];
+}
+
 + (NSString*)getWallpaperName {
   return [VivaldiStartPagePrefs getWallpaperName];
 }
@@ -77,6 +85,14 @@
 
 + (void)setShowStartPageCustomizeButton:(BOOL)show {
   [VivaldiStartPagePrefs setShowStartPageCustomizeButton:show];
+}
+
++ (void)setReopenStartPageWithItem:(const VivaldiStartPageStartItemType)item {
+  [VivaldiStartPagePrefs setReopenStartPageWithItem:item];
+}
+
++ (void)setStartPageLastVisitedGroupIndex:(const NSInteger)index {
+  [VivaldiStartPagePrefs setStartPageLastVisitedGroupIndex:index];
 }
 
 + (void)setWallpaperName:(NSString*)name {

@@ -28,6 +28,8 @@ message RuntimeMetadata {
   RuntimeType.Type type = 2;
   // Various Runtime capabilities.
   RuntimeCapabilities runtime_capabilities = 3;
+  // cast to native capabilities, only enabled if type == NATIVE
+  CastNativeCapabilities cast_native_capabilities = 4;
 }
 
 message RuntimeType {
@@ -43,11 +45,20 @@ message RuntimeType {
     CAST_WEB = 1;
     // Cast Lite runtime for audio.
     CAST_LITE = 2;
-    // Runtimes native to specific platform (Netflix, YouTube applications etc)
+    // Runtimes native to specific platform (Netflix, YouTube applications etc),
+    // or cast functional runtimes (follower, mirroring, etc)
     NATIVE = 3;
     // Cast Web runtime on Cobalt.
     CAST_COBALT = 4;
+    // Runtime that can only be launched and not stopped/prelaunched.
+    // This runtime does not expose a gRPC endpoint.
+    LAUNCH_ONLY = 5;
   }
+}
+
+message CastNativeCapabilities {
+  // The platforms the OEM supports for this runtime.
+  repeated string supported_platforms = 1;
 }
 
 message MediaCapabilities {

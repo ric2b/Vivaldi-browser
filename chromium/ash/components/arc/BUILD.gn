@@ -60,8 +60,6 @@ static_library("arc") {
     "ime/arc_ime_util.h",
     "ime/key_event_result_receiver.cc",
     "ime/key_event_result_receiver.h",
-    "keyboard_shortcut/arc_keyboard_shortcut_bridge.cc",
-    "keyboard_shortcut/arc_keyboard_shortcut_bridge.h",
     "memory/arc_memory_bridge.cc",
     "memory/arc_memory_bridge.h",
     "metrics/arc_daily_metrics.cc",
@@ -100,8 +98,6 @@ static_library("arc") {
     "power/arc_power_bridge.h",
     "sensor/arc_iio_sensor_bridge.cc",
     "sensor/arc_iio_sensor_bridge.h",
-    "storage_manager/arc_storage_manager.cc",
-    "storage_manager/arc_storage_manager.h",
     "system_ui/arc_system_ui_bridge.cc",
     "system_ui/arc_system_ui_bridge.h",
     "timer/arc_timer_bridge.cc",
@@ -113,6 +109,8 @@ static_library("arc") {
     "volume_mounter/arc_volume_mounter_bridge.h",
     "wake_lock/arc_wake_lock_bridge.cc",
     "wake_lock/arc_wake_lock_bridge.h",
+    "window/arc_window_watcher.cc",
+    "window/arc_window_watcher.h",
   ]
 
   public_deps = [
@@ -136,6 +134,7 @@ static_library("arc") {
     "//chromeos/ash/components/dbus/arc:arc_proto",
     "//chromeos/ash/components/dbus/concierge",
     "//chromeos/ash/components/dbus/concierge:concierge_proto",
+    "//chromeos/ash/components/dbus/cros_disks",
     "//chromeos/ash/components/dbus/cryptohome",
     "//chromeos/ash/components/dbus/patchpanel",
     "//chromeos/ash/components/dbus/patchpanel:patchpanel_proto",
@@ -155,6 +154,7 @@ static_library("arc") {
     "//chromeos/dbus/permission_broker",
     "//chromeos/dbus/power",
     "//chromeos/dbus/power:power_manager_proto",
+    "//chromeos/ui/base",
     "//chromeos/ui/frame",
     "//components/device_event_log",
     "//components/exo",
@@ -350,8 +350,6 @@ static_library("arc_test_support") {
     "test/fake_process_instance.h",
     "test/fake_sharesheet_instance.cc",
     "test/fake_sharesheet_instance.h",
-    "test/fake_storage_manager_instance.cc",
-    "test/fake_storage_manager_instance.h",
     "test/fake_system_state_instance.cc",
     "test/fake_system_state_instance.h",
     "test/fake_system_ui_instance.cc",
@@ -399,6 +397,10 @@ static_library("arc_test_support") {
   ]
 }
 
+static_library("arc_app_constants") {
+  sources = [ "app/arc_app_constants.h" ]
+}
+
 source_set("arc_metrics_constants") {
   sources = [ "metrics/arc_metrics_constants.h" ]
 }
@@ -444,7 +446,6 @@ source_set("unit_tests") {
     "pay/arc_payment_app_bridge_unittest.cc",
     "power/arc_power_bridge_unittest.cc",
     "sensor/arc_iio_sensor_bridge_unittest.cc",
-    "storage_manager/arc_storage_manager_unittest.cc",
     "system_ui/arc_system_ui_bridge_unittest.cc",
     "timer/arc_timer_bridge_unittest.cc",
     "usb/usb_host_bridge_unittest.cc",
@@ -468,6 +469,7 @@ source_set("unit_tests") {
     "//chromeos",
     "//chromeos/ash/components/audio",
     "//chromeos/ash/components/dbus/concierge",
+    "//chromeos/ash/components/dbus/cros_disks",
     "//chromeos/ash/components/dbus/patchpanel",
     "//chromeos/ash/components/dbus/resourced",
     "//chromeos/ash/components/dbus/session_manager",

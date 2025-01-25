@@ -1,0 +1,22 @@
+// Copyright 2025 Vivaldi Technologies AS. All rights reserved.
+{
+  "int_variables": {
+    // The lowest version of search_engines.json,
+    // which defines the expected default search engines for the dialog.
+    "kSearchEnginesDataVersionRequired": 10000164,
+    // Update the version each time the data is changed.
+    "kVersion": 2
+  },
+  // Add only types that exist in
+  // chromium/components/search_engines/search_engine_type.h
+  "prompt_if_type": [
+    "SEARCH_ENGINE_GOOGLE",
+    "SEARCH_ENGINE_BING"
+  ],
+  // Fallback domain, if the type cannot be identified.
+  // Domain will match on all subdomains, e.g. google.com == www.google.com
+  "prompt_if_domain": [
+    "google.com",
+    "bing.com"
+  ]
+}

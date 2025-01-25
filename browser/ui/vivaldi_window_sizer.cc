@@ -3,6 +3,8 @@
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
 
 #include "build/build_config.h"
+#include "ui/base/mojom/menu_source_type.mojom-shared.h"
+#include "ui/base/mojom/window_show_state.mojom-shared.h"
 #include "ui/display/display.h"
 
 namespace vivaldi {
@@ -25,7 +27,7 @@ static const int kVivaldiResElmCount =
     sizeof(vivaldi_maximized) / sizeof(VivaldiResolutionForMaximized);
 
 bool SetMaximizedIfPossible(gfx::Rect* bounds,
-                            ui::WindowShowState* show_state,
+                            ui::mojom::WindowShowState* show_state,
                             const display::Display& display) {
   const gfx::Rect display_bounds = display.bounds();
 
@@ -33,19 +35,19 @@ bool SetMaximizedIfPossible(gfx::Rect* bounds,
     if (display.device_scale_factor() == vivaldi_maximized[i].scale_factor &&
         display_bounds.width() == vivaldi_maximized[i].width &&
         display_bounds.height() == vivaldi_maximized[i].height) {
-      *show_state = ui::SHOW_STATE_MAXIMIZED;
+      *show_state = ui::mojom::WindowShowState::kMaximized;
       return true;
     } else if (vivaldi_maximized[i].ignore_scale &&
                display_bounds.width() == vivaldi_maximized[i].width &&
                display_bounds.height() == vivaldi_maximized[i].height) {
-      *show_state = ui::SHOW_STATE_MAXIMIZED;
+      *show_state = ui::mojom::WindowShowState::kMaximized;
       return true;
     }
   }
 #if !BUILDFLAG(IS_MAC)
   // If we're lower resolution, always maximize, except on Mac.
   if (display_bounds.width() < 1920 && display_bounds.height() < 1080) {
-    *show_state = ui::SHOW_STATE_MAXIMIZED;
+    *show_state = ui::mojom::WindowShowState::kMaximized;
     return true;
   }
 #endif  // !IS_MAC
@@ -56,7 +58,7 @@ bool SetMaximizedIfPossible(gfx::Rect* bounds,
 
 void WindowSizer::AdjustDefaultSizeForVivaldi(
     gfx::Rect* bounds,
-    ui::WindowShowState* show_state,
+    ui::mojom::WindowShowState* show_state,
     const display::Display& display) const {
   vivaldi::SetMaximizedIfPossible(bounds, show_state, display);
 

@@ -13,12 +13,6 @@
 
 // static
 safe_browsing::TailoredSecurityService*
-TailoredSecurityServiceFactory::GetForBrowserState(ProfileIOS* profile) {
-  return GetForProfile(profile);
-}
-
-// static
-safe_browsing::TailoredSecurityService*
 TailoredSecurityServiceFactory::GetForProfile(ProfileIOS* profile) {
   return static_cast<safe_browsing::TailoredSecurityService*>(
       GetInstance()->GetServiceForBrowserState(profile, true));
@@ -41,10 +35,8 @@ TailoredSecurityServiceFactory::TailoredSecurityServiceFactory()
 std::unique_ptr<KeyedService>
 TailoredSecurityServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* browser_state) const {
-  ChromeBrowserState* chrome_browser_state =
-      ChromeBrowserState::FromBrowserState(browser_state);
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(browser_state);
   return std::make_unique<safe_browsing::ChromeTailoredSecurityService>(
-      chrome_browser_state,
-      IdentityManagerFactory::GetForProfile(chrome_browser_state),
-      SyncServiceFactory::GetForBrowserState(chrome_browser_state));
+      profile, IdentityManagerFactory::GetForProfile(profile),
+      SyncServiceFactory::GetForProfile(profile));
 }

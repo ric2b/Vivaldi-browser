@@ -10,16 +10,19 @@ $assert DATATYPE in ["QC8", "QS8", "QU8"]
 #include <assert.h>
 $if VARIANT == "LRINTF":
   #include <math.h>
+#include <stddef.h>
+#include <stdint.h>
 
+#include "xnnpack/common.h"
 #include "xnnpack/dwconv.h"
 #include "xnnpack/math.h"
+#include "xnnpack/microparams.h"
 $if CHANNEL_TILE % 4 != 0:
   #include "xnnpack/unaligned.h"
 
-
 $DATATYPE_SPEC = {"QS8": "qs8", "QC8": "qs8_qc8w", "QU8": "qu8"}[DATATYPE]
-$PARAMS_STRUCT = REQUANTIZATION.lower() + "_scalar" + ("_" + VARIANT.lower() if VARIANT else "")
-$PARAMS_UNION = "xnn_qs8_qc8w_conv_minmax_params" if DATATYPE == "QC8" else "xnn_%s_conv_minmax_params" % DATATYPE.lower()
+$PARAMS_STRUCT = REQUANTIZATION.lower() + "_scalar"
+$PARAMS_TYPE = "union xnn_qs8_qc8w_conv_minmax_params" if DATATYPE == "QC8" else "union xnn_%s_conv_minmax_params" % DATATYPE.lower()
 $XINT8_T = "uint8_t" if DATATYPE == "QU8" else "int8_t"
 $MIN_F32 = "__builtin_wasm_min_f32" if WASM else "math_min_f32"
 $MAX_F32 = "__builtin_wasm_max_f32" if WASM else "math_max_f32"
@@ -33,7 +36,7 @@ void xnn_${DATATYPE_SPEC}_dwconv_minmax_${REQUANTIZATION.lower()}_ukernel_${KERN
     size_t output_increment,
     size_t input_offset,
     const ${XINT8_T}* zero,
-    const union ${PARAMS_UNION} params[restrict XNN_MIN_ELEMENTS(1)])
+    const ${PARAMS_TYPE} params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(channels != 0);
   assert(output_width != 0);
@@ -42,25 +45,27 @@ void xnn_${DATATYPE_SPEC}_dwconv_minmax_${REQUANTIZATION.lower()}_ukernel_${KERN
     $if DATATYPE != "QC8":
       const float vscale = params->${PARAMS_STRUCT}.scale;
     $if VARIANT == "FMAGIC":
-      const float voutput_min_less_zero_point = params->${PARAMS_STRUCT}.output_min_less_zero_point;
-      const float voutput_max_less_zero_point = params->${PARAMS_STRUCT}.output_max_less_zero_point;
-      const float vmagic_bias = params->${PARAMS_STRUCT}.magic_bias;
-      const int32_t vmagic_bias_less_output_zero_point = params->${PARAMS_STRUCT}.magic_bias_less_output_zero_point;
+      const float voutput_min_less_zero_point = (int32_t) params->${PARAMS_STRUCT}.output_min - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
+      const float voutput_max_less_zero_point = (int32_t) params->${PARAMS_STRUCT}.output_max - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
+      const float vmagic_bias = 12582912.0f;
+      const int32_t vmagic_bias_less_output_zero_point = INT32_C(0x4B400000) - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
     $elif VARIANT == "IMAGIC":
-      const float vmagic_bias = params->${PARAMS_STRUCT}.magic_bias;
-      const int32_t vmagic_min = params->${PARAMS_STRUCT}.magic_min;
-      const int32_t vmagic_max = params->${PARAMS_STRUCT}.magic_max;
-      const int32_t vmagic_bias_less_zero_point = params->${PARAMS_STRUCT}.magic_bias_less_zero_point;
+      const float vmagic_bias = 12582912.0f;
+      const int32_t output_min_less_zero_point = (int32_t) params->${PARAMS_STRUCT}.output_min - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
+      const int32_t output_max_less_zero_point = (int32_t) params->${PARAMS_STRUCT}.output_max - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
+      const int32_t vmagic_min = (int32_t) float_as_uint32(12582912.0f + output_min_less_zero_point);
+      const int32_t vmagic_max = (int32_t) float_as_uint32(12582912.0f + output_max_less_zero_point);
+      const int32_t vmagic_bias_less_zero_point = INT32_C(0x4B400000) - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
     $elif VARIANT == "LRINTF":
-      const float voutput_min_less_zero_point = params->${PARAMS_STRUCT}.output_min_less_zero_point;
-      const float voutput_max_less_zero_point = params->${PARAMS_STRUCT}.output_max_less_zero_point;
+      const float voutput_min_less_zero_point = (int32_t) params->${PARAMS_STRUCT}.output_min - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
+      const float voutput_max_less_zero_point = (int32_t) params->${PARAMS_STRUCT}.output_max - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
       const int32_t voutput_zero_point = params->${PARAMS_STRUCT}.output_zero_point;
   $elif REQUANTIZATION == "RNDNU":
     const int32_t vmultiplier = params->${PARAMS_STRUCT}.multiplier;
     const int64_t vrounding = params->${PARAMS_STRUCT}.rounding;
     const uint32_t vshift = params->${PARAMS_STRUCT}.shift;
-    const int32_t voutput_min_less_zero_point = params->${PARAMS_STRUCT}.output_min_less_zero_point;
-    const int32_t voutput_max_less_zero_point = params->${PARAMS_STRUCT}.output_max_less_zero_point;
+    const int32_t voutput_min_less_zero_point = (int32_t) params->${PARAMS_STRUCT}.output_min - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
+    const int32_t voutput_max_less_zero_point = (int32_t) params->${PARAMS_STRUCT}.output_max - (int32_t) params->${PARAMS_STRUCT}.output_zero_point;
     const int32_t voutput_zero_point = params->${PARAMS_STRUCT}.output_zero_point;
   $if DATATYPE == "QU8":
     const int32_t vkernel_zero_point = params->${PARAMS_STRUCT}.kernel_zero_point;

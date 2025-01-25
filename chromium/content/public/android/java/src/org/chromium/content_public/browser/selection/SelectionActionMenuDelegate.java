@@ -9,6 +9,7 @@ import android.content.pm.ResolveInfo;
 import androidx.annotation.NonNull;
 
 import org.chromium.content_public.browser.SelectionMenuItem;
+import org.chromium.content_public.browser.SelectionPopupController;
 
 import java.util.List;
 
@@ -26,11 +27,14 @@ public interface SelectionActionMenuDelegate {
      *
      * @param menuItemBuilders default menu item builder list which need to be modified.
      * @param isSelectionPassword True if current selection is of password type, False otherwise.
+     * @param isSelectionReadOnly True if current node having selection is editable, False
+     *     otherwise.
      * @param selectedText The selected text (empty if no text selected).
      */
     void modifyDefaultMenuItems(
             List<SelectionMenuItem.Builder> menuItemBuilders,
             boolean isSelectionPassword,
+            boolean isSelectionReadOnly,
             @NonNull String selectedText);
 
     /**
@@ -60,4 +64,15 @@ public interface SelectionActionMenuDelegate {
      */
     @NonNull
     List<SelectionMenuItem> getAdditionalTextProcessingItems();
+
+    /**
+     * Queries if selection menu item cache can be reused. Selection menu's items can be cached for
+     * repeated selections. Delegate can add menu items using {@link #modifyDefaultMenuItems(List)}
+     * API due to which repeated selections can result in different selection menu items being
+     * shown.
+     *
+     * @return True, if cached selection menu items can be reused for repeated selection, False
+     *     otherwise.
+     */
+    boolean canReuseCachedSelectionMenu();
 }

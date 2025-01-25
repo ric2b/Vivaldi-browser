@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "components/search_engines/template_url_prepopulate_data.h"
 
 #include <algorithm>
@@ -37,6 +32,7 @@
 #include "app/vivaldi_apptools.h"
 #include "components/search_engines/search_engines_helper.h"
 #include "components/search_engines/search_engines_manager.h"
+#include "components/search_engines/search_engines_managers_factory.h"
 #include "components/search_engines/vivaldi_pref_names.h"
 namespace TemplateURLPrepopulateData {
 
@@ -237,7 +233,9 @@ int GetDataVersion(PrefService* prefs) {
   // Allow tests to override the local version.
   return (prefs && prefs->HasPrefPath(prefs::kSearchProviderOverridesVersion)) ?
       prefs->GetInteger(prefs::kSearchProviderOverridesVersion) :
-      SearchEnginesManager::GetInstance()->GetCurrentDataVersion();
+        SearchEnginesManagersFactory::GetInstance()
+                   ->GetSearchEnginesManager()
+                   ->GetCurrentDataVersion();
 }
 
 std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedEngines(
@@ -323,8 +321,7 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedEngineFromFullList(
   // case of IDs shared across multiple entries, we might be returning the
   // wrong one for the profile country. We can look into better heuristics in
   // future work.
-  for (const PrepopulatedEngine* engine :
-       SearchEnginesManager::GetInstance()->GetAllEngines()) {
+  for (const PrepopulatedEngine* engine : kAllEngines) {
     if (engine->id == prepopulated_id) {
       return TemplateURLDataFromPrepopulatedEngine(*engine);
     }
@@ -354,8 +351,8 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedFallbackSearch(
                                         /*use_first_as_fallback=*/true);
 }
 
-std::vector<const PrepopulatedEngine*> GetAllPrepopulatedEngines() {
-  return SearchEnginesManager::GetInstance()->GetAllEngines();
+const base::span<const PrepopulatedEngine* const> GetAllPrepopulatedEngines() {
+  return kAllEngines;
 }
 
 std::vector<std::unique_ptr<TemplateURLData>>

@@ -62,7 +62,7 @@ void CalendarServiceFactory::ShutdownForProfile(Profile* profile) {
 
 content::BrowserContext* CalendarServiceFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
+  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 KeyedService* CalendarServiceFactory::BuildServiceInstanceFor(

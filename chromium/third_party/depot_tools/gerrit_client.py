@@ -393,6 +393,30 @@ def CMDsetlabel(parser, args):
     write_result(result, opt)
 
 
+@subcommand.usage('[args ...]')
+def CMDaddMessage(parser, args):
+    """Adds a message to a given change at given revision."""
+    parser.add_option('-c', '--change', type=int, help='change number')
+    parser.add_option(
+        '-r',
+        '--revision',
+        type=str,
+        default='current',
+        help='revision ID. See '
+        'https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#revision-id '  # pylint: disable=line-too-long
+        'for acceptable format')
+    parser.add_option('-m', '--message', type=str, help='message to add')
+    (opt, args) = parser.parse_args(args)
+    assert opt.change, "-c not defined"
+    assert opt.message, "-m not defined"
+    result = gerrit_util.SetReview(urllib.parse.urlparse(opt.host).netloc,
+                                   opt.change,
+                                   revision=opt.revision,
+                                   msg=opt.message)
+    logging.info(result)
+    write_result(result, opt)
+
+
 @subcommand.usage('')
 def CMDrestore(parser, args):
     """Restores a Gerrit change."""

@@ -34,7 +34,7 @@ class OmniboxTextChangeDelegate;
 
 // Vivaldi
 - (void)searchEngineShortcutActivatedForURL:(TemplateURL*)templateURL;
-- (void)insertKeywordToOmnibox:(NSString*)text;
+- (void)insertKeywordToOmnibox:(NSString*)text fromPaste:(BOOL)fromPaste;
 - (void)resetActivatedSearchEngineShortcut;
 // End Vivaldi
 
@@ -92,6 +92,13 @@ class OmniboxTextChangeDelegate;
 
 // The layout guide center to use to refer to the omnibox leading image.
 @property(nonatomic, strong) LayoutGuideCenter* layoutGuideCenter;
+
+- (instancetype)initWithIsLensOverlay:(BOOL)isLensOverlay
+    NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithNibName:(NSString*)nibNameOrNil
+                         bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
+- (instancetype)initWithCoder:(NSCoder*)coder NS_UNAVAILABLE;
+- (instancetype)init NS_UNAVAILABLE;
 
 - (void)setTextChangeDelegate:(OmniboxTextChangeDelegate*)textChangeDelegate;
 

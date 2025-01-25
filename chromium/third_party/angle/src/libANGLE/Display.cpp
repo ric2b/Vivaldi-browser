@@ -58,8 +58,6 @@
 #        include "libANGLE/renderer/gl/wgl/DisplayWGL.h"
 #    elif ANGLE_ENABLE_CGL
 #        include "libANGLE/renderer/gl/cgl/DisplayCGL.h"
-#    elif ANGLE_ENABLE_EAGL
-#        include "libANGLE/renderer/gl/eagl/DisplayEAGL.h"
 #    elif defined(ANGLE_PLATFORM_LINUX)
 #        include "libANGLE/renderer/gl/egl/DisplayEGL.h"
 #        if defined(ANGLE_USE_X11)
@@ -410,10 +408,6 @@ rx::DisplayImpl *CreateDisplayFromAttribs(EGLAttrib displayType,
 
 #    elif ANGLE_ENABLE_CGL
             impl = new rx::DisplayCGL(state);
-            break;
-
-#    elif ANGLE_ENABLE_EAGL
-            impl = new rx::DisplayEAGL(state);
             break;
 
 #    elif defined(ANGLE_PLATFORM_LINUX)
@@ -898,27 +892,6 @@ Display *Display::GetDisplayFromDevice(Device *device, const AttributeMap &attri
     return display;
 }
 
-// static
-Display::EglDisplaySet Display::GetEglDisplaySet()
-{
-    Display::EglDisplaySet displays;
-
-    ANGLEPlatformDisplayMap *anglePlatformDisplays   = GetANGLEPlatformDisplayMap();
-    DevicePlatformDisplayMap *devicePlatformDisplays = GetDevicePlatformDisplayMap();
-
-    for (auto anglePlatformDisplayMapEntry : *anglePlatformDisplays)
-    {
-        displays.insert(anglePlatformDisplayMapEntry.second);
-    }
-
-    for (auto devicePlatformDisplayMapEntry : *devicePlatformDisplays)
-    {
-        displays.insert(devicePlatformDisplayMapEntry.second);
-    }
-
-    return displays;
-}
-
 Display::Display(EGLenum platform, EGLNativeDisplayType displayId, Device *eglDevice)
     : mState(displayId),
       mImplementation(nullptr),
@@ -1100,11 +1073,6 @@ Error Display::initialize()
         // config.second.conformant |= EGL_OPENGL_ES_BIT;
 
         config.second.renderableType |= EGL_OPENGL_ES_BIT;
-
-        // If we aren't using desktop GL entry points, remove desktop GL support from all configs
-#if !defined(ANGLE_ENABLE_GL_DESKTOP_FRONTEND)
-        config.second.renderableType &= ~EGL_OPENGL_BIT;
-#endif
     }
 
     mFrontendFeatures.reset();
@@ -1551,7 +1519,6 @@ Error Display::createStream(const AttributeMap &attribs, Stream **outStream)
 
 Error Display::createContext(const Config *configuration,
                              gl::Context *shareContext,
-                             EGLenum clientType,
                              const AttributeMap &attribs,
                              gl::Context **outContext)
 {
@@ -1641,8 +1608,8 @@ Error Display::createContext(const Config *configuration,
 
     gl::Context *context =
         new gl::Context(this, configuration, shareContext, shareTextures, shareSemaphores,
-                        sharedContextMutex, programCachePointer, shaderCachePointer, clientType,
-                        attribs, mDisplayExtensions, GetClientExtensions());
+                        sharedContextMutex, programCachePointer, shaderCachePointer, attribs,
+                        mDisplayExtensions, GetClientExtensions());
     Error error = context->initialize();
     if (error.isError())
     {
@@ -2162,10 +2129,6 @@ static ClientExtensions GenerateClientExtensions()
     extensions.platformANGLEDeviceTypeEGLANGLE = true;
 #endif
 
-#if defined(ANGLE_ENABLE_EAGL)
-    extensions.platformANGLEDeviceContextVolatileEagl = true;
-#endif
-
 #if defined(ANGLE_ENABLE_CGL)
     extensions.platformANGLEDeviceContextVolatileCgl = true;
 #endif
@@ -2332,18 +2295,7 @@ void Display::initVersionString()
 
 void Display::initClientAPIString()
 {
-    std::string supportedClientAPIs = "OpenGL_ES";
-
-#ifdef ANGLE_ENABLE_GL_DESKTOP_FRONTEND
-    // If angle_enable_gl_desktop_frontend is enabled and the max supported desktop version
-    // is not None, we support a desktop GL frontend.
-    if (mImplementation->getMaxSupportedDesktopVersion().valid())
-    {
-        supportedClientAPIs += " OpenGL";
-    }
-#endif  // ANGLE_ENABLE_GL_DESKTOP_FRONTEND
-
-    mClientAPIString = supportedClientAPIs;
+    mClientAPIString = "OpenGL_ES";
 }
 
 void Display::initializeFrontendFeatures()
@@ -2534,17 +2486,8 @@ const char *Display::queryStringi(const EGLint name, const EGLint index)
         case EGL_FEATURE_CATEGORY_ANGLE:
             result = angle::FeatureCategoryToString(mFeatures[index]->category);
             break;
-        case EGL_FEATURE_DESCRIPTION_ANGLE:
-            result = mFeatures[index]->description;
-            break;
-        case EGL_FEATURE_BUG_ANGLE:
-            result = mFeatures[index]->bug;
-            break;
         case EGL_FEATURE_STATUS_ANGLE:
             result = angle::FeatureStatusToString(mFeatures[index]->enabled);
-            break;
-        case EGL_FEATURE_CONDITION_ANGLE:
-            result = mFeatures[index]->condition;
             break;
         default:
             UNREACHABLE();

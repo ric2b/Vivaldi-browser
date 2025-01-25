@@ -110,8 +110,8 @@ using vivaldi::NoteNode;
 // The view controller to present when pushing to add or edit folder
 @property(nonatomic, strong)
   NoteAddEditFolderViewController* noteFolderEditorController;
-// The user's browser state model used.
-@property(nonatomic, assign) ChromeBrowserState* browserState;
+// The user's profile used.
+@property(nonatomic, assign) ProfileIOS* profile;
 @property(nonatomic, weak)
   NoteFolderSelectionHeaderView* tableHeaderView;
 @property(nonatomic, strong) NSString* searchText;
@@ -130,7 +130,7 @@ using vivaldi::NoteNode;
 @synthesize selectedFolder = _selectedFolder;
 
 @synthesize noteFolderEditorController = _noteFolderEditorController;
-@synthesize browserState = _browserState;
+@synthesize profile = _profile;
 @synthesize tableHeaderView = _tableHeaderView;
 @synthesize searchText = _searchText;
 
@@ -158,8 +158,7 @@ using vivaldi::NoteNode;
     _modelBridge.reset(
         new notes::NoteModelBridge(self, _noteModel));
 
-    _browserState =
-       _browser->GetBrowserState()->GetOriginalChromeBrowserState();
+    _profile = _browser->GetProfile()->GetOriginalProfile();
   }
 
   return self;

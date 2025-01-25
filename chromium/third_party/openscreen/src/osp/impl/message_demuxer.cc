@@ -17,9 +17,8 @@ namespace openscreen::osp {
 // static
 // Decodes a varUint, expecting it to follow the encoding format described here:
 // https://tools.ietf.org/html/draft-ietf-quic-transport-16#section-16
-ErrorOr<uint64_t> MessageTypeDecoder::DecodeVarUint(
-    const std::vector<uint8_t>& buffer,
-    size_t* num_bytes_decoded) {
+ErrorOr<uint64_t> MessageTypeDecoder::DecodeVarUint(ByteView buffer,
+                                                    size_t* num_bytes_decoded) {
   if (buffer.size() == 0) {
     return Error::Code::kCborIncompleteMessage;
   }
@@ -51,9 +50,8 @@ ErrorOr<uint64_t> MessageTypeDecoder::DecodeVarUint(
 // Decodes the Type of message, expecting it to follow the encoding format
 // described here:
 // https://tools.ietf.org/html/draft-ietf-quic-transport-16#section-16
-ErrorOr<msgs::Type> MessageTypeDecoder::DecodeType(
-    const std::vector<uint8_t>& buffer,
-    size_t* num_bytes_decoded) {
+ErrorOr<msgs::Type> MessageTypeDecoder::DecodeType(ByteView buffer,
+                                                   size_t* num_bytes_decoded) {
   ErrorOr<uint64_t> message_type =
       MessageTypeDecoder::DecodeVarUint(buffer, num_bytes_decoded);
   if (message_type.is_error()) {
@@ -72,8 +70,10 @@ ErrorOr<msgs::Type> MessageTypeDecoder::DecodeType(
 // static
 constexpr size_t MessageDemuxer::kDefaultBufferLimit;
 
-MessageDemuxer::MessageWatch::MessageWatch() = default;
+MessageDemuxer::MessageCallback::MessageCallback() = default;
+MessageDemuxer::MessageCallback::~MessageCallback() = default;
 
+MessageDemuxer::MessageWatch::MessageWatch() = default;
 MessageDemuxer::MessageWatch::MessageWatch(MessageDemuxer* parent,
                                            bool is_default,
                                            uint64_t instance_id,
@@ -149,20 +149,23 @@ MessageDemuxer::MessageWatch MessageDemuxer::WatchMessageType(
             .emplace(instance_id, std::map<msgs::Type, MessageCallback*>{})
             .first;
   }
+
   auto emplace_result = callbacks_entry->second.emplace(message_type, callback);
   if (!emplace_result.second) {
     return MessageWatch();
   }
+
   auto instance_entry = buffers_.find(instance_id);
   if (instance_entry != buffers_.end()) {
     for (auto& buffer : instance_entry->second) {
       if (buffer.second.empty()) {
         continue;
       }
+
       auto buffered_type = static_cast<msgs::Type>(buffer.second[0]);
       if (message_type == buffered_type) {
         HandleStreamBufferLoop(instance_id, buffer.first, callbacks_entry,
-                               &buffer.second);
+                               buffer.second);
       }
     }
   }
@@ -176,18 +179,20 @@ MessageDemuxer::MessageWatch MessageDemuxer::SetDefaultMessageTypeWatch(
   if (!emplace_result.second) {
     return MessageWatch();
   }
+
   for (auto& instance_buffers : buffers_) {
     auto instance_id = instance_buffers.first;
     for (auto& stream_map : instance_buffers.second) {
       if (stream_map.second.empty()) {
         continue;
       }
+
       auto buffered_type = static_cast<msgs::Type>(stream_map.second[0]);
       if (message_type == buffered_type) {
         auto connection_id = stream_map.first;
         auto callbacks_entry = message_callbacks_.find(instance_id);
         HandleStreamBufferLoop(instance_id, connection_id, callbacks_entry,
-                               &stream_map.second);
+                               stream_map.second);
       }
     }
   }
@@ -206,7 +211,7 @@ void MessageDemuxer::OnStreamData(uint64_t instance_id,
   buffer.insert(buffer.end(), data, data + data_size);
 
   auto callbacks_entry = message_callbacks_.find(instance_id);
-  HandleStreamBufferLoop(instance_id, connection_id, callbacks_entry, &buffer);
+  HandleStreamBufferLoop(instance_id, connection_id, callbacks_entry, buffer);
 
   if (buffer.size() > buffer_limit_) {
     stream_map.erase(connection_id);
@@ -238,7 +243,7 @@ MessageDemuxer::HandleStreamBufferResult MessageDemuxer::HandleStreamBufferLoop(
     uint64_t connection_id,
     std::map<uint64_t, std::map<msgs::Type, MessageCallback*>>::iterator
         callbacks_entry,
-    std::vector<uint8_t>* buffer) {
+    std::vector<uint8_t>& buffer) {
   HandleStreamBufferResult result;
   do {
     result = {false, 0};
@@ -262,29 +267,27 @@ MessageDemuxer::HandleStreamBufferResult MessageDemuxer::HandleStreamBufferLoop(
                                   &callbacks_entry->second, buffer);
     }
 
-    if (!result.handled && !buffer->empty() && !default_callbacks_.empty()) {
+    if (!result.handled && !buffer.empty() && !default_callbacks_.empty()) {
       OSP_VLOG << "attempting generic message handling";
       result = HandleStreamBuffer(instance_id, connection_id,
                                   &default_callbacks_, buffer);
     }
     OSP_VLOG_IF(!result.handled) << "no message handler matched";
-  } while (result.consumed && !buffer->empty());
+  } while (result.consumed && !buffer.empty());
 
   return result;
 }
 
-// TODO(issuetracker.google.com/281741443): Use openscreen::Span for the
-// |buffer|.
 MessageDemuxer::HandleStreamBufferResult MessageDemuxer::HandleStreamBuffer(
     uint64_t instance_id,
     uint64_t connection_id,
     std::map<msgs::Type, MessageCallback*>* message_callbacks,
-    std::vector<uint8_t>* buffer) {
+    std::vector<uint8_t>& buffer) {
   size_t msg_type_byte_length;
   ErrorOr<msgs::Type> message_type =
-      MessageTypeDecoder::DecodeType(*buffer, &msg_type_byte_length);
+      MessageTypeDecoder::DecodeType(buffer, &msg_type_byte_length);
   if (message_type.is_error()) {
-    buffer->clear();
+    buffer.clear();
     return HandleStreamBufferResult{.handled = false, .consumed = 0};
   }
 
@@ -297,8 +300,8 @@ MessageDemuxer::HandleStreamBufferResult MessageDemuxer::HandleStreamBuffer(
            << static_cast<int>(message_type.value());
   auto consumed_or_error = callback_entry->second->OnStreamMessage(
       instance_id, connection_id, message_type.value(),
-      buffer->data() + msg_type_byte_length,
-      buffer->size() - msg_type_byte_length, now_function_());
+      buffer.data() + msg_type_byte_length,
+      buffer.size() - msg_type_byte_length, now_function_());
   if (!consumed_or_error) {
     // A message may be split into multiple QUIC packets when sent.
     // `kCborIncompleteMessage` means that we are trying to process an
@@ -308,12 +311,12 @@ MessageDemuxer::HandleStreamBufferResult MessageDemuxer::HandleStreamBuffer(
     // message. We should clear the `buffer` in this case.
     if (consumed_or_error.error().code() !=
         Error::Code::kCborIncompleteMessage) {
-      buffer->clear();
+      buffer.clear();
     }
     return HandleStreamBufferResult{.handled = true, .consumed = 0};
   } else {
     size_t consumed_size = consumed_or_error.value() + msg_type_byte_length;
-    buffer->erase(buffer->begin(), buffer->begin() + consumed_size);
+    buffer.erase(buffer.begin(), buffer.begin() + consumed_size);
     return HandleStreamBufferResult{.handled = true, .consumed = consumed_size};
   }
 }

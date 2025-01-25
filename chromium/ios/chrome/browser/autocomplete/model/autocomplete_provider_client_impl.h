@@ -10,7 +10,6 @@
 #import "components/omnibox/browser/autocomplete_provider_client.h"
 #import "ios/chrome/browser/autocomplete/model/autocomplete_scheme_classifier_impl.h"
 #import "ios/chrome/browser/autocomplete/model/tab_matcher_impl.h"
-#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
 // Vivaldi
 #include "components/direct_match/direct_match_service.h"
@@ -18,6 +17,7 @@
 
 class AutocompleteScoringModelService;
 class OnDeviceTailModelService;
+class ProfileIOS;
 struct ProviderStateService;
 
 namespace unified_consent {

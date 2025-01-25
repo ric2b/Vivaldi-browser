@@ -15,11 +15,11 @@ typedef std::string AgentFingerprint;
 class AgentCertificate {
  public:
   AgentCertificate();
-  virtual ~AgentCertificate();
   AgentCertificate(const AgentCertificate&) = delete;
   AgentCertificate& operator=(const AgentCertificate&) = delete;
   AgentCertificate(AgentCertificate&&) noexcept = delete;
   AgentCertificate& operator=(AgentCertificate&&) noexcept = delete;
+  virtual ~AgentCertificate();
 
   // Load an agent certificate from the file identified by `filename`.
   // Returns true when loads the agent certificate successfully, false

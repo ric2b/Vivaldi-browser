@@ -59,15 +59,16 @@ class FakeWebAppUiManager : public WebAppUiManager {
   bool IsInAppWindow(content::WebContents* web_contents) const override;
   const webapps::AppId* GetAppIdForWindow(
       const content::WebContents* web_contents) const override;
-  void NotifyOnAssociatedAppChanged(
-      content::WebContents* web_contents,
-      const std::optional<webapps::AppId>& previous_app_id,
-      const std::optional<webapps::AppId>& new_app_id) const override {}
   bool CanReparentAppTabToWindow(const webapps::AppId& app_id,
                                  bool shortcut_created) const override;
   Browser* ReparentAppTabToWindow(content::WebContents* contents,
                                   const webapps::AppId& app_id,
                                   bool shortcut_created) override;
+  Browser* ReparentAppTabToWindow(
+      content::WebContents* contents,
+      const webapps::AppId& app_id,
+      base::OnceCallback<void(content::WebContents*)> completion_callback)
+      override;
   void ShowWebAppFileLaunchDialog(
       const std::vector<base::FilePath>& file_paths,
       const webapps::AppId& app_id,

@@ -6,6 +6,8 @@
 
 ![](circle-trns-after-plte.png)
 
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
 An opaque blue circle on a transparent green background.
 
 It is of color type 2 (PNG_COLOR_TYPE_RGB) and has a tRNS chunk after a PLTE
@@ -14,6 +16,8 @@ chunk.
 ### File [circle-trns-before-plte.png](circle-trns-before-plte.png)
 
 ![](circle-trns-before-plte.png)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
 
 An opaque blue circle on a transparent green background.
 
@@ -25,6 +29,8 @@ ignores it.
 ### File [draw_points.png](draw_points.png)
 
 ![](draw_points.png)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
 
 Source: Generated with ImageMagick's `convert` command:
 
@@ -436,7 +442,9 @@ Source: Same pixels as `color_grid_alpha_nogrid.avif` encoded with
 
 License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
 
-Source: Based on paris_exif_xmp_icc.jpg with ICC stripped out and a gain map added.
+Source: Based on `paris_exif_xmp_icc.jpg` with ICC stripped out and a gain map added
+using Photoshop.
+
 Contains a MPF (Multi-Picture Format) segment with metadata pointing to a second image
 at offset 33487. The MPF metadata is in little endian order, as signaled by the four bytes
 'II*\0'.
@@ -461,7 +469,7 @@ at offset 33487. The MPF metadata is in little endian order, as signaled by the 
 
 License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
 
-Source: Same as paris_exif_xmp_gainmap_littleendian.jpg but manually edited with
+Source: Same as `paris_exif_xmp_gainmap_littleendian.jpg` but manually edited with
 a hex editor to make the MPF metadata big endian, as signaled by the four bytes
 'MM\0*'.
 
@@ -537,7 +545,8 @@ Source: generated with a modified libavif at https://github.com/maryla-uc/libavi
 by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImages ../tests/data/` 
 
 Contains a gain map with the `version` field set to 99 in the tmap box.
-`minimum_version` and `writer_version` are 0.
+Fields `minimum_version` and `writer_version` are 0.
+Decoders should ignore the gain map since the `version` is unsupported.
 
 ### File [unsupported_gainmap_minimum_version.avif](unsupported_gainmap_minimum_version.avif)
 
@@ -548,8 +557,9 @@ License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LIC
 Source: generated with a modified libavif at https://github.com/maryla-uc/libavif/tree/weirdgainmaps
 by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImages ../tests/data/` 
 
-Contains a gain map with the `minimum_version` field set to 99 in the tmap box.
-`version` and `writer_version` are 0.
+Contains a gain map with the `minimum_version` and `writer_version` fields set to 99 in the tmap box.
+Field `version` is 0.
+Decoders should ignore the gain map since the `minimum_version` is unsupported.
 
 ### File [unsupported_gainmap_writer_version_with_extra_bytes.avif](unsupported_gainmap_writer_version_with_extra_bytes.avif)
 
@@ -561,8 +571,10 @@ Source: generated with a modified libavif at https://github.com/maryla-uc/libavi
 by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImages ../tests/data/` 
 
 Contains a gain map with the `writer_version` field set to 99 in the tmap box,
-and some extra unexpected bytes at the end of the gain map metadata.
+and some extra bytes at the end of the gain map metadata.
 `version` and `minimum_version` are 0.
+Decoders should decode this image including the gain map. The extra bytes should not
+cause issues since the `writer_version` is unsupported.
 
 ### File [supported_gainmap_writer_version_with_extra_bytes.avif](supported_gainmap_writer_version_with_extra_bytes.avif)
 
@@ -575,6 +587,7 @@ by running `./tests/avifgainmaptest --gtest_filter=GainMapTest.CreateGainMapImag
 
 Contains a gain map with some extra unexpected bytes at the end of the gain map metadata.
 `version`, `minimum_version` and `writer_version` are 0.
+Because of the extra bytes despite a supported `writer_version`, this file should be treated as invalid.
 
 ### File [seine_hdr_srgb.avif](seine_hdr_srgb.avif)
 
@@ -588,7 +601,7 @@ https://gregbenzphotography.com/hdr-images/jpg-hdr-gain-maps-in-adobe-camera-raw
 
 See also sources/seine.psd
 
-HDR image using the PQ transfer curve. Contains a gain map in
+HDR image using the PQ transfer curve. Contains an irrelevant gain map in
 [Adobe's format](https://helpx.adobe.com/camera-raw/using/gain-map.html) that is not recognized by
 libavif and ignored by the tests.
 
@@ -609,6 +622,10 @@ https://gregbenzphotography.com/hdr-images/jpg-hdr-gain-maps-in-adobe-camera-raw
 License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
 
 Source : same as seine_hdr_srgb but saved with the Rec. 2020 color space in Photoshop (Camera Raw 16.0.1.1683).
+
+HDR image using the PQ transfer curve and Rec. 2020 color space. Contains an irrelevant gain map in
+[Adobe's format](https://helpx.adobe.com/camera-raw/using/gain-map.html) that is not recognized by
+libavif and ignored by the tests.
 
 ### File [seine_sdr_gainmap_srgb.avif](seine_sdr_gainmap_srgb.avif)
 
@@ -635,6 +652,19 @@ License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LIC
 Source : same as seine_sdr_gainmap_srgb.avif before commit 10b7232
 
 An image with a `tmap` item (i.e. a gain map) but no 'tmap' brand in the `ftyp` box.
+The gain map should be ignored by the decoder since the `tmap` brand is missing.
+
+### File [seine_sdr_gainmap_gammazero.avif](seine_sdr_gainmap_gammazero.avif)
+
+![](seine_sdr_gainmap_gammazero.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source : same as seine_sdr_gainmap_srgb.avif generated with a modified avifenc that
+writes 0 instead of the gain map gamma numerator.
+
+An image with a gain map where the gain map gamma value is zero (invalid).
+
 
 ### File [seine_sdr_gainmap_big_srgb.avif](seine_sdr_gainmap_big_srgb.avif)
 
@@ -644,7 +674,7 @@ Source : generated by running `./tests/avifgainmaptest --gtest_filter=GainMapTes
 after changing `kUpdateTestImages` to true in the `avifgainmaptest.cc`.
 
 SDR image with a gain map to allow tone mapping to HDR. The gain map's width and height are doubled compared to the base image.
-This is an atypical image just for testing. Typically, the gain map would be either the same size or smaller as the base image.
+This is a valid but atypical image for testing. Typically, the gain map would be either the same size or smaller as the base image.
 
 ### File [seine_hdr_gainmap_srgb.avif](seine_hdr_gainmap_srgb.avif)
 
@@ -671,6 +701,8 @@ SDR image with a gain map to allow tone mapping to HDR. The gain map's width and
 ## Files colors*_hdr_*.avif and colors*_sdr_srgb.avif
 
 ![](colors_wcg_hdr_rec2020.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
 
 SDR and HDR (PQ) AVIF images in various colorspaces.
 The files with 'wcg' (wide color gamut) in their name have colors outside of the sRGB color space.
@@ -699,6 +731,48 @@ To export more images from sources/colors.psd:
   the Camera Raw dialog, and click the save icon on the top right.
 - For the wide color gamut version, choose Edit > Assign Profile... and set the color space to
   Rec.ITU-R BT.2020-1
+
+## Idat
+
+These files use the 'idat' box instead of the 'mdat' box to store data.
+
+### File [draw_points_idat.avif](draw_points_idat.avif)
+
+![](draw_points_idat.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source: generated with a modified libavif at https://github.com/maryla-uc/libavif/tree/idat
+by running `./avifenc -q 100 ../tests/data/draw_points.png ../tests/data/draw_points_idat.avif` 
+
+### File [draw_points_idat_metasize0.avif](draw_points_idat_metasize0.avif)
+
+![](draw_points_idat_metasize0.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source: generated with a modified libavif at https://github.com/maryla-uc/libavif/tree/idat
+after uncommenting the line under `// uncomment to make meta size zero` and running
+`./avifenc -q 100 ../tests/data/draw_points.png ../tests/data/draw_points_idat_metasize0.avif` 
+
+### File [draw_points_idat_progressive.avif](draw_points_idat_progressive.avif)
+
+![](draw_points_idat_progressive.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source: generated with a modified libavif at https://github.com/maryla-uc/libavif/tree/idat
+by running `./avifenc -q 100 --progressive ../tests/data/draw_points.png ../tests/data/draw_points_idat_progressive.avif` 
+
+### File [draw_points_idat_progressive_metasize0.avif](draw_points_idat_progressive_metasize0.avif)
+
+![](draw_points_idat_progressive_metasize0.avif)
+
+License: [same as libavif](https://github.com/AOMediaCodec/libavif/blob/main/LICENSE)
+
+Source: generated with a modified libavif at https://github.com/maryla-uc/libavif/tree/idat
+after uncommenting the line under `// uncomment to make meta size zero` and running
+`./avifenc -q 100 --progressive ../tests/data/draw_points.png ../tests/data/draw_points_idat_progressive_metasize0.avif` 
 
 ## Animated Images
 

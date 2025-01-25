@@ -2,6 +2,9 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
+- yasm support dropped, users need to use nasm
+
+version 7.1:
 - Raw Captions with Time (RCWT) closed caption demuxer
 - LC3/LC3plus decoding/encoding using external library liblc3
 - ffmpeg CLI filtergraph chaining
@@ -10,6 +13,23 @@ version <next>:
 - vf_scale supports secondary ref input and framesync options
 - vf_scale2ref deprecated
 - qsv_params option added for QSV encoders
+- VVC decoder compatible with DVB test content
+- xHE-AAC decoder
+- removed DEC Alpha DSP and support code
+- VVC encoding support via libvvenc
+- perlin video source
+- D3D12VA HEVC encoder
+- Cropping metadata parsing and writing in Matroska and MP4/MOV de/muxers
+- Intel QSV-accelerated VVC decoding
+- MediaCodec AAC/AMR-NB/AMR-WB/MP3 decoding
+- YUV colorspace negotiation for codecs and filters, obsoleting the
+  YUVJ pixel format
+- Vulkan H.264 encoder
+- Vulkan H.265 encoder
+- stream specifiers in fftools can now match by stream disposition
+- LCEVC enhancement data exporting in H.26x and MP4/ISOBMFF
+- LCEVC filter
+- MV-HEVC decoding
 
 
 version 7.0:

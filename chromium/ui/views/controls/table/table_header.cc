@@ -41,25 +41,25 @@ constexpr int kMinColumnWidth = 10;
 // Amount that a column is resized when using the keyboard.
 constexpr int kResizeKeyboardAmount = 5;
 
-constexpr int kVerticalPadding = 4;
+// Amount the text is padded on top/bottom.
+constexpr int kCellVerticalPaddingDefault = 4;
 
-// Distace from edge columns can be resized by.
+// Amount the text is padded on the left/right side.
+constexpr int kCellHorizontalPaddingDefault = 7;
+
+// Distance from edge columns can be resized by.
 constexpr int kResizePadding = 5;
 
-// Amount of space above/below the separator.
-constexpr int kSeparatorPadding = 4;
+// Amount of space above/below the resize separators.
+constexpr int kVerticalSeparatorPaddingDefault = 4;
+
+// Amount of space the content separator is inset by.
+constexpr int kHorizontalSeparatorPaddingDefault = 0;
 
 // Size of the sort indicator (doesn't include padding).
 constexpr int kSortIndicatorSize = 8;
 
 }  // namespace
-
-// static
-const int TableHeader::kHorizontalPadding = 7;
-
-// static
-const int TableHeader::kSortIndicatorWidth =
-    kSortIndicatorSize + TableHeader::kHorizontalPadding * 2;
 
 class TableHeader::HighlightPathGenerator
     : public views::HighlightPathGenerator {
@@ -90,7 +90,8 @@ class TableHeader::HighlightPathGenerator
 using Columns = std::vector<TableView::VisibleColumn>;
 
 TableHeader::TableHeader(base::WeakPtr<TableView> table)
-    : table_(std::move(table)) {
+    : table_(std::move(table)),
+      font_list_(gfx::FontList().DeriveWithWeight(GetFontWeight())) {
   HighlightPathGenerator::Install(
       this, std::make_unique<TableHeader::HighlightPathGenerator>());
   FocusRing::Install(this);
@@ -108,35 +109,71 @@ void TableHeader::UpdateFocusState() {
   views::FocusRing::Get(this)->SchedulePaint();
 }
 
+int TableHeader::GetCellVerticalPadding() const {
+  return table_->header_style().cell_vertical_padding.value_or(
+      kCellVerticalPaddingDefault);
+}
+
+int TableHeader::GetCellHorizontalPadding() const {
+  return table_->header_style().cell_horizontal_padding.value_or(
+      kCellHorizontalPaddingDefault);
+}
+
+int TableHeader::GetResizeBarVerticalPadding() const {
+  return table_->header_style().resize_bar_vertical_padding.value_or(
+      kVerticalSeparatorPaddingDefault);
+}
+
+int TableHeader::GetSeparatorHorizontalPadding() const {
+  return table_->header_style().separator_horizontal_padding.value_or(
+      kHorizontalSeparatorPaddingDefault);
+}
+
+gfx::Font::Weight TableHeader::GetFontWeight() const {
+  return table_->header_style().font_weight.value_or(gfx::Font::Weight::NORMAL);
+}
+
+// Amount of space reserved for the sort indicator and padding.
+int TableHeader::GetSortIndicatorWidth() const {
+  return kSortIndicatorSize + kCellHorizontalPaddingDefault * 2;
+}
+
 void TableHeader::OnPaint(gfx::Canvas* canvas) {
   ui::ColorProvider* color_provider = GetColorProvider();
+  const int vertical_padding = GetCellVerticalPadding();
+  const int horizontal_padding = GetCellHorizontalPadding();
   const SkColor text_color =
       color_provider->GetColor(ui::kColorTableHeaderForeground);
   const SkColor separator_color =
       color_provider->GetColor(ui::kColorTableHeaderSeparator);
+  const int resize_bar_vertical_padding = GetResizeBarVerticalPadding();
+  const int separator_horizontal_padding = GetSeparatorHorizontalPadding();
   // Paint the background and a separator at the bottom. The separator color
   // matches that of the border around the scrollview.
   OnPaintBackground(canvas);
   SkColor border_color =
       color_provider->GetColor(ui::kColorFocusableBorderUnfocused);
-  canvas->DrawSharpLine(gfx::PointF(0, height() - 1),
-                        gfx::PointF(width(), height() - 1), border_color);
+  canvas->DrawSharpLine(
+      gfx::PointF(separator_horizontal_padding, height() - 1),
+      gfx::PointF(width() - separator_horizontal_padding, height() - 1),
+      border_color);
 
   const Columns& columns = table_->visible_columns();
   const int sorted_column_id = table_->sort_descriptors().empty()
                                    ? -1
                                    : table_->sort_descriptors()[0].column_id;
+  const int sort_indicator_width = GetSortIndicatorWidth();
   for (const auto& column : columns) {
     if (column.width >= 2) {
       const int separator_x = GetMirroredXInView(column.x + column.width - 1);
       canvas->DrawSharpLine(
-          gfx::PointF(separator_x, kSeparatorPadding),
-          gfx::PointF(separator_x, height() - kSeparatorPadding),
+          gfx::PointF(separator_x, resize_bar_vertical_padding),
+          gfx::PointF(separator_x, height() - resize_bar_vertical_padding),
           separator_color);
     }
 
-    const int x = column.x + kHorizontalPadding;
-    int width = column.width - kHorizontalPadding - kHorizontalPadding;
+    const int x = column.x + horizontal_padding;
+    int width = column.width - horizontal_padding - horizontal_padding;
     if (width <= 0)
       continue;
 
@@ -144,15 +181,15 @@ void TableHeader::OnPaint(gfx::Canvas* canvas) {
         gfx::GetStringWidth(column.column.title, font_list_);
     const bool paint_sort_indicator =
         (column.column.id == sorted_column_id &&
-         title_width + kSortIndicatorWidth <= width);
+         title_width + sort_indicator_width <= width);
 
     if (paint_sort_indicator)
-      width -= kSortIndicatorWidth;
+      width -= sort_indicator_width;
 
     canvas->DrawStringRectWithFlags(
         column.column.title, font_list_, text_color,
-        gfx::Rect(GetMirroredXWithWidthInView(x, width), kVerticalPadding,
-                  width, height() - kVerticalPadding * 2),
+        gfx::Rect(GetMirroredXWithWidthInView(x, width), vertical_padding,
+                  width, height() - vertical_padding * 2),
         TableColumnAlignmentToCanvasAlignment(
             GetMirroredTableColumnAlignment(column.column.alignment)));
 
@@ -176,7 +213,7 @@ void TableHeader::OnPaint(gfx::Canvas* canvas) {
       }
 
       const int scale = base::i18n::IsRTL() ? -1 : 1;
-      indicator_x += (kSortIndicatorWidth - kSortIndicatorSize) / 2;
+      indicator_x += (sort_indicator_width - kSortIndicatorSize) / 2;
       indicator_x = GetMirroredXInView(indicator_x);
       int indicator_y = height() / 2 - kSortIndicatorSize / 2;
       SkPath indicator_path;
@@ -207,7 +244,7 @@ void TableHeader::OnPaint(gfx::Canvas* canvas) {
 
 gfx::Size TableHeader::CalculatePreferredSize(
     const SizeBounds& /*available_size*/) const {
-  return gfx::Size(1, kVerticalPadding * 2 + font_list_.GetHeight());
+  return gfx::Size(1, GetCellVerticalPadding() * 2 + font_list_.GetHeight());
 }
 
 bool TableHeader::GetNeedsNotificationWhenVisibleBoundsChange() const {
@@ -295,7 +332,7 @@ void TableHeader::ResizeColumnViaKeyboard(
   const TableView::VisibleColumn& column = table_->GetVisibleColumn(index);
   const int needed_for_title =
       gfx::GetStringWidth(column.column.title, font_list_) +
-      2 * kHorizontalPadding;
+      2 * GetCellHorizontalPadding();
 
   int new_width = column.width;
   switch (direction) {
@@ -356,7 +393,7 @@ void TableHeader::ContinueResize(const ui::LocatedEvent& event) {
       table_->GetVisibleColumn(resize_details_->column_index);
   const int needed_for_title =
       gfx::GetStringWidth(column.column.title, font_list_) +
-      2 * kHorizontalPadding;
+      2 * GetCellHorizontalPadding();
   table_->SetVisibleColumnWidth(
       resize_details_->column_index,
       std::max({kMinColumnWidth, needed_for_title,

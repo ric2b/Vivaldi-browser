@@ -128,13 +128,13 @@ std::string ProxyServerToPacResultElement(const ProxyServer& proxy_server) {
                                      proxy_server.GetPort());
     default:
       // Got called with an invalid scheme.
-      NOTREACHED_IN_MIGRATION();
-      return std::string();
+      NOTREACHED();
   }
 }
 
 ProxyChain ProxyUriToProxyChain(std::string_view uri,
-                                ProxyServer::Scheme default_scheme) {
+                                ProxyServer::Scheme default_scheme,
+                                bool is_quic_allowed) {
   // If uri is direct, return direct proxy chain.
   uri = HttpUtil::TrimLWS(uri);
   size_t colon = uri.find("://");
@@ -145,11 +145,13 @@ ProxyChain ProxyUriToProxyChain(std::string_view uri,
     }
     return ProxyChain::Direct();
   }
-  return ProxyChain(ProxyUriToProxyServer(uri, default_scheme));
+  return ProxyChain(
+      ProxyUriToProxyServer(uri, default_scheme, is_quic_allowed));
 }
 
 ProxyServer ProxyUriToProxyServer(std::string_view uri,
-                                  ProxyServer::Scheme default_scheme) {
+                                  ProxyServer::Scheme default_scheme,
+                                  bool is_quic_allowed) {
   // We will default to |default_scheme| if no scheme specifier was given.
   ProxyServer::Scheme scheme = default_scheme;
 
@@ -160,7 +162,7 @@ ProxyServer ProxyUriToProxyServer(std::string_view uri,
   size_t colon = uri.find(':');
   if (colon != std::string_view::npos && uri.size() - colon >= 3 &&
       uri[colon + 1] == '/' && uri[colon + 2] == '/') {
-    scheme = GetSchemeFromUriScheme(uri.substr(0, colon));
+    scheme = GetSchemeFromUriScheme(uri.substr(0, colon), is_quic_allowed);
     uri = uri.substr(colon + 3);  // Skip past the "://"
   }
 
@@ -192,8 +194,7 @@ std::string ProxyServerToProxyUri(const ProxyServer& proxy_server) {
                                      proxy_server.GetPort());
     default:
       // Got called with an invalid scheme.
-      NOTREACHED_IN_MIGRATION();
-      return std::string();
+      NOTREACHED();
   }
 }
 
@@ -237,7 +238,8 @@ ProxyServer ProxySchemeHostAndPortToProxyServer(
   return ProxyServer::FromSchemeHostAndPort(scheme, hostname, port);
 }
 
-ProxyServer::Scheme GetSchemeFromUriScheme(std::string_view scheme) {
+ProxyServer::Scheme GetSchemeFromUriScheme(std::string_view scheme,
+                                           bool is_quic_allowed) {
   if (base::EqualsCaseInsensitiveASCII(scheme, "http")) {
     return ProxyServer::SCHEME_HTTP;
   }
@@ -253,11 +255,17 @@ ProxyServer::Scheme GetSchemeFromUriScheme(std::string_view scheme) {
   if (base::EqualsCaseInsensitiveASCII(scheme, "https")) {
     return ProxyServer::SCHEME_HTTPS;
   }
+#if BUILDFLAG(ENABLE_QUIC_PROXY_SUPPORT)
+  if (is_quic_allowed && base::EqualsCaseInsensitiveASCII(scheme, "quic")) {
+    return ProxyServer::SCHEME_QUIC;
+  }
+#endif  // BUILDFLAG(ENABLE_QUIC_PROXY_SUPPORT)
   return ProxyServer::SCHEME_INVALID;
 }
 
 ProxyChain MultiProxyUrisToProxyChain(std::string_view uris,
-                                      ProxyServer::Scheme default_scheme) {
+                                      ProxyServer::Scheme default_scheme,
+                                      bool is_quic_allowed) {
 #if !BUILDFLAG(ENABLE_BRACKETED_PROXY_URIS)
   // This function should not be called in non-debug modes.
   CHECK(false);
@@ -294,7 +302,8 @@ ProxyChain MultiProxyUrisToProxyChain(std::string_view uris,
       return number_of_proxy_uris > 1 ? ProxyChain() : ProxyChain::Direct();
     }
 
-    proxy_server_list.push_back(ProxyUriToProxyServer(uri, default_scheme));
+    proxy_server_list.push_back(
+        ProxyUriToProxyServer(uri, default_scheme, is_quic_allowed));
   }
 
   return ProxyChain(std::move(proxy_server_list));

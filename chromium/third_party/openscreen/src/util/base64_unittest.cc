@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "gtest/gtest.h"
+#include "platform/base/span.h"
 
 namespace openscreen::base64 {
 
@@ -20,7 +21,7 @@ constexpr char kBase64Text[] = "aGVsbG8gd29ybGQ=";
 // More sophisticated comparisons here, such as EXPECT_STREQ, may
 // cause memory failures on some platforms (e.g. ASAN) due to mismatched
 // lengths.
-void CheckEquals(const char* expected, const std::vector<uint8_t>& actual) {
+void CheckEquals(const char* expected, ByteView actual) {
   EXPECT_EQ(0, std::memcmp(actual.data(), expected, actual.size()));
 }
 

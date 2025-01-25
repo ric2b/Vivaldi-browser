@@ -59,6 +59,9 @@ struct ImportedNotesEntry;
 [Native]
 struct ImportedSpeedDialEntry;
 
+[Native]
+struct ImportedTabEntry;
+
 // These are messages sent from the profile import process to the browser.
 // These messages send information about the status of the import and individual
 // import tasks.
@@ -97,6 +100,8 @@ interface ProfileImportObserver {
   OnSpeedDialImportGroup(array<ImportedSpeedDialEntry> group);
   OnExtensionsImportStart(uint32 total_count);
   OnExtensionsImportGroup(array<string> group);
+  OnTabImportStart(uint32 total_count);
+  OnTabImportGroup(array<ImportedTabEntry> group);
 };
 
 // This interface is used to control the import process.

@@ -10,6 +10,7 @@ import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 
+import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
@@ -52,8 +53,7 @@ public class SafetyHubMagicStackBuilder implements ModuleProviderBuilder, Module
                         profile,
                         mTabModelSelector,
                         moduleDelegate,
-                        mModalDialogManagerSupplier,
-                        this::showProactiveSurvey);
+                        mModalDialogManagerSupplier);
         onModuleBuiltCallback.onResult(coordinator);
         return true;
     }
@@ -72,18 +72,16 @@ public class SafetyHubMagicStackBuilder implements ModuleProviderBuilder, Module
 
     @Override
     public boolean isEligible() {
+        // The Safety Hub is not fully supported on Automotive.
+        if (BuildInfo.getInstance().isAutomotive) return false;
+
         if (!mProfileSupplier.hasValue()) return false;
 
         if (!ChromeFeatureList.sSafetyHub.isEnabled()) {
-            SafetyHubHatsBridge.getForProfile(getRegularProfile())
+            SafetyHubHatsHelper.getForProfile(getRegularProfile())
                     .triggerControlHatsSurvey(mTabModelSelector);
         }
         return ChromeFeatureList.sSafetyHub.isEnabled();
-    }
-
-    private void showProactiveSurvey(String moduleType) {
-        SafetyHubHatsBridge.getForProfile(getRegularProfile())
-                .triggerProactiveHatsSurvey(mTabModelSelector, moduleType);
     }
 
     private Profile getRegularProfile() {

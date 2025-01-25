@@ -438,7 +438,6 @@ ResultOrError<GLuint> ShaderModule::CompileShader(
         bindings.texture_builtins_from_uniform.ubo_binding,
         tint::glsl::writer::binding::Uniform{layout->GetInternalUniformBinding()});
 
-    *needsPlaceholderSampler = false;
     CombinedSamplerInfo combinedSamplerInfo =
         generateCombinedSamplerInfo(inspector, programmableStage.entryPoint, bindings,
                                     externalTextureExpansionMap, needsPlaceholderSampler);
@@ -513,8 +512,7 @@ ResultOrError<GLuint> ShaderModule::CompileShader(
                 }
 
                 // Prepend v_ or f_ to buffer binding variable names in order to avoid collisions in
-                // renamed interface blocks. The AddBlockAttribute transform in the Tint GLSL
-                // printer will always generate wrapper structs from such bindings.
+                // renamed interface blocks.
                 for (const auto& variableName : r.bufferBindingVariables) {
                     assignedRenamings.emplace(
                         variableName,
@@ -573,7 +571,14 @@ ResultOrError<GLuint> ShaderModule::CompileShader(
             // TODO(crbug.com/356424898): In the long run, we want to move SingleEntryPoint to Tint,
             // but that has interactions with SubstituteOverrides which need to be handled first.
             remappedEntryPoint = "";
-            auto result = tint::glsl::writer::Generate(program, r.tintOptions, remappedEntryPoint);
+
+            // Convert the AST program to an IR module.
+            auto ir = tint::wgsl::reader::ProgramToLoweredIR(program);
+            DAWN_INVALID_IF(ir != tint::Success, "An error occurred while generating Tint IR\n%s",
+                            ir.Failure().reason.Str());
+
+            // Generate GLSL from Tint IR.
+            auto result = tint::glsl::writer::Generate(ir.Get(), r.tintOptions, remappedEntryPoint);
             DAWN_INVALID_IF(result != tint::Success, "An error occurred while generating GLSL:\n%s",
                             result.Failure().reason.Str());
 

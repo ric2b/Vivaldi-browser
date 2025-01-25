@@ -131,10 +131,10 @@ class DnsSdInstanceEndpoint : public DnsSdInstance {
                                      std::move(subtype),
                                      std::move(types)...)) {}
 
-  // Lazy Initializes the |addresses_| vector.
+  // Lazy Initializes the `addresses_` vector.
   const std::vector<IPAddress>& CalculateAddresses() const;
 
-  // Initialized the |endpoints_| vector after construction.
+  // Initialized the `endpoints_` vector after construction.
   void InitializeEndpoints();
 
   // NOTE: The below vector is stored in sorted order to make comparison

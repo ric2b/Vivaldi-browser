@@ -29,7 +29,6 @@ public class MockTab extends TabImpl {
 
     private boolean mIsCustomTab;
 
-    private Long mTimestampMillis;
     private Integer mParentId;
 
     /** Create a new Tab for testing and initializes Tab UserData objects. */
@@ -48,11 +47,11 @@ public class MockTab extends TabImpl {
     }
 
     public MockTab(int id, Profile profile) {
-        this(id, profile, null);
+        this(id, profile, TabLaunchType.UNSET);
     }
 
-    public MockTab(int id, Profile profile, @TabLaunchType Integer type) {
-        super(id, profile, type);
+    public MockTab(int id, Profile profile, @TabLaunchType int tabLaunchType) {
+        super(id, profile, tabLaunchType);
     }
 
     @Override
@@ -145,18 +144,6 @@ public class MockTab extends TabImpl {
 
     public void setIsBeingRestored(boolean isBeingRestored) {
         mIsBeingRestored = isBeingRestored;
-    }
-
-    @Override
-    public long getTimestampMillis() {
-        if (mTimestampMillis == null) {
-            return super.getTimestampMillis();
-        }
-        return mTimestampMillis;
-    }
-
-    public void setTimestampMillis(long timestampMillis) {
-        mTimestampMillis = timestampMillis;
     }
 
     @Override

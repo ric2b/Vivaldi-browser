@@ -57,7 +57,7 @@ Prerequisites:
 
 Before trying to read a Frame Viewer trace, a few fundamentals:
 
-After its loaded, the page changes in response to two inputs: user interaction
+After it's loaded, the page changes in response to two inputs: user interaction
 mediated by the user agent (default pressed button styles, scrolling, etc) and
 updates to the DOM from JavaScript. From there, a cascade of effects through
 several rendering sub-systems eventually produces new pixels on the user’s

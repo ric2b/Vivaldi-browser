@@ -17,8 +17,8 @@
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "components/web_modal/modal_dialog_host.h"
 #include "extensions/common/mojom/frame.mojom.h"
-#include "ui/base/ui_base_types.h"  // WindowShowState
 #include "ui/gfx/image/image_family.h"
+#include "ui/infobar_container_web_proxy.h"
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
 #include "ui/views/widget/widget.h"
 
@@ -26,6 +26,8 @@
 
 class ScopedKeepAlive;
 class SkRegion;
+
+class ToastSpecification;
 
 class VivaldiLocationBar;
 class VivaldiWindowWidgetDelegate;
@@ -51,7 +53,6 @@ class VivaldiRootDocumentHandler;
 namespace vivaldi {
 class InfoBarContainerWebProxy;
 }
-
 
 class VivaldiUIRelay: public send_tab_to_self::ReceivingUiHandler {
  public:
@@ -89,7 +90,6 @@ class VivaldiToolbarButtonProvider : public ToolbarButtonProvider {
       std::optional<PageActionIconType> type) override;  // the one
   void ZoomChangedForActiveTab(bool can_show_bubble) override;
   AvatarToolbarButton* GetAvatarToolbarButton() override;
-  ManagementToolbarButton* GetManagementToolbarButton() override;
   ToolbarButton* GetBackButton() override;
   ReloadButton* GetReloadButton() override;
   IntentChipButton* GetIntentChipButton() override;
@@ -123,7 +123,7 @@ struct VivaldiBrowserWindowParams {
   gfx::Rect content_bounds{kUnspecifiedPosition, kUnspecifiedPosition, 0, 0};
 
   // Initial state of the window.
-  ui::WindowShowState state = ui::SHOW_STATE_DEFAULT;
+  ui::mojom::WindowShowState state = ui::mojom::WindowShowState::kDefault;
 
   // The initial URL to show in the window.
   std::string resource_relative_url;
@@ -179,6 +179,7 @@ struct VivaldiBrowserWindowParams {
 //
 class VivaldiBrowserWindow final : public BrowserWindow {
  public:
+
   VivaldiBrowserWindow();
   ~VivaldiBrowserWindow() override;
   VivaldiBrowserWindow(const VivaldiBrowserWindow&) = delete;
@@ -236,10 +237,12 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   // TODO(pettern): fix
   bool requested_alpha_enabled() { return false; }
 
-  void SetWindowState(ui::WindowShowState show_state) {
+  void SetWindowState(ui::mojom::WindowShowState show_state) {
     window_state_data_.state = show_state;
   }
-  ui::WindowShowState GetWindowState() { return window_state_data_.state; }
+  ui::mojom::WindowShowState GetWindowState() {
+    return window_state_data_.state;
+  }
 
   // Takes ownership of |browser|.
   void CreateWebContents(std::unique_ptr<Browser> browser,
@@ -330,14 +333,13 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void UpdateDevTools() override;
   void UpdateLoadingAnimations(bool should_animate) override {}
   void SetStarredState(bool is_starred) override {}
-  void SetTranslateIconToggled(bool is_lit) override {}
   void OnActiveTabChanged(content::WebContents* old_contents,
                           content::WebContents* new_contents,
                           int index,
                           int reason) override;
   void ZoomChangedForActiveTab(bool can_show_bubble) override {}
   gfx::Rect GetRestoredBounds() const override;
-  ui::WindowShowState GetRestoredState() const override;
+  ui::mojom::WindowShowState GetRestoredState() const override;
   gfx::Rect GetBounds() const override;
   bool IsMaximized() const override;
   bool IsMinimized() const override;
@@ -357,6 +359,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   bool UpdateToolbarSecurityState() override;
   bool IsToolbarShowing() const override;
   void MaybeShowProfileSwitchIPH() override {}
+  void MaybeShowSupervisedUserProfileSignInIPH() override {}
   void FocusToolbar() override {}
   void ToolbarSizeChanged(bool is_animating) override {}
   void FocusAppMenu() override {}
@@ -403,7 +406,6 @@ class VivaldiBrowserWindow final : public BrowserWindow {
                              const std::string& target_language,
                              const std::u16string& text_selection) override {}
   void ShowAvatarBubbleFromAvatarButton(bool is_source_accelerator) override {}
-  void ShowBubbleFromManagementToolbarButton() override {}
   bool IsDownloadShelfVisible() const override;
   DownloadShelf* GetDownloadShelf() override;
   views::View* GetTopContainer() override;
@@ -434,8 +436,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void ShowOneClickSigninConfirmation(
       const std::u16string& email,
       base::OnceCallback<void(bool)> start_sync_callback) override {}
-  void OnTabDetached(content::WebContents* contents, bool was_active) override {
-  }
+  void OnTabDetached(content::WebContents* contents, bool was_active) override;
   void TabDraggingStatusChanged(bool is_dragging) override {}
   void LinkOpeningFromGesture(WindowOpenDisposition disposition) override {}
   // Shows in-product help for the given feature.
@@ -466,27 +467,29 @@ class VivaldiBrowserWindow final : public BrowserWindow {
       content::RenderFrameHost* frame,
       content::EyeDropperListener* listener) override;
   void ShowCaretBrowsingDialog() override {}
-  void CreateTabSearchBubble(int tab_index) override {}
+  void CreateTabSearchBubble(
+      tab_search::mojom::TabSearchSection section,
+      tab_search::mojom::TabOrganizationFeature organization_feature) override {
+  }
   void CloseTabSearchBubble() override {}
-  user_education::FeaturePromoController* GetFeaturePromoController() override;
   bool IsFeaturePromoActive(
       const base::Feature& iph_feature) const override;
   user_education::FeaturePromoResult CanShowFeaturePromo(
       const base::Feature& iph_feature) const override;
-  user_education::FeaturePromoResult MaybeShowFeaturePromo(
-      user_education::FeaturePromoParams params) override;
-  bool MaybeShowStartupFeaturePromo(
-      user_education::FeaturePromoParams params) override;
-  bool CloseFeaturePromo(
-      const base::Feature& iph_feature,
-      user_education::EndFeaturePromoReason close_reason =
-          user_education::EndFeaturePromoReason::kFeatureEngaged) override;
+  void MaybeShowFeaturePromo(
+      user_education::FeaturePromoParams params) override {}
+  void MaybeShowStartupFeaturePromo(
+      user_education::FeaturePromoParams params) override {}
+  bool AbortFeaturePromo(const base::Feature& iph_feature) override;
   user_education::FeaturePromoHandle CloseFeaturePromoAndContinue(
       const base::Feature& iph_feature) override;
-  void NotifyFeatureEngagementEvent(const char* event_name) override {}
-  void NotifyPromoFeatureUsed(const base::Feature& iph_feature) override {}
+  bool NotifyFeaturePromoFeatureUsed(
+      const base::Feature& feature,
+      FeaturePromoFeatureUsedAction action) override;
+  void NotifyAdditionalConditionEvent(const char* event_name) override {}
   user_education::DisplayNewBadge MaybeShowNewBadgeFor(
       const base::Feature& feature) override;
+  void NotifyNewBadgeFeatureUsed(const base::Feature& feature) override {}
   void ShowIncognitoClearBrowsingDataDialog() override {}
   void ShowIncognitoHistoryDisclaimerDialog() override {}
   std::string GetWorkspace() const override;
@@ -499,7 +502,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   // `window.setResizable(bool)` API.
   void OnCanResizeFromWebAPIChanged() override;
   bool GetCanResize() override;
-  ui::WindowShowState GetWindowShowState() const override;
+  ui::mojom::WindowShowState GetWindowShowState() const override;
   views::WebView* GetContentsWebView() override;
   BrowserView* AsBrowserView() override;
 
@@ -531,6 +534,12 @@ class VivaldiBrowserWindow final : public BrowserWindow {
     return toolbar_button_provider_.get();
   }
 
+  void ShowToast(const ToastSpecification* spec, std::vector<std::u16string> body_string_replacement_params);
+
+ protected:
+  user_education::FeaturePromoController* GetFeaturePromoControllerImpl()
+      override;
+
  private:
   enum QuitAction { ShowDialogOnQuit = 0, SaveSessionOnQuit,  DoNothingOnQuit };
   enum class CloseDialogMode { CloseWindow = 0, QuitApplication };
@@ -558,7 +567,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 
   struct WindowStateData {
     // State kept to dispatch events on changes.
-    ui::WindowShowState state = ui::SHOW_STATE_DEFAULT;
+    ui::mojom::WindowShowState state = ui::mojom::WindowShowState::kDefault;
     gfx::Rect bounds;
   };
 
@@ -570,7 +579,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void UpdateActivation(bool is_active);
   void OnIconImagesLoaded(gfx::ImageFamily image_family);
 
-  void OnStateChanged(ui::WindowShowState state);
+  void OnStateChanged(ui::mojom::WindowShowState state);
   void OnPositionChanged();
   void OnActivationChanged(bool activated);
 

@@ -8,6 +8,7 @@
 #include "base/location.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/system/sys_info.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/types/expected_macros.h"
@@ -25,6 +26,7 @@
 #include "services/webnn/tflite/graph_builder_tflite.h"
 #include "services/webnn/tflite/op_resolver.h"
 #include "services/webnn/tflite/tensor_impl_tflite.h"
+#include "services/webnn/webnn_constant_operand.h"
 #include "services/webnn/webnn_graph_impl.h"
 #include "third_party/flatbuffers/src/include/flatbuffers/flatbuffers.h"
 #include "third_party/tflite/src/tensorflow/lite/interpreter_builder.h"
@@ -59,6 +61,8 @@ std::string_view TfLiteStatusToString(TfLiteStatus status) {
       return "unresolved ops";
     case kTfLiteCancelled:
       return "cancelled";
+    case kTfLiteOutputShapeNotKnown:
+      return "output shape not known";
   }
 }
 
@@ -76,12 +80,16 @@ base::span<uint8_t> SpanFromTensor(TfLiteTensor* tensor) {
 class GraphImplTflite::ComputeResources {
  public:
   static base::expected<std::unique_ptr<ComputeResources>, mojom::ErrorPtr>
-  Create(WebNNContextImpl* context, const mojom::GraphInfo& graph_info) {
+  Create(WebNNContextImpl* context,
+         const mojom::GraphInfo& graph_info,
+         const base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>&
+             constant_operands) {
     auto self = std::make_unique<ComputeResources>();
 
     ASSIGN_OR_RETURN(
         self->model_content_,
-        GraphBuilderTflite::CreateAndBuild(context->properties(), graph_info),
+        GraphBuilderTflite::CreateAndBuild(context->properties(), graph_info,
+                                           constant_operands),
         [](std::string error) {
           return mojom::Error::New(mojom::Error::Code::kNotSupportedError,
                                    std::move(error));
@@ -96,14 +104,13 @@ class GraphImplTflite::ComputeResources {
                             "Unable to build flatbuffer model"));
     }
 
-    int num_threads =
-        context->options().thread_count_hint != 0
-            ? static_cast<int>(context->options().thread_count_hint)
-            : -1;  // Let the TFLite runtime decide.
-
     OpResolver op_resolver(context->options());
     ::tflite::InterpreterBuilder builder(*self->model_, op_resolver);
-    builder.SetNumThreads(num_threads);
+    // On a lower-end system, use only one thread for 1 or 2 cores, use half
+    // of the cores for less than 8 cores. On systems with more cores, the max
+    // number threads is 4 to be used for inference.
+    builder.SetNumThreads(
+        std::min(4, (base::SysInfo::NumberOfProcessors() + 1) / 2));
     TfLiteStatus status = builder(&self->interpreter_);
     if (status != kTfLiteOk) {
       return base::unexpected(
@@ -329,11 +336,15 @@ class GraphImplTflite::ComputeResources {
 
 // static
 base::expected<std::unique_ptr<GraphImplTflite>, mojom::ErrorPtr>
-GraphImplTflite::CreateAndBuild(mojom::GraphInfoPtr graph_info,
-                                ComputeResourceInfo compute_resource_info,
-                                ContextImplTflite* context) {
-  ASSIGN_OR_RETURN(std::unique_ptr<ComputeResources> compute_resources,
-                   ComputeResources::Create(context, *graph_info));
+GraphImplTflite::CreateAndBuild(
+    mojom::GraphInfoPtr graph_info,
+    ComputeResourceInfo compute_resource_info,
+    base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>
+        constant_operands,
+    ContextImplTflite* context) {
+  ASSIGN_OR_RETURN(
+      std::unique_ptr<ComputeResources> compute_resources,
+      ComputeResources::Create(context, *graph_info, constant_operands));
 
   auto compute_resources_state =
       base::MakeRefCounted<QueueableResourceState<ComputeResources>>(
@@ -373,7 +384,8 @@ void GraphImplTflite::ComputeImpl(NamedBuffers named_inputs,
                 compute_resources_state->GetExclusivelyLockedResource();
 
             base::ThreadPool::PostTaskAndReplyWithResult(
-                FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+                FROM_HERE,
+                {base::TaskPriority::USER_BLOCKING, base::MayBlock()},
                 base::BindOnce(
                     &ComputeResources::DoCompute,
                     // Unretained is safe here because a reference to

@@ -30,7 +30,7 @@ class ReportingClient;
 
 class QuerierImpl : public DnsSdQuerier, public MdnsRecordChangedCallback {
  public:
-  // |querier|, |task_runner|, and |network_config| must outlive the QuerierImpl
+  // `querier`, `task_runner`, and `network_config` must outlive the QuerierImpl
   // instance constructed.
   QuerierImpl(MdnsService& querier,
               TaskRunner& task_runner,
@@ -53,7 +53,7 @@ class QuerierImpl : public DnsSdQuerier, public MdnsRecordChangedCallback {
  private:
   friend class QuerierImplTesting;
 
-  // Applies the provided record change to the underlying |graph_| instance.
+  // Applies the provided record change to the underlying `graph_` instance.
   ErrorOr<std::vector<PendingQueryChange>> ApplyRecordChanges(
       const MdnsRecord& record,
       RecordChangedEvent event);

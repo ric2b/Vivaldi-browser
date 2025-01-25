@@ -3,10 +3,10 @@ on:
   push:
   pull_request:
     paths:
-      - '.github/workflows/ci-unix-static-sanitized.yml'
-      - '**CMakeLists.txt'
-      - 'cmake/**'
-      - 'ext/**'
+      - ".github/workflows/ci-unix-static-sanitized.yml"
+      - "**CMakeLists.txt"
+      - "cmake/**"
+      - "ext/**"
 
 permissions:
   contents: read
@@ -18,29 +18,28 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        sanitizer: [ address, thread, undefined ] # TODO(yguyon): Add memory
+        sanitizer: [address, thread, undefined] # TODO(yguyon): Add memory
 
     env:
       CC: clang
       CXX: clang++
 
     steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: ./.github/actions/setup-linux
         if: runner.os == 'Linux'
         id: setup_linux
         with:
-          codec-aom: 'LOCAL'
-          codec-dav1d: 'LOCAL'
-          libyuv: 'LOCAL'
-          recent-cmake: 'true'
+          codec-aom: "LOCAL"
+          codec-dav1d: "LOCAL"
+          libyuv: "LOCAL"
           extra-cache-key: ${{ matrix.sanitizer }}
       - uses: ./.github/actions/setup-macos
         if: runner.os == 'macOS'
         id: setup_macos
         with:
-          codec-aom: 'LOCAL'
-          codec-dav1d: 'LOCAL'
+          codec-aom: "LOCAL"
+          codec-dav1d: "LOCAL"
           extra-cache-key: ${{ matrix.sanitizer }}
       - id: cache-hit
         run: echo "hit=${{ (runner.os == 'Linux' && steps.setup_linux.outputs.ext-cache-hit == 'true') || (runner.os == 'macOS' && steps.setup_macos.outputs.ext-cache-hit == 'true') }}" >> "$GITHUB_OUTPUT"

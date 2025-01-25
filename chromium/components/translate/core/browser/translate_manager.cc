@@ -495,6 +495,10 @@ void TranslateManager::PageTranslated(const std::string& source_lang,
   if ((error_type == TranslateErrors::NONE) &&
       source_lang != translate::kUnknownLanguageCode &&
       !TranslateDownloadManager::IsSupportedLanguage(source_lang)) {
+    // Vivaldi:
+    // This is not an error condition here since we trust
+    // the Vivaldi Translate server to auto-detect source language.
+    if (!source_lang.empty())
     error_type = TranslateErrors::UNSUPPORTED_LANGUAGE;
   }
 

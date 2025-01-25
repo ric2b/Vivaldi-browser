@@ -3,9 +3,9 @@
 #ifndef IOS_CHROME_BROWSER_BROWSER_STATE_VIVALDI_POST_BROWSER_STATE_INIT_H_
 #define IOS_CHROME_BROWSER_BROWSER_STATE_VIVALDI_POST_BROWSER_STATE_INIT_H_
 
-class ChromeBrowserState;
+class ProfileIOS;
 
 namespace vivaldi {
-void PostBrowserStateInit (ChromeBrowserState* browser_state);
+void PostBrowserStateInit (ProfileIOS* profile);
 }
 #endif //IOS_CHROME_BROWSER_BROWSER_STATE_VIVALDI_POST_BROWSER_STATE_INIT_H_

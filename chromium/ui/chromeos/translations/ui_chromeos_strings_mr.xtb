@@ -19,6 +19,7 @@
 <translation id="115443833402798225">हँगल Ahnmatae</translation>
 <translation id="1155759005174418845">कॅटलान</translation>
 <translation id="1168100932582989117">Google नाव सर्व्हर</translation>
+<translation id="1170788066030116158">घेतल्‍याची तारीख</translation>
 <translation id="1172970565351728681">सुमारे <ph name="REMAINING_TIME" /> शिल्लक आहे/आहेत</translation>
 <translation id="1173894706177603556">नाव बदला</translation>
 <translation id="1173916544412572294"><ph name="NETWORK_COUNT" /> पैकी <ph name="NETWORK_INDEX" /> नेटवर्क, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, सिग्नल क्षमता <ph name="SIGNAL_STRENGTH" />%, फोन बॅटरी <ph name="BATTERY_STATUS" />%, तपशील</translation>
@@ -421,6 +422,7 @@
 <translation id="4387004326333427325">ऑथेंटिकेशन प्रमाणपत्र रिमोट पद्धतीने नाकारले</translation>
 <translation id="4394214039309501350">बाह्य लिंक</translation>
 <translation id="4394980935660306080">या आठवड्याच्या सुरुवातीला</translation>
+<translation id="4397435965699247285">ऑफलाइन असताना OneDrive उपलब्ध नाही</translation>
 <translation id="4398096759193130964">आयटम रिस्टोअर करा किंवा त्यांना ट्रॅशच्या बाहेरील नवीन फोल्डरमध्ये ड्रॅग करा</translation>
 <translation id="4401287888955153199">सर्व काढा</translation>
 <translation id="4410695710508688828">काढून टाकता आले नाही. <ph name="ERROR_MESSAGE" /></translation>
@@ -662,7 +664,7 @@ Google ड्राइव्ह मधील फाइल अपडेट के
 <translation id="6096979789310008754">शोध मजकूर साफ केला, सर्व फाइल आणि फोल्डर दाखवत आहे.</translation>
 <translation id="610101264611565198"><ph name="FILE_NAME" /> <ph name="FOLDER_NAME" /> वर हलवत आहे</translation>
 <translation id="61118516107968648">CSV मजकूर</translation>
-<translation id="6129953537138746214">जागा</translation>
+<translation id="6129953537138746214">स्पेस</translation>
 <translation id="6133173853026656527"><ph name="FILE_NAME" /> हलवित आहे...</translation>
 <translation id="6133877453787250710">अ‍ॅडमिनिस्ट्रेटर मॉनिटर:</translation>
 <translation id="613750717151263950">यूएस कीबोर्डसह जपानी</translation>

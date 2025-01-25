@@ -189,7 +189,7 @@ if (!is_ios) {
   }
 
   update_target("//chrome/browser/updates/announcement_notification:announcement_notification") {
-    deps += ["//chrome/app:generated_resources"]
+    deps = ["//chrome/app:generated_resources"]
   }
 
   update_target("//content/public/browser:browser_sources") {
@@ -223,3 +223,9 @@ if (!is_ios) {
   import("//vivaldi/ios/chrome/browser/features/deps_updates.gni")
   import("//vivaldi/thirdparty/deps_updates.gni")
 } # is_ios
+
+if (!is_android && !is_ios) {
+  update_target("//third_party/devtools-frontend/src:devtools_frontend_resources") {
+    public_deps -= [ "test" ]
+  }
+}

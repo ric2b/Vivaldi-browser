@@ -33,7 +33,7 @@ import org.chromium.chrome.browser.share.ShareDelegate.ShareOrigin;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tab.TabWebContentsObserver;
-import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
+import org.chromium.chrome.browser.user_education.IphCommandBuilder;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.components.browser_ui.share.ShareParams;
 import org.chromium.components.feature_engagement.FeatureConstants;
@@ -41,6 +41,7 @@ import org.chromium.content_public.browser.ActionModeCallback;
 import org.chromium.content_public.browser.ActionModeCallbackHelper;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.url.GURL;
 
 import java.util.HashSet;
 import java.util.List;
@@ -62,14 +63,10 @@ public class ChromeActionModeHandler {
     /** Observes the active WebContents being initialized into a Tab. */
     private final Callback<WebContents> mInitWebContentsObserver;
 
-    private final ActivityTabProvider.ActivityTabTabObserver mActivityTabTabObserver;
-
     private Tab mActiveTab;
 
     /**
      * @param activityTabProvider {@link ActivityTabProvider} instance.
-     * @param actionBarObserver observer called when the contextual action bar's visibility has
-     *     changed.
      * @param showWebSearch Whether 'Web Search' option will be shown.
      * @param searchCallback Callback to run when search action is selected in the action mode.
      * @param shareDelegateSupplier The {@link Supplier} of the {@link ShareDelegate} that will be
@@ -96,25 +93,32 @@ public class ChromeActionModeHandler {
                     spc.setDropdownMenuDelegate(new ChromeSelectionDropdownMenuDelegate());
                 };
 
-        mActivityTabTabObserver =
-                new ActivityTabProvider.ActivityTabTabObserver(activityTabProvider) {
-                    @Override
-                    public void onObservingDifferentTab(Tab tab, boolean hint) {
-                        // ActivityTabProvider will null out the tab passed to
-                        // onObservingDifferentTab when the tab is non-interactive (e.g. when
-                        // entering the TabSwitcher), but in those cases we actually still want to
-                        // use the most recently selected tab.
-                        if (tab == null || tab == mActiveTab) return;
+        new ActivityTabProvider.ActivityTabTabObserver(activityTabProvider) {
+            @Override
+            public void onObservingDifferentTab(Tab tab, boolean hint) {
+                // ActivityTabProvider will null out the tab passed to onObservingDifferentTab when
+                // the tab is non-interactive (e.g. when entering the TabSwitcher), but in those
+                // cases we actually still want to use the most recently selected tab.
+                if (tab == null || tab == mActiveTab) return;
+                if (mActiveTab != null && mActiveTab.isInitialized()) {
+                    TabWebContentsObserver.from(mActiveTab)
+                            .removeInitWebContentsObserver(mInitWebContentsObserver);
+                }
+                mActiveTab = tab;
+                TabWebContentsObserver.from(tab)
+                        .addInitWebContentsObserver(mInitWebContentsObserver);
+            }
 
-                        if (mActiveTab != null && mActiveTab.isInitialized()) {
-                            TabWebContentsObserver.from(mActiveTab)
-                                    .removeInitWebContentsObserver(mInitWebContentsObserver);
-                        }
-                        mActiveTab = tab;
-                        TabWebContentsObserver.from(tab)
-                                .addInitWebContentsObserver(mInitWebContentsObserver);
-                    }
-                };
+            @Override
+            public void onPageLoadStarted(Tab tab, GURL url) {
+                SelectionPopupController.fromWebContents(tab.getWebContents()).clearSelection();
+            }
+
+            @Override
+            public void onContentChanged(Tab tab) {
+                SelectionPopupController.fromWebContents(tab.getWebContents()).clearSelection();
+            }
+        };
     }
 
     @VisibleForTesting
@@ -191,7 +195,7 @@ public class ChromeActionModeHandler {
                     if (BuildConfig.IS_VIVALDI && // Vivaldi VAB-9670
                             item.getItemId() == R.id.select_action_menu_translate) {
                         item.setTitle(R.string.translate_vivaldi_context_menu);
-                        Intent webappIntent = (TabUtils.getActivity(mTab)).getIntent();
+                        Intent webappIntent = TabUtils.getActivity(mTab).getIntent();
                         if (webappIntent != null && webappIntent.getData() != null &&
                                 webappIntent.getData().toString().contains("webapp")) {
                                     item.setVisible(false); // Removes option in PWAs
@@ -224,8 +228,8 @@ public class ChromeActionModeHandler {
             UserEducationHelper mUserEducationHelper =
                     new UserEducationHelper(
                             TabUtils.getActivity(mTab), mTab.getProfile(), new Handler());
-            mUserEducationHelper.requestShowIPH(
-                    new IPHCommandBuilder(
+            mUserEducationHelper.requestShowIph(
+                    new IphCommandBuilder(
                                     view.getResources(),
                                     FeatureConstants.SHARED_HIGHLIGHTING_BUILDER_FEATURE,
                                     R.string.iph_shared_highlighting_builder,
@@ -276,7 +280,7 @@ public class ChromeActionModeHandler {
             } else if (mShareDelegateSupplier.get() != null
                     && id == R.id.select_action_menu_share) {
                 RecordUserAction.record(SelectionPopupController.UMA_MOBILE_ACTION_MODE_SHARE);
-                RecordHistogram.recordMediumTimesHistogram(
+                RecordHistogram.deprecatedRecordMediumTimesHistogram(
                         "ContextMenu.TimeToSelectShare",
                         System.currentTimeMillis() - mContextMenuStartTime);
                 mShareDelegateSupplier

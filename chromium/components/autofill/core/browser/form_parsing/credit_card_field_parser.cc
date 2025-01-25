@@ -62,8 +62,7 @@ bool FieldCanFitDataForFieldType(uint64_t max_length, FieldType type) {
       return max_length >= kMinimum4YearCcExpLength;
     }
     default:
-      NOTREACHED_IN_MIGRATION();
-      return false;
+      NOTREACHED();
   }
 }
 
@@ -276,8 +275,7 @@ bool CreditCardFieldParser::LikelyCardMonthSelectField(
   AutofillField* field = scanner->Cursor();
   if (!MatchesFormControlType(
           field->form_control_type(),
-          {FormControlType::kSelectOne, FormControlType::kSelectList,
-           FormControlType::kInputSearch})) {
+          {FormControlType::kSelectOne, FormControlType::kInputSearch})) {
     return false;
   }
 
@@ -311,8 +309,7 @@ bool CreditCardFieldParser::LikelyCardYearSelectField(
   AutofillField* field = scanner->Cursor();
   if (!MatchesFormControlType(
           field->form_control_type(),
-          {FormControlType::kSelectOne, FormControlType::kSelectList,
-           FormControlType::kInputSearch})) {
+          {FormControlType::kSelectOne, FormControlType::kInputSearch})) {
     return false;
   }
 
@@ -391,8 +388,7 @@ bool CreditCardFieldParser::LikelyCardTypeSelectField(
 
   if (!MatchesFormControlType(
           field->form_control_type(),
-          {FormControlType::kSelectOne, FormControlType::kSelectList,
-           FormControlType::kInputSearch})) {
+          {FormControlType::kSelectOne, FormControlType::kInputSearch})) {
     return false;
   }
 
@@ -450,7 +446,7 @@ CreditCardFieldParser::~CreditCardFieldParser() = default;
 
 void CreditCardFieldParser::AddClassifications(
     FieldCandidatesMap& field_candidates) const {
-  for (autofill::AutofillField* number : numbers_) {
+  for (AutofillField* number : numbers_) {
     AddClassification(number, CREDIT_CARD_NUMBER,
                       kBaseCreditCardParserScore, field_candidates);
   }
@@ -689,7 +685,7 @@ FieldType CreditCardFieldParser::DetermineExpirationYearType(
     return std::ranges::any_of(field.options(), is_substring,
                                option_projection);
   };
-  if (field.IsSelectOrSelectListElement()) {
+  if (field.IsSelectElement()) {
     base::Time::Exploded time_exploded;
     AutofillClock::Now().UTCExplode(&time_exploded);
     std::u16string year_4_digits = base::NumberToString16(time_exploded.year);

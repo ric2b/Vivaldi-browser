@@ -28,12 +28,14 @@
 #include "ui/ozone/platform/wayland/test/test_alpha_compositing.h"
 #include "ui/ozone/platform/wayland/test/test_compositor.h"
 #include "ui/ozone/platform/wayland/test/test_data_device_manager.h"
+#include "ui/ozone/platform/wayland/test/test_fractional_scale.h"
 #include "ui/ozone/platform/wayland/test/test_output.h"
 #include "ui/ozone/platform/wayland/test/test_overlay_prioritizer.h"
 #include "ui/ozone/platform/wayland/test/test_seat.h"
 #include "ui/ozone/platform/wayland/test/test_subcompositor.h"
 #include "ui/ozone/platform/wayland/test/test_surface_augmenter.h"
 #include "ui/ozone/platform/wayland/test/test_viewporter.h"
+#include "ui/ozone/platform/wayland/test/test_wp_linux_drm_syncobj.h"
 #include "ui/ozone/platform/wayland/test/test_wp_pointer_gestures.h"
 #include "ui/ozone/platform/wayland/test/test_zaura_output_manager_v2.h"
 #include "ui/ozone/platform/wayland/test/test_zaura_shell.h"
@@ -57,6 +59,7 @@ struct DisplayDeleter {
 // Server configuration related enums and structs.
 enum class PrimarySelectionProtocol { kNone, kGtk, kZwp };
 enum class ShouldUseExplicitSynchronizationProtocol { kNone, kUse };
+enum class ShouldUseLinuxDrmSyncobjProtocol { kNone, kUse };
 enum class EnableAuraShellProtocol { kEnabled, kDisabled };
 // Text input protocol type.
 enum class ZWPTextInputWrapperType { kV1, kV3 };
@@ -71,9 +74,10 @@ struct ServerConfig {
       PrimarySelectionProtocol::kNone;
   ShouldUseExplicitSynchronizationProtocol use_explicit_synchronization =
       ShouldUseExplicitSynchronizationProtocol::kUse;
+  ShouldUseLinuxDrmSyncobjProtocol use_linux_drm_syncobj =
+      ShouldUseLinuxDrmSyncobjProtocol::kNone;
   EnableAuraShellProtocol enable_aura_shell =
       EnableAuraShellProtocol::kDisabled;
-  bool surface_submission_in_pixel_coordinates = true;
   bool supports_viewporter_surface_scaling = false;
 };
 
@@ -172,6 +176,9 @@ class TestWaylandServerThread : public TestOutput::Delegate,
   zwp_linux_explicit_synchronization_v1() {
     return &zwp_linux_explicit_synchronization_v1_;
   }
+  TestWpLinuxDrmSyncobjManagerV1* wp_linux_drm_syncobj_manager_v1() {
+    return &wp_linux_drm_syncobj_manager_v1_;
+  }
   MockZwpLinuxDmabufV1* zwp_linux_dmabuf_v1() { return &zwp_linux_dmabuf_v1_; }
 
   wl_display* display() const { return display_.get(); }
@@ -211,6 +218,7 @@ class TestWaylandServerThread : public TestOutput::Delegate,
   bool SetupPrimarySelectionManager(PrimarySelectionProtocol protocol);
   bool SetupExplicitSynchronizationProtocol(
       ShouldUseExplicitSynchronizationProtocol usage);
+  bool SetupLinuxDrmSyncobjProtocol(ShouldUseLinuxDrmSyncobjProtocol usage);
 
   std::unique_ptr<base::MessagePump> CreateMessagePump(
       base::OnceClosure closure);
@@ -245,6 +253,7 @@ class TestWaylandServerThread : public TestOutput::Delegate,
 
   TestSubCompositor sub_compositor_;
   TestViewporter viewporter_;
+  TestFractionalScaleManager fractional_scale_manager_;
   TestAlphaCompositing alpha_compositing_;
   TestDataDeviceManager data_device_manager_;
   TestOutput output_;
@@ -261,6 +270,7 @@ class TestWaylandServerThread : public TestOutput::Delegate,
   TestZwpTextInputManagerV1 zwp_text_input_manager_v1_;
   TestZwpTextInputManagerV3 zwp_text_input_manager_v3_;
   TestZwpLinuxExplicitSynchronizationV1 zwp_linux_explicit_synchronization_v1_;
+  TestWpLinuxDrmSyncobjManagerV1 wp_linux_drm_syncobj_manager_v1_;
   MockZwpLinuxDmabufV1 zwp_linux_dmabuf_v1_;
   MockWpPresentation wp_presentation_;
   TestWpPointerGestures wp_pointer_gestures_;

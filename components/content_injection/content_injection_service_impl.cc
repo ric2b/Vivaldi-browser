@@ -63,7 +63,7 @@ void ServiceImpl::OnRenderProcessHostCreated(
     content::RenderProcessHost* process_host) {
   mojo::Remote<mojom::Manager> manager;
 
-  if (chrome::GetBrowserContextRedirectedInIncognito(
+  if (GetBrowserContextRedirectedInIncognito(
           process_host->GetBrowserContext()) != browser_context_)
     return;
 

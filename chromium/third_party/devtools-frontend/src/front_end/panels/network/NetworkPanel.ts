@@ -40,7 +40,7 @@ import * as SDK from '../../core/sdk/sdk.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import type * as Extensions from '../../models/extensions/extensions.js';
 import * as Logs from '../../models/logs/logs.js';
-import * as TraceEngine from '../../models/trace/trace.js';
+import * as Trace from '../../models/trace/trace.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import * as NetworkForward from '../../panels/network/forward/forward.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
@@ -78,7 +78,7 @@ const UIStrings = {
   /**
    *@description Text to disable cache while DevTools is open
    */
-  disableCacheWhileDevtoolsIsOpen: 'Disable cache (while DevTools is open)',
+  disableCacheWhileDevtoolsIsOpen: 'Disable cache while DevTools is open',
   /**
    *@description Text in Network Config View of the Network panel
    */
@@ -92,7 +92,7 @@ const UIStrings = {
    */
   showMoreInformationInRequestRows: 'Show more information in request rows',
   /**
-   *@description Text in Network Panel of the Network panel
+   *@description Text in Network Panel used to toggle the "big request rows" setting.
    */
   useLargeRequestRows: 'Big request rows',
   /**
@@ -100,7 +100,7 @@ const UIStrings = {
    */
   showOverviewOfNetworkRequests: 'Show overview of network requests',
   /**
-   *@description Text in Network Panel of the Network panel
+   *@description Text in Network Panel used to show the overview for a given network request.
    */
   showOverview: 'Overview',
   /**
@@ -108,7 +108,7 @@ const UIStrings = {
    */
   groupRequestsByTopLevelRequest: 'Group requests by top level request frame',
   /**
-   *@description Text in Network Panel of the Network panel
+   *@description Text for group by frame network setting
    */
   groupByFrame: 'Group by frame',
   /**
@@ -142,20 +142,29 @@ const UIStrings = {
    */
   throttling: 'Throttling',
   /**
-   *@description Text in Network Panel of the Network panel
+   *@description Text in Network Panel to tell the user to reload the page to capture screenshots.
    *@example {Ctrl + R} PH1
    */
   hitSToReloadAndCaptureFilmstrip: 'Hit {PH1} to reload and capture filmstrip.',
   /**
-   *@description A context menu item in the Network Panel of the Network panel
+   * @description A context menu item that is shown for resources in other panels
+   * to open them in the Network panel.
    */
-  revealInNetworkPanel: 'Reveal in Network panel',
+  openInNetworkPanel: 'Open in Network panel',
   /**
-   *@description Text in Network Panel of the Network panel
+   * @description A context menu item that is shown for resources in other panels
+   * to open them in the Network panel, but when there's no associated network
+   * request. This context menu item is always disabled and only provided to give
+   * the developer an idea of why they cannot open the resource in the Network
+   * panel.
+   */
+  openInNetworkPanelMissingRequest: 'Open in Network panel (missing request)',
+  /**
+   *@description Text in Network Panel that is displayed whilst the recording is in progress.
    */
   recordingFrames: 'Recording frames...',
   /**
-   *@description Text in Network Panel of the Network panel
+   *@description Text in Network Panel that is displayed when frames are being fetched.
    */
   fetchingFrames: 'Fetching frames...',
   /**
@@ -531,13 +540,13 @@ export class NetworkPanel extends UI.Panel.Panel implements
     }
   }
 
-  private filmStripAvailable(filmStrip: TraceEngine.Extras.FilmStrip.Data): void {
+  private filmStripAvailable(filmStrip: Trace.Extras.FilmStrip.Data): void {
     if (this.filmStripView) {
       this.filmStripView.setModel(filmStrip);
     }
     const timestamps = filmStrip.frames.map(frame => {
       // The network view works in seconds.
-      return TraceEngine.Helpers.Timing.microSecondsToSeconds(frame.screenshotEvent.ts);
+      return Trace.Helpers.Timing.microSecondsToSeconds(frame.screenshotEvent.ts);
     });
 
     this.networkLogView.addFilmStripFrames(timestamps);
@@ -682,6 +691,7 @@ export class NetworkPanel extends UI.Panel.Panel implements
     this.currentRequest = request;
     this.networkOverview.setHighlightedRequest(request);
     this.updateNetworkItemView();
+    UI.Context.Context.instance().setFlavor(SDK.NetworkRequest.NetworkRequest, request);
   }
 
   private onRequestActivated(event: Common.EventTarget.EventTargetEvent<RequestActivatedEvent>): void {
@@ -756,16 +766,22 @@ export class NetworkPanel extends UI.Panel.Panel implements
       TimelineUtils.NetworkRequest.TimelineNetworkRequest): void {
     const appendRevealItem = (request: SDK.NetworkRequest.NetworkRequest): void => {
       contextMenu.revealSection().appendItem(
-          i18nString(UIStrings.revealInNetworkPanel),
+          i18nString(UIStrings.openInNetworkPanel),
           () => UI.ViewManager.ViewManager.instance()
                     .showView('network')
                     .then(this.networkLogView.resetFilter.bind(this.networkLogView))
                     .then(this.revealAndHighlightRequest.bind(this, request)),
           {jslogContext: 'reveal-in-network'});
     };
+    const appendRevealItemMissingData = (): void => {
+      contextMenu.revealSection().appendItem(i18nString(UIStrings.openInNetworkPanelMissingRequest), () => {}, {
+        disabled: true,
+        jslogContext: 'reveal-in-network',
+      });
+    };
     const appendRevealItemAndSelect = (request: TimelineUtils.NetworkRequest.TimelineNetworkRequest): void => {
       contextMenu.revealSection().appendItem(
-          i18nString(UIStrings.revealInNetworkPanel),
+          i18nString(UIStrings.openInNetworkPanel),
           () => UI.ViewManager.ViewManager.instance()
                     .showView('network')
                     .then(this.networkLogView.resetFilter.bind(this.networkLogView))
@@ -782,6 +798,8 @@ export class NetworkPanel extends UI.Panel.Panel implements
     if (target instanceof SDK.Resource.Resource) {
       if (target.request) {
         appendRevealItem(target.request);
+      } else {
+        appendRevealItemMissingData();
       }
       return;
     }
@@ -789,6 +807,8 @@ export class NetworkPanel extends UI.Panel.Panel implements
       const resource = Bindings.ResourceUtils.resourceForURL(target.url());
       if (resource && resource.request) {
         appendRevealItem(resource.request);
+      } else {
+        appendRevealItemMissingData();
       }
       return;
     }
@@ -826,8 +846,8 @@ export class NetworkPanel extends UI.Panel.Panel implements
     this.calculator.updateBoundaries(request);
     // FIXME: Unify all time units across the frontend!
     this.overviewPane.setBounds(
-        TraceEngine.Types.Timing.MilliSeconds(this.calculator.minimumBoundary() * 1000),
-        TraceEngine.Types.Timing.MilliSeconds(this.calculator.maximumBoundary() * 1000));
+        Trace.Types.Timing.MilliSeconds(this.calculator.minimumBoundary() * 1000),
+        Trace.Types.Timing.MilliSeconds(this.calculator.maximumBoundary() * 1000));
     this.networkOverview.updateRequest(request);
   }
 
@@ -867,19 +887,19 @@ export class NetworkLogWithFilterRevealer implements
   }
 }
 
-export class FilmStripRecorder implements TraceEngine.TracingManager.TracingManagerClient {
-  private tracingManager: TraceEngine.TracingManager.TracingManager|null;
+export class FilmStripRecorder implements Trace.TracingManager.TracingManagerClient {
+  private tracingManager: Trace.TracingManager.TracingManager|null;
   private resourceTreeModel: SDK.ResourceTreeModel.ResourceTreeModel|null;
   private readonly timeCalculator: NetworkTimeCalculator;
   private readonly filmStripView: PerfUI.FilmStripView.FilmStripView;
-  private callback: ((filmStrip: TraceEngine.Extras.FilmStrip.Data) => void)|null;
+  private callback: ((filmStrip: Trace.Extras.FilmStrip.Data) => void)|null;
   // Used to fetch screenshots of the page load and show them in the panel.
-  #traceEngine: TraceEngine.TraceModel.Model;
-  #collectedTraceEvents: TraceEngine.Types.TraceEvents.TraceEventData[] = [];
+  #traceEngine: Trace.TraceModel.Model;
+  #collectedTraceEvents: Trace.Types.Events.Event[] = [];
 
   constructor(timeCalculator: NetworkTimeCalculator, filmStripView: PerfUI.FilmStripView.FilmStripView) {
-    this.#traceEngine = TraceEngine.TraceModel.Model.createWithSubsetOfHandlers({
-      Screenshots: TraceEngine.Handlers.ModelHandlers.Screenshots,
+    this.#traceEngine = Trace.TraceModel.Model.createWithSubsetOfHandlers({
+      Screenshots: Trace.Handlers.ModelHandlers.Screenshots,
     });
 
     this.tracingManager = null;
@@ -889,7 +909,7 @@ export class FilmStripRecorder implements TraceEngine.TracingManager.TracingMana
     this.callback = null;
   }
 
-  traceEventsCollected(events: TraceEngine.Types.TraceEvents.TraceEventData[]): void {
+  traceEventsCollected(events: Trace.Types.Events.Event[]): void {
     this.#collectedTraceEvents.push(...events);
   }
 
@@ -900,14 +920,14 @@ export class FilmStripRecorder implements TraceEngine.TracingManager.TracingMana
     this.tracingManager = null;
     await this.#traceEngine.parse(this.#collectedTraceEvents);
 
-    const data = this.#traceEngine.traceParsedData(this.#traceEngine.size() - 1) as
-        TraceEngine.Extras.FilmStrip.HandlerDataWithScreenshots;
+    const data = this.#traceEngine.parsedTrace(this.#traceEngine.size() - 1) as
+        Trace.Extras.FilmStrip.HandlerDataWithScreenshots;
     if (!data) {
       return;
     }
-    const zeroTimeInSeconds = TraceEngine.Types.Timing.Seconds(this.timeCalculator.minimumBoundary());
-    const filmStrip = TraceEngine.Extras.FilmStrip.fromTraceData(
-        data, TraceEngine.Helpers.Timing.secondsToMicroseconds(zeroTimeInSeconds));
+    const zeroTimeInSeconds = Trace.Types.Timing.Seconds(this.timeCalculator.minimumBoundary());
+    const filmStrip =
+        Trace.Extras.FilmStrip.fromParsedTrace(data, Trace.Helpers.Timing.secondsToMicroseconds(zeroTimeInSeconds));
 
     if (this.callback) {
       this.callback(filmStrip);
@@ -935,7 +955,7 @@ export class FilmStripRecorder implements TraceEngine.TracingManager.TracingMana
     this.filmStripView.reset();
     this.filmStripView.setStatusText(i18nString(UIStrings.recordingFrames));
     const tracingManager =
-        SDK.TargetManager.TargetManager.instance().scopeTarget()?.model(TraceEngine.TracingManager.TracingManager);
+        SDK.TargetManager.TargetManager.instance().scopeTarget()?.model(Trace.TracingManager.TracingManager);
     if (this.tracingManager || !tracingManager) {
       return;
     }
@@ -951,7 +971,7 @@ export class FilmStripRecorder implements TraceEngine.TracingManager.TracingMana
     return Boolean(this.tracingManager);
   }
 
-  stopRecording(callback: (filmStrip: TraceEngine.Extras.FilmStrip.Data) => void): void {
+  stopRecording(callback: (filmStrip: Trace.Extras.FilmStrip.Data) => void): void {
     if (!this.tracingManager) {
       return;
     }

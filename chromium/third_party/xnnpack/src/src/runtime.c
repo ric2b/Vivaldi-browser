@@ -40,10 +40,6 @@
 #include <time.h>
 #endif
 
-#ifndef XNN_ENABLE_JIT
-  #error "XNN_ENABLE_JIT is not defined"
-#endif
-
 enum xnn_status xnn_reshape_external_value(
     xnn_runtime_t runtime,
     uint32_t external_id,
@@ -391,29 +387,11 @@ static void optimize_tensor_allocation_for_in_place_operations(
   for (uint32_t n = 0; n < runtime->num_ops; n++) {
     const struct xnn_operator_data* node = &runtime->opdata[n];
     switch (node->type) {
-      case xnn_node_type_abs:
-      case xnn_node_type_add2:
-      case xnn_node_type_bankers_rounding:
-      case xnn_node_type_ceiling:
-      case xnn_node_type_clamp:
+      case xnn_node_type_unary_elementwise:
+      case xnn_node_type_binary_elementwise:
       case xnn_node_type_copy:
-      case xnn_node_type_divide:
-      case xnn_node_type_elu:
-      case xnn_node_type_floor:
-      case xnn_node_type_hardswish:
-      case xnn_node_type_leaky_relu:
-      case xnn_node_type_maximum2:
-      case xnn_node_type_minimum2:
-      case xnn_node_type_multiply2:
-      case xnn_node_type_negate:
-      case xnn_node_type_prelu:
-      case xnn_node_type_sigmoid:
       case xnn_node_type_softmax:
-      case xnn_node_type_square:
-      case xnn_node_type_square_root:
-      case xnn_node_type_squared_difference:
       case xnn_node_type_static_reshape:
-      case xnn_node_type_subtract:
         // Valid operation types that can be optimized.
         break;
       default:
@@ -468,9 +446,8 @@ enum xnn_status xnn_create_runtime_v4(
   }
 
   if (workspace == NULL) {
-    xnn_log_error("failed to create runtime: workspace is NULL");
-    status = xnn_status_invalid_parameter;
-    goto error;
+    xnn_log_debug("Allocating non-shared workspace");
+    workspace = xnn_allocate_zero_simd_memory(sizeof(struct xnn_workspace));
   }
 
   const uint32_t optimization_flags = XNN_FLAG_HINT_SPARSE_INFERENCE | XNN_FLAG_HINT_FP16_INFERENCE |
@@ -526,22 +503,6 @@ enum xnn_status xnn_create_runtime_v4(
   }
 
   struct xnn_code_cache* code_cache = NULL;
-  #if XNN_PLATFORM_JIT
-    if (flags & XNN_FLAG_JIT) {
-      #if !XNN_ENABLE_JIT
-        // Warn and continue without JIT enabled.
-        xnn_log_warning("unable to enable JIT: not compiled with JIT enabled");
-      #else
-        code_cache = &runtime->code_cache;
-        status = xnn_init_code_cache(code_cache);
-        if (status != xnn_status_success) {
-          xnn_log_error("failed to initialize code cache");
-          goto error;
-        }
-      #endif
-    }
-  #endif
-
   runtime->values = xnn_allocate_zero_memory(sizeof(struct xnn_value) * subgraph->num_values);
   if (runtime->values == NULL) {
     xnn_log_error("failed to allocate %zu bytes for runtime's value descriptors",
@@ -594,12 +555,6 @@ enum xnn_status xnn_create_runtime_v4(
 #ifdef XNN_SLINKY_ENABLED
   runtime->slinky_pipeline = xnn_runtime_to_slinky_pipeline(runtime);
 #endif
-
-  #if XNN_PLATFORM_JIT
-    if (code_cache != NULL) {
-      xnn_finalize_code_memory(&code_cache->cache.code);
-    }
-  #endif
 
   for (uint32_t i = 0; i < runtime->num_values; i++) {
     struct xnn_value* value = &runtime->values[i];
@@ -832,23 +787,27 @@ enum xnn_status xnn_setup_runtime_v2(
   }
 
   // Apply runtime state changes.
-#ifdef XNN_SLINKY_ENABLED
-  size_t input_id = 0, output_id = 0;
-#endif
   for (size_t i = 0; i < num_external_values; i++) {
     const struct xnn_external_value* external_value = &external_values[i];
     const uint32_t value_id = external_value->id;
     struct xnn_value* value = &runtime->values[value_id];
     value->data = external_value->data;
+  }
+
 #ifdef XNN_SLINKY_ENABLED
-    if (value->flags & XNN_VALUE_FLAG_EXTERNAL_INPUT) {
+  size_t input_id = 0, output_id = 0;
+  // Use the runtime values instead of the external values so the order is the
+  // same.
+  for (size_t i = 0; i < runtime->num_values; i++) {
+    struct xnn_value* value = &runtime->values[i];
+    if (xnn_value_is_static(value)) {
+      // The value is constant.
+    } else if (value->flags & XNN_VALUE_FLAG_EXTERNAL_INPUT) {
       runtime->input_values[input_id++] = value;
     } else if (value->flags & XNN_VALUE_FLAG_EXTERNAL_OUTPUT) {
       runtime->output_values[output_id++] = value;
     }
-#endif
   }
-#ifdef XNN_SLINKY_ENABLED
   runtime->num_inputs = input_id;
   runtime->num_outputs = output_id;
 #endif
@@ -1096,11 +1055,6 @@ enum xnn_status xnn_delete_runtime(
         xnn_release_workspace(runtime->workspace);
       }
     }
-#if XNN_PLATFORM_JIT
-    if (xnn_code_cache_valid(&runtime->code_cache)) {
-      xnn_release_code_cache(&runtime->code_cache);
-    }
-#endif
     xnn_release_memory(runtime);
   }
   return xnn_status_success;

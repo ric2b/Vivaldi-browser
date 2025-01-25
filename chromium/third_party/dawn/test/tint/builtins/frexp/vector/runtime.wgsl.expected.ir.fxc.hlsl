@@ -1,5 +1,3 @@
-SKIP: FAILED
-
 struct frexp_result_vec2_f32 {
   float2 fract;
   int2 exp;
@@ -9,17 +7,11 @@ struct frexp_result_vec2_f32 {
 [numthreads(1, 1, 1)]
 void main() {
   float2 tint_symbol = float2(1.25f, 3.75f);
-  frexp_result_vec2_f32 v = frexp(tint_symbol);
-  frexp_result_vec2_f32 res = v;
+  float2 v = (0.0f).xx;
+  float2 v_1 = frexp(tint_symbol, v);
+  float2 v_2 = (float2(sign(tint_symbol)) * v_1);
+  frexp_result_vec2_f32 res = {v_2, int2(v)};
   float2 fract = res.fract;
-  frexp_result_vec2_f32 v_1 = v;
-  int2 exp = v_1.exp;
+  int2 exp = res.exp;
 }
 
-FXC validation failure:
-<scrubbed_path>(10,29-46): error X3013: 'frexp': no matching 1 parameter intrinsic function
-<scrubbed_path>(10,29-46): error X3013: Possible intrinsic functions are:
-<scrubbed_path>(10,29-46): error X3013:     frexp(float|half, out float|half exp)
-
-
-tint executable returned error: exit status 1

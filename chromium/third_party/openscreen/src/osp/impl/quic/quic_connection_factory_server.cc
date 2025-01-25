@@ -23,6 +23,9 @@
 
 namespace openscreen::osp {
 
+QuicConnectionFactoryServer::ServerDelegate::ServerDelegate() = default;
+QuicConnectionFactoryServer::ServerDelegate::~ServerDelegate() = default;
+
 QuicConnectionFactoryServer::QuicConnectionFactoryServer(
     TaskRunner& task_runner)
     : QuicConnectionFactoryBase(task_runner) {}
@@ -127,7 +130,7 @@ void QuicConnectionFactoryServer::OnConnectionClosed(
   UdpSocket* const socket = entry->second.socket;
   connections_.erase(entry);
 
-  // If none of the remaining |connections_| reference the socket, close/destroy
+  // If none of the remaining `connections_` reference the socket, close/destroy
   // it.
   if (!ContainsIf(connections_,
                   [socket](const decltype(connections_)::value_type& entry) {

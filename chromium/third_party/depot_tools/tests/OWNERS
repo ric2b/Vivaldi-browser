@@ -1,4 +1,3 @@
-per-file autoninja_test.py=brucedawson@chromium.org
 per-file autoninja_test.py=file://BUILD_OWNERS
 per-file bazel_test.py=file://CROS_OWNERS
 per-file build_telemetry_test.py=file://BUILD_OWNERS

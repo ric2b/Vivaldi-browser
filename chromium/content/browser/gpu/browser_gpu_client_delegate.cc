@@ -18,13 +18,4 @@ viz::GpuHostImpl* BrowserGpuClientDelegate::EnsureGpuHost() {
   return nullptr;
 }
 
-// FEATURE_FORCE_ACCESS_TO_GPU
-void BrowserGpuClientDelegate::SetForceAllowAccessToGpu(bool enable) {
-  auto* host = GpuProcessHost::Get();
-
-  if (host)
-    host->gpu_host()->SetForceAllowAccessToGpu(enable);
-}
-
-
 }  // namespace content

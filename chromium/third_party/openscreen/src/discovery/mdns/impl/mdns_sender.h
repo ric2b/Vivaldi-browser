@@ -15,7 +15,7 @@ class MdnsMessage;
 
 class MdnsSender {
  public:
-  // MdnsSender does not own |socket| and expects that its lifetime exceeds the
+  // MdnsSender does not own `socket` and expects that its lifetime exceeds the
   // lifetime of MdnsSender.
   explicit MdnsSender(UdpSocket& socket);
   MdnsSender(const MdnsSender& other) = delete;

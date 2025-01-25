@@ -56,22 +56,26 @@ ScriptPromise<IDLString> AIWriter::write(ScriptState* script_state,
                              int(input.CharactersSizeInBytes()));
 
   CHECK(options);
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolver<IDLString>>(script_state);
+  auto promise = resolver->Promise();
+
   AbortSignal* signal = options->getSignalOr(nullptr);
   if (signal && signal->aborted()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kAbortError,
-                                      kExceptionMessageRequestAborted);
-    return ScriptPromise<IDLString>();
+    resolver->Reject(signal->reason(script_state));
+    return promise;
   }
   const String context_string = options->getContextOr(String());
 
   if (!remote_) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kExceptionMessageWriterDestroyed);
-    return ScriptPromise<IDLString>();
+    return promise;
   }
-  auto [promise, pending_remote] = CreateModelExecutionResponder(
-      script_state, signal, task_runner_, AIMetrics::AISessionType::kWriter,
-      base::DoNothing());
+
+  auto pending_remote = CreateModelExecutionResponder(
+      script_state, signal, resolver, task_runner_,
+      AIMetrics::AISessionType::kWriter, base::DoNothing());
   remote_->Write(input, context_string, std::move(pending_remote));
   return promise;
 }
@@ -93,8 +97,9 @@ ReadableStream* AIWriter::writeStreaming(ScriptState* script_state,
   CHECK(options);
   AbortSignal* signal = options->getSignalOr(nullptr);
   if (signal && signal->aborted()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kAbortError,
-                                      kExceptionMessageRequestAborted);
+    // TODO(crbug.com/374879796): figure out how to handling aborted signal for
+    // the streaming API.
+    ThrowAbortedException(exception_state);
     return nullptr;
   }
   const String context_string = options->getContextOr(String());

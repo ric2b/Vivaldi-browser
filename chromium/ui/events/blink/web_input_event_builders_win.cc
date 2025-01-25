@@ -144,8 +144,9 @@ WebMouseEvent WebMouseEventBuilder::Build(
             NOTREACHED();
         }
         break;
-      }
-      NOTREACHED_IN_MIGRATION();
+      } // End Vivaldi
+
+      NOTREACHED();
   }
 
   // set modifiers:

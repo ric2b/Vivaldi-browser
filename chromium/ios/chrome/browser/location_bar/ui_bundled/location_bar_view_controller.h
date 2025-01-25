@@ -23,9 +23,13 @@
 @protocol BadgeViewVisibilityDelegate;
 @protocol ContextualPanelEntrypointVisibilityDelegate;
 @protocol HelpCommands;
+@protocol LensOverlayCommands;
 @protocol LocationBarOffsetProvider;
 @protocol LoadQueryCommands;
 @protocol TextFieldViewContaining;
+namespace feature_engagement {
+class Tracker;
+}
 
 @protocol LocationBarViewControllerDelegate<NSObject>
 
@@ -79,6 +83,7 @@
 @property(nonatomic, weak) id<ActivityServiceCommands,
                               ApplicationCommands,
                               LoadQueryCommands,
+                              LensOverlayCommands,
                               OmniboxCommands>
     dispatcher;
 
@@ -91,9 +96,15 @@
 // The layout guide center to use to refer to the first suggestion label.
 @property(nonatomic, strong) LayoutGuideCenter* layoutGuideCenter;
 
+// Feature engagement tracker.
+@property(nonatomic, assign) feature_engagement::Tracker* tracker;
+
 // Displays the voice search button instead of the share button in steady state,
 // and adds the voice search button to the empty textfield.
 @property(nonatomic, assign) BOOL voiceSearchEnabled;
+
+// The help command handler.
+@property(nonatomic, weak) id<HelpCommands> helpCommandsHandler;
 
 // Sets the edit view to use in the editing state. This must be set before the
 // view of this view controller is initialized. This must only be called once.
@@ -107,10 +118,6 @@
 // UIs. This must be called only once and set before the view of this view
 // controller is initialized.
 - (void)setContextualPanelEntrypointView:(UIView*)contextualPanelEntrypointView;
-
-// Set the placeholder view to be displayed in case there is no badge view nor
-// contextual panel entrypoint.
-- (void)setPlaceholderView:(UIView*)placeholderView;
 
 // Switches between the two states of the location bar:
 // - editing state, with the textfield;
@@ -148,8 +155,11 @@
 // Returns the badge view visibility delegate.
 - (id<BadgeViewVisibilityDelegate>)badgeViewVisibilityDelegate;
 
-// The help command handler.
-@property(nonatomic, weak) id<HelpCommands> helpCommandsHandler;
+// Attempts to show the lens overlay IPH.
+- (void)attemptShowingLensOverlayIPH;
+
+// Records the lens overlay entrypoint availability in the location bar.
+- (void)recordLensOverlayAvailability;
 
 // Vivaldi
 @property(nonatomic, strong) UIColor* locationBarContainerColor;

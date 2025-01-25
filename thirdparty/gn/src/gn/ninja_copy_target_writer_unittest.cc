@@ -35,7 +35,7 @@ TEST(NinjaCopyTargetWriter, Run) {
       "build input1.out: copy ../../foo/input1.txt\n"
       "build input2.out: copy ../../foo/input2.txt\n"
       "\n"
-      "build obj/foo/bar.stamp: stamp input1.out input2.out\n";
+      "build phony/foo/bar: phony input1.out input2.out\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected_linux, out_str);
 }
@@ -63,7 +63,7 @@ TEST(NinjaCopyTargetWriter, ToolchainDeps) {
   const char expected_linux[] =
       "build output.out: copy ../../foo/input1.txt\n"
       "\n"
-      "build obj/foo/bar.stamp: stamp output.out\n";
+      "build phony/foo/bar: phony output.out\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected_linux, out_str);
 }
@@ -88,7 +88,7 @@ TEST(NinjaCopyTargetWriter, OrderOnlyDeps) {
   const char expected_linux[] =
       "build input1.out: copy ../../foo/input1.txt || ../../foo/script.py\n"
       "\n"
-      "build obj/foo/bar.stamp: stamp input1.out\n";
+      "build phony/foo/bar: phony input1.out\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected_linux, out_str);
 }
@@ -118,9 +118,9 @@ TEST(NinjaCopyTargetWriter, DataDeps) {
   writer.Run();
 
   const char expected_linux[] =
-      "build input1.out: copy ../../foo/input1.txt || obj/foo/datadep.stamp\n"
+      "build input1.out: copy ../../foo/input1.txt || phony/foo/datadep\n"
       "\n"
-      "build obj/foo/bar.stamp: stamp input1.out\n";
+      "build phony/foo/bar: phony input1.out\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected_linux, out_str);
 }

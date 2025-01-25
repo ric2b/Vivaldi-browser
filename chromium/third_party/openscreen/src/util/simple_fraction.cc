@@ -9,16 +9,20 @@
 #include <string>
 #include <vector>
 
-#include "absl/strings/str_split.h"
 #include "util/osp_logging.h"
 #include "util/string_parse.h"
+#include "util/string_util.h"
 #include "util/stringprintf.h"
 
 namespace openscreen {
 
 // static
 ErrorOr<SimpleFraction> SimpleFraction::FromString(std::string_view value) {
-  std::vector<std::string_view> fields = absl::StrSplit(value, '/');
+  if (value.size() > 0 && value.at(0) == '/') {
+    return Error::Code::kParameterInvalid;
+  }
+
+  std::vector<std::string_view> fields = string_util::Split(value, '/');
   if (fields.size() != 1 && fields.size() != 2) {
     return Error::Code::kParameterInvalid;
   }

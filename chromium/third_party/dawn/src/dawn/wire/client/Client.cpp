@@ -28,6 +28,7 @@
 #include "dawn/wire/client/Client.h"
 
 #include "dawn/common/Compiler.h"
+#include "dawn/common/StringViewUtils.h"
 #include "dawn/wire/client/Device.h"
 
 namespace dawn::wire::client {
@@ -99,17 +100,6 @@ ReservedTexture Client::ReserveTexture(WGPUDevice device, const WGPUTextureDescr
     return result;
 }
 
-ReservedSwapChain Client::ReserveSwapChain(WGPUDevice device,
-                                           const WGPUSwapChainDescriptor* descriptor) {
-    Ref<SwapChain> swapChain = Make<SwapChain>(nullptr, descriptor);
-
-    ReservedSwapChain result;
-    result.handle = swapChain->GetWireHandle();
-    result.deviceHandle = FromAPI(device)->GetWireHandle();
-    result.swapchain = ReturnToAPI(std::move(swapChain));
-    return result;
-}
-
 ReservedSurface Client::ReserveSurface(WGPUInstance instance,
                                        const WGPUSurfaceCapabilities* capabilities) {
     Ref<Surface> surface = Make<Surface>(capabilities);
@@ -145,10 +135,6 @@ void Client::ReclaimTextureReservation(const ReservedTexture& reservation) {
     ReclaimReservation(FromAPI(reservation.texture));
 }
 
-void Client::ReclaimSwapChainReservation(const ReservedSwapChain& reservation) {
-    ReclaimReservation(FromAPI(reservation.swapchain));
-}
-
 void Client::ReclaimSurfaceReservation(const ReservedSurface& reservation) {
     ReclaimReservation(FromAPI(reservation.surface));
 }
@@ -176,8 +162,8 @@ void Client::Disconnect() {
         auto& deviceList = mObjects[ObjectType::Device];
         for (auto object : deviceList.GetAllObjects()) {
             if (object != nullptr) {
-                static_cast<Device*>(object)->HandleDeviceLost(WGPUDeviceLostReason_Unknown,
-                                                               "GPU connection lost");
+                static_cast<Device*>(object)->HandleDeviceLost(
+                    WGPUDeviceLostReason_Unknown, ToOutputStringView("GPU connection lost"));
             }
         }
     }

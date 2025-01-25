@@ -742,7 +742,7 @@ TEST_F(TargetTest, GetOutputFilesForSource_Binary) {
   EXPECT_TRUE(target.GetOutputsAsSourceFiles(LocationRange(), true,
                                              &computed_outputs, &err));
   ASSERT_EQ(1u, computed_outputs.size());
-  EXPECT_EQ("//out/Debug/obj/a/a.stamp", computed_outputs[0].value());
+  EXPECT_EQ("//out/Debug/phony/a/a", computed_outputs[0].value());
 }
 
 TEST_F(TargetTest, CheckStampFileName) {
@@ -770,9 +770,7 @@ TEST_F(TargetTest, CheckStampFileName) {
   std::vector<SourceFile> computed_outputs;
   EXPECT_TRUE(target.GetOutputsAsSourceFiles(LocationRange(), true,
                                              &computed_outputs, &err));
-  ASSERT_EQ(1u, computed_outputs.size());
-  EXPECT_EQ("//out/Debug/obj/a/a.stamp", computed_outputs[0].value())
-      << "was instead: " << computed_outputs[0].value();
+  ASSERT_EQ(0u, computed_outputs.size()) << computed_outputs.size();
 }
 
 // Tests Target::GetOutputFilesForSource for action_foreach targets (these, like

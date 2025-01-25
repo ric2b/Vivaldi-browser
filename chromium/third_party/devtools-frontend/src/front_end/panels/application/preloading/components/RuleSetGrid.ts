@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../../ui/components/data_grid/data_grid.js';
+import '../../../../ui/components/icon_button/icon_button.js';
+
 import * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import type * as Platform from '../../../../core/platform/platform.js';
 import {assertNotNullOrUndefined} from '../../../../core/platform/platform.js';
 import * as SDK from '../../../../core/sdk/sdk.js';
 import * as Protocol from '../../../../generated/protocol.js';
-import * as DataGrid from '../../../../ui/components/data_grid/data_grid.js';
-import * as IconButton from '../../../../ui/components/icon_button/icon_button.js';
+import type * as DataGrid from '../../../../ui/components/data_grid/data_grid.js';
 import * as LegacyWrapper from '../../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import type * as UI from '../../../../ui/legacy/legacy.js';
 import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
@@ -19,6 +21,8 @@ import * as PreloadingHelper from '../helper/helper.js';
 
 import * as PreloadingString from './PreloadingString.js';
 import ruleSetGridStyles from './ruleSetGrid.css.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -32,11 +36,11 @@ const UIStrings = {
   /**
    *@description button: Title of button to reveal the corresponding request of rule set in Elements panel
    */
-  buttonClickToRevealInElementsPanel: 'Click to reveal in Elements panel',
+  clickToOpenInElementsPanel: 'Click to open in Elements panel',
   /**
    *@description button: Title of button to reveal the corresponding request of rule set in Network panel
    */
-  buttonClickToRevealInNetworkPanel: 'Click to reveal in Network panel',
+  clickToOpenInNetworkPanel: 'Click to open in Network panel',
   /**
    *@description Value of status, specifying rule set contains how many errors.
    */
@@ -61,7 +65,6 @@ export interface RuleSetGridRow {
 
 // Grid component to show SpeculationRules rule sets.
 export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<UI.Widget.VBox> {
-  static readonly litTagName = LitHtml.literal`devtools-resources-ruleset-grid`;
 
   readonly #shadow = this.attachShadow({mode: 'open'});
   #data: RuleSetGridData|null = null;
@@ -106,12 +109,10 @@ export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    LitHtml.render(LitHtml.html`
+    LitHtml.render(html`
       <div class="ruleset-container"
       jslog=${VisualLogging.pane('preloading-rules')}>
-        <${DataGrid.DataGridController.DataGridController.litTagName} .data=${
-            reportsGridData as DataGrid.DataGridController.DataGridControllerData}>
-        </${DataGrid.DataGridController.DataGridController.litTagName}>
+        <devtools-data-grid-controller .data=${reportsGridData}></devtools-data-grid-controller>
       </div>
     `, this.#shadow, {host: this});
     // clang-format on
@@ -166,10 +167,10 @@ function ruleSetRenderer(
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
+    return html`
       <button class="link" role="link"
         @click=${revealSpeculationRulesInElements}
-        title=${i18nString(UIStrings.buttonClickToRevealInElementsPanel)}
+        title=${i18nString(UIStrings.clickToOpenInElementsPanel)}
         style=${LitHtml.Directives.styleMap({
           border: 'none',
           background: 'none',
@@ -181,18 +182,18 @@ function ruleSetRenderer(
         })}
         jslog=${VisualLogging.action('reveal-in-elements').track({click: true})}
       >
-        <${IconButton.Icon.Icon.litTagName}
+        <devtools-icon
           .data=${{
             iconName: 'code-circle',
             color: 'var(--icon-link)',
             width: '16px',
             height: '16px',
-          } as IconButton.Icon.IconData}
+          }}
           style=${LitHtml.Directives.styleMap({
             'vertical-align': 'sub',
           })}
         >
-        </${IconButton.Icon.Icon.litTagName}>
+        </devtools-icon>
         ${location}
       </button>
     `;
@@ -221,10 +222,10 @@ function ruleSetRenderer(
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
+    return html`
       <button class="link" role="link"
         @click=${revealSpeculationRulesInNetwork}
-        title=${i18nString(UIStrings.buttonClickToRevealInNetworkPanel)}
+        title=${i18nString(UIStrings.clickToOpenInNetworkPanel)}
         style=${LitHtml.Directives.styleMap({
           border: 'none',
           background: 'none',
@@ -235,18 +236,18 @@ function ruleSetRenderer(
           'padding-inline-end': '0',
         })}
       >
-        <${IconButton.Icon.Icon.litTagName}
+        <devtools-icon
          .data=${{
             iconName: 'arrow-up-down-circle',
             color: 'var(--icon-link)',
             width: '16px',
             height: '16px',
-          } as IconButton.Icon.IconData}
+          }}
           style=${LitHtml.Directives.styleMap({
             'vertical-align': 'sub',
           })}
         >
-        </${IconButton.Icon.Icon.litTagName}>
+        </devtools-icon>
         ${location}
       </button>
     `;
@@ -263,7 +264,7 @@ function ruleSetRenderer(
     return ruleSetRendererOutOfDocument(ruleSet, location);
   }
 
-  return LitHtml.html`${location}`;
+  return html`${location}`;
 }
 
 function statusRenderer(preloadsStatusSummary: string, ruleSet: Protocol.Preload.RuleSet): LitHtml.TemplateResult {
@@ -274,7 +275,7 @@ function statusRenderer(preloadsStatusSummary: string, ruleSet: Protocol.Preload
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
+    return html`
       <button class="link" role="link"
         @click=${revealAttemptViewWithFilter}
         title=${i18nString(UIStrings.buttonRevealPreloadsAssociatedWithRuleSet)}
@@ -296,7 +297,7 @@ function statusRenderer(preloadsStatusSummary: string, ruleSet: Protocol.Preload
 
   function errors(): LitHtml.TemplateResult {
     const nErrors = i18nString(UIStrings.errors, {errorCount: 1});
-    return LitHtml.html`
+    return html`
       <span
         style=${LitHtml.Directives.styleMap({
       color: 'var(--sys-color-error)',
@@ -313,6 +314,6 @@ function statusRenderer(preloadsStatusSummary: string, ruleSet: Protocol.Preload
     case Protocol.Preload.RuleSetErrorType.SourceIsNotJsonObject:
       return errors();
     case Protocol.Preload.RuleSetErrorType.InvalidRulesSkipped:
-      return LitHtml.html`${errors()} ${counts(preloadsStatusSummary, ruleSet)}`;
+      return html`${errors()} ${counts(preloadsStatusSummary, ruleSet)}`;
   }
 }

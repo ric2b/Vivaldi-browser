@@ -45,7 +45,7 @@ class VivaldiDesktopWindowTreeHostWin : public views::DesktopWindowTreeHostWin {
  private:
   // Overridden from DesktopWindowTreeHostWin:
   void Init(const views::Widget::InitParams& params) override;
-  void Show(ui::WindowShowState show_state,
+  void Show(ui::mojom::WindowShowState show_state,
             const gfx::Rect& restore_bounds) override;
   std::string GetWorkspace() const override;
   void HandleFrameChanged() override;

@@ -15,7 +15,8 @@ bool StructTraits<blink::mojom::ViewTransitionElementDataView,
     Read(blink::mojom::ViewTransitionElementDataView data,
          blink::ViewTransitionElement* out) {
   if (!data.ReadTagName(&out->tag_name) ||
-      !data.ReadBorderBoxSizeInCssSpace(&out->border_box_size_in_css_space) ||
+      !data.ReadBorderBoxRectInEnclosingLayerCssSpace(
+          &out->border_box_rect_in_enclosing_layer_css_space) ||
       !data.ReadViewportMatrix(&out->viewport_matrix) ||
       !data.ReadOverflowRectInLayoutSpace(
           &out->overflow_rect_in_layout_space) ||
@@ -24,7 +25,8 @@ bool StructTraits<blink::mojom::ViewTransitionElementDataView,
           &out->captured_rect_in_layout_space) ||
       !data.ReadCapturedCssProperties(&out->captured_css_properties) ||
       !data.ReadClassList(&out->class_list) ||
-      !data.ReadContainingGroupName(&out->containing_group_name)) {
+      !data.ReadContainingGroupName(&out->containing_group_name) ||
+      !data.ReadBorderOffset(&out->border_offset)) {
     return false;
   }
 

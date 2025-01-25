@@ -123,10 +123,6 @@ class TestParseDiff(unittest.TestCase):
             self.assertCountEqual(content, diff)
             self.assertCountEqual(change_files, expected)
 
-    def test_diff_to_change_files_raises_on_empty_file(self):
-        with self.assertRaises(presubmit_support.PresubmitFailure):
-            self._test_diff_to_change_files(diff='', expected=[])
-
     def test_diff_to_change_files_raises_on_empty_diff_header(self):
         diff = """
 diff --git a/foo b/foo

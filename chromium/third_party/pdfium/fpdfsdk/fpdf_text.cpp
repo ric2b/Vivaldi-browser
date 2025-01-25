@@ -71,7 +71,7 @@ FPDFText_GetUnicode(FPDF_TEXTPAGE text_page, int index) {
     return 0;
 
   const CPDF_TextPage::CharInfo& charinfo = textpage->GetCharInfo(index);
-  return charinfo.m_Unicode;
+  return charinfo.unicode();
 }
 
 FPDF_EXPORT FPDF_PAGEOBJECT FPDF_CALLCONV
@@ -82,7 +82,7 @@ FPDFText_GetTextObject(FPDF_TEXTPAGE text_page, int index) {
   }
 
   return FPDFPageObjectFromCPDFPageObject(
-      textpage->GetCharInfo(index).m_pTextObj);
+      textpage->GetCharInfo(index).text_object());
 }
 
 FPDF_EXPORT int FPDF_CALLCONV FPDFText_IsGenerated(FPDF_TEXTPAGE text_page,
@@ -92,7 +92,7 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFText_IsGenerated(FPDF_TEXTPAGE text_page,
     return -1;
 
   const CPDF_TextPage::CharInfo& charinfo = textpage->GetCharInfo(index);
-  return charinfo.m_CharType == CPDF_TextPage::CharType::kGenerated ? 1 : 0;
+  return charinfo.char_type() == CPDF_TextPage::CharType::kGenerated ? 1 : 0;
 }
 
 FPDF_EXPORT int FPDF_CALLCONV FPDFText_IsHyphen(FPDF_TEXTPAGE text_page,
@@ -103,7 +103,7 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFText_IsHyphen(FPDF_TEXTPAGE text_page,
   }
 
   const CPDF_TextPage::CharInfo& charinfo = textpage->GetCharInfo(index);
-  return charinfo.m_CharType == CPDF_TextPage::CharType::kHyphen;
+  return charinfo.char_type() == CPDF_TextPage::CharType::kHyphen;
 }
 
 FPDF_EXPORT int FPDF_CALLCONV
@@ -113,7 +113,7 @@ FPDFText_HasUnicodeMapError(FPDF_TEXTPAGE text_page, int index) {
     return -1;
 
   const CPDF_TextPage::CharInfo& charinfo = textpage->GetCharInfo(index);
-  return charinfo.m_CharType == CPDF_TextPage::CharType::kNotUnicode;
+  return charinfo.char_type() == CPDF_TextPage::CharType::kNotUnicode;
 }
 
 FPDF_EXPORT double FPDF_CALLCONV FPDFText_GetFontSize(FPDF_TEXTPAGE text_page,
@@ -136,10 +136,11 @@ FPDFText_GetFontInfo(FPDF_TEXTPAGE text_page,
     return 0;
 
   const CPDF_TextPage::CharInfo& charinfo = textpage->GetCharInfo(index);
-  if (!charinfo.m_pTextObj)
+  if (!charinfo.text_object()) {
     return 0;
+  }
 
-  RetainPtr<CPDF_Font> font = charinfo.m_pTextObj->GetFont();
+  RetainPtr<CPDF_Font> font = charinfo.text_object()->GetFont();
   if (flags)
     *flags = font->GetFontFlags();
 
@@ -158,10 +159,11 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFText_GetFontWeight(FPDF_TEXTPAGE text_page,
     return -1;
 
   const CPDF_TextPage::CharInfo& charinfo = textpage->GetCharInfo(index);
-  if (!charinfo.m_pTextObj)
+  if (!charinfo.text_object()) {
     return -1;
+  }
 
-  return charinfo.m_pTextObj->GetFont()->GetFontWeight();
+  return charinfo.text_object()->GetFont()->GetFontWeight();
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
@@ -176,15 +178,17 @@ FPDFText_GetFillColor(FPDF_TEXTPAGE text_page,
     return false;
 
   const CPDF_TextPage::CharInfo& charinfo = textpage->GetCharInfo(index);
-  if (!charinfo.m_pTextObj)
+  if (!charinfo.text_object()) {
     return false;
+  }
 
-  FX_COLORREF fill_color = charinfo.m_pTextObj->color_state().GetFillColorRef();
+  FX_COLORREF fill_color =
+      charinfo.text_object()->color_state().GetFillColorRef();
   *R = FXSYS_GetRValue(fill_color);
   *G = FXSYS_GetGValue(fill_color);
   *B = FXSYS_GetBValue(fill_color);
   *A = FXSYS_GetUnsignedAlpha(
-      charinfo.m_pTextObj->general_state().GetFillAlpha());
+      charinfo.text_object()->general_state().GetFillAlpha());
   return true;
 }
 
@@ -200,16 +204,17 @@ FPDFText_GetStrokeColor(FPDF_TEXTPAGE text_page,
     return false;
 
   const CPDF_TextPage::CharInfo& charinfo = textpage->GetCharInfo(index);
-  if (!charinfo.m_pTextObj)
+  if (!charinfo.text_object()) {
     return false;
+  }
 
   FX_COLORREF stroke_color =
-      charinfo.m_pTextObj->color_state().GetStrokeColorRef();
+      charinfo.text_object()->color_state().GetStrokeColorRef();
   *R = FXSYS_GetRValue(stroke_color);
   *G = FXSYS_GetGValue(stroke_color);
   *B = FXSYS_GetBValue(stroke_color);
   *A = FXSYS_GetUnsignedAlpha(
-      charinfo.m_pTextObj->general_state().GetStrokeAlpha());
+      charinfo.text_object()->general_state().GetStrokeAlpha());
   return true;
 }
 
@@ -226,7 +231,7 @@ FPDF_EXPORT float FPDF_CALLCONV FPDFText_GetCharAngle(FPDF_TEXTPAGE text_page,
   // | c  d  0 |    | sin(t)   cos(t)  0 |
   // | e  f  1 |    |   0        0     1 |
   // Calculate the angle of the vector
-  float angle = atan2f(charinfo.m_Matrix.c, charinfo.m_Matrix.a);
+  float angle = atan2f(charinfo.matrix().c, charinfo.matrix().a);
   if (angle < 0)
     angle = 2 * FXSYS_PI + angle;
 
@@ -247,10 +252,10 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFText_GetCharBox(FPDF_TEXTPAGE text_page,
     return false;
 
   const CPDF_TextPage::CharInfo& charinfo = textpage->GetCharInfo(index);
-  *left = charinfo.m_CharBox.left;
-  *right = charinfo.m_CharBox.right;
-  *bottom = charinfo.m_CharBox.bottom;
-  *top = charinfo.m_CharBox.top;
+  *left = charinfo.char_box().left;
+  *right = charinfo.char_box().right;
+  *bottom = charinfo.char_box().bottom;
+  *top = charinfo.char_box().top;
   return true;
 }
 
@@ -278,7 +283,7 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFText_GetMatrix(FPDF_TEXTPAGE text_page,
     return false;
 
   const CPDF_TextPage::CharInfo& charinfo = textpage->GetCharInfo(index);
-  *matrix = FSMatrixFromCFXMatrix(charinfo.m_Matrix);
+  *matrix = FSMatrixFromCFXMatrix(charinfo.matrix());
   return true;
 }
 
@@ -292,8 +297,8 @@ FPDFText_GetCharOrigin(FPDF_TEXTPAGE text_page,
     return false;
 
   const CPDF_TextPage::CharInfo& charinfo = textpage->GetCharInfo(index);
-  *x = charinfo.m_Origin.x;
-  *y = charinfo.m_Origin.y;
+  *x = charinfo.origin().x;
+  *y = charinfo.origin().y;
   return true;
 }
 

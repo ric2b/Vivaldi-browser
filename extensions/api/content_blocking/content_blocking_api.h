@@ -10,7 +10,7 @@
 #include "components/ad_blocker/adblock_known_sources_handler.h"
 #include "components/ad_blocker/adblock_rule_manager.h"
 #include "components/ad_blocker/adblock_rule_service.h"
-#include "components/request_filter/adblock_filter/adblock_tab_handler.h"
+#include "components/request_filter/adblock_filter/adblock_state_and_logs.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function.h"
@@ -23,7 +23,7 @@ class ContentBlockingEventRouter
     : public adblock_filter::RuleService::Observer,
       public adblock_filter::RuleManager::Observer,
       public adblock_filter::KnownRuleSourcesHandler::Observer,
-      public adblock_filter::TabHandler::Observer {
+      public adblock_filter::StateAndLogs::Observer {
  public:
   explicit ContentBlockingEventRouter(content::BrowserContext* browser_context);
   ~ContentBlockingEventRouter() override;
@@ -56,7 +56,7 @@ class ContentBlockingEventRouter
   void OnKnownSourceDisabled(adblock_filter::RuleGroup group,
                              uint32_t source_id) override;
 
-  // adblock_filter::TabHandler::Observer implementation.
+  // adblock_filter::StateAndLogs::Observer implementation.
   void OnNewBlockedUrlsReported(
       adblock_filter::RuleGroup group,
       std::set<content::WebContents*> tabs_with_new_blocks) override;
@@ -414,6 +414,19 @@ class ContentBlockingIsExemptOfFilteringFunction : public AdBlockFunction {
 
  private:
   ~ContentBlockingIsExemptOfFilteringFunction() override = default;
+  // AdBlockFunction:
+  ResponseValue RunWithService(
+      adblock_filter::RuleService* rules_service) override;
+};
+
+class ContentBlockingIsExemptByPartnerURLFunction : public AdBlockFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("contentBlocking.isExemptByPartnerURL",
+                             CONTENT_BLOCKING_IS_EXEMPT_BY_PARTNER_URL)
+  ContentBlockingIsExemptByPartnerURLFunction() = default;
+
+ private:
+  ~ContentBlockingIsExemptByPartnerURLFunction() override = default;
   // AdBlockFunction:
   ResponseValue RunWithService(
       adblock_filter::RuleService* rules_service) override;

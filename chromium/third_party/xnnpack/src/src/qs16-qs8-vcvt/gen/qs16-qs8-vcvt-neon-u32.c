@@ -18,15 +18,15 @@ void xnn_qs16_qs8_vcvt_ukernel__neon_u32(
     size_t batch,
     const int16_t* input,
     int8_t* output,
-    const union xnn_qs16_qs8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_qs16_qs8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(int16_t) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const int32x4_t vmultiplier = vld1q_dup_s32(&params->neon.multiplier);
-  const int16x8_t voutput_zero_point = vld1q_dup_s16(&params->neon.output_zero_point);
+  const int32x4_t vmultiplier = vld1q_dup_s32(&params->scalar.multiplier);
+  const int16x8_t voutput_zero_point = vld1q_dup_s16(&params->scalar.output_zero_point);
   for (; batch >= 32 * sizeof(int16_t); batch -= 32 * sizeof(int16_t)) {
     const int16x8_t vx0 = vld1q_s16(input); input += 8;
     const int16x8_t vx1 = vld1q_s16(input); input += 8;

@@ -40,22 +40,20 @@ cc_library(
         "timer.h",
         "utils.h",
     ],
-    copts = [
-        "-Ithird_party/nearby/internal/platform/implementation/windows/generated",
-        "-Wno-non-virtual-dtor",
-        "-Wno-vla-extension",
-    ],
     defines = ["_SILENCE_CLANG_COROUTINE_MESSAGE"],
-    visibility = ["//sharing/internal/impl/windows:__pkg__"],
+    visibility = [
+        "//sharing/internal/impl/windows:__pkg__",
+    ],
     deps = [
         ":comm",
         "//internal/base:bluetooth_address",
         "//internal/base:files",
         "//internal/flags:nearby_flags",
         "//internal/platform:base",
-        "//internal/platform:types",
+        "//internal/platform:logging",
         "//internal/platform:uuid",
         "//internal/platform/implementation:types",
+        "//internal/platform/implementation/windows:string_utils",
         "//internal/platform/implementation/windows/generated:types",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -113,12 +111,12 @@ cc_library(
         "//connections/implementation/flags:connections_flags",
         "//internal/flags:nearby_flags",
         "//internal/platform:base",
-        "//internal/platform:comm",
-        "//internal/platform:types",
         "//internal/platform:uuid",
         "//internal/platform/flags:platform_flags",
         "//internal/platform/implementation:account_manager",
         "//internal/platform/implementation:comm",
+        "//internal/platform/implementation:wifi_utils",
+        "//internal/platform/implementation/shared:count_down_latch",
         "//internal/platform/implementation/windows/generated:types",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -145,6 +143,26 @@ cc_library(
         "//internal/platform/implementation:types",
         "@boringssl//:crypto",
         "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "string_utils",
+    srcs = [
+        "string_utils.cc",
+    ],
+    hdrs = [
+        "string_utils.h",
+    ],
+    compatible_with = ["//buildenv/target:non_prod"],
+    visibility = [
+        "//internal/platform:__subpackages__",
+        "//location/nearby:__subpackages__",
+    ],
+    deps = [
+        "//internal/platform:logging",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
     ],
 )
 
@@ -197,8 +215,7 @@ cc_library(
     # WFD API is only support after _WIN32_WINNT_WIN8, but the current lexan _WIN32_WINNT is set to _WIN32_WINNT_WIN7
     copts = [
         "-DNO_INTEL_PIE",
-        "-Ithird_party/nearby/internal/platform/implementation/windows/generated -D_WIN32_WINNT=_WIN32_WINNT_WIN10 -DWINVER=_WIN32_WINNT_WIN10",
-        "-Wno-non-virtual-dtor",
+        "-D_WIN32_WINNT=_WIN32_WINNT_WIN10 -DWINVER=_WIN32_WINNT_WIN10",
         "-Wno-unused-variable",
         "-Wno-unused-value",
     ],
@@ -206,6 +223,7 @@ cc_library(
     visibility = [
         "//chrome/chromeos/assistant/data_migration/lib:__pkg__",
         "//connections:__subpackages__",
+        "//connections:partners",
         "//fastpair:__subpackages__",
         "//internal/platform:__subpackages__",
         "//location/nearby:__subpackages__",
@@ -215,6 +233,7 @@ cc_library(
     deps = [
         ":comm",
         ":crypto",  # build_cleaner: keep
+        ":string_utils",
         ":types",
         "//connections/implementation/flags:connections_flags",
         "//internal/account",
@@ -222,13 +241,13 @@ cc_library(
         "//internal/flags:nearby_flags",
         "//internal/platform:base",
         "//internal/platform:cancellation_flag",
-        "//internal/platform:comm",
-        "//internal/platform:types",
+        "//internal/platform:logging",
         "//internal/platform:uuid",
         "//internal/platform/flags:platform_flags",
         "//internal/platform/implementation:comm",
         "//internal/platform/implementation:platform",
         "//internal/platform/implementation:types",
+        "//internal/platform/implementation:wifi_utils",
         "//internal/platform/implementation/shared:count_down_latch",
         "//internal/platform/implementation/shared:file",
         "//internal/platform/implementation/windows/generated:types",
@@ -294,7 +313,7 @@ cc_test(
         "wifi_hotspot_test.cc",
         "wifi_medium_test.cc",
     ],
-    copts = ["-Ithird_party/nearby/internal/platform/implementation/windows/generated -DCORE_ADAPTER_DLL"],
+    copts = ["-DCORE_ADAPTER_DLL"],
     tags = ["nozapfhahn"],
     deps = [
         ":comm",
@@ -303,7 +322,7 @@ cc_test(
         ":types",
         ":windows",
         "//internal/platform:base",
-        "//internal/platform:types",
+        "//internal/platform:logging",
         "//internal/platform/implementation:comm",
         "//internal/platform/implementation:platform",
         "//internal/platform/implementation:types",
@@ -317,5 +336,19 @@ cc_test(
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
         "@nlohmann_json//:json",
+    ],
+)
+
+cc_test(
+    name = "string_utils_test",
+    size = "small",
+    timeout = "short",
+    srcs = [
+        "string_utils_test.cc",
+    ],
+    deps = [
+        ":string_utils",
+        "@com_github_protobuf_matchers//protobuf-matchers",
+        "@com_google_googletest//:gtest_main",
     ],
 )

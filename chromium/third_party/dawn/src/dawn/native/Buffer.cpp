@@ -37,6 +37,7 @@
 #include "absl/strings/str_format.h"
 #include "dawn/common/Alloc.h"
 #include "dawn/common/Assert.h"
+#include "dawn/common/StringViewUtils.h"
 #include "dawn/native/Adapter.h"
 #include "dawn/native/CallbackTaskManager.h"
 #include "dawn/native/ChainUtils.h"
@@ -340,8 +341,8 @@ struct BufferBase::MapAsyncEvent2 final : public BufferBase::MapAsyncEvent {
 
         if (completionType == EventCompletionType::Shutdown) {
             mCallback(WGPUMapAsyncStatus_InstanceDropped,
-                      "A valid external Instance reference no longer exists.", userdata1,
-                      userdata2);
+                      ToOutputStringView("A valid external Instance reference no longer exists."),
+                      userdata1, userdata2);
             return;
         }
 
@@ -368,10 +369,10 @@ struct BufferBase::MapAsyncEvent2 final : public BufferBase::MapAsyncEvent {
         });
         if (error) {
             DAWN_ASSERT(!pendingErrorData.message.empty());
-            mCallback(pendingErrorData.status, pendingErrorData.message.c_str(), userdata1,
-                      userdata2);
+            mCallback(pendingErrorData.status, ToOutputStringView(pendingErrorData.message),
+                      userdata1, userdata2);
         } else {
-            mCallback(WGPUMapAsyncStatus_Success, nullptr, userdata1, userdata2);
+            mCallback(WGPUMapAsyncStatus_Success, kEmptyOutputStringView, userdata1, userdata2);
         }
     }
 
@@ -587,8 +588,14 @@ MaybeError BufferBase::MapAtCreation() {
     DeviceBase* device = GetDevice();
     if (device->IsToggleEnabled(Toggle::LazyClearResourceOnFirstUse) &&
         !device->IsToggleEnabled(Toggle::DisableLazyClearForMappedAtCreationBuffer)) {
-        memset(ptr, uint8_t(0u), size);
-        device->IncrementLazyClearCountForTesting();
+        // The staging buffer is created with `MappedAtCreation == true` so we don't need to clear
+        // it again.
+        if (mStagingBuffer != nullptr) {
+            DAWN_ASSERT(!mStagingBuffer->NeedsInitialization());
+        } else {
+            memset(ptr, uint8_t(0u), size);
+            device->IncrementLazyClearCountForTesting();
+        }
     } else if (device->IsToggleEnabled(Toggle::NonzeroClearResourcesOnCreationForTesting)) {
         memset(ptr, uint8_t(1u), size);
     }
@@ -623,8 +630,6 @@ MaybeError BufferBase::MapAtCreationInternal() {
             stagingBufferDesc.size = Align(GetAllocatedSize(), 4);
             stagingBufferDesc.mappedAtCreation = true;
             stagingBufferDesc.label = "Dawn_MappedAtCreationStaging";
-
-            IgnoreLazyClearCountScope scope(GetDevice());
             DAWN_TRY_ASSIGN(mStagingBuffer, GetDevice()->CreateBuffer(&stagingBufferDesc));
         }
     }
@@ -885,8 +890,7 @@ MaybeError BufferBase::CopyFromStagingBuffer() {
     DAWN_TRY(
         GetDevice()->CopyFromStagingToBuffer(mStagingBuffer.Get(), 0, this, 0, GetAllocatedSize()));
 
-    DynamicUploader* uploader = GetDevice()->GetDynamicUploader();
-    uploader->ReleaseStagingBuffer(std::move(mStagingBuffer));
+    mStagingBuffer = nullptr;
 
     return {};
 }

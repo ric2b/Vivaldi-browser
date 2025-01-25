@@ -131,6 +131,15 @@ class AutofillField : public FormFieldData {
     possible_profile_value_sources_ = std::move(possible_profile_value_sources);
   }
 
+  std::optional<ProfileValueSource> assumed_profile_value_source() const {
+    return assumed_profile_value_source_;
+  }
+
+  void set_assumed_profile_value_source(
+      std::optional<ProfileValueSource> value_source) {
+    assumed_profile_value_source_ = value_source;
+  }
+
   void SetHtmlType(HtmlFieldType type, HtmlFieldMode mode);
 
   void set_previously_autofilled(bool previously_autofilled) {
@@ -367,14 +376,15 @@ class AutofillField : public FormFieldData {
   }
 
   const std::vector<FieldLogEventType>& field_log_events() const {
-    return field_log_events_;
+    static const std::vector<FieldLogEventType> empty_vector{};
+    return field_log_events_ ? *field_log_events_ : empty_vector;
   }
 
   // Avoid holding references to the return value. It is invalidated by
   // AppendLogEventIfNotRepeated().
   base::optional_ref<FieldLogEventType> last_field_log_event() {
-    if (!field_log_events_.empty()) {
-      return field_log_events_.back();
+    if (field_log_events_ && !field_log_events_->empty()) {
+      return field_log_events_->back();
     }
     return std::nullopt;
   }
@@ -384,7 +394,11 @@ class AutofillField : public FormFieldData {
   void AppendLogEventIfNotRepeated(const FieldLogEventType& log_event);
 
   // Clear all the log events for this field.
-  void ClearLogEvents() { field_log_events_.clear(); }
+  void ClearLogEvents() {
+    if (field_log_events_) {
+      field_log_events_->clear();
+    }
+  }
 
   void set_autofill_source_profile_guid(
       std::optional<std::string> autofill_profile_guid) {
@@ -453,15 +467,12 @@ class AutofillField : public FormFieldData {
   std::array<FieldType, static_cast<size_t>(HeuristicSource::kMaxValue) + 1>
       local_type_predictions_;
 
-  // The type of the field. Overrides all other types (html_type_,
-  // heuristic_type_).
-  // |AutofillType(NO_SERVER_DATA)| is used when this |overall_type_| has not
-  // been set.
-  // This field serves as a cache to prevent frequent re-evaluation of
-  // ComputedType(). It is invalidated when set_heuristic_type(),
-  // set_server_predictions() or SetHtmlType() is called and then set to a
-  // value during the rationalization.
-  AutofillType overall_type_;
+  // The rationalized `ComputedType()`. This is the type used for all
+  // autofilling operations. It defaults to `ComputedType()` and is invalidated
+  // when `set_heuristic_type()`, `set_server_predictions()` or `SetHtmlType()`
+  // are called. Rationalization potentially overwrites it using `SetTypeTo()`.
+  // The result is cached to prevent frequent re-evaluation of `ComputedType()`.
+  mutable AutofillType overall_type_;
 
   // The type of the field, as specified by the site author in HTML.
   HtmlFieldType html_type_ = HtmlFieldType::kUnspecified;
@@ -482,6 +493,14 @@ class AutofillField : public FormFieldData {
   // contained in `possible_types_` with the additional information in which
   // profile the matching type was detected.
   PossibleProfileValueSources possible_profile_value_sources_;
+
+  // Holds the assumed profile and type of the `value` found in this field.
+  // The assumed source may be derived by using the
+  // `possible_profile_value_sources_` or the `autofill_source_profile_guid_`.
+  // There are no strong guarantees regarding the consistency between those
+  // different fields. The `nullopt` state indicates that no assumed value
+  // source was identified yet.
+  std::optional<ProfileValueSource> assumed_profile_value_source_;
 
   // The field's initial value. By default, it's the same as the field's
   // `value()`, but FormStructure::RetrieveFromCache() may override it.
@@ -565,7 +584,8 @@ class AutofillField : public FormFieldData {
   // during autofill or editing, such as user clicks on the field, the
   // suggestion list is shown for the field, user accepts one suggestion to
   // fill the form and user edits the field.
-  std::vector<FieldLogEventType> field_log_events_;
+  std::optional<std::vector<FieldLogEventType>> field_log_events_ =
+      std::vector<FieldLogEventType>{};
 
   // The autofill profile's GUID that was used for field filling. It corresponds
   // to the autofill profile's GUID for the last address filling value of the

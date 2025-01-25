@@ -56,9 +56,6 @@ BASE_DECLARE_FEATURE(kApiUserScriptsMultipleWorlds);
 // Controls the availability of the odfsConfigPrivate API.
 BASE_DECLARE_FEATURE(kApiOdfsConfigPrivate);
 
-// Controls the availability of navigation to file URLs.
-BASE_DECLARE_FEATURE(kRestrictFileURLNavigation);
-
 // If enabled, allows using the
 // `enterprise.reportingPrivate.reportDataMaskingEvent` API.
 BASE_DECLARE_FEATURE(kApiEnterpriseReportingPrivateReportDataMaskingEvent);
@@ -94,6 +91,9 @@ BASE_DECLARE_FEATURE(kCheckingNoExtensionIdInExtensionIpcs);
 // embedding Chrome App to request access to Human Interface Devices.
 BASE_DECLARE_FEATURE(kEnableWebHidInWebView);
 
+// If enabled, disables unpacked extensions if developer mode is off.
+BASE_DECLARE_FEATURE(kExtensionDisableUnsupportedDeveloper);
+
 // Determine if dynamic extension URLs are handled and redirected.
 BASE_DECLARE_FEATURE(kExtensionDynamicURLRedirection);
 
@@ -108,13 +108,23 @@ BASE_DECLARE_FEATURE(kExtensionManifestV2DeprecationWarning);
 // Users can re-enable these extensions.
 BASE_DECLARE_FEATURE(kExtensionManifestV2Disabled);
 
+// Controls fully removing support for user-installed MV2 extensions.
+// Users may no longer re-enable these extensions. Enterprises may still
+// override this.
+BASE_DECLARE_FEATURE(kExtensionManifestV2Unsupported);
+
 // Allows server-side configuration of a temporary exception list.
 BASE_DECLARE_FEATURE(kExtensionManifestV2ExceptionList);
 extern const base::FeatureParam<std::string>
     kExtensionManifestV2ExceptionListParam;
 
-// Side panel API availability.
-BASE_DECLARE_FEATURE(kExtensionSidePanelIntegration);
+// A feature to allow legacy MV2 extensions, even if they are not supported by
+// the browser or experiment configuration. This is important to allow
+// developers of MV2 extensions to continue loading, running, and testing their
+// extensions for as long as MV2 is supported in any variant.
+// This will be removed once the ExtensionManifestV2Availability enterprise
+// policy is no longer supported.
+BASE_DECLARE_FEATURE(kAllowLegacyMV2Extensions);
 
 // IsValidSourceUrl enforcement for ExtensionHostMsg_OpenChannelToExtension IPC.
 BASE_DECLARE_FEATURE(kExtensionSourceUrlEnforcement);
@@ -151,22 +161,11 @@ BASE_DECLARE_FEATURE(kForceWebRequestProxyForTest);
 // cmd.exe process as a proxy.
 BASE_DECLARE_FEATURE(kLaunchWindowsNativeHostsDirectly);
 
-#if BUILDFLAG(IS_MAC)
-// Controls whether extension resource file paths ending with a separator are
-// rejected. See https://crbug.com/356878412.
-// TODO(crbug.com/357636604): Remove this feature flag in M132.
-BASE_DECLARE_FEATURE(kMacRejectFilePathsEndingWithSeparator);
-#endif
-
 // Controls whether extensions can use the new favicon fetching in Manifest V3.
 BASE_DECLARE_FEATURE(kNewExtensionFaviconHandling);
 
 // To investigate signal beacon loss in crrev.com/c/2262402.
 BASE_DECLARE_FEATURE(kReportKeepaliveUkm);
-
-// When enabled, causes extensions to allow access to certain APIs only if the
-// user is in the developer mode.
-BASE_DECLARE_FEATURE(kRestrictDeveloperModeAPIs);
 
 // Reports Extensions.WebRequest.KeepaliveRequestFinished when enabled.
 // Automatically disable extensions not included in the Safe Browsing CRX
@@ -207,11 +206,6 @@ BASE_DECLARE_FEATURE(kDeclarativeNetRequestResponseHeaderMatching);
 // limit.
 BASE_DECLARE_FEATURE(kDeclarativeNetRequestSafeRuleLimits);
 
-// If enabled, extensions installed from .zip files (from dev mode) are changed
-// from installing in base::TEMP_DIR to .../<profile_dir>/UnpackedExtensions and
-// persist until removed by the user.
-BASE_DECLARE_FEATURE(kExtensionsZipFileInstalledInProfileDir);
-
 // If enabled, include JS call stack data in the extension API request
 // sent to the browser process. This data is used for telemetry purpose
 // only.
@@ -232,6 +226,8 @@ BASE_DECLARE_FEATURE(kUseNewServiceWorkerTaskQueue);
 // type for modifying headers.
 BASE_DECLARE_FEATURE(kDeclarativeNetRequestHeaderSubstitution);
 
+// Show no warning banner when an extension uses CDP's `chrome.debugger`.
+BASE_DECLARE_FEATURE(kSilentDebuggerExtensionAPI);
 }  // namespace extensions_features
 
 #endif  // EXTENSIONS_COMMON_EXTENSION_FEATURES_H_

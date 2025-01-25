@@ -20,17 +20,19 @@ void xnn_f32_qu8_vcvt_ukernel__sse2_u8(
     size_t batch,
     const float* input,
     uint8_t* output,
-    const union xnn_f32_qu8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f32_qu8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const __m128 vscale = _mm_load_ps(params->sse2.scale);
-  const __m128 voutput_max_less_zero_point = _mm_load_ps(params->sse2.output_max_less_zero_point);
-  const __m128i voutput_zero_point = _mm_load_si128((const __m128i*) params->sse2.output_zero_point);
-  const __m128i voutput_min = _mm_load_si128((const __m128i*) params->sse2.output_min);
+  const __m128 vscale = _mm_set1_ps(params->scalar.scale);
+  const __m128 voutput_max_less_zero_point = _mm_set1_ps((float) ((int32_t) 255 - (int32_t) params->scalar.output_zero_point));
+  const __m128i voutput_zero_point = _mm_set1_epi16(params->scalar.output_zero_point);
+  XNN_FORCE_REALIZATION(vscale);
+  XNN_FORCE_REALIZATION(voutput_max_less_zero_point);
+  XNN_FORCE_REALIZATION(voutput_zero_point);
 
   for (; batch >= 8 * sizeof(float); batch -= 8 * sizeof(float)) {
     __m128 vx_lo = _mm_loadu_ps(input);
@@ -49,7 +51,6 @@ void xnn_f32_qu8_vcvt_ukernel__sse2_u8(
     __m128i vy = _mm_packs_epi32(vy_lo, vy_hi);
     vy = _mm_adds_epi16(vy, voutput_zero_point);
     vy = _mm_packus_epi16(vy, vy);
-    vy = _mm_max_epu8(vy, voutput_min);
 
     _mm_storel_epi64((__m128i*) output, vy);
     output += 8;
@@ -71,7 +72,6 @@ void xnn_f32_qu8_vcvt_ukernel__sse2_u8(
     __m128i vy = _mm_packs_epi32(vy_lo, vy_hi);
     vy = _mm_adds_epi16(vy, voutput_zero_point);
     vy = _mm_packus_epi16(vy, vy);
-    vy = _mm_max_epu8(vy, voutput_min);
 
     if (batch & (4 * sizeof(float))) {
       unaligned_store_u32(output, (uint32_t) _mm_cvtsi128_si32(vy));

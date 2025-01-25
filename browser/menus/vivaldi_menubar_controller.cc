@@ -18,17 +18,21 @@
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/favicon/core/favicon_service.h"
+#include "components/prefs/pref_service.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "ui/base/mojom/menu_source_type.mojom-shared.h"
 #include "ui/base/theme_provider.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/submenu_view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_context_menu.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi {
 
@@ -471,6 +475,12 @@ void MenubarController::Show() {
     extensions::MenubarMenuAPI::SendError(GetProfile(), "No menu");
     extensions::MenubarMenuAPI::SendClose(GetProfile());
   } else {
+    Profile* profile = Profile::FromBrowserContext(
+        web_contents_->GetBrowserContext());
+    views::MenuController::VivaldiSetCompactLayout(
+        profile->GetPrefs()->GetBoolean(vivaldiprefs::kMenuCompact));
+    views::MenuController::VivaldiSetContextMenu(false);
+
     int32_t types = views::MenuRunner::HAS_MNEMONICS;
     if (run_types_ & views::MenuRunner::SHOULD_SHOW_MNEMONICS)
       types |= views::MenuRunner::SHOULD_SHOW_MNEMONICS;
@@ -482,7 +492,7 @@ void MenubarController::Show() {
     const gfx::Rect& rect = state_.GetSibling(active_menu_id_)->rect;
     menu_runner_->RunMenuAt(parent, nullptr, rect,
                             views::MenuAnchorPosition::kTopLeft,
-                            ui::MENU_SOURCE_NONE);
+                            ui::mojom::MenuSourceType::kNone);
   }
 }
 
@@ -556,7 +566,8 @@ void MenubarController::ExecuteCommand(int id, int mouse_event_flags) {
   if (IsBookmarkCommand(id) || IsVivaldiMenuItem(id)) {
     bookmark_menu_delegate_->ExecuteCommand(id, mouse_event_flags);
   } else {
-    extensions::MenubarMenuAPI::SendAction(GetProfile(), id, mouse_event_flags);
+    extensions::MenubarMenuAPI::SendAction(
+        GetProfile(), id, mouse_event_flags, false);
   }
 }
 
@@ -579,9 +590,9 @@ void MenubarController::VivaldiSelectionChanged(views::MenuItemView* menu) {
 }
 
 bool MenubarController::ShowContextMenu(views::MenuItemView* source,
-                              int command_id,
-                              const gfx::Point& p,
-                              ui::MenuSourceType source_type) {
+                                        int command_id,
+                                        const gfx::Point& p,
+                                        ui::mojom::MenuSourceType source_type) {
   return IsBookmarkCommand(command_id)
              ? bookmark_menu_delegate_->ShowContextMenu(source, command_id, p,
                                                         source_type)

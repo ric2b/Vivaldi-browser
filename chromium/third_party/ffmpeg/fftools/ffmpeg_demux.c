@@ -66,6 +66,7 @@ typedef struct DemuxStream {
     int                      have_sub2video;
     int                      reinit_filters;
     int                      autorotate;
+    int                      apply_cropping;
 
 
     int                      wrap_correction_done;
@@ -239,7 +240,7 @@ static void ts_discontinuity_detect(Demuxer *d, InputStream *ist,
             }
         } else {
             if (FFABS(delta) > 1LL * dts_error_threshold * AV_TIME_BASE) {
-                av_log(NULL, AV_LOG_WARNING,
+                av_log(ist, AV_LOG_WARNING,
                        "DTS %"PRId64", next:%"PRId64" st:%d invalid dropping\n",
                        pkt->dts, ds->next_dts, pkt->stream_index);
                 pkt->dts = AV_NOPTS_VALUE;
@@ -248,7 +249,7 @@ static void ts_discontinuity_detect(Demuxer *d, InputStream *ist,
                 int64_t pkt_pts = av_rescale_q(pkt->pts, pkt->time_base, AV_TIME_BASE_Q);
                 delta = pkt_pts - ds->next_dts;
                 if (FFABS(delta) > 1LL * dts_error_threshold * AV_TIME_BASE) {
-                    av_log(NULL, AV_LOG_WARNING,
+                    av_log(ist, AV_LOG_WARNING,
                            "PTS %"PRId64", next:%"PRId64" invalid dropping st:%d\n",
                            pkt->pts, ds->next_dts, pkt->stream_index);
                     pkt->pts = AV_NOPTS_VALUE;
@@ -260,7 +261,7 @@ static void ts_discontinuity_detect(Demuxer *d, InputStream *ist,
         int64_t delta = pkt_dts - d->last_ts;
         if (FFABS(delta) > 1LL * dts_delta_threshold * AV_TIME_BASE) {
             d->ts_offset_discont -= delta;
-            av_log(NULL, AV_LOG_DEBUG,
+            av_log(ist, AV_LOG_DEBUG,
                    "Inter stream timestamp discontinuity %"PRId64", new offset= %"PRId64"\n",
                    delta, d->ts_offset_discont);
             pkt->dts -= av_rescale_q(delta, AV_TIME_BASE_Q, pkt->time_base);
@@ -475,7 +476,7 @@ static int input_packet_process(Demuxer *d, AVPacket *pkt, unsigned *send_flags)
     fd->wallclock[LATENCY_PROBE_DEMUX] = av_gettime_relative();
 
     if (debug_ts) {
-        av_log(NULL, AV_LOG_INFO, "demuxer+ffmpeg -> ist_index:%d:%d type:%s pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s duration:%s duration_time:%s off:%s off_time:%s\n",
+        av_log(ist, AV_LOG_INFO, "demuxer+ffmpeg -> ist_index:%d:%d type:%s pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s duration:%s duration_time:%s off:%s off_time:%s\n",
                f->index, pkt->stream_index,
                av_get_media_type_string(ist->par->codec_type),
                av_ts2str(pkt->pts), av_ts2timestr(pkt->pts, &pkt->time_base),
@@ -839,7 +840,6 @@ static void ist_free(InputStream **pist)
 
     av_dict_free(&ds->decoder_opts);
     av_freep(&ist->filters);
-    av_freep(&ist->outputs);
     av_freep(&ds->dec_opts.hwaccel_device);
 
     avcodec_parameters_free(&ist->par);
@@ -873,7 +873,8 @@ void ifile_close(InputFile **pf)
     av_freep(pf);
 }
 
-static int ist_use(InputStream *ist, int decoding_needed)
+int ist_use(InputStream *ist, int decoding_needed,
+            const ViewSpecifier *vs, SchedulerNode *src)
 {
     Demuxer      *d = demuxer_from_ifile(ist->file);
     DemuxStream *ds = ds_from_ist(ist);
@@ -953,43 +954,37 @@ static int ist_use(InputStream *ist, int decoding_needed)
         ds->sch_idx_dec = ret;
 
         ret = sch_connect(d->sch, SCH_DSTREAM(d->f.index, ds->sch_idx_stream),
-                                  SCH_DEC(ds->sch_idx_dec));
+                                  SCH_DEC_IN(ds->sch_idx_dec));
         if (ret < 0)
             return ret;
 
         d->have_audio_dec |= is_audio;
     }
 
+    if (decoding_needed && ist->par->codec_type == AVMEDIA_TYPE_VIDEO) {
+        ret = dec_request_view(ist->decoder, vs, src);
+        if (ret < 0)
+            return ret;
+    } else {
+        *src = decoding_needed                             ?
+               SCH_DEC_OUT(ds->sch_idx_dec, 0)             :
+               SCH_DSTREAM(d->f.index, ds->sch_idx_stream);
+    }
+
     return 0;
 }
 
-int ist_output_add(InputStream *ist, OutputStream *ost)
-{
-    DemuxStream *ds = ds_from_ist(ist);
-    int ret;
-
-    ret = ist_use(ist, ost->enc ? DECODING_FOR_OST : 0);
-    if (ret < 0)
-        return ret;
-
-    ret = GROW_ARRAY(ist->outputs, ist->nb_outputs);
-    if (ret < 0)
-        return ret;
-
-    ist->outputs[ist->nb_outputs - 1] = ost;
-
-    return ost->enc ? ds->sch_idx_dec : ds->sch_idx_stream;
-}
-
 int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple,
-                   InputFilterOptions *opts)
+                   const ViewSpecifier *vs, InputFilterOptions *opts,
+                   SchedulerNode *src)
 {
     Demuxer      *d = demuxer_from_ifile(ist->file);
     DemuxStream *ds = ds_from_ist(ist);
     int64_t tsoffset = 0;
     int ret;
 
-    ret = ist_use(ist, is_simple ? DECODING_FOR_OST : DECODING_FOR_FILTER);
+    ret = ist_use(ist, is_simple ? DECODING_FOR_OST : DECODING_FOR_FILTER,
+                  vs, src);
     if (ret < 0)
         return ret;
 
@@ -1000,11 +995,23 @@ int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple,
     ist->filters[ist->nb_filters - 1] = ifilter;
 
     if (ist->par->codec_type == AVMEDIA_TYPE_VIDEO) {
+        const AVPacketSideData *sd = av_packet_side_data_get(ist->par->coded_side_data,
+                                                             ist->par->nb_coded_side_data,
+                                                             AV_PKT_DATA_FRAME_CROPPING);
         if (ist->framerate.num > 0 && ist->framerate.den > 0) {
             opts->framerate = ist->framerate;
             opts->flags |= IFILTER_FLAG_CFR;
         } else
             opts->framerate = av_guess_frame_rate(d->f.ctx, ist->st, NULL);
+        if (sd && sd->size >= sizeof(uint32_t) * 4) {
+            opts->crop_top    = AV_RL32(sd->data +  0);
+            opts->crop_bottom = AV_RL32(sd->data +  4);
+            opts->crop_left   = AV_RL32(sd->data +  8);
+            opts->crop_right  = AV_RL32(sd->data + 12);
+            if (ds->apply_cropping && ds->apply_cropping != CROP_CODEC &&
+                (opts->crop_top | opts->crop_bottom | opts->crop_left | opts->crop_right))
+                opts->flags |= IFILTER_FLAG_CROP;
+        }
     } else if (ist->par->codec_type == AVMEDIA_TYPE_SUBTITLE) {
         /* Compute the size of the canvas for the subtitles stream.
            If the subtitles codecpar has set a size, use it. Otherwise use the
@@ -1061,17 +1068,18 @@ int ist_filter_add(InputStream *ist, InputFilter *ifilter, int is_simple,
     opts->flags |= IFILTER_FLAG_AUTOROTATE * !!(ds->autorotate) |
                    IFILTER_FLAG_REINIT     * !!(ds->reinit_filters);
 
-    return ds->sch_idx_dec;
+    return 0;
 }
 
-static int choose_decoder(const OptionsContext *o, AVFormatContext *s, AVStream *st,
+static int choose_decoder(const OptionsContext *o, void *logctx,
+                          AVFormatContext *s, AVStream *st,
                           enum HWAccelID hwaccel_id, enum AVHWDeviceType hwaccel_device_type,
                           const AVCodec **pcodec)
 
 {
-    char *codec_name = NULL;
+    const char *codec_name = NULL;
 
-    MATCH_PER_STREAM_OPT(codec_names, str, codec_name, s, st);
+    opt_match_per_stream_str(logctx, &o->codec_names, s, st, &codec_name);
     if (codec_name) {
         int ret = find_codec(NULL, codec_name, st->codecpar->codec_type, 0, pcodec);
         if (ret < 0)
@@ -1096,7 +1104,7 @@ static int choose_decoder(const OptionsContext *o, AVFormatContext *s, AVStream 
 
                 for (int j = 0; config = avcodec_get_hw_config(c, j); j++) {
                     if (config->device_type == hwaccel_device_type) {
-                        av_log(NULL, AV_LOG_VERBOSE, "Selecting decoder '%s' because of requested hwaccel method %s\n",
+                        av_log(logctx, AV_LOG_VERBOSE, "Selecting decoder '%s' because of requested hwaccel method %s\n",
                                c->name, av_hwdevice_get_type_name(hwaccel_device_type));
                         *pcodec = c;
                         return 0;
@@ -1137,9 +1145,9 @@ static int add_display_matrix_to_stream(const OptionsContext *o,
     int hflip_set = 0, vflip_set = 0, rotation_set = 0;
     int32_t *buf;
 
-    MATCH_PER_STREAM_OPT(display_rotations, dbl, rotation, ctx, st);
-    MATCH_PER_STREAM_OPT(display_hflips,    i,   hflip,    ctx, st);
-    MATCH_PER_STREAM_OPT(display_vflips,    i,   vflip,    ctx, st);
+    opt_match_per_stream_dbl(ist, &o->display_rotations, ctx, st, &rotation);
+    opt_match_per_stream_int(ist, &o->display_hflips, ctx, st, &hflip);
+    opt_match_per_stream_int(ist, &o->display_vflips, ctx, st, &vflip);
 
     rotation_set = rotation != DBL_MAX;
     hflip_set    = hflip != -1;
@@ -1207,19 +1215,20 @@ static DemuxStream *demux_stream_alloc(Demuxer *d, AVStream *st)
     return ds;
 }
 
-static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
+static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st, AVDictionary **opts_used)
 {
     AVFormatContext *ic = d->f.ctx;
     AVCodecParameters *par = st->codecpar;
     DemuxStream *ds;
     InputStream *ist;
-    char *framerate = NULL, *hwaccel_device = NULL;
+    const char *framerate = NULL, *hwaccel_device = NULL;
     const char *hwaccel = NULL;
-    char *hwaccel_output_format = NULL;
-    char *codec_tag = NULL;
-    char *bsfs = NULL;
+    const char *apply_cropping = NULL;
+    const char *hwaccel_output_format = NULL;
+    const char *codec_tag = NULL;
+    const char *bsfs = NULL;
     char *next;
-    char *discard_str = NULL;
+    const char *discard_str = NULL;
     int ret;
 
     ds  = demux_stream_alloc(d, st);
@@ -1236,12 +1245,39 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
     ds->dec_opts.time_base = st->time_base;
 
     ds->ts_scale = 1.0;
-    MATCH_PER_STREAM_OPT(ts_scale, dbl, ds->ts_scale, ic, st);
+    opt_match_per_stream_dbl(ist, &o->ts_scale, ic, st, &ds->ts_scale);
 
     ds->autorotate = 1;
-    MATCH_PER_STREAM_OPT(autorotate, i, ds->autorotate, ic, st);
+    opt_match_per_stream_int(ist, &o->autorotate, ic, st, &ds->autorotate);
 
-    MATCH_PER_STREAM_OPT(codec_tags, str, codec_tag, ic, st);
+    ds->apply_cropping = CROP_ALL;
+    opt_match_per_stream_str(ist, &o->apply_cropping, ic, st, &apply_cropping);
+    if (apply_cropping) {
+        const AVOption opts[] = {
+            { "apply_cropping", NULL, 0, AV_OPT_TYPE_INT,
+                    { .i64 = CROP_ALL }, CROP_DISABLED, CROP_CONTAINER, AV_OPT_FLAG_DECODING_PARAM, .unit = "apply_cropping" },
+                { "none",      NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CROP_DISABLED  }, .unit = "apply_cropping" },
+                { "all",       NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CROP_ALL       }, .unit = "apply_cropping" },
+                { "codec",     NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CROP_CODEC     }, .unit = "apply_cropping" },
+                { "container", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = CROP_CONTAINER }, .unit = "apply_cropping" },
+            { NULL },
+        };
+        const AVClass class = {
+            .class_name = "apply_cropping",
+            .item_name  = av_default_item_name,
+            .option     = opts,
+            .version    = LIBAVUTIL_VERSION_INT,
+        };
+        const AVClass *pclass = &class;
+
+        ret = av_opt_eval_int(&pclass, opts, apply_cropping, &ds->apply_cropping);
+        if (ret < 0) {
+            av_log(ist, AV_LOG_ERROR, "Invalid apply_cropping value '%s'.\n", apply_cropping);
+            return ret;
+        }
+    }
+
+    opt_match_per_stream_str(ist, &o->codec_tags, ic, st, &codec_tag);
     if (codec_tag) {
         uint32_t tag = strtol(codec_tag, &next, 0);
         if (*next) {
@@ -1258,10 +1294,9 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
         if (ret < 0)
             return ret;
 
-        MATCH_PER_STREAM_OPT(hwaccels, str, hwaccel, ic, st);
-        MATCH_PER_STREAM_OPT(hwaccel_output_formats, str,
-                             hwaccel_output_format, ic, st);
-
+        opt_match_per_stream_str(ist, &o->hwaccels, ic, st, &hwaccel);
+        opt_match_per_stream_str(ist, &o->hwaccel_output_formats, ic, st,
+                                       &hwaccel_output_format);
         if (!hwaccel_output_format && hwaccel && !strcmp(hwaccel, "cuvid")) {
             av_log(ist, AV_LOG_WARNING,
                 "WARNING: defaulting hwaccel_output_format to cuda for compatibility "
@@ -1319,7 +1354,7 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
             }
         }
 
-        MATCH_PER_STREAM_OPT(hwaccel_devices, str, hwaccel_device, ic, st);
+        opt_match_per_stream_str(ist, &o->hwaccel_devices, ic, st, &hwaccel_device);
         if (hwaccel_device) {
             ds->dec_opts.hwaccel_device = av_strdup(hwaccel_device);
             if (!ds->dec_opts.hwaccel_device)
@@ -1327,20 +1362,20 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
         }
     }
 
-    ret = choose_decoder(o, ic, st, ds->dec_opts.hwaccel_id,
+    ret = choose_decoder(o, ist, ic, st, ds->dec_opts.hwaccel_id,
                          ds->dec_opts.hwaccel_device_type, &ist->dec);
     if (ret < 0)
         return ret;
 
     if (ist->dec) {
         ret = filter_codec_opts(o->g->codec_opts, ist->st->codecpar->codec_id,
-                                ic, st, ist->dec, &ds->decoder_opts);
+                                ic, st, ist->dec, &ds->decoder_opts, opts_used);
         if (ret < 0)
             return ret;
     }
 
     ds->reinit_filters = -1;
-    MATCH_PER_STREAM_OPT(reinit_filters, i, ds->reinit_filters, ic, st);
+    opt_match_per_stream_int(ist, &o->reinit_filters, ic, st, &ds->reinit_filters);
 
     ist->user_set_discard = AVDISCARD_NONE;
 
@@ -1350,7 +1385,7 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
         (o->data_disable && ist->st->codecpar->codec_type == AVMEDIA_TYPE_DATA))
             ist->user_set_discard = AVDISCARD_ALL;
 
-    MATCH_PER_STREAM_OPT(discard, str, discard_str, ic, st);
+    opt_match_per_stream_str(ist, &o->discard, ic, st, &discard_str);
     if (discard_str) {
         ret = av_opt_set(ist->st, "discard", discard_str, 0);
         if (ret  < 0) {
@@ -1362,6 +1397,9 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
 
     ds->dec_opts.flags |= DECODER_FLAG_BITEXACT * !!o->bitexact;
 
+    av_dict_set_int(&ds->decoder_opts, "apply_cropping",
+                    ds->apply_cropping && ds->apply_cropping != CROP_CONTAINER, 0);
+
     /* Attached pics are sparse, therefore we would not want to delay their decoding
      * till EOF. */
     if (ist->st->disposition & AV_DISPOSITION_ATTACHED_PIC)
@@ -1369,7 +1407,7 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
 
     switch (par->codec_type) {
     case AVMEDIA_TYPE_VIDEO:
-        MATCH_PER_STREAM_OPT(frame_rates, str, framerate, ic, st);
+        opt_match_per_stream_str(ist, &o->frame_rates, ic, st, &framerate);
         if (framerate) {
             ret = av_parse_video_rate(&ist->framerate, framerate);
             if (ret < 0) {
@@ -1381,21 +1419,44 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
 
 #if FFMPEG_OPT_TOP
         ist->top_field_first = -1;
-        MATCH_PER_STREAM_OPT(top_field_first, i, ist->top_field_first, ic, st);
+        opt_match_per_stream_int(ist, &o->top_field_first, ic, st, &ist->top_field_first);
 #endif
 
         break;
     case AVMEDIA_TYPE_AUDIO: {
-        int guess_layout_max = INT_MAX;
-        MATCH_PER_STREAM_OPT(guess_layout_max, i, guess_layout_max, ic, st);
-        guess_input_channel_layout(ist, par, guess_layout_max);
+        const char *ch_layout_str = NULL;
+
+        opt_match_per_stream_str(ist, &o->audio_ch_layouts, ic, st, &ch_layout_str);
+        if (ch_layout_str) {
+            AVChannelLayout ch_layout;
+            ret = av_channel_layout_from_string(&ch_layout, ch_layout_str);
+            if (ret < 0) {
+                av_log(ist, AV_LOG_ERROR, "Error parsing channel layout %s.\n", ch_layout_str);
+                return ret;
+            }
+            if (par->ch_layout.nb_channels <= 0 || par->ch_layout.nb_channels == ch_layout.nb_channels) {
+                av_channel_layout_uninit(&par->ch_layout);
+                par->ch_layout = ch_layout;
+            } else {
+                av_log(ist, AV_LOG_ERROR,
+                    "Specified channel layout '%s' has %d channels, but input has %d channels.\n",
+                    ch_layout_str, ch_layout.nb_channels, par->ch_layout.nb_channels);
+                av_channel_layout_uninit(&ch_layout);
+                return AVERROR(EINVAL);
+            }
+        } else {
+            int guess_layout_max = INT_MAX;
+            opt_match_per_stream_int(ist, &o->guess_layout_max, ic, st, &guess_layout_max);
+            guess_input_channel_layout(ist, par, guess_layout_max);
+        }
         break;
     }
     case AVMEDIA_TYPE_DATA:
     case AVMEDIA_TYPE_SUBTITLE: {
-        char *canvas_size = NULL;
-        MATCH_PER_STREAM_OPT(fix_sub_duration, i, ist->fix_sub_duration, ic, st);
-        MATCH_PER_STREAM_OPT(canvas_sizes, str, canvas_size, ic, st);
+        const char *canvas_size = NULL;
+
+        opt_match_per_stream_int(ist, &o->fix_sub_duration, ic, st, &ist->fix_sub_duration);
+        opt_match_per_stream_str(ist, &o->canvas_sizes, ic, st, &canvas_size);
         if (canvas_size) {
             ret = av_parse_video_size(&par->width, &par->height,
                                       canvas_size);
@@ -1425,7 +1486,7 @@ static int ist_add(const OptionsContext *o, Demuxer *d, AVStream *st)
     if (ist->st->sample_aspect_ratio.num)
         ist->par->sample_aspect_ratio = ist->st->sample_aspect_ratio;
 
-    MATCH_PER_STREAM_OPT(bitstream_filters, str, bsfs, ic, st);
+    opt_match_per_stream_str(ist, &o->bitstream_filters, ic, st, &bsfs);
     if (bsfs) {
         ret = av_bsf_list_parse_str(bsfs, &ds->bsf);
         if (ret < 0) {
@@ -1530,10 +1591,9 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
     InputFile *f;
     AVFormatContext *ic;
     const AVInputFormat *file_iformat = NULL;
-    int err, i, ret = 0;
+    int err, ret = 0;
     int64_t timestamp;
-    AVDictionary *unused_opts = NULL;
-    const AVDictionaryEntry *e = NULL;
+    AVDictionary *opts_used = NULL;
     const char*    video_codec_name = NULL;
     const char*    audio_codec_name = NULL;
     const char* subtitle_codec_name = NULL;
@@ -1686,9 +1746,9 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
         return ret;
 
     /* apply forced codec ids */
-    for (i = 0; i < ic->nb_streams; i++) {
+    for (int i = 0; i < ic->nb_streams; i++) {
         const AVCodec *dummy;
-        ret = choose_decoder(o, ic, ic->streams[i], HWACCEL_NONE, AV_HWDEVICE_TYPE_NONE,
+        ret = choose_decoder(o, f, ic, ic->streams[i], HWACCEL_NONE, AV_HWDEVICE_TYPE_NONE,
                              &dummy);
         if (ret < 0)
             return ret;
@@ -1706,7 +1766,7 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
            first frames to get it. (used in mpeg case for example) */
         ret = avformat_find_stream_info(ic, opts);
 
-        for (i = 0; i < orig_nb_streams; i++)
+        for (int i = 0; i < orig_nb_streams; i++)
             av_dict_free(&opts[i]);
         av_freep(&opts);
 
@@ -1747,7 +1807,7 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
 
         if (!(ic->iformat->flags & AVFMT_SEEK_TO_PTS)) {
             int dts_heuristic = 0;
-            for (i=0; i<ic->nb_streams; i++) {
+            for (int i = 0; i < ic->nb_streams; i++) {
                 const AVCodecParameters *par = ic->streams[i]->codecpar;
                 if (par->video_delay) {
                     dts_heuristic = 1;
@@ -1805,53 +1865,24 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
 
     /* Add all the streams from the given input file to the demuxer */
     for (int i = 0; i < ic->nb_streams; i++) {
-        ret = ist_add(o, d, ic->streams[i]);
-        if (ret < 0)
+        ret = ist_add(o, d, ic->streams[i], &opts_used);
+        if (ret < 0) {
+            av_dict_free(&opts_used);
             return ret;
+        }
     }
 
     /* dump the file content */
     av_dump_format(ic, f->index, filename, 0);
 
     /* check if all codec options have been used */
-    unused_opts = strip_specifiers(o->g->codec_opts);
-    for (i = 0; i < f->nb_streams; i++) {
-        DemuxStream *ds = ds_from_ist(f->streams[i]);
-        e = NULL;
-        while ((e = av_dict_iterate(ds->decoder_opts, e)))
-            av_dict_set(&unused_opts, e->key, NULL, 0);
-    }
+    ret = check_avoptions_used(o->g->codec_opts, opts_used, d, 1);
+    av_dict_free(&opts_used);
+    if (ret < 0)
+        return ret;
 
-    e = NULL;
-    while ((e = av_dict_iterate(unused_opts, e))) {
-        const AVClass *class = avcodec_get_class();
-        const AVOption *option = av_opt_find(&class, e->key, NULL, 0,
-                                             AV_OPT_SEARCH_CHILDREN | AV_OPT_SEARCH_FAKE_OBJ);
-        const AVClass *fclass = avformat_get_class();
-        const AVOption *foption = av_opt_find(&fclass, e->key, NULL, 0,
-                                             AV_OPT_SEARCH_CHILDREN | AV_OPT_SEARCH_FAKE_OBJ);
-        if (!option || foption)
-            continue;
-
-
-        if (!(option->flags & AV_OPT_FLAG_DECODING_PARAM)) {
-            av_log(d, AV_LOG_ERROR, "Codec AVOption %s (%s) is not a decoding "
-                   "option.\n", e->key, option->help ? option->help : "");
-            return AVERROR(EINVAL);
-        }
-
-        av_log(d, AV_LOG_WARNING, "Codec AVOption %s (%s) has not been used "
-               "for any stream. The most likely reason is either wrong type "
-               "(e.g. a video option with no video streams) or that it is a "
-               "private option of some decoder which was not actually used "
-               "for any stream.\n", e->key, option->help ? option->help : "");
-    }
-    av_dict_free(&unused_opts);
-
-    for (i = 0; i < o->dump_attachment.nb_opt; i++) {
-        int j;
-
-        for (j = 0; j < f->nb_streams; j++) {
+    for (int i = 0; i < o->dump_attachment.nb_opt; i++) {
+        for (int j = 0; j < f->nb_streams; j++) {
             InputStream *ist = f->streams[j];
 
             if (check_stream_specifier(ic, ist->st, o->dump_attachment.opt[i].specifier) == 1) {

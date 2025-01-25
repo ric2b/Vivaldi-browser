@@ -91,13 +91,13 @@ std::unique_ptr<BucketRanges> CreateRangesFromData(
 }
 
 // Calculate the number of bytes required to store all of a histogram's
-// "counts". This will return zero (0) if |bucket_count| is not valid.
+// "counts". This will return zero (0) if `bucket_count` is not valid.
 size_t CalculateRequiredCountsBytes(size_t bucket_count) {
   // 2 because each "sample count" also requires a backup "logged count"
   // used for calculating the delta during snapshot operations.
   const size_t kBytesPerBucket = 2 * sizeof(HistogramBase::AtomicCount);
 
-  // If the |bucket_count| is such that it would overflow the return type,
+  // If the `bucket_count` is such that it would overflow the return type,
   // perhaps as the result of a malicious actor, then return zero to
   // indicate the problem to the caller.
   if (bucket_count > std::numeric_limits<size_t>::max() / kBytesPerBucket)
@@ -106,28 +106,25 @@ size_t CalculateRequiredCountsBytes(size_t bucket_count) {
   return bucket_count * kBytesPerBucket;
 }
 
-void MergeSamplesToExistingHistogram(
+bool MergeSamplesToExistingHistogram(
     HistogramBase* existing,
     const HistogramBase* histogram,
     std::unique_ptr<HistogramSamples> samples) {
-#if !BUILDFLAG(IS_NACL)
-  // If the passed |histogram| does not match with |existing| (i.e. the one
-  // registered with the global StatisticsRecorder) due to not being the same
-  // type of histogram or due to specifying different buckets, then unexpected
-  // things may happen further down the line. This may be indicative that a
-  // child process is emitting a histogram with different parameters than the
-  // browser process, for example.
-  // TODO(crbug.com/40064026): Remove this. Used to investigate failures when
-  // merging histograms from an allocator to the global StatisticsRecorder.
-  bool histograms_match = true;
+  // Check if the histograms match, which is necessary for merging their data.
   HistogramType existing_type = existing->GetHistogramType();
+  if (existing_type == HistogramType::DUMMY_HISTOGRAM) {
+    // Merging into a dummy histogram (e.g. histogram is expired) is a no-op and
+    // not considered a failure case.
+    return true;
+  }
   if (histogram->GetHistogramType() != existing_type) {
-    // Different histogram types.
-    histograms_match = false;
-  } else if (existing_type == HistogramType::HISTOGRAM ||
-             existing_type == HistogramType::LINEAR_HISTOGRAM ||
-             existing_type == HistogramType::BOOLEAN_HISTOGRAM ||
-             existing_type == HistogramType::CUSTOM_HISTOGRAM) {
+    return false;  // Merge failed due to different histogram types.
+  }
+
+  if (existing_type == HistogramType::HISTOGRAM ||
+      existing_type == HistogramType::LINEAR_HISTOGRAM ||
+      existing_type == HistogramType::BOOLEAN_HISTOGRAM ||
+      existing_type == HistogramType::CUSTOM_HISTOGRAM) {
     // Only numeric histograms make use of BucketRanges.
     const BucketRanges* existing_buckets =
         static_cast<const Histogram*>(existing)->bucket_ranges();
@@ -135,31 +132,20 @@ void MergeSamplesToExistingHistogram(
         static_cast<const Histogram*>(histogram)->bucket_ranges();
     // DCHECK because HasValidChecksum() recomputes the checksum which can be
     // expensive to do in a loop.
-    DCHECK(existing_buckets->HasValidChecksum() &&
-           histogram_buckets->HasValidChecksum());
+    DCHECK(existing_buckets->HasValidChecksum());
+    DCHECK(histogram_buckets->HasValidChecksum());
 
     if (existing_buckets->checksum() != histogram_buckets->checksum()) {
-      // Different buckets.
-      histograms_match = false;
+      return false;  // Merge failed due to different buckets.
     }
   }
 
-  if (!histograms_match) {
-    // If the histograms do not match, then the call to AddSamples() below might
-    // trigger a NOTREACHED(). Include the histogram name here for
-    // debugging purposes. This is not done in
-    // GetOrCreateStatisticsRecorderHistogram() directly, since that could
-    // incorrectly create crash reports for enum histograms that have newly
-    // appended entries (different bucket max and count).
-    SCOPED_CRASH_KEY_STRING256("PersistentHistogramAllocator", "histogram",
-                               existing->histogram_name());
-    existing->AddSamples(*samples);
-    return;
-  }
-#endif  // !BUILDFLAG(IS_NACL)
-
   // Merge the delta from the passed object to the one in the SR.
-  existing->AddSamples(*samples);
+
+  // It's possible for the buckets to differ but their checksums to match due
+  // to a collision, in which case AddSamples() will return false, which we
+  // propagate to the caller (indicating histogram mismatch).
+  return existing->AddSamples(*samples);
 }
 
 }  // namespace
@@ -192,7 +178,7 @@ std::vector<PersistentMemoryAllocator::Reference>
 PersistentSparseHistogramDataManager::LoadRecords(
     PersistentSampleMapRecords* sample_map_records,
     std::optional<HistogramBase::Sample> until_value) {
-  // DataManager must be locked in order to access the |sample_records_|
+  // DataManager must be locked in order to access the `sample_records_`
   // vectors.
   base::AutoLock auto_lock(lock_);
 
@@ -238,7 +224,7 @@ PersistentSparseHistogramDataManager::LoadRecords(
   }
 
   // Return all references found that have not yet been seen by
-  // |sample_map_records|, up until |until_value| (if applicable).
+  // `sample_map_records`, up until `until_value` (if applicable).
   std::vector<PersistentMemoryAllocator::Reference> new_references;
   CHECK_GE(found_records.size(), sample_map_records->seen_);
   auto new_found_records = base::make_span(found_records)
@@ -246,9 +232,9 @@ PersistentSparseHistogramDataManager::LoadRecords(
   new_references.reserve(new_found_records.size());
   for (const auto& new_record : new_found_records) {
     new_references.push_back(new_record.reference);
-    // Maybe references after |until_value| were found. Stop here immediately in
+    // Maybe references after `until_value` were found. Stop here immediately in
     // such a case, since the caller will not expect any more samples after
-    // |until_value|.
+    // `until_value`.
     if (until_value.has_value() && new_record.value == until_value.value()) {
       break;
     }
@@ -337,9 +323,9 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::GetHistogram(
   // count data (while these must reference the persistent counts) and always
   // add it to the local list of known histograms (while these may be simple
   // references to histograms in other processes).
+  size_t length = 0;
   PersistentHistogramData* data =
-      memory_allocator_->GetAsObject<PersistentHistogramData>(ref);
-  const size_t length = memory_allocator_->GetAllocSize(ref);
+      memory_allocator_->GetAsObject<PersistentHistogramData>(ref, &length);
 
   // Check that metadata is reasonable: name is null-terminated and non-empty,
   // ID fields have been loaded with a hash of the name (0 is considered
@@ -347,7 +333,7 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::GetHistogram(
   if (!data || data->name[0] == '\0' ||
       reinterpret_cast<char*>(data)[length - 1] != '\0' ||
       data->samples_metadata.id == 0 || data->logged_metadata.id == 0 ||
-      // Note: Sparse histograms use |id + 1| in |logged_metadata|.
+      // Note: Sparse histograms use `id + 1` in `logged_metadata`.
       (data->logged_metadata.id != data->samples_metadata.id &&
        data->logged_metadata.id != data->samples_metadata.id + 1) ||
       // Most non-matching values happen due to truncated names. Ideally, we
@@ -390,7 +376,7 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
     histogram_data->histogram_type = histogram_type;
     histogram_data->flags = flags | HistogramBase::kIsPersistent;
 
-    // |counts_ref| relies on being zero'd out initially. Even though this
+    // `counts_ref` relies on being zero'd out initially. Even though this
     // should always be the case, manually zero it out again here in case there
     // was memory corruption (e.g. if the memory was mapped from a corrupted
     // spare file).
@@ -404,7 +390,7 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
     size_t bucket_count = bucket_ranges->bucket_count();
     size_t counts_bytes = CalculateRequiredCountsBytes(bucket_count);
     if (counts_bytes == 0) {
-      // |bucket_count| was out-of-range.
+      // `bucket_count` was out-of-range.
       return nullptr;
     }
 
@@ -412,8 +398,8 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
     // objects for re-use, it would be dangerous for one to hold a reference
     // from a persistent allocator that is not the global one (which is
     // permanent once set). If this stops being the case, this check can
-    // become an "if" condition beside "!ranges_ref" below and before
-    // set_persistent_reference() farther down.
+    // become an `if` condition beside `!ranges_ref` below and before
+    // `set_persistent_reference()` farther down.
     DCHECK_EQ(this, GlobalHistogramAllocator::Get());
 
     // Re-use an existing BucketRanges persistent allocation if one is known;
@@ -450,7 +436,7 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
     if (ranges_ref && histogram_data) {
       histogram_data->minimum = minimum;
       histogram_data->maximum = maximum;
-      // |bucket_count| must fit within 32-bits or the allocation of the counts
+      // `bucket_count` must fit within 32-bits or the allocation of the counts
       // array would have failed for being too large; the allocator supports
       // less than 4GB total size.
       histogram_data->bucket_count = static_cast<uint32_t>(bucket_count);
@@ -463,7 +449,7 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
 
   if (histogram_data) {
     // Create the histogram using resources in persistent memory. This ends up
-    // resolving the "ref" values stored in histogram_data instad of just
+    // resolving the `ref` values stored in histogram_data instead of just
     // using what is already known above but avoids duplicating the switch
     // statement here and serves as a double-check that everything is
     // correct before commiting the new histogram to persistent space.
@@ -506,7 +492,7 @@ void PersistentHistogramAllocator::FinalizeHistogram(Reference ref,
   }
 }
 
-void PersistentHistogramAllocator::MergeHistogramDeltaToStatisticsRecorder(
+bool PersistentHistogramAllocator::MergeHistogramDeltaToStatisticsRecorder(
     HistogramBase* histogram) {
   DCHECK(histogram);
 
@@ -515,20 +501,21 @@ void PersistentHistogramAllocator::MergeHistogramDeltaToStatisticsRecorder(
   // the StatisticsRecorder, which requires acquiring a lock.
   std::unique_ptr<HistogramSamples> samples = histogram->SnapshotDelta();
   if (samples->IsDefinitelyEmpty()) {
-    return;
+    return true;
   }
 
   HistogramBase* existing = GetOrCreateStatisticsRecorderHistogram(histogram);
   if (!existing) {
     // The above should never fail but if it does, no real harm is done.
     // Some metric data will be lost but that is better than crashing.
-    return;
+    return false;
   }
 
-  MergeSamplesToExistingHistogram(existing, histogram, std::move(samples));
+  return MergeSamplesToExistingHistogram(existing, histogram,
+                                         std::move(samples));
 }
 
-void PersistentHistogramAllocator::MergeHistogramFinalDeltaToStatisticsRecorder(
+bool PersistentHistogramAllocator::MergeHistogramFinalDeltaToStatisticsRecorder(
     const HistogramBase* histogram) {
   DCHECK(histogram);
 
@@ -537,17 +524,18 @@ void PersistentHistogramAllocator::MergeHistogramFinalDeltaToStatisticsRecorder(
   // requires acquiring a lock.
   std::unique_ptr<HistogramSamples> samples = histogram->SnapshotFinalDelta();
   if (samples->IsDefinitelyEmpty()) {
-    return;
+    return true;
   }
 
   HistogramBase* existing = GetOrCreateStatisticsRecorderHistogram(histogram);
   if (!existing) {
     // The above should never fail but if it does, no real harm is done.
     // Some metric data will be lost but that is better than crashing.
-    return;
+    return false;
   }
 
-  MergeSamplesToExistingHistogram(existing, histogram, std::move(samples));
+  return MergeSamplesToExistingHistogram(existing, histogram,
+                                         std::move(samples));
 }
 
 std::unique_ptr<PersistentSampleMapRecords>
@@ -602,17 +590,16 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::CreateHistogram(
   uint32_t histogram_ranges_ref = histogram_data_ptr->ranges_ref;
   uint32_t histogram_ranges_checksum = histogram_data_ptr->ranges_checksum;
 
+  size_t allocated_bytes = 0;
   HistogramBase::Sample* ranges_data =
       memory_allocator_->GetAsArray<HistogramBase::Sample>(
           histogram_ranges_ref, kTypeIdRangesArray,
-          PersistentMemoryAllocator::kSizeAny);
+          PersistentMemoryAllocator::kSizeAny, &allocated_bytes);
 
   const uint32_t max_buckets =
       std::numeric_limits<uint32_t>::max() / sizeof(HistogramBase::Sample);
   size_t required_bytes =
       (histogram_bucket_count + 1) * sizeof(HistogramBase::Sample);
-  size_t allocated_bytes =
-      memory_allocator_->GetAllocSize(histogram_ranges_ref);
   if (!ranges_data || histogram_bucket_count < 2 ||
       histogram_bucket_count >= max_buckets ||
       allocated_bytes < required_bytes) {
@@ -640,11 +627,14 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::CreateHistogram(
   }
 
   size_t counts_bytes = CalculateRequiredCountsBytes(histogram_bucket_count);
+  if (counts_bytes == 0) {
+    return nullptr;
+  }
+
   PersistentMemoryAllocator::Reference counts_ref =
       histogram_data_ptr->counts_ref.load(std::memory_order_acquire);
-  if (counts_bytes == 0 ||
-      (counts_ref != 0 &&
-       memory_allocator_->GetAllocSize(counts_ref) < counts_bytes)) {
+  if (counts_ref != 0 && !memory_allocator_->GetAsArray<uint8_t>(
+                             counts_ref, kTypeIdCountsArray, counts_bytes)) {
     return nullptr;
   }
 
@@ -774,6 +764,9 @@ bool GlobalHistogramAllocator::CreateWithFile(const FilePath& file_path,
                                               uint64_t id,
                                               std::string_view name,
                                               bool exclusive_write) {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
+
   uint32_t flags = File::FLAG_OPEN_ALWAYS | File::FLAG_WIN_SHARE_DELETE |
                    File::FLAG_READ | File::FLAG_WRITE;
   if (exclusive_write)
@@ -911,6 +904,8 @@ bool GlobalHistogramAllocator::ParseFilePath(const FilePath& path,
 
 bool GlobalHistogramAllocator::CreateSpareFile(const FilePath& spare_path,
                                                size_t size) {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
   // If the spare file already exists, it was created in a previous session and
   // is still unused, so do nothing.
   if (base::PathExists(spare_path)) {
@@ -972,7 +967,7 @@ void GlobalHistogramAllocator::Set(GlobalHistogramAllocator* allocator) {
   // histogram allocator was initialized.
   //
   // TODO(crbug.com/40945497): CHECK(histogram_count == 0) and remove emit of
-  // early histogram count once |histogram_count| is reliably zero (0) for all
+  // early histogram count once `histogram_count` is reliably zero (0) for all
   // process types.
   size_t histogram_count = StatisticsRecorder::GetHistogramCount();
   if (histogram_count != 0) {

@@ -31,9 +31,7 @@ wgpu::TextureFormat VizToWGPUFormat(const viz::SharedImageFormat& format) {
   if (format == viz::SinglePlaneFormat::kRGBA_F16) {
     return wgpu::TextureFormat::RGBA16Float;
   }
-  NOTREACHED_IN_MIGRATION()
-      << "Unexpected canvas format: " << format.ToString();
-  return wgpu::TextureFormat::RGBA8Unorm;
+  NOTREACHED() << "Unexpected canvas format: " << format.ToString();
 }
 
 }  // namespace
@@ -175,8 +173,7 @@ scoped_refptr<WebGPUMailboxTexture> WebGPUMailboxTexture::FromVideoFrame(
   };
   return base::AdoptRef(new WebGPUMailboxTexture(
       std::move(dawn_control_client), device, desc,
-      video_frame->mailbox_holder(0).mailbox,
-      video_frame->mailbox_holder(0).sync_token,
+      video_frame->shared_image()->mailbox(), video_frame->acquire_sync_token(),
       gpu::webgpu::WEBGPU_MAILBOX_NONE, wgpu::TextureUsage::None,
       std::move(finished_access_callback), nullptr));
 }

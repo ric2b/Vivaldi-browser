@@ -421,14 +421,11 @@ static inline void fill_variance_4x4avg(const uint8_t *src_buf, int src_stride,
   }
 }
 
-// TODO(kyslov) Bring back threshold adjustment based on content state
 static int64_t scale_part_thresh_content(int64_t threshold_base, int speed,
-                                         int width, int height,
-                                         int non_reference_frame) {
-  (void)width;
-  (void)height;
+                                         int non_reference_frame,
+                                         int is_static) {
   int64_t threshold = threshold_base;
-  if (non_reference_frame) threshold = (3 * threshold) >> 1;
+  if (non_reference_frame && !is_static) threshold = (3 * threshold) >> 1;
   if (speed >= 8) {
     return (5 * threshold) >> 2;
   }
@@ -645,11 +642,11 @@ static inline int64_t tune_base_thresh_content(AV1_COMP *cpi,
       updated_thresh_base = (5 * updated_thresh_base) >> 2;
   }
   updated_thresh_base = scale_part_thresh_content(
-      updated_thresh_base, cpi->oxcf.speed, cm->width, cm->height,
-      cpi->ppi->rtc_ref.non_reference_frame);
+      updated_thresh_base, cpi->oxcf.speed,
+      cpi->ppi->rtc_ref.non_reference_frame, cpi->rc.frame_source_sad == 0);
   if (cpi->oxcf.speed >= 11 && source_sad_nonrd > kLowSad &&
       cpi->rc.high_motion_content_screen_rtc)
-    updated_thresh_base = updated_thresh_base << 5;
+    updated_thresh_base = updated_thresh_base << 4;
   return updated_thresh_base;
 }
 
@@ -1011,6 +1008,11 @@ static inline void chroma_check(AV1_COMP *cpi, MACROBLOCK *x, BLOCK_SIZE bsize,
   if (cpi->oxcf.tune_cfg.content == AOM_CONTENT_SCREEN &&
       cpi->rc.high_source_sad) {
     shift_lower_limit = 7;
+  } else if (cpi->oxcf.tune_cfg.content == AOM_CONTENT_SCREEN &&
+             cpi->rc.percent_blocks_with_motion > 90 &&
+             cpi->rc.frame_source_sad > 10000 && source_sad_nonrd > kLowSad) {
+    shift_lower_limit = 8;
+    shift_upper_limit = 3;
   } else if (source_sad_nonrd >= kMedSad && x->source_variance > 500 &&
              cpi->common.width * cpi->common.height >= 640 * 360) {
     shift_upper_limit = 2;

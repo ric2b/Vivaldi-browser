@@ -19,6 +19,7 @@
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
 #include "components/page_load_metrics/browser/features.h"
+#include "components/page_load_metrics/browser/observers/assert_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/page_load_metrics_embedder_interface.h"
 #include "components/page_load_metrics/browser/page_load_metrics_forward_observer.h"
 #include "components/page_load_metrics/browser/page_load_metrics_memory_tracker.h"
@@ -199,6 +200,9 @@ void DispatchObserverTimingCallbacks(PageLoadMetricsObserverInterface* observer,
   if (new_timing.connect_start && !last_timing.connect_start) {
     observer->OnConnectStart(new_timing);
   }
+  if (new_timing.connect_end && !last_timing.connect_end) {
+    observer->OnConnectEnd(new_timing);
+  }
 }
 
 internal::PageLoadTrackerPageType CalculatePageType(
@@ -224,6 +228,21 @@ bool CalculateIsOriginVisit(bool is_first_navigation,
     return false;
   }
   return true;
+}
+
+void RegisterObservers(PageLoadTracker* tracker,
+                       PageLoadMetricsEmbedderInterface* embedder,
+                       content::NavigationHandle* navigation_handle) {
+#if DCHECK_IS_ON()
+  // Link Preview doesn't emit activation event yet and assertion of event
+  // orders fail.
+  //
+  // TODO(b:302999778): Reenable it.
+  if (!tracker->GetWebContents()->IsInPreviewMode()) {
+    tracker->AddObserver(std::make_unique<AssertPageLoadMetricsObserver>());
+  }
+#endif
+  embedder->RegisterObservers(tracker, navigation_handle);
 }
 
 }  // namespace
@@ -261,7 +280,7 @@ PageLoadTracker::PageLoadTracker(
       page_type_(CalculatePageType(navigation_handle)),
       parent_tracker_(std::move(parent_tracker)) {
   DCHECK(!navigation_handle->HasCommitted());
-  embedder_interface_->RegisterObservers(this);
+  RegisterObservers(this, embedder_interface, navigation_handle);
   switch (page_type_) {
     case internal::PageLoadTrackerPageType::kPrimaryPage:
       CHECK_NE(ukm::kInvalidSourceId, source_id_);
@@ -942,6 +961,11 @@ void PageLoadTracker::UpdatePageEndInternal(
 
   if (is_certainly_browser_timestamp) {
     ClampBrowserTimestampIfInterProcessTimeTickSkew(&page_end_time_);
+  }
+  if (page_end_reason_ == END_RENDER_PROCESS_GONE) {
+    for (const auto& observer : observers_) {
+      observer->OnPrimaryPageRenderProcessGone();
+    }
   }
 }
 

@@ -9,6 +9,7 @@
 #import "base/metrics/user_metrics_action.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
+#import "ios/chrome/app/profile/profile_state.h"
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service_factory.h"
@@ -64,14 +65,13 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
 
 - (FeedMetricsRecorder*)feedMetricsRecorderForBrowser:(Browser*)browser {
   DiscoverFeedService* discoverFeedService =
-      DiscoverFeedServiceFactory::GetForBrowserState(
-          browser->GetBrowserState());
+      DiscoverFeedServiceFactory::GetForProfile(browser->GetProfile());
   return discoverFeedService->GetFeedMetricsRecorder();
 }
 
 - (NewTabPageHeaderViewController*)headerViewControllerForBrowser:
     (Browser*)browser {
-  PrefService* prefService = browser->GetBrowserState()->GetPrefs();
+  PrefService* prefService = browser->GetProfile()->GetPrefs();
   NSInteger lensNewBadgeShowCount =
       prefService->GetInteger(prefs::kNTPLensEntryPointNewBadgeShownCount);
 
@@ -110,29 +110,26 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
 - (NewTabPageMediator*)NTPMediatorForBrowser:(Browser*)browser
                     identityDiscImageUpdater:
                         (id<UserAccountImageUpdateDelegate>)imageUpdater {
-  ChromeBrowserState* browserState = browser->GetBrowserState();
+  ProfileIOS* profile = browser->GetProfile();
   TemplateURLService* templateURLService =
-      ios::TemplateURLServiceFactory::GetForBrowserState(browserState);
+      ios::TemplateURLServiceFactory::GetForProfile(profile);
   AuthenticationService* authService =
-      AuthenticationServiceFactory::GetForBrowserState(browserState);
+      AuthenticationServiceFactory::GetForProfile(profile);
   DiscoverFeedService* discoverFeedService =
-      DiscoverFeedServiceFactory::GetForBrowserState(browserState);
-  PrefService* prefService =
-      ChromeBrowserState::FromBrowserState(browser->GetBrowserState())
-          ->GetPrefs();
-  syncer::SyncService* syncService =
-      SyncServiceFactory::GetForBrowserState(browser->GetBrowserState());
-  BOOL isSafeMode = [browser->GetSceneState().appState resumingFromSafeMode];
+      DiscoverFeedServiceFactory::GetForProfile(profile);
+  PrefService* prefService = profile->GetPrefs();
+  syncer::SyncService* syncService = SyncServiceFactory::GetForProfile(profile);
+  BOOL isSafeMode =
+      [browser->GetSceneState().profileState.appState resumingFromSafeMode];
   return [[NewTabPageMediator alloc]
       initWithTemplateURLService:templateURLService
                        URLLoader:UrlLoadingBrowserAgent::FromBrowser(browser)
                      authService:authService
-                 identityManager:IdentityManagerFactory::GetForProfile(
-                                     browserState)
+                 identityManager:IdentityManagerFactory::GetForProfile(profile)
            accountManagerService:ChromeAccountManagerServiceFactory::
-                                     GetForBrowserState(browserState)
+                                     GetForProfile(profile)
         identityDiscImageUpdater:imageUpdater
-                     isIncognito:browserState->IsOffTheRecord()
+                     isIncognito:profile->IsOffTheRecord()
              discoverFeedService:discoverFeedService
                      prefService:prefService
                      syncService:syncService
@@ -153,8 +150,7 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
 
   // Get the feed factory from the `browser` and create the feed model.
   DiscoverFeedService* feedService =
-      DiscoverFeedServiceFactory::GetForBrowserState(
-          browser->GetBrowserState());
+      DiscoverFeedServiceFactory::GetForProfile(browser->GetProfile());
   FeedModelConfiguration* discoverFeedConfiguration =
       [FeedModelConfiguration discoverFeedModelConfiguration];
   feedService->CreateFeedModel(discoverFeedConfiguration);
@@ -176,8 +172,7 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
   // Get the feed factory from the `browser` and create the feed model. Content
   // is sorted by `sortType`.
   DiscoverFeedService* feedService =
-      DiscoverFeedServiceFactory::GetForBrowserState(
-          browser->GetBrowserState());
+      DiscoverFeedServiceFactory::GetForProfile(browser->GetProfile());
   FeedModelConfiguration* followingFeedConfiguration =
       [FeedModelConfiguration followingModelConfigurationWithSortType:sortType];
   feedService->CreateFeedModel(followingFeedConfiguration);
@@ -197,10 +192,8 @@ void LogLensButtonNewBadgeShownHistogram(IOSNTPNewBadgeShownResult result) {
                                        feedViewController:feedViewController];
 }
 
-- (FeedHeaderViewController*)feedHeaderViewControllerWithFollowingDotVisible:
-    (BOOL)followingDotVisible {
-  return [[FeedHeaderViewController alloc]
-      initWithFollowingDotVisible:followingDotVisible];
+- (FeedHeaderViewController*)feedHeaderViewController {
+  return [[FeedHeaderViewController alloc] init];
 }
 
 @end

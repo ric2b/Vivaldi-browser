@@ -13,6 +13,7 @@
 #include <optional>
 
 #include "ash/constants/ash_features.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
@@ -60,6 +61,7 @@ inline constexpr char kMaxDemoModeAppVersion[] = "appVersion.max";
 // Device Targeting paths.
 inline constexpr char kDeviceTargeting[] = "device";
 inline constexpr char kApplicationLocales[] = "locales";
+inline constexpr char kBoards[] = "boards";
 inline constexpr char kUserLocales[] = "userLocales";
 inline constexpr char kIncludedCountries[] = "includedCountries";
 inline constexpr char kExcludedCountries[] = "excludedCountries";
@@ -70,6 +72,7 @@ inline constexpr char kMaxVersion[] = "version.max";
 inline constexpr char kFeatureAware[] = "isFeatureAwareDevice";
 inline constexpr char kRegisteredTime[] = "registeredTime";
 inline constexpr char kDeviceAgeInHours[] = "deviceAgeInHours";
+inline constexpr char kChannels[] = "channels";
 
 // Session Targeting paths.
 inline constexpr char kSessionTargeting[] = "session";
@@ -103,8 +106,11 @@ inline constexpr char kTriggerTargetings[] = "triggerList";
 inline constexpr char kTriggerType[] = "triggerType";
 inline constexpr char kTriggerEvents[] = "triggerEvents";
 
-// User Preference Targeting paths.
+// User Preference Targeting path.
 inline constexpr char kUserPrefTargetings[] = "userPrefs";
+
+// Shelf Hotseat Targeting path.
+inline constexpr char kHotseatAppIcon[] = "hotseat.appIcon";
 
 // Scheduling Targeting paths.
 inline constexpr char kSchedulingTargetings[] = "schedulings";
@@ -114,6 +120,10 @@ inline constexpr char kTimeWindowEnd[] = "end";
 // Number Range Targeting paths.
 inline constexpr char kNumberRangeStart[] = "start";
 inline constexpr char kNumberRangeEnd[] = "end";
+
+// String List Targeting paths.
+inline constexpr char kStringListIncludes[] = "includes";
+inline constexpr char kStringListExcludes[] = "excludes";
 
 // Opened App Targeting paths.
 inline constexpr char kAppsOpenedTargetings[] = "appsOpened";
@@ -200,8 +210,8 @@ std::optional<int> GetBuiltInImageResourceId(
   }
 
   switch (image_model_type.value()) {
-    case BuiltInImage::kContainerApp:
-      return IDR_GROWTH_FRAMEWORK_CONTAINER_APP_PNG;
+    case BuiltInImage::kGeminiApp:
+      return IDR_GROWTH_FRAMEWORK_GEMINI_APP_PNG;
     case BuiltInImage::kG1:
       return IDR_GROWTH_FRAMEWORK_G1_PNG;
     case BuiltInImage::kSparkRebuy:
@@ -212,6 +222,8 @@ std::optional<int> GetBuiltInImageResourceId(
       return IDR_GROWTH_FRAMEWORK_SPARK_V2_PNG;
     case BuiltInImage::kG1Notification:
       return IDR_GROWTH_FRAMEWORK_G1_NOTIFICATION_PNG;
+    case BuiltInImage::kMall:
+      return IDR_GROWTH_FRAMEWORK_MALL_PNG;
   }
 }
 
@@ -273,6 +285,7 @@ const base::Feature* SelectFeatureByIndex(const base::Feature* features[],
 }  // namespace
 
 Trigger::Trigger(TriggerType type) : type(type) {}
+Trigger::~Trigger() = default;
 
 Campaigns* GetMutableCampaignsBySlot(CampaignsPerSlot* campaigns_per_slot,
                                      Slot slot) {
@@ -314,8 +327,7 @@ const Payload* GetPayloadBySlot(const Campaign* campaign, Slot slot) {
       return campaign->FindDictByDottedPath(base::StringPrintf(
           kPayloadPathTemplate, kOobePerkDiscoveryPayloadPath));
     case Slot::kDemoModeFreePlayApps:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
 
   return nullptr;
@@ -419,6 +431,15 @@ DeviceTargeting::DeviceTargeting(const Targeting* targeting_dict)
 
 DeviceTargeting::~DeviceTargeting() = default;
 
+const std::unique_ptr<StringListTargeting> DeviceTargeting::GetBoards() const {
+  auto* string_list_dict = GetDictCriteria(kBoards);
+  if (!string_list_dict) {
+    return nullptr;
+  }
+
+  return std::make_unique<StringListTargeting>(string_list_dict);
+}
+
 const base::Value::List* DeviceTargeting::GetLocales() const {
   return GetListCriteria(kApplicationLocales);
 }
@@ -467,12 +488,22 @@ std::unique_ptr<TimeWindowTargeting> DeviceTargeting::GetRegisteredTime()
 
 const std::unique_ptr<NumberRangeTargeting> DeviceTargeting::GetDeviceAge()
     const {
-  auto* number_rage_dict = GetDictCriteria(kDeviceAgeInHours);
-  if (!number_rage_dict) {
+  auto* number_range_dict = GetDictCriteria(kDeviceAgeInHours);
+  if (!number_range_dict) {
     return nullptr;
   }
 
-  return std::make_unique<NumberRangeTargeting>(number_rage_dict);
+  return std::make_unique<NumberRangeTargeting>(number_range_dict);
+}
+
+const std::unique_ptr<StringListTargeting> DeviceTargeting::GetChannels()
+    const {
+  auto* string_list_dict = GetDictCriteria(kChannels);
+  if (!string_list_dict) {
+    return nullptr;
+  }
+
+  return std::make_unique<StringListTargeting>(string_list_dict);
 }
 
 // Apps Targeting.
@@ -565,6 +596,21 @@ const std::optional<int> NumberRangeTargeting::GetStart() const {
 
 const std::optional<int> NumberRangeTargeting::GetEnd() const {
   return number_range_dict_->FindInt(kNumberRangeEnd);
+}
+
+// String List Targeting.
+StringListTargeting::StringListTargeting(
+    const base::Value::Dict* string_list_dict)
+    : string_list_dict_(string_list_dict) {}
+
+StringListTargeting::~StringListTargeting() = default;
+
+const base::Value::List* StringListTargeting::GetIncludes() const {
+  return string_list_dict_->FindList(kStringListIncludes);
+}
+
+const base::Value::List* StringListTargeting::GetExcludes() const {
+  return string_list_dict_->FindList(kStringListExcludes);
 }
 
 // Session Targeting.
@@ -673,7 +719,7 @@ const std::vector<std::string> RuntimeTargeting::GetActiveUrlRegexes() const {
   return active_urls_regexs;
 }
 
-std::unique_ptr<EventsTargeting> RuntimeTargeting::GetEventsConfig() const {
+std::unique_ptr<EventsTargeting> RuntimeTargeting::GetEventsTargeting() const {
   auto* config = GetDictCriteria(kEventsTargetings);
   if (!config) {
     return nullptr;
@@ -704,6 +750,14 @@ RuntimeTargeting::GetTriggers() const {
 
 const base::Value::List* RuntimeTargeting::GetUserPrefTargetings() const {
   return GetListCriteria(kUserPrefTargetings);
+}
+
+std::unique_ptr<AppTargeting> RuntimeTargeting::GetHotseatAppIcon() const {
+  auto* app = GetDictCriteria(kHotseatAppIcon);
+  if (!app) {
+    return nullptr;
+  }
+  return std::make_unique<AppTargeting>(app);
 }
 
 // Action.
@@ -818,14 +872,22 @@ const gfx::VectorIcon* VectorIcon::GetVectorIcon() const {
 
 const gfx::VectorIcon* VectorIcon::GetBuiltInVectorIcon() const {
   const auto icon = GetBuiltInVectorIconType(vector_icon_dict_);
-  if (!icon || icon.value() != BuiltInVectorIcon::kRedeem) {
-    // TODO: b/340895798 - record error metric.
-    CAMPAIGNS_LOG(ERROR) << "Unrecognized built in vector icon.";
+  if (!icon) {
+    // TODO: b/376659798 - record error metric.
+    CAMPAIGNS_LOG(ERROR) << "Missing built in vector icon.";
 
     return nullptr;
   }
 
-  return &chromeos::kRedeemIcon;
+  switch (icon.value()) {
+    case BuiltInVectorIcon::kRedeem:
+      return &chromeos::kRedeemIcon;
+    case BuiltInVectorIcon::kHelpApp:
+      return &ash::kNotificationHelpAppIcon;
+  }
+
+  // TODO: b/376659798 - record error metric.
+  CAMPAIGNS_LOG(ERROR) << "Unrecognized built in vector icon.";
 }
 
 // Image Model.

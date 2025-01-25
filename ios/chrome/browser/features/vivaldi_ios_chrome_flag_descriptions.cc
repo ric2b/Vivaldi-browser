@@ -18,6 +18,10 @@ const char kViewMarkdownAsHTMLName[] =
 const char kkViewMarkdownAsHTMLDescription[] =
     "When enabled the user is able to toggle between plain text and HTML view";
 
+const char kShowNewSpeedDialDialog[] = "Enable new speed dial dialog";
+const char kShowNewSpeedDialDialogDescription[] =
+    "When enabled, redesigned new speed dial dialog is presented";
+
 // Please insert your name/description above in alphabetical order.
 
 }  // namespace flag_descriptions

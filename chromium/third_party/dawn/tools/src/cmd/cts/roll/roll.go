@@ -42,7 +42,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"text/tabwriter"
 	"time"
 
 	commonAuth "dawn.googlesource.com/dawn/tools/src/auth"
@@ -78,20 +77,21 @@ const (
 )
 
 type rollerFlags struct {
-	gitPath             string
-	npmPath             string
-	nodePath            string
-	auth                authcli.Flags
-	cacheDir            string
-	ctsGitURL           string
-	ctsRevision         string
-	force               bool // Create a new roll, even if CTS is up to date
-	rebuild             bool // Rebuild the expectations file from scratch
-	preserve            bool // If false, abandon past roll changes
-	sendToGardener      bool // If true, automatically send to the gardener for review
-	verbose             bool
-	parentSwarmingRunID string
-	maxAttempts         int
+	gitPath               string
+	npmPath               string
+	nodePath              string
+	auth                  authcli.Flags
+	cacheDir              string
+	ctsGitURL             string
+	ctsRevision           string
+	force                 bool // Create a new roll, even if CTS is up to date
+	rebuild               bool // Rebuild the expectations file from scratch
+	preserve              bool // If false, abandon past roll changes
+	sendToGardener        bool // If true, automatically send to the gardener for review
+	verbose               bool
+	useSimplifiedCodepath bool
+	parentSwarmingRunID   string
+	maxAttempts           int
 }
 
 type cmd struct {
@@ -121,6 +121,7 @@ func (c *cmd) RegisterFlags(ctx context.Context, cfg common.Config) ([]string, e
 	flag.BoolVar(&c.flags.preserve, "preserve", false, "do not abandon existing rolls")
 	flag.BoolVar(&c.flags.sendToGardener, "send-to-gardener", false, "send the CL to the WebGPU gardener for review")
 	flag.BoolVar(&c.flags.verbose, "verbose", false, "emit additional logging")
+	flag.BoolVar(&c.flags.useSimplifiedCodepath, "use-simplified-codepath", false, "use the simplified codepath that only looks at unexpected failures")
 	flag.StringVar(&c.flags.parentSwarmingRunID, "parent-swarming-run-id", "", "parent swarming run id. All triggered tasks will be children of this task and will be canceled if the parent is canceled.")
 	flag.IntVar(&c.flags.maxAttempts, "max-attempts", 3, "number of update attempts before giving up")
 	return nil, nil
@@ -413,7 +414,11 @@ func (r *roller) roll(ctx context.Context) error {
 
 		// Gather the build results
 		log.Println("gathering results...")
-		psResultsByExecutionMode, err = common.CacheResults(ctx, r.cfg, ps, r.flags.cacheDir, r.client, builds)
+		if r.flags.useSimplifiedCodepath {
+			psResultsByExecutionMode, err = common.CacheUnsuppressedFailingResults(ctx, r.cfg, ps, r.flags.cacheDir, r.client, builds)
+		} else {
+			psResultsByExecutionMode, err = common.CacheResults(ctx, r.cfg, ps, r.flags.cacheDir, r.client, builds)
+		}
 		if err != nil {
 			return err
 		}
@@ -426,20 +431,25 @@ func (r *roller) roll(ctx context.Context) error {
 		// Rebuild the expectations with the accumulated results
 		log.Println("building new expectations...")
 		for _, exInfo := range exInfos {
-			// Merge the new results into the accumulated results
-			log.Printf("merging results for %s ...\n", exInfo.executionMode)
-			exInfo.results = result.Merge(exInfo.results, psResultsByExecutionMode[exInfo.executionMode])
+			if r.flags.useSimplifiedCodepath {
+				// TODO(crbug.com/372730248): Modify exInfo.expectations in place once
+				// the old code path is removed.
+				exInfo.newExpectations = exInfo.expectations.Clone()
+				err := exInfo.newExpectations.AddExpectationsForFailingResults(psResultsByExecutionMode[exInfo.executionMode], testlist, r.flags.verbose)
+				if err != nil {
+					return err
+				}
+				exInfo.expectations = exInfo.newExpectations
+			} else {
+				// Merge the new results into the accumulated results
+				log.Printf("merging results for %s ...\n", exInfo.executionMode)
+				exInfo.results = result.Merge(exInfo.results, psResultsByExecutionMode[exInfo.executionMode])
 
-			exInfo.newExpectations = exInfo.expectations.Clone()
-			diags, err := exInfo.newExpectations.Update(exInfo.results, testlist, r.flags.verbose)
-			if err != nil {
-				return err
-			}
-
-			// Post statistics and expectation diagnostics
-			log.Printf("posting stats & diagnostics for %s...\n", exInfo.executionMode)
-			if err := r.postComments(ps, exInfo.path, diags, exInfo.results); err != nil {
-				return err
+				exInfo.newExpectations = exInfo.expectations.Clone()
+				_, err := exInfo.newExpectations.Update(exInfo.results, testlist, r.flags.verbose)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -613,76 +623,6 @@ func (r *roller) rollCommitMessage(
 	}
 
 	return msg.String()
-}
-
-func (r *roller) postComments(ps gerrit.Patchset, path string, diags []expectations.Diagnostic, results result.List) error {
-	fc := make([]gerrit.FileComment, len(diags))
-	for i, d := range diags {
-		var prefix string
-		switch d.Severity {
-		case expectations.Error:
-			prefix = "🟥"
-		case expectations.Warning:
-			prefix = "🟨"
-		case expectations.Note:
-			prefix = "🟦"
-		}
-		fc[i] = gerrit.FileComment{
-			Path:    path,
-			Side:    gerrit.Left,
-			Line:    d.Line,
-			Message: fmt.Sprintf("%v %v: %v", prefix, d.Severity, d.Message),
-		}
-	}
-
-	sb := &strings.Builder{}
-
-	{
-		sb.WriteString("Tests by status:\n")
-		counts := map[result.Status]int{}
-		for _, r := range results {
-			counts[r.Status] = counts[r.Status] + 1
-		}
-		type StatusCount struct {
-			status result.Status
-			count  int
-		}
-		statusCounts := []StatusCount{}
-		for s, n := range counts {
-			if n > 0 {
-				statusCounts = append(statusCounts, StatusCount{s, n})
-			}
-		}
-		sort.Slice(statusCounts, func(i, j int) bool { return statusCounts[i].status < statusCounts[j].status })
-		sb.WriteString("```\n")
-		tw := tabwriter.NewWriter(sb, 0, 1, 0, ' ', 0)
-		for _, sc := range statusCounts {
-			fmt.Fprintf(tw, "%v:\t %v\n", sc.status, sc.count)
-		}
-		tw.Flush()
-		sb.WriteString("```\n")
-	}
-	{
-		sb.WriteString("Top 25 slowest tests:\n")
-		sort.Slice(results, func(i, j int) bool {
-			return results[i].Duration > results[j].Duration
-		})
-		const N = 25
-		topN := results
-		if len(topN) > N {
-			topN = topN[:N]
-		}
-		sb.WriteString("```\n")
-		for i, r := range topN {
-			fmt.Fprintf(sb, "%3.1d: %v\n", i+1, r)
-		}
-		sb.WriteString("```\n")
-	}
-
-	if err := r.gerrit.Comment(ps, sb.String(), fc); err != nil {
-		return fmt.Errorf("failed to post stats on change: %v", err)
-	}
-	return nil
 }
 
 // findExistingRolls looks for all existing open CTS rolls by this user

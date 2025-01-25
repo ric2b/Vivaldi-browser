@@ -46,9 +46,6 @@
 #endif
 
 namespace viz {
-
-bool GpuHostImpl::force_allow_access_to_gpu_ = false;
-
 namespace {
 
 // A wrapper around gfx::FontRenderParams that checks it is set and accessed on
@@ -106,9 +103,7 @@ GpuHostImpl::GpuHostImpl(Delegate* delegate,
                          InitParams params)
     : delegate_(delegate),
       viz_main_(std::move(viz_main)),
-      params_(std::move(params)),
-      shared_bitmap_to_shared_image_flag_(
-          base::FeatureList::IsEnabled(features::kSharedBitmapToSharedImage)) {
+      params_(std::move(params)) {
   // Create a special GPU info collection service if the GPU process is used for
   // info collection only.
 #if BUILDFLAG(IS_WIN)
@@ -136,11 +131,25 @@ GpuHostImpl::GpuHostImpl(Delegate* delegate,
   viz_main_->SetHostProcessId(base::GetCurrentProcId());
 #endif
 
+  mojom::GpuServiceCreationParamsPtr gpu_service_params =
+      mojom::GpuServiceCreationParams::New();
+// NOTE: Linux has an issue when running in single-process mode wherein
+// GetPlatformRuntimeProperties() browser-side calls can have a data race with
+// in-process GPU service initialization. This call tickles that data race. As
+// overlays are not currently supported on Linux, elide the call here at this
+// time.
+// TODO(crbug.com/377886734): Fix the underlying issue and re-enable this call.
+#if BUILDFLAG(IS_OZONE) && !BUILDFLAG(IS_LINUX)
+  gpu_service_params->supports_overlays = ui::OzonePlatform::GetInstance()
+                                              ->GetPlatformRuntimeProperties()
+                                              .supports_overlays;
+#endif
+
   viz_main_->CreateGpuService(
       gpu_service_remote_.BindNewPipeAndPassReceiver(task_runner),
       gpu_host_receiver_.BindNewPipeAndPassRemote(task_runner),
       std::move(discardable_manager_remote),
-      use_shader_cache_shm_count_.CloneRegion());
+      use_shader_cache_shm_count_.CloneRegion(), std::move(gpu_service_params));
   MaybeSendFontRenderParams();
 
 #if BUILDFLAG(IS_OZONE)
@@ -226,20 +235,6 @@ void GpuHostImpl::EstablishGpuChannel(int client_id,
   TRACE_EVENT0("gpu", "GpuHostImpl::EstablishGpuChannel");
 
   shutdown_timeout_.Stop();
-
-  // If GPU features are already blocklisted, no need to establish the channel.
-  bool gpu_channel_allowed = shared_bitmap_to_shared_image_flag_
-                                 ? true
-                                 : delegate_->GpuAccessAllowed();
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  if (!(force_allow_access_to_gpu_ || gpu_channel_allowed)) {
-    DVLOG(1) << "GPU access blocked, refusing to open a GPU channel.";
-    std::move(callback).Run(mojo::ScopedMessagePipeHandle(), gpu::GPUInfo(),
-                            gpu::GpuFeatureInfo(),
-                            gpu::SharedImageCapabilities(),
-                            EstablishChannelStatus::kGpuAccessDenied);
-    return;
-  }
 
   if (gpu::IsReservedClientId(client_id)) {
     // The display-compositor/GrShaderCache in the gpu process uses these
@@ -419,13 +414,6 @@ std::string GpuHostImpl::GetShaderPrefixKey() {
     std::string build_fp =
         base::android::BuildInfo::GetInstance()->android_build_fp();
     shader_prefix_key_ += "-" + build_fp;
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-    // ChromeOS can update independently of Lacros and the GPU driver
-    // information is not enough to ensure blob compatibility. See
-    // crbug.com/1444684
-    std::string chromeos_version = base::SysInfo::OperatingSystemName() + " " +
-                                   base::SysInfo::OperatingSystemVersion();
-    shader_prefix_key_ += "-" + chromeos_version;
 #endif
   }
 
@@ -472,23 +460,6 @@ void GpuHostImpl::OnChannelEstablished(
                             gpu::GpuFeatureInfo(),
                             gpu::SharedImageCapabilities(),
                             EstablishChannelStatus::kGpuHostInvalid);
-    return;
-  }
-
-  // Currently if any of the GPU features are blocklisted, we don't establish a
-  // GPU channel.
-  bool gpu_channel_allowed = shared_bitmap_to_shared_image_flag_
-                                 ? true
-                                 : delegate_->GpuAccessAllowed();
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  if (!(force_allow_access_to_gpu_ || gpu_channel_allowed)) {
-    gpu_service_remote_->CloseChannel(client_id);
-    std::move(callback).Run(mojo::ScopedMessagePipeHandle(), gpu::GPUInfo(),
-                            gpu::GpuFeatureInfo(),
-                            gpu::SharedImageCapabilities(),
-                            EstablishChannelStatus::kGpuAccessDenied);
-    RecordLogMessage(logging::LOGGING_WARNING, "WARNING",
-                     "Hardware acceleration is unavailable.");
     return;
   }
 
@@ -688,11 +659,5 @@ void GpuHostImpl::LogFrame(base::Value frame_data) {
     viz_debug_output_callback_.Run(std::move(frame_data));
 }
 #endif
-
-// FEATURE_FORCE_ACCESS_TO_GPU
-// static
-void GpuHostImpl::SetForceAllowAccessToGpu(bool enable) {
-  force_allow_access_to_gpu_ = enable;
-}
 
 }  // namespace viz

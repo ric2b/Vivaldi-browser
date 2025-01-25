@@ -187,7 +187,7 @@ class VivaldiImageStoreFactory : public BrowserContextKeyedServiceFactory {
 
   content::BrowserContext* GetBrowserContextToUse(
       content::BrowserContext* browser_context) const override {
-    return chrome::GetBrowserContextRedirectedInIncognito(browser_context);
+    return GetBrowserContextRedirectedInIncognito(browser_context);
   }
 
   KeyedService* BuildServiceInstanceFor(
@@ -993,7 +993,7 @@ VivaldiImageStore::GetDataForIdOnFileThread(UrlKind url_kind, std::string id) {
     return nullptr;
   }
 
-  return base::RefCountedBytes::TakeVector(&buffer);
+  return base::MakeRefCounted<base::RefCountedBytes>(std::move(buffer));
 }
 
 bool VivaldiImageStore::GetDataForIdToVectorOnFileThread(

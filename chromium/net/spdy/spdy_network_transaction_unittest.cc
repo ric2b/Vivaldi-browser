@@ -25,6 +25,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_file_util.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "net/base/auth.h"
 #include "net/base/chunked_upload_data_stream.h"
@@ -76,8 +77,8 @@
 #include "net/test/test_data_directory.h"
 #include "net/test/test_with_task_environment.h"
 #include "net/third_party/quiche/src/quiche/common/http/http_header_block.h"
+#include "net/third_party/quiche/src/quiche/http2/core/spdy_protocol.h"
 #include "net/third_party/quiche/src/quiche/http2/test_tools/spdy_test_utils.h"
-#include "net/third_party/quiche/src/quiche/spdy/core/spdy_protocol.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
@@ -102,12 +103,31 @@ using testing::Eq;
 
 const int32_t kBufferSize = SpdyHttpStream::kRequestBodyBufferSize;
 
+struct TestParams {
+  TestParams(bool priority_header_enabled, bool happy_eyeballs_v3_enabled)
+      : priority_header_enabled(priority_header_enabled),
+        happy_eyeballs_v3_enabled(happy_eyeballs_v3_enabled) {}
+
+  bool priority_header_enabled;
+  bool happy_eyeballs_v3_enabled;
+};
+
+std::vector<TestParams> GetTestParams() {
+  return {TestParams(/*priority_header_enabled=*/true,
+                     /*happy_eyeballs_v3_enabled=*/false),
+          TestParams(/*priority_header_enabled=*/false,
+                     /*happy_eyeballs_v3_enabled=*/false),
+          TestParams(/*priority_header_enabled=*/true,
+                     /*happy_eyeballs_v3_enabled=*/true)};
+}
+
 }  // namespace
 
 const char kPushedUrl[] = "https://www.example.org/foo.dat";
 
-class SpdyNetworkTransactionTest : public TestWithTaskEnvironment,
-                                   public ::testing::WithParamInterface<bool> {
+class SpdyNetworkTransactionTest
+    : public TestWithTaskEnvironment,
+      public ::testing::WithParamInterface<TestParams> {
  protected:
   SpdyNetworkTransactionTest()
       : TestWithTaskEnvironment(
@@ -115,11 +135,22 @@ class SpdyNetworkTransactionTest : public TestWithTaskEnvironment,
         default_url_(kDefaultUrl),
         host_port_pair_(HostPortPair::FromURL(default_url_)),
         spdy_util_(/*use_priority_header=*/true) {
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
     if (PriorityHeaderEnabled()) {
-      feature_list_.InitAndEnableFeature(net::features::kPriorityHeader);
+      enabled_features.emplace_back(features::kPriorityHeader);
     } else {
-      feature_list_.InitAndDisableFeature(net::features::kPriorityHeader);
+      disabled_features.emplace_back(features::kPriorityHeader);
     }
+
+    if (HappyEyeballsV3Enabled()) {
+      enabled_features.emplace_back(features::kHappyEyeballsV3);
+    } else {
+      disabled_features.emplace_back(features::kHappyEyeballsV3);
+    }
+
+    feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
   ~SpdyNetworkTransactionTest() override {
@@ -506,7 +537,13 @@ class SpdyNetworkTransactionTest : public TestWithTaskEnvironment,
                                base::Unretained(this), delta);
   }
 
-  bool PriorityHeaderEnabled() const { return GetParam(); }
+  bool PriorityHeaderEnabled() const {
+    return GetParam().priority_header_enabled;
+  }
+
+  bool HappyEyeballsV3Enabled() const {
+    return GetParam().happy_eyeballs_v3_enabled;
+  }
 
   const GURL default_url_;
   const HostPortPair host_port_pair_;
@@ -523,7 +560,7 @@ class SpdyNetworkTransactionTest : public TestWithTaskEnvironment,
 
 INSTANTIATE_TEST_SUITE_P(All,
                          SpdyNetworkTransactionTest,
-                         testing::Values(true, false));
+                         testing::ValuesIn(GetTestParams()));
 
 // Verify HttpNetworkTransaction constructor.
 TEST_P(SpdyNetworkTransactionTest, Constructor) {
@@ -2820,6 +2857,12 @@ TEST_P(SpdyNetworkTransactionTest,
 // SpdySession with two different SocketTags, only one request gets the session,
 // while the other makes a new SPDY session.
 TEST_P(SpdyNetworkTransactionTest, ConnectionPoolingMultipleSocketTags) {
+  // SocketTag is not supported yet for HappyEyeballsV3.
+  // TODO(crbug.com/346835898): Support SocketTag.
+  if (HappyEyeballsV3Enabled()) {
+    return;
+  }
+
   const SocketTag kSocketTag1(SocketTag::UNSET_UID, 1);
   const SocketTag kSocketTag2(SocketTag::UNSET_UID, 2);
   const SocketTag kSocketTag3(SocketTag::UNSET_UID, 3);
@@ -2980,6 +3023,12 @@ TEST_P(SpdyNetworkTransactionTest, ConnectionPoolingMultipleSocketTags) {
 }
 
 TEST_P(SpdyNetworkTransactionTest, SocketTagChangeSessionTagWithDnsAliases) {
+  // SocketTag is not supported yet for HappyEyeballsV3.
+  // TODO(crbug.com/346835898): Support SocketTag.
+  if (HappyEyeballsV3Enabled()) {
+    return;
+  }
+
   SocketTag socket_tag_1(SocketTag::UNSET_UID, 1);
   SocketTag socket_tag_2(SocketTag::UNSET_UID, 2);
   request_.socket_tag = socket_tag_1;
@@ -3102,6 +3151,12 @@ TEST_P(SpdyNetworkTransactionTest, SocketTagChangeSessionTagWithDnsAliases) {
 
 TEST_P(SpdyNetworkTransactionTest,
        SocketTagChangeFromIPAliasedSessionWithDnsAliases) {
+  // SocketTag is not supported yet for HappyEyeballsV3.
+  // TODO(crbug.com/346835898): Support SocketTag.
+  if (HappyEyeballsV3Enabled()) {
+    return;
+  }
+
   SocketTag socket_tag_1(SocketTag::UNSET_UID, 1);
   SocketTag socket_tag_2(SocketTag::UNSET_UID, 2);
   request_.socket_tag = socket_tag_1;
@@ -3800,7 +3855,7 @@ TEST_P(SpdyNetworkTransactionTest, BufferFull) {
     if (rv > 0) {
       content.append(buf->data(), rv);
     } else if (rv < 0) {
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
     }
   } while (rv > 0);
 
@@ -6838,7 +6893,7 @@ class SpdyNetworkTransactionTLSUsageCheckTest
 
 INSTANTIATE_TEST_SUITE_P(All,
                          SpdyNetworkTransactionTLSUsageCheckTest,
-                         testing::Values(true, false));
+                         testing::ValuesIn(GetTestParams()));
 
 TEST_P(SpdyNetworkTransactionTLSUsageCheckTest, TLSVersionTooOld) {
   auto ssl_provider = std::make_unique<SSLSocketDataProvider>(ASYNC, OK);
@@ -7488,6 +7543,9 @@ TEST_P(SpdyNetworkTransactionTest,
 
   TestCompletionCallback callback1;
   int rv = helper.trans()->Start(&request_, callback1.callback(), log_);
+  // This fast forward makes sure that the transaction switches to the
+  // HttpStreamPool when HappyEyeballsV3 is enabled.
+  FastForwardBy(base::Milliseconds(1));
   ASSERT_THAT(rv, IsError(ERR_IO_PENDING));
 
   HttpRequestInfo request2;
@@ -7637,6 +7695,9 @@ TEST_P(SpdyNetworkTransactionTest,
 
   TestCompletionCallback callback1;
   int rv = helper.trans()->Start(&request_, callback1.callback(), log_);
+  // This fast forward makes sure that the transaction switches to the
+  // HttpStreamPool when HappyEyeballsV3 is enabled.
+  FastForwardBy(base::Milliseconds(1));
   ASSERT_THAT(rv, IsError(ERR_IO_PENDING));
 
   HttpRequestInfo request2;

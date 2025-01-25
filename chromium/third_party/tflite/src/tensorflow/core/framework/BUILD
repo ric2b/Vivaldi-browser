@@ -31,13 +31,15 @@ default_visibility = [
     "//tensorflow/core:__subpackages__",
     "//tensorflow/security/fuzzing:__subpackages__",
     # TODO(pedaveeraiah): to be removed when summary.proto.h deps moves to TSL
-    "@local_tsl//tsl/lib:__subpackages__",
+    "@local_xla//xla/tsl/lib:__subpackages__",
     # copybara:uncomment "//learning/brain/tfrt/aot:__subpackages__",
     # copybara:uncomment "//platforms/xla/megascale/tensorflow:__subpackages__",
     # copybara:uncomment "//learning/brain/experimental/tfrt/native_lowering/graph_executor:__subpackages__",
     "//tensorflow/cc/saved_model:__subpackages__",
     #internal starburst clustering service,
     "//waymo/ml/deploy/benchmark:__subpackages__",
+    # copybara:uncomment #internal tuning service,
+    # copybara:uncomment "//third_party/odml/experimental:__subpackages__",
 ]
 
 package(
@@ -573,7 +575,7 @@ cc_library(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
-        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/status",
     ],
 )
 
@@ -717,15 +719,18 @@ cc_library(
     visibility = default_visibility + [
         "//learning/brain/experimental/jax_pst/grpc/tf:__pkg__",
         "//learning/brain/google/data/core/kernels:__pkg__",
+        "//learning/brain/google/data/core/parse_proto:__pkg__",
         "//learning/deepmind/tensorflow/queues:__pkg__",
         "//learning/deepmind/tensorflow/sstable:__pkg__",
         "//learning/deepmind/video/tensorflow:__pkg__",
+        "//learning/sibyl/tfx/state/kernels:__pkg__",
         "//learning/sibyl/tfx/transformation/kernels:__pkg__",
         "//tensorflow/compiler/mlir/tools/kernel_gen:__pkg__",
         "//tensorflow/compiler/tf2xla:__pkg__",
         "//tensorflow/examples/custom_ops_doc/simple_hash_table:__pkg__",
         "//third_party/py/grain/_src/tensorflow/ops:__pkg__",
         "//waymo/ml/compiler/frontend/kernels:__pkg__",
+        "//waymo/ml/compiler/runtime/alpine/core:__pkg__",
     ],
     deps = [
         "//tensorflow/core/lib/core:refcount",
@@ -1407,7 +1412,7 @@ tf_cc_tests(
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@eigen_archive//:eigen3",
-        "@local_tsl//tsl/profiler/utils:xplane_utils",
+        "@local_xla//xla/tsl/profiler/utils:xplane_utils",
     ],
 )
 
@@ -1566,6 +1571,7 @@ tf_proto_library(
         ":types_proto",
         ":versions_proto",
     ],
+    visibility = ["//visibility:public"],
 )
 
 tf_proto_library(
@@ -1798,13 +1804,15 @@ tf_proto_library(
         ":tensor_shape_proto",
         ":types_proto",
     ],
+    visibility = [
+        "//tensorflow/python:__pkg__",
+    ] + default_visibility,
 )
 
 # copybara:uncomment_begin(google-only)
 # py_proto_library(
 #     name = "function_proto_py_pb2",
 #     has_services = 0,
-#     api_version = 2,
 #     deps = [
 #         ":function_proto",
 #     ],
@@ -1820,9 +1828,9 @@ tf_proto_library(
         ":tensor_proto",
         ":tensor_shape_proto",
         ":types_proto",
-        "@local_tsl//tsl/protobuf:histogram_proto",
+        "@local_xla//xla/tsl/protobuf:histogram_proto",
     ],
-    exports = ["@local_tsl//tsl/protobuf:histogram_proto"],
+    exports = ["@local_xla//xla/tsl/protobuf:histogram_proto"],
 )
 
 tf_proto_library(

@@ -9,11 +9,11 @@ import * as Common from '../common/common.js';
 import * as i18n from '../i18n/i18n.js';
 import * as Root from '../root/root.js';
 
-import {type CSSModel} from './CSSModel.js';
+import type {CSSModel} from './CSSModel.js';
 import {DebuggerModel, Events as DebuggerModelEvents} from './DebuggerModel.js';
 import {DeferredDOMNode, DOMModel, type DOMNode, Events as DOMModelEvents} from './DOMModel.js';
 import {OverlayPersistentHighlighter} from './OverlayPersistentHighlighter.js';
-import {type RemoteObject} from './RemoteObject.js';
+import type {RemoteObject} from './RemoteObject.js';
 import {SDKModel} from './SDKModel.js';
 import {Capability, type Target} from './Target.js';
 import {TargetManager} from './TargetManager.js';
@@ -83,7 +83,6 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
   #showDebugBordersSetting: Common.Settings.Setting<boolean>;
   #showFPSCounterSetting: Common.Settings.Setting<boolean>;
   #showScrollBottleneckRectsSetting: Common.Settings.Setting<boolean>;
-  #showWebVitalsSetting: Common.Settings.Setting<boolean>;
   #registeredListeners: Common.EventTarget.EventDescriptor[];
   #showViewportSizeOnResize: boolean;
   #persistentHighlighter: OverlayPersistentHighlighter|null;
@@ -126,7 +125,6 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
     this.#showFPSCounterSetting = Common.Settings.Settings.instance().moduleSetting<boolean>('show-fps-counter');
     this.#showScrollBottleneckRectsSetting =
         Common.Settings.Settings.instance().moduleSetting<boolean>('show-scroll-bottleneck-rects');
-    this.#showWebVitalsSetting = Common.Settings.Settings.instance().moduleSetting<boolean>('show-web-vitals');
 
     this.#registeredListeners = [];
     this.#showViewportSizeOnResize = true;
@@ -236,8 +234,6 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
       this.#showScrollBottleneckRectsSetting.addChangeListener(
           () => this.overlayAgent.invoke_setShowScrollBottleneckRects(
               {show: this.#showScrollBottleneckRectsSetting.get()})),
-      this.#showWebVitalsSetting.addChangeListener(
-          () => this.overlayAgent.invoke_setShowWebVitals({show: this.#showWebVitalsSetting.get()})),
     ];
 
     if (this.#showPaintRectsSetting.get()) {
@@ -257,9 +253,6 @@ export class OverlayModel extends SDKModel<EventTypes> implements ProtocolProxyA
     }
     if (this.#showScrollBottleneckRectsSetting.get()) {
       void this.overlayAgent.invoke_setShowScrollBottleneckRects({show: true});
-    }
-    if (this.#showWebVitalsSetting.get()) {
-      void this.overlayAgent.invoke_setShowWebVitals({show: true});
     }
     if (this.#debuggerModel && this.#debuggerModel.isPaused()) {
       this.updatePausedInDebuggerMessage();

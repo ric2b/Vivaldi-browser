@@ -11,7 +11,7 @@ int search_bar_height = 56;
 int panel_search_view_height = 56;
 int panel_header_height = 112;
 int panel_top_view_height = 56;
-int panel_sidebar_width = 360;
+int panel_sidebar_width = 400;
 int panel_top_padding = 12;
 int panel_horizontal_padding = 20;
 int panel_sheet_corner_radius = 20;
@@ -29,6 +29,8 @@ extern NSString* vPanelHistory;
 extern NSString* vPanelHistoryActive;
 extern NSString* vPanelReadingList;
 extern NSString* vPanelReadingListActive;
+extern NSString* vPanelTranslate;
+extern NSString* vPanelTranslateActive;
 
 extern NSString* vPanelMoreAction;
 extern NSString* vPanelSortOrderAction;

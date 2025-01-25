@@ -246,7 +246,8 @@ public class NativePageFactory {
                     mHomeSurfaceTracker,
                     mTabContentManagerSupplier,
                     mTabStripHeightSupplier,
-                    mModuleRegistrySupplier);
+                    mModuleRegistrySupplier,
+                    mEdgeToEdgeControllerSupplier);
         }
 
         protected NativePage buildBookmarksPage(Tab tab) {
@@ -263,7 +264,7 @@ public class NativePageFactory {
                     mActivity,
                     mSnackbarManagerSupplier.get(),
                     mWindowAndroid.getModalDialogManager(),
-                    profile.getOTRProfileID(),
+                    profile.getOtrProfileId(),
                     new TabShim(tab, mBrowserControlsManager, mTabModelSelector));
         }
 
@@ -293,9 +294,9 @@ public class NativePageFactory {
             return new RecentTabsPage(
                     mActivity,
                     recentTabsManager,
-                    new TabShim(tab, mBrowserControlsManager, mTabModelSelector),
                     mBrowserControlsManager,
-                    mTabStripHeightSupplier);
+                    mTabStripHeightSupplier,
+                    mEdgeToEdgeControllerSupplier);
         }
 
         protected NativePage buildManagementPage(Tab tab) {

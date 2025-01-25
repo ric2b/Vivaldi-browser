@@ -20,8 +20,9 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include <fp16/fp16.h>
 #include "xnnpack.h"
+#include "xnnpack/math.h"
+#include "xnnpack/buffer.h"
 #include "replicable_random_device.h"
 
 class MaxPoolingOperatorTester {
@@ -454,12 +455,11 @@ class MaxPoolingOperatorTester {
     std::uniform_int_distribution<int32_t> i8dist(
       std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
 
-    std::vector<int8_t> input((batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(int8_t));
-    std::vector<int8_t> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(int8_t));
-    std::vector<int8_t> output_ref(batch_size() * output_height() * output_width() * channels());
+    xnnpack::Buffer<int8_t> input((batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(int8_t));
+    xnnpack::Buffer<int8_t> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(int8_t));
+    xnnpack::Buffer<int8_t> output_ref(batch_size() * output_height() * output_width() * channels());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return i8dist(rng); });
-      std::fill(output.begin(), output.end(), 0xA5);
 
       // Compute reference results.
       for (size_t i = 0; i < batch_size(); i++) {
@@ -542,12 +542,11 @@ class MaxPoolingOperatorTester {
     std::uniform_int_distribution<int32_t> u8dist(
       std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
 
-    std::vector<uint8_t> input((batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(uint8_t));
-    std::vector<uint8_t> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(uint8_t));
-    std::vector<uint8_t> output_ref(batch_size() * output_height() * output_width() * channels());
+    xnnpack::Buffer<uint8_t> input((batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(uint8_t));
+    xnnpack::Buffer<uint8_t> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(uint8_t));
+    xnnpack::Buffer<uint8_t> output_ref(batch_size() * output_height() * output_width() * channels());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return u8dist(rng); });
-      std::fill(output.begin(), output.end(), 0xA5);
 
       // Compute reference results.
       for (size_t i = 0; i < batch_size(); i++) {
@@ -631,12 +630,11 @@ class MaxPoolingOperatorTester {
     // native vs emulated arithmetics, and we use exact comparison to verify the results against reference.
     std::uniform_real_distribution<float> f32dist(0.001f, 1.0f);
 
-    std::vector<uint16_t> input((batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(uint16_t));
-    std::vector<uint16_t> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(uint16_t));
-    std::vector<float> output_ref(batch_size() * output_height() * output_width() * channels());
+    xnnpack::Buffer<xnn_float16> input((batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(xnn_float16));
+    xnnpack::Buffer<xnn_float16> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(xnn_float16));
+    xnnpack::Buffer<float> output_ref(batch_size() * output_height() * output_width() * channels());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
-      std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-      std::fill(output.begin(), output.end(), UINT16_C(0x7E00) /* NaN */);
+      std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
 
       // Compute reference results, without clamping.
       for (size_t i = 0; i < batch_size(); i++) {
@@ -649,8 +647,8 @@ class MaxPoolingOperatorTester {
                 for (size_t px = 0; px < pooling_width(); px++) {
                   const size_t ix = ox * stride_width() + px * dilation_width() - padding_left();
                   if (ix < input_width() && iy < input_height()) {
-                    max_value = std::max(max_value,
-                      fp16_ieee_to_fp32_value(input[((i * input_height() + iy) * input_width() + ix) * input_pixel_stride() + c]));
+                    max_value = std::max<float>(max_value,
+                      input[((i * input_height() + iy) * input_width() + ix) * input_pixel_stride() + c]);
                   }
                 }
               }
@@ -666,8 +664,8 @@ class MaxPoolingOperatorTester {
       const float accumulated_range = accumulated_max - accumulated_min;
       float output_min = accumulated_min + accumulated_range / 255.0f * float(qmin());
       float output_max = accumulated_max - accumulated_range / 255.0f * float(255 - qmax());
-      output_min = fp16_ieee_to_fp32_value(fp16_ieee_from_fp32_value(output_min));
-      output_max = fp16_ieee_to_fp32_value(fp16_ieee_from_fp32_value(output_max));
+      output_min = xnn_float16(output_min);
+      output_max = xnn_float16(output_max);
       if (accumulated_range == 0.0f) {
         output_min = -std::numeric_limits<float>::infinity();
         output_max = +std::numeric_limits<float>::infinity();
@@ -727,10 +725,10 @@ class MaxPoolingOperatorTester {
         for (size_t y = 0; y < output_height(); y++) {
           for (size_t x = 0; x < output_width(); x++) {
             for (size_t c = 0; c < channels(); c++) {
-              EXPECT_LE(fp16_ieee_to_fp32_value(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + c]), output_max);
-              EXPECT_GE(fp16_ieee_to_fp32_value(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + c]), output_min);
+              EXPECT_LE(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + c], output_max);
+              EXPECT_GE(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + c], output_min);
               EXPECT_EQ(
-                  fp16_ieee_to_fp32_value(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + c]),
+                  output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + c],
                   output_ref[((i * output_height() + y) * output_width() + x) * channels() + c]) <<
                 "in batch index " << i << ", pixel (" << y << ", " << x << "), channel " << c
                 << ", min = " << output_min << ", max = " << output_max;
@@ -745,12 +743,11 @@ class MaxPoolingOperatorTester {
     xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist;
 
-    std::vector<float> input((batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(float));
-    std::vector<float> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(float));
-    std::vector<float> output_ref(batch_size() * output_height() * output_width() * channels());
+    xnnpack::Buffer<float> input((batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(float));
+    xnnpack::Buffer<float> output((batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + channels() + XNN_EXTRA_BYTES / sizeof(float));
+    xnnpack::Buffer<float> output_ref(batch_size() * output_height() * output_width() * channels());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
-      std::fill(output.begin(), output.end(), nanf(""));
 
       // Compute reference results, without clamping.
       for (size_t i = 0; i < batch_size(); i++) {
@@ -848,17 +845,16 @@ class MaxPoolingOperatorTester {
     std::uniform_int_distribution<int32_t> i8dist(
       std::numeric_limits<int8_t>::min(), std::numeric_limits<int8_t>::max());
 
-    std::vector<int8_t> input(XNN_EXTRA_BYTES / sizeof(int8_t) + std::max<size_t>(
+    xnnpack::Buffer<int8_t> input(XNN_EXTRA_BYTES / sizeof(int8_t) + std::max<size_t>(
       (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + channels(),
       (next_batch_size() * next_input_height() * next_input_width() - 1) * input_pixel_stride() + channels()));
-    std::vector<int8_t> output(XNN_EXTRA_BYTES / sizeof(int8_t) + std::max<size_t>(
+    xnnpack::Buffer<int8_t> output(XNN_EXTRA_BYTES / sizeof(int8_t) + std::max<size_t>(
       (batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + channels(),
       (next_batch_size() * next_output_height() * next_output_width() - 1) * output_pixel_stride() + channels()));
-    std::vector<float> output_ref(batch_size() * output_height() * output_width() * channels());
-    std::vector<float> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * channels());
+    xnnpack::Buffer<float> output_ref(batch_size() * output_height() * output_width() * channels());
+    xnnpack::Buffer<float> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * channels());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return i8dist(rng); });
-      std::fill(output.begin(), output.end(), INT8_C(0xA5));
 
       // Compute reference results.
       for (size_t i = 0; i < batch_size(); i++) {
@@ -934,7 +930,6 @@ class MaxPoolingOperatorTester {
 
       // Re-generate data for the second run.
       std::generate(input.begin(), input.end(), [&]() { return i8dist(rng); });
-      std::fill(output.begin(), output.end(), 0xA5);
 
       // Compute reference results for the second run.
       for (size_t i = 0; i < next_batch_size(); i++) {
@@ -998,17 +993,16 @@ class MaxPoolingOperatorTester {
     std::uniform_int_distribution<int32_t> u8dist(
       std::numeric_limits<uint8_t>::min(), std::numeric_limits<uint8_t>::max());
 
-    std::vector<uint8_t> input(XNN_EXTRA_BYTES / sizeof(uint8_t) + std::max<size_t>(
+    xnnpack::Buffer<uint8_t> input(XNN_EXTRA_BYTES / sizeof(uint8_t) + std::max<size_t>(
       (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + channels(),
       (next_batch_size() * next_input_height() * next_input_width() - 1) * input_pixel_stride() + channels()));
-    std::vector<uint8_t> output(XNN_EXTRA_BYTES / sizeof(uint8_t) + std::max<size_t>(
+    xnnpack::Buffer<uint8_t> output(XNN_EXTRA_BYTES / sizeof(uint8_t) + std::max<size_t>(
       (batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + channels(),
       (next_batch_size() * next_output_height() * next_output_width() - 1) * output_pixel_stride() + channels()));
-    std::vector<float> output_ref(batch_size() * output_height() * output_width() * channels());
-    std::vector<float> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * channels());
+    xnnpack::Buffer<float> output_ref(batch_size() * output_height() * output_width() * channels());
+    xnnpack::Buffer<float> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * channels());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return u8dist(rng); });
-      std::fill(output.begin(), output.end(), 0xA5);
 
       // Compute reference results.
       for (size_t i = 0; i < batch_size(); i++) {
@@ -1084,7 +1078,6 @@ class MaxPoolingOperatorTester {
 
       // Re-generate data for the second run.
       std::generate(input.begin(), input.end(), [&]() { return u8dist(rng); });
-      std::fill(output.begin(), output.end(), 0xA5);
 
       // Compute reference results for the second run.
       for (size_t i = 0; i < next_batch_size(); i++) {
@@ -1149,17 +1142,16 @@ class MaxPoolingOperatorTester {
     // native vs emulated arithmetics, and we use exact comparison to verify the results against reference.
     std::uniform_real_distribution<float> f32dist(0.001f, 1.0f);
 
-    std::vector<uint16_t> input(XNN_EXTRA_BYTES / sizeof(uint16_t) + std::max<size_t>(
+    xnnpack::Buffer<xnn_float16> input(XNN_EXTRA_BYTES / sizeof(xnn_float16) + std::max<size_t>(
       (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + channels(),
       (next_batch_size() * next_input_height() * next_input_width() - 1) * input_pixel_stride() + channels()));
-    std::vector<uint16_t> output(XNN_EXTRA_BYTES / sizeof(uint16_t) + std::max<size_t>(
+    xnnpack::Buffer<xnn_float16> output(XNN_EXTRA_BYTES / sizeof(xnn_float16) + std::max<size_t>(
       (batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + channels(),
       (next_batch_size() * next_output_height() * next_output_width() - 1) * output_pixel_stride() + channels()));
-    std::vector<float> output_ref(batch_size() * output_height() * output_width() * channels());
-    std::vector<float> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * channels());
+    xnnpack::Buffer<float> output_ref(batch_size() * output_height() * output_width() * channels());
+    xnnpack::Buffer<float> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * channels());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
-      std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-      std::fill(output.begin(), output.end(), UINT16_C(0x7E00) /* NaN */);
+      std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
 
       // Compute reference results, without clamping.
       for (size_t i = 0; i < batch_size(); i++) {
@@ -1172,8 +1164,8 @@ class MaxPoolingOperatorTester {
                 for (size_t px = 0; px < pooling_width(); px++) {
                   const size_t ix = ox * stride_width() + px * dilation_width() - padding_left();
                   if (ix < input_width() && iy < input_height()) {
-                    max_value = std::max(max_value,
-                      fp16_ieee_to_fp32_value(input[((i * input_height() + iy) * input_width() + ix) * input_pixel_stride() + c]));
+                    max_value = std::max<float>(max_value,
+                      input[((i * input_height() + iy) * input_width() + ix) * input_pixel_stride() + c]);
                   }
                 }
               }
@@ -1189,8 +1181,8 @@ class MaxPoolingOperatorTester {
       const float accumulated_range = accumulated_max - accumulated_min;
       float output_min = accumulated_min + accumulated_range / 255.0f * float(qmin());
       float output_max = accumulated_max - accumulated_range / 255.0f * float(255 - qmax());
-      output_min = fp16_ieee_to_fp32_value(fp16_ieee_from_fp32_value(output_min));
-      output_max = fp16_ieee_to_fp32_value(fp16_ieee_from_fp32_value(output_max));
+      output_min = xnn_float16(output_min);
+      output_max = xnn_float16(output_max);
       if (accumulated_range == 0.0f) {
         output_min = -std::numeric_limits<float>::infinity();
         output_max = +std::numeric_limits<float>::infinity();
@@ -1247,10 +1239,10 @@ class MaxPoolingOperatorTester {
         for (size_t y = 0; y < output_height(); y++) {
           for (size_t x = 0; x < output_width(); x++) {
             for (size_t c = 0; c < channels(); c++) {
-              EXPECT_LE(fp16_ieee_to_fp32_value(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + c]), output_max);
-              EXPECT_GE(fp16_ieee_to_fp32_value(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + c]), output_min);
+              EXPECT_LE(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + c], output_max);
+              EXPECT_GE(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + c], output_min);
               EXPECT_EQ(
-                  fp16_ieee_to_fp32_value(output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + c]),
+                  output[((i * output_height() + y) * output_width() + x) * output_pixel_stride() + c],
                   output_ref[((i * output_height() + y) * output_width() + x) * channels() + c]) <<
                 "in batch index " << i << ", pixel (" << y << ", " << x << "), channel " << c
                 << ", min = " << output_min << ", max = " << output_max;
@@ -1260,8 +1252,7 @@ class MaxPoolingOperatorTester {
       }
 
       // Re-generate data for the second run.
-      std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-      std::fill(output.begin(), output.end(), UINT16_C(0x7E00) /* NaN */);
+      std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
 
       // Compute reference results for the second run, including clamping.
       for (size_t i = 0; i < next_batch_size(); i++) {
@@ -1274,8 +1265,8 @@ class MaxPoolingOperatorTester {
                 for (size_t px = 0; px < pooling_width(); px++) {
                   const size_t ix = ox * stride_width() + px * dilation_width() - padding_left();
                   if (ix < next_input_width() && iy < next_input_height()) {
-                    max_value = std::max(max_value,
-                      fp16_ieee_to_fp32_value(input[((i * next_input_height() + iy) * next_input_width() + ix) * input_pixel_stride() + c]));
+                    max_value = std::max<float>(max_value,
+                      input[((i * next_input_height() + iy) * next_input_width() + ix) * input_pixel_stride() + c]);
                   }
                 }
               }
@@ -1308,10 +1299,10 @@ class MaxPoolingOperatorTester {
         for (size_t y = 0; y < next_output_height(); y++) {
           for (size_t x = 0; x < next_output_width(); x++) {
             for (size_t c = 0; c < channels(); c++) {
-              EXPECT_LE(fp16_ieee_to_fp32_value(output[((i * next_output_height() + y) * next_output_width() + x) * output_pixel_stride() + c]), output_max);
-              EXPECT_GE(fp16_ieee_to_fp32_value(output[((i * next_output_height() + y) * next_output_width() + x) * output_pixel_stride() + c]), output_min);
+              EXPECT_LE(output[((i * next_output_height() + y) * next_output_width() + x) * output_pixel_stride() + c], output_max);
+              EXPECT_GE(output[((i * next_output_height() + y) * next_output_width() + x) * output_pixel_stride() + c], output_min);
               EXPECT_EQ(
-                  fp16_ieee_to_fp32_value(output[((i * next_output_height() + y) * next_output_width() + x) * output_pixel_stride() + c]),
+                  output[((i * next_output_height() + y) * next_output_width() + x) * output_pixel_stride() + c],
                   next_output_ref[((i * next_output_height() + y) * next_output_width() + x) * channels() + c]) <<
                 "in batch index " << i << ", pixel (" << y << ", " << x << "), channel " << c
                 << ", min = " << output_min << ", max = " << output_max;
@@ -1326,17 +1317,16 @@ class MaxPoolingOperatorTester {
     xnnpack::ReplicableRandomDevice rng;
     std::uniform_real_distribution<float> f32dist;
 
-    std::vector<float> input(XNN_EXTRA_BYTES / sizeof(float) + std::max<size_t>(
+    xnnpack::Buffer<float> input(XNN_EXTRA_BYTES / sizeof(float) + std::max<size_t>(
       (batch_size() * input_height() * input_width() - 1) * input_pixel_stride() + channels(),
       (next_batch_size() * next_input_height() * next_input_width() - 1) * input_pixel_stride() + channels()));
-    std::vector<float> output(XNN_EXTRA_BYTES / sizeof(float) + std::max<size_t>(
+    xnnpack::Buffer<float> output(XNN_EXTRA_BYTES / sizeof(float) + std::max<size_t>(
       (batch_size() * output_height() * output_width() - 1) * output_pixel_stride() + channels(),
       (next_batch_size() * next_output_height() * next_output_width() - 1) * output_pixel_stride() + channels()));
-    std::vector<float> output_ref(batch_size() * output_height() * output_width() * channels());
-    std::vector<float> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * channels());
+    xnnpack::Buffer<float> output_ref(batch_size() * output_height() * output_width() * channels());
+    xnnpack::Buffer<float> next_output_ref(next_batch_size() * next_output_height() * next_output_width() * channels());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
-      std::fill(output.begin(), output.end(), nanf(""));
 
       // Compute reference results, without clamping.
       for (size_t i = 0; i < batch_size(); i++) {
@@ -1425,7 +1415,6 @@ class MaxPoolingOperatorTester {
 
       // Re-generate data for the second run.
       std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
-      std::fill(output.begin(), output.end(), std::nanf(""));
 
       // Compute reference results for the second run, including clamping.
       for (size_t i = 0; i < next_batch_size(); i++) {

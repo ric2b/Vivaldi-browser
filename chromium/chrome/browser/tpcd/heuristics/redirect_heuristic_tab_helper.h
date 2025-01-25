@@ -27,10 +27,6 @@ class RenderFrameHost;
 class WebContents;
 }  // namespace content
 
-namespace content_settings {
-class CookieSettings;
-}
-
 class DIPSServiceImpl;
 class GURL;
 
@@ -80,11 +76,11 @@ class RedirectHeuristicTabHelper
   void WebContentsDestroyed() override;
 
   // Start RedirectChainDetector::Observer overrides:
-  void OnNavigationCommitted() override;
+  void OnNavigationCommitted(
+      content::NavigationHandle* navigation_handle) override;
 
   raw_ptr<RedirectChainDetector> detector_;
   raw_ptr<DIPSServiceImpl> dips_service_;
-  scoped_refptr<content_settings::CookieSettings> cookie_settings_;
   raw_ref<base::Clock> clock_{*base::DefaultClock::GetInstance()};
   std::optional<base::Time> last_commit_timestamp_;
 

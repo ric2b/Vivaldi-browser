@@ -71,10 +71,10 @@ void ReadDataFromSpeechFile(char* data, int length) {
              .Append(FILE_PATH_LITERAL("data"))
              .Append(FILE_PATH_LITERAL("speech_16b_stereo_48kHz.raw"));
   DCHECK(base::PathExists(file));
-  int64_t data_file_size64 = 0;
-  DCHECK(base::GetFileSize(file, &data_file_size64));
+  std::optional<int64_t> data_file_size64 = base::GetFileSize(file);
+  DCHECK(data_file_size64.has_value());
   EXPECT_EQ(length, base::ReadFile(file, data, length));
-  DCHECK(data_file_size64 > length);
+  DCHECK(data_file_size64.value() > length);
 }
 
 void DisableDefaultSettings(AudioProcessingSettings& settings) {
@@ -85,7 +85,6 @@ void DisableDefaultSettings(AudioProcessingSettings& settings) {
   settings.high_pass_filter = false;
   settings.multi_channel_capture_processing = false;
   settings.stereo_mirroring = false;
-  settings.force_apm_creation = false;
 }
 
 }  // namespace

@@ -2,13 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../../ui/components/data_grid/data_grid.js';
+
 import * as i18n from '../../../../core/i18n/i18n.js';
 import type * as Platform from '../../../../core/platform/platform.js';
 import {assertNotNullOrUndefined} from '../../../../core/platform/platform.js';
 import * as SDK from '../../../../core/sdk/sdk.js';
 import type * as Protocol from '../../../../generated/protocol.js';
 import * as Diff from '../../../../third_party/diff/diff.js';
-import * as DataGrid from '../../../../ui/components/data_grid/data_grid.js';
+import type * as DataGrid from '../../../../ui/components/data_grid/data_grid.js';
 import * as LegacyWrapper from '../../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import type * as UI from '../../../../ui/legacy/legacy.js';
 import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
@@ -99,8 +101,6 @@ export interface MismatchedPreloadingGridData {
 
 // Grid component to show prerendering attempts.
 export class MismatchedPreloadingGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<UI.Widget.VBox> {
-  static readonly litTagName = LitHtml.literal`devtools-resources-mismatched-preloading-grid`;
-
   readonly #shadow = this.attachShadow({mode: 'open'});
   #data: MismatchedPreloadingGridData|null = null;
 
@@ -150,14 +150,9 @@ export class MismatchedPreloadingGrid extends LegacyWrapper.LegacyWrapper.Wrappa
       striped: true,
     };
 
-    // Disabled until https://crbug.com/1079231 is fixed.
-    // clang-format off
-    render(html`
-      <${DataGrid.DataGridController.DataGridController.litTagName} .data=${
-        reportsGridData as DataGrid.DataGridController.DataGridControllerData}>
-      </${DataGrid.DataGridController.DataGridController.litTagName}>
-    `, this.#shadow, {host: this});
-    // clang-format on
+    render(
+        html`<devtools-data-grid-controller .data=${reportsGridData}></devtools-data-grid-controller>`, this.#shadow,
+        {host: this});
   }
 
   #buildReportRows(): DataGrid.DataGridUtils.Row[] {
@@ -166,7 +161,7 @@ export class MismatchedPreloadingGrid extends LegacyWrapper.LegacyWrapper.Wrappa
           additionalProps: {'color'?: string, 'text-decoration'?: string}, s: string): LitHtml.TemplateResult {
         // Don't insert spaces to prevent spaces for inline blocks.
         // clang-format off
-        return LitHtml.html`<span style=${LitHtml.Directives.styleMap(additionalProps)}>${s}</span>`;
+        return html`<span style=${LitHtml.Directives.styleMap(additionalProps)}>${s}</span>`;
         // clang-format on
       }
 
@@ -187,7 +182,7 @@ export class MismatchedPreloadingGrid extends LegacyWrapper.LegacyWrapper.Wrappa
         }
       }, LitHtml.nothing as unknown as LitHtml.TemplateResult);
 
-      return LitHtml.html`<div>${contents}</div>`;
+      return html`<div>${contents}</div>`;
     }
 
     assertNotNullOrUndefined(this.#data);

@@ -92,4 +92,40 @@ TEST(StringUtilTest, StrCat) {
   EXPECT_EQ(std::string("abcdef"), StrCat({"abc", std::string("def")}));
 }
 
+TEST(StringUtilTest, Split) {
+  std::vector<std::string_view> result;
+  std::vector<std::string_view> empty;
+  auto single = std::vector<std::string_view>({"donut"});
+  auto expected = std::vector<std::string_view>({"a", "b", "ccc"});
+
+  result = Split("", ';');
+  EXPECT_EQ(result, empty);
+  result = Split(";;;;;", ';');
+  EXPECT_EQ(result, empty);
+  result = Split("donut", ';');
+  EXPECT_EQ(result, single);
+  result = Split(";;;donut", ';');
+  EXPECT_EQ(result, single);
+  result = Split("donut;;;", ';');
+  EXPECT_EQ(result, single);
+  result = Split("a;;b;;;ccc", ';');
+  EXPECT_EQ(result, expected);
+  result = Split(";;;a;;b;;;ccc", ';');
+  EXPECT_EQ(result, expected);
+  result = Split(";;;a;;b;;;ccc;;;;", ';');
+  EXPECT_EQ(result, expected);
+}
+
+TEST(StringUtilTest, Join) {
+  std::vector<std::string_view> empty;
+  auto single = std::vector<std::string_view>({"donut"});
+  auto input = std::vector<std::string_view>({"a", "b", "ccc"});
+
+  EXPECT_EQ("", Join(empty.begin(), empty.end(), ","));
+  EXPECT_EQ("donut", Join(single.begin(), single.end(), ","));
+  EXPECT_EQ("abccc", Join(input.begin(), input.end(), ""));
+  EXPECT_EQ("a,b,ccc", Join(input.begin(), input.end(), ","));
+  EXPECT_EQ("a<->b<->ccc", Join(input.begin(), input.end(), "<->"));
+}
+
 }  // namespace openscreen::string_util

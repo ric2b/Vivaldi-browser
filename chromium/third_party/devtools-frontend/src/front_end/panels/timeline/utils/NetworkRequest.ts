@@ -5,9 +5,9 @@ import * as Common from '../../../core/common/common.js';
 import type * as Platform from '../../../core/platform/platform.js';
 import type * as SDK from '../../../core/sdk/sdk.js';
 import * as Bindings from '../../../models/bindings/bindings.js';
-import type * as TraceEngine from '../../../models/trace/trace.js';
+import type * as Trace from '../../../models/trace/trace.js';
 
-export function getNetworkRequest(syntheticNetworkRequest: TraceEngine.Types.TraceEvents.SyntheticNetworkRequest):
+export function getNetworkRequest(syntheticNetworkRequest: Trace.Types.Events.SyntheticNetworkRequest):
     SDK.NetworkRequest.NetworkRequest|undefined|null {
   const url = syntheticNetworkRequest.args.data.url as Platform.DevToolsPath.UrlString;
   const urlWithoutHash = Common.ParsedURL.ParsedURL.urlWithoutHash(url) as Platform.DevToolsPath.UrlString;
@@ -15,14 +15,14 @@ export function getNetworkRequest(syntheticNetworkRequest: TraceEngine.Types.Tra
   return resource?.request;
 }
 
-export function createTimelineNetworkRequest(
-    syntheticNetworkRequest: TraceEngine.Types.TraceEvents.SyntheticNetworkRequest): TimelineNetworkRequest|null {
+export function createTimelineNetworkRequest(syntheticNetworkRequest: Trace.Types.Events.SyntheticNetworkRequest):
+    TimelineNetworkRequest|null {
   const request = getNetworkRequest(syntheticNetworkRequest);
   return request ? new TimelineNetworkRequest(request) : null;
 }
 
 // Add a wrapper class here.
-// The reason is the `Reveal in Network panel` option is handled by the context menu provider, which will add this
+// The reason is the `Open in Network panel` option is handled by the context menu provider, which will add this
 // option for all supporting types. And there are a lot of context menu providers that support
 // `SDK.NetworkRequest.NetworkRequest`, for example `Override content` by PersistenceActions, but we so far just want
 // the one to reveal in network panel, so add a new class which will only be supported by Network panel. Also we want to

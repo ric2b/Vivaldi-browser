@@ -15,29 +15,26 @@ namespace openscreen::osp {
 
 // static
 std::unique_ptr<QuicProtocolConnection> QuicProtocolConnection::FromExisting(
-    Owner& owner,
     QuicConnection& connection,
     QuicStreamManager& manager,
     uint64_t instance_id) {
   OSP_VLOG << "QUIC stream created for instance " << instance_id;
   QuicStream* stream = connection.MakeOutgoingStream(manager);
-  auto pc =
-      std::make_unique<QuicProtocolConnection>(owner, *stream, instance_id);
-  manager.AddStreamPair(ServiceStreamPair{stream, pc.get()});
+  auto pc = std::make_unique<QuicProtocolConnection>(stream, instance_id);
+  manager.AddStream(*pc);
   return pc;
 }
 
-QuicProtocolConnection::QuicProtocolConnection(Owner& owner,
-                                               QuicStream& stream,
+QuicProtocolConnection::QuicProtocolConnection(QuicStream* stream,
                                                uint64_t instance_id)
-    : owner_(owner), instance_id_(instance_id), stream_(&stream) {}
+    : instance_id_(instance_id), stream_(stream) {}
 
 QuicProtocolConnection::~QuicProtocolConnection() {
+  // When this is destroyed, if there is still a underlying QuicStream serving
+  // this, we should close it and OnClose will be triggered before this function
+  // completes.
   if (stream_) {
-    stream_->CloseWriteEnd();
-    // Only need to notify `owner_` when `stream_` is still working.
-    // Otherwise, it is already handled when `stream_` is closed.
-    owner_.OnConnectionDestroyed(*this);
+    stream_->Close();
   }
 }
 
@@ -51,9 +48,9 @@ void QuicProtocolConnection::Write(ByteView bytes) {
   }
 }
 
-void QuicProtocolConnection::CloseWriteEnd() {
+void QuicProtocolConnection::Close() {
   if (stream_) {
-    stream_->CloseWriteEnd();
+    stream_->Close();
   }
 }
 

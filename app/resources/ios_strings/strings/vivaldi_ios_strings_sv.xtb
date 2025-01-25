@@ -2,24 +2,27 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
 <translation id="1063263220330818888">Privat sök</translation>
+<translation id="1097355661841455597">Vi vill gärna höra dina tankar.</translation>
 <translation id="1137850887415122856">För att låsa dina privata flikar, ställ in Touch ID, Face ID eller ett lösenord.</translation>
 <translation id="1310184829257917508">Be att få öppna länkar från andra appar privat</translation>
-<translation id="1512201558627495343">Ny privat flik</translation>
 <translation id="207677936531967364">Ny privat fliksida</translation>
+<translation id="2418705169960294134">Ny privat flik</translation>
 <translation id="2899836479226240291">Du kan öppna länkar i Vivaldi automatiskt genom att göra det till din standardwebbläsarapp.</translation>
-<translation id="3365529507898144230">Spara i Foto</translation>
+<translation id="3463990832590571933">Öppna i ny privat flik</translation>
 <translation id="3473652525653758699">Nytt privat fönster</translation>
 <translation id="3501504415290398157">Använd <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> för att låsa upp dina privata flikar.</translation>
 <translation id="3692650606013198282">Öppna privat</translation>
-<translation id="3709782636417497984">Öppna i Ny privat flik</translation>
 <translation id="3981599532037327317">Öppna ${url} privat</translation>
 <translation id="398477389655464998">Kopiera länk till markering</translation>
-<translation id="4620246317052452550">Sidor du har läst</translation>
+<translation id="4026745073321351206">🙄 Hittat ett problem?</translation>
 <translation id="4755216899422789286">Öppna webbadresser i Vivaldi</translation>
+<translation id="5431239785743546285">Sidor du har läst</translation>
 <translation id="6233792867654386826">Öppnar de inmatade webbadresserna i Vivaldi.</translation>
 <translation id="6827597288286078054">Privat sök</translation>
 <translation id="7307970171564921489">Lås upp privata flikar med <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Öppna privat?</translation>
 <translation id="7549299604720382000">Ny privat flik</translation>
+<translation id="7920949005883349320">Integritet och säkerhet</translation>
+<translation id="8031932676440435547">Spara i bilder</translation>
 <translation id="8326104954595890674">Ny privat flik</translation>
 </translationbundle>

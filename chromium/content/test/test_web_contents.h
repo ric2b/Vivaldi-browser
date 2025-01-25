@@ -139,6 +139,12 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   void TestIncrementUsbActiveFrameCount() override;
   void TestDecrementUsbActiveFrameCount() override;
 
+  void TestIncrementHidActiveFrameCount() override;
+  void TestDecrementHidActiveFrameCount() override;
+
+  void TestIncrementSerialActiveFrameCount() override;
+  void TestDecrementSerialActiveFrameCount() override;
+
   void TestIncrementBluetoothConnectedDeviceCount() override;
   void TestDecrementBluetoothConnectedDeviceCount() override;
 
@@ -186,6 +192,9 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
 
   void SetMediaCaptureRawDeviceIdsOpened(blink::mojom::MediaStreamType type,
                                          std::vector<std::string> ids) override;
+
+  void OnIgnoredUIEvent() override;
+  bool GetIgnoredUIEventCalled() const;
 
  protected:
   // The deprecated WebContentsTester still needs to subclass this.
@@ -250,6 +259,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   bool overscroll_enabled_ = true;
   base::flat_map<blink::mojom::MediaStreamType, std::vector<std::string>>
       media_capture_raw_device_ids_opened_;
+  bool ignored_ui_event_called_ = false;
 };
 
 }  // namespace content

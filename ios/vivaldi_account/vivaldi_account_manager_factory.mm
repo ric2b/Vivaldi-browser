@@ -13,10 +13,10 @@
 namespace vivaldi {
 
 // static
-VivaldiAccountManager* VivaldiAccountManagerFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+VivaldiAccountManager* VivaldiAccountManagerFactory::GetForProfile(
+  ProfileIOS* profile) {
   return static_cast<VivaldiAccountManager*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 // static
@@ -37,15 +37,14 @@ VivaldiAccountManagerFactory::~VivaldiAccountManagerFactory() {}
 std::unique_ptr<KeyedService>
 VivaldiAccountManagerFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
 
-  auto url_loader_factory = browser_state->GetSharedURLLoaderFactory();
-  auto password_store = IOSChromeProfilePasswordStoreFactory::GetForBrowserState(
-      browser_state, ServiceAccessType::IMPLICIT_ACCESS);
+  auto url_loader_factory = profile->GetSharedURLLoaderFactory();
+  auto password_store = IOSChromeProfilePasswordStoreFactory::GetForProfile(
+      profile, ServiceAccessType::IMPLICIT_ACCESS);
 
   return std::make_unique<VivaldiAccountManager>(
-      browser_state->GetPrefs(), GetApplicationContext()->GetLocalState(),
+      profile->GetPrefs(), GetApplicationContext()->GetLocalState(),
       std::move(url_loader_factory), std::move(password_store));
 }
 

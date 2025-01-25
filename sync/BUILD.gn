@@ -2,10 +2,13 @@
 
 source_set("invalidations") {
   sources = [
+    "invalidations/invalidation_service_stomp_client.cc",
+    "invalidations/invalidation_service_stomp_client.h",
+    "invalidations/stomp_constants.h",
+    "invalidations/stomp_frame_builder.cc",
+    "invalidations/stomp_frame_builder.h",
     "invalidations/vivaldi_sync_invalidations_service.cc",
     "invalidations/vivaldi_sync_invalidations_service.h",
-    "invalidations/invalidation_service_stomp_websocket.cc",
-    "invalidations/invalidation_service_stomp_websocket.h",
   ]
 
   deps = [

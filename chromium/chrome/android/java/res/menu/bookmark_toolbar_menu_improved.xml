@@ -56,7 +56,7 @@ found in the LICENSE file.
             android:id="@+id/sort_bookmarks_id"
             android:title="@string/panel_sort"
             android:icon="@drawable/vivaldi_sort_button_24dp"
-            app:showAsAction="always"
+            app:showAsAction="ifRoom"
             app:iconTint="@color/default_icon_color_secondary_tint_list"
             >
             <menu>

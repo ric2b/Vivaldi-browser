@@ -163,8 +163,10 @@ public class PageInfoConnectionController
                         securityLevel,
                         /* isSmallDevice= */ false,
                         /* skipIconForNeutralState= */ false,
-                        /* useUpdatedConnectionSecurityIndicators= */ false, null); // Vivaldi
+                        /* useLockIconForSecureState= */ true,
+                        null); // Vivaldi
         rowParams.iconTint = getSecurityIconColor(securityLevel);
+        rowParams.decreaseIconSize = true; // Vivaldi
         if (hasClickCallback) rowParams.clickCallback = this::launchSubpage;
         mRowView.setParams(rowParams);
     }

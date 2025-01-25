@@ -48,6 +48,7 @@ size_t last_bits = 0;
 uint64_t best_target = ~0ull;
 #endif
 namespace HWY_NAMESPACE {
+namespace {
 
 template <size_t kBits, typename T>
 T Random(RandomState& rng) {
@@ -207,6 +208,9 @@ void TestAllPack32() {
 }
 
 void TestAllPack64() {
+  // Fails, but only on GCC 13.
+#if !(HWY_COMPILER_GCC_ACTUAL && HWY_COMPILER_GCC_ACTUAL < 1400 && \
+      HWY_TARGET == HWY_RVV)
   ForShrinkableVectors<TestPack<Pack64, 64, 1>>()(uint64_t());
   ForShrinkableVectors<TestPack<Pack64, 64, 5>>()(uint64_t());
   ForShrinkableVectors<TestPack<Pack64, 64, 12>>()(uint64_t());
@@ -216,22 +220,25 @@ void TestAllPack64() {
   ForShrinkableVectors<TestPack<Pack64, 64, 33>>()(uint64_t());
   ForShrinkableVectors<TestPack<Pack64, 64, 41>>()(uint64_t());
   ForShrinkableVectors<TestPack<Pack64, 64, 61>>()(uint64_t());
+#endif
 }
 
+}  // namespace
 // NOLINTNEXTLINE(google-readability-namespace-comments)
 }  // namespace HWY_NAMESPACE
 }  // namespace hwy
 HWY_AFTER_NAMESPACE();
 
 #if HWY_ONCE
-
 namespace hwy {
+namespace {
 HWY_BEFORE_TEST(BitPackTest);
 HWY_EXPORT_AND_TEST_P(BitPackTest, TestAllPack8);
 HWY_EXPORT_AND_TEST_P(BitPackTest, TestAllPack16);
 HWY_EXPORT_AND_TEST_P(BitPackTest, TestAllPack32);
 HWY_EXPORT_AND_TEST_P(BitPackTest, TestAllPack64);
 HWY_AFTER_TEST();
+}  // namespace
 }  // namespace hwy
-
-#endif
+HWY_TEST_MAIN();
+#endif  // HWY_ONCE

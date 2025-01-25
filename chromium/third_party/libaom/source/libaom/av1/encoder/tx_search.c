@@ -3045,10 +3045,12 @@ static inline void block_rd_txfm(int plane, int block, int blk_row, int blk_col,
                  &txb_ctx, args->ftxs_mode, args->skip_trellis,
                  args->best_rd - args->current_rd, &this_rd_stats);
 
+#if !CONFIG_REALTIME_ONLY
   if (plane == AOM_PLANE_Y && xd->cfl.store_y) {
     assert(!is_inter || plane_bsize < BLOCK_8X8);
     cfl_store_tx(xd, blk_row, blk_col, tx_size, plane_bsize);
   }
+#endif
 
 #if CONFIG_RD_DEBUG
   update_txb_coeff_cost(&this_rd_stats, plane, this_rd_stats.rate);

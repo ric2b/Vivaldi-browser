@@ -52,8 +52,8 @@ class SDLPlayerBase : public Receiver::Consumer, public Decoder::Client {
     PresentableFrame& operator=(PresentableFrame&& other) noexcept;
   };
 
-  // |error_callback| is run only if a fatal error occurs, at which point the
-  // player has halted and set |error_status()|. |media_type| should be "audio"
+  // `error_callback` is run only if a fatal error occurs, at which point the
+  // player has halted and set `error_status()`. `media_type` should be "audio"
   // or "video" (only used when logging).
   SDLPlayerBase(ClockNowFunctionPtr now_function,
                 TaskRunner& task_runner,
@@ -64,16 +64,16 @@ class SDLPlayerBase : public Receiver::Consumer, public Decoder::Client {
 
   PlayerState state() const { return state_; }
 
-  // Called back from either |decoder_| or a player subclass to handle a fatal
+  // Called back from either `decoder_` or a player subclass to handle a fatal
   // error event.
   void OnFatalError(const std::string& message) final;
 
-  // Renders the |frame| and returns its [possibly adjusted] presentation time.
+  // Renders the `frame` and returns its [possibly adjusted] presentation time.
   virtual ErrorOr<Clock::time_point> RenderNextFrame(
       const PresentableFrame& frame) = 0;
 
   // Called to render when the player has no new content, and returns true if a
-  // Present() is necessary. |frame| may be null, if it is not available. This
+  // Present() is necessary. `frame` may be null, if it is not available. This
   // method can be called before the first frame, after any frame, or after a
   // fatal error has occurred.
   virtual bool RenderWhileIdle(const PresentableFrame* frame) = 0;
@@ -103,7 +103,7 @@ class SDLPlayerBase : public Receiver::Consumer, public Decoder::Client {
       const EncodedFrame& frame);
 
   // AVCodecDecoder::Client implementation. These are called-back from
-  // |decoder_| to provide results.
+  // `decoder_` to provide results.
   void OnFrameDecoded(FrameId frame_id, const AVFrame& frame) final;
   void OnDecodeError(FrameId frame_id, const std::string& message) final;
 

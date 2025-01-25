@@ -16,6 +16,7 @@
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_item_configuration.h"
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_item_type.h"
 #import "ios/chrome/browser/price_insights/model/price_insights_feature.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/web/public/web_state.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -79,8 +80,8 @@ void PriceInsightsModel::FetchConfigurationForWebState(
   price_insights_executions_[product_url] =
       std::make_unique<PriceInsightsExecution>();
 
-  shopping_service_ = commerce::ShoppingServiceFactory::GetForBrowserState(
-      web_state->GetBrowserState());
+  shopping_service_ = commerce::ShoppingServiceFactory::GetForProfile(
+      ProfileIOS::FromBrowserState(web_state->GetBrowserState()));
   shopping_service_->GetProductInfoForUrl(
       product_url, base::BindOnce(&PriceInsightsModel::OnProductInfoUrlReceived,
                                   weak_ptr_factory_.GetWeakPtr()));
@@ -130,9 +131,11 @@ void PriceInsightsModel::OnProductInfoUrlReceived(
 void PriceInsightsModel::OnPriceInsightsInfoUrlReceived(
     const GURL& url,
     const std::optional<commerce::PriceInsightsInfo>& info) {
+  bool has_valid_price_insights_info =
+      info.has_value() && info.value().catalog_history_prices.size() > 0;
   base::UmaHistogramBoolean(kPriceInsightsModelPriceInsightsInfo,
-                            info.has_value());
-  if (info.has_value()) {
+                            has_valid_price_insights_info);
+  if (has_valid_price_insights_info) {
     price_insights_executions_[url]->config->price_insights_info = info.value();
   }
   price_insights_executions_[url]->is_price_insights_info_processed = true;

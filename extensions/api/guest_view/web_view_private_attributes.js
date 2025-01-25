@@ -15,6 +15,18 @@ TabIdAttribute.prototype.handleMutation = function (oldValue, newValue) {
   // nothing to do here
 }
 
+function ParentTabIdAttribute(view) {
+  GuestViewAttributes.Attribute.call(this,
+    WebViewConstants.ATTRIBUTE_PARENT_TAB_ID, view);
+}
+
+ParentTabIdAttribute.prototype.__proto__ =
+  GuestViewAttributes.Attribute.prototype;
+
+ParentTabIdAttribute.prototype.handleMutation = function (oldValue, newValue) {
+  // nothing to do here
+}
+
 function InspectTabIdAttribute(view) {
   GuestViewAttributes.Attribute.call(this,
     WebViewConstants.ATTRIBUTE_INSPECT_TAB_ID, view);
@@ -64,6 +76,7 @@ function addVivaldiWebViewAttributes(athis) {
   athis.WasTypedAttribute = WasTypedAttribute;
   athis.ViewtypeAttribute = ViewtypeAttribute;
   athis.WindowIdAttribute = WindowIdAttribute;
+  athis.ParentTabIdAttribute = ParentTabIdAttribute;
 }
 
 // Exports.

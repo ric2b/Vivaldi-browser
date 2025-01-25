@@ -136,6 +136,12 @@ void BasePcpHandler::Shutdown() {
   // Stop all the ongoing Runnables (as gracefully as possible).
   NEARBY_LOGS(INFO) << "BasePcpHandler(" << strategy_.GetName()
                     << ") is bringing down executors.";
+
+  encryption_runner_.Shutdown();
+
+  // Stop discovery of Bluetooth Classic.
+  mediums_->GetBluetoothClassic().StopAllDiscovery();
+
   serial_executor_.Shutdown();
   alarm_executor_.Shutdown();
   NEARBY_LOGS(INFO) << "BasePcpHandler(" << strategy_.GetName()
@@ -513,6 +519,12 @@ Status BasePcpHandler::WaitForResult(const std::string& method_name,
 
 void BasePcpHandler::RunOnPcpHandlerThread(const std::string& name,
                                            Runnable runnable) {
+  if (closed_.Get()) {
+    NEARBY_LOGS(WARNING) << "Skip to run PCP Handler task " << name
+                         << " due to PCP Handler is closed";
+    return;
+  }
+
   serial_executor_.Execute(name, std::move(runnable));
 }
 
@@ -774,14 +786,15 @@ ConnectionInfo BasePcpHandler::FillConnectionInfo(
                       << "; bssid=" << connection_info.bssid
                       << "; ap_frequency=" << connection_info.ap_frequency
                       << "Mhz; ip_address in bytes format="
-                      << connection_info.ip_address;
+                      << absl::BytesToHexString(connection_info.ip_address);
   }
   connection_info.supported_mediums =
       GetSupportedConnectionMediumsByPriority(connection_options);
 
   if (!NearbyFlags::GetInstance().GetBoolFlag(
           config_package_nearby::nearby_connections_feature::
-              kEnableWifiHotspotClient)) {
+              kEnableWifiHotspotClient) ||
+      connection_options.non_disruptive_hotspot_mode) {
     // Remove Wi-Fi Hotspot if WiFi LAN is available.
     StripOutWifiHotspotMedium(connection_info);
   }
@@ -1940,7 +1953,7 @@ Exception BasePcpHandler::OnIncomingConnection(
                     << "; bssid=" << connection_info.bssid
                     << "; ap_frequency=" << connection_info.ap_frequency
                     << "Mhz; ip_address in bytes format="
-                    << connection_info.ip_address;
+                    << absl::BytesToHexString(connection_info.ip_address);
 
   // We've successfully connected to the device, and are now about to jump on to
   // the EncryptionRunner thread to start running our encryption protocol. We'll
@@ -2272,6 +2285,13 @@ void BasePcpHandler::EvaluateConnectionResult(ClientProxy* client,
   client->OnConnectionAccepted(endpoint_id);
 
   // Report the current bandwidth to the client
+  if (FeatureFlags::GetInstance()
+          .GetFlags()
+          .support_web_rtc_non_cellular_medium) {
+    if (medium == Medium::WEB_RTC && !mediums_->GetWebRtc().IsUsingCellular()) {
+      medium = Medium::WEB_RTC_NON_CELLULAR;
+    }
+  }
   client->OnBandwidthChanged(endpoint_id, medium);
 
   NEARBY_LOGS(INFO) << "Connection accepted on Medium:"

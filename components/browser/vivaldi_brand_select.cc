@@ -96,7 +96,11 @@ void SelectClientHintsBrand(std::optional<std::string>& brand,
   }
 }
 
-void UpdateBrands(int seed, blink::UserAgentBrandList& brands) {
+void UpdateBrands(
+    std::optional<blink::UserAgentBrandVersion>& additional_brand_version) {
+  if (additional_brand_version.has_value())
+    return;
+
   if (!IsVivaldiRunning() || (!g_client_hints_prefs && !g_brand_override))
     return;
 
@@ -114,7 +118,8 @@ void UpdateBrands(int seed, blink::UserAgentBrandList& brands) {
                   vivaldiprefs::kVivaldiClientHintsBrandAppendVivaldi)))
     return;
 
-  brands.emplace_back("Vivaldi", GetVivaldiReleaseVersion());
+  additional_brand_version =
+      blink::UserAgentBrandVersion("Vivaldi", GetVivaldiReleaseVersion());
 }
 
 std::string GetBrandFullVersion() {

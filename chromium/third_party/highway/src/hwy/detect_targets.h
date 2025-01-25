@@ -215,14 +215,15 @@
 #endif
 
 // HWY_NEON_BF16 requires recent compilers.
-#if (HWY_COMPILER_CLANG >= 1600 || HWY_COMPILER_GCC_ACTUAL >= 1302)
+#if (HWY_COMPILER_CLANG != 0 && HWY_COMPILER_CLANG < 1700) || \
+    (HWY_COMPILER_GCC_ACTUAL != 0 && HWY_COMPILER_GCC_ACTUAL < 1302)
 #define HWY_BROKEN_NEON_BF16 (HWY_NEON_BF16)
 #else
 #define HWY_BROKEN_NEON_BF16 0
 #endif
 
 // SVE[2] require recent clang or gcc versions.
-#if (HWY_COMPILER_CLANG && HWY_COMPILER_CLANG < 1100) || \
+#if (HWY_COMPILER_CLANG && HWY_COMPILER_CLANG < 1900) || \
     (HWY_COMPILER_GCC_ACTUAL && HWY_COMPILER_GCC_ACTUAL < 1000)
 #define HWY_BROKEN_SVE (HWY_SVE | HWY_SVE2 | HWY_SVE_256 | HWY_SVE2_128)
 #else
@@ -257,6 +258,22 @@
 #define HWY_BROKEN_PPC10 0
 #endif
 
+// PPC8/PPC9/PPC10 targets may fail to compile on 32-bit PowerPC
+#if HWY_ARCH_PPC && !HWY_ARCH_PPC_64
+#define HWY_BROKEN_PPC_32BIT (HWY_PPC8 | HWY_PPC9 | HWY_PPC10)
+#else
+#define HWY_BROKEN_PPC_32BIT 0
+#endif
+
+// HWY_RVV fails to compile with GCC < 13 or Clang < 16.
+#if HWY_ARCH_RISCV &&                                     \
+    ((HWY_COMPILER_CLANG && HWY_COMPILER_CLANG < 1600) || \
+     (HWY_COMPILER_GCC_ACTUAL && HWY_COMPILER_GCC_ACTUAL < 1300))
+#define HWY_BROKEN_RVV (HWY_RVV)
+#else
+#define HWY_BROKEN_RVV 0
+#endif
+
 // Allow the user to override this without any guarantee of success.
 #ifndef HWY_BROKEN_TARGETS
 
@@ -264,7 +281,8 @@
   (HWY_BROKEN_CLANG6 | HWY_BROKEN_32BIT | HWY_BROKEN_MSVC |    \
    HWY_BROKEN_AVX3_DL_ZEN4 | HWY_BROKEN_AVX3_SPR |             \
    HWY_BROKEN_ARM7_BIG_ENDIAN | HWY_BROKEN_ARM7_WITHOUT_VFP4 | \
-   HWY_BROKEN_NEON_BF16 | HWY_BROKEN_SVE | HWY_BROKEN_PPC10)
+   HWY_BROKEN_NEON_BF16 | HWY_BROKEN_SVE | HWY_BROKEN_PPC10 |  \
+   HWY_BROKEN_PPC_32BIT | HWY_BROKEN_RVV)
 
 #endif  // HWY_BROKEN_TARGETS
 
@@ -576,36 +594,65 @@
 #endif
 // Defining one of HWY_COMPILE_ONLY_* will trump HWY_COMPILE_ALL_ATTAINABLE.
 
-// Allow opting out, and without a guarantee of success, opting-in.
-#ifndef HWY_HAVE_AUXV
+#ifndef HWY_HAVE_AUXV  // allow override
 #ifdef TOOLCHAIN_MISS_SYS_AUXV_H
 #define HWY_HAVE_AUXV 0  // CMake failed to find the header
 // glibc 2.16 added auxv, but checking for that requires features.h, and we do
 // not want to include system headers here. Instead check for the header
 // directly, which has been supported at least since GCC 5.4 and Clang 3.
+#elif defined(__has_include)  // note: wrapper macro fails on Clang ~17
 // clang-format off
-#elif HWY_HAS_INCLUDE(<sys/auxv.h>)
+#if __has_include(<sys/auxv.h>)
 // clang-format on
-#define HWY_HAVE_AUXV 1  // header present
+#define HWY_HAVE_AUXV 1       // header present
 #else
-#define HWY_HAVE_AUXV 0  // header not present, or non Clang/GCC compiler
+#define HWY_HAVE_AUXV 0  // header not present
+#endif                   // __has_include
+#else                    // compiler lacks __has_include
+#define HWY_HAVE_AUXV 0
 #endif
 #endif  // HWY_HAVE_AUXV
 
+#ifndef HWY_HAVE_RUNTIME_DISPATCH_RVV  // allow override
+// The riscv_vector.h in Clang 16-18 requires compiler flags, and 19 still has
+// some missing intrinsics, see
+// https://github.com/llvm/llvm-project/issues/56592. GCC 13.3 also has an
+// #error check, whereas 14.1 fails with "argument type 'vuint16m8_t' requires
+// the V ISA extension": https://gcc.gnu.org/bugzilla/show_bug.cgi?id=115325.
+#if HWY_ARCH_RISCV && HWY_COMPILER_CLANG >= 1900 && 0
+#define HWY_HAVE_RUNTIME_DISPATCH_RVV 1
+#else
+#define HWY_HAVE_RUNTIME_DISPATCH_RVV 0
+#endif
+#endif  // HWY_HAVE_RUNTIME_DISPATCH_RVV
+
+#ifndef HWY_HAVE_RUNTIME_DISPATCH_APPLE  // allow override
+#if HWY_ARCH_ARM_A64 && HWY_OS_APPLE && \
+    (HWY_COMPILER_GCC_ACTUAL || HWY_COMPILER_CLANG >= 1700)
+#define HWY_HAVE_RUNTIME_DISPATCH_APPLE 1
+#else
+#define HWY_HAVE_RUNTIME_DISPATCH_APPLE 0
+#endif
+#endif  // HWY_HAVE_RUNTIME_DISPATCH_APPLE
+
+#ifndef HWY_HAVE_RUNTIME_DISPATCH_LINUX  // allow override
+#if (HWY_ARCH_ARM || HWY_ARCH_PPC || HWY_ARCH_S390X) && HWY_OS_LINUX && \
+    (HWY_COMPILER_GCC_ACTUAL || HWY_COMPILER_CLANG >= 1700) && HWY_HAVE_AUXV
+#define HWY_HAVE_RUNTIME_DISPATCH_LINUX 1
+#else
+#define HWY_HAVE_RUNTIME_DISPATCH_LINUX 0
+#endif
+#endif  // HWY_HAVE_RUNTIME_DISPATCH_LINUX
+
 // Allow opting out, and without a guarantee of success, opting-in.
 #ifndef HWY_HAVE_RUNTIME_DISPATCH
-// Clang, GCC and MSVC allow runtime dispatch on x86.
-#if HWY_ARCH_X86
-#define HWY_HAVE_RUNTIME_DISPATCH 1
-// On Arm, PPC, S390X, and RISC-V: GCC and Clang 17+ do, and we require Linux
-// to detect CPU capabilities.
-#elif (HWY_ARCH_ARM || HWY_ARCH_PPC || HWY_ARCH_S390X || HWY_ARCH_RISCV) &&    \
-    (HWY_COMPILER_GCC_ACTUAL || HWY_COMPILER_CLANG >= 1700) && HWY_OS_LINUX && \
-    HWY_HAVE_AUXV
+// Clang, GCC and MSVC allow OS-independent runtime dispatch on x86.
+#if HWY_ARCH_X86 || HWY_HAVE_RUNTIME_DISPATCH_RVV || \
+    HWY_HAVE_RUNTIME_DISPATCH_APPLE || HWY_HAVE_RUNTIME_DISPATCH_LINUX
 #define HWY_HAVE_RUNTIME_DISPATCH 1
 #else
 #define HWY_HAVE_RUNTIME_DISPATCH 0
-#endif  // HWY_ARCH_*
+#endif
 #endif  // HWY_HAVE_RUNTIME_DISPATCH
 
 // AVX3_DL is not widely available yet. To reduce code size and compile time,
@@ -668,22 +715,28 @@
 #endif
 
 #if HWY_ARCH_RISCV && HWY_HAVE_RUNTIME_DISPATCH
-#define HWY_ATTAINABLE_RISCV (HWY_RVV)
+#define HWY_ATTAINABLE_RISCV HWY_RVV
+#else
+#define HWY_ATTAINABLE_RISCV HWY_BASELINE_RVV
 #endif
 
-// Attainable means enabled and the compiler allows intrinsics (even when not
-// allowed to autovectorize). Used in 3 and 4.
-#if HWY_ARCH_X86
-#if HWY_COMPILER_MSVC
+#ifndef HWY_ATTAINABLE_TARGETS_X86  // allow override
+#if HWY_COMPILER_MSVC && defined(HWY_SLOW_MSVC)
 // Fewer targets for faster builds.
-#define HWY_ATTAINABLE_TARGETS \
+#define HWY_ATTAINABLE_TARGETS_X86 \
   HWY_ENABLED(HWY_BASELINE_SCALAR | HWY_STATIC_TARGET | HWY_AVX2)
 #else  // !HWY_COMPILER_MSVC
-#define HWY_ATTAINABLE_TARGETS                                               \
+#define HWY_ATTAINABLE_TARGETS_X86                                           \
   HWY_ENABLED(HWY_BASELINE_SCALAR | HWY_SSE2 | HWY_SSSE3 | HWY_SSE4 |        \
               HWY_AVX2 | HWY_AVX3 | HWY_ATTAINABLE_AVX3_DL | HWY_AVX3_ZEN4 | \
               HWY_AVX3_SPR)
 #endif  // !HWY_COMPILER_MSVC
+#endif  // HWY_ATTAINABLE_TARGETS_X86
+
+// Attainable means enabled and the compiler allows intrinsics (even when not
+// allowed to autovectorize). Used in 3 and 4.
+#if HWY_ARCH_X86
+#define HWY_ATTAINABLE_TARGETS HWY_ATTAINABLE_TARGETS_X86
 #elif HWY_ARCH_ARM
 #define HWY_ATTAINABLE_TARGETS                                                 \
   HWY_ENABLED(HWY_BASELINE_SCALAR | HWY_ATTAINABLE_NEON | HWY_ATTAINABLE_SVE | \
@@ -694,7 +747,7 @@
 #elif HWY_ARCH_S390X
 #define HWY_ATTAINABLE_TARGETS \
   HWY_ENABLED(HWY_BASELINE_SCALAR | HWY_ATTAINABLE_S390X)
-#elif HWY_ARCH_RVV
+#elif HWY_ARCH_RISCV
 #define HWY_ATTAINABLE_TARGETS \
   HWY_ENABLED(HWY_BASELINE_SCALAR | HWY_ATTAINABLE_RISCV)
 #else

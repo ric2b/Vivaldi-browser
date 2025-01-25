@@ -86,7 +86,7 @@ some numbers:
   unreasonable).
 
 * From a flake which happens 1/1000 builds, 999/1000 builds will pass,
-  assuming that there's no other issues with the tree.
+  assuming that there are no other issues with the tree.
 
 * 999/1000 builds to the power of 100 builders per CQ run means that
   only **90.47% of CQ runs will pass**.

@@ -742,7 +742,7 @@ String CachedStorageArea::Uint8VectorToString(const Vector<uint8_t>& input,
       // TODO(mek): When this lived in content it used to do a "lenient"
       // conversion, while this is a strict conversion. Figure out if that
       // difference actually matters in practice.
-      result = String::FromUTF8(input.data(), input_size);
+      result = String::FromUTF8(base::span(input));
       if (result.IsNull()) {
         corrupt = true;
         break;
@@ -764,8 +764,7 @@ String CachedStorageArea::Uint8VectorToString(const Vector<uint8_t>& input,
           break;
         }
         case StorageFormat::Latin1:
-          result = String(reinterpret_cast<const char*>(input.data() + 1),
-                          payload_size);
+          result = String(base::span(input).subspan(1));
           break;
         default:
           corrupt = true;
@@ -853,7 +852,7 @@ Vector<uint8_t> CachedStorageArea::StringToUint8Vector(
       return result;
     }
   }
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void CachedStorageArea::EvictCachedData() {

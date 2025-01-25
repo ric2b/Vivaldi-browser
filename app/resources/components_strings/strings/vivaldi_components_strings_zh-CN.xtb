@@ -10,6 +10,7 @@
 <translation id="132390688737681464">保存并填写地址</translation>
 <translation id="1375198122581997741">关于版本</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> 未发送数据。</translation>
+<translation id="1555191101192706055">您尝试访问的网站上的攻击者可能会诱骗您安装影响您浏览方式的有害软件，例如更改您的主页或在您访问的网站上向您展示额外的广告。</translation>
 <translation id="1559528461873125649">该文件或目录不存在</translation>
 <translation id="1640244768702815859">请尝试<ph name="BEGIN_LINK" />访问该网站的首页<ph name="END_LINK" />。</translation>
 <translation id="1645368109819982629">协议不受支持</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />检查代理服务器和防火墙<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">颁发对象：<ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">此网站无法提供安全连接</translation>
+<translation id="2178904466768126352">您尝试访问的网站上的攻击者可能会安装有害软件，以窃取或删除您的密码、照片、消息或信用卡号等内容。</translation>
 <translation id="2187317261103489799">检测（默认）</translation>
 <translation id="2224337661447660594">未连接到互联网</translation>
 <translation id="2283340219607151381">保存并填写地址</translation>
@@ -92,6 +94,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />检查防火墙和杀毒软件配置<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />正在尝试进行网络诊断<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">有效</translation>
+<translation id="4241830393007970744">您尝试访问的网站上的攻击者可能会诱骗您安装软件或泄露您的密码、电话或信用卡号码等信息。</translation>
 <translation id="4250431568374086873">您与此网站之间建立的连接并非完全安全</translation>
 <translation id="4265872034478892965">您的管理员允许</translation>
 <translation id="4305666528087210886">无法访问您的文件</translation>
@@ -102,6 +105,7 @@
 <translation id="4522570452068850558">详细信息</translation>
 <translation id="4558551763791394412">尝试停用扩展程序。</translation>
 <translation id="4592951414987517459">您与 <ph name="DOMAIN" /> 之间的连接采用新型加密套件进行了加密。</translation>
+<translation id="4598641255230617220">粘贴并转到</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /><ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">您的连接已中断</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />正在进行Windows网络诊断<ph name="END_LINK" /></translation>
@@ -111,6 +115,7 @@
 <translation id="4764776831041365478">网址为 <ph name="URL" /> 的网页可能暂时无法连接，或者它已永久性地移动到了新网址。</translation>
 <translation id="483241715238664915">开启警告</translation>
 <translation id="4943872375798546930">无结果</translation>
+<translation id="5017554619425969104">您复制的文字</translation>
 <translation id="5023310440958281426">请查看管理员制定的政策</translation>
 <translation id="5039804452771397117">允许</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{（使用了 1 个）}other{（使用了 # 个）}}</translation>
@@ -165,11 +170,11 @@
 <translation id="7108819624672055576">某款扩展程序允许</translation>
 <translation id="7111012039238467737">（有效）</translation>
 <translation id="7113310725918019676">不屏蔽来自 <ph name="DOMAIN" /> 的<ph name="BLOCKED_TYPE" /></translation>
+<translation id="7126644664682723998">粘贴并搜索</translation>
 <translation id="7179323680825933600">保存并填写支付方式</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合相关安全标准。</translation>
 <translation id="7219179957768738017">该连接使用 <ph name="SSL_VERSION" />。</translation>
 <translation id="7221855153210829124">显示通知</translation>
-<translation id="7227747683324411744">您尝试访问的网站上的攻击者可能会诱骗您安装影响您浏览方式的有害软件，例如更改您的主页或在您访问的网站上向您展示额外的广告。</translation>
 <translation id="7353601530677266744">命令行</translation>
 <translation id="7364115444476960850">您尝试访问的页面被Vivaldi的<ph name="BLOCKER_NAME" />阻止</translation>
 <translation id="7419106976560586862">配置文件路径</translation>
@@ -177,7 +182,6 @@
 <translation id="7518003948725431193">找不到与以下网址对应的网页：<ph name="URL" /></translation>
 <translation id="7549584377607005141">此网页需要使用您之前输入的数据才能正常显示。您可以重新发送这些数据，不过，这么做会重复执行此网页之前执行过的所有操作。</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> 目前无法处理此请求。</translation>
-<translation id="7605377493722372900">您正在尝试访问的网站上的攻击者可能会安装有害软件，以窃取或删除某些信息，例如您的密码、照片、消息或信用卡号码。</translation>
 <translation id="7662298039739062396">设置由某款扩展程序控制</translation>
 <translation id="7663736086183791259">证书<ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">证书</translation>
@@ -203,7 +207,6 @@
 <translation id="8288807391153049143">显示证书</translation>
 <translation id="8289355894181816810">如果您不确定这是什么意思，请与您的网络管理员联系。</translation>
 <translation id="8332188693563227489">访问 <ph name="HOST_NAME" /> 的请求遭到拒绝</translation>
-<translation id="8422228580902424274">您尝试访问的网站上的攻击者可能会诱骗您安装软件或泄露您的密码、电话或信用卡号等信息。</translation>
 <translation id="8473863474539038330">地址和其他信息</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> 的响应时间过长。</translation>
 <translation id="8503813439785031346">用户名</translation>

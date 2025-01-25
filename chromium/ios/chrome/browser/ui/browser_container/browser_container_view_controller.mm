@@ -13,6 +13,7 @@
 #import "ios/chrome/browser/ui/browser_container/browser_edit_menu_handler.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/web/common/features.h"
 #import "ui/base/l10n/l10n_util.h"
 
 @interface BrowserContainerViewController ()
@@ -35,12 +36,6 @@
   [super viewDidLoad];
   self.view.autoresizingMask =
       UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-#if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
-  if (@available(iOS 16, *)) {
-  } else {
-    [self addLinkToTextInEditMenu];
-  }
-#endif
 }
 
 - (void)viewDidLayoutSubviews {
@@ -77,8 +72,11 @@
 - (void)buildMenuWithBuilder:(id<UIMenuBuilder>)builder {
   [super buildMenuWithBuilder:builder];
 
-  DCHECK(self.browserEditMenuHandler);
-  [self.browserEditMenuHandler buildMenuWithBuilder:builder];
+  if (base::FeatureList::IsEnabled(
+          web::features::kRestoreWKWebViewEditMenuHandler)) {
+    DCHECK(self.browserEditMenuHandler);
+    [self.browserEditMenuHandler buildEditMenuWithBuilder:builder];
+  }
 }
 
 #pragma mark - Public
@@ -147,37 +145,6 @@
   }
 }
 
-#if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
-#pragma mark - Link to Text methods
-
-- (void)addLinkToTextInEditMenu {
-  if (!base::FeatureList::IsEnabled(kSharedHighlightingIOS)) {
-    return;
-  }
-
-  NSString* title = l10n_util::GetNSString(IDS_IOS_SHARE_LINK_TO_TEXT);
-  UIMenuItem* menuItem =
-      [[UIMenuItem alloc] initWithTitle:title action:@selector(linkToText:)];
-  RegisterEditMenuItem(menuItem);
-}
-
-- (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
-  if (@available(iOS 16, *)) {
-  } else {
-    if (action == @selector(linkToText:) && self.linkToTextDelegate) {
-      return [self.linkToTextDelegate shouldOfferLinkToText];
-    }
-  }
-
-  return [super canPerformAction:action withSender:sender];
-}
-
-- (void)linkToText:(UIMenuItem*)item {
-  DCHECK(base::FeatureList::IsEnabled(kSharedHighlightingIOS));
-  DCHECK(self.linkToTextDelegate);
-  [self.linkToTextDelegate handleLinkToTextSelection];
-}
-#endif
 
 #pragma mark - Private
 

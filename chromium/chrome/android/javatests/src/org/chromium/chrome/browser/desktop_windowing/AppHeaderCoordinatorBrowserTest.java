@@ -15,6 +15,7 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Rect;
 import android.os.Build;
+import android.view.ViewGroup.MarginLayoutParams;
 import android.widget.FrameLayout.LayoutParams;
 import android.widget.ImageButton;
 
@@ -58,25 +59,36 @@ import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.chrome.browser.toolbar.top.ToolbarTablet;
 import org.chromium.chrome.browser.toolbar.top.tab_strip.TabStripTransitionCoordinator;
 import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderCoordinator;
-import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderState;
 import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderUtils;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent.ContentPriority;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
+import org.chromium.components.browser_ui.bottomsheet.ManagedBottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.TestBottomSheetContent;
+import org.chromium.components.browser_ui.desktop_windowing.AppHeaderState;
+import org.chromium.content_public.browser.test.util.DOMUtils;
+import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.ui.InsetObserver;
 import org.chromium.ui.InsetsRectProvider;
-import org.chromium.ui.test.util.UiRestriction;
+import org.chromium.ui.base.DeviceFormFactor;
+
+import java.util.concurrent.TimeoutException;
 
 /** Browser test for {@link AppHeaderCoordinator} */
 @RequiresApi(Build.VERSION_CODES.R)
-@Restriction(UiRestriction.RESTRICTION_TYPE_TABLET)
+@Restriction(DeviceFormFactor.TABLET)
 @CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
 @Batch(Batch.PER_CLASS)
 @RunWith(ChromeJUnit4ClassRunner.class)
 public class AppHeaderCoordinatorBrowserTest {
     private static final int APP_HEADER_LEFT_PADDING = 10;
     private static final int APP_HEADER_RIGHT_PADDING = 20;
+    private static final String TEXTFIELD_DOM_ID = "inputElement";
+    private static final int KEYBOARD_TIMEOUT = 10000;
 
     private static final WindowInsetsCompat BOTTOM_NAV_BAR_INSETS =
             new WindowInsetsCompat.Builder()
@@ -144,6 +156,7 @@ public class AppHeaderCoordinatorBrowserTest {
     @Test
     @MediumTest
     @EnableFeatures(ChromeFeatureList.TAB_STRIP_TRANSITION_IN_DESKTOP_WINDOW)
+    @DisabledTest(message = "Flaky, crbug.com/375500318")
     public void testToggleTabStripVisibilityInDesktopWindow() {
         ChromeTabbedActivity activity = mActivityTestRule.getActivity();
         triggerDesktopWindowingModeChange(activity, true);
@@ -359,6 +372,126 @@ public class AppHeaderCoordinatorBrowserTest {
         secondActivity.finish();
     }
 
+    @Test
+    @MediumTest
+    public void testKeyboardInDesktopWindowingModePadsRootView() throws TimeoutException {
+        ChromeTabbedActivity activity = mActivityTestRule.getActivity();
+        triggerDesktopWindowingModeChange(activity, true);
+        var insetObserver = activity.getWindowAndroid().getInsetObserver();
+
+        // Navigate to a URL with an input field. Clicking on it should trigger the OSK.
+        mActivityTestRule.loadUrl(
+                mActivityTestRule
+                        .getTestServer()
+                        .getURL("/chrome/test/data/android/page_with_editable.html"));
+        DOMUtils.clickNode(activity.getActivityTab().getWebContents(), TEXTFIELD_DOM_ID);
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    boolean isKeyboardShowing =
+                            mActivityTestRule
+                                    .getKeyboardDelegate()
+                                    .isKeyboardShowing(activity, activity.getTabsView());
+                    Criteria.checkThat(isKeyboardShowing, Matchers.is(true));
+                },
+                KEYBOARD_TIMEOUT,
+                CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+
+        // Verify that the root view is padded at the bottom to account for the OSK inset.
+        var rootView = activity.getWindow().getDecorView().getRootView();
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    var keyboardInset = insetObserver.getSupplierForKeyboardInset().get();
+                    Criteria.checkThat(rootView.getPaddingBottom(), Matchers.is(keyboardInset));
+                });
+
+        // Remove input field focus to hide the keyboard.
+        JavaScriptUtils.executeJavaScript(
+                activity.getActivityTab().getWebContents(),
+                "document.querySelector('input').blur()");
+
+        // Verify that the root view bottom padding uses the system bar bottom inset.
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    var systemBarBottomInset =
+                            insetObserver
+                                    .getLastRawWindowInsets()
+                                    .getInsets(WindowInsetsCompat.Type.systemBars())
+                                    .bottom;
+                    Criteria.checkThat(
+                            rootView.getPaddingBottom(), Matchers.is(systemBarBottomInset));
+                });
+
+        // Dispatch window insets to simulate no overlap of the app window with system bar windows.
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    insetObserver.onApplyWindowInsets(
+                            rootView,
+                            new WindowInsetsCompat.Builder()
+                                    .setInsets(
+                                            WindowInsetsCompat.Type.systemBars(),
+                                            Insets.of(0, 0, 0, 0))
+                                    .build());
+                });
+
+        // Verify that the root view bottom padding is reset.
+        CriteriaHelper.pollUiThread(
+                () -> Criteria.checkThat(rootView.getPaddingBottom(), Matchers.is(0)));
+    }
+
+    @Test
+    @MediumTest
+    public void testBottomSheet() {
+        ChromeTabbedActivity activity = mActivityTestRule.getActivity();
+        // Switch to desktop windowing mode.
+        triggerDesktopWindowingModeChange(activity, true);
+
+        // Trigger a bottom sheet, verify that the sheet container's top margin is updated to
+        // account for the app header height.
+        var bottomSheetContent = new TestBottomSheetContent(activity, ContentPriority.HIGH, false);
+        var bottomSheetController =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> {
+                            var controller =
+                                    (ManagedBottomSheetController)
+                                            BottomSheetControllerProvider.from(
+                                                    activity.getWindowAndroid());
+                            controller.requestShowContent(bottomSheetContent, false);
+                            return controller;
+                        });
+
+        var sheetContainer = activity.findViewById(R.id.sheet_container);
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    Criteria.checkThat(
+                            "Bottom sheet should be visible.",
+                            bottomSheetController.getSheetState(),
+                            Matchers.not(SheetState.HIDDEN));
+                    Criteria.checkThat(
+                            "Sheet container top margin should account for app header height.",
+                            ((MarginLayoutParams) sheetContainer.getLayoutParams()).topMargin,
+                            Matchers.is(mTestAppHeaderHeight));
+                });
+
+        // Switch out of desktop windowing mode, verify that the sheet container's top margin is
+        // reset.
+        triggerDesktopWindowingModeChange(activity, false);
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    Criteria.checkThat(
+                            "Bottom sheet should be visible.",
+                            bottomSheetController.getSheetState(),
+                            Matchers.not(SheetState.HIDDEN));
+                    Criteria.checkThat(
+                            "Sheet container top margin should be reset.",
+                            ((MarginLayoutParams) sheetContainer.getLayoutParams()).topMargin,
+                            Matchers.is(0));
+                });
+
+        // Hide bottom sheet.
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> bottomSheetController.hideContent(bottomSheetContent, false));
+    }
+
     private void doTestOnTopResumedActivityChanged(
             boolean isInDesktopWindow, boolean isActivityFocused) {
         ToolbarFeatures.setIsTabStripLayoutOptimizationEnabledForTesting(true);
@@ -368,7 +501,7 @@ public class AppHeaderCoordinatorBrowserTest {
                 () -> {
                     var appHeaderCoordinator =
                             activity.getRootUiCoordinatorForTesting()
-                                    .getDesktopWindowStateProvider();
+                                    .getDesktopWindowStateManager();
                     Criteria.checkThat(appHeaderCoordinator, Matchers.notNullValue());
                 });
 
@@ -433,7 +566,7 @@ public class AppHeaderCoordinatorBrowserTest {
                 () -> {
                     var appHeaderStateProvider =
                             activity.getRootUiCoordinatorForTesting()
-                                    .getDesktopWindowStateProvider();
+                                    .getDesktopWindowStateManager();
                     setupAppHeaderRects(isInDesktopWindow);
                     var appHeaderState =
                             new AppHeaderState(

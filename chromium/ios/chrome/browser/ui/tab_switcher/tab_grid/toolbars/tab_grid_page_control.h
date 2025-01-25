@@ -77,6 +77,10 @@ extern UIControlEvents TabGridPageChangeByDragEvent;
 // Returns the frame of the last segment, in window coordinates.
 - (CGRect)lastSegmentFrame;
 
+// Vivaldi
+- (void)setIconForRemoteTabsWithSyncEnabled:(BOOL)syncEnabled;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TAB_SWITCHER_TAB_GRID_TOOLBARS_TAB_GRID_PAGE_CONTROL_H_

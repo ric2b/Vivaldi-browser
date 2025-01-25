@@ -47,6 +47,11 @@ enum TabOpeningPostOpeningAction {
   ADD_BOOKMARKS,
   ADD_READING_LIST_ITEMS,
   EXTERNAL_ACTION_SHOW_BROWSER_SETTINGS,
+
+  // Vivaldi
+  SHOW_UNINSTALL_SURVEY,
+  // End Vivaldi
+
 };
 
 class GURL;

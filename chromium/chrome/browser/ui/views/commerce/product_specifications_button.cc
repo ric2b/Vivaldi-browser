@@ -60,8 +60,9 @@ ProductSpecificationsButton::ProductSpecificationsButton(
       std::make_unique<views::MouseWatcherViewHost>(locked_expansion_view,
                                                     gfx::Insets()),
       this);
-  CHECK(entry_point_controller_);
-  entry_point_controller_observations_.Observe(entry_point_controller_);
+  if (entry_point_controller_) {
+    entry_point_controller_observations_.Observe(entry_point_controller_);
+  }
   auto* const layout_manager =
       SetLayoutManager(std::make_unique<views::BoxLayout>());
   layout_manager->set_main_axis_alignment(
@@ -188,6 +189,8 @@ void ProductSpecificationsButton::ShowEntryPointWithTitle(
 
 void ProductSpecificationsButton::HideEntryPoint() {
   Hide();
+  base::RecordAction(
+      base::UserMetricsAction("Commerce.Compare.ProactiveChipDisqualified"));
 }
 
 void ProductSpecificationsButton::SetOpacity(float factor) {
@@ -321,7 +324,8 @@ void ProductSpecificationsButton::SetLockedExpansionMode(
   if (mode == LockedExpansionMode::kNone) {
     if (locked_expansion_mode_ == LockedExpansionMode::kWillShow) {
       // Check if the entry point is still eligible for showing.
-      if (entry_point_controller_->ShouldExecuteEntryPointShow()) {
+      if (entry_point_controller_ &&
+          entry_point_controller_->ShouldExecuteEntryPointShow()) {
         ExecuteShow();
       }
     } else if (locked_expansion_mode_ == LockedExpansionMode::kWillHide) {

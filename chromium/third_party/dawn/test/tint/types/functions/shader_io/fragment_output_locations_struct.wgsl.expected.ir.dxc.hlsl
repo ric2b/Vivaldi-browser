@@ -14,17 +14,13 @@ struct main_outputs {
 
 
 FragmentOutputs main_inner() {
-  FragmentOutputs v = {1, 1u, 1.0f, float4(1.0f, 2.0f, 3.0f, 4.0f)};
+  FragmentOutputs v = {int(1), 1u, 1.0f, float4(1.0f, 2.0f, 3.0f, 4.0f)};
   return v;
 }
 
 main_outputs main() {
   FragmentOutputs v_1 = main_inner();
-  FragmentOutputs v_2 = v_1;
-  FragmentOutputs v_3 = v_1;
-  FragmentOutputs v_4 = v_1;
-  FragmentOutputs v_5 = v_1;
-  main_outputs v_6 = {v_2.loc0, v_3.loc1, v_4.loc2, v_5.loc3};
-  return v_6;
+  main_outputs v_2 = {v_1.loc0, v_1.loc1, v_1.loc2, v_1.loc3};
+  return v_2;
 }
 

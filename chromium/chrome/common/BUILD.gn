@@ -228,6 +228,7 @@ static_library("common_lib") {
     "//components/prefs",
     "//components/safe_browsing:buildflags",
     "//components/safe_search_api",
+    "//components/sampling_profiler",
     "//components/services/app_service",
     "//components/services/heap_profiling/public/cpp",
     "//components/strings",
@@ -365,8 +366,8 @@ static_library("common_lib") {
     # Non-Android.
     public_deps += [ "//chrome/common/importer" ]
     sources += [
-      "accessibility/read_anything_constants.cc",
-      "accessibility/read_anything_constants.h",
+      "read_anything/read_anything_constants.cc",
+      "read_anything/read_anything_constants.h",
     ]
   }
 
@@ -576,6 +577,7 @@ static_library("constants") {
     ":non_code_constants",
     "//components/compose:buildflags",
     "//components/signin/public/base:signin_buildflags",
+    "//content/public/common:buildflags",
     "//content/public/common:result_codes",
     "//rlz/buildflags",
     "//third_party/widevine/cdm:buildflags",

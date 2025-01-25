@@ -386,8 +386,8 @@ MaybeError ValidateResolveTarget(const DeviceBase* device,
     const TextureViewBase* resolveTarget = colorAttachment.resolveTarget;
     const TextureViewBase* attachment = colorAttachment.view;
     DAWN_TRY(device->ValidateObject(colorAttachment.resolveTarget));
-    DAWN_TRY(ValidateCanUseAs(colorAttachment.resolveTarget->GetTexture(),
-                              wgpu::TextureUsage::RenderAttachment, usageValidationMode));
+    DAWN_TRY(ValidateCanUseAs(colorAttachment.resolveTarget, wgpu::TextureUsage::RenderAttachment,
+                              usageValidationMode));
 
     DAWN_INVALID_IF(!attachment->GetTexture()->IsMultisampledTexture(),
                     "Cannot set %s as a resolve target when the color attachment %s has a sample "
@@ -503,12 +503,12 @@ MaybeError ValidateExpandResolveTextureLoadOp(const DeviceBase* device,
                 !colorAttachment.resolveTarget->IsError());
     DAWN_ASSERT(colorAttachment.view->GetFormat().supportsResolveTarget);
 
-    DAWN_INVALID_IF((colorAttachment.resolveTarget->GetTexture()->GetUsage() &
-                     wgpu::TextureUsage::TextureBinding) == 0,
-                    "Resolve target %s was not created with %s usage, which is required for "
-                    "%s.",
-                    colorAttachment.resolveTarget, wgpu::TextureUsage::TextureBinding,
-                    wgpu::LoadOp::ExpandResolveTexture);
+    DAWN_INVALID_IF(
+        (colorAttachment.resolveTarget->GetUsage() & wgpu::TextureUsage::TextureBinding) == 0,
+        "Resolve target %s was not created with %s usage, which is required for "
+        "%s.",
+        colorAttachment.resolveTarget, wgpu::TextureUsage::TextureBinding,
+        wgpu::LoadOp::ExpandResolveTexture);
 
     // TODO(42240662): multiplanar textures are not supported as resolve target.
     // The RenderPassValidationState currently rejects such usage.
@@ -529,8 +529,8 @@ MaybeError ValidateRenderPassColorAttachment(DeviceBase* device,
     }
 
     DAWN_TRY(device->ValidateObject(attachment));
-    DAWN_TRY(ValidateCanUseAs(attachment->GetTexture(), wgpu::TextureUsage::RenderAttachment,
-                              usageValidationMode));
+    DAWN_TRY(
+        ValidateCanUseAs(attachment, wgpu::TextureUsage::RenderAttachment, usageValidationMode));
 
     UnpackedPtr<RenderPassColorAttachment> unpacked;
     DAWN_TRY_ASSIGN(unpacked, ValidateAndUnpack(&colorAttachment));
@@ -558,16 +558,16 @@ MaybeError ValidateRenderPassColorAttachment(DeviceBase* device,
     DAWN_TRY(ValidateStoreOp(colorAttachment.storeOp));
     DAWN_INVALID_IF(colorAttachment.loadOp == wgpu::LoadOp::Undefined, "loadOp must be set.");
     DAWN_INVALID_IF(colorAttachment.storeOp == wgpu::StoreOp::Undefined, "storeOp must be set.");
-    if (attachment->GetTexture()->GetUsage() & wgpu::TextureUsage::TransientAttachment) {
+    if (attachment->GetUsage() & wgpu::TextureUsage::TransientAttachment) {
         DAWN_INVALID_IF(colorAttachment.loadOp != wgpu::LoadOp::Clear &&
                             colorAttachment.loadOp != wgpu::LoadOp::ExpandResolveTexture,
                         "The color attachment %s has the load op set to %s while its usage (%s) "
                         "has the transient attachment bit set.",
-                        attachment, colorAttachment.loadOp, attachment->GetTexture()->GetUsage());
+                        attachment, colorAttachment.loadOp, attachment->GetUsage());
         DAWN_INVALID_IF(colorAttachment.storeOp != wgpu::StoreOp::Discard,
                         "The color attachment %s has the store op set to %s while its usage (%s) "
                         "has the transient attachment bit set.",
-                        attachment, wgpu::StoreOp::Store, attachment->GetTexture()->GetUsage());
+                        attachment, wgpu::StoreOp::Store, attachment->GetUsage());
     }
 
     const dawn::native::Color& clearValue = colorAttachment.clearValue;
@@ -612,8 +612,8 @@ MaybeError ValidateRenderPassDepthStencilAttachment(
 
     TextureViewBase* attachment = depthStencilAttachment->view;
     DAWN_TRY(device->ValidateObject(attachment));
-    DAWN_TRY(ValidateCanUseAs(attachment->GetTexture(), wgpu::TextureUsage::RenderAttachment,
-                              usageValidationMode));
+    DAWN_TRY(
+        ValidateCanUseAs(attachment, wgpu::TextureUsage::RenderAttachment, usageValidationMode));
 
     // DS attachments must encompass all aspects of the texture, so we first check that this is
     // true, which means that in the rest of the function we can assume that the view's format is
@@ -712,8 +712,8 @@ MaybeError ValidateRenderPassPLS(DeviceBase* device,
 
         // Validate the attachment can be used as a storage attachment.
         DAWN_TRY(device->ValidateObject(attachment.storage));
-        DAWN_TRY(ValidateCanUseAs(attachment.storage->GetTexture(),
-                                  wgpu::TextureUsage::StorageAttachment, usageValidationMode));
+        DAWN_TRY(ValidateCanUseAs(attachment.storage, wgpu::TextureUsage::StorageAttachment,
+                                  usageValidationMode));
         DAWN_TRY(ValidateAttachmentArrayLayersAndLevelCount(attachment.storage));
 
         // Validate the load/storeOp and the clearValue.
@@ -1059,7 +1059,7 @@ Ref<CommandEncoder> CommandEncoder::Create(
 }
 
 // static
-Ref<CommandEncoder> CommandEncoder::MakeError(DeviceBase* device, const char* label) {
+Ref<CommandEncoder> CommandEncoder::MakeError(DeviceBase* device, StringView label) {
     return AcquireRef(new CommandEncoder(device, ObjectBase::kError, label));
 }
 
@@ -1076,7 +1076,7 @@ CommandEncoder::CommandEncoder(DeviceBase* device,
     }
 }
 
-CommandEncoder::CommandEncoder(DeviceBase* device, ObjectBase::ErrorTag tag, const char* label)
+CommandEncoder::CommandEncoder(DeviceBase* device, ObjectBase::ErrorTag tag, StringView label)
     : ApiObjectBase(device, tag, label),
       mEncodingContext(device, tag),
       mUsageValidationMode(UsageValidationMode::Default) {}
@@ -1142,7 +1142,10 @@ Ref<ComputePassEncoder> CommandEncoder::BeginComputePass(const ComputePassDescri
             if (descriptor == nullptr) {
                 return {};
             }
-            cmd->label = std::string(descriptor->label ? descriptor->label : "");
+
+            if (!descriptor->label.IsUndefined()) {
+                cmd->label = std::string(descriptor->label);
+            }
 
             if (descriptor->timestampWrites != nullptr) {
                 QuerySetBase* querySet = descriptor->timestampWrites->querySet;
@@ -1227,7 +1230,10 @@ Ref<RenderPassEncoder> CommandEncoder::BeginRenderPass(const RenderPassDescripto
             mEncodingContext.WillBeginRenderPass();
             BeginRenderPassCmd* cmd =
                 allocator->Allocate<BeginRenderPassCmd>(Command::BeginRenderPass);
-            cmd->label = std::string(descriptor->label ? descriptor->label : "");
+
+            if (!descriptor->label.IsUndefined()) {
+                cmd->label = std::string(descriptor->label);
+            }
 
             cmd->attachmentState = device->GetOrCreateAttachmentState(descriptor);
             attachmentState = cmd->attachmentState;
@@ -1896,8 +1902,8 @@ void CommandEncoder::APIClearBuffer(BufferBase* buffer, uint64_t offset, uint64_
         "encoding %s.ClearBuffer(%s, %u, %u).", this, buffer, offset, size);
 }
 
-void CommandEncoder::APIInjectValidationError2(std::string_view message) {
-    message = utils::NormalizeLabel(message);
+void CommandEncoder::APIInjectValidationError(StringView messageIn) {
+    std::string_view message = utils::NormalizeMessageString(messageIn);
     mEncodingContext.TryEncode(
         this,
         [&](CommandAllocator*) -> MaybeError {
@@ -1906,19 +1912,17 @@ void CommandEncoder::APIInjectValidationError2(std::string_view message) {
         "injecting validation error: %s.", message);
 }
 
-void CommandEncoder::APIInsertDebugMarker2(std::string_view groupLabel) {
-    groupLabel = utils::NormalizeLabel(groupLabel);
+void CommandEncoder::APIInsertDebugMarker(StringView markerIn) {
+    std::string_view marker = utils::NormalizeMessageString(markerIn);
     mEncodingContext.TryEncode(
         this,
         [&](CommandAllocator* allocator) -> MaybeError {
             InsertDebugMarkerCmd* cmd =
                 allocator->Allocate<InsertDebugMarkerCmd>(Command::InsertDebugMarker);
-            cmd->length = groupLabel.length();
-            allocator->CopyAsNullTerminatedString(groupLabel);
-
+            AddNullTerminatedString(allocator, marker, &cmd->length);
             return {};
         },
-        "encoding %s.InsertDebugMarker(\"%s\").", this, groupLabel);
+        "encoding %s.InsertDebugMarker(%s).", this, marker);
 }
 
 void CommandEncoder::APIPopDebugGroup() {
@@ -1938,22 +1942,21 @@ void CommandEncoder::APIPopDebugGroup() {
         "encoding %s.PopDebugGroup().", this);
 }
 
-void CommandEncoder::APIPushDebugGroup2(std::string_view groupLabel) {
-    groupLabel = utils::NormalizeLabel(groupLabel);
+void CommandEncoder::APIPushDebugGroup(StringView groupLabelIn) {
+    std::string_view groupLabel = utils::NormalizeMessageString(groupLabelIn);
     mEncodingContext.TryEncode(
         this,
         [&](CommandAllocator* allocator) -> MaybeError {
             PushDebugGroupCmd* cmd =
                 allocator->Allocate<PushDebugGroupCmd>(Command::PushDebugGroup);
-            cmd->length = groupLabel.length();
-            const char* label = allocator->CopyAsNullTerminatedString(groupLabel);
+            const char* label = AddNullTerminatedString(allocator, groupLabel, &cmd->length);
 
             mDebugGroupStackSize++;
             mEncodingContext.PushDebugGroupLabel(std::string_view(label, cmd->length));
 
             return {};
         },
-        "encoding %s.PushDebugGroup(\"%s\").", this, groupLabel);
+        "encoding %s.PushDebugGroup(%s).", this, groupLabel);
 }
 
 void CommandEncoder::APIResolveQuerySet(QuerySetBase* querySet,

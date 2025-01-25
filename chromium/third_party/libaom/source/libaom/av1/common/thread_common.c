@@ -42,6 +42,7 @@ static inline int get_sync_range(int width) {
     return 8;
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 static inline int get_lr_sync_range(int width) {
 #if 0
   // nsync numbers are picked by testing. For example, for 4k
@@ -59,6 +60,7 @@ static inline int get_lr_sync_range(int width) {
   return 1;
 #endif
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 // Allocate memory for lf row synchronization
 void av1_loop_filter_alloc(AV1LfSync *lf_sync, AV1_COMMON *cm, int rows,
@@ -519,6 +521,7 @@ void av1_loop_filter_frame_mt(YV12_BUFFER_CONFIG *frame, AV1_COMMON *cm,
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 static inline void lr_sync_read(void *const lr_sync, int r, int c, int plane) {
 #if CONFIG_MULTITHREAD
   AV1LrSync *const loop_res_sync = (AV1LrSync *)lr_sync;
@@ -991,6 +994,7 @@ void av1_loop_restoration_filter_frame_mt(YV12_BUFFER_CONFIG *frame,
   foreach_rest_unit_in_planes_mt(loop_rest_ctxt, workers, num_workers, lr_sync,
                                  cm, do_extend_border);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 // Initializes cdef_sync parameters.
 static inline void reset_cdef_job_info(AV1CdefSync *const cdef_sync) {

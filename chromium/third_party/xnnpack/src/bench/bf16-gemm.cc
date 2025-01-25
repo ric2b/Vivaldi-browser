@@ -7,23 +7,21 @@
 #include <cfloat>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <random>
 #include <vector>
 
-#include <benchmark/benchmark.h>
-#include <fp16/fp16.h>
-#include "bench/gemm.h"
-#include "bench/utils.h"
-
+#include "gemm.h"
+#include "utils.h"
 #include "xnnpack.h"
-#include "xnnpack/aligned-allocator.h"
 #include "xnnpack/common.h"
 #include "xnnpack/gemm.h"
 #include "xnnpack/math.h"
-#include "xnnpack/pack.h"
 #include "xnnpack/microfnptr.h"
 #include "xnnpack/microparams-init.h"
-
+#include "xnnpack/pack.h"
+#include "xnnpack/buffer.h"
+#include <benchmark/benchmark.h>
 
 static void bf16_gemm(benchmark::State& state,
   xnn_bf16_gemm_minmax_ukernel_fn gemm,
@@ -46,30 +44,32 @@ static void bf16_gemm(benchmark::State& state,
   auto rng = std::mt19937(random_device());
   auto f32rng = std::bind(std::uniform_real_distribution<float>(), std::ref(rng));
 
-  std::vector<uint16_t> a(mc * kc + XNN_EXTRA_BYTES / sizeof(uint16_t));
-  std::generate(a.begin(), a.end(), [&] { return fp32_to_bits(f32rng(rng)) >> 16; });
-  std::vector<uint16_t> k(nc * kc);
-  std::generate(k.begin(), k.end(), [&] { return fp32_to_bits(f32rng(rng)) >> 16; });
-  std::vector<uint16_t> b(nc);
-  std::generate(b.begin(), b.end(), [&] { return fp32_to_bits(f32rng(rng)) >> 16; });
+  xnnpack::Buffer<xnn_bfloat16> a(mc * kc + XNN_EXTRA_BYTES / sizeof(xnn_bfloat16));
+  std::generate(a.begin(), a.end(), [&] { return xnn_bfloat16_from_float(f32rng(rng)); });
+  xnnpack::Buffer<xnn_bfloat16> k(nc * kc);
+  std::generate(k.begin(), k.end(), [&] { return xnn_bfloat16_from_float(f32rng(rng)); });
+  xnnpack::Buffer<xnn_bfloat16> b(nc);
+  std::generate(b.begin(), b.end(), [&] { return xnn_bfloat16_from_float(f32rng(rng)); });
 
   const size_t w_elements = nc_stride * kc_stride + nc_stride;
   const size_t c_elements = mc * nc;
   const size_t num_buffers = 1 +
     benchmark::utils::DivideRoundUp<size_t>(benchmark::utils::GetMaxCacheSize(),
-      sizeof(uint16_t) * (w_elements + c_elements));
+      sizeof(xnn_bfloat16) * (w_elements + c_elements));
 
-  std::vector<uint16_t, AlignedAllocator<uint16_t, 64>> w(w_elements * num_buffers);
-  std::fill(w.begin(), w.end(), 0);
+  xnnpack::Buffer<xnn_bfloat16, XNN_ALLOCATION_ALIGNMENT> w(w_elements * num_buffers);
   xnn_pack_f16_gemm_goi_w(/*groups=*/1, nc, kc, nr, kr, sr,
-    k.data(), b.data(), /*scale=*/nullptr, w.data(), /*extra_bytes=*/0, /*params=*/nullptr);
-  std::vector<uint16_t> c(c_elements * num_buffers);
-  std::fill(c.begin(), c.end(), UINT16_C(0x7FC0) /* NaN */);
+                          reinterpret_cast<const uint16_t*>(k.data()),
+                          reinterpret_cast<const uint16_t*>(b.data()), /*scale=*/nullptr,
+                          reinterpret_cast<uint16_t*>(w.data()),
+                          /*extra_bytes=*/0, /*params=*/nullptr);
+  xnnpack::Buffer<xnn_bfloat16> c(c_elements * num_buffers);
 
   // Prepare minmax parameters.
   xnn_bf16_minmax_params params;
   init_params(&params,
-    UINT16_C(0xFF80)  /* -inf */, UINT16_C(0x7F80)  /* inf */);
+              -std::numeric_limits<float>::infinity(),
+              +std::numeric_limits<float>::infinity());
 
   size_t buffer_index = 0;
   for (auto _ : state) {
@@ -78,7 +78,7 @@ static void bf16_gemm(benchmark::State& state,
     // - W is not in cache (for any cache level)
     // - C is not in cache (for any cache level)
     state.PauseTiming();
-    benchmark::utils::PrefetchToL1(a.data(), a.size() * sizeof(uint16_t));
+    benchmark::utils::PrefetchToL1(a.data(), a.size() * sizeof(xnn_bfloat16));
     buffer_index = (buffer_index + 1) % num_buffers;
     state.ResumeTiming();
 
@@ -87,10 +87,10 @@ static void bf16_gemm(benchmark::State& state,
       for (uint32_t n = 0; n < nc; n += nr) {
         const uint32_t nb = min(nc - n, nr);
         gemm(
-          mb, nb, kc * sizeof(uint16_t),
-          a.data() + m * kc, kc * sizeof(uint16_t),
+          mb, nb, kc * sizeof(xnn_bfloat16),
+          a.data() + m * kc, kc * sizeof(xnn_bfloat16),
           w.data() + (nc_stride * buffer_index + n) * (kc_stride + 1),
-          c.data() + (mc * buffer_index + m) * nc + n, nc * sizeof(uint16_t), nr * sizeof(uint16_t),
+          c.data() + (mc * buffer_index + m) * nc + n, nc * sizeof(xnn_bfloat16), nr * sizeof(xnn_bfloat16),
           &params);
       }
     }

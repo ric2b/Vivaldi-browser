@@ -161,8 +161,7 @@ TEST_F(SpirvWriterTest, WorkgroupVar) {
 TEST_F(SpirvWriterTest, WorkgroupVar_LoadAndStore) {
     auto* v = mod.root_block->Append(b.Var("v", ty.ptr<workgroup, i32>()));
 
-    auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kCompute,
-                            std::array{1u, 1u, 1u});
+    auto* func = b.ComputeFunction("foo");
     b.Append(func->Block(), [&] {
         auto* load = b.Load(v);
         auto* add = b.Add(ty.i32(), load, 1_i);
@@ -198,15 +197,15 @@ TEST_F(SpirvWriterTest, StorageVar_ReadOnly) {
 
     ASSERT_TRUE(Generate()) << Error() << output_;
     EXPECT_INST(R"(
-               OpDecorate %tint_symbol_1 Block
+               OpDecorate %v_block Block
                OpDecorate %1 DescriptorSet 0
                OpDecorate %1 Binding 0
                OpDecorate %1 NonWritable
 )");
     EXPECT_INST(R"(
-%tint_symbol_1 = OpTypeStruct %int                  ; Block
-%_ptr_StorageBuffer_tint_symbol_1 = OpTypePointer StorageBuffer %tint_symbol_1
-          %1 = OpVariable %_ptr_StorageBuffer_tint_symbol_1 StorageBuffer   ; DescriptorSet 0, Binding 0, NonWritable
+    %v_block = OpTypeStruct %int                    ; Block
+%_ptr_StorageBuffer_v_block = OpTypePointer StorageBuffer %v_block
+          %1 = OpVariable %_ptr_StorageBuffer_v_block StorageBuffer     ; DescriptorSet 0, Binding 0, NonWritable
 )");
 }
 
@@ -215,8 +214,7 @@ TEST_F(SpirvWriterTest, StorageVar_LoadAndStore) {
     v->SetBindingPoint(0, 0);
     mod.root_block->Append(v);
 
-    auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kCompute,
-                            std::array{1u, 1u, 1u});
+    auto* func = b.ComputeFunction("foo");
     b.Append(func->Block(), [&] {
         auto* load = b.Load(v);
         auto* add = b.Add(ty.i32(), load, 1_i);
@@ -245,8 +243,7 @@ TEST_F(SpirvWriterTest, StorageVar_WithVulkan) {
     v->SetBindingPoint(0, 0);
     mod.root_block->Append(v);
 
-    auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kCompute,
-                            std::array{1u, 1u, 1u});
+    auto* func = b.ComputeFunction("foo");
     b.Append(func->Block(), [&] {
         auto* load = b.Load(v);
         auto* add = b.Add(ty.i32(), load, 1_i);
@@ -269,23 +266,23 @@ TEST_F(SpirvWriterTest, StorageVar_WithVulkan) {
                OpExecutionMode %foo LocalSize 1 1 1
 
                ; Debug Information
-               OpMemberName %tint_symbol_1 0 "tint_symbol"
-               OpName %tint_symbol_1 "tint_symbol_1"    ; id %3
-               OpName %foo "foo"                        ; id %5
-               OpName %load "load"                      ; id %13
-               OpName %add "add"                        ; id %14
+               OpMemberName %v_block 0 "inner"
+               OpName %v_block "v_block"            ; id %3
+               OpName %foo "foo"                    ; id %5
+               OpName %load "load"                  ; id %13
+               OpName %add "add"                    ; id %14
 
                ; Annotations
-               OpMemberDecorate %tint_symbol_1 0 Offset 0
-               OpDecorate %tint_symbol_1 Block
+               OpMemberDecorate %v_block 0 Offset 0
+               OpDecorate %v_block Block
                OpDecorate %1 DescriptorSet 0
                OpDecorate %1 Binding 0
 
                ; Types, variables and constants
         %int = OpTypeInt 32 1
-%tint_symbol_1 = OpTypeStruct %int                  ; Block
-%_ptr_StorageBuffer_tint_symbol_1 = OpTypePointer StorageBuffer %tint_symbol_1
-          %1 = OpVariable %_ptr_StorageBuffer_tint_symbol_1 StorageBuffer   ; DescriptorSet 0, Binding 0
+    %v_block = OpTypeStruct %int                    ; Block
+%_ptr_StorageBuffer_v_block = OpTypePointer StorageBuffer %v_block
+          %1 = OpVariable %_ptr_StorageBuffer_v_block StorageBuffer     ; DescriptorSet 0, Binding 0
        %void = OpTypeVoid
           %7 = OpTypeFunction %void
 %_ptr_StorageBuffer_int = OpTypePointer StorageBuffer %int
@@ -310,8 +307,7 @@ TEST_F(SpirvWriterTest, StorageVar_Workgroup_WithVulkan) {
     v->SetBindingPoint(0, 0);
     mod.root_block->Append(v);
 
-    auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kCompute,
-                            std::array{1u, 1u, 1u});
+    auto* func = b.ComputeFunction("foo");
     b.Append(func->Block(), [&] {
         auto* load = b.Load(v);
         auto* add = b.Add(ty.i32(), load, 1_i);
@@ -394,8 +390,7 @@ TEST_F(SpirvWriterTest, StorageVar_WriteOnly) {
     v->SetBindingPoint(0, 0);
     mod.root_block->Append(v);
 
-    auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kCompute,
-                            std::array{1u, 1u, 1u});
+    auto* func = b.ComputeFunction("foo");
     b.Append(func->Block(), [&] {
         b.Store(v, 42_i);
         b.Return(func);
@@ -403,7 +398,7 @@ TEST_F(SpirvWriterTest, StorageVar_WriteOnly) {
 
     ASSERT_TRUE(Generate()) << Error() << output_;
     EXPECT_INST(R"(
-               OpDecorate %tint_symbol_1 Block
+               OpDecorate %v_block Block
                OpDecorate %1 DescriptorSet 0
                OpDecorate %1 Binding 0
                OpDecorate %1 NonReadable
@@ -421,14 +416,14 @@ TEST_F(SpirvWriterTest, UniformVar) {
 
     ASSERT_TRUE(Generate()) << Error() << output_;
     EXPECT_INST(R"(
-               OpDecorate %tint_symbol_1 Block
+               OpDecorate %v_block Block
                OpDecorate %1 DescriptorSet 0
                OpDecorate %1 Binding 0
 )");
     EXPECT_INST(R"(
-%tint_symbol_1 = OpTypeStruct %int                  ; Block
-%_ptr_Uniform_tint_symbol_1 = OpTypePointer Uniform %tint_symbol_1
-          %1 = OpVariable %_ptr_Uniform_tint_symbol_1 Uniform   ; DescriptorSet 0, Binding 0, NonWritable
+    %v_block = OpTypeStruct %int                    ; Block
+%_ptr_Uniform_v_block = OpTypePointer Uniform %v_block
+          %1 = OpVariable %_ptr_Uniform_v_block Uniform     ; DescriptorSet 0, Binding 0, NonWritable
 )");
 }
 
@@ -437,8 +432,7 @@ TEST_F(SpirvWriterTest, UniformVar_Load) {
     v->SetBindingPoint(0, 0);
     mod.root_block->Append(v);
 
-    auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kCompute,
-                            std::array{1u, 1u, 1u});
+    auto* func = b.ComputeFunction("foo");
     b.Append(func->Block(), [&] {
         auto* load = b.Load(v);
         b.Return(func);
@@ -458,12 +452,12 @@ TEST_F(SpirvWriterTest, PushConstantVar) {
 
     ASSERT_TRUE(Generate()) << Error() << output_;
     EXPECT_INST(R"(
-               OpDecorate %tint_symbol_1 Block
+               OpDecorate %v_block Block
 )");
     EXPECT_INST(R"(
-%tint_symbol_1 = OpTypeStruct %int                  ; Block
-%_ptr_PushConstant_tint_symbol_1 = OpTypePointer PushConstant %tint_symbol_1
-          %1 = OpVariable %_ptr_PushConstant_tint_symbol_1 PushConstant
+    %v_block = OpTypeStruct %int                    ; Block
+%_ptr_PushConstant_v_block = OpTypePointer PushConstant %v_block
+          %1 = OpVariable %_ptr_PushConstant_v_block PushConstant
 )");
 }
 

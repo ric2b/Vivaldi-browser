@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Chyba</translation>
 <translation id="1175364870820465910">&amp;Tisk…</translation>
 <translation id="1181037720776840403">Odebrat</translation>
+<translation id="1184037892196730210">Obrazovku nelze sdílet</translation>
 <translation id="1187722533808055681">Probuzení z nečinnosti</translation>
 <translation id="122082903575839559">Algoritmus podpisu certifikátu</translation>
 <translation id="1221825588892235038">Pouze výběr</translation>
@@ -169,6 +170,7 @@
 <translation id="3838085852053358637">Rozšíření se nepodařilo načíst</translation>
 <translation id="383891835335927981">Žádné stránky nebyly přiblížené ani oddálené</translation>
 <translation id="385051799172605136">Zpět</translation>
+<translation id="3861977424605124250">Zobrazit při spuštění</translation>
 <translation id="3867944738977021751">Pole certifikátu</translation>
 <translation id="3905761538810670789">Opravit aplikaci</translation>
 <translation id="3908501907586732282">Aktivovat rozšíření</translation>
@@ -366,6 +368,7 @@
 <translation id="7287143125007575591">Přístup byl odepřen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Kontrolovat pravopis během psaní</translation>
+<translation id="7359680654975233185">List nelze sdílet</translation>
 <translation id="7385854874724088939">Při pokusu o tisk došlo k chybě. Zkontrolujte tiskárnu a zkuste to znovu.</translation>
 <translation id="7412226954991670867">Paměť GPU</translation>
 <translation id="7421925624202799674">Zobrazit zdrojo&amp;vý kód stránky</translation>
@@ -379,6 +382,7 @@
 <translation id="7661259717474717992">Povolit webům ukládat a číst data souborů cookie</translation>
 <translation id="7663719505383602579">Příjemce: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Nainstalováno vaším administrátorem</translation>
+<translation id="7685038817958445325">Nelze sdílet</translation>
 <translation id="7685049629764448582">Paměť JavaScriptu</translation>
 <translation id="7701869757853594372">Popisovače – UŽIVATEL</translation>
 <translation id="7704305437604973648">Úloha</translation>

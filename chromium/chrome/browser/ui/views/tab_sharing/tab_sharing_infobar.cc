@@ -25,11 +25,6 @@
 #include "ui/views/style/platform_style.h"
 #include "ui/views/view_class_properties.h"
 
-// Vivaldi
-#include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_list.h"
-#include "ui/infobar_container_web_proxy.h"
-
 namespace {
 constexpr auto kCapturedSurfaceControlIndicatorButtonInsets =
     gfx::Insets::VH(4, 8);
@@ -240,10 +235,5 @@ int TabSharingInfoBar::NonLabelWidth() const {
 
 std::unique_ptr<infobars::InfoBar> CreateTabSharingInfoBar(
     std::unique_ptr<TabSharingInfoBarDelegate> delegate) {
-  Browser* browser = BrowserList::GetInstance()->GetLastActive();
-  if (browser && browser->is_vivaldi()) {
-    return std::make_unique<vivaldi::ConfirmInfoBarWebProxy>(
-        std::move(delegate));
-  }
   return std::make_unique<TabSharingInfoBar>(std::move(delegate));
 }

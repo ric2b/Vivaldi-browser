@@ -14,17 +14,18 @@
 precision highp float;
 precision highp int;
 
-layout(location = 0) in float x_1;
-void tint_symbol(float x) {
-  while (true) {
-    {
-      float tint_phony = dFdx(1.0f);
-      if ((x > 0.0f)) { break; }
+layout(location = 0) in float tint_symbol_loc0_Input;
+void tint_symbol_inner(float x) {
+  {
+    while(true) {
+      {
+        dFdx(1.0f);
+        if ((x > 0.0f)) { break; }
+      }
+      continue;
     }
   }
 }
-
 void main() {
-  tint_symbol(x_1);
-  return;
+  tint_symbol_inner(tint_symbol_loc0_Input);
 }

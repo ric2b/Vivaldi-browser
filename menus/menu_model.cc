@@ -37,21 +37,24 @@ std::unique_ptr<MenuLoadDetails> Menu_Model::CreateLoadDetails(
                                       Menu_Node::mainmenu_node_id());
   Menu_Control* control = new Menu_Control();
   control->version = ::vivaldi::GetVivaldiVersionString();
+  MenuLoadDetails::Mode mode = is_reset
+    ? (menu.empty() ? MenuLoadDetails::kResetAll : MenuLoadDetails::kResetByName)
+    : MenuLoadDetails::kLoad;
   return base::WrapUnique(
-      new MenuLoadDetails(mainmenu, control, menu, loaded_, is_reset));
+      new MenuLoadDetails(mainmenu, control, menu, loaded_ || is_reset, mode));
 }
 
-std::unique_ptr<MenuLoadDetails> Menu_Model::CreateLoadDetails(
-    int64_t id, bool is_reset) {
+std::unique_ptr<MenuLoadDetails> Menu_Model::CreateLoadDetails(int64_t id) {
   Menu_Node* mainmenu = new Menu_Node(Menu_Node::mainmenu_node_guid(),
                                       Menu_Node::mainmenu_node_id());
   Menu_Control* control = new Menu_Control();
   control->version = ::vivaldi::GetVivaldiVersionString();
+  MenuLoadDetails::Mode mode = MenuLoadDetails::kResetById;
   return base::WrapUnique(
-      new MenuLoadDetails(mainmenu, control, id, loaded_, is_reset));
+      new MenuLoadDetails(mainmenu, control, id, true, mode));
 }
 
-void Menu_Model::Load() {
+void Menu_Model::Load(bool is_reset) {
   // Make a backend task runner to avoid file access in the IO-thread
   const scoped_refptr<base::SequencedTaskRunner>& task_runner =
       base::ThreadPool::CreateSequencedTaskRunner({
@@ -60,7 +63,7 @@ void Menu_Model::Load() {
           base::TaskShutdownBehavior::BLOCK_SHUTDOWN,
       });
   store_.reset(new MenuStorage(context_, this, task_runner.get()));
-  store_->Load(CreateLoadDetails("", false));
+  store_->Load(CreateLoadDetails("", is_reset));
 }
 
 bool Menu_Model::Save() {
@@ -73,10 +76,40 @@ bool Menu_Model::Save() {
 
 void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
   DCHECK(details);
+  if (details->mode() == MenuLoadDetails::kLoad) {
+    // Install content for the first time.
+    std::unique_ptr<Menu_Node> mainmenu_node(details->release_mainmenu_node());
+    mainmenu_node_ = mainmenu_node.get();
+    root_.Add(std::move(mainmenu_node));
 
-  if (loaded_) {
-    // Reset exisiting content
-    if (!details->menu().empty()) {
+    control_ = details->release_control();
+    loaded_ = true;
+    // If model is loaded on demand the first operation can be a reset action.
+    if (details->has_upgraded()) {
+      Save();
+    }
+    for (auto& observer : observers_)
+      observer.MenuModelLoaded(this);
+  } else {
+    if (details->mode() == MenuLoadDetails::kResetAll) {
+      // Reset entire file (all menus). If model is loaded on demand the first
+      // operation can be a reset action and there will be nothing to remove.
+      int index = -1;
+      for (const auto& node : root_.children()) {
+        if (node->id() == details->mainmenu_node()->id()) {
+          index = root_.GetIndexOf(node.get()).value();
+          break;
+        }
+      }
+      if (index != -1) {
+        root_.Remove(index);
+      }
+      std::unique_ptr<Menu_Node> mainmenu_node(details->release_mainmenu_node());
+      mainmenu_node_ = mainmenu_node.get();
+      root_.Add(std::move(mainmenu_node));
+      control_ = details->release_control();
+      Save();
+    } else if (details->mode() == MenuLoadDetails::kResetByName) {
       // Reset named menu entry. Works even if old is missing. A menu is in this
       // case a full menu bar, the vivaldi menu, the tab context menu etc.
       for (const auto& node : root_.children()) {
@@ -112,10 +145,9 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
       if (menu && menu->children().size() > 0) {
         id = menu->children()[0]->id();
       }
-
       for (auto& observer : observers_)
         observer.MenuModelChanged(this, id, details->menu());
-    } else if (details->id() >= 0) {
+    } else if (details->mode() == MenuLoadDetails::kResetById) {
       // Replace node specified by id. The id refers to an exising id in the
       // current installed model. Unlike guids every time we create a new item
       // the id steps. So we can not compare ids in current model and the newly
@@ -163,31 +195,12 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
         }
       }
     }
-  } else {
-    // Install content for the first time.
-
-    // Add new content
-    std::unique_ptr<Menu_Node> mainmenu_node(details->release_mainmenu_node());
-    mainmenu_node_ = mainmenu_node.get();
-    root_.Add(std::move(mainmenu_node));
-
-    control_ = details->release_control();
-    loaded_ = true;
-    if (details->has_upgraded()) {
-      Save();
-    }
+    bool all = details->mode() == MenuLoadDetails::kResetAll;
     for (auto& observer : observers_)
-      observer.MenuModelLoaded(this);
+      observer.MenuModelReset(this, all);
   }
-
-  // If loading took place as result of resetting content we have to signal
-  // model content is updated.
-  if (details->is_reset()) {
-    for (auto& observer : observers_)
-      observer.MenuModelReset(this);
-  }
-
 }
+
 
 bool Menu_Model::Move(const Menu_Node* node,
                       const Menu_Node* new_parent,
@@ -451,7 +464,7 @@ bool Menu_Model::RemoveAction(Menu_Node* root, const std::string& action) {
 
 bool Menu_Model::Reset(const Menu_Node* node) {
   if (store_.get()) {
-    store_->Load(CreateLoadDetails(node->id(), true));
+    store_->Load(CreateLoadDetails(node->id()));
     return true;
   }
   return false;
@@ -463,6 +476,17 @@ bool Menu_Model::Reset(const std::string& menu) {
     return true;
   }
   return false;
+}
+
+bool Menu_Model::ResetAll() {
+  if (store_.get()) {
+    store_->Load(CreateLoadDetails("", true));
+  } else {
+    // The context menu model is loaded on demand (the first time a context
+    // menu is requested). This has not happened yet.
+    Load(true);
+  }
+  return true;
 }
 
 void Menu_Model::RemoveBundleTag(Menu_Node* node, bool include_children) {

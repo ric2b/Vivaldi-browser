@@ -145,8 +145,7 @@ const char* CacheStorageErrorString(mojom::blink::CacheStorageError error) {
       // This function should only be called upon error.
       break;
   }
-  NOTREACHED_IN_MIGRATION();
-  return "";
+  NOTREACHED();
 }
 
 CachedResponseType ResponseTypeToString(
@@ -165,8 +164,7 @@ CachedResponseType ResponseTypeToString(
     case network::mojom::FetchResponseType::kOpaqueRedirect:
       return protocol::CacheStorage::CachedResponseTypeEnum::OpaqueRedirect;
   }
-  NOTREACHED_IN_MIGRATION();
-  return "";
+  NOTREACHED();
 }
 
 struct DataRequestParams {
@@ -262,7 +260,7 @@ class ResponsesAccumulator : public RefCounted<ResponsesAccumulator> {
       requests = std::move(old_requests);
     } else {
       for (auto& request : old_requests) {
-        String urlPath(request->url.GetPath());
+        String urlPath(request->url.GetPath().ToString());
         if (!urlPath.Contains(params_.path_filter,
                               WTF::kTextCaseUnicodeInsensitive)) {
           continue;

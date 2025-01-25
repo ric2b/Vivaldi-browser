@@ -8,6 +8,7 @@
 #include "src/gpu/graphite/dawn/DawnCaps.h"
 
 #include <algorithm>
+#include <string>
 
 #include "include/core/SkTextureCompressionType.h"
 #include "include/gpu/graphite/ContextOptions.h"
@@ -413,7 +414,7 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
     backendContext.fDevice.GetAdapter().GetInfo(&info);
 
 #if defined(GPU_TEST_UTILS)
-    this->setDeviceName(info.device);
+    this->setDeviceName(std::string(info.device));
 #endif
 #endif // defined(__EMSCRIPTEN__)
 
@@ -435,8 +436,8 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
     fMaxTextureSize = limits.limits.maxTextureDimension2D;
 
     fRequiredTransferBufferAlignment = 4;
-    fRequiredUniformBufferAlignment = 256;
-    fRequiredStorageBufferAlignment = fRequiredUniformBufferAlignment;
+    fRequiredUniformBufferAlignment = limits.limits.minUniformBufferOffsetAlignment;
+    fRequiredStorageBufferAlignment = limits.limits.minStorageBufferOffsetAlignment;
 
     // Dawn requires 256 bytes per row alignment for buffer texture copies.
     fTextureDataRowBytesAlignment = 256;
@@ -1150,8 +1151,8 @@ void DawnCaps::buildKeyForTexture(SkISize dimensions,
     // If we are using ycbcr texture/sampling, more key information is needed.
     if ((hasYcbcrInfo = ycbcrUtils::DawnDescriptorIsValid(dawnSpec.fYcbcrVkDescriptor))) {
         num32DataCnt += ycbcrUtils::DawnDescriptorUsesExternalFormat(dawnSpec.fYcbcrVkDescriptor)
-                ? ycbcrUtils::kIntsNeededExternalFormat
-                : ycbcrUtils::kIntsNeededKnownFormat;
+                ? SamplerDesc::kInt32sNeededExternalFormat
+                : SamplerDesc::kInt32sNeededKnownFormat;
     }
 #endif
     GraphiteResourceKey::Builder builder(key, type, num32DataCnt, shareable);

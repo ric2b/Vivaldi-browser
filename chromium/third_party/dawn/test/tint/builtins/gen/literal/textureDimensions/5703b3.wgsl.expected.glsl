@@ -1,43 +1,11 @@
-#version 310 es
-precision highp float;
-precision highp int;
+SKIP: INVALID
 
-layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
-  uint inner;
-} prevent_dce;
+<dawn>/src/tint/lang/glsl/writer/printer/printer.cc:733 internal compiler error: TINT_UNREACHABLE invalid texel format for read-write
+********************************************************************
+*  The tint shader compiler has encountered an unexpected error.   *
+*                                                                  *
+*  Please help us fix this issue by submitting a bug report at     *
+*  crbug.com/tint with the source program that triggered the bug.  *
+********************************************************************
 
-layout(binding = 0, rgba8) uniform highp writeonly image2D arg_0;
-uint textureDimensions_5703b3() {
-  uint res = uvec2(imageSize(arg_0)).x;
-  return res;
-}
-
-void fragment_main() {
-  prevent_dce.inner = textureDimensions_5703b3();
-}
-
-void main() {
-  fragment_main();
-  return;
-}
-#version 310 es
-
-layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
-  uint inner;
-} prevent_dce;
-
-layout(binding = 0, rgba8) uniform highp writeonly image2D arg_0;
-uint textureDimensions_5703b3() {
-  uint res = uvec2(imageSize(arg_0)).x;
-  return res;
-}
-
-void compute_main() {
-  prevent_dce.inner = textureDimensions_5703b3();
-}
-
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-void main() {
-  compute_main();
-  return;
-}
+tint executable returned error: signal: trace/BPT trap

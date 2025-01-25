@@ -82,6 +82,8 @@ tint_add_target(tint_lang_core_ir lib
   lang/core/ir/disassembler.h
   lang/core/ir/discard.cc
   lang/core/ir/discard.h
+  lang/core/ir/evaluator.cc
+  lang/core/ir/evaluator.h
   lang/core/ir/exit.cc
   lang/core/ir/exit.h
   lang/core/ir/exit_if.cc
@@ -119,6 +121,10 @@ tint_add_target(tint_lang_core_ir lib
   lang/core/ir/next_iteration.h
   lang/core/ir/operand_instruction.cc
   lang/core/ir/operand_instruction.h
+  lang/core/ir/override.cc
+  lang/core/ir/override.h
+  lang/core/ir/referenced_functions.h
+  lang/core/ir/referenced_module_vars.h
   lang/core/ir/return.cc
   lang/core/ir/return.h
   lang/core/ir/store.cc
@@ -194,6 +200,7 @@ tint_add_target(tint_lang_core_ir_test test
   lang/core/ir/core_builtin_call_test.cc
   lang/core/ir/core_unary_test.cc
   lang/core/ir/discard_test.cc
+  lang/core/ir/evaluator_test.cc
   lang/core/ir/exit_if_test.cc
   lang/core/ir/exit_loop_test.cc
   lang/core/ir/exit_switch_test.cc
@@ -211,6 +218,9 @@ tint_add_target(tint_lang_core_ir_test test
   lang/core/ir/multi_in_block_test.cc
   lang/core/ir/next_iteration_test.cc
   lang/core/ir/operand_instruction_test.cc
+  lang/core/ir/override_test.cc
+  lang/core/ir/referenced_functions_test.cc
+  lang/core/ir/referenced_module_vars_test.cc
   lang/core/ir/return_test.cc
   lang/core/ir/store_test.cc
   lang/core/ir/store_vector_element_test.cc

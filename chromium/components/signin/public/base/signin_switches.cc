@@ -24,15 +24,19 @@ BASE_FEATURE(kSkipCheckForAccountManagementOnSignin,
 
 BASE_FEATURE(kHideSettingsSignInPromo,
              "HideSettingsSignInPromo",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kUseConsentLevelSigninForLegacyAccountEmailPref,
              "UseConsentLevelSigninForLegacyAccountEmailPref",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kDontFallbackToDefaultImplementationInAccountManagerFacade,
-             "DontFallbackToDefaultImplementationInAccountManagerFacade",
+BASE_FEATURE(kCctSignInPrompt,
+             "CctSignInPrompt",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPutParcelableSigninConfigInExtra,
+             "PutParcelableSigninConfigInExtra",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -112,7 +116,7 @@ BASE_FEATURE(kForceStartupSigninPromo,
 // restore.
 BASE_FEATURE(kRestoreSignedInAccountAndSettingsFromBackup,
              "RestoreSignedInAccountAndSettingsFromBackup",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 BASE_FEATURE(kExplicitBrowserSigninUIOnDesktop,
@@ -137,21 +141,6 @@ bool IsImprovedSigninUIOnDesktopEnabled() {
 }
 
 #if BUILDFLAG(IS_IOS)
-
-BASE_FEATURE(kMinorModeRestrictionsForHistorySyncOptIn,
-             "MinorModeRestrictionsForHistorySyncOptIn",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Based on Signin.AccountCapabilities.UserVisibleLatency
-constexpr int kMinorModeRestrictionsFetchDeadlineDefaultValueMs = 500;
-
-const base::FeatureParam<int> kMinorModeRestrictionsFetchDeadlineMs{
-    &kMinorModeRestrictionsForHistorySyncOptIn,
-    /*name=*/"MinorModeRestrictionsFetchDeadlineMs",
-    kMinorModeRestrictionsFetchDeadlineDefaultValueMs};
-#endif
-
-#if BUILDFLAG(IS_IOS)
 BASE_FEATURE(kEnableClearCut,
              "EnableClearcut",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -159,6 +148,14 @@ BASE_FEATURE(kEnableClearCut,
 BASE_FEATURE(kRemoveSignedInAccountsDialog,
              "RemoveSignedInAccountsDialog",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableIdentityInAuthError,
+             "EnableIdentityInAuthError",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableASWebAuthenticationSession,
+             "EnableASWebAuthenticationSession",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -167,17 +164,19 @@ BASE_FEATURE(kPreconnectAccountCapabilitiesPostSignin,
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
-#if BUILDFLAG(IS_IOS)
-BASE_FEATURE(kAlwaysLoadDeviceAccounts,
-             "kAlwaysLoadDeviceAccounts",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
-
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 BASE_FEATURE(kBatchUploadDesktop,
              "BatchUploadDesktop",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+
+bool IsBatchUploadDesktopEnabled() {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  return base::FeatureList::IsEnabled(kBatchUploadDesktop);
+#else
+  return false;
+#endif
+}
 
 }  // namespace switches
 
@@ -189,12 +188,6 @@ BASE_FEATURE(kStableDeviceId,
              "StableDeviceId",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-// Enables showing the enterprise dialog after every signin into a managed
-// account.
-BASE_FEATURE(kShowEnterpriseDialogForAllManagedAccountsSignin,
-             "ShowEnterpriseDialogForAllManagedAccountsSignin",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Disables signout for enteprise managed profiles
 BASE_FEATURE(kDisallowManagedProfileSignout,
@@ -224,3 +217,9 @@ extern const base::FeatureParam<bool>
         &kForceSigninFlowInProfilePicker, /*name=*/"reauth_use_add_session",
         /*default_value=*/false};
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kIgnoreMirrorHeadersInBackgoundTabs,
+             "IgnoreMirrorHeadersInBackgoundTabs",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif

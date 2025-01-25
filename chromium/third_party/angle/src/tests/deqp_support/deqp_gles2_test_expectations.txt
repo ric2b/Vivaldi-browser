@@ -158,6 +158,8 @@
 40096462 MAC OPENGL INTEL : dEQP-GLES2.functional.color_clear.scissored_rgb = FAIL
 40096462 MAC OPENGL INTEL : dEQP-GLES2.functional.color_clear.scissored_rgba = FAIL
 40096462 MAC OPENGL INTEL : dEQP-GLES2.functional.color_clear.short_scissored_rgb = FAIL
+40096462 MAC OPENGL INTEL : dEQP-GLES2.functional.polygon_offset.default_render_with_units = FAIL
+40096462 MAC OPENGL INTEL : dEQP-GLES2.functional.polygon_offset.fixed16_render_with_units = FAIL
 40096462 MAC OPENGL INTEL : dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_alpha = FAIL
 40096462 MAC OPENGL INTEL : dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_luminance = FAIL
 40096462 MAC OPENGL INTEL : dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_luminance_alpha = FAIL
@@ -231,6 +233,9 @@
 42261921 D3D11 NVIDIA : dEQP-GLES2.functional.texture.mipmap.cube.bias.linear_nearest = FAIL
 42261921 D3D11 NVIDIA : dEQP-GLES2.functional.texture.mipmap.cube.bias.linear_linear = FAIL
 
+42260109 D3D11 : dEQP-GLES2.functional.polygon_offset.default_render_with_units = FAIL
+42260109 D3D11 : dEQP-GLES2.functional.polygon_offset.fixed16_render_with_units = FAIL
+
 // Fail with very tiny pixel differences
 42261918 D3D11 : dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_linear_nearest_clamp = FAIL
 42261918 D3D11 : dEQP-GLES2.functional.texture.vertex.cube.filtering.linear_mipmap_linear_nearest_mirror = FAIL
@@ -249,6 +254,7 @@
 40644666 VULKAN LINUX NVIDIA : dEQP-GLES2.functional.shaders.invariance.lowp.subexpression_precision_mediump = FAIL
 40644666 VULKAN LINUX NVIDIA : dEQP-GLES2.functional.shaders.invariance.mediump.subexpression_precision_lowp = FAIL
 // New failures when upgrading to Ubuntu 22/newer driver 535.183.01.
+362486580 VULKAN LINUX NVIDIA : dEQP-GLES2.functional.texture.completeness.cube.npot_mirrored_repeat = FAIL
 362486580 VULKAN LINUX NVIDIA : dEQP-GLES2.functional.texture.filtering.cube.linear_mipmap_linear_nearest_clamp_etc1 = FAIL
 // Fails on 431.02 NVIDIA driver
 40644697 VULKAN WIN NVIDIA : dEQP-GLES2.functional.fbo.render.repeated_clear.* = FAIL
@@ -384,7 +390,6 @@ b/328156792 PINEAPPLE VULKAN : dEQP-GLES2.functional.uniform_api.value.assigned.
 42267100 WGPU : dEQP-GLES2.functional.attribute_location.bind.mat* = FAIL
 42267100 WGPU : dEQP-GLES2.functional.attribute_location.bind_max_attributes.mat* = FAIL
 // Tests that fail because uniforms aren't yet implemented in the WGSL translator
-42267100 WGPU : dEQP-GLES2.functional.negative_api.state.get_uniform* = FAIL
 42267100 WGPU : dEQP-GLES2.functional.negative_api.shader.uniform* = FAIL
 42267100 WGPU : dEQP-GLES2.functional.state_query.shader.program_active_uniform_* = FAIL
 42267100 WGPU : dEQP-GLES2.functional.attribute_location.bind_aliasing.* = FAIL

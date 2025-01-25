@@ -45,7 +45,6 @@
 #include "video.h"
 #include "avfilter.h"
 #include "filters.h"
-#include "internal.h"
 #include "window_func.h"
 
 enum DisplayMode  { COMBINED, SEPARATE, NB_MODES };
@@ -359,32 +358,23 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_freep(&s->frames);
 }
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
     AVFilterFormats *formats = NULL;
-    AVFilterChannelLayouts *layouts = NULL;
-    AVFilterLink *inlink = ctx->inputs[0];
-    AVFilterLink *outlink = ctx->outputs[0];
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVA444P, AV_PIX_FMT_NONE };
     int ret;
 
     /* set input audio formats */
     formats = ff_make_format_list(sample_fmts);
-    if ((ret = ff_formats_ref(formats, &inlink->outcfg.formats)) < 0)
-        return ret;
-
-    layouts = ff_all_channel_counts();
-    if ((ret = ff_channel_layouts_ref(layouts, &inlink->outcfg.channel_layouts)) < 0)
-        return ret;
-
-    formats = ff_all_samplerates();
-    if ((ret = ff_formats_ref(formats, &inlink->outcfg.samplerates)) < 0)
+    if ((ret = ff_formats_ref(formats, &cfg_in[0]->formats)) < 0)
         return ret;
 
     /* set output video format */
     formats = ff_make_format_list(pix_fmts);
-    if ((ret = ff_formats_ref(formats, &outlink->incfg.formats)) < 0)
+    if ((ret = ff_formats_ref(formats, &cfg_out[0]->formats)) < 0)
         return ret;
 
     return 0;
@@ -1061,6 +1051,7 @@ static int plot_channel_log(AVFilterContext *ctx, void *arg, int jobnr, int nb_j
 
 static int config_output(AVFilterLink *outlink)
 {
+    FilterLink *l = ff_filter_link(outlink);
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink = ctx->inputs[0];
     ShowSpectrumContext *s = ctx->priv;
@@ -1283,8 +1274,8 @@ static int config_output(AVFilterLink *outlink)
     } else {
         s->frame_rate = s->auto_frame_rate;
     }
-    outlink->frame_rate = s->frame_rate;
-    outlink->time_base = av_inv_q(outlink->frame_rate);
+    l->frame_rate = s->frame_rate;
+    outlink->time_base = av_inv_q(l->frame_rate);
 
     if (s->orientation == VERTICAL) {
         s->combine_buffer =
@@ -1696,7 +1687,7 @@ const AVFilter ff_avf_showspectrum = {
     .priv_size     = sizeof(ShowSpectrumContext),
     FILTER_INPUTS(ff_audio_default_filterpad),
     FILTER_OUTPUTS(showspectrum_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .activate      = activate,
     .priv_class    = &showspectrum_class,
     .flags         = AVFILTER_FLAG_SLICE_THREADS,
@@ -1883,7 +1874,7 @@ const AVFilter ff_avf_showspectrumpic = {
     .priv_size     = sizeof(ShowSpectrumContext),
     FILTER_INPUTS(showspectrumpic_inputs),
     FILTER_OUTPUTS(showspectrumpic_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .priv_class    = &showspectrumpic_class,
     .flags         = AVFILTER_FLAG_SLICE_THREADS,
 };

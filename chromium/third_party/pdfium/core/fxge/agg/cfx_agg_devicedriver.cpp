@@ -275,7 +275,7 @@ void RasterizeStroke(agg::rasterizer_scanline_aa* rasterizer,
                      float scale,
                      bool bTextMode) {
   agg::line_cap_e cap;
-  switch (pGraphState->m_LineCap) {
+  switch (pGraphState->line_cap()) {
     case CFX_GraphStateData::LineCap::kRound:
       cap = agg::round_cap;
       break;
@@ -287,7 +287,7 @@ void RasterizeStroke(agg::rasterizer_scanline_aa* rasterizer,
       break;
   }
   agg::line_join_e join;
-  switch (pGraphState->m_LineJoin) {
+  switch (pGraphState->line_join()) {
     case CFX_GraphStateData::LineJoin::kRound:
       join = agg::round_join;
       break;
@@ -298,32 +298,32 @@ void RasterizeStroke(agg::rasterizer_scanline_aa* rasterizer,
       join = agg::miter_join_revert;
       break;
   }
-  float width = pGraphState->m_LineWidth * scale;
+  float width = pGraphState->line_width() * scale;
   float unit = 1.0f;
   if (pObject2Device) {
     unit =
         1.0f / ((pObject2Device->GetXUnit() + pObject2Device->GetYUnit()) / 2);
   }
   width = std::max(width, unit);
-  if (!pGraphState->m_DashArray.empty()) {
+  const std::vector<float>& dash_array = pGraphState->dash_array();
+  if (!dash_array.empty()) {
     using DashConverter = agg::conv_dash<agg::path_storage>;
     DashConverter dash(*path_data);
-    for (size_t i = 0; i < (pGraphState->m_DashArray.size() + 1) / 2; i++) {
-      float on = pGraphState->m_DashArray[i * 2];
-      if (on <= 0.000001f)
+    for (size_t i = 0; i < (dash_array.size() + 1) / 2; i++) {
+      float on = dash_array[i * 2];
+      if (on <= 0.000001f) {
         on = 0.1f;
-      float off = i * 2 + 1 == pGraphState->m_DashArray.size()
-                      ? on
-                      : pGraphState->m_DashArray[i * 2 + 1];
+      }
+      float off = i * 2 + 1 == dash_array.size() ? on : dash_array[i * 2 + 1];
       off = std::max(off, 0.0f);
       dash.add_dash(on * scale, off * scale);
     }
-    dash.dash_start(pGraphState->m_DashPhase * scale);
+    dash.dash_start(pGraphState->dash_phase() * scale);
     using DashStroke = agg::conv_stroke<DashConverter>;
     DashStroke stroke(dash);
     stroke.line_join(join);
     stroke.line_cap(cap);
-    stroke.miter_limit(pGraphState->m_MiterLimit);
+    stroke.miter_limit(pGraphState->miter_limit());
     stroke.width(width);
     rasterizer->add_path_transformed(stroke, pObject2Device);
     return;
@@ -331,7 +331,7 @@ void RasterizeStroke(agg::rasterizer_scanline_aa* rasterizer,
   agg::conv_stroke<agg::path_storage> stroke(*path_data);
   stroke.line_join(join);
   stroke.line_cap(cap);
-  stroke.miter_limit(pGraphState->m_MiterLimit);
+  stroke.miter_limit(pGraphState->miter_limit());
   stroke.width(width);
   rasterizer->add_path_transformed(stroke, pObject2Device);
 }
@@ -469,12 +469,12 @@ void CFX_AggRenderer::CompositeSpan(uint8_t* dest_scan,
                                     const uint8_t* cover_scan,
                                     const uint8_t* clip_scan) {
   CHECK(bytes_per_pixel);
-  const auto& bgr = GetBGR();
   UNSAFE_TODO({
     dest_scan += col_start * bytes_per_pixel;
     backdrop_scan += col_start * bytes_per_pixel;
     if (m_bRgbByteOrder) {
       if (bytes_per_pixel == 4 && bDestAlpha) {
+        const auto& bgr = GetBGR();
         for (int col = col_start; col < col_end; col++) {
           int src_alpha = GetSrcAlpha(clip_scan, col);
           uint8_t dest_alpha =
@@ -506,6 +506,7 @@ void CFX_AggRenderer::CompositeSpan(uint8_t* dest_scan,
         return;
       }
       if (bytes_per_pixel == 3 || bytes_per_pixel == 4) {
+        const auto& bgr = GetBGR();
         for (int col = col_start; col < col_end; col++) {
           int src_alpha = GetSrcAlpha(clip_scan, col);
           int r = FXDIB_ALPHA_MERGE(*backdrop_scan++, bgr.red, src_alpha);
@@ -523,6 +524,7 @@ void CFX_AggRenderer::CompositeSpan(uint8_t* dest_scan,
       return;
     }
     if (bytes_per_pixel == 4 && bDestAlpha) {
+      const auto& bgr = GetBGR();
       for (int col = col_start; col < col_end; col++) {
         int src_alpha = GetSrcAlpha(clip_scan, col);
         int src_alpha_covered = src_alpha * cover_scan[col] / 255;
@@ -558,6 +560,7 @@ void CFX_AggRenderer::CompositeSpan(uint8_t* dest_scan,
       return;
     }
     if (bytes_per_pixel == 3 || bytes_per_pixel == 4) {
+      const auto& bgr = GetBGR();
       for (int col = col_start; col < col_end; col++) {
         int src_alpha = GetSrcAlpha(clip_scan, col);
         if (m_bFullCover) {

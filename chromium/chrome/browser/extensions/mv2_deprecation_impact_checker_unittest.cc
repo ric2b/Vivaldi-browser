@@ -10,7 +10,6 @@
 #include "chrome/browser/extensions/manifest_v2_experiment_manager.h"
 #include "chrome/browser/extensions/mv2_experiment_stage.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/test/base/testing_profile.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/common/extension_builder.h"
@@ -76,6 +75,9 @@ std::string DescribeTestVariant(const TestVariant& test_variant) {
     case MV2ExperimentStage::kDisableWithReEnable:
       description += "DisableExperiment";
       break;
+    case MV2ExperimentStage::kUnsupported:
+      description += "UnsupportedExperiment";
+      break;
   }
 
   return description;
@@ -100,7 +102,7 @@ class MV2DeprecationImpactCheckerUnitTest
 
     // Sets the current level of the MV2 admin policy.
     sync_preferences::TestingPrefServiceSyncable* pref_service =
-        testing_profile()->GetTestingPrefService();
+        testing_pref_service();
     std::optional<internal::GlobalSettings::ManifestV2Setting> pref_value;
     switch (mv2_policy_level_) {
       case MV2PolicyLevel::kUnset:
@@ -191,7 +193,7 @@ class MV2DeprecationImpactCheckerUnitTest
             .Build();
 
     sync_preferences::TestingPrefServiceSyncable* pref_service =
-        testing_profile()->GetTestingPrefService();
+        testing_pref_service();
     const base::Value* existing_value =
         pref_service->GetManagedPref(pref_names::kExtensionManagement);
     base::Value::Dict new_value;
@@ -242,7 +244,8 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Combine(
         testing::Values(MV2ExperimentStage::kNone,
                         MV2ExperimentStage::kWarning,
-                        MV2ExperimentStage::kDisableWithReEnable),
+                        MV2ExperimentStage::kDisableWithReEnable,
+                        MV2ExperimentStage::kUnsupported),
         testing::Values(MV2PolicyLevel::kUnset,
                         MV2PolicyLevel::kAllowed,
                         MV2PolicyLevel::kDisallowed,
@@ -256,7 +259,9 @@ INSTANTIATE_TEST_SUITE_P(
     MV2DeprecationImpactCheckerUnitTestWithAllowlist,
     testing::Combine(
         testing::Values(MV2ExperimentStage::kNone,
-                        MV2ExperimentStage::kWarning),
+                        MV2ExperimentStage::kWarning,
+                        MV2ExperimentStage::kDisableWithReEnable,
+                        MV2ExperimentStage::kUnsupported),
         testing::Values(MV2PolicyLevel::kUnset,
                         MV2PolicyLevel::kAllowed,
                         MV2PolicyLevel::kDisallowed,

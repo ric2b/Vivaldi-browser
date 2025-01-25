@@ -62,7 +62,7 @@ void MailClientServiceFactory::ShutdownForProfile(Profile* profile) {
 
 content::BrowserContext* MailClientServiceFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
+  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 KeyedService* MailClientServiceFactory::BuildServiceInstanceFor(

@@ -92,6 +92,7 @@ class VivaldiPrefsDefinitions : public sync_preferences::SyncablePrefsDatabase {
   }
 
   void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+  void MigrateObsoleteProfilePrefs(PrefService* profile_prefs);
 
   // Implementing sync_preferences::SyncablePrefsDatabase
   std::optional<sync_preferences::SyncablePrefMetadata> GetSyncablePrefMetadata(

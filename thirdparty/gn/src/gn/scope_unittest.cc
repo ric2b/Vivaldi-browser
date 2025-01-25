@@ -26,9 +26,8 @@ bool HasStringValueEqualTo(const Scope* scope,
 
 bool ContainsBuildDependencyFile(const Scope* scope,
                                  const SourceFile& source_file) {
-  const auto& build_dependency_files = scope->build_dependency_files();
-  return build_dependency_files.end() !=
-         build_dependency_files.find(source_file);
+  const auto& build_dependency_files = scope->CollectBuildDependencyFiles();
+  return build_dependency_files.find(source_file) != build_dependency_files.end();
 }
 
 }  // namespace
@@ -39,7 +38,7 @@ TEST(Scope, InheritBuildDependencyFilesFromParent) {
   setup.scope()->AddBuildDependencyFile(source_file);
 
   Scope new_scope(setup.scope());
-  EXPECT_EQ(1U, new_scope.build_dependency_files().size());
+  EXPECT_EQ(1U, new_scope.CollectBuildDependencyFiles().size());
   EXPECT_TRUE(ContainsBuildDependencyFile(&new_scope, source_file));
 }
 
@@ -225,7 +224,7 @@ TEST(Scope, NonRecursiveMergeTo) {
     EXPECT_TRUE(from_scope.NonRecursiveMergeTo(&to_scope, options, &assignment,
                                                "error", &err));
     EXPECT_FALSE(err.has_error());
-    EXPECT_EQ(1U, to_scope.build_dependency_files().size());
+    EXPECT_EQ(1U, to_scope.CollectBuildDependencyFiles().size());
     EXPECT_TRUE(ContainsBuildDependencyFile(&to_scope, source_file));
   }
 }

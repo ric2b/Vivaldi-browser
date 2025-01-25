@@ -632,18 +632,35 @@
           "title": {
             "type": "string"
           },
-          "click_url": {
-            "type": "string"
-          },
-          "target_url": {
-            "type": "string"
-          },
           "image_url": {
             "type": "string"
           },
           "image_path": {
             "type": "string"
+          },
+          "category": {
+            "type": "number"
+          },
+          "display_location_address_bar": {
+            "type": "boolean"
+          },
+          "display_location_sd_dialog": {
+            "type": "boolean"
+          },
+          "redirect_url": {
+            "type": "string"
+          },
+          "allowed_to_be_default_match": {
+            "type": "boolean"
           }
+        }
+      },
+      {
+        "id": "DirectMatchItems",
+        "type": "array",
+        "description": "A Direct match items array",
+        "items": {
+          "$ref": "DirectMatchItem"
         }
       }
     ],
@@ -702,8 +719,6 @@
           ]
         }
       },
-
-
       {
         "name": "isTabInLastSession",
         "type": "function",
@@ -1594,21 +1609,6 @@
         ]
       },
       {
-        "name": "isFirstRun",
-        "type": "function",
-        "description": "chrome::IsChromeFirstRun()",
-        "parameters": [],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-              "name": "result",
-              "type": "boolean"
-            }
-          ]
-        }
-      },
-      {
         "name": "generateQRCode",
         "type": "function",
         "description": "Generate a QR image based on the given data.",
@@ -1813,6 +1813,34 @@
         }
       },
       {
+        "name": "getOSGeolocationState",
+        "type": "function",
+        "description": "Gets the state of OS geolocation.",
+        "parameters": [
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "state",
+              "type": "boolean",
+              "description": "True if enabled, False if not. Always true for systems that have no central management."
+            }
+          ]
+        }
+      },
+      {
+        "name": "openOSGeolocationSettings",
+        "type": "function",
+        "description": "Makes the OS geolocation settings visible to the user.",
+        "parameters": [
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
+      },
+      {
         "name": "getCommandLineValue",
         "type": "function",
         "description": "Gets the command line value for the given named argument.",
@@ -2003,21 +2031,6 @@
         }
       },
       {
-        "name": "detectNewCrashes",
-        "type": "function",
-        "description": "Checks to see if there are any new crash reports since the last function call.",
-        "parameters": [],
-        "returns_async": {
-          "name": "callback",
-          "parameters": [
-            {
-              "name": "hasNewCrashes",
-              "type": "boolean"
-            }
-          ]
-        }
-      },
-      {
         "name": "isRTL",
         "type": "function",
         "description": "Checks if current locale Right-To-Left locale.",
@@ -2045,6 +2058,45 @@
               "name": "item",
               "$ref": "DirectMatchItem",
               "optional": true
+            }
+          ]
+        }
+      },
+      {
+        "name": "GetDirectMatchPopularSites",
+        "type": "function",
+        "description": "Fetch popular sites from DM units sorted asc by `position` where sd_dialog=true",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "items",
+              "$ref": "DirectMatchItems",
+              "optional": false
+            }
+          ]
+        }
+      },
+      {
+        "name": "GetDirectMatchesForCategory",
+        "type": "function",
+        "description": "Returns direct match items for provided `category_id` sorted asc by `position` and filtered by `display_locations`",
+        "parameters": [
+          {
+            "name": "categoryId",
+            "type": "number"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "items",
+              "$ref": "DirectMatchItems",
+              "optional": false
             }
           ]
         }
@@ -2115,6 +2167,29 @@
               "type": "integer"
             },
             "description": "Array of IDs of the download items to initiate the drag."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": []
+        }
+      },
+      {
+        "name": "acknowledgeCrashedSession",
+        "type": "function",
+        "description": "Must be called in the post crash browser launch. It can either restore crashed session, or just acknowledge the crash.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          },
+          {
+            "name": "restoreSession",
+            "type": "boolean"
+          },
+          {
+            "name": "reenableExtensions",
+            "type": "boolean"
           }
         ],
         "returns_async": {
@@ -2222,6 +2297,18 @@
             "description": "The url to show the QR code for."
           }
         ]
+      },
+      {
+        "name": "onSessionRecoveryStart",
+        "type": "function",
+        "description": "Fired when the session recovery starts.",
+        "parameters": []
+      },
+      {
+        "name": "onSessionRecoveryDone",
+        "type": "function",
+        "description": "Fired when the session recovery is done.",
+        "parameters": []
       }
     ]
   }

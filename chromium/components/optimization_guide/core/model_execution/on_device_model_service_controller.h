@@ -23,6 +23,8 @@
 #include "components/optimization_guide/core/model_execution/on_device_model_component.h"
 #include "components/optimization_guide/core/model_execution/on_device_model_metadata.h"
 #include "components/optimization_guide/core/model_execution/on_device_model_validator.h"
+#include "components/optimization_guide/core/model_execution/safety_checker.h"
+#include "components/optimization_guide/core/model_execution/safety_client.h"
 #include "components/optimization_guide/core/model_execution/safety_model_info.h"
 #include "components/optimization_guide/core/model_execution/session_impl.h"
 #include "components/optimization_guide/core/model_info.h"
@@ -31,6 +33,8 @@
 #include "feature_keys.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/on_device_model/public/cpp/model_assets.h"
+#include "services/on_device_model/public/cpp/service_client.h"
+#include "services/on_device_model/public/cpp/text_safety_assets.h"
 #include "services/on_device_model/public/mojom/on_device_model.mojom.h"
 #include "services/on_device_model/public/mojom/on_device_model_service.mojom.h"
 
@@ -55,18 +59,14 @@ class OnDeviceModelAdaptationController;
 // As all OnDeviceModelServiceController's share the same model, and we do not
 // want to load duplicate models (would consume excessive amounts of memory), at
 // most one instance of OnDeviceModelServiceController is created.
-//
-// TODO(b/302402576): Handle unloading the model, and stopping the service. The
-// StreamingResponder should notify the controller upon completion to accomplish
-// this. Also handle multiple requests gracefully and fail the subsequent
-// requests, while handling the first one.
 class OnDeviceModelServiceController
     : public base::RefCounted<OnDeviceModelServiceController> {
  public:
   OnDeviceModelServiceController(
       std::unique_ptr<OnDeviceModelAccessController> access_controller,
       base::WeakPtr<OnDeviceModelComponentStateManager>
-          on_device_component_state_manager);
+          on_device_component_state_manager,
+      on_device_model::ServiceClient::LaunchFn launch_fn);
 
   // Initializes OnDeviceModelServiceController. This should be called once
   // after creation.
@@ -87,19 +87,16 @@ class OnDeviceModelServiceController
           model_quality_uploader_service,
       const std::optional<SessionConfigParams>& config_params);
 
-  // Launches the on-device model-service.
-  virtual void LaunchService() = 0;
-
-  // Starts the service and calls |callback| with the estimated performance
-  // class. Will call with std::nullopt if the service crashes.
-  using GetEstimatedPerformanceClassCallback = base::OnceCallback<void(
-      std::optional<on_device_model::mojom::PerformanceClass>
-          performance_class)>;
-  void GetEstimatedPerformanceClass(
-      GetEstimatedPerformanceClassCallback callback);
+  // Starts the service and executes a benchmark to determine the performance
+  // class, returning the result via `callback`. The controller will be kept
+  // alive until the benchmark completes. Returns kServiceCrash if the service
+  // crashes.
+  static void GetEstimatedPerformanceClass(
+      scoped_refptr<OnDeviceModelServiceController> controller,
+      base::OnceCallback<void(OnDeviceModelPerformanceClass)> callback);
 
   bool IsConnectedForTesting() {
-    return base_model_remote_.is_bound() || service_remote_.is_bound();
+    return base_model_remote_.is_bound() || service_client_.is_bound();
   }
 
   // Sets the language detection model to be used by the ODM service when text
@@ -121,8 +118,7 @@ class OnDeviceModelServiceController
       std::unique_ptr<OnDeviceModelAdaptationMetadata> adaptation_metadata);
 
   // Called when the model adaptation remote is disconnected.
-  void OnModelAdaptationRemoteDisconnected(ModelBasedCapabilityKey feature,
-                                           ModelRemoteDisconnectReason reason);
+  void OnModelAdaptationRemoteDisconnected();
 
   // Add/remove observers for notifying on-device model availability changes.
   void AddOnDeviceModelAvailabilityChangeObserver(
@@ -140,7 +136,7 @@ class OnDeviceModelServiceController
   virtual ~OnDeviceModelServiceController();
 
   std::optional<base::FilePath> language_detection_model_path() const {
-    return language_detection_model_path_;
+    return safety_client_.language_detection_model_path();
   }
 
   mojo::Remote<on_device_model::mojom::OnDeviceModel>& base_model_remote() {
@@ -161,7 +157,6 @@ class OnDeviceModelServiceController
     mojo::Remote<on_device_model::mojom::OnDeviceModel>& GetModelRemote()
         override;
     void OnResponseCompleted() override;
-    void OnSessionTimedOut() override;
 
    private:
     ModelBasedCapabilityKey feature_;
@@ -176,6 +171,7 @@ class OnDeviceModelServiceController
   friend class OnDeviceModelAdaptationController;
   friend class OnDeviceModelClient;
   friend class OnDeviceModelServiceAdaptationControllerTest;
+  friend class OnDeviceModelServiceControllerIOS;
   friend class OnDeviceModelServiceControllerTest;
   friend class base::RefCounted<OnDeviceModelServiceController>;
 
@@ -190,14 +186,14 @@ class OnDeviceModelServiceController
   void MaybeCreateBaseModelRemote(
       const on_device_model::ModelAssetPaths& model_paths);
 
-  // Invoked at the end of model load, to continue with model execution.
-  void OnLoadModelResult(on_device_model::mojom::LoadModelResult result);
-
   // Called when the model assets have been loaded from disk and are ready to be
   // sent to the service.
   void OnModelAssetsLoaded(
       mojo::PendingReceiver<on_device_model::mojom::OnDeviceModel> model,
       on_device_model::ModelAssets assets);
+
+  // Called when the service disconnects unexpectedly.
+  void OnServiceDisconnected(on_device_model::ServiceDisconnectReason reason);
 
   // Called when disconnected from the model.
   void OnBaseModelDisconnected();
@@ -225,13 +221,9 @@ class OnDeviceModelServiceController
   base::WeakPtr<OnDeviceModelComponentStateManager>
       on_device_component_state_manager_;
 
-  // Full path of the language detection model file if it's available.
-  std::optional<base::FilePath> language_detection_model_path_;
-
-  // Can be null if no safety model available.
-  std::unique_ptr<SafetyModelInfo> safety_model_info_;
   std::unique_ptr<OnDeviceModelMetadata> model_metadata_;
-  mojo::Remote<on_device_model::mojom::OnDeviceModelService> service_remote_;
+  on_device_model::ServiceClient service_client_;
+  SafetyClient safety_client_;
 
   mojo::Remote<on_device_model::mojom::OnDeviceModel> base_model_remote_;
 

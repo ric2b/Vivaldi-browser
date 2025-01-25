@@ -23,6 +23,13 @@ class OpenScreenSessionBase : public quic::QuicSession {
  public:
   class Visitor : public quic::QuicSession::Visitor {
    public:
+    Visitor();
+    Visitor(const Visitor&) = delete;
+    Visitor& operator=(const Visitor&) = delete;
+    Visitor(Visitor&&) noexcept = delete;
+    Visitor& operator=(Visitor&&) noexcept = delete;
+    ~Visitor() override;
+
     virtual void OnCryptoHandshakeComplete() = 0;
     virtual void OnIncomingStream(QuicStream* stream) = 0;
     virtual void OnClientCertificates(
@@ -38,6 +45,8 @@ class OpenScreenSessionBase : public quic::QuicSession {
       const quic::ParsedQuicVersionVector& supported_versions);
   OpenScreenSessionBase(const OpenScreenSessionBase&) = delete;
   OpenScreenSessionBase& operator=(const OpenScreenSessionBase&) = delete;
+  OpenScreenSessionBase(OpenScreenSessionBase&&) noexcept = delete;
+  OpenScreenSessionBase& operator=(OpenScreenSessionBase&&) noexcept = delete;
   ~OpenScreenSessionBase() override;
 
   // QuicSession overrides.
@@ -58,8 +67,12 @@ class OpenScreenSessionBase : public quic::QuicSession {
   virtual std::unique_ptr<quic::QuicCryptoStream> CreateCryptoStream() = 0;
 
   // QuicSession interface implementation.
-  quic::QuicCryptoStream* GetMutableCryptoStream() override;
-  const quic::QuicCryptoStream* GetCryptoStream() const override;
+  quic::QuicCryptoStream* GetMutableCryptoStream() override {
+    return crypto_stream_.get();
+  }
+  const quic::QuicCryptoStream* GetCryptoStream() const override {
+    return crypto_stream_.get();
+  }
   quic::QuicStream* CreateIncomingStream(quic::QuicStreamId id) override;
   quic::QuicStream* CreateIncomingStream(quic::PendingStream* pending) override;
   bool ShouldKeepConnectionAlive() const override;

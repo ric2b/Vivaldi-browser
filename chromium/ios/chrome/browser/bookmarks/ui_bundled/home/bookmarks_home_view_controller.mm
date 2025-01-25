@@ -309,19 +309,18 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   self = [super initWithStyle:style];
   if (self) {
     _browser = browser->AsWeakPtr();
-    ChromeBrowserState* browserState = self.browserState;
+    ProfileIOS* profile = self.profile;
     _webStateList = browser->GetWebStateList();
 
-    _faviconLoader =
-        IOSChromeFaviconLoaderFactory::GetForBrowserState(browserState);
+    _faviconLoader = IOSChromeFaviconLoaderFactory::GetForProfile(profile);
 
-    _bookmarkModel = ios::BookmarkModelFactory::GetForBrowserState(browserState)
-                         ->AsWeakPtr();
+    _bookmarkModel =
+        ios::BookmarkModelFactory::GetForProfile(profile)->AsWeakPtr();
     _bookmarkModelBridge =
         std::make_unique<BookmarkModelBridge>(self, _bookmarkModel.get());
 
     // Vivaldi
-    [VivaldiBookmarkPrefs setPrefService:browserState->GetPrefs()];
+    [VivaldiBookmarkPrefs setPrefService:profile->GetPrefs()];
     // End Vivaldi
 
   }
@@ -384,7 +383,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   // If cache is present then reconstruct the last visited bookmark from
   // cache.
   if (![BookmarkPathCache
-          bookmarkTopMostRowCacheWithPrefService:self.browserState->GetPrefs()
+          bookmarkTopMostRowCacheWithPrefService:self.profile->GetPrefs()
                                    bookmarkModel:_bookmarkModel.get()
                                         folderId:&cachedFolderID
                                       topMostRow:&cachedIndexPathRow] ||
@@ -491,13 +490,18 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   } else {
     [self showLoadingSpinnerBackground];
   }
+
+  if (@available(iOS 17, *)) {
+    [self registerForTraitChanges:TraitCollectionSetForTraits(nil)
+                       withAction:@selector(stopEdittingBookmarkOnTraitChange)];
+  }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
 
   if (_isShutDown) {
-    // After `shutdown` is called, `_browserState` is null.
+    // After `shutdown` is called, `_profile` is null.
     return;
   }
   // Set the delegate here to make sure it is working when navigating in the
@@ -557,11 +561,16 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   return NO;
 }
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-  // Stop edit of current bookmark folder name, if any.
-  [self.editingFolderCell stopEdit];
+  if (@available(iOS 17, *)) {
+    return;
+  }
+
+  [self stopEdittingBookmarkOnTraitChange];
 }
+#endif
 
 - (UIStatusBarStyle)preferredStatusBarStyle {
   return UIStatusBarStyleDefault;
@@ -634,7 +643,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   int topMostVisibleIndexPathRow = [self topMostVisibleIndexPathRow];
   if (self.displayedFolderNode) {
     [BookmarkPathCache
-        cacheBookmarkTopMostRowWithPrefService:self.browserState->GetPrefs()
+        cacheBookmarkTopMostRowWithPrefService:self.profile->GetPrefs()
                                       folderId:self.displayedFolderNode->id()
                                      inStorage:bookmark_utils_ios::
                                                    GetBookmarkStorageType(
@@ -981,7 +990,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   base::RecordAction(base::UserMetricsAction(userAction));
   [self.snackbarCommandsHandler
       showSnackbarMessage:bookmark_utils_ios::DeleteBookmarksWithUndoToast(
-                              nodes, _bookmarkModel.get(), self.browserState,
+                              nodes, _bookmarkModel.get(), self.profile,
                               FROM_HERE)];
   [self setTableViewEditing:NO];
 }
@@ -1166,7 +1175,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   }
   int64_t unusedFolderId;
   int unusedIndexPathRow;
-  PrefService* prefService = self.browserState->GetPrefs();
+  PrefService* prefService = self.profile->GetPrefs();
   while ([BookmarkPathCache
       bookmarkTopMostRowCacheWithPrefService:prefService
                                bookmarkModel:_bookmarkModel.get()
@@ -1299,7 +1308,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
     return;
   }
 
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 - (void)handleMoveNode:(const BookmarkNode*)node toPosition:(size_t)position {
@@ -1307,7 +1316,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
       showSnackbarMessage:
           bookmark_utils_ios::UpdateBookmarkPositionWithUndoToast(
               node, self.displayedFolderNode, position, _bookmarkModel.get(),
-              self.browserState)];
+              self.profile)];
 }
 
 - (void)handleRefreshContextBar {
@@ -1320,6 +1329,11 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
 
 - (BOOL)isAtTopOfNavigation {
   return (self.navigationController.topViewController == self);
+}
+
+// Stop edit of current bookmark folder name, if any.
+- (void)stopEdittingBookmarkOnTraitChange {
+  [self.editingFolderCell stopEdit];
 }
 
 #pragma mark - BookmarkTableCellTitleEditDelegate
@@ -1360,16 +1374,15 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   DCHECK_GE(editedNodesVector.size(), 1u);
 
   [self setTableViewEditing:NO];
-  ChromeBrowserState* browserState = self.browserState;
+  ProfileIOS* profile = self.profile;
   [self.snackbarCommandsHandler
       showSnackbarMessage:bookmark_utils_ios::MoveBookmarksWithUndoToast(
                               editedNodesVector, _bookmarkModel.get(), folder,
-                              browserState,
-                              AuthenticationServiceFactory::GetForBrowserState(
-                                  browserState)
+                              profile,
+                              AuthenticationServiceFactory::GetForProfile(
+                                  profile)
                                   ->GetWeakPtr(),
-                              SyncServiceFactory::GetForBrowserState(
-                                  browserState))];
+                              SyncServiceFactory::GetForProfile(profile))];
 }
 
 - (void)bookmarksFolderChooserCoordinatorDidCancel:
@@ -1405,7 +1418,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   // again here if restoring of cache position is needed.  It is to prevent
   // crbug.com/765503.
   if ([BookmarkPathCache
-          bookmarkTopMostRowCacheWithPrefService:self.browserState->GetPrefs()
+          bookmarkTopMostRowCacheWithPrefService:self.profile->GetPrefs()
                                    bookmarkModel:_bookmarkModel.get()
                                         folderId:&unusedFolderId
                                       topMostRow:&unusedIndexPathRow]) {
@@ -1482,10 +1495,10 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
 
 #pragma mark - private
 
-// Returns the browser state.
-- (ChromeBrowserState*)browserState {
+// Returns the profile.
+- (ProfileIOS*)profile {
   if (Browser* browser = _browser.get()) {
-    return browser->GetBrowserState()->GetOriginalChromeBrowserState();
+    return browser->GetProfile()->GetOriginalProfile();
   }
   return nullptr;
 }
@@ -1621,7 +1634,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
 
   bool is_ntp = self.webStateList->GetActiveWebState()->GetVisibleURL() ==
                 kChromeUINewTabURL;
-  new_tab_page_uma::RecordNTPAction(self.browserState->IsOffTheRecord(), is_ntp,
+  new_tab_page_uma::RecordNTPAction(self.profile->IsOffTheRecord(), is_ntp,
                                     new_tab_page_uma::ACTION_OPENED_BOOKMARK);
   base::RecordAction(
       base::UserMetricsAction("MobileBookmarkManagerEntryOpened"));
@@ -1765,19 +1778,19 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   // items within those folders. IsNodeManaged() returns true for the
   // managed_node and all nodes that are descendants of managed_node.
   bookmarks::ManagedBookmarkService* managedBookmarkService =
-      ManagedBookmarkServiceFactory::GetForBrowserState(self.browserState);
+      ManagedBookmarkServiceFactory::GetForProfile(self.profile);
   return managedBookmarkService ? !managedBookmarkService->IsNodeManaged(node)
                                 : YES;
 }
 
 // Returns YES if user is allowed to edit any bookmarks.
 - (BOOL)isEditBookmarksEnabled {
-  ChromeBrowserState* browserState = self.browserState;
-  if (!browserState) {
+  ProfileIOS* profile = self.profile;
+  if (!profile) {
     // The view is being closed.
     return NO;
   }
-  return browserState->GetPrefs()->GetBoolean(
+  return profile->GetPrefs()->GetBoolean(
       bookmarks::prefs::kEditBookmarksEnabled);
 }
 
@@ -1935,12 +1948,12 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
 
 // Returns whether the incognito mode is forced.
 - (BOOL)isIncognitoForced {
-  return IsIncognitoModeForced(self.browserState->GetPrefs());
+  return IsIncognitoModeForced(self.profile->GetPrefs());
 }
 
 // Returns whether the incognito mode is available.
 - (BOOL)isIncognitoAvailable {
-  return !IsIncognitoModeDisabled(self.browserState->GetPrefs());
+  return !IsIncognitoModeDisabled(self.profile->GetPrefs());
 }
 
 #pragma mark - Loading and Empty States
@@ -2072,8 +2085,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
     case BookmarksContextBarBeginSelection:
       // This must never happen, as the leading button is disabled at this
       // point.
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
     case BookmarksContextBarSingleURLSelection:
     case BookmarksContextBarMultipleURLSelection:
     case BookmarksContextBarSingleFolderSelection:
@@ -2085,7 +2097,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
       break;
     case BookmarksContextBarNone:
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 
@@ -2130,8 +2142,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
     case BookmarksContextBarBeginSelection:
     case BookmarksContextBarNone:
       // Center button is disabled in these states.
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
 
   [self addCancelActionToCoordinator:self.actionSheetCoordinator];
@@ -2612,8 +2623,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
     [self configureCoordinator:self.actionSheetCoordinator
         forSingleBookmarkFolder:node];
   } else {
-    NOTREACHED_IN_MIGRATION();
-    return;
+    NOTREACHED();
   }
 
   [self addCancelActionToCoordinator:self.actionSheetCoordinator];
@@ -2989,7 +2999,7 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
           bookmark_utils_ios::CreateBookmarkAtPositionWithUndoToast(
               base::SysUTF8ToNSString(URL.spec()), URL,
               self.displayedFolderNode, index, _bookmarkModel.get(),
-              self.browserState)];
+              self.profile)];
 }
 
 #pragma mark - Vivaldi
@@ -3078,12 +3088,12 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
       showSnackbarMessage:bookmark_utils_ios::MoveBookmarksWithUndoToast(
                               movedNodesVector, _bookmarkModel.get(),
                               trashFolder,
-                              self.browserState,
-                             AuthenticationServiceFactory::GetForBrowserState(
-                                 self.browserState)
+                              self.profile,
+                             AuthenticationServiceFactory::GetForProfile(
+                                 self.profile)
                                  ->GetWeakPtr(),
-                             SyncServiceFactory::GetForBrowserState(
-                                 self.browserState))];
+                             SyncServiceFactory::GetForProfile(
+                                 self.profile))];
   [self refreshContents];
   [self setTableViewEditing:NO];
 }
@@ -3156,14 +3166,15 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   DCHECK_GE(nodes.size(), 1u);
   [self.snackbarCommandsHandler
       showSnackbarMessage:bookmark_utils_ios::DeleteBookmarksWithUndoToast(
-                nodes, _bookmarkModel.get(), self.browserState, FROM_HERE)];
+                nodes, _bookmarkModel.get(), self.profile, FROM_HERE)];
   [self setTableViewEditing:NO];
 }
 
 /// Returns true if device is iPad and multitasking UI has
 /// enough space to show iPad side panel.
 - (BOOL)showingSidePanel {
-  return VivaldiGlobalHelpers.canShowSidePanel;
+  return [VivaldiGlobalHelpers
+              canShowSidePanelForTrait:self.traitCollection];
 }
 
 // Called when the empty trash button is clicked.

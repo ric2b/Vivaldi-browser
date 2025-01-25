@@ -12,7 +12,6 @@
 #include "osp/public/timestamp.h"
 #include "platform/base/error.h"
 #include "platform/base/interface_info.h"
-#include "platform/base/macros.h"
 
 namespace openscreen::osp {
 
@@ -43,7 +42,12 @@ class ServicePublisher {
 
   class Observer {
    public:
-    virtual ~Observer() = default;
+    Observer();
+    Observer(const Observer&) = delete;
+    Observer& operator=(const Observer&) = delete;
+    Observer(Observer&&) noexcept = delete;
+    Observer& operator=(Observer&&) noexcept = delete;
+    virtual ~Observer();
 
     // Called when the state becomes kRunning.
     virtual void OnStarted() = 0;
@@ -66,7 +70,7 @@ class ServicePublisher {
 
     // The DNS domain name label that should be used to identify this service
     // within the openscreen service type.
-    // TODO(btolsch): This could be derived from |friendly_name| but we will
+    // TODO(btolsch): This could be derived from `friendly_name` but we will
     // leave it as an arbitrary name until the spec is finalized.
     std::string instance_name;
 
@@ -93,6 +97,11 @@ class ServicePublisher {
     bool IsValid() const;
   };
 
+  ServicePublisher();
+  ServicePublisher(const ServicePublisher&) = delete;
+  ServicePublisher& operator=(const ServicePublisher&) = delete;
+  ServicePublisher(ServicePublisher&&) noexcept = delete;
+  ServicePublisher& operator=(ServicePublisher&&) noexcept = delete;
   virtual ~ServicePublisher();
 
   // Sets the service configuration for this publisher.
@@ -131,14 +140,10 @@ class ServicePublisher {
   const Error& last_error() const { return last_error_; }
 
  protected:
-  ServicePublisher();
-
   State state_;
   Error last_error_;
   std::vector<Observer*> observers_;
   Config config_;
-
-  OSP_DISALLOW_COPY_AND_ASSIGN(ServicePublisher);
 };
 
 }  // namespace openscreen::osp

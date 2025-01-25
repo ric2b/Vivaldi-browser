@@ -25,17 +25,15 @@ NotesModelFactory::NotesModelFactory()
 NotesModelFactory::~NotesModelFactory() {}
 
 // static
-NotesModel* NotesModelFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+NotesModel* NotesModelFactory::GetForProfile(ProfileIOS* profile) {
   return static_cast<NotesModel*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 // static
-NotesModel* NotesModelFactory::GetForBrowserStateIfExists(
-    ChromeBrowserState* browser_state) {
+NotesModel* NotesModelFactory::GetForProfileIfExists(ProfileIOS* profile) {
   return static_cast<NotesModel*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, false));
+      GetInstance()->GetServiceForBrowserState(profile, false));
 }
 
 // static
@@ -46,12 +44,11 @@ NotesModelFactory* NotesModelFactory::GetInstance() {
 
 std::unique_ptr<KeyedService> NotesModelFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   auto notes_model = std::make_unique<NotesModel>(
-      NoteSyncServiceFactory::GetForBrowserState(browser_state),
-      SyncedFileStoreFactory::GetForBrowserState(browser_state));
-  notes_model->Load(browser_state->GetStatePath());
+      NoteSyncServiceFactory::GetForProfile(profile),
+      SyncedFileStoreFactory::GetForProfile(profile));
+  notes_model->Load(profile->GetStatePath());
   return notes_model;
 }
 

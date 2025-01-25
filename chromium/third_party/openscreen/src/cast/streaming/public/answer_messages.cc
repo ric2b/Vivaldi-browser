@@ -7,13 +7,13 @@
 #include <string_view>
 #include <utility>
 
-#include "absl/strings/str_split.h"
 #include "cast/streaming/public/constants.h"
 #include "platform/base/error.h"
 #include "util/enum_name_table.h"
 #include "util/json/json_helpers.h"
 #include "util/osp_logging.h"
 #include "util/string_parse.h"
+#include "util/string_util.h"
 #include "util/stringprintf.h"
 
 namespace openscreen::cast {
@@ -69,7 +69,7 @@ static constexpr char kDimensions[] = "dimensions";
 // pixels are not square.
 static constexpr char kAspectRatio[] = "aspectRatio";
 // The delimeter used for the aspect ratio format ("A:B").
-static constexpr char kAspectRatioDelimiter[] = ":";
+static constexpr char kAspectRatioDelimiter = ':';
 // Sets the aspect ratio constraints. Value must be either "sender" or
 // "receiver", see kScalingSender and kScalingReceiver below.
 static constexpr char kScaling[] = "scaling";
@@ -158,7 +158,7 @@ bool AspectRatio::TryParse(const Json::Value& value, AspectRatio* out) {
   }
 
   std::vector<std::string_view> fields =
-      absl::StrSplit(parsed_value, kAspectRatioDelimiter);
+      string_util::Split(parsed_value, kAspectRatioDelimiter);
   if (fields.size() != 2) {
     return false;
   }
@@ -334,7 +334,7 @@ Json::Value DisplayDescription::ToJson() const {
   Json::Value root;
   if (aspect_ratio.has_value()) {
     root[kAspectRatio] =
-        StringPrintf("%d%s%d", aspect_ratio->width, kAspectRatioDelimiter,
+        StringPrintf("%d%c%d", aspect_ratio->width, kAspectRatioDelimiter,
                      aspect_ratio->height);
   }
   if (dimensions.has_value()) {

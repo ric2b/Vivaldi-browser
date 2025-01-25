@@ -12,7 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[allow(warnings)]
 pub mod bindings {
-    #![allow(warnings)]
+    // Blaze does not support the `OUT_DIR` configuration used by Cargo. Instead, it specifies a
+    // complete path to the generated bindings as an environment variable.
+    #[cfg(google3)]
     include!(env!("CRABBYAVIF_LIBGAV1_BINDINGS_RS"));
+    #[cfg(not(google3))]
+    include!(concat!(env!("OUT_DIR"), "/libgav1_bindgen.rs"));
 }

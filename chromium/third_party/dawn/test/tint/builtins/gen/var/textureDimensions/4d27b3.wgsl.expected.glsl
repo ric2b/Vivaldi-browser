@@ -2,42 +2,30 @@
 precision highp float;
 precision highp int;
 
-layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+layout(binding = 0, std430)
+buffer prevent_dce_block_1_ssbo {
   uvec3 inner;
-} prevent_dce;
-
+} v;
 layout(binding = 0, r32i) uniform highp iimage3D arg_0;
 uvec3 textureDimensions_4d27b3() {
   uvec3 res = uvec3(imageSize(arg_0));
   return res;
 }
-
-void fragment_main() {
-  prevent_dce.inner = textureDimensions_4d27b3();
-}
-
 void main() {
-  fragment_main();
-  return;
+  v.inner = textureDimensions_4d27b3();
 }
 #version 310 es
 
-layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+layout(binding = 0, std430)
+buffer prevent_dce_block_1_ssbo {
   uvec3 inner;
-} prevent_dce;
-
+} v;
 layout(binding = 0, r32i) uniform highp iimage3D arg_0;
 uvec3 textureDimensions_4d27b3() {
   uvec3 res = uvec3(imageSize(arg_0));
   return res;
 }
-
-void compute_main() {
-  prevent_dce.inner = textureDimensions_4d27b3();
-}
-
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
-  compute_main();
-  return;
+  v.inner = textureDimensions_4d27b3();
 }

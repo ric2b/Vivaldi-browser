@@ -140,7 +140,6 @@
 <translation id="3607176258839749451">エラー出て登録できへんかったわ。後でまた試して。</translation>
 <translation id="3646647753063635401">データ全部同期して、同期できるデータ項目増えたらそれも自動で同期する</translation>
 <translation id="3682791711395736890">デスクトップ用サイト出す</translation>
-<translation id="3692650606013198282">プライベートタブで開く</translation>
 <translation id="3699026013955941879">コードの期限切れてるわ。コード再発行リクエストして。</translation>
 <translation id="3700829948786686853">Vivaldiにおこしやす</translation>
 <translation id="3766350025418769949">iPadの他のアプリでも、Vivaldiパスワードマネージャーに保存したパスワード使えるで。</translation>
@@ -235,7 +234,6 @@
 <translation id="5153806174841856652">ログイン失敗したわ</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />コードもっかい送る<ph name="END_LINK" /></translation>
 <translation id="5191012692655103305">タブと履歴取得中...</translation>
-<translation id="5221269430020540672">バックグラウンドのタブで画像開く</translation>
 <translation id="5238642303473095117">データほかす</translation>
 <translation id="5245732982828228444">メモここに出るで</translation>
 <translation id="5249199221558969362">そんな数字ありえへんやろ。</translation>
@@ -244,7 +242,6 @@
 <translation id="5317780077021120954">保存</translation>
 <translation id="5349678548463426691">説明順</translation>
 <translation id="5350737901534958404">Vivaldiパートナーからの広告は許可する（Vivaldiのサポートになるで）</translation>
-<translation id="5350868038818774118">ブックマークマッチング</translation>
 <translation id="5351912500249789547">vivaldi.net があんたの認証情報拒否したわ: エラーコード <ph name="ERROR_CODE" /></translation>
 <translation id="5378841821586202982">ごみ箱</translation>
 <translation id="5398772614898833570">広告ブロック数</translation>
@@ -265,7 +262,6 @@
 <translation id="5859825823508296659">ドメイン編集</translation>
 <translation id="5867841422488265304">検索ワードかウェブアドレス入れて</translation>
 <translation id="5869217094746242845">プライバシーとセキュリティーもっと知る</translation>
-<translation id="587130020764788326">ニックネームマッチング</translation>
 <translation id="5871497086027727873">１件のアイテム移したで</translation>
 <translation id="5898502570200301364">iPhoneの他のアプリでも、Vivaldiパスワードマネージャーに保存したパスワード使えるで。</translation>
 <translation id="5900160494089383343">このユーザー名使われへんわ。</translation>
@@ -296,7 +292,6 @@
 <translation id="6703516503311038964">Vivaldiのニュースレター購読したい</translation>
 <translation id="6724024423419410528">色</translation>
 <translation id="6745857330065678428">ページのアクセントカラー使う</translation>
-<translation id="6757792528048321576">広告・トラッカーブロッカー</translation>
 <translation id="6798469570047202628">パスワード間違うてるみたいやで</translation>
 <translation id="681368974849482173">アイテムできたで</translation>
 <translation id="6830986331692390764">同期データほかし中やで。待っててな。</translation>
@@ -333,7 +328,6 @@
 <translation id="7417521636956146248">検索エンジンの設定が初期状態に戻るで。あんたが入れた検索エンジンも消えるで。</translation>
 <translation id="7454640759045234067">ブロックしたトラッカー</translation>
 <translation id="7461899062138731833">ソース</translation>
-<translation id="7490291412537629707">さらのバックグラウンドタブで開く</translation>
 <translation id="749277285729135008">さらのタブ開いた時はアドレスバーにフォーカス</translation>
 <translation id="750493650310597496">０件選んでる</translation>
 <translation id="7525067979554623046">作成</translation>
@@ -350,7 +344,6 @@
 <translation id="7732622593814325274">トラッカーブロックソース管理</translation>
 <translation id="7765158879357617694">移動</translation>
 <translation id="7771452384635174008">レイアウト</translation>
-<translation id="7791161131809889864">全部バックグランドで開く</translation>
 <translation id="7801204999757211519">もうアカウント持ってる？<ph name="BEGIN_LINK" /> ログイン ➔ <ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">さらのグループ作る？</translation>
 <translation id="7914995060146784406">メモ編集</translation>
@@ -367,7 +360,6 @@
 <translation id="8142291334394582384">検索候補の並び順、逆にする</translation>
 <translation id="8147118677117542370">歳いくつか書いて。</translation>
 <translation id="8165573437634525334">データは暗号化パスワードで保護されてるで</translation>
-<translation id="8182979418912184986">さらのプライベートタブ</translation>
 <translation id="8237090677709100373">カスタムカラーコード</translation>
 <translation id="8257908958623224237">別のクライアントのデータと干渉してるわ。</translation>
 <translation id="8261506727792406068">ほかす</translation>
@@ -381,7 +373,6 @@
 <translation id="8347535536909603600">Cookie同意のポップアップ消す (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">他のデバイスにあるタブ出すんやったら、同期有効にせなあかんで。</translation>
 <translation id="8366175803122817174">全部のメモのURL開く</translation>
-<translation id="8384409685584033392">ページ情報</translation>
 <translation id="8395378633507873708">アドレスバー</translation>
 <translation id="839736845446313156">登録</translation>
 <translation id="8414685983518053656">メモ</translation>

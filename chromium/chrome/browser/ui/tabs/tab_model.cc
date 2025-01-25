@@ -15,8 +15,10 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "components/constrained_window/constrained_window_views.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
+#include "ui/views/widget/widget.h"
 
 namespace tabs {
 
@@ -115,6 +117,24 @@ void TabModel::OnReparented(TabCollection* parent,
   parent_collection_ = parent;
 }
 
+void TabModel::SetPinned(bool pinned) {
+  if (pinned_ == pinned) {
+    return;
+  }
+
+  pinned_ = pinned;
+  pinned_state_changed_callback_list_.Notify(this, pinned_);
+}
+
+void TabModel::SetGroup(std::optional<tab_groups::TabGroupId> group) {
+  if (group_ == group) {
+    return;
+  }
+
+  group_ = group;
+  group_changed_callback_list_.Notify(this, group_);
+}
+
 void TabModel::WillEnterBackground(base::PassKey<TabStripModel>) {
   will_enter_background_callback_list_.Notify(this);
 }
@@ -122,6 +142,10 @@ void TabModel::WillEnterBackground(base::PassKey<TabStripModel>) {
 void TabModel::WillDetach(base::PassKey<TabStripModel>,
                           tabs::TabInterface::DetachReason reason) {
   will_detach_callback_list_.Notify(this, reason);
+}
+
+void TabModel::DidInsert(base::PassKey<TabStripModel>) {
+  did_insert_callback_list_.Notify(this);
 }
 
 content::WebContents* TabModel::GetContents() const {
@@ -152,6 +176,21 @@ base::CallbackListSubscription TabModel::RegisterWillDetach(
   return will_detach_callback_list_.Add(std::move(callback));
 }
 
+base::CallbackListSubscription TabModel::RegisterDidInsert(
+    TabInterface::DidInsertCallback callback) {
+  return did_insert_callback_list_.Add(std::move(callback));
+}
+
+base::CallbackListSubscription TabModel::RegisterPinnedStateChanged(
+    TabInterface::PinnedStateChangedCallback callback) {
+  return pinned_state_changed_callback_list_.Add(std::move(callback));
+}
+
+base::CallbackListSubscription TabModel::RegisterGroupChanged(
+    TabInterface::GroupChangedCallback callback) {
+  return group_changed_callback_list_.Add(std::move(callback));
+}
+
 bool TabModel::CanShowModalUI() const {
   return !showing_modal_ui_;
 }
@@ -172,7 +211,22 @@ tabs::TabFeatures* TabModel::GetTabFeatures() {
   return tab_features_.get();
 }
 
-uint32_t TabModel::GetTabHandle() {
+std::unique_ptr<views::Widget> TabModel::CreateAndShowTabScopedWidget(
+    views::WidgetDelegate* delegate) {
+  // TODO(kylixrd): Remove the use of constrained window API.
+  return base::WrapUnique(
+      constrained_window::ShowWebModalDialogViews(delegate, GetContents()));
+}
+
+bool TabModel::IsPinned() const {
+  return pinned_;
+}
+
+std::optional<tab_groups::TabGroupId> TabModel::GetGroup() const {
+  return group_;
+}
+
+uint32_t TabModel::GetTabHandle() const {
   return GetHandle().raw_value();
 }
 

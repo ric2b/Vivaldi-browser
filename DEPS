@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "I75f718ecb34bb5c53df8c729f44d46590594cce3",
+  "upstream_commit_id": "I5bbf556ecd353886c9042669aa0afbfd7e7266e9",
 
   # The path of the sysroots.json file.
   # This is used by vendor builds like Electron.
@@ -297,15 +297,6 @@ hooks = [
                 '--local_state=chromium/chrome/android/profiles/arm.local.txt',
                 '--output_name=chromium/chrome/android/profiles/arm.afdo.prof',
                 '--gs_url_base=chromeos-prebuilt/afdo-job/llvm',
-    ],
-  },
-  {
-    # Pull doclava binaries if building for Android.
-    'name': 'doclava',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': ['python3', "-u",
-               'chromium/build/android/download_doclava.py',
     ],
   },
   # Download PGO profiles.

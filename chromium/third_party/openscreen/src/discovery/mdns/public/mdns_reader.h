@@ -23,8 +23,8 @@ class MdnsReader : public BigEndianReader {
   using BigEndianReader::Read;
 
   // The following methods return true if the method was able to successfully
-  // read the value to |out| and advances current() to point right past the read
-  // data. Returns false if the method failed to read the value to |out|,
+  // read the value to `out` and advances current() to point right past the read
+  // data. Returns false if the method failed to read the value to `out`,
   // current() remains unchanged.
   bool Read(TxtRecordRdata::Entry* out);
   bool Read(DomainName* out);

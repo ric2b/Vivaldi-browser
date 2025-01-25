@@ -83,12 +83,12 @@ class IDLUpdater:
             print('No update is needed.\n')
             return
 
-        cmd = self._extract_update_command(proc.stdout)
+        cmd = self._extract_update_command(proc.stdout, proc.stderr)
         print('Updating IDL COM headers/TLB by running: [', cmd, ']...')
         subprocess.run(cmd, shell=True, capture_output=True, check=True)
         print('Done.\n')
 
-    def _extract_update_command(self, stdout: str) -> str:
+    def _extract_update_command(self, stdout: str, stderr: str) -> str:
         # Exclude blank lines.
         lines = list(filter(None, stdout.splitlines()))
 
@@ -100,10 +100,13 @@ class IDLUpdater:
             print('STDOUT:')
             print(stdout)
             print('-' * 80)
+            print('STDERR:')
+            print(stderr)
+            print('-' * 80)
 
             raise IDLUpdateError(
-                'Unexpected autoninja error, or update this tool if the output '
-                'format is changed.')
+                'Unexpected autoninja error (see output above). Update this '
+                'tool if the output format has changed.')
 
         return lines[-2].strip().replace('..\\..\\', '')
 
@@ -147,7 +150,6 @@ def main():
                 'updater_legacy_idl',
                 'updater_legacy_idl_user',
                 'updater_legacy_idl_system',
-                'google_update',
                 'elevation_service_idl',
                 'gaia_credential_provider_idl',
                 'iaccessible2',

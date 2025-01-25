@@ -47,17 +47,17 @@ limitations under the License.
 #include "absl/types/span.h"
 #include "third_party/gpus/cuda/include/cuda.h"
 #include "xla/status_macros.h"
+#include "xla/stream_executor/activate_context.h"
 #include "xla/stream_executor/cuda/cuda_status.h"
 #include "xla/stream_executor/cuda/ptx_compiler.h"
+#include "xla/stream_executor/cuda/ptx_compiler_helpers.h"
 #include "xla/stream_executor/cuda/ptx_compiler_support.h"
 #include "xla/stream_executor/device_description.h"
-#include "xla/stream_executor/gpu/context.h"
 #include "xla/stream_executor/gpu/gpu_asm_opts.h"
-#include "xla/stream_executor/gpu/scoped_activate_context.h"
 #include "xla/stream_executor/semantic_version.h"
 #include "xla/stream_executor/stream_executor.h"
 #include "xla/util.h"
-#include "tsl/platform/cuda_libdevice_path.h"
+#include "tsl/platform/cuda_root_path.h"
 #include "tsl/platform/env.h"
 #include "tsl/platform/errors.h"
 #include "tsl/platform/path.h"
@@ -342,8 +342,9 @@ absl::StatusOr<std::vector<uint8_t>> CompileGpuAsmUsingPtxAs(
     tsl::Env::Default()->DeleteFile(cubin_path).IgnoreError();
   };
   tsl::SubProcess ptxas_info_dumper;
-  // If the target is sm_90, hard code it to sm_90a so that all instructions
-  // can be used. We don't need the portability that sm_90 gives.
+  // On Hopper, default to sm_90a so that all instructions can be used. But
+  // only sm_90 is forward compatible, so don't use sm_90a with newer hardware:
+  // https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#ptx-compatibility
   std::string extension = (cc_major == 9 && cc_minor == 0) ? "a" : "";
   std::vector<std::string> ptxas_args = {
       ptxas_path,
@@ -381,10 +382,9 @@ absl::StatusOr<std::vector<uint8_t>> CompileGpuAsmUsingPtxAs(
           "%s ptxas too old. Falling back to the driver to compile.",
           ptxas_path));
     }
-    if (absl::StrContains(stderr_output, "ptxas fatal") &&
-        absl::StrContains(stderr_output, "Register allocation failed")) {
+    if (IsPtxRegisterAllocationError(stderr_output)) {
       LOG(INFO) << stderr_output;
-      return absl::ResourceExhaustedError("Register allocation failed");
+      return absl::ResourceExhaustedError(stderr_output);
     }
 
     return absl::InternalError(
@@ -592,9 +592,10 @@ absl::StatusOr<std::vector<uint8_t>> LinkUsingNvlink(
 }
 
 absl::StatusOr<std::vector<uint8_t>> LinkGpuAsm(
-    stream_executor::CudaComputeCapability cc, gpu::Context* context,
+    stream_executor::CudaComputeCapability cc,
+    stream_executor::StreamExecutor* executor,
     std::vector<CubinOrPTXImage> images) {
-  gpu::ScopedActivateContext activation(context);
+  std::unique_ptr<ActivateContext> activation = executor->Activate();
 
   CUlinkState link_state;
   CUjit_option options[] = {CU_JIT_TARGET};

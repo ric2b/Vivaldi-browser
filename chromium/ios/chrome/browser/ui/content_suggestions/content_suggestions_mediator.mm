@@ -11,6 +11,7 @@
 #import "base/apple/foundation_util.h"
 #import "base/functional/bind.h"
 #import "base/functional/callback.h"
+#import "base/ios/block_types.h"
 #import "base/ios/ios_util.h"
 #import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_macros.h"
@@ -70,7 +71,7 @@
   return self;
 }
 
-+ (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
++ (void)registerProfilePrefs:(user_prefs::PrefRegistrySyncable*)registry {
   registry->RegisterInt64Pref(prefs::kIosDiscoverFeedLastRefreshTime, 0);
   registry->RegisterInt64Pref(prefs::kIosDiscoverFeedLastUnseenRefreshTime, 0);
 }
@@ -99,8 +100,9 @@
 }
 
 - (void)magicStackRankingModel:(MagicStackRankingModel*)model
-                 didRemoveItem:(MagicStackModule*)item {
-  [self.magicStackConsumer removeItem:item];
+                 didRemoveItem:(MagicStackModule*)item
+                withCompletion:(ProceduralBlock)completion {
+  [self.magicStackConsumer removeItem:item withCompletion:completion];
 }
 
 - (void)magicStackRankingModel:(MagicStackRankingModel*)model

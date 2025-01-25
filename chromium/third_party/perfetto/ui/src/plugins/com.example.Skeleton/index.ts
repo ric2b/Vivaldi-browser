@@ -15,7 +15,7 @@
 import {Trace} from '../../public/trace';
 import {App} from '../../public/app';
 import {MetricVisualisation} from '../../public/plugin';
-import {PerfettoPlugin, PluginDescriptor} from '../../public/plugin';
+import {PerfettoPlugin} from '../../public/plugin';
 import {createStore, Store} from '../../base/store';
 
 interface State {
@@ -23,7 +23,10 @@ interface State {
 }
 
 // SKELETON: Rename this class to match your plugin.
-class Skeleton implements PerfettoPlugin {
+export default class implements PerfettoPlugin {
+  // SKELETON: Update pluginId to match the directory of the plugin.
+  static readonly id = 'com.example.Skeleton';
+
   private store: Store<State> = createStore({foo: 'foo'});
 
   /**
@@ -35,7 +38,7 @@ class Skeleton implements PerfettoPlugin {
    * This hook should be used for adding commands that don't depend on the
    * trace.
    */
-  onActivate(_: App): void {
+  static onActivate(_: App): void {
     //
   }
 
@@ -61,54 +64,42 @@ class Skeleton implements PerfettoPlugin {
     if (ctx.openerPluginArgs !== undefined) {
       console.log(`Postmessage args for ${ctx.pluginId}`, ctx.openerPluginArgs);
     }
+
+    /**
+     * This hook is called when the trace has finished loading, and all plugins
+     * have returned from their onTraceLoad calls. The UI can be considered
+     * 'ready' at this point. All tracks and commands should now be available,
+     * and the timeline is ready to use.
+     *
+     * This is where any automations should be done - things that you would
+     * usually do manually after the trace has loaded but you'd like to automate
+     * them.
+     *
+     * Examples of things that could be done here:
+     * - Pinning tracks
+     * - Focusing on a slice
+     * - Adding debug tracks
+     *
+     * Postmessage args might be useful here - e.g. if you would like to pin a
+     * specific track, pass the track details through the postmessage args
+     * interface and react to it here.
+     *
+     * Note: Any tracks registered in this hook will not be displayed in the
+     * timeline, unless they are manually added through the ctx.timeline API.
+     * However this part of the code is in flux at the moment and the semantics
+     * of how this works might change, though it's still good practice to use
+     * the onTraceLoad hook to add tracks as it means that all tracks are
+     * available by the time this hook gets called.
+     *
+     * TODO(stevegolton): Update this comment if the semantics of track adding
+     * changes.
+     */
+    ctx.addEventListener('traceready', async () => {
+      console.log('onTraceReady called');
+    });
   }
 
-  /**
-   * This hook is called when the trace has finished loading, and all plugins
-   * have returned from their onTraceLoad calls. The UI can be considered
-   * 'ready' at this point. All tracks and commands should now be available, and
-   * the timeline is ready to use.
-   *
-   * This is where any automations should be done - things that you would
-   * usually do manually after the trace has loaded but you'd like to automate
-   * them.
-   *
-   * Examples of things that could be done here:
-   * - Pinning tracks
-   * - Focusing on a slice
-   * - Adding debug tracks
-   *
-   * Postmessage args might be useful here - e.g. if you would like to pin a
-   * specific track, pass the track details through the postmessage args
-   * interface and react to it here.
-   *
-   * Note: Any tracks registered in this hook will not be displayed in the
-   * timeline, unless they are manually added through the ctx.timeline API.
-   * However this part of the code is in flux at the moment and the semantics of
-   * how this works might change, though it's still good practice to use the
-   * onTraceLoad hook to add tracks as it means that all tracks are available by
-   * the time this hook gets called.
-   *
-   * TODO(stevegolton): Update this comment if the semantics of track adding
-   * changes.
-   */
-  async onTraceReady(_ctx: Trace): Promise<void> {}
-
-  /**
-   * This hook is called as the trace is being unloaded, such as when switching
-   * traces. It should be used to clean up any trace related resources.
-   */
-  async onTraceUnload(_: Trace): Promise<void> {
-    this.store[Symbol.dispose]();
-  }
-
-  metricVisualisations(_: Trace): MetricVisualisation[] {
+  static metricVisualisations(): MetricVisualisation[] {
     return [];
   }
 }
-
-export const plugin: PluginDescriptor = {
-  // SKELETON: Update pluginId to match the directory of the plugin.
-  pluginId: 'com.example.Skeleton',
-  plugin: Skeleton,
-};

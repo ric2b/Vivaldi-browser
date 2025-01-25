@@ -130,14 +130,13 @@ bool Index_Model::Save() {
 bool Index_Model::Move(const Index_Node* node, const Index_Node* parent,
                        size_t index) {
   if (!node->parent() || !IsValidIndex(parent, index)) {
-    NOTREACHED();
-    //return false;
+    LOG(ERROR) << "Session model. Can not move node. Parent missing or invalid index.";
+    return false;
   }
   DCHECK(!parent->HasAncestor(node));
   if (parent->HasAncestor(node)) {
-    // Can't make an ancestor of the node be a child of the node.
-    NOTREACHED();
-    //return false;
+    LOG(ERROR) << "Session model. Can not move node. Will become a child of itself.";
+    return false;
   }
 
   // We can only move an item into a container if it originally came from it.
@@ -145,8 +144,8 @@ bool Index_Model::Move(const Index_Node* node, const Index_Node* parent,
   if (!node->container_guid().empty()) {
     if (node->container_guid() != parent->guid() &&
         !parent->is_trash_folder()) {
-      NOTREACHED();
-      //return false;
+      LOG(ERROR) << "Session model. Can not move node.";
+      return false;
     }
   }
 

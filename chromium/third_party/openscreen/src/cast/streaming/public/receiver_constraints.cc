@@ -16,7 +16,7 @@
 namespace openscreen::cast {
 
 namespace {
-// Calculates whether any codecs present in |second| are not present in |first|.
+// Calculates whether any codecs present in `second` are not present in `first`.
 template <typename T>
 bool IsMissingCodecs(const std::vector<T>& first,
                      const std::vector<T>& second) {
@@ -33,14 +33,14 @@ bool IsMissingCodecs(const std::vector<T>& first,
   return false;
 }
 
-// Calculates whether the limits defined by |first| are less restrictive than
-// those defined by |second|.
+// Calculates whether the limits defined by `first` are less restrictive than
+// those defined by `second`.
 // NOTE: These variables are intentionally passed by copy - the function will
 // mutate them.
 template <typename T>
 bool HasLessRestrictiveLimits(std::vector<T> first, std::vector<T> second) {
   // Sort both vectors to allow for element-by-element comparison between the
-  // two. All elements with |applies_to_all_codecs| set are sorted to the front.
+  // two. All elements with `applies_to_all_codecs` set are sorted to the front.
   std::function<bool(const T&, const T&)> sorter = [](const T& x, const T& y) {
     if (x.applies_to_all_codecs != y.applies_to_all_codecs) {
       return x.applies_to_all_codecs;
@@ -52,7 +52,7 @@ bool HasLessRestrictiveLimits(std::vector<T> first, std::vector<T> second) {
   auto first_it = first.begin();
   auto second_it = second.begin();
 
-  // |applies_to_all_codecs| is a special case, so handle that first.
+  // `applies_to_all_codecs` is a special case, so handle that first.
   T fake_applies_to_all_codecs_struct;
   fake_applies_to_all_codecs_struct.applies_to_all_codecs = true;
   T* first_applies_to_all_codecs_struct =
@@ -69,7 +69,7 @@ bool HasLessRestrictiveLimits(std::vector<T> first, std::vector<T> second) {
   }
 
   // Now all elements of the vectors can be assumed to NOT have
-  // |applies_to_all_codecs| set. So iterate through all codecs set in either
+  // `applies_to_all_codecs` set. So iterate through all codecs set in either
   // vector and check that the first has the less restrictive configuration set.
   while (first_it != first.end() || second_it != second.end()) {
     // Calculate the current codec to process, and whether each vector contains

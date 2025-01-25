@@ -7,7 +7,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Win x64 Builder",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-win-archive",
@@ -35,7 +35,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Win10 Tests x64",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-win-archive",
@@ -59,7 +59,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Win x64 Builder",
-                "project": "chromium-m130"
+                "project": "chromium-m132"
               }
             }
           }
@@ -69,7 +69,7 @@
         {
           "bucket": "ci",
           "builder": "Win10 Tests x64",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -78,7 +78,8 @@
           "group": "tryserver.chromium.win"
         }
       ],
-      "retry_failed_shards": true
+      "retry_failed_shards": true,
+      "targets_spec_directory": "src/infra/config/generated/builders/ci/Win10 Tests x64/targets"
     }
   },
   "$build/reclient": {

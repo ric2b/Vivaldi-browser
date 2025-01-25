@@ -21,6 +21,10 @@ BASE_DECLARE_FEATURE(kAdSamplerTriggerFeature);
 // Enables adding warning shown timestamp to client safe browsing report.
 BASE_DECLARE_FEATURE(kAddWarningShownTSToClientSafeBrowsingReport);
 
+// Expand allowlist usage beyond CSPP allowlist by using the high confidence
+// allowlist as well.
+BASE_DECLARE_FEATURE(kClientSideDetectionAcceptHCAllowlist);
+
 // Killswitch for client side phishing detection. Since client side models are
 // run on a large fraction of navigations, crashes due to the model are very
 // impactful, even if only a small fraction of users have a bad version of the
@@ -44,6 +48,12 @@ BASE_DECLARE_FEATURE(kClientSideDetectionSamplePing);
 // Expand CSPP beyond phishing and trigger when vibration API is called on the
 // web page.
 BASE_DECLARE_FEATURE(kClientSideDetectionVibrationApi);
+
+// Set a RESIZE_BEST preference for image resizing algorithm in Client Side
+// Detection renderer processes for both image classification and image
+// embedding. This experiment is done to see if the resizing algorithm
+// preference will send clearer screenshots for server side evaluation.
+BASE_DECLARE_FEATURE(kConditionalImageResize);
 
 // Creates and sends CSBRRs when notification permissions are accepted for an
 // abusive site whose interstitial has been bypassed.
@@ -90,6 +100,14 @@ extern const base::FeatureParam<int> kDownloadWarningSurveyType;
 // The time interval after which to consider a download warning ignored, and
 // potentially show the survey for ignoring a download bubble warning.
 extern const base::FeatureParam<int> kDownloadWarningSurveyIgnoreDelaySeconds;
+
+// Enables string update on the enhanced protection description on
+// chrome://settings/security to mention the use of AI.
+BASE_DECLARE_FEATURE(kEsbAiStringUpdate);
+
+// Makes the Enhanced Protection a syncable setting.
+// Check the design doc (go/esb-as-a-synced-setting-dd) for further details.
+BASE_DECLARE_FEATURE(kEsbAsASyncedSetting);
 
 // Controls whether Safe Browsing Extended Reporting (SBER) is deprecated.
 // When this feature flag is enabled:
@@ -150,8 +168,8 @@ BASE_DECLARE_FEATURE(kExtensionTelemetryPotentialPasswordTheft);
 // Extension Telemetry service reports.
 BASE_DECLARE_FEATURE(kExtensionTelemetryDisableOffstoreExtensions);
 
-// Prompt users to re-enable Android app verification on APK download.
-BASE_DECLARE_FEATURE(kGooglePlayProtectPrompt);
+// Enables reporting of external app redirects
+BASE_DECLARE_FEATURE(kExternalAppRedirectTelemetry);
 
 // Whether to provide Google Play Protect status in APK telemetry pings
 BASE_DECLARE_FEATURE(kGooglePlayProtectInApkTelemetry);
@@ -184,12 +202,6 @@ extern const base::FeatureParam<int> kHashPrefixRealTimeLookupsSampleRate;
 // replace the downloads url.
 BASE_DECLARE_FEATURE(kDownloadsPageReferrerUrl);
 
-// If enabled, hash databases will compute an "offset map" that allows
-// prefix lookups to quickly narrow the search to a subrange of the
-// database. This will tradeoff memory for lookup time.
-BASE_DECLARE_FEATURE(kHashDatabaseOffsetMap);
-extern const base::FeatureParam<int> kHashDatabaseOffsetMapBytesPerOffset;
-
 // If enabled, fetching lists from Safe Browsing and performing checks on those
 // lists uses the v5 APIs instead of the v4 Update API. There is no change to
 // how often the checks are triggered (they are still not in real time).
@@ -198,13 +210,17 @@ BASE_DECLARE_FEATURE(kLocalListsUseSBv5);
 // Enable logging of the account enhanced protection setting in Protego pings.
 BASE_DECLARE_FEATURE(kLogAccountEnhancedProtectionStateInProtegoPings);
 
-// Controls whether custom messages from admin are shown for warn and block
-// enterprise interstitials.
-BASE_DECLARE_FEATURE(kRealTimeUrlFilteringCustomMessage);
+// Killswitch for fetching and executing the notification content detection
+// model. This also gates logging metrics related to this model.
+BASE_DECLARE_FEATURE(kOnDeviceNotificationContentDetectionModel);
+// Determines the percentage of notifications from allowlisted sites that we
+// will check the model for. The value should be between 0 and 100.
+extern const base::FeatureParam<int>
+    kOnDeviceNotificationContentDetectionModelAllowlistSamplingRate;
 
-// Enables a ripple effect that is triggered when a user enables the enhanced
-// protection radio button on the chrome://settings/security page.
-BASE_DECLARE_FEATURE(kRippleForEnhancedProtection);
+// Enable movement of password leak toggle out of standard protection and into
+// its own section.
+BASE_DECLARE_FEATURE(kPasswordLeakToggleMove);
 
 // Controls whether asynchronous real-time check is enabled. When enabled, the
 // navigation can be committed before real-time Safe Browsing check is
@@ -299,6 +315,9 @@ BASE_DECLARE_FEATURE(kEnhancedSafeBrowsingPromo);
 
 // Enables saving gaia password hash from the Profile Picker sign-in flow.
 BASE_DECLARE_FEATURE(kSavePasswordHashFromProfilePicker);
+
+// Enables showing an updated Password Reuse UI for enterprise users.
+BASE_DECLARE_FEATURE(kEnterprisePasswordReuseUiRefresh);
 
 }  // namespace safe_browsing
 #endif  // COMPONENTS_SAFE_BROWSING_CORE_COMMON_FEATURES_H_

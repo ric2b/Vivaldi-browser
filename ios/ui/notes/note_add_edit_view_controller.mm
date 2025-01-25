@@ -40,13 +40,18 @@
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/notes/cells/note_parent_folder_item.h"
+#import "ios/ui/notes/markdown/markdown_keyboard_view_provider.h"
+#import "ios/ui/notes/markdown/markdown_keyboard_view.h"
+#import "ios/ui/notes/markdown/markdown_command_delegate.h"
+#import "ios/ui/notes/markdown/markdown_toolbar_view.h"
+#import "ios/ui/notes/markdown/vivaldi_markdown_constants.h"
+#import "ios/ui/notes/markdown/vivaldi_notes_web_view_creation_util.h"
 #import "ios/ui/notes/note_folder_chooser_view_controller.h"
 #import "ios/ui/notes/note_mediator.h"
 #import "ios/ui/notes/note_model_bridge_observer.h"
 #import "ios/ui/notes/note_parent_folder_view.h"
 #import "ios/ui/notes/note_ui_constants.h"
 #import "ios/ui/notes/note_utils_ios.h"
-#import "ios/web/common/web_view_creation_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/gfx/image/image.h"
@@ -65,14 +70,17 @@ CGFloat noteTextViewBottomPadding = 12;
 UIEdgeInsets bodyContainerViewPadding = UIEdgeInsetsMake(12, 12, 0, 12);
 CGFloat bodyContainerCornerRadius = 6;
 // Markdown toggle button icons
-NSString *vMarkdownToggleOn = @"markdown_toggle_on";
-NSString *vMarkdownToggleOff = @"markdown_toggle_off";
+NSString* vMarkdownToggleOn = @"markdown_toggle_on";
+NSString* vMarkdownToggleOff = @"markdown_toggle_off";
 }  // namespace
 
 @interface NoteAddEditViewController () <NoteFolderChooserViewControllerDelegate,
                                         NoteModelBridgeObserver,
+                                        MarkdownCommandDelegate,
                                         UITextViewDelegate,
-                                        WKNavigationDelegate> {
+                                        WKNavigationDelegate,
+                                        WKScriptMessageHandler,
+                                        WKScriptMessageHandlerWithReply> {
   // Flag to ignore note model changes notifications.
   BOOL _ignoresNotesModelChanges;
 
@@ -99,7 +107,7 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
 
 @property(nonatomic, assign) Browser* browser;
 
-@property(nonatomic, assign) ChromeBrowserState* browserState;
+@property(nonatomic, assign) ProfileIOS* profile;
 
 // Cancel button item in navigation bar.
 @property(nonatomic, strong) UIBarButtonItem* cancelItem;
@@ -110,9 +118,12 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
 // The note text content view
 @property(nonatomic, weak) VivaldiTextView* noteTextView;
 
-// For markdown to HTML toggle
 @property(nonatomic, strong) UIView* bodyContainerView;
+
+// For markdown editor
 @property(nonatomic, strong) WKWebView* webView;
+@property(nonatomic, strong) MarkdownKeyboardView* markdownKeyboardInputView;
+@property(nonatomic, strong) UIToolbar* markdownAccessoryView;
 
 // The action sheet coordinator, if one is currently being shown.
 @property(nonatomic, strong) ActionSheetCoordinator* actionSheetCoordinator;
@@ -156,7 +167,7 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
 - (void)saveNote;
 
 // Bottom constraint for the note text view.
-@property (nonatomic, strong) NSLayoutConstraint *noteTextViewBottomConstraint;
+@property(nonatomic, strong) NSLayoutConstraint* noteTextViewBottomConstraint;
 
 @property(nonatomic, strong) id<ApplicationCommands> handler;
 
@@ -172,7 +183,7 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
 @synthesize folder = _folder;
 @synthesize folderViewController = _folderViewController;
 @synthesize browser = _browser;
-@synthesize browserState = _browserState;
+@synthesize profile = _profile;
 @synthesize cancelItem = _cancelItem;
 @synthesize doneItem = _doneItem;
 @synthesize editingExistingItem = _editingExistingItem;
@@ -182,6 +193,8 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
 @synthesize noteTextViewBottomConstraint = _noteTextViewBottomConstraint;
 @synthesize bodyContainerView = _bodyContainerView;
 @synthesize webView = _webView;
+@synthesize markdownKeyboardInputView = _markdownKeyboardInputView;
+@synthesize markdownAccessoryView = _markdownAccessoryView;
 
 #pragma mark - Lifecycle
 
@@ -212,22 +225,55 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
     // Browser may be OTR, which is why the original browser state is being
     // explicitly requested.
     _browser = browser;
-    _browserState = browser->GetBrowserState()->GetOriginalChromeBrowserState();
-    _noteModel =
-      vivaldi::NotesModelFactory::GetForBrowserState(_browserState);
+    _profile = browser->GetProfile()->GetOriginalProfile();
+    _noteModel = vivaldi::NotesModelFactory::GetForProfile(_profile);
 
     // Set up the note model oberver.
-    _modelBridge.reset(
-      new notes::NoteModelBridge(self, _noteModel));
+    _modelBridge.reset(new notes::NoteModelBridge(self, _noteModel));
 
     self.handler = HandlerForProtocol(self.browser->GetCommandDispatcher(),
                                       ApplicationCommands);
+
+    self.markdownKeyboardInputView =
+        [[MarkdownKeyboardView alloc] initWithFrame:CGRectZero
+                                    commandDelegate:self];
+
+    self.markdownAccessoryView =
+        [[MarkdownToolbarView alloc] initWithFrame:CGRectZero
+                                   commandDelegate:self];
+
+    MarkdownKeyboardViewProvider* inputViewProvider =
+        [[MarkdownKeyboardViewProvider alloc]
+            initWithInputView:self.markdownKeyboardInputView
+                accessoryView:self.markdownAccessoryView];
+
+    self.webView = BuildNotesWKWebView(self.bodyContainerView.bounds,
+                                       self.profile, inputViewProvider);
+
+    // TODO(tomas@vivaldi.com): Removing all scripts here because of a crash
+    // that happens in split screen mode on ipad when split view is changed.
+    // Figure out why webview is not cleaned up properly in that case.
+    [self.webView.configuration
+            .userContentController removeAllScriptMessageHandlers];
+
+    [self.webView.configuration.userContentController
+        addScriptMessageHandlerWithReply:self
+                            contentWorld:WKContentWorld.pageWorld
+                                    name:vMarkdownMessageHandlerWithReply];
+    [self.webView.configuration.userContentController
+        addScriptMessageHandler:self
+                           name:vSetNoteContent];
+
+    // VIB-802 Disable pinch zoom
+    self.webView.scrollView.minimumZoomScale = 1.0;
+    self.webView.scrollView.maximumZoomScale = 1.0;
   }
   return self;
 }
 
 - (void)dealloc {
   _folderViewController.delegate = nil;
+  [self cleanWebview];
 }
 
 #pragma mark View lifecycle
@@ -376,25 +422,144 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
      constraintEqualToAnchor:self.bodyContainerView.bottomAnchor
      constant:-noteTextViewBottomPadding];
   [self.noteTextViewBottomConstraint setActive:YES];
-  [self setupWebView];
+  [self setupMarkdownWebView];
 }
 
--(void)setupWebView {
-  if (!IsViewMarkdownAsHTMLEnabled()) {
+-(void)setupMarkdownWebView {
+  if (!IsViewMarkdownAsHTMLEnabled() || !self.webView) {
     return;
   }
-  self.webView = web::BuildWKWebView(self.bodyContainerView.bounds,
-                                     self.browserState);
+
   self.webView.navigationDelegate = self;
   [self.bodyContainerView addSubview:self.webView];
   [self.webView fillSuperview];
-
   [self setWebViewHidden:YES];
-  [self createMarkdownWebView];
+  [self injectMarkdownWebView];
 }
 
-- (void)createMarkdownWebView {
-  if (!IsViewMarkdownAsHTMLEnabled()) {
+- (void)userContentController:(WKUserContentController*)userContentController
+      didReceiveScriptMessage:(WKScriptMessage*)message {
+  if ([message.name isEqualToString:vSetNoteContent]) {
+    if ([message.body isKindOfClass:[NSString class]]) {
+      [self.noteTextView setText:static_cast<NSString*>(message.body)];
+    }
+  }
+}
+
+- (void)userContentController:(WKUserContentController*)userContentController
+      didReceiveScriptMessage:(WKScriptMessage*)message
+                 replyHandler:
+                     (void (^)(id reply, NSString* errorMessage))replyHandler {
+  if ([message.name isEqualToString:vMarkdownMessageHandlerWithReply]) {
+    if ([message.body isEqualToString:vGetNoteContent]) {
+      NSDictionary* reply;
+      if (self.note) {
+        reply = @{
+          @"id" :
+              base::SysUTF8ToNSString(self.note->uuid().AsLowercaseString()),
+          @"content" : base::SysUTF16ToNSString(self.note->GetContent())
+        };
+      }
+      replyHandler(reply, /*errormessage=*/nil);
+    } else if ([message.body isEqualToString:vGetEditorHeight]) {
+      CGFloat height = self.bodyContainerView.bounds.size.height;
+      replyHandler([NSNumber numberWithFloat:height], /*errormessage=*/nil);
+    } else if ([message.body isEqualToString:vGetLinkURL]) {
+      [self showLinkUrlDialog:replyHandler];
+    } else if ([message.body isEqualToString:vGetImageTitleAndURL]) {
+      [self showImageUrlDialog:replyHandler];
+    }
+  }
+}
+
+- (void)showImageUrlDialog:(void (^)(id reply,
+                                     NSString* errorMessage))replyHandler {
+  UIAlertController* imageDialog = [UIAlertController
+      alertControllerWithTitle:l10n_util::GetNSString(
+                                   IDS_VIVALDI_NOTE_MARKDOWN_ADD_IMAGE_TITLE)
+                       message:l10n_util::GetNSString(
+                                   IDS_VIVALDI_NOTE_MARKDOWN_ADD_IMAGE_MESSAGE)
+                preferredStyle:UIAlertControllerStyleAlert];
+
+  [imageDialog addTextFieldWithConfigurationHandler:^(UITextField* textField) {
+    textField.placeholder = vURLPlaceholderText;
+    textField.keyboardType = UIKeyboardTypeURL;
+  }];
+  [imageDialog addTextFieldWithConfigurationHandler:^(UITextField* textField) {
+    textField.placeholder =
+        l10n_util::GetNSString(IDS_VIVALDI_NOTE_MARKDOWN_ADD_IMAGE_TITLE_ENTRY);
+    textField.keyboardType = UIKeyboardTypeDefault;
+  }];
+
+  UIAlertAction* confirmAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+                          IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_CONFIRM)
+                style:UIAlertActionStyleDefault
+              handler:^(UIAlertAction* _Nonnull action) {
+                NSDictionary* reply;
+                reply = @{
+                  @"src" : imageDialog.textFields[0].text,
+                  @"altText" : imageDialog.textFields[1].text
+                };
+                if (replyHandler) {
+                  replyHandler(reply, nil);
+                }
+              }];
+
+  UIAlertAction* cancelAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+                          IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_CANCEL)
+                style:UIAlertActionStyleCancel
+              handler:nil];
+
+  [imageDialog addAction:confirmAction];
+  [imageDialog addAction:cancelAction];
+
+  [self presentViewController:imageDialog animated:YES completion:nil];
+}
+
+- (void)showLinkUrlDialog:(void (^)(id reply,
+                                    NSString* errorMessage))replyHandler {
+  UIAlertController* linkDialog = [UIAlertController
+      alertControllerWithTitle:l10n_util::GetNSString(
+                                   IDS_VIVALDI_NOTE_MARKDOWN_ADD_LINK_TITLE)
+                       message:l10n_util::GetNSString(
+                                   IDS_VIVALDI_NOTE_MARKDOWN_ADD_LINK_MESSAGE)
+                preferredStyle:UIAlertControllerStyleAlert];
+
+  [linkDialog addTextFieldWithConfigurationHandler:^(UITextField* textField) {
+    textField.placeholder = vURLPlaceholderText;
+    textField.keyboardType = UIKeyboardTypeURL;
+  }];
+
+  UIAlertAction* confirmAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+                          IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_CONFIRM)
+                style:UIAlertActionStyleDefault
+              handler:^(UIAlertAction* _Nonnull action) {
+                NSDictionary* reply;
+                reply = @{
+                  @"url" : linkDialog.textFields[0].text,
+                };
+                if (replyHandler) {
+                  replyHandler(reply, nil);
+                }
+              }];
+
+  UIAlertAction* cancelAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+                          IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_CANCEL)
+                style:UIAlertActionStyleCancel
+              handler:nil];
+
+  [linkDialog addAction:confirmAction];
+  [linkDialog addAction:cancelAction];
+
+  [self presentViewController:linkDialog animated:YES completion:nil];
+}
+
+- (void)injectMarkdownWebView {
+  if (!IsViewMarkdownAsHTMLEnabled() || !self.webView) {
     return;
   }
   NSURL* url =
@@ -404,8 +569,8 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
 
   // Inject markdown JS library
   NSString* markdown_bundle_path =
-    [base::apple::FrameworkBundle() pathForResource:vMarkdownLibraryBundleName
-                                              ofType:@"js"];
+      [base::apple::FrameworkBundle() pathForResource:vMarkdownLibraryBundleName
+                                               ofType:@"js"];
 
   NSError* error = nil;
   NSString* markdown_bundle =
@@ -421,7 +586,7 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
 
   WKUserScript* markdown_script = [[WKUserScript alloc]
         initWithSource:markdown_bundle
-          injectionTime:WKUserScriptInjectionTimeAtDocumentEnd
+         injectionTime:WKUserScriptInjectionTimeAtDocumentEnd
       forMainFrameOnly:NO];
   [self.webView.configuration.userContentController
       addUserScript:markdown_script];
@@ -440,14 +605,16 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
     [self.webView reloadFromOrigin];
     [self setWebViewHidden:NO];
   } else {
+    [self commitNoteChanges];
     [self setWebViewHidden:YES];
     [self setupContentView];
     [self updateUIFromNote];
+    [GetFirstResponder() resignFirstResponder];
   }
 
   // set toggle button
   self.isToggledOn = !self.isToggledOn;
-  UIImage *newImage;
+  UIImage* newImage;
   if (self.isToggledOn) {
     newImage = [UIImage imageNamed:vMarkdownToggleOn];
   } else {
@@ -467,42 +634,12 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
   }
 }
 
-- (void)webView:(WKWebView *)webView
-  didFinishNavigation:(WKNavigation *)navigation {
-  // The markdown.html file is loaded and ready, next we try to convert the
-  // markdown text to HTML with the JS library
-  if (!self.note)
-    return;
-
-  // We need to replace these characters, otherwise the webview can not execute
-  // the conversion script
-  NSString* markdownText = base::SysUTF16ToNSString(self.note->GetContent());
-  markdownText = [markdownText stringByReplacingOccurrencesOfString:@"\""
-                                                        withString:@"\\\""];
-  markdownText = [markdownText stringByReplacingOccurrencesOfString:@"\n"
-                                                        withString:@"\\n"];
-  // Conversion script
-  NSString* textToHTMLScript =
-      [NSString stringWithFormat:@"textToHTML(\"%@\")", markdownText];
-
-  __weak __typeof(self) weakSelf = self;
-  [self.webView evaluateJavaScript:textToHTMLScript
-                 completionHandler:^(id object, NSError* err) {
-    if (err != nil) {
-      // TODO(tomas@vivaldi): What should happen in case of JS error?
-      // For now, fall back to the markdown view
-      [weakSelf fallbackToMarkdownViewDueToError];
-      return;
-    }
-  }];
-}
-
-- (void)webView:(WKWebView *)webView
-    decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction
+- (void)webView:(WKWebView*)webView
+    decidePolicyForNavigationAction:(WKNavigationAction*)navigationAction
       decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
   // Check if the navigation action is a link click
   if (navigationAction.navigationType == WKNavigationTypeLinkActivated) {
-    NSURL *url = navigationAction.request.URL;
+    NSURL* url = navigationAction.request.URL;
     const std::string urlString = [url.absoluteString UTF8String];
     GURL gurl(urlString);
     __weak NoteAddEditViewController* weakSelf = self;
@@ -546,7 +683,7 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
                          object:nil];
 }
 
-- (void)handleKeyboardNotification:(NSNotification *)notification {
+- (void)handleKeyboardNotification:(NSNotification*)notification {
   // Extract the keyboard frame from the notification's user info
   NSDictionary* userInfo = [notification userInfo];
   CGRect keyboardFrame =
@@ -569,7 +706,7 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
   // In this case, we need to calculate the bottom padding based on the window
   // size and current view size.
   CGFloat bottomPadding = 0;
-  UIWindow *window = self.view.window;
+  UIWindow* window = self.view.window;
   if (window) {
     // Convert the view's bounds to window coordinates
     CGRect viewFrameInWindow =
@@ -659,9 +796,9 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
      showSnackbarMessage:
        note_utils_ios::CreateOrUpdateNoteWithToast(
          self.note, [self inputNoteName], GURL(),
-         self.folder, self.noteModel, self.browserState)];
+         self.folder, self.noteModel, self.profile)];
   } else {
-    NSString *noteString = [self.inputNoteName stringByTrimmingCharactersInSet:
+    NSString* noteString = [self.inputNoteName stringByTrimmingCharactersInSet:
                             [NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if ([noteString length] == 0) {
       return;
@@ -685,7 +822,7 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
   DCHECK(folder->is_folder());
   self.folder = folder;
   [NoteMediator setFolderForNewNotes:self.folder
-                      inBrowserState:self.browserState];
+                           inProfile:self.profile];
 }
 
 /// Updates the parent folder view componets, i.e. title and icon.
@@ -734,7 +871,7 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
         nodes.insert(self.note);
         [self.snackbarCommandsHandler
          showSnackbarMessage:note_utils_ios::DeleteNotesWithToast(
-           nodes, self.noteModel, self.browserState)];
+           nodes, self.noteModel, self.profile)];
         self.note = nil;
       }
     }
@@ -751,7 +888,7 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
   [self.snackbarCommandsHandler
    showSnackbarMessage:note_utils_ios::MoveNotesWithToast(
      nodes, self.noteModel, trashFolder,
-     self.browserState)];
+     self.profile)];
 }
 
 - (void)moveNote {
@@ -784,6 +921,7 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
   } else {
     [self.navigationController popViewControllerAnimated:YES];
   }
+  [self cleanWebview];
 }
 
 - (void)saveNote {
@@ -794,6 +932,17 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
 - (void)stop {
   self.folderViewController = nil;
   self.folderViewController.delegate = nil;
+}
+
+- (void)cleanWebview {
+  self.markdownAccessoryView = nil;
+  self.markdownKeyboardInputView.commandDelegate = nil;
+  self.markdownKeyboardInputView = nil;
+  [self.webView.configuration
+          .userContentController removeAllScriptMessageHandlers];
+  [self.webView.configuration.userContentController removeAllUserScripts];
+  self.webView = nil;
+  self.markdownKeyboardInputView = nil;
 }
 
 #pragma mark - NoteFolderChooserViewControllerDelegate
@@ -943,6 +1092,25 @@ NSString *vMarkdownToggleOff = @"markdown_toggle_off";
 
 - (void)keyCommand_close {
   [self dismiss];
+}
+
+#pragma mark MarkdownCommandDelegate
+
+- (void)sendCommand:(NSString*)command commandType:(NSString*)commandType {
+  NSString* commandScript =
+      [NSString stringWithFormat:@"window.sendCommand(\"%@\", \"%@\")", command,
+                                 commandType];
+
+  __weak __typeof(self) weakSelf = self;
+  [self.webView evaluateJavaScript:commandScript
+                 completionHandler:^(id object, NSError* err) {
+                   if (err != nil) {
+                     // TODO(tomas@vivaldi): What should happen in case of JS
+                     // error? For now, fall back to the markdown view
+                     [weakSelf fallbackToMarkdownViewDueToError];
+                     return;
+                   }
+                 }];
 }
 
 @end

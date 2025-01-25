@@ -313,6 +313,6 @@ void AutocompleteProviderClientImpl::set_in_background_state(
 #pragma mark - Vivaldi
 direct_match::DirectMatchService*
 AutocompleteProviderClientImpl::GetDirectMatchService() {
-  return direct_match::DirectMatchServiceFactory::GetForBrowserState(profile_);
+  return direct_match::DirectMatchServiceFactory::GetForProfile(profile_);
 }
 // End Vivaldi

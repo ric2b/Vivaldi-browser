@@ -35,9 +35,9 @@
 #include "chrome/browser/printing/print_job_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/scalable_iph/scalable_iph_factory.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/scalable_iph/scalable_iph.h"
+#include "chromeos/ash/components/scalable_iph/scalable_iph_factory.h"
 #include "chromeos/printing/printing_constants.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -135,13 +135,11 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager {
   }
 
   bool SuspendPrintJob(CupsPrintJob* job) override {
-    NOTREACHED_IN_MIGRATION() << "Pause printer is not implemented";
-    return false;
+    NOTREACHED() << "Pause printer is not implemented";
   }
 
   bool ResumePrintJob(CupsPrintJob* job) override {
-    NOTREACHED_IN_MIGRATION() << "Resume printer is not implemented";
-    return false;
+    NOTREACHED() << "Resume printer is not implemented";
   }
 
   void OnDocDone(::printing::PrintJob* job,
@@ -540,8 +538,9 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager {
 };
 
 // static
-CupsPrintJobManager* CupsPrintJobManager::CreateInstance(Profile* profile) {
-  return new CupsPrintJobManagerImpl(profile);
+std::unique_ptr<CupsPrintJobManager> CupsPrintJobManager::CreateInstance(
+    Profile* profile) {
+  return std::make_unique<CupsPrintJobManagerImpl>(profile);
 }
 
 }  // namespace ash

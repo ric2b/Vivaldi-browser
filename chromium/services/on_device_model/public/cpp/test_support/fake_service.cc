@@ -4,13 +4,13 @@
 
 #include "services/on_device_model/public/cpp/test_support/fake_service.h"
 
-#include <cstdint>
-
+#include "base/check.h"
 #include "base/containers/span.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/to_string.h"
+#include "services/on_device_model/public/mojom/on_device_model.mojom-shared.h"
 
 namespace on_device_model {
 
@@ -88,8 +88,9 @@ void FakeOnDeviceSession::Execute(
       settings_->execute_delay);
 }
 
-void FakeOnDeviceSession::GetSizeInTokensDeprecated(const std::string& text,
-                                          GetSizeInTokensCallback callback) {
+void FakeOnDeviceSession::GetSizeInTokensDeprecated(
+    const std::string& text,
+    GetSizeInTokensCallback callback) {
   std::move(callback).Run(0);
 }
 
@@ -187,40 +188,13 @@ void FakeOnDeviceModel::AddSession(
 
 void FakeOnDeviceModel::DetectLanguage(const std::string& text,
                                        DetectLanguageCallback callback) {
-  if (!data_.has_language_model) {
-    std::move(callback).Run(nullptr);
-    return;
-  }
-  mojom::LanguageDetectionResultPtr language;
-  if (text.find("esperanto") != std::string::npos) {
-    language = mojom::LanguageDetectionResult::New("eo", 1.0);
-  }
-  std::move(callback).Run(std::move(language));
+  NOTREACHED();
 }
 
 void FakeOnDeviceModel::ClassifyTextSafety(
     const std::string& text,
     ClassifyTextSafetyCallback callback) {
-  if (!data_.has_safety_model) {
-    std::move(callback).Run(nullptr);
-    return;
-  }
-  auto safety_info = mojom::SafetyInfo::New();
-
-  // Text is unsafe if it contains "unsafe".
-  bool has_unsafe = text.find("unsafe") != std::string::npos;
-  safety_info->class_scores.emplace_back(has_unsafe ? 0.8 : 0.2);
-
-  bool has_reasonable = text.find("reasonable") != std::string::npos;
-  safety_info->class_scores.emplace_back(has_reasonable ? 0.2 : 0.8);
-
-  if (data_.has_language_model) {
-    if (text.find("esperanto") != std::string::npos) {
-      safety_info->language = mojom::LanguageDetectionResult::New("eo", 1.0);
-    }
-  }
-
-  std::move(callback).Run(std::move(safety_info));
+  NOTREACHED();
 }
 
 void FakeOnDeviceModel::LoadAdaptation(
@@ -235,10 +209,63 @@ void FakeOnDeviceModel::LoadAdaptation(
   std::move(callback).Run(mojom::LoadModelResult::kSuccess);
 }
 
+FakeTsModel::FakeTsModel(
+    on_device_model::mojom::TextSafetyModelParamsPtr params) {
+  if (params->ts_assets) {
+    CHECK_EQ(ReadFile(params->ts_assets->data), FakeTsData());
+    CHECK_EQ(ReadFile(params->ts_assets->sp_model), FakeTsSpModel());
+    has_safety_model_ = true;
+  }
+  if (params->language_assets) {
+    CHECK_EQ(ReadFile(params->language_assets->model), FakeLanguageModel());
+    has_language_model_ = true;
+  }
+}
+FakeTsModel::~FakeTsModel() = default;
+
+void FakeTsModel::ClassifyTextSafety(const std::string& text,
+                                     ClassifyTextSafetyCallback callback) {
+  CHECK(has_safety_model_);
+  auto safety_info = mojom::SafetyInfo::New();
+  // Text is unsafe if it contains "unsafe".
+  bool has_unsafe = text.find("unsafe") != std::string::npos;
+  safety_info->class_scores.emplace_back(has_unsafe ? 0.8 : 0.2);
+
+  bool has_reasonable = text.find("reasonable") != std::string::npos;
+  safety_info->class_scores.emplace_back(has_reasonable ? 0.2 : 0.8);
+
+  if (has_language_model_) {
+    if (text.find("esperanto") != std::string::npos) {
+      safety_info->language = mojom::LanguageDetectionResult::New("eo", 1.0);
+    }
+  }
+  std::move(callback).Run(std::move(safety_info));
+}
+void FakeTsModel::DetectLanguage(const std::string& text,
+                                 DetectLanguageCallback callback) {
+  CHECK(has_language_model_);
+  mojom::LanguageDetectionResultPtr language;
+  if (text.find("esperanto") != std::string::npos) {
+    language = mojom::LanguageDetectionResult::New("eo", 1.0);
+  }
+  std::move(callback).Run(std::move(language));
+}
+
+FakeTsHolder::FakeTsHolder() = default;
+FakeTsHolder::~FakeTsHolder() = default;
+
+void FakeTsHolder::Reset(
+    on_device_model::mojom::TextSafetyModelParamsPtr params,
+    mojo::PendingReceiver<on_device_model::mojom::TextSafetyModel>
+        model_receiver) {
+  model_.Clear();
+  model_.Add(std::make_unique<FakeTsModel>(std::move(params)),
+             std::move(model_receiver));
+}
+
 FakeOnDeviceModelService::FakeOnDeviceModelService(
-    mojo::PendingReceiver<mojom::OnDeviceModelService> receiver,
     FakeOnDeviceServiceSettings* settings)
-    : settings_(settings), receiver_(this, std::move(receiver)) {}
+    : settings_(settings) {}
 
 FakeOnDeviceModelService::~FakeOnDeviceModelService() = default;
 
@@ -247,24 +274,19 @@ void FakeOnDeviceModelService::LoadModel(
     mojo::PendingReceiver<mojom::OnDeviceModel> model,
     LoadModelCallback callback) {
   if (settings_->drop_connection_request) {
-    std::move(callback).Run(settings_->load_model_result);
+    std::move(callback).Run(mojom::LoadModelResult::kSuccess);
     return;
   }
-  FakeOnDeviceModel::Data data;
-  if (params->assets.ts_data.IsValid()) {
-    CHECK_EQ(ReadFile(params->assets.ts_data), FakeTsData());
-    CHECK_EQ(ReadFile(params->assets.ts_sp_model), FakeTsSpModel());
-    data.has_safety_model = true;
-  }
-  if (params->assets.language_detection_model.IsValid()) {
-    CHECK_EQ(ReadFile(params->assets.language_detection_model),
-             FakeLanguageModel());
-    data.has_language_model = true;
-  }
   auto test_model =
-      std::make_unique<FakeOnDeviceModel>(settings_, std::move(data));
+      std::make_unique<FakeOnDeviceModel>(settings_, FakeOnDeviceModel::Data{});
   model_receivers_.Add(std::move(test_model), std::move(model));
-  std::move(callback).Run(settings_->load_model_result);
+  std::move(callback).Run(mojom::LoadModelResult::kSuccess);
+}
+
+void FakeOnDeviceModelService::LoadTextSafetyModel(
+    mojom::TextSafetyModelParamsPtr params,
+    mojo::PendingReceiver<mojom::TextSafetyModel> model) {
+  ts_holder_.Reset(std::move(params), std::move(model));
 }
 
 void FakeOnDeviceModelService::GetEstimatedPerformanceClass(
@@ -273,6 +295,27 @@ void FakeOnDeviceModelService::GetEstimatedPerformanceClass(
       FROM_HERE,
       base::BindOnce(std::move(callback), mojom::PerformanceClass::kVeryHigh),
       settings_->estimated_performance_delay);
+}
+
+FakeServiceLauncher::FakeServiceLauncher(
+    on_device_model::FakeOnDeviceServiceSettings* settings)
+    : settings_(settings), weak_ptr_factory_(this) {}
+FakeServiceLauncher::~FakeServiceLauncher() = default;
+
+void FakeServiceLauncher::LaunchService(
+    mojo::PendingReceiver<on_device_model::mojom::OnDeviceModelService>
+        pending_receiver) {
+  did_launch_service_ = true;
+  if (settings_->service_disconnect_reason) {
+    pending_receiver.ResetWithReason(
+        static_cast<uint32_t>(*settings_->service_disconnect_reason),
+        "Fake error");
+    return;
+  }
+  auto service =
+      std::make_unique<on_device_model::FakeOnDeviceModelService>(settings_);
+  auto* raw_service = service.get();
+  services_.Add(std::move(service), std::move(pending_receiver), raw_service);
 }
 
 }  // namespace on_device_model

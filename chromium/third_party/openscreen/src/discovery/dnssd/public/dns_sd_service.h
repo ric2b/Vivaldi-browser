@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 
+#include "platform/api/task_runner_deleter.h"
 #include "platform/base/error.h"
 #include "platform/base/interface_info.h"
 #include "platform/base/ip_address.h"
@@ -31,6 +32,8 @@ class DnsSdService {
   // supported, returns nullptr.
   virtual DnsSdPublisher* GetPublisher() = 0;
 };
+
+using DnsSdServicePtr = std::unique_ptr<DnsSdService, TaskRunnerDeleter>;
 
 }  // namespace openscreen::discovery
 

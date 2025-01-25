@@ -25,6 +25,9 @@ class PageInfoInfoBarDelegate : public ConfirmInfoBarDelegate {
   // |infobar_manager|.
   static void Create(infobars::ContentInfoBarManager* infobar_manager);
 
+  // Creates a ConfirmInfoBarWebProxy for use in the Vivaldi client.
+  static void CreateForVivaldi(infobars::ContentInfoBarManager* infobar_manager);
+
  private:
   PageInfoInfoBarDelegate();
   ~PageInfoInfoBarDelegate() override;

@@ -153,6 +153,8 @@ filegroup(
         ":minimal_logging_android.cc",
         ":mutable_op_resolver.cc",
         ":mutable_op_resolver.h",
+        ":mutable_op_resolver_utils.cc",
+        ":mutable_op_resolver_utils.h",
         ":op_resolver.h",
         ":portable_type_to_tflitetype.h",
         ":stderr_reporter.cc",
@@ -276,6 +278,9 @@ cc_test(
         "tflite_not_portable_android",
     ],
     deps = [
+        ":cc_api_stable",
+        "//tensorflow/lite/c:c_api_types",
+        "//tensorflow/lite/c:common",
         "//tensorflow/lite/kernels:subgraph_test_util",
         "//tensorflow/lite/testing:util",
         "@com_google_googletest//:gtest_main",
@@ -413,9 +418,9 @@ cc_library(
 #         "//base:addressmap",
 #         "//base:low_level_alloc",
 #         "//base:malloc_hook",
+#         "@local_xla//xla/tsl/profiler/backends/cpu:traceme_recorder",
 #         "//tensorflow/lite/core/c:common",
 #         "//tensorflow/lite/kernels:kernel_util",
-#         "@local_tsl//tsl/profiler/backends/cpu:traceme_recorder",
 #         "@local_tsl//tsl/profiler/lib:scoped_memory_debug_annotation",
 #         "@local_tsl//tsl/profiler/lib:traceme",
 #         "@local_tsl//tsl/profiler/lib:traceme_encode",
@@ -1226,6 +1231,7 @@ cc_library(
     compatible_with = get_compatible_with_portable(),
     copts = tflite_copts_warnings() + tflite_copts(),
     deps = [
+        "//tensorflow/lite/c:common",
         "//tensorflow/lite/core/c:common",
     ],
 )

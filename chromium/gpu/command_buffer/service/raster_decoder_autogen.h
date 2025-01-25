@@ -260,7 +260,6 @@ error::Error RasterDecoderImpl::HandleCopySharedImageINTERNALImmediate(
   GLint y = static_cast<GLint>(c.y);
   GLsizei width = static_cast<GLsizei>(c.width);
   GLsizei height = static_cast<GLsizei>(c.height);
-  GLboolean unpack_flip_y = static_cast<GLboolean>(c.unpack_flip_y);
   uint32_t mailboxes_size;
   if (!gles2::GLES2Util::ComputeDataSize<GLbyte, 32>(1, &mailboxes_size)) {
     return error::kOutOfBounds;
@@ -284,8 +283,7 @@ error::Error RasterDecoderImpl::HandleCopySharedImageINTERNALImmediate(
   if (mailboxes == nullptr) {
     return error::kOutOfBounds;
   }
-  DoCopySharedImageINTERNAL(xoffset, yoffset, x, y, width, height,
-                            unpack_flip_y, mailboxes);
+  DoCopySharedImageINTERNAL(xoffset, yoffset, x, y, width, height, mailboxes);
   return error::kNoError;
 }
 
@@ -436,77 +434,6 @@ error::Error RasterDecoderImpl::HandleReadbackYUVImagePixelsINTERNALImmediate(
   DoReadbackYUVImagePixelsINTERNAL(dst_width, dst_height, shm_id, shm_offset,
                                    y_offset, y_stride, u_offset, u_stride,
                                    v_offset, v_stride, mailbox);
-  return error::kNoError;
-}
-
-error::Error
-RasterDecoderImpl::HandleConvertYUVAMailboxesToRGBINTERNALImmediate(
-    uint32_t immediate_data_size,
-    const volatile void* cmd_data) {
-  const volatile raster::cmds::ConvertYUVAMailboxesToRGBINTERNALImmediate& c =
-      *static_cast<const volatile raster::cmds::
-                       ConvertYUVAMailboxesToRGBINTERNALImmediate*>(cmd_data);
-  GLint src_x = static_cast<GLint>(c.src_x);
-  GLint src_y = static_cast<GLint>(c.src_y);
-  GLsizei width = static_cast<GLsizei>(c.width);
-  GLsizei height = static_cast<GLsizei>(c.height);
-  GLenum planes_yuv_color_space = static_cast<GLenum>(c.planes_yuv_color_space);
-  GLenum plane_config = static_cast<GLenum>(c.plane_config);
-  GLenum subsampling = static_cast<GLenum>(c.subsampling);
-  uint32_t mailboxes_size;
-  if (!gles2::GLES2Util::ComputeDataSize<GLbyte, 144>(1, &mailboxes_size)) {
-    return error::kOutOfBounds;
-  }
-  if (mailboxes_size > immediate_data_size) {
-    return error::kOutOfBounds;
-  }
-  volatile const GLbyte* mailboxes =
-      gles2::GetImmediateDataAs<volatile const GLbyte*>(c, mailboxes_size,
-                                                        immediate_data_size);
-  if (width < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glConvertYUVAMailboxesToRGBINTERNAL",
-                       "width < 0");
-    return error::kNoError;
-  }
-  if (height < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glConvertYUVAMailboxesToRGBINTERNAL",
-                       "height < 0");
-    return error::kNoError;
-  }
-  if (mailboxes == nullptr) {
-    return error::kOutOfBounds;
-  }
-  DoConvertYUVAMailboxesToRGBINTERNAL(src_x, src_y, width, height,
-                                      planes_yuv_color_space, plane_config,
-                                      subsampling, mailboxes);
-  return error::kNoError;
-}
-
-error::Error
-RasterDecoderImpl::HandleConvertRGBAToYUVAMailboxesINTERNALImmediate(
-    uint32_t immediate_data_size,
-    const volatile void* cmd_data) {
-  const volatile raster::cmds::ConvertRGBAToYUVAMailboxesINTERNALImmediate& c =
-      *static_cast<const volatile raster::cmds::
-                       ConvertRGBAToYUVAMailboxesINTERNALImmediate*>(cmd_data);
-  GLenum planes_yuv_color_space = static_cast<GLenum>(c.planes_yuv_color_space);
-  GLenum plane_config = static_cast<GLenum>(c.plane_config);
-  GLenum subsampling = static_cast<GLenum>(c.subsampling);
-  uint32_t mailboxes_size;
-  if (!gles2::GLES2Util::ComputeDataSize<GLbyte, 80>(1, &mailboxes_size)) {
-    return error::kOutOfBounds;
-  }
-  if (mailboxes_size > immediate_data_size) {
-    return error::kOutOfBounds;
-  }
-  volatile const GLbyte* mailboxes =
-      gles2::GetImmediateDataAs<volatile const GLbyte*>(c, mailboxes_size,
-                                                        immediate_data_size);
-  if (mailboxes == nullptr) {
-    return error::kOutOfBounds;
-  }
-  DoConvertRGBAToYUVAMailboxesINTERNAL(planes_yuv_color_space, plane_config,
-                                       subsampling, mailboxes);
   return error::kNoError;
 }
 

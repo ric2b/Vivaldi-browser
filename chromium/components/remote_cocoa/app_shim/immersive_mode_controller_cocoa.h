@@ -9,10 +9,14 @@
 
 #include <optional>
 
+#include "base/scoped_observation.h"
 #import "components/remote_cocoa/app_shim/bridged_content_view.h"
 #import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
+#import "components/remote_cocoa/app_shim/native_widget_mac_overlay_nswindow.h"
 #include "components/remote_cocoa/app_shim/remote_cocoa_app_shim_export.h"
 #include "components/remote_cocoa/common/native_widget_ns_window.mojom-shared.h"
+#include "ui/display/display_observer.h"
+#include "ui/display/screen.h"
 
 @class ImmersiveModeMapper;
 
@@ -41,12 +45,13 @@ namespace remote_cocoa {
 REMOTE_COCOA_APP_SHIM_EXPORT bool IsNSToolbarFullScreenWindow(NSWindow* window);
 
 // Manages a single fullscreen session.
-class REMOTE_COCOA_APP_SHIM_EXPORT ImmersiveModeControllerCocoa {
+class REMOTE_COCOA_APP_SHIM_EXPORT ImmersiveModeControllerCocoa
+    : public display::DisplayObserver {
  public:
   explicit ImmersiveModeControllerCocoa(
       NativeWidgetMacNSWindow* browser_window,
-      NativeWidgetMacNSWindow* overlay_window);
-  virtual ~ImmersiveModeControllerCocoa();
+      NativeWidgetMacOverlayNSWindow* overlay_window);
+  ~ImmersiveModeControllerCocoa() override;
 
   // Must be called once and only once after construction. Prevents the side-
   // effects of adding a toolbar accessory from accessing partially constructed
@@ -110,7 +115,7 @@ class REMOTE_COCOA_APP_SHIM_EXPORT ImmersiveModeControllerCocoa {
   virtual bool ShouldObserveChildWindow(NSWindow* child);
 
   NSWindow* browser_window();
-  NSWindow* overlay_window();
+  NativeWidgetMacOverlayNSWindow* overlay_window();
   BridgedContentView* overlay_content_view();
 
   // Called when `immersive_mode_titlebar_view_controller_`'s view is moved to
@@ -168,6 +173,9 @@ class REMOTE_COCOA_APP_SHIM_EXPORT ImmersiveModeControllerCocoa {
   // visibility update of `last_used_style_`.
   void ForceToolbarVisibilityUpdate();
 
+  // display::DisplayObserver:
+  void OnPrimaryDisplayChanged() override;
+
   bool initialized_ = false;
 
   int reveal_lock_count_ = 0;
@@ -183,7 +191,7 @@ class REMOTE_COCOA_APP_SHIM_EXPORT ImmersiveModeControllerCocoa {
   bool fullscreen_transition_complete_ = false;
 
   NativeWidgetMacNSWindow* __weak browser_window_;
-  NativeWidgetMacNSWindow* __weak overlay_window_;
+  NativeWidgetMacOverlayNSWindow* __weak overlay_window_;
   BridgedContentView* __weak overlay_content_view_;
 
   // A controller for top chrome.
@@ -202,6 +210,9 @@ class REMOTE_COCOA_APP_SHIM_EXPORT ImmersiveModeControllerCocoa {
 
   // Keeps track of which windows have received titlebar and reveal locks.
   std::set<NSWindow*> window_lock_received_;
+
+  base::ScopedObservation<display::Screen, display::DisplayObserver>
+      display_observation_{this};
 
   base::WeakPtrFactory<ImmersiveModeControllerCocoa> weak_ptr_factory_;
 };

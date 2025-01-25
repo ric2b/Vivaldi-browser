@@ -2,32 +2,33 @@
 precision highp float;
 precision highp int;
 
-bool tint_discarded = false;
-layout(location = 1) flat in ivec3 x_1;
-layout(location = 2) out int value;
+bool continue_execution = true;
+layout(location = 1) flat in ivec3 tint_symbol_loc1_Input;
+layout(location = 2) out int tint_symbol_loc2_Output;
 int f(int x) {
   if ((x == 10)) {
-    tint_discarded = true;
+    continue_execution = false;
   }
   return x;
 }
-
-int tint_symbol(ivec3 x) {
-  int y = x.x;
-  while (true) {
-    int r = f(y);
-    if ((r == 0)) {
-      break;
+int tint_symbol_inner(ivec3 x) {
+  int y = x[0u];
+  {
+    while(true) {
+      int r = f(y);
+      if ((r == 0)) {
+        break;
+      }
+      {
+      }
+      continue;
     }
+  }
+  if (!(continue_execution)) {
+    discard;
   }
   return y;
 }
-
 void main() {
-  int inner_result = tint_symbol(x_1);
-  value = inner_result;
-  if (tint_discarded) {
-    discard;
-  }
-  return;
+  tint_symbol_loc2_Output = tint_symbol_inner(tint_symbol_loc1_Input);
 }

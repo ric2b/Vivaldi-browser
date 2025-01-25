@@ -41,6 +41,7 @@ devtools_module("persistence") {
     "../../models/breakpoints:bundle",
     "../../models/text_utils:bundle",
     "../../models/workspace:bundle",
+    "../../ui/components/cards:bundle",
     "../../ui/legacy:bundle",
     "../../ui/legacy/components/utils:bundle",
   ]
@@ -62,6 +63,7 @@ devtools_entrypoint("bundle") {
     "../../panels/recorder/*",
     "../../panels/snippets/*",
     "../../panels/sources/*",
+    "../../panels/utils/*",
     "../../testing/*",
     "../bindings:unittests",
     "../workspace:unittests",

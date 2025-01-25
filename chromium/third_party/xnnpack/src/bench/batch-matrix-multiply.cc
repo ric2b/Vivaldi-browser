@@ -15,7 +15,8 @@
 #include "xnnpack.h"
 
 #include <benchmark/benchmark.h>
-#include "bench/utils.h"
+#include "utils.h"
+#include "xnnpack/buffer.h"
 #ifdef BENCHMARK_TENSORFLOW_LITE
 #include "flatbuffers/include/flatbuffers/flatbuffers.h"
 #include "tensorflow/lite/interpreter.h"
@@ -27,16 +28,18 @@
 void xnnpack_batch_matrix_multiply_f32(benchmark::State& state, const char* net) {
   const size_t batch_size = state.range(0);
   const size_t m = state.range(1);
-  const size_t k = state.range(1);
-  const size_t n = state.range(1);
+  const size_t k = state.range(2);
+  const size_t n = state.range(3);
+  const bool transpose_b = state.range(4);
+  const size_t num_threads = state.range(5);
 
   std::random_device random_device;
   auto rng = std::mt19937(random_device());
   auto f32rng = std::bind(std::uniform_real_distribution<float>(0.0f, 1.0f), std::ref(rng));
 
-  std::vector<float> input1(batch_size * m * k);
+  xnnpack::Buffer<float> input1(batch_size * m * k);
   std::generate(input1.begin(), input1.end(), std::ref(f32rng));
-  std::vector<float> input2(batch_size * k * n);
+  xnnpack::Buffer<float> input2(batch_size * k * n);
   std::generate(input2.begin(), input2.end(), std::ref(f32rng));
   const size_t output_elements = batch_size * m * n;
 
@@ -48,19 +51,20 @@ void xnnpack_batch_matrix_multiply_f32(benchmark::State& state, const char* net)
 
   const size_t num_buffers =
     1 + benchmark::utils::DivideRoundUp<size_t>(benchmark::utils::GetMaxCacheSize(), sizeof(float) * (output_elements));
-  std::vector<float> output(output_elements * num_buffers);
+  xnnpack::Buffer<float> output(output_elements * num_buffers);
 
-  std::vector<xnn_operator_t> ops(num_buffers);
+  xnnpack::Buffer<xnn_operator_t> ops(num_buffers);
 
+  uint32_t flags = transpose_b ? XNN_FLAG_TRANSPOSE_B : 0;
   for (xnn_operator_t& op : ops) {
-    status = xnn_create_batch_matrix_multiply_nc_f32(/*flags=*/0, &op);
+    status = xnn_create_batch_matrix_multiply_nc_f32(flags, &op);
     if (status != xnn_status_success) {
       state.SkipWithError("failed to create FP32 Convolution operator");
       return;
     }
   }
 
-  std::vector<std::unique_ptr<std::vector<char>>> workspaces;
+  std::vector<std::unique_ptr<xnnpack::Buffer<char>>> workspaces;
 
   for (xnn_operator_t& op : ops) {
     size_t workspace_size = 0;
@@ -70,7 +74,7 @@ void xnnpack_batch_matrix_multiply_f32(benchmark::State& state, const char* net)
         /*batch_dims_b=*/&batch_size, m, k, n, &workspace_size,
         &workspace_alignment, nullptr);
 
-    auto workspace = std::make_unique<std::vector<char>>(workspace_size);
+    auto workspace = std::make_unique<xnnpack::Buffer<char>>(workspace_size);
     char* workspace_ptr = workspace->data();
 
     workspaces.push_back(std::move(workspace));
@@ -84,12 +88,14 @@ void xnnpack_batch_matrix_multiply_f32(benchmark::State& state, const char* net)
   }
 
   size_t buffer_index = 0;
+  pthreadpool_t threadpool = pthreadpool_create(num_threads);
+
   for (auto _ : state) {
     state.PauseTiming();
     buffer_index = (buffer_index + 1) % num_buffers;
     state.ResumeTiming();
 
-    status = xnn_run_operator(ops[buffer_index], /*threadpool=*/nullptr);
+    status = xnn_run_operator(ops[buffer_index], threadpool);
     if (status != xnn_status_success) {
       state.SkipWithError("failed to run FP32 Convolution operator");
       return;
@@ -113,6 +119,8 @@ void xnnpack_batch_matrix_multiply_f32(benchmark::State& state, const char* net)
   state.counters["FLOPS"] = benchmark::Counter(
     uint64_t(state.iterations()) * batch_size * m * k * n,
     benchmark::Counter::kIsRate);
+
+  pthreadpool_destroy(threadpool);
 }
 
 #ifdef BENCHMARK_TENSORFLOW_LITE
@@ -126,9 +134,9 @@ void tflite_batch_matrix_multiply_f32(benchmark::State& state, const char* net) 
   auto rng = std::mt19937(random_device());
   auto f32rng = std::bind(std::uniform_real_distribution<float>(0.0f, 1.0f), std::ref(rng));
 
-  std::vector<float> input1(batch_size * m * k);
+  xnnpack::Buffer<float> input1(batch_size * m * k);
   std::generate(input1.begin(), input1.end(), std::ref(f32rng));
-  std::vector<float> input2(batch_size * k * n);
+  xnnpack::Buffer<float> input2(batch_size * k * n);
   std::generate(input2.begin(), input2.end(), std::ref(f32rng));
 
   flatbuffers::FlatBufferBuilder builder;

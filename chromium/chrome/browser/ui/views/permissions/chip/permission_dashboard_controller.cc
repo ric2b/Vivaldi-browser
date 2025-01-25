@@ -374,7 +374,7 @@ void PermissionDashboardController::Collapse(bool hide) {
 }
 
 void PermissionDashboardController::HideIndicators() {
-  collapse_timer_.AbandonAndStop();
+  collapse_timer_.Stop();
   permission_dashboard_view_->GetIndicatorChip()->ResetAnimation();
   is_verbose_ = false;
   permission_dashboard_view_->GetIndicatorChip()
@@ -597,6 +597,5 @@ std::u16string PermissionDashboardController::GetIndicatorTitle(
     return l10n_util::GetStringUTF16(IDS_MICROPHONE_IN_USE);
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return std::u16string();
+  NOTREACHED();
 }

@@ -55,6 +55,9 @@ using base::UserMetricsAction;
   BOOL _isSearchEngineNicknameEnabled;
   // Boolean to track if keyword is being removed with backspace
   BOOL _isDeletingBackward;
+  // Boolean to track if a Paste event about to happen and if the input
+  // text is from pasted text.
+  BOOL _isInputFromPaste;
   // End Vivaldi
 
 }
@@ -112,9 +115,20 @@ using base::UserMetricsAction;
   // otherwise it should act exactly like a system button.
   /// Clear button owned by `view` (OmniboxContainerView).
   __weak UIButton* _clearButton;
+
+  /// Whether the view is presented in the lens overlay.
+  BOOL _isLensOverlay;
 }
 
 @dynamic view;
+
+- (instancetype)initWithIsLensOverlay:(BOOL)isLensOverlay {
+  self = [super initWithNibName:nil bundle:nil];
+  if (self) {
+    _isLensOverlay = isLensOverlay;
+  }
+  return self;
+}
 
 #pragma mark - UIViewController
 
@@ -127,7 +141,8 @@ using base::UserMetricsAction;
   self.view = [[OmniboxContainerView alloc] initWithFrame:CGRectZero
                                                 textColor:textColor
                                             textFieldTint:textFieldTintColor
-                                                 iconTint:iconTintColor];
+                                                 iconTint:iconTintColor
+                                            isLensOverlay:_isLensOverlay];
   self.view.layoutGuideCenter = self.layoutGuideCenter;
   _clearButton = self.view.clearButton;
 
@@ -145,22 +160,6 @@ using base::UserMetricsAction;
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-#if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
-  // Add Paste and Go option to the editing menu
-  RegisterEditMenuItem([[UIMenuItem alloc]
-      initWithTitle:l10n_util::GetNSString(IDS_IOS_SEARCH_COPIED_IMAGE)
-             action:@selector(searchCopiedImage:)]);
-  RegisterEditMenuItem([[UIMenuItem alloc]
-      initWithTitle:l10n_util::GetNSString(
-                        IDS_IOS_SEARCH_COPIED_IMAGE_WITH_LENS)
-             action:@selector(lensCopiedImage:)]);
-  RegisterEditMenuItem([[UIMenuItem alloc]
-      initWithTitle:l10n_util::GetNSString(IDS_IOS_VISIT_COPIED_LINK)
-             action:@selector(visitCopiedLink:)]);
-  RegisterEditMenuItem([[UIMenuItem alloc]
-      initWithTitle:l10n_util::GetNSString(IDS_IOS_SEARCH_COPIED_TEXT)
-             action:@selector(searchCopiedText:)]);
-#endif
 
   if (IsVivaldiRunning()) {
     self.textField.placeholder = [self defaultPlaceholder];
@@ -218,6 +217,15 @@ using base::UserMetricsAction;
            object:nil];
 }
 
+- (void)viewIsAppearing:(BOOL)animated {
+  [super viewIsAppearing:animated];
+  if (_isLensOverlay) {
+    self.semanticContentAttribute =
+        [self.textField bestSemanticContentAttribute];
+    [self.textField updateTextDirection];
+  }
+}
+
 - (void)viewWillDisappear:(BOOL)animated {
   [super viewWillDisappear:animated];
   self.textField.selectedTextRange =
@@ -248,20 +256,6 @@ using base::UserMetricsAction;
   if (_isTextfieldEditing == owns) {
     return;
   }
-#if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
-  if (owns) {
-    [[NSNotificationCenter defaultCenter]
-        addObserver:self
-           selector:@selector(menuControllerWillShow:)
-               name:UIMenuControllerWillShowMenuNotification
-             object:nil];
-  } else {
-    [[NSNotificationCenter defaultCenter]
-        removeObserver:self
-                  name:UIMenuControllerWillShowMenuNotification
-                object:nil];
-  }
-#endif
   _isTextfieldEditing = owns;
 }
 
@@ -423,6 +417,11 @@ using base::UserMetricsAction;
     // already deconstructed on shutdown.
     return;
   }
+
+  if (IsVivaldiRunning()) {
+    _isInputFromPaste = YES;
+  } // End Vivaldi
+
   _textChangeDelegate->WillPaste();
 }
 
@@ -505,7 +504,7 @@ using base::UserMetricsAction;
   } else if ([self.textField canPerformKeyboardAction:keyboardAction]) {
     [self.textField performKeyboardAction:keyboardAction];
   } else {
-    NOTREACHED_IN_MIGRATION() << "Check canPerformKeyboardAction before!";
+    NOTREACHED() << "Check canPerformKeyboardAction before!";
   }
 }
 
@@ -685,28 +684,6 @@ using base::UserMetricsAction;
         [weakSelf onClipboardContentTypesReceived:matched_types];
       }));
 }
-
-#if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
-- (void)menuControllerWillShow:(NSNotification*)notification {
-  if (self.showingEditMenu || !self.isTextfieldEditing ||
-      !self.textField.window.isKeyWindow) {
-    return;
-  }
-
-  self.showingEditMenu = YES;
-
-  // Cancel original menu opening.
-  UIMenuController* menuController = [UIMenuController sharedMenuController];
-  [menuController hideMenu];
-
-  // Reset where it should open below text field and reopen it.
-  menuController.arrowDirection = UIMenuControllerArrowUp;
-
-  [menuController showMenuFromView:self.textField rect:self.textField.frame];
-
-  self.showingEditMenu = NO;
-}
-#endif
 
 - (void)pasteboardDidChange:(NSNotification*)notification {
   [self updateCachedClipboardState];
@@ -927,7 +904,9 @@ using base::UserMetricsAction;
   if (searchText == nil || [searchText isEqualToString:@""]) {
     [self clearButtonPressed];
   } else {
-    [self.textInputDelegate insertKeywordToOmnibox:searchText];
+    [self.textInputDelegate insertKeywordToOmnibox:searchText
+                                         fromPaste:_isInputFromPaste];
+    _isInputFromPaste = NO;
   }
 }
 

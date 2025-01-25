@@ -26,9 +26,14 @@
 #include "components/sessions/core/session_service_commands.h"
 #include "components/sessions/core/tab_restore_service_client.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/mojom/window_show_state.mojom-forward.h"
 #include "ui/base/ui_base_types.h"
 
 class Profile;
+
+namespace base {
+class Value;
+}
 
 namespace content {
 class WebContents;
@@ -80,7 +85,7 @@ class SessionServiceBase : public sessions::CommandStorageManagerDelegate,
   // Sets the bounds of a window.
   void SetWindowBounds(SessionID window_id,
                        const gfx::Rect& bounds,
-                       ui::WindowShowState show_state);
+                       ui::mojom::WindowShowState show_state);
 
   // Sets the workspace the window resides in.
   void SetWindowWorkspace(SessionID window_id, const std::string& workspace);
@@ -168,6 +173,14 @@ class SessionServiceBase : public sessions::CommandStorageManagerDelegate,
                                int count) override;
   void TabNavigationPathEntriesDeleted(SessionID window_id,
                                        SessionID tab_id) override;
+
+#if DCHECK_IS_ON()
+  // Returns the state of this class and logs for the
+  // chrome://internals/session-service debug page. The logs are in reverse
+  // order for truncation ease. This value is NOT STABLE -
+  // do not rely on it's contents for anything.
+  virtual base::Value ToDebugValue() const;
+#endif  // DCHECK_IS_ON()
 
   // Tests Vivaldi specific attributes on the Browser to see if we should
   // track this in the session.

@@ -41,10 +41,8 @@ import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiState.BookmarkUiMode;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -210,7 +208,6 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
         mBookmarkToolbar.initializeSearchView(
                 mSearchDelegate, R.string.bookmark_toolbar_search, R.id.search_menu_id);
         mBookmarkToolbar.setSortMenuIds(BookmarkToolbarMediator.SORT_MENU_IDS);
-        mBookmarkToolbar.setBookmarkOpener(mBookmarkOpener);
         mBookmarkToolbar.setSelectionDelegate(mSelectionDelegate);
         mBookmarkToolbar.setBookmarkUiMode(BookmarkUiMode.FOLDER);
         mBookmarkToolbar.setIsDialogUi(true);
@@ -249,7 +246,6 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
         for (int menuId : applicableMenuIds) {
             boolean isVisible = !hiddenIdSet.contains(menuId);
             MenuItem menuItem = mBookmarkToolbar.getMenu().findItem(menuId);
-            assertNotNull(menuId);
             assertEquals(
                     "Mismatched visibility for menu item " + menuItem,
                     isVisible,
@@ -261,7 +257,6 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
         for (int menuId : applicableMenuIds) {
             boolean isEnabled = !disabledIds.contains(menuId);
             MenuItem menuItem = mBookmarkToolbar.getMenu().findItem(menuId);
-            assertNotNull(menuId);
             assertEquals(
                     "Mismatched enabled state for menu item " + menuItem,
                     isEnabled,
@@ -401,7 +396,6 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
     @Test
     @SmallTest
     @UiThreadTest
-    @EnableFeatures(ChromeFeatureList.ANDROID_IMPROVED_BOOKMARKS)
     public void testSearching_improvedBookmarks() {
         initializeNormal();
         mBookmarkToolbar.setBookmarkUiMode(BookmarkUiMode.SEARCHING);
@@ -411,7 +405,6 @@ public class BookmarkToolbarTest extends BlankUiTestActivityTestCase {
     @Test
     @SmallTest
     @UiThreadTest
-    @EnableFeatures(ChromeFeatureList.ANDROID_IMPROVED_BOOKMARKS)
     public void testSortButtonsDisabled_throughSelection() {
         initializeNormal();
         mBookmarkToolbar.setSortMenuIdsEnabled(false);

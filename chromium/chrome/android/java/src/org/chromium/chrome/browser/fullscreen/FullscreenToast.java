@@ -9,6 +9,7 @@ import android.view.Gravity;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.widget.Toast;
 import org.chromium.ui.widget.Toast.ToastPriority;
@@ -100,7 +101,12 @@ interface FullscreenToast {
                 toastTextId = R.string.vivaldi_immersive_fullscreen_api_notification;
             } else
             if (BuildInfo.getInstance().isAutomotive) {
-                toastTextId = R.string.immersive_fullscreen_api_notification_automotive;
+                toastTextId =
+                        ChromeFeatureList.isEnabled(
+                                        ChromeFeatureList
+                                                .AUTOMOTIVE_FULLSCREEN_TOOLBAR_IMPROVEMENTS)
+                                ? R.string.immersive_fullscreen_automotive_toolbar_improvements
+                                : R.string.immersive_fullscreen_api_notification_automotive;
             }
             mNotificationToast =
                     Toast.makeTextWithPriority(

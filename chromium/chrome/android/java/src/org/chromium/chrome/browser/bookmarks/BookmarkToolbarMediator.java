@@ -101,7 +101,6 @@ class BookmarkToolbarMediator
 
     // Vivaldi
     private ChromeTabbedActivity mTabbedActivity;
-    private VivaldiBookmarkPanelDelegate mBookmarkPanelDelegate;
 
     BookmarkToolbarMediator(
             Context context,
@@ -409,7 +408,7 @@ class BookmarkToolbarMediator
                 mCurrentFolder.equals(mBookmarkModel.getDefaultReadingListFolder());
         if (ChromeApplicationImpl.isVivaldi()) {
             mModel.set(BookmarkToolbarProperties.CLOSE_BUTTON_VISIBLE,
-                    PanelUtils.isPanelOpen((mTabbedActivity)));
+                    PanelUtils.isPanelOpen(mTabbedActivity));
             mModel.set(BookmarkToolbarProperties.ADD_TO_READING_LIST_BUTTON_VISIBLE,
                     isReadingListFolder);
             mModel.set(BookmarkToolbarProperties.SORT_BUTTON_VISIBLE, !isReadingListFolder);
@@ -553,6 +552,15 @@ class BookmarkToolbarMediator
         showMarkRead = onlyReadingListSelected && numRead == 0;
         showMarkUnread = onlyReadingListSelected && numRead == selectedBookmarks.size();
 
+        if (ChromeApplicationImpl.isVivaldi()) {
+            for (int i = 0; i < selectedBookmarks.size(); i++) {
+                BookmarkId bookmark = selectedBookmarks.get(i);
+                if (bookmark.getType() == BookmarkType.READING_LIST) {
+                    showEdit = false;
+                }
+            }
+        } // End Vivaldi
+
         mModel.set(BookmarkToolbarProperties.SELECTION_MODE_SHOW_EDIT, showEdit);
         mModel.set(BookmarkToolbarProperties.SELECTION_MODE_SHOW_OPEN_IN_NEW_TAB, showOpenInNewTab);
         mModel.set(
@@ -601,12 +609,6 @@ class BookmarkToolbarMediator
 
         mBookmarkDelegate.openFolder(mBookmarkModel.getBookmarkById(mCurrentFolder).getParentId());
     }
-
-    /** Vivaldi */
-    public void setBookmarkPanelDelegate(VivaldiBookmarkPanelDelegate bookmarkPanelDelegate) {
-        mBookmarkPanelDelegate = bookmarkPanelDelegate;
-    }
-
 
     private static void writeSortOrderPref(BookmarkManagerMediator.SortOrder sorting) {
         ChromeSharedPreferences.getInstance().writeString(PREF_SPEEDDIAL_SORT_ORDER, sorting.name());

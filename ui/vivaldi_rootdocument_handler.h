@@ -18,8 +18,10 @@
 #include "chrome/browser/profiles/profile_observer.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/infobars/core/confirm_infobar_delegate.h"
 #include "content/public/browser/navigation_handle.h"
 #include "extensions/browser/extension_registry_observer.h"
+#include "ui/infobar_container_web_proxy.h"
 #include "ui/vivaldi_document_loader.h"
 
 class PrefChangeRegistrar;
@@ -29,8 +31,9 @@ namespace extensions {
 
 class VivaldiRootDocumentHandler;
 
-void MarkProfileForNoVivaldiClient(const base::FilePath& path);
-bool ShouldProfileCreateVivaldiClient(const base::FilePath& path);
+void MarkProfilePathForNoVivaldiClient(const base::FilePath& path);
+void ClearProfilePathForNoVivaldiClient(const base::FilePath& path);
+bool ProfileShouldNotUseVivaldiClient(const base::FilePath& path);
 
 class VivaldiRootDocumentHandlerObserver {
  public:
@@ -71,7 +74,8 @@ class VivaldiRootDocumentHandlerFactory
 class VivaldiRootDocumentHandler : public KeyedService,
                                    public extensions::ExtensionRegistryObserver,
                                    public ProfileObserver,
-                                   protected content::WebContentsObserver {
+                                   protected content::WebContentsObserver,
+                                   public infobars::InfoBarContainer::Delegate {
   friend base::DefaultSingletonTraits<VivaldiRootDocumentHandler>;
 
  public:
@@ -82,6 +86,10 @@ class VivaldiRootDocumentHandler : public KeyedService,
 
   content::WebContents* GetWebContents();
   content::WebContents* GetOTRWebContents();
+
+  raw_ptr<::vivaldi::InfoBarContainerWebProxy> InfoBarContainer() {
+    return infobar_container_.get();
+  }
 
  private:
   ~VivaldiRootDocumentHandler() override;
@@ -115,6 +123,10 @@ class VivaldiRootDocumentHandler : public KeyedService,
                            const extensions::Extension* extension,
                            extensions::UnloadedExtensionReason reason) override;
 
+  // infobars::InfoBarContainer::Delegate.
+
+  void InfoBarContainerStateChanged(bool is_animating) override {}
+
   void InformObservers();
 
   // These are the WebContents holders for our portal-windows. One document for
@@ -136,6 +148,9 @@ class VivaldiRootDocumentHandler : public KeyedService,
 
   base::ScopedMultiSourceObservation<Profile, ProfileObserver>
       observed_profiles_{this};
+
+  // The InfoBarContainerWebProxy that contains InfoBars for the current tab.
+  std::unique_ptr<::vivaldi::InfoBarContainerWebProxy> infobar_container_;
 
   raw_ptr<const Extension> vivaldi_extension_ = nullptr;
   // The profile we observe.

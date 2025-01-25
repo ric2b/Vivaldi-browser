@@ -12,6 +12,8 @@
 #ifndef AOM_AV1_ENCODER_PARTITION_SEARCH_H_
 #define AOM_AV1_ENCODER_PARTITION_SEARCH_H_
 
+#include "config/aom_config.h"
+
 #include "av1/encoder/block.h"
 #include "av1/encoder/encoder.h"
 #include "av1/encoder/encodeframe.h"
@@ -39,10 +41,10 @@ void av1_nonrd_pick_partition(AV1_COMP *cpi, ThreadData *td,
                               RD_STATS *rd_cost, int do_recon, int64_t best_rd,
                               PC_TREE *pc_tree);
 #endif
-void av1_reset_part_sf(PARTITION_SPEED_FEATURES *part_sf);
-void av1_reset_sf_for_ext_part(AV1_COMP *const cpi);
 
 #if CONFIG_PARTITION_SEARCH_ORDER
+void av1_reset_part_sf(PARTITION_SPEED_FEATURES *part_sf);
+void av1_reset_sf_for_ext_part(AV1_COMP *const cpi);
 bool av1_rd_partition_search(AV1_COMP *const cpi, ThreadData *td,
                              TileDataEnc *tile_data, TokenExtra **tp,
                              SIMPLE_MOTION_DATA_TREE *sms_root, int mi_row,

@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">단독 설치</translation>
 <translation id="1682285232070778125">Vivaldi를 기본 브라우저로 설정</translation>
 <translation id="1974060860693918893">고급</translation>
+<translation id="2053560788696003312">Vivaldi를 설치하려면 Windows 10 이상이 필요합니다.</translation>
 <translation id="2134216661302048561">Vivaldi 인스톨러가 아직 Vivaldi 브라우저 설치를 완료하지 못했습니다. 정말로 지금 나가시겠습니까?</translation>
 <translation id="2286454467119466181">단순</translation>
 <translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. 모든 권리 보유. &lt;a&gt;개인정보 처리방침&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">동의 및 업데이트</translation>
 <translation id="5302048478445481009">언어</translation>
 <translation id="694714344624446243">Vivaldi 인스톨러</translation>
+<translation id="7467493612551448880">현재 설치하려는 Vivaldi 버전이 실행하고 있는 Windows에 최적화되어 있지 않습니다.
+
+vivaldi.com/download 에서 Windows on ARM 버전을 다운로드 해주세요.</translation>
 <translation id="7658239707568436148">취소</translation>
 <translation id="8773751185824654197">참고: 실행되고 있는 Vivaldi 브라우저를 업데이트하면 인스턴스가 종료되고 재실행됩니다</translation>
 <translation id="933060950687965486">설치 유형</translation>

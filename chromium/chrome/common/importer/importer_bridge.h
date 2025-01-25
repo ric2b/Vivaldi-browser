@@ -21,6 +21,7 @@ struct ImporterAutofillFormDataEntry;
 // Vivaldi
 struct ImportedNotesEntry;
 struct ImportedSpeedDialEntry;
+struct ImportedTabEntry;
 
 namespace importer {
 struct SearchEngineInfo;
@@ -82,6 +83,9 @@ class ImporterBridge : public base::RefCountedThreadSafe<ImporterBridge> {
 
   virtual void AddExtensions(
       const std::vector<std::string>& extensions) {}
+
+  virtual void AddOpenTabs(
+      const std::vector<ImportedTabEntry>& extensions) {}
 
   virtual void NotifyItemFailed(importer::ImportItem item,
                                 const std::string& error) {}

@@ -373,9 +373,12 @@ struct COMPONENT_EXPORT(WEBNN_PUBLIC_CPP) SliceAttributes {
   // The sequence of unsigned integer values indicating the starting index to
   // slice of each input dimension.
   std::vector<uint32_t> starts;
-  // The sequence of unsigned integer values indicating the number of elements
-  // to slice of each input dimension.
+  // The sequence of unsigned integer values indicating the window size to slice
+  // of each input dimension.
   std::vector<uint32_t> sizes;
+  // The sequence of unsigned integer values indicating the strides to slice of
+  // each input dimension.
+  std::vector<uint32_t> strides;
   // The operator label defined by the user.
   std::string label = "";
 };
@@ -534,6 +537,15 @@ base::expected<OperandDescriptor, std::string> COMPONENT_EXPORT(
         const uint32_t axis,
         std::string_view label);
 
+// Validate and infer output information of gatherND operator defined in
+// WebIDL here https://www.w3.org/TR/webnn/#api-mlgraphbuilder-gatherND
+base::expected<OperandDescriptor, std::string> COMPONENT_EXPORT(
+    WEBNN_PUBLIC_CPP)
+    ValidateGatherNDAndInferOutput(const ContextProperties& context_properties,
+                                   const OperandDescriptor& input,
+                                   const OperandDescriptor& indices,
+                                   std::string_view label);
+
 // Validate gemm operator defined in WebIDL here
 // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-gemm
 base::expected<OperandDescriptor, std::string> COMPONENT_EXPORT(
@@ -675,6 +687,18 @@ base::expected<OperandDescriptor, std::string> COMPONENT_EXPORT(
                                  std::string_view label,
                                  base::span<const uint32_t> axes,
                                  bool keepDimensions = false);
+
+// Validate and infer output information of scatterElements operator defined in
+// WebIDL here https://www.w3.org/TR/webnn/#api-mlgraphbuilder-scatterelements
+base::expected<OperandDescriptor, std::string> COMPONENT_EXPORT(
+    WEBNN_PUBLIC_CPP)
+    ValidateScatterElementsAndInferOutput(
+        const ContextProperties& context_properties,
+        const OperandDescriptor& input,
+        const OperandDescriptor& indices,
+        const OperandDescriptor& updates,
+        uint32_t axis,
+        std::string_view label);
 
 // Validate and infer output information of scatterND operator defined in
 // WebIDL here https://www.w3.org/TR/webnn/#api-mlgraphbuilder-scatternd

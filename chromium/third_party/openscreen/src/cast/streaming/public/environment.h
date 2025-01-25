@@ -35,7 +35,7 @@ class Environment : public UdpSocket::Client {
 
   // Consumers of the environment's UDP socket should be careful to check the
   // socket's state before accessing its methods, especially
-  // GetBoundLocalEndpoint(). If the environment is |kStarting|, the
+  // GetBoundLocalEndpoint(). If the environment is `kStarting`, the
   // local endpoint may not be set yet and will be zero initialized.
   enum class SocketState {
     // Socket is still initializing. Usually the UDP socket bind is
@@ -53,7 +53,7 @@ class Environment : public UdpSocket::Client {
   };
 
   // Classes concerned with the Environment's UDP socket state may inherit from
-  // |Subscriber| and then |Subscribe|.
+  // `Subscriber` and then `Subscribe`.
   class SocketSubscriber {
    public:
     // Event that occurs when the environment is ready for use.
@@ -68,7 +68,7 @@ class Environment : public UdpSocket::Client {
 
   // Construct with the given clock source and TaskRunner. Creates and
   // internally-owns a UdpSocket, and immediately binds it to the given
-  // |local_endpoint|. Default behavior if |local_endpoint| is omitted is to
+  // `local_endpoint`. Default behavior if `local_endpoint` is omitted is to
   // bind to all available interfaces using IPv4.
   Environment(ClockNowFunctionPtr now_function,
               TaskRunner& task_runner,
@@ -108,7 +108,7 @@ class Environment : public UdpSocket::Client {
   void SetStatisticsCollector(StatisticsCollector* subscriber);
   StatisticsCollector* statistics_collector() { return statistics_collector_; }
 
-  // Start/Resume delivery of incoming packets to the given |packet_consumer|.
+  // Start/Resume delivery of incoming packets to the given `packet_consumer`.
   // Delivery will continue until DropIncomingPackets() is called.
   void ConsumeIncomingPackets(PacketConsumer* packet_consumer);
 
@@ -121,7 +121,7 @@ class Environment : public UdpSocket::Client {
   // value of at least kRequiredNetworkPacketSize.
   int GetMaxPacketSize() const;
 
-  // Sends the given |packet| to the remote endpoint, best-effort.
+  // Sends the given `packet` to the remote endpoint, best-effort.
   // set_remote_endpoint() must be called beforehand with a valid IPEndpoint.
   //
   // Note: This method is virtual to allow unit tests to intercept packets

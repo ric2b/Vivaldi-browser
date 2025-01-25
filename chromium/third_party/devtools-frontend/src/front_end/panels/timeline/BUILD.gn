@@ -54,6 +54,7 @@ devtools_module("timeline") {
   sources = [
     "ActiveFilters.ts",
     "AnimationsTrackAppender.ts",
+    "AnnotationHelpers.ts",
     "AppenderUtils.ts",
     "BenchmarkEvents.ts",
     "CLSLinkifier.ts",
@@ -74,7 +75,6 @@ devtools_module("timeline") {
     "NetworkTrackAppender.ts",
     "SaveFileFormatter.ts",
     "ServerTimingsTrackAppender.ts",
-    "SourceMapsResolver.ts",
     "TargetForEvent.ts",
     "ThreadAppender.ts",
     "TimelineController.ts",
@@ -151,6 +151,7 @@ devtools_entrypoint("bundle") {
     "../../../test/perf/*",
     "../../entrypoints/*",
     "../../models/trace/handlers:unittests",
+    "../../panels/freestyler/*",
     "../../testing",
     "../../testing/*",
     "../../ui/components/docs/performance_panel/*",
@@ -184,6 +185,7 @@ ts_library("unittests") {
   testonly = true
 
   sources = [
+    "AnnotationHelpers.test.ts",
     "Breadcrumbs.test.ts",
     "EntriesFilter.test.ts",
     "EventsSerializer.test.ts",
@@ -191,7 +193,6 @@ ts_library("unittests") {
     "Initiators.test.ts",
     "ModificationsManager.test.ts",
     "SaveFileFormatter.test.ts",
-    "SourceMapsResolver.test.ts",
     "TimelineController.test.ts",
     "TimelineDetailsView.test.ts",
     "TimelineFilters.test.ts",

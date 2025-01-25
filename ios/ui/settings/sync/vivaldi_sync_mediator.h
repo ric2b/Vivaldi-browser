@@ -45,6 +45,8 @@ namespace syncer {
         deviceName:(NSString*)deviceName
       save_password:(BOOL)save_password;
 
+- (void)updateDeviceName:(NSString*)deviceName;
+
 - (BOOL)setEncryptionPassword:(std::string)password;
 - (void)importEncryptionPassword:(NSURL*)file
           completionHandler:(void (^)(NSString* errorMessage))completionHandler;

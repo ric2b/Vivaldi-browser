@@ -50,8 +50,7 @@ using GlslWriterBinaryTest = GlslWriterTestWithParam<BinaryData>;
 TEST_P(GlslWriterBinaryTest, Emit) {
     auto params = GetParam();
 
-    auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kCompute);
-    func->SetWorkgroupSize(1, 1, 1);
+    auto* func = b.ComputeFunction("foo");
     b.Append(func->Block(), [&] {
         auto* l = b.Let("left", b.Constant(1_u));
         auto* r = b.Let("right", b.Constant(2_u));
@@ -91,8 +90,7 @@ using GlslWriterBinaryBoolTest = GlslWriterTestWithParam<BinaryData>;
 TEST_P(GlslWriterBinaryBoolTest, Emit) {
     auto params = GetParam();
 
-    auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kCompute);
-    func->SetWorkgroupSize(1, 1, 1);
+    auto* func = b.ComputeFunction("foo");
     b.Append(func->Block(), [&] {
         auto* l = b.Let("left", b.Constant(1_u));
         auto* r = b.Let("right", b.Constant(2_u));
@@ -122,20 +120,118 @@ INSTANTIATE_TEST_SUITE_P(
                     BinaryData{"(left <= right)", core::BinaryOp::kLessThanEqual},
                     BinaryData{"(left >= right)", core::BinaryOp::kGreaterThanEqual}));
 
-// TODO(dsinclair): Test int_div_mod polyfil
-TEST_F(GlslWriterTest, DISABLED_Binary_Int_Div_Polyfill) {}
+using GlslWriterBinaryBitwiseBoolTest = GlslWriterTestWithParam<BinaryData>;
+TEST_P(GlslWriterBinaryBitwiseBoolTest, Emit) {
+    auto params = GetParam();
 
-// TODO(dsinclair): Test int_div_mod polyfil
-TEST_F(GlslWriterTest, DISABLED_Binary_Int_Mod_Polyfill) {}
+    auto* func = b.ComputeFunction("foo");
+    b.Append(func->Block(), [&] {
+        auto* l = b.Let("left", b.Constant(true));
+        auto* r = b.Let("right", b.Constant(false));
+        auto* bin = b.Binary(params.op, ty.bool_(), l, r);
+        b.Let("val", bin);
+        b.Return(func);
+    });
 
-// TODO(dsinclair): Polyfill conversion to relational functions
-TEST_F(GlslWriterTest, DISABLED_Binary_Relational_Vector) {}
+    ASSERT_TRUE(Generate()) << err_ << output_.glsl;
+    EXPECT_EQ(output_.glsl, GlslHeader() + R"(
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+void main() {
+  bool left = true;
+  bool right = false;
+  uint v = uint(left);
+  bool val = bool((v )" + params.result +
+                                R"( uint(right)));
+}
+)");
+}
 
-// TODO(dsinclair): Bitwise bool
-TEST_F(GlslWriterTest, DISABLED_Binary_Bitwise_Bool) {}
+TEST_P(GlslWriterBinaryBitwiseBoolTest, EmitVec) {
+    auto params = GetParam();
 
-// TODO(dsinclair): Float Modulo
-TEST_F(GlslWriterTest, DISABLED_Binary_Float_Modulo) {}
+    auto* func = b.ComputeFunction("foo");
+    b.Append(func->Block(), [&] {
+        auto* l = b.Let("left", b.Splat(ty.vec2<bool>(), true));
+        auto* r = b.Let("right", b.Splat(ty.vec2<bool>(), false));
+        auto* bin = b.Binary(params.op, ty.vec2<bool>(), l, r);
+        b.Let("val", bin);
+        b.Return(func);
+    });
+
+    ASSERT_TRUE(Generate()) << err_ << output_.glsl;
+    EXPECT_EQ(output_.glsl, GlslHeader() + R"(
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+void main() {
+  bvec2 left = bvec2(true);
+  bvec2 right = bvec2(false);
+  uvec2 v = uvec2(left);
+  bvec2 val = bvec2((v )" + params.result +
+                                R"( uvec2(right)));
+}
+)");
+}
+INSTANTIATE_TEST_SUITE_P(GlslWriterTest,
+                         GlslWriterBinaryBitwiseBoolTest,
+                         testing::Values(BinaryData{"&", core::BinaryOp::kAnd},
+                                         BinaryData{"|", core::BinaryOp::kOr}));
+
+using GlslWriterBinaryRelationalVecTest = GlslWriterTestWithParam<BinaryData>;
+TEST_P(GlslWriterBinaryRelationalVecTest, Emit) {
+    auto params = GetParam();
+
+    auto* func = b.ComputeFunction("foo");
+    b.Append(func->Block(), [&] {
+        auto* l = b.Let("left", b.Splat(ty.vec2<f32>(), 1_f));
+        auto* r = b.Let("right", b.Splat(ty.vec2<f32>(), 2_f));
+        auto* bin = b.Binary(params.op, ty.vec2<bool>(), l, r);
+        b.Let("val", bin);
+        b.Return(func);
+    });
+
+    ASSERT_TRUE(Generate()) << err_ << output_.glsl;
+    EXPECT_EQ(output_.glsl, GlslHeader() + R"(
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+void main() {
+  vec2 left = vec2(1.0f);
+  vec2 right = vec2(2.0f);
+  bvec2 val = )" + params.result +
+                                R"((left, right);
+}
+)");
+}
+INSTANTIATE_TEST_SUITE_P(
+    GlslWriterTest,
+    GlslWriterBinaryRelationalVecTest,
+    testing::Values(BinaryData{"equal", core::BinaryOp::kEqual},
+                    BinaryData{"notEqual", core::BinaryOp::kNotEqual},
+                    BinaryData{"lessThan", core::BinaryOp::kLessThan},
+                    BinaryData{"lessThanEqual", core::BinaryOp::kLessThanEqual},
+                    BinaryData{"greaterThan", core::BinaryOp::kGreaterThan},
+                    BinaryData{"greaterThanEqual", core::BinaryOp::kGreaterThanEqual}));
+
+TEST_F(GlslWriterTest, Binary_Float_Modulo) {
+    auto* func = b.ComputeFunction("foo");
+    b.Append(func->Block(), [&] {
+        auto* l = b.Let("left", b.Splat(ty.vec2<f32>(), 1_f));
+        auto* r = b.Let("right", b.Splat(ty.vec2<f32>(), 2_f));
+        auto* bin = b.Modulo(ty.vec2<f32>(), l, r);
+        b.Let("val", bin);
+        b.Return(func);
+    });
+
+    ASSERT_TRUE(Generate()) << err_ << output_.glsl;
+    EXPECT_EQ(output_.glsl, GlslHeader() + R"(
+vec2 tint_float_modulo(vec2 x, vec2 y) {
+  return (x - (y * trunc((x / y))));
+}
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+void main() {
+  vec2 left = vec2(1.0f);
+  vec2 right = vec2(2.0f);
+  vec2 val = tint_float_modulo(left, right);
+}
+)");
+}
 
 }  // namespace
 }  // namespace tint::glsl::writer

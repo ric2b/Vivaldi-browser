@@ -1,570 +1,126 @@
-// Copyright 2023 Google LLC
+// Copyright 2024 Google LLC
 //
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
-//
-// Auto-generated file. Do not edit!
-//   Specification: test/x32-packb.yaml
-//   Generator: tools/generate-packb-test.py
 
 
-#include <cstddef>
+#include <string>
 
 #include <gtest/gtest.h>
 #include "xnnpack/common.h"
 #include "xnnpack/isa-checks.h"
 #include "xnnpack/packb.h"
+#include "xnnpack/zerob.h"
 #include "packb-microkernel-tester.h"
 
+namespace {
 
-TEST(X32_PACKB_GEMM_2C1S1R__SCALAR_FLOAT, n_eq_2) {
+struct XnnTestParam {
+  const char *name;
+  PackBMicrokernelTester::Kernel kernel;
+  uint64_t arch_flags;
+  size_t channel_tile, channel_subtile, channel_round;
+};
+
+class XnnTest : public testing::TestWithParam<XnnTestParam> {};
+
+std::string GetTestName(const testing::TestParamInfo<XnnTest::ParamType>& info) {
+  return info.param.name;
+}
+
+#define XNN_UKERNEL(arch_flags, ukernel, channel_tile, channel_subtile, channel_round) \
+  { #ukernel, PackBMicrokernelTester::Kernel{ukernel}, arch_flags, channel_tile, channel_subtile, channel_round },
+
+const XnnTestParam xnn_test_params[] = {
+#include "x32-packb/x32-packb.h"
+#include "x32-zerob/x32-zerob.h"
+};
+
+#undef XNN_UKERNEL
+
+}  // namespace
+
+TEST_P(XnnTest, n_eq_channel_tile) {
+  TEST_REQUIRES_ARCH_FLAGS(GetParam().arch_flags);
   for (size_t k = 1; k < 4; k++) {
     PackBMicrokernelTester()
-      .channels(2)
+      .channels(GetParam().channel_tile)
       .kernel_tile(k)
-      .channel_tile(2)
-      .channel_subtile(1)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_2c1s1r__scalar_float);
+      .channel_tile(GetParam().channel_tile)
+      .channel_subtile(GetParam().channel_subtile)
+      .channel_round(GetParam().channel_round)
+      .Test(GetParam().kernel);
   }
 }
 
-TEST(X32_PACKB_GEMM_2C1S1R__SCALAR_FLOAT, n_div_2) {
+TEST_P(XnnTest, n_div_channel_tile) {
+  TEST_REQUIRES_ARCH_FLAGS(GetParam().arch_flags);
+  if (GetParam().channel_tile <= 1) {
+    GTEST_SKIP();
+  }
   for (size_t k = 1; k < 4; k++) {
     PackBMicrokernelTester()
-      .channels(4)
+      .channels(GetParam().channel_tile * 2)
       .kernel_tile(k)
-      .channel_tile(2)
-      .channel_subtile(1)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_2c1s1r__scalar_float);
+      .channel_tile(GetParam().channel_tile)
+      .channel_subtile(GetParam().channel_subtile)
+      .channel_round(GetParam().channel_round)
+      .Test(GetParam().kernel);
   }
 }
 
-TEST(X32_PACKB_GEMM_2C1S1R__SCALAR_FLOAT, n_lt_2) {
+TEST_P(XnnTest, n_lt_channel_tile) {
+  TEST_REQUIRES_ARCH_FLAGS(GetParam().arch_flags);
+  if (GetParam().channel_tile <= 1) {
+    GTEST_SKIP();
+  }
   for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 1; n < 2; n++) {
+    for (size_t n = 1; n < GetParam().channel_tile; n++) {
       PackBMicrokernelTester()
         .channels(n)
         .kernel_tile(k)
-        .channel_tile(2)
-        .channel_subtile(1)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_2c1s1r__scalar_float);
+        .channel_tile(GetParam().channel_tile)
+        .channel_subtile(GetParam().channel_subtile)
+        .channel_round(GetParam().channel_round)
+        .Test(GetParam().kernel);
     }
   }
 }
 
-TEST(X32_PACKB_GEMM_2C1S1R__SCALAR_FLOAT, n_gt_2) {
+TEST_P(XnnTest, n_gt_channel_tile) {
+  TEST_REQUIRES_ARCH_FLAGS(GetParam().arch_flags);
   for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 3; n < 4; n++) {
+    for (size_t n = GetParam().channel_tile + 1; n < (GetParam().channel_tile == 1 ? 10 : GetParam().channel_tile * 2); n++) {
       PackBMicrokernelTester()
         .channels(n)
         .kernel_tile(k)
-        .channel_tile(2)
-        .channel_subtile(1)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_2c1s1r__scalar_float);
+        .channel_tile(GetParam().channel_tile)
+        .channel_subtile(GetParam().channel_subtile)
+        .channel_round(GetParam().channel_round)
+        .Test(GetParam().kernel);
     }
   }
 }
 
-TEST(X32_PACKB_GEMM_2C1S1R__SCALAR_FLOAT, groups_gt_1) {
+TEST_P(XnnTest, groups_gt_1) {
+  TEST_REQUIRES_ARCH_FLAGS(GetParam().arch_flags);
   for (size_t g = 2; g <= 3; g++) {
     for (size_t kernel_tile = 1; kernel_tile < 4; kernel_tile++) {
-      for (size_t n = 3; n < 4; n++) {
+      for (size_t n = GetParam().channel_tile + 1; n < (GetParam().channel_tile == 1 ? 10 : GetParam().channel_tile * 2); n++) {
         PackBMicrokernelTester()
           .groups(g)
           .channels(n)
           .kernel_tile(kernel_tile)
-          .channel_tile(2)
-          .channel_subtile(1)
-          .channel_round(1)
-          .Test(xnn_x32_packb_gemm_ukernel_2c1s1r__scalar_float);
+          .channel_tile(GetParam().channel_tile)
+          .channel_subtile(GetParam().channel_subtile)
+          .channel_round(GetParam().channel_round)
+          .Test(GetParam().kernel);
       }
     }
   }
 }
+INSTANTIATE_TEST_SUITE_P(x32_packb,
+                         XnnTest,
+                         testing::ValuesIn(xnn_test_params),
+                         GetTestName);
 
-TEST(X32_PACKB_GEMM_2C1S1R__SCALAR_INT, n_eq_2) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(2)
-      .kernel_tile(k)
-      .channel_tile(2)
-      .channel_subtile(1)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_2c1s1r__scalar_int);
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C1S1R__SCALAR_INT, n_div_2) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(4)
-      .kernel_tile(k)
-      .channel_tile(2)
-      .channel_subtile(1)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_2c1s1r__scalar_int);
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C1S1R__SCALAR_INT, n_lt_2) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 1; n < 2; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(2)
-        .channel_subtile(1)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_2c1s1r__scalar_int);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C1S1R__SCALAR_INT, n_gt_2) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 3; n < 4; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(2)
-        .channel_subtile(1)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_2c1s1r__scalar_int);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C1S1R__SCALAR_INT, groups_gt_1) {
-  for (size_t g = 2; g <= 3; g++) {
-    for (size_t kernel_tile = 1; kernel_tile < 4; kernel_tile++) {
-      for (size_t n = 3; n < 4; n++) {
-        PackBMicrokernelTester()
-          .groups(g)
-          .channels(n)
-          .kernel_tile(kernel_tile)
-          .channel_tile(2)
-          .channel_subtile(1)
-          .channel_round(1)
-          .Test(xnn_x32_packb_gemm_ukernel_2c1s1r__scalar_int);
-      }
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C2S1R__SCALAR_FLOAT, n_eq_2) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(2)
-      .kernel_tile(k)
-      .channel_tile(2)
-      .channel_subtile(2)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_2c2s1r__scalar_float);
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C2S1R__SCALAR_FLOAT, n_div_2) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(4)
-      .kernel_tile(k)
-      .channel_tile(2)
-      .channel_subtile(2)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_2c2s1r__scalar_float);
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C2S1R__SCALAR_FLOAT, n_lt_2) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 1; n < 2; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(2)
-        .channel_subtile(2)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_2c2s1r__scalar_float);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C2S1R__SCALAR_FLOAT, n_gt_2) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 3; n < 4; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(2)
-        .channel_subtile(2)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_2c2s1r__scalar_float);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C2S1R__SCALAR_FLOAT, groups_gt_1) {
-  for (size_t g = 2; g <= 3; g++) {
-    for (size_t kernel_tile = 1; kernel_tile < 4; kernel_tile++) {
-      for (size_t n = 3; n < 4; n++) {
-        PackBMicrokernelTester()
-          .groups(g)
-          .channels(n)
-          .kernel_tile(kernel_tile)
-          .channel_tile(2)
-          .channel_subtile(2)
-          .channel_round(1)
-          .Test(xnn_x32_packb_gemm_ukernel_2c2s1r__scalar_float);
-      }
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C2S1R__SCALAR_INT, n_eq_2) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(2)
-      .kernel_tile(k)
-      .channel_tile(2)
-      .channel_subtile(2)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_2c2s1r__scalar_int);
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C2S1R__SCALAR_INT, n_div_2) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(4)
-      .kernel_tile(k)
-      .channel_tile(2)
-      .channel_subtile(2)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_2c2s1r__scalar_int);
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C2S1R__SCALAR_INT, n_lt_2) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 1; n < 2; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(2)
-        .channel_subtile(2)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_2c2s1r__scalar_int);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C2S1R__SCALAR_INT, n_gt_2) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 3; n < 4; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(2)
-        .channel_subtile(2)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_2c2s1r__scalar_int);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_2C2S1R__SCALAR_INT, groups_gt_1) {
-  for (size_t g = 2; g <= 3; g++) {
-    for (size_t kernel_tile = 1; kernel_tile < 4; kernel_tile++) {
-      for (size_t n = 3; n < 4; n++) {
-        PackBMicrokernelTester()
-          .groups(g)
-          .channels(n)
-          .kernel_tile(kernel_tile)
-          .channel_tile(2)
-          .channel_subtile(2)
-          .channel_round(1)
-          .Test(xnn_x32_packb_gemm_ukernel_2c2s1r__scalar_int);
-      }
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C1S1R__SCALAR_FLOAT, n_eq_4) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(4)
-      .kernel_tile(k)
-      .channel_tile(4)
-      .channel_subtile(1)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_4c1s1r__scalar_float);
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C1S1R__SCALAR_FLOAT, n_div_4) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(8)
-      .kernel_tile(k)
-      .channel_tile(4)
-      .channel_subtile(1)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_4c1s1r__scalar_float);
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C1S1R__SCALAR_FLOAT, n_lt_4) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 1; n < 4; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(4)
-        .channel_subtile(1)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_4c1s1r__scalar_float);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C1S1R__SCALAR_FLOAT, n_gt_4) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 5; n < 8; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(4)
-        .channel_subtile(1)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_4c1s1r__scalar_float);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C1S1R__SCALAR_FLOAT, groups_gt_1) {
-  for (size_t g = 2; g <= 3; g++) {
-    for (size_t kernel_tile = 1; kernel_tile < 4; kernel_tile++) {
-      for (size_t n = 5; n < 8; n++) {
-        PackBMicrokernelTester()
-          .groups(g)
-          .channels(n)
-          .kernel_tile(kernel_tile)
-          .channel_tile(4)
-          .channel_subtile(1)
-          .channel_round(1)
-          .Test(xnn_x32_packb_gemm_ukernel_4c1s1r__scalar_float);
-      }
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C1S1R__SCALAR_INT, n_eq_4) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(4)
-      .kernel_tile(k)
-      .channel_tile(4)
-      .channel_subtile(1)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_4c1s1r__scalar_int);
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C1S1R__SCALAR_INT, n_div_4) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(8)
-      .kernel_tile(k)
-      .channel_tile(4)
-      .channel_subtile(1)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_4c1s1r__scalar_int);
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C1S1R__SCALAR_INT, n_lt_4) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 1; n < 4; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(4)
-        .channel_subtile(1)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_4c1s1r__scalar_int);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C1S1R__SCALAR_INT, n_gt_4) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 5; n < 8; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(4)
-        .channel_subtile(1)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_4c1s1r__scalar_int);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C1S1R__SCALAR_INT, groups_gt_1) {
-  for (size_t g = 2; g <= 3; g++) {
-    for (size_t kernel_tile = 1; kernel_tile < 4; kernel_tile++) {
-      for (size_t n = 5; n < 8; n++) {
-        PackBMicrokernelTester()
-          .groups(g)
-          .channels(n)
-          .kernel_tile(kernel_tile)
-          .channel_tile(4)
-          .channel_subtile(1)
-          .channel_round(1)
-          .Test(xnn_x32_packb_gemm_ukernel_4c1s1r__scalar_int);
-      }
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C4S1R__SCALAR_FLOAT, n_eq_4) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(4)
-      .kernel_tile(k)
-      .channel_tile(4)
-      .channel_subtile(4)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_4c4s1r__scalar_float);
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C4S1R__SCALAR_FLOAT, n_div_4) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(8)
-      .kernel_tile(k)
-      .channel_tile(4)
-      .channel_subtile(4)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_4c4s1r__scalar_float);
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C4S1R__SCALAR_FLOAT, n_lt_4) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 1; n < 4; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(4)
-        .channel_subtile(4)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_4c4s1r__scalar_float);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C4S1R__SCALAR_FLOAT, n_gt_4) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 5; n < 8; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(4)
-        .channel_subtile(4)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_4c4s1r__scalar_float);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C4S1R__SCALAR_FLOAT, groups_gt_1) {
-  for (size_t g = 2; g <= 3; g++) {
-    for (size_t kernel_tile = 1; kernel_tile < 4; kernel_tile++) {
-      for (size_t n = 5; n < 8; n++) {
-        PackBMicrokernelTester()
-          .groups(g)
-          .channels(n)
-          .kernel_tile(kernel_tile)
-          .channel_tile(4)
-          .channel_subtile(4)
-          .channel_round(1)
-          .Test(xnn_x32_packb_gemm_ukernel_4c4s1r__scalar_float);
-      }
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C4S1R__SCALAR_INT, n_eq_4) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(4)
-      .kernel_tile(k)
-      .channel_tile(4)
-      .channel_subtile(4)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_4c4s1r__scalar_int);
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C4S1R__SCALAR_INT, n_div_4) {
-  for (size_t k = 1; k < 4; k++) {
-    PackBMicrokernelTester()
-      .channels(8)
-      .kernel_tile(k)
-      .channel_tile(4)
-      .channel_subtile(4)
-      .channel_round(1)
-      .Test(xnn_x32_packb_gemm_ukernel_4c4s1r__scalar_int);
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C4S1R__SCALAR_INT, n_lt_4) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 1; n < 4; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(4)
-        .channel_subtile(4)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_4c4s1r__scalar_int);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C4S1R__SCALAR_INT, n_gt_4) {
-  for (size_t k = 1; k < 4; k++) {
-    for (size_t n = 5; n < 8; n++) {
-      PackBMicrokernelTester()
-        .channels(n)
-        .kernel_tile(k)
-        .channel_tile(4)
-        .channel_subtile(4)
-        .channel_round(1)
-        .Test(xnn_x32_packb_gemm_ukernel_4c4s1r__scalar_int);
-    }
-  }
-}
-
-TEST(X32_PACKB_GEMM_4C4S1R__SCALAR_INT, groups_gt_1) {
-  for (size_t g = 2; g <= 3; g++) {
-    for (size_t kernel_tile = 1; kernel_tile < 4; kernel_tile++) {
-      for (size_t n = 5; n < 8; n++) {
-        PackBMicrokernelTester()
-          .groups(g)
-          .channels(n)
-          .kernel_tile(kernel_tile)
-          .channel_tile(4)
-          .channel_subtile(4)
-          .channel_round(1)
-          .Test(xnn_x32_packb_gemm_ukernel_4c4s1r__scalar_int);
-      }
-    }
-  }
-}

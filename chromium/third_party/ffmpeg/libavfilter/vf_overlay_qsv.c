@@ -29,7 +29,7 @@
 #include "libavutil/hwcontext.h"
 #include "libavutil/mathematics.h"
 
-#include "internal.h"
+#include "filters.h"
 #include "avfilter.h"
 #include "formats.h"
 
@@ -156,12 +156,13 @@ release:
 
 static int have_alpha_planar(AVFilterLink *link)
 {
+    FilterLink              *l = ff_filter_link(link);
     enum AVPixelFormat pix_fmt = link->format;
     const AVPixFmtDescriptor *desc;
     AVHWFramesContext *fctx;
 
     if (link->format == AV_PIX_FMT_QSV) {
-        fctx    = (AVHWFramesContext *)link->hw_frames_ctx->data;
+        fctx    = (AVHWFramesContext *)l->hw_frames_ctx->data;
         pix_fmt = fctx->sw_format;
     }
 
@@ -273,6 +274,9 @@ static int config_output(AVFilterLink *outlink)
     QSVOverlayContext *vpp = ctx->priv;
     AVFilterLink      *in0 = ctx->inputs[0];
     AVFilterLink      *in1 = ctx->inputs[1];
+    FilterLink         *l0 = ff_filter_link(in0);
+    FilterLink         *l1 = ff_filter_link(in1);
+    FilterLink         *ol = ff_filter_link(outlink);
     int ret;
 
     av_log(ctx, AV_LOG_DEBUG, "Output is of %s.\n", av_get_pix_fmt_name(outlink->format));
@@ -282,8 +286,8 @@ static int config_output(AVFilterLink *outlink)
         av_log(ctx, AV_LOG_ERROR, "Mixing hardware and software pixel formats is not supported.\n");
         return AVERROR(EINVAL);
     } else if (in0->format == AV_PIX_FMT_QSV) {
-        AVHWFramesContext *hw_frame0 = (AVHWFramesContext *)in0->hw_frames_ctx->data;
-        AVHWFramesContext *hw_frame1 = (AVHWFramesContext *)in1->hw_frames_ctx->data;
+        AVHWFramesContext *hw_frame0 = (AVHWFramesContext *)l0->hw_frames_ctx->data;
+        AVHWFramesContext *hw_frame1 = (AVHWFramesContext *)l1->hw_frames_ctx->data;
 
         if (hw_frame0->device_ctx != hw_frame1->device_ctx) {
             av_log(ctx, AV_LOG_ERROR, "Inputs with different underlying QSV devices are forbidden.\n");
@@ -294,8 +298,8 @@ static int config_output(AVFilterLink *outlink)
 
     outlink->w          = vpp->var_values[VAR_MW];
     outlink->h          = vpp->var_values[VAR_MH];
-    outlink->frame_rate = in0->frame_rate;
-    outlink->time_base  = av_inv_q(outlink->frame_rate);
+    ol->frame_rate      = l0->frame_rate;
+    outlink->time_base  = av_inv_q(ol->frame_rate);
 
     ret = init_framesync(ctx);
     if (ret < 0)
@@ -362,7 +366,9 @@ static int activate(AVFilterContext *ctx)
     return ff_framesync_activate(&s->fs);
 }
 
-static int overlay_qsv_query_formats(AVFilterContext *ctx)
+static int overlay_qsv_query_formats(const AVFilterContext *ctx,
+                                     AVFilterFormatsConfig **cfg_in,
+                                     AVFilterFormatsConfig **cfg_out)
 {
     int i;
     int ret;
@@ -382,12 +388,12 @@ static int overlay_qsv_query_formats(AVFilterContext *ctx)
     };
 
     for (i = 0; i < ctx->nb_inputs; i++) {
-        ret = ff_formats_ref(ff_make_format_list(main_in_fmts), &ctx->inputs[i]->outcfg.formats);
+        ret = ff_formats_ref(ff_make_format_list(main_in_fmts), &cfg_in[i]->formats);
         if (ret < 0)
             return ret;
     }
 
-    ret = ff_formats_ref(ff_make_format_list(out_pix_fmts), &ctx->outputs[0]->incfg.formats);
+    ret = ff_formats_ref(ff_make_format_list(out_pix_fmts), &cfg_out[0]->formats);
     if (ret < 0)
         return ret;
 
@@ -427,7 +433,7 @@ const AVFilter ff_vf_overlay_qsv = {
     .activate       = activate,
     FILTER_INPUTS(overlay_qsv_inputs),
     FILTER_OUTPUTS(overlay_qsv_outputs),
-    FILTER_QUERY_FUNC(overlay_qsv_query_formats),
+    FILTER_QUERY_FUNC2(overlay_qsv_query_formats),
     .priv_class     = &overlay_qsv_class,
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
     .flags          = AVFILTER_FLAG_HWDEVICE,

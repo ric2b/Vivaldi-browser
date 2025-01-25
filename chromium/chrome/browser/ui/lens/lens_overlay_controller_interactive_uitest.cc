@@ -19,7 +19,7 @@
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/lens/lens_overlay_controller.h"
 #include "chrome/browser/ui/lens/lens_overlay_gen204_controller.h"
-#include "chrome/browser/ui/lens/lens_overlay_invocation_source.h"
+#include "chrome/browser/ui/lens/test_lens_overlay_query_controller.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/webui_url_constants.h"
@@ -28,6 +28,7 @@
 #include "chrome/test/user_education/interactive_feature_promo_test.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/lens/lens_features.h"
+#include "components/lens/lens_overlay_invocation_source.h"
 #include "components/lens/lens_overlay_permission_utils.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url_service.h"
@@ -38,79 +39,41 @@
 
 namespace {
 
+// The fake server session id.
+constexpr char kTestServerSessionId[] = "server_session_id";
+
+// The fake search session id.
+constexpr char kTestSearchSessionId[] = "search_session_id";
+
+// The fake suggest signals.
+constexpr char kTestSuggestSignals[] = "encoded_image_signals";
+
 constexpr char kDocumentWithNamedElement[] = "/select.html";
 constexpr char kDocumentWithImage[] = "/test_visual.html";
 constexpr char kDocumentWithVideo[] = "/media/bigbuck-player.html";
 
-lens::mojom::TextPtr CreateTestText(const std::vector<std::string>& words) {
-  // Create a Line.
-  lens::mojom::LinePtr line = lens::mojom::Line::New();
+lens::Text CreateTestText(const std::vector<std::string>& words) {
+  lens::Text text;
+  text.set_content_language("es");
+  // Create a paragraph.
+  lens::TextLayout::Paragraph* paragraph =
+      text.mutable_text_layout()->add_paragraphs();
+  // Create a line.
+  lens::TextLayout::Line* line = paragraph->add_lines();
 
   for (size_t i = 0; i < words.size(); ++i) {
-    lens::mojom::WordPtr word = lens::mojom::Word::New();
-    word->plain_text = words[i];
-    word->text_separator = " ";
-    word->geometry = lens::mojom::Geometry::New(
-        lens::mojom::CenterRotatedBox::New(
-            gfx::RectF(0.1 * i, 0.1, 0.1, 0.1), 0.0,
-            lens::mojom::CenterRotatedBox_CoordinateType::kNormalized),
-        std::vector<lens::mojom::PolygonPtr>());
-
-    line->words.push_back(std::move(word));
+    lens::TextLayout::Word* word = line->add_words();
+    word->set_plain_text(words[i]);
+    word->set_text_separator(" ");
+    word->mutable_geometry()->mutable_bounding_box()->set_center_x(0.1 * i);
+    word->mutable_geometry()->mutable_bounding_box()->set_center_y(0.1);
+    word->mutable_geometry()->mutable_bounding_box()->set_width(0.1);
+    word->mutable_geometry()->mutable_bounding_box()->set_height(0.1);
+    word->mutable_geometry()->mutable_bounding_box()->set_coordinate_type(
+        lens::NORMALIZED);
   }
-
-  // Add line with words to a paragraph.
-  lens::mojom::ParagraphPtr paragraph = lens::mojom::Paragraph::New();
-  paragraph->lines.push_back(std::move(line));
-
-  // Create text with the paragraph.
-  lens::mojom::TextPtr text =
-      lens::mojom::Text::New(lens::mojom::TextLayout::New(), "es");
-  text->text_layout->paragraphs.push_back(std::move(paragraph));
   return text;
 }
-
-class LensOverlayQueryControllerFake : public lens::LensOverlayQueryController {
- public:
-  explicit LensOverlayQueryControllerFake(
-      lens::LensOverlayFullImageResponseCallback full_image_callback,
-      lens::LensOverlayUrlResponseCallback url_callback,
-      lens::LensOverlayInteractionResponseCallback interaction_data_callback,
-      lens::LensOverlayThumbnailCreatedCallback thumbnail_created_callback,
-      variations::VariationsClient* variations_client,
-      signin::IdentityManager* identity_manager,
-      Profile* profile,
-      lens::LensOverlayInvocationSource invocation_source,
-      bool use_dark_mode,
-      lens::LensOverlayGen204Controller* gen204_controller)
-      : LensOverlayQueryController(full_image_callback,
-                                   url_callback,
-                                   interaction_data_callback,
-                                   thumbnail_created_callback,
-                                   variations_client,
-                                   identity_manager,
-                                   profile,
-                                   invocation_source,
-                                   use_dark_mode,
-                                   gen204_controller) {}
-
-  void StartQueryFlow(
-      const SkBitmap& screenshot,
-      std::optional<GURL> page_url,
-      std::optional<std::string> page_title,
-      std::vector<lens::mojom::CenterRotatedBoxPtr> significant_region_boxes,
-      base::span<const uint8_t> underlying_content_bytes,
-      const std::string& underlying_content_type,
-      float ui_scale_factor) override {
-    // Send response for full image callback / HandleStartQueryResponse.
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(full_image_callback_,
-                       std::vector<lens::mojom::OverlayObjectPtr>(),
-                       CreateTestText({"This", "is", "test", "text."}),
-                       /*is_error=*/false));
-  }
-};
 
 // Stubs out network requests.
 class LensOverlayControllerFake : public LensOverlayController {
@@ -132,7 +95,7 @@ class LensOverlayControllerFake : public LensOverlayController {
   std::unique_ptr<lens::LensOverlayQueryController> CreateLensQueryController(
       lens::LensOverlayFullImageResponseCallback full_image_callback,
       lens::LensOverlayUrlResponseCallback url_callback,
-      lens::LensOverlayInteractionResponseCallback interaction_data_callback,
+      lens::LensOverlaySuggestInputsCallback suggest_inputs_callback,
       lens::LensOverlayThumbnailCreatedCallback thumbnail_created_callback,
       variations::VariationsClient* variations_client,
       signin::IdentityManager* identity_manager,
@@ -141,10 +104,30 @@ class LensOverlayControllerFake : public LensOverlayController {
       bool use_dark_mode,
       lens::LensOverlayGen204Controller* gen204_controller) override {
     auto fake_query_controller =
-        std::make_unique<LensOverlayQueryControllerFake>(
-            full_image_callback, url_callback, interaction_data_callback,
+        std::make_unique<lens::TestLensOverlayQueryController>(
+            full_image_callback, url_callback, suggest_inputs_callback,
             thumbnail_created_callback, variations_client, identity_manager,
             profile, invocation_source, use_dark_mode, gen204_controller);
+
+    // Set up the fake responses for the query controller.
+    lens::LensOverlayServerClusterInfoResponse cluster_info_response;
+    cluster_info_response.set_server_session_id(kTestServerSessionId);
+    cluster_info_response.set_search_session_id(kTestSearchSessionId);
+    fake_query_controller->set_fake_cluster_info_response(
+        cluster_info_response);
+
+    lens::LensOverlayObjectsResponse objects_response;
+    objects_response.mutable_text()->CopyFrom(
+        CreateTestText({"This", "is", "test", "text."}));
+    objects_response.mutable_cluster_info()->set_server_session_id(
+        kTestServerSessionId);
+    objects_response.mutable_cluster_info()->set_search_session_id(
+        kTestSearchSessionId);
+    fake_query_controller->set_fake_objects_response(objects_response);
+
+    lens::LensOverlayInteractionResponse interaction_response;
+    interaction_response.set_encoded_response(kTestSuggestSignals);
+    fake_query_controller->set_fake_interaction_response(interaction_response);
     return fake_query_controller;
   }
 };
@@ -182,8 +165,10 @@ class LensOverlayControllerCUJTest : public InteractiveFeaturePromoTest {
 
   void SetUp() override {
     feature_list_.InitWithFeatures(
-        {lens::features::kLensOverlay, media::kContextMenuSearchForVideoFrame},
-        {});
+        {lens::features::kLensOverlay,
+         lens::features::kLensOverlayTranslateButton,
+         media::kContextMenuSearchForVideoFrame},
+        {lens::features::kLensOverlayContextualSearchbox});
     ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
     InteractiveFeaturePromoTest::SetUp();
   }
@@ -506,9 +491,10 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerCUJTest,
 //  (2) User opens lens overlay.
 //  (3) User makes a selection that opens the results side panel.
 //  (4) User presses the escape key to close lens overlay.
-// TODO(crbug.com/340343342): Reenable on Windows, Mac, and Linux Tests (dbg).
+// TODO(crbug.com/340343342): Reenable on Windows, Mac, and Linux+ChromeOS Tests
+// (dbg).
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || defined(MEMORY_SANITIZER) || \
-    (BUILDFLAG(IS_LINUX) && !defined(NDEBUG))
+    ((BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)) && !defined(NDEBUG))
 #define MAYBE_EscapeKeyCloseWithResultsPanel \
   DISABLED_EscapeKeyCloseWithResultsPanel
 #else
@@ -833,6 +819,64 @@ IN_PROC_BROWSER_TEST_F(LensOverlayControllerPromoTest, MAYBE_ShowsPromo) {
       // A second IPH should appear showing where the item was pinned.
       WaitForPromo(
           feature_engagement::kIPHSidePanelLensOverlayPinnableFollowupFeature));
+}
+
+class LensOverlayControllerTranslatePromoTest
+    : public LensOverlayControllerCUJTest {
+ public:
+  LensOverlayControllerTranslatePromoTest()
+      : LensOverlayControllerCUJTest(
+            feature_engagement::kIPHLensOverlayTranslateButtonFeature) {}
+  ~LensOverlayControllerTranslatePromoTest() override = default;
+};
+
+// TODO(crbug.com/355224013): Disabled on mac because the mac interaction test
+// util implementation does not support setting the input (mouse / keyboard)
+// type for a context menu item selection.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_ShowsTranslatePromo DISABLED_ShowsTranslatePromo
+#else
+#define MAYBE_ShowsTranslatePromo ShowsTranslatePromo
+#endif
+// This tests the following promo flow:
+//  (1) User opens the Lens Overlay.
+//  (2) Promo shows. After, user clicks the translate button.
+//  (3) Promo hides.
+IN_PROC_BROWSER_TEST_F(LensOverlayControllerTranslatePromoTest,
+                       MAYBE_ShowsTranslatePromo) {
+  WaitForTemplateURLServiceToLoad();
+  DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kOverlayId);
+
+  const DeepQuery kPathToTranslateButton{
+      "lens-overlay-app",
+      "#translateButton",
+      "#translateEnableButton",
+  };
+  RunTestSequence(
+      OpenLensOverlay(),
+
+      // The overlay controller is an independent floating widget
+      // associated with a tab rather than a browser window, so by
+      // convention gets its own element context.
+      InAnyContext(Steps(
+          InstrumentNonTabWebView(kOverlayId,
+                                  LensOverlayController::kOverlayId),
+          WaitForWebContentsReady(
+              kOverlayId, GURL(chrome::kChromeUILensOverlayUntrustedURL)))),
+
+      // Wait for the webview to finish loading to prevent re-entrancy.
+      InSameContext(Steps(WaitForShow(LensOverlayController::kOverlayId),
+                          WaitForScreenshotRendered(kOverlayId),
+                          EnsurePresent(kOverlayId, kPathToTranslateButton))),
+
+      // Wait for the initial translate promo help bubble.
+      WaitForPromo(feature_engagement::kIPHLensOverlayTranslateButtonFeature),
+
+      // Click the translate button element.
+      ClickElement(kOverlayId, kPathToTranslateButton),
+
+      WaitForHide(
+          user_education::HelpBubbleView::kHelpBubbleElementIdForTesting));
 }
 
 }  // namespace

@@ -2,18 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../ui/components/icon_button/icon_button.js';
+import './Dialog.js';
+
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
-import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
+import type * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import {
-  Dialog as DialogElement,
-  type DialogHorizontalAlignment,
-  type DialogVerticalPosition,
-} from './Dialog.js';
+import type {Dialog as DialogElement, DialogHorizontalAlignment, DialogVerticalPosition} from './Dialog.js';
 import iconDialogStyles from './iconDialog.css.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -52,7 +53,6 @@ export interface IconDialogData {
 // This class provides a shorthand for a typical use case of Dialog,
 // i.e. Dialog on an icon.
 export class IconDialog extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-icon-dialog`;
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #renderBound = this.#render.bind(this);
 
@@ -101,36 +101,36 @@ export class IconDialog extends HTMLElement {
     if (this.#data.closeButton) {
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
-      maybeCloseButton = LitHtml.html`
+      maybeCloseButton = html`
         <div id='close-button-container'>
           <div id='close-button-right-aligner'>
-            <${IconButton.Icon.Icon.litTagName}
+            <devtools-icon
               @click=${this.#closeDialog}
               .data=${{
                 iconName: 'cross',
                 color: 'var(--icon-default-hover)',
                 width: '16px',
                 height: '16px',
-              } as IconButton.Icon.IconWithName}
+              }}
               jslog=${VisualLogging.close().track({click: true})}
               title=${i18nString(UIStrings.close)}
-            ></${IconButton.Icon.Icon.litTagName}>
+            ></devtools-icon>
           </div>
         </div>
       `;
-      // clang-format on
+                // clang-format on
     }
 
     // clang-format off
-    LitHtml.render(LitHtml.html`
-      <${IconButton.Icon.Icon.litTagName}
+    LitHtml.render(html`
+      <devtools-icon
         @click=${this.#showDialog}
         on-render=${ComponentHelpers.Directives.nodeRenderedCallback(node => {
           this.#icon = node as IconButton.Icon.Icon;
         })}
-        .data=${this.#data.iconData as IconButton.Icon.IconWithName}
-      ></${IconButton.Icon.Icon.litTagName}>
-      <${DialogElement.litTagName}
+        .data=${this.#data.iconData}
+      ></devtools-icon>
+      <devtools-dialog
         @clickoutsidedialog=${this.#closeDialog}
         .showConnector=${true}
         .origin=${() => {
@@ -151,7 +151,7 @@ export class IconDialog extends HTMLElement {
         <div id='slot-container'>
           <slot></slot>
         </div>
-      </${DialogElement.litTagName}>
+      </devtools-dialog>
     `, this.#shadow, {host: this});
     // clang-format on
   }

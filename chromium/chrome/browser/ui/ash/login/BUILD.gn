@@ -132,6 +132,7 @@ static_library("login") {
     "//chrome/common:constants",
     "//chrome/common:non_code_constants",
     "//chromeos/ash/components/attestation",
+    "//chromeos/ash/components/audio/public/cpp/sounds",
     "//chromeos/ash/components/browser_context_helper",
     "//chromeos/ash/components/dbus/userdataauth",
     "//chromeos/ash/components/geolocation",
@@ -162,7 +163,6 @@ static_library("login") {
     "//extensions/common:mojom",
     "//google_apis",
     "//ipc:message_support",
-    "//services/audio/public/cpp",
     "//third_party/blink/public/common:headers",
     "//ui/accessibility:ax_base",
     "//ui/aura",
@@ -200,10 +200,6 @@ static_library("test_support") {
     "mock_login_display_host.h",
     "mock_signin_ui.cc",
     "mock_signin_ui.h",
-    "test_login_screen.cc",
-    "test_login_screen.h",
-    "test_login_screen_model.cc",
-    "test_login_screen_model.h",
   ]
 
   public_deps = [
@@ -256,6 +252,7 @@ source_set("browser_tests") {
     "//chrome/browser/ash/policy/core:test_support",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/ui",
+    "//chrome/browser/ui/login",
     "//chrome/browser/ui/webui/ash/os_feedback_dialog",
     "//chrome/browser/ui/webui/ash/system_web_dialog",
     "//chrome/common:constants",

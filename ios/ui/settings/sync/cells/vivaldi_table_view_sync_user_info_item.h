@@ -7,6 +7,10 @@
 
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_header_footer_item.h"
 
+@protocol VivaldiTableViewSyncUserInfoViewDelegate <NSObject>
+- (void)didTapSessionEditButtonWithCurrentSession:(NSString*)sessionName;
+@end
+
 @interface VivaldiTableViewSyncUserInfoItem : TableViewHeaderFooterItem
 @property(nonatomic, copy) NSString* userName;
 @property(nonatomic, copy) NSString* sessionName;
@@ -19,6 +23,9 @@
 
 @property(nonatomic, readonly, strong) UILabel* userNameLabel;
 @property(nonatomic, readonly, strong) UILabel* sessionNameLabel;
+
+@property (nonatomic, weak)
+    id<VivaldiTableViewSyncUserInfoViewDelegate> delegate;
 
 - (void)setUserAvatar:(UIImage*)image;
 - (void)setBadgeImage:(UIImage*)badgeImage;

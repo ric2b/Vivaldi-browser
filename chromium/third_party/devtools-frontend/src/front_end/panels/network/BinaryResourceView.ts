@@ -6,6 +6,7 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
+import type * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as SourceFrame from '../../ui/legacy/components/source_frame/source_frame.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
@@ -70,12 +71,12 @@ export class BinaryResourceView extends UI.Widget.VBox {
   private lastView: UI.Widget.Widget|null;
 
   constructor(
-      base64content: string, contentUrl: Platform.DevToolsPath.UrlString,
+      content: TextUtils.StreamingContentData.StreamingContentData, contentUrl: Platform.DevToolsPath.UrlString,
       resourceType: Common.ResourceType.ResourceType) {
     super();
 
     this.binaryResourceViewFactory =
-        new SourceFrame.BinaryResourceViewFactory.BinaryResourceViewFactory(base64content, contentUrl, resourceType);
+        new SourceFrame.BinaryResourceViewFactory.BinaryResourceViewFactory(content, contentUrl, resourceType);
 
     this.toolbar = new UI.Toolbar.Toolbar('binary-view-toolbar', this.element);
 
@@ -83,7 +84,7 @@ export class BinaryResourceView extends UI.Widget.VBox {
       new BinaryViewObject(
           'base64', i18n.i18n.lockedString('Base64'), i18nString(UIStrings.copiedAsBase),
           this.binaryResourceViewFactory.createBase64View.bind(this.binaryResourceViewFactory),
-          () => Promise.resolve(this.binaryResourceViewFactory.base64())),
+          this.binaryResourceViewFactory.base64.bind(this.binaryResourceViewFactory)),
       new BinaryViewObject(
           'hex', i18nString(UIStrings.hexViewer), i18nString(UIStrings.copiedAsHex),
           this.binaryResourceViewFactory.createHexView.bind(this.binaryResourceViewFactory),
@@ -104,7 +105,7 @@ export class BinaryResourceView extends UI.Widget.VBox {
 
     const copyButton = new UI.Toolbar.ToolbarButton(i18nString(UIStrings.copyToClipboard), 'copy');
     copyButton.addEventListener(UI.Toolbar.ToolbarButton.Events.CLICK, _event => {
-      void this.copySelectedViewToClipboard();
+      this.copySelectedViewToClipboard();
     }, this);
     this.toolbar.appendToolbarItem(copyButton);
 
@@ -128,12 +129,12 @@ export class BinaryResourceView extends UI.Widget.VBox {
     return binaryViewObject || null;
   }
 
-  private async copySelectedViewToClipboard(): Promise<void> {
+  private copySelectedViewToClipboard(): void {
     const viewObject = this.getCurrentViewObject();
     if (!viewObject) {
       return;
     }
-    Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(await viewObject.content());
+    Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(viewObject.content());
     this.copiedText.setText(viewObject.copiedMessage);
     this.copiedText.element.classList.remove('fadeout');
     function addFadeoutClass(this: BinaryResourceView): void {
@@ -207,13 +208,12 @@ export class BinaryViewObject {
   type: string;
   label: string;
   copiedMessage: string;
-  content: () => Promise<string>;
+  content: () => string;
   private createViewFn: () => UI.Widget.Widget;
   private view: UI.Widget.Widget|null;
 
   constructor(
-      type: string, label: string, copiedMessage: string, createViewFn: () => UI.Widget.Widget,
-      content: () => Promise<string>) {
+      type: string, label: string, copiedMessage: string, createViewFn: () => UI.Widget.Widget, content: () => string) {
     this.type = type;
     this.label = label;
     this.copiedMessage = copiedMessage;

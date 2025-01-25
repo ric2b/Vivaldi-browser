@@ -23,29 +23,45 @@ namespace blink {
 
 LayoutFlexibleBox::LayoutFlexibleBox(Element* element) : LayoutBlock(element) {}
 
-bool LayoutFlexibleBox::HasTopOverflow() const {
-  const auto& style = StyleRef();
-  bool is_wrap_reverse = StyleRef().FlexWrap() == EFlexWrap::kWrapReverse;
-  if (style.IsHorizontalWritingMode()) {
-    return style.ResolvedIsColumnReverseFlexDirection() ||
-           (style.ResolvedIsRowFlexDirection() && is_wrap_reverse);
+namespace {
+
+LogicalToPhysical<bool> GetOverflowConverter(const ComputedStyle& style) {
+  const bool is_wrap_reverse = style.FlexWrap() == EFlexWrap::kWrapReverse;
+  const bool is_direction_reverse = style.ResolvedIsReverseFlexDirection();
+
+  bool inline_start = false;
+  bool inline_end = true;
+  bool block_start = false;
+  bool block_end = true;
+
+  if (style.ResolvedIsColumnFlexDirection()) {
+    if (is_direction_reverse) {
+      std::swap(block_start, block_end);
+    }
+    if (is_wrap_reverse) {
+      std::swap(inline_start, inline_end);
+    }
+  } else {
+    if (is_direction_reverse) {
+      std::swap(inline_start, inline_end);
+    }
+    if (is_wrap_reverse) {
+      std::swap(block_start, block_end);
+    }
   }
-  return style.IsLeftToRightDirection() ==
-         (style.ResolvedIsRowReverseFlexDirection() ||
-          (style.ResolvedIsColumnFlexDirection() && is_wrap_reverse));
+
+  return LogicalToPhysical(style.GetWritingDirection(), inline_start,
+                           inline_end, block_start, block_end);
+}
+
+}  // namespace
+
+bool LayoutFlexibleBox::HasTopOverflow() const {
+  return GetOverflowConverter(StyleRef()).Top();
 }
 
 bool LayoutFlexibleBox::HasLeftOverflow() const {
-  const auto& style = StyleRef();
-  bool is_wrap_reverse = StyleRef().FlexWrap() == EFlexWrap::kWrapReverse;
-  if (style.IsHorizontalWritingMode()) {
-    return style.IsLeftToRightDirection() ==
-           (style.ResolvedIsRowReverseFlexDirection() ||
-            (style.ResolvedIsColumnFlexDirection() && is_wrap_reverse));
-  }
-  return (style.GetWritingMode() == WritingMode::kVerticalLr) ==
-         (style.ResolvedIsColumnReverseFlexDirection() ||
-          (style.ResolvedIsRowFlexDirection() && is_wrap_reverse));
+  return GetOverflowConverter(StyleRef()).Left();
 }
 
 namespace {
@@ -72,7 +88,7 @@ bool LayoutFlexibleBox::IsChildAllowed(LayoutObject* object,
   const auto* select = DynamicTo<HTMLSelectElement>(GetNode());
   if (select && select->UsesMenuList()) [[unlikely]] {
     if (select->IsAppearanceBaseButton()) {
-      CHECK(RuntimeEnabledFeatures::StylableSelectEnabled());
+      CHECK(RuntimeEnabledFeatures::CustomizableSelectEnabled());
       if (IsA<HTMLOptionElement>(object->GetNode()) ||
           IsA<HTMLOptGroupElement>(object->GetNode()) ||
           IsA<HTMLHRElement>(object->GetNode())) {
@@ -84,7 +100,9 @@ bool LayoutFlexibleBox::IsChildAllowed(LayoutObject* object,
       // However, the InnerElement is only used for rendering in
       // appearance:auto, so don't include that one.
       Node* child = object->GetNode();
-      if (child == &select->InnerElementForAppearanceAuto()) {
+      if (child == &select->InnerElement() && select->SlottedButton()) {
+        // If the author doesn't provide a button, then we still want to display
+        // the InnerElement.
         return false;
       }
       if (auto* popover = select->PopoverForAppearanceBase()) {
@@ -100,7 +118,7 @@ bool LayoutFlexibleBox::IsChildAllowed(LayoutObject* object,
       // For a size=1 appearance:auto <select>, we only render the active option
       // label through the InnerElement. We do not allow adding layout objects
       // for options and optgroups.
-      return object->GetNode() == &select->InnerElementForAppearanceAuto();
+      return object->GetNode() == &select->InnerElement();
     }
   }
   return LayoutBlock::IsChildAllowed(object, style);

@@ -128,19 +128,18 @@ ContentInjectionHandlerImpl::ContentInjectionHandlerImpl(
 
   // Register callback for configuration changes in the main profile
   if (config_provider_) {
+    // Apply for the existing configuration
+    OnNewConfigurationCreated(
+         config_provider_.get(), config_provider_->GetWebViewConfiguration());
+
     main_config_subscription_ =
         config_provider_->RegisterConfigurationCreatedCallback(
             base::BindRepeating(
                &ContentInjectionHandlerImpl::OnNewConfigurationCreated,
                    weak_ptr_factory_.GetWeakPtr(), config_provider_.get()));
-    // Apply for the existing configuration
-    OnNewConfigurationCreated(
-         config_provider_.get(), config_provider_->GetWebViewConfiguration());
   }
 
-  if (resources_->loaded())
-    InjectUserScripts();
-  else
+  if (!resources_->loaded())
     resources->AddObserver(this);
 }
 
@@ -149,6 +148,7 @@ void ContentInjectionHandlerImpl::SetIncognitoBrowserState(
   if (incognito_config_provider_) {
     incognito_config_subscription_ = base::CallbackListSubscription();
     incognito_config_provider_.reset();
+    incognito_user_content_controller_ = nullptr;
   }
 
   if (!browser_state) {
@@ -159,16 +159,17 @@ void ContentInjectionHandlerImpl::SetIncognitoBrowserState(
       web::WKWebViewConfigurationProvider::FromBrowserState(browser_state)
           .AsWeakPtr();
   if (incognito_config_provider_) {
+    // Apply for the existing configuration
+    OnNewConfigurationCreated(
+        incognito_config_provider_.get(),
+        incognito_config_provider_->GetWebViewConfiguration());
+
     incognito_config_subscription_ =
         incognito_config_provider_->RegisterConfigurationCreatedCallback(
             base::BindRepeating(
                &ContentInjectionHandlerImpl::OnNewConfigurationCreated,
                    weak_ptr_factory_.GetWeakPtr(),
                    incognito_config_provider_.get()));
-    // Apply for the existing configuration
-    OnNewConfigurationCreated(
-        incognito_config_provider_.get(),
-        incognito_config_provider_->GetWebViewConfiguration());
   }
 }
 

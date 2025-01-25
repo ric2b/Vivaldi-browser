@@ -19,7 +19,7 @@ void xnn_f32_vminc_ukernel__wasm_u4(
     const float* input_a,
     const float* input_b,
     float* output,
-    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -40,7 +40,6 @@ void xnn_f32_vminc_ukernel__wasm_u4(
     float vacc1 = __builtin_wasm_min_f32(va1, vb);
     float vacc2 = __builtin_wasm_min_f32(va2, vb);
     float vacc3 = __builtin_wasm_min_f32(va3, vb);
-
 
 
     output[0] = vacc0;

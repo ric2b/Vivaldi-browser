@@ -21,8 +21,11 @@
 #include "quiche/quic/core/crypto/null_encrypter.h"
 #include "quiche/quic/core/crypto/transport_parameters.h"
 #include "quiche/quic/core/frames/quic_max_streams_frame.h"
+#include "quiche/quic/core/frames/quic_reset_stream_at_frame.h"
+#include "quiche/quic/core/quic_constants.h"
 #include "quiche/quic/core/quic_crypto_stream.h"
 #include "quiche/quic/core/quic_data_writer.h"
+#include "quiche/quic/core/quic_error_codes.h"
 #include "quiche/quic/core/quic_packets.h"
 #include "quiche/quic/core/quic_stream.h"
 #include "quiche/quic/core/quic_types.h"
@@ -1609,6 +1612,23 @@ TEST_P(QuicSessionTestServer, OnRstStreamInvalidStreamId) {
   session_.OnRstStream(rst1);
 }
 
+TEST_P(QuicSessionTestServer, OnResetStreamAtInvalidStreamId) {
+  if (connection_->version().handshake_protocol != PROTOCOL_TLS1_3) {
+    // This test requires IETF QUIC.
+    return;
+  }
+  // Send two bytes of payload.
+  QuicResetStreamAtFrame rst1(
+      kInvalidControlFrameId,
+      QuicUtils::GetInvalidStreamId(connection_->transport_version()),
+      QUIC_ERROR_PROCESSING_STREAM, 10, 0);
+  EXPECT_CALL(*connection_,
+              CloseConnection(
+                  QUIC_INVALID_STREAM_ID, "Received data for an invalid stream",
+                  ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET));
+  session_.OnResetStreamAt(rst1);
+}
+
 TEST_P(QuicSessionTestServer, HandshakeUnblocksFlowControlBlockedStream) {
   if (connection_->version().handshake_protocol == PROTOCOL_TLS1_3) {
     // This test requires Google QUIC crypto because it assumes streams start
@@ -3045,6 +3065,44 @@ TEST_P(QuicSessionTestServer, OnStopSendingForWriteClosedStream) {
   QuicStopSendingFrame frame(1, stream_id, QUIC_STREAM_CANCELLED);
   EXPECT_CALL(*connection_, CloseConnection(_, _, _)).Times(0);
   session_.OnStopSendingFrame(frame);
+}
+
+// Regression test for b/368421586.
+TEST_P(QuicSessionTestServer, OnStopSendingForZombieStreams) {
+  if (!VersionHasIetfQuicFrames(transport_version())) {
+    return;
+  }
+  CompleteHandshake();
+  session_.set_writev_consumes_all_data(true);
+
+  TestStream* stream = session_.CreateOutgoingBidirectionalStream();
+  std::string body(100, '.');
+  QuicStreamPeer::CloseReadSide(stream);
+  stream->WriteOrBufferData(body, true, nullptr);
+  EXPECT_TRUE(stream->IsWaitingForAcks());
+  // Verify that the stream is a zombie.
+  EXPECT_TRUE(stream->IsZombie());
+  ASSERT_EQ(0u, session_.closed_streams()->size());
+
+  QuicStopSendingFrame frame(1, stream->id(), QUIC_STREAM_CANCELLED);
+  EXPECT_CALL(*connection_, CloseConnection(_, _, _)).Times(0);
+  if (GetQuicReloadableFlag(quic_deliver_stop_sending_to_zombie_streams)) {
+    EXPECT_CALL(*connection_, SendControlFrame(_)).Times(1);
+    EXPECT_CALL(*connection_, OnStreamReset(_, _)).Times(1);
+  } else {
+    EXPECT_CALL(*connection_, SendControlFrame(_)).Times(0);
+    EXPECT_CALL(*connection_, OnStreamReset(_, _)).Times(0);
+  }
+  session_.OnStopSendingFrame(frame);
+  if (GetQuicReloadableFlag(quic_deliver_stop_sending_to_zombie_streams)) {
+    // STOP_SENDING should cause the stream to be closed.
+    EXPECT_FALSE(stream->IsZombie());
+    EXPECT_EQ(1u, session_.closed_streams()->size());
+  } else {
+    // STOP_SENDING is not delivered to zombie streams.
+    EXPECT_TRUE(stream->IsZombie());
+    EXPECT_EQ(0u, session_.closed_streams()->size());
+  }
 }
 
 // If stream is closed, return true and do not close the connection.

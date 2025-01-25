@@ -32,15 +32,15 @@
 
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
-import {type SearchableView} from './SearchableView.js';
+import type {SearchableView} from './SearchableView.js';
 import {SplitWidget} from './SplitWidget.js';
 import {VBox} from './Widget.js';
 
 export class Panel extends VBox {
   protected panelName: string;
 
-  constructor(name: string) {
-    super();
+  constructor(name: string, useShadowDom?: boolean) {
+    super(useShadowDom);
 
     this.element.setAttribute('jslog', `${VisualLogging.panel().context(name).track({resize: true})}`);
     this.element.classList.add('panel');

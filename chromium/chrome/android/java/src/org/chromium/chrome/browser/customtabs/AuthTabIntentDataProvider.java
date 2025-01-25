@@ -23,6 +23,8 @@ import org.chromium.chrome.browser.browserservices.intents.ColorProvider;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
+import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.url.GURL;
 
 /**
  * A model class that parses the incoming intent for Auth Tab specific data.
@@ -38,6 +40,9 @@ public class AuthTabIntentDataProvider extends BrowserServicesIntentDataProvider
     private final @NonNull ColorProvider mColorProvider;
     private final @NonNull Drawable mCloseButtonIcon;
     private final @Nullable String mRedirectScheme;
+    private final @Nullable String mRedirectHost;
+    private final @Nullable String mRedirectPath;
+    private final @CustomTabProfileType int mCustomTabMode;
 
     @Nullable private String mUrlToLoad;
 
@@ -65,6 +70,36 @@ public class AuthTabIntentDataProvider extends BrowserServicesIntentDataProvider
         // might want to disallow more.
         mRedirectScheme =
                 IntentUtils.safeGetStringExtra(intent, AuthTabIntent.EXTRA_REDIRECT_SCHEME);
+        boolean httpsEnabled = ChromeFeatureList.sCctAuthTabEnableHttpsRedirects.isEnabled();
+        String host =
+                httpsEnabled
+                        ? IntentUtils.safeGetStringExtra(
+                                intent, AuthTabIntent.EXTRA_HTTPS_REDIRECT_HOST)
+                        : null;
+        String path =
+                httpsEnabled
+                        ? IntentUtils.safeGetStringExtra(
+                                intent, AuthTabIntent.EXTRA_HTTPS_REDIRECT_PATH)
+                        : null;
+        GURL redirectUrl = new GURL(UrlConstants.HTTPS_URL_PREFIX + host + path);
+        mRedirectHost = redirectUrl.getHost();
+        mRedirectPath = redirectUrl.getPath();
+        mCustomTabMode =
+                isEphemeralTab(intent)
+                        ? CustomTabProfileType.EPHEMERAL
+                        : CustomTabProfileType.REGULAR;
+
+        logFeatureUsage();
+    }
+
+    @Override
+    public String getAuthRedirectHost() {
+        return mRedirectHost;
+    }
+
+    @Override
+    public String getAuthRedirectPath() {
+        return mRedirectPath;
     }
 
     @Override
@@ -128,8 +163,7 @@ public class AuthTabIntentDataProvider extends BrowserServicesIntentDataProvider
 
     @Override
     public @CustomTabProfileType int getCustomTabMode() {
-        // TODO(crbug.com/359315737): Handle properly once the relevant code lands in AndroidX.
-        return CustomTabProfileType.REGULAR;
+        return mCustomTabMode;
     }
 
     @Override
@@ -140,5 +174,36 @@ public class AuthTabIntentDataProvider extends BrowserServicesIntentDataProvider
     @Override
     public String getAuthRedirectScheme() {
         return mRedirectScheme;
+    }
+
+    /**
+     * Logs the usage of Auth Tab features to a large enum histogram in order to track usage by
+     * apps.
+     */
+    private void logFeatureUsage() {
+        if (!CustomTabsFeatureUsage.isEnabled()) return;
+        CustomTabsFeatureUsage featureUsage = new CustomTabsFeatureUsage();
+
+        // Ordering: Log all the features ordered by enum, when they apply.
+        if (mCustomTabMode == CustomTabProfileType.EPHEMERAL) {
+            featureUsage.log(
+                    CustomTabsFeatureUsage.CustomTabsFeature.EXTRA_ENABLE_EPHEMERAL_BROWSING);
+        }
+        featureUsage.log(CustomTabsFeatureUsage.CustomTabsFeature.EXTRA_LAUNCH_AUTH_TAB);
+        if (mRedirectScheme != null) {
+            featureUsage.log(CustomTabsFeatureUsage.CustomTabsFeature.EXTRA_REDIRECT_SCHEME);
+        }
+        if (mRedirectHost != null) {
+            featureUsage.log(CustomTabsFeatureUsage.CustomTabsFeature.EXTRA_HTTPS_REDIRECT_HOST);
+        }
+        if (mRedirectPath != null) {
+            featureUsage.log(CustomTabsFeatureUsage.CustomTabsFeature.EXTRA_HTTPS_REDIRECT_PATH);
+        }
+    }
+
+    private static boolean isEphemeralTab(Intent intent) {
+        if (!ChromeFeatureList.sCctEphemeralMode.isEnabled()) return false;
+        return IntentUtils.safeGetBooleanExtra(
+                intent, CustomTabsIntent.EXTRA_ENABLE_EPHEMERAL_BROWSING, false);
     }
 }

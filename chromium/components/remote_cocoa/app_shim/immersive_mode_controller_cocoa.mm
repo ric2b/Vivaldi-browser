@@ -10,8 +10,10 @@
 #include "base/auto_reset.h"
 #include "base/check.h"
 #include "base/containers/contains.h"
+#include "components/remote_cocoa/app_shim/features.h"
 #import "components/remote_cocoa/app_shim/immersive_mode_delegate_mac.h"
 #import "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace {
@@ -151,7 +153,7 @@ bool IsNSToolbarFullScreenWindow(NSWindow* window) {
 
 ImmersiveModeControllerCocoa::ImmersiveModeControllerCocoa(
     NativeWidgetMacNSWindow* browser_window,
-    NativeWidgetMacNSWindow* overlay_window)
+    NativeWidgetMacOverlayNSWindow* overlay_window)
     : weak_ptr_factory_(this) {
   browser_window_ = browser_window;
   overlay_window_ = overlay_window;
@@ -195,6 +197,10 @@ ImmersiveModeControllerCocoa::ImmersiveModeControllerCocoa(
   // Use a placeholder view since the content has been moved to the
   // ImmersiveModeTitlebarViewController.
   overlay_window_.contentView = [[OpaqueView alloc] init];
+  if (base::FeatureList::IsEnabled(
+          remote_cocoa::features::kImmersiveFullscreenOverlayWindowDebug)) {
+    [overlay_window_ debugWithColor:NSColor.greenColor];
+  }
 
   // The overlay window will become a child of NSToolbarFullScreenWindow and sit
   // above it in the z-order. Allow mouse events that are not handled by the
@@ -218,6 +224,8 @@ ImmersiveModeControllerCocoa::ImmersiveModeControllerCocoa(
       NSColor.blackColor.CGColor;
   thin_titlebar_view_controller_.layoutAttribute = NSLayoutAttributeBottom;
   thin_titlebar_view_controller_.fullScreenMinHeight = kThinControllerHeight;
+
+  display_observation_.Observe(display::Screen::GetScreen());
 }
 
 ImmersiveModeControllerCocoa::~ImmersiveModeControllerCocoa() {
@@ -389,6 +397,20 @@ void ImmersiveModeControllerCocoa::ForceToolbarVisibilityUpdate() {
   UpdateToolbarVisibility(std::exchange(last_used_style_, std::nullopt));
 }
 
+void ImmersiveModeControllerCocoa::OnPrimaryDisplayChanged() {
+  // During screen switching, the primary display (which contains the (0,0)
+  // origin) may change. However, NSScreen.screens.firstObject used for
+  // coordinate conversion may still refer to the old primary display. This can
+  // lead to incorrect cached bounds for the overlay widget.
+  // To address this, we force an update of the overlay's geometry to ensure it
+  // aligns with the new primary display.
+  // See https://crbug.com/365733574#comment28 for more details.
+  if (NativeWidgetNSWindowBridge* overlay_bridge =
+          NativeWidgetNSWindowBridge::GetFromNativeWindow(overlay_window_)) {
+    overlay_bridge->UpdateWindowGeometry();
+  }
+}
+
 void ImmersiveModeControllerCocoa::ObserveChildWindows(NSWindow* window) {
   // Watch the Widget for addition and removal of child Widgets.
   NativeWidgetMacNSWindow* widget_window =
@@ -415,7 +437,7 @@ bool ImmersiveModeControllerCocoa::ShouldObserveChildWindow(NSWindow* child) {
 NSWindow* ImmersiveModeControllerCocoa::browser_window() {
   return browser_window_;
 }
-NSWindow* ImmersiveModeControllerCocoa::overlay_window() {
+NativeWidgetMacOverlayNSWindow* ImmersiveModeControllerCocoa::overlay_window() {
   return overlay_window_;
 }
 BridgedContentView* ImmersiveModeControllerCocoa::overlay_content_view() {

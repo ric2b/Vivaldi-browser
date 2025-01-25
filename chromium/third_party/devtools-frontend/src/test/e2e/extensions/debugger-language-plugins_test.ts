@@ -4,7 +4,7 @@
 
 import {assert} from 'chai';
 
-import {type Chrome} from '../../../extension-api/ExtensionAPI.js';
+import type {Chrome} from '../../../extension-api/ExtensionAPI.js';
 import {expectError} from '../../conductor/events.js';
 import {
   $,
@@ -27,7 +27,6 @@ import {
   waitForMany,
   waitForNone,
 } from '../../shared/helper.js';
-
 import {
   CONSOLE_TAB_SELECTOR,
   focusConsolePrompt,
@@ -45,7 +44,6 @@ import {
   getValuesForScope,
   type LabelMapping,
   openFileInEditor,
-  openSourceCodeEditorForFile,
   openSourcesPanel,
   PAUSE_ON_UNCAUGHT_EXCEPTION_SELECTOR,
   RESUME_BUTTON,
@@ -82,6 +80,17 @@ function goToWasmResource(
   return goToResource(`extensions/wasm_module.html?${queryParams.join('&')}`);
 }
 
+// We need a dummy external DWARF file such that DevTools uses the mock extensions
+// for debugging the WebAssembly.
+async function addDummyExternalDWARFInfo(wasmFile: string) {
+  await openFileInEditor(wasmFile);
+  await click('aria/Code editor', {clickOptions: {button: 'right'}});
+  await click('aria/Add DWARF debug info…');
+  await waitFor('.add-source-map');
+  await typeText('dummy-external-file');
+  await pressKey('Enter');
+}
+
 // This testcase reaches into DevTools internals to install the extension plugin. At this point, there is no sensible
 // alternative, because loading a real extension is not supported in our test setup.
 describe('The Debugger Language Plugins', () => {
@@ -99,15 +108,19 @@ describe('The Debugger Language Plugins', () => {
         }
       }
 
-      RegisterExtension(new SingleFilePlugin(), 'Single File', {language: 'WebAssembly', symbol_types: ['None']});
+      RegisterExtension(
+          new SingleFilePlugin(), 'Single File', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     });
 
     await goToWasmResource('/test/e2e/resources/extensions/global_variable.wasm');
     await openSourcesPanel();
-    const capturedFileNames = await captureAddedSourceFiles(2, async () => {
+
+    const capturedFileNames = captureAddedSourceFiles(2, async () => {
       await target.evaluate('loadModule();');
     });
-    assert.deepEqual(capturedFileNames, [
+    await addDummyExternalDWARFInfo('global_variable.wasm');
+
+    assert.deepEqual(await capturedFileNames, [
       '/test/e2e/resources/extensions/global_variable.wasm',
       '/source_file.c',
     ]);
@@ -145,13 +158,14 @@ describe('The Debugger Language Plugins', () => {
         }
       }
       RegisterExtension(
-          new LocationMappingPlugin(), 'Location Mapping', {language: 'WebAssembly', symbol_types: ['None']});
+          new LocationMappingPlugin(), 'Location Mapping', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     }, locationLabels.getMappingsForPlugin());
 
     await openSourcesPanel();
     await click(PAUSE_ON_UNCAUGHT_EXCEPTION_SELECTOR);
 
     await goToWasmResource('unreachable.wasm', {runFunctionAfterLoad: 'Main', autoLoadModule: true});
+    await addDummyExternalDWARFInfo('unreachable.wasm');
     await waitFor('.paused-status');
 
     const pauseLocation = await locationLabels.checkLocationForLabel('PAUSED(unreachable)');
@@ -227,11 +241,12 @@ describe('The Debugger Language Plugins', () => {
       }
 
       RegisterExtension(
-          new LocationMappingPlugin(), 'Location Mapping', {language: 'WebAssembly', symbol_types: ['None']});
+          new LocationMappingPlugin(), 'Location Mapping', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     }, locationLabels.getMappingsForPlugin());
 
     await goToWasmResource('/test/e2e/resources/extensions/global_variable.wasm', {autoLoadModule: true});
     await openSourcesPanel();
+    await addDummyExternalDWARFInfo('global_variable.wasm');
     await openFileInEditor('global_variable.wat');
 
     const toolbarLink = await waitFor('.toolbar-item .devtools-link');
@@ -291,12 +306,13 @@ describe('The Debugger Language Plugins', () => {
       }
 
       RegisterExtension(
-          new VariableListingPlugin(), 'Location Mapping', {language: 'WebAssembly', symbol_types: ['None']});
+          new VariableListingPlugin(), 'Location Mapping', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     });
 
     await openSourcesPanel();
     await click(PAUSE_ON_UNCAUGHT_EXCEPTION_SELECTOR);
     await goToResource('sources/wasm/unreachable.html');
+    await addDummyExternalDWARFInfo('unreachable.wasm');
     await waitFor(RESUME_BUTTON);
 
     const locals = await getValuesForScope('LOCAL', 0, 1);
@@ -366,16 +382,21 @@ describe('The Debugger Language Plugins', () => {
         }
       }
 
-      RegisterExtension(new InliningPlugin(), 'Inlining', {language: 'WebAssembly', symbol_types: ['None']});
+      RegisterExtension(new InliningPlugin(), 'Inlining', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     });
 
     await openSourcesPanel();
     await click(PAUSE_ON_UNCAUGHT_EXCEPTION_SELECTOR);
     await goToResource('sources/wasm/unreachable.html');
     await waitFor(RESUME_BUTTON);
+    await addDummyExternalDWARFInfo('unreachable.wasm');
 
     // Call stack shows inline function names and source locations.
-    const funcNames = await getCallFrameNames();
+    let funcNames: string[] = [];
+    await waitForFunction(async () => {
+      funcNames = await getCallFrameNames();
+      return funcNames.length === 6;
+    });
     assert.deepEqual(funcNames, ['inner_inline_func', 'outer_inline_func', 'Main', 'go', 'await in go', '(anonymous)']);
     const sourceLocations = await getCallFrameLocations();
     assert.deepEqual(
@@ -458,12 +479,13 @@ describe('The Debugger Language Plugins', () => {
         }
       }
 
-      RegisterExtension(new InliningPlugin(), 'Inlining', {language: 'WebAssembly', symbol_types: ['None']});
+      RegisterExtension(new InliningPlugin(), 'Inlining', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     });
 
     await openSourcesPanel();
     await click(PAUSE_ON_UNCAUGHT_EXCEPTION_SELECTOR);
     await goToResource('sources/wasm/unreachable.html');
+    await addDummyExternalDWARFInfo('unreachable.wasm');
     await waitFor(RESUME_BUTTON);
 
     // Call stack shows inline function names and source locations.
@@ -491,13 +513,15 @@ describe('The Debugger Language Plugins', () => {
         }
       }
 
-      RegisterExtension(new MissingInfoPlugin(), 'MissingInfo', {language: 'WebAssembly', symbol_types: ['None']});
+      RegisterExtension(
+          new MissingInfoPlugin(), 'MissingInfo', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     });
 
     await openSourcesPanel();
     await click(PAUSE_ON_UNCAUGHT_EXCEPTION_SELECTOR);
     await goToResource('sources/wasm/unreachable.html');
     await waitFor(RESUME_BUTTON);
+    await addDummyExternalDWARFInfo('unreachable.wasm');
 
     const incompleteMessage = `Failed to load any debug info for ${getResourcesPath()}/sources/wasm/unreachable.wasm.`;
     const infoBar = await waitFor(`.infobar-error[aria-label="${incompleteMessage}"`);
@@ -561,12 +585,14 @@ describe('The Debugger Language Plugins', () => {
         }
       }
 
-      RegisterExtension(new MissingInfoPlugin(), 'MissingInfo', {language: 'WebAssembly', symbol_types: ['None']});
+      RegisterExtension(
+          new MissingInfoPlugin(), 'MissingInfo', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     });
 
     await openSourcesPanel();
     await click(PAUSE_ON_UNCAUGHT_EXCEPTION_SELECTOR);
     await goToResource('sources/wasm/unreachable.html');
+    await addDummyExternalDWARFInfo('unreachable.wasm');
     await waitFor(RESUME_BUTTON);
 
     const incompleteMessage = 'The debug information for function $Main is incomplete';
@@ -601,12 +627,14 @@ describe('The Debugger Language Plugins', () => {
         }
       }
 
-      RegisterExtension(new MissingInfoPlugin(), 'MissingInfo', {language: 'WebAssembly', symbol_types: ['None']});
+      RegisterExtension(
+          new MissingInfoPlugin(), 'MissingInfo', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     });
 
     await openSourcesPanel();
     await click(PAUSE_ON_UNCAUGHT_EXCEPTION_SELECTOR);
     await goToResource('sources/wasm/unreachable.html');
+    await addDummyExternalDWARFInfo('unreachable.wasm');
     await waitFor(RESUME_BUTTON);
 
     const incompleteMessage = 'The debug information for function $Main is incomplete';
@@ -743,12 +771,13 @@ describe('The Debugger Language Plugins', () => {
         }
       }
 
-      RegisterExtension(new EvalPlugin(), 'Evaluation', {language: 'WebAssembly', symbol_types: ['None']});
+      RegisterExtension(new EvalPlugin(), 'Evaluation', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     });
 
     await openSourcesPanel();
     await click(PAUSE_ON_UNCAUGHT_EXCEPTION_SELECTOR);
     await goToResource('sources/wasm/unreachable.html');
+    await addDummyExternalDWARFInfo('unreachable.wasm');
     await waitFor(RESUME_BUTTON);
 
     const locals = await getValuesForScope('LOCAL', 3, 5);
@@ -820,13 +849,15 @@ describe('The Debugger Language Plugins', () => {
       }
 
       RegisterExtension(
-          new VariableListingPlugin(), 'Location Mapping', {language: 'WebAssembly', symbol_types: ['None']});
+          new VariableListingPlugin(), 'Location Mapping', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     });
 
     await openSourcesPanel();
     await click(PAUSE_ON_UNCAUGHT_EXCEPTION_SELECTOR);
-    await openSourceCodeEditorForFile('unreachable.ll', 'wasm/unreachable.html');
+    await goToResource('sources/wasm/unreachable.html');
+    await addDummyExternalDWARFInfo('unreachable.wasm');
     await waitFor(RESUME_BUTTON);
+    await openFileInEditor('unreachable.ll');
 
     const pausedPosition = await waitForFunction(async () => {
       const element = await $('.cm-executionToken');
@@ -898,12 +929,13 @@ describe('The Debugger Language Plugins', () => {
       }
 
       RegisterExtension(
-          new FormattingErrorsPlugin(), 'Formatter Errors', {language: 'WebAssembly', symbol_types: ['None']});
+          new FormattingErrorsPlugin(), 'Formatter Errors', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     });
 
     await openSourcesPanel();
     await click(PAUSE_ON_UNCAUGHT_EXCEPTION_SELECTOR);
     await goToResource('sources/wasm/unreachable.html');
+    await addDummyExternalDWARFInfo('unreachable.wasm');
     await waitFor(RESUME_BUTTON);
     const locals = await getValuesForScope('LOCAL', 0, 1);
     assert.deepStrictEqual(locals, ['unreachable: undefined']);
@@ -974,11 +1006,13 @@ describe('The Debugger Language Plugins', () => {
         }
       }
 
-      RegisterExtension(new WasmDataExtension(), 'Wasm Data', {language: 'WebAssembly', symbol_types: ['None']});
+      RegisterExtension(
+          new WasmDataExtension(), 'Wasm Data', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     });
 
     await goToWasmResource('can_access_wasm_data.wasm', {autoLoadModule: true});
     await openSourcesPanel();
+    await addDummyExternalDWARFInfo('can_access_wasm_data.wasm');
 
     await target.evaluate(
         () => new Uint8Array((window.Module.instance.exports.memory as WebAssembly.Memory).buffer)
@@ -1114,6 +1148,7 @@ describe('The Debugger Language Plugins', () => {
 
     await goToWasmResource('stepping.wasm', {autoLoadModule: true});
     await openSourcesPanel();
+    await addDummyExternalDWARFInfo('stepping.wasm');
 
     // Do this after setting the breakpoint, otherwise the helper gets confused
     await locationLabels.setBreakpointInWasmAndRun('FIRST_PAUSE', 'window.Module.instance.exports.Main(16)');
@@ -1171,7 +1206,7 @@ describe('The Debugger Language Plugins', () => {
       }
 
       RegisterExtension(
-          new LocationMappingPlugin(), 'Location Mapping', {language: 'WebAssembly', symbol_types: ['None']});
+          new LocationMappingPlugin(), 'Location Mapping', {language: 'WebAssembly', symbol_types: ['ExternalDWARF']});
     }, locationLabels.getMappingsForPlugin());
 
     await waitFor('.paused-status');

@@ -474,6 +474,11 @@ class PasswordManagerClient {
   // pointer.
   virtual FirstCctPageLoadPasswordsUkmRecorder*
   GetFirstCctPageLoadUkmRecorder() = 0;
+
+  // Signals that a password form eligible for saving was submitted. Note that
+  // this gets called for form submissions that might not necessarily be
+  // successful logins.
+  virtual void PotentialSaveFormSubmitted() = 0;
 #endif
   // Gets the PasswordRequirementsService associated with the client. It is
   // valid that this method returns a nullptr if the PasswordRequirementsService
@@ -542,6 +547,7 @@ class PasswordManagerClient {
   // the selected `PasswordForm`.
   virtual void ShowCredentialsInAmbientBubble(
       std::vector<std::unique_ptr<password_manager::PasswordForm>> forms,
+      int credential_type_flags,
       CredentialsCallback callback);
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \

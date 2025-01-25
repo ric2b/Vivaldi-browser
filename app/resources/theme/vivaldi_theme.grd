@@ -7,18 +7,21 @@
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="vivaldi_final/product_logo_32.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22" file="vivaldi_final/product_logo_name_22.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22_WHITE" file="vivaldi_final/product_logo_name_22_white.png" />
+        <structure type="chrome_scaled_image" name="IDR_INCOGNITO_WHITE_CIRCLE" file="vivaldi_final/private_media.png" />
       </if>
       <if expr="vivaldi_release_snapshot">
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_16" file="vivaldi_snapshot/product_logo_16.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="vivaldi_snapshot/product_logo_32.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22" file="vivaldi_snapshot/product_logo_name_22.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22_WHITE" file="vivaldi_snapshot/product_logo_name_22_white.png" />
+        <structure type="chrome_scaled_image" name="IDR_INCOGNITO_WHITE_CIRCLE" file="vivaldi_snapshot/private_media.png" />
       </if>
       <if expr="vivaldi_release_sopranos">
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_16" file="vivaldi_sopranos/product_logo_16.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_32" file="vivaldi_sopranos/product_logo_32.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22" file="vivaldi_sopranos/product_logo_name_22.png" />
         <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO_NAME_22_WHITE" file="vivaldi_sopranos/product_logo_name_22_white.png" />
+        <structure type="chrome_scaled_image" name="IDR_INCOGNITO_WHITE_CIRCLE" file="vivaldi_sopranos/private_media.png" />
       </if>
       <if expr="not is_android">
         <structure type="chrome_scaled_image" name="IDR_SAVE_PASSWORD" file="viv_common/save_password.png" />

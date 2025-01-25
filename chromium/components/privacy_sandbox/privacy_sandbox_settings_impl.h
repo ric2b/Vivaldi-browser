@@ -96,7 +96,7 @@ class PrivacySandboxSettingsImpl : public PrivacySandboxSettings,
       const url::Origin& accessing_origin,
       std::string* out_debug_message,
       bool* out_block_is_site_setting_specific) const override;
-  bool IsLocalUnpartitionedDataAccessAllowed(
+  bool IsFencedStorageReadAllowed(
       const url::Origin& top_frame_origin,
       const url::Origin& accessing_origin,
       content::RenderFrameHost* console_frame) const override;
@@ -150,6 +150,9 @@ class PrivacySandboxSettingsImpl : public PrivacySandboxSettings,
                            FledgeJoinSettingTimeRangeDeletion);
   // Called when the Related Website Sets enabled preference is changed.
   void OnRelatedWebsiteSetsEnabledPrefChanged();
+
+  // Called when the CookieControlsMode preference is changed.
+  void OnCookieControlsModePrefChanged();
 
   void SetTopicsDataAccessibleFromNow() const;
 
@@ -220,6 +223,9 @@ class PrivacySandboxSettingsImpl : public PrivacySandboxSettings,
   // Internal helper for `IsFledgeAllowed`. Used only when
   // `interest_group_api_operation` is `kJoin`.
   bool IsFledgeJoiningAllowed(const url::Origin& top_frame_origin) const;
+
+  // Whether fenced frame local unpartitioned data access is enabled.
+  Status GetFencedStorageReadEnabledStatus() const;
 
   // From TrackingProtectionSettingsObserver.
   void OnBlockAllThirdPartyCookiesChanged() override;

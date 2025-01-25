@@ -18,8 +18,8 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/base/accelerators/accelerator.h"
-#include "ui/base/models/simple_menu_model.h"
 #include "ui/devtools/devtools_connector.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/vivaldi_rootdocument_handler.h"
 
 namespace vivaldi {

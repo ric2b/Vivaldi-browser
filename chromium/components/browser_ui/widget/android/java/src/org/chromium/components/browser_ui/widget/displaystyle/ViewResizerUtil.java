@@ -11,6 +11,9 @@ import androidx.annotation.Nullable;
 
 import org.chromium.base.BuildInfo;
 
+//Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** Util class for @{@link org.chromium.components.browser_ui.widget.displaystyle.ViewResizer}. */
 public class ViewResizerUtil {
 
@@ -24,15 +27,19 @@ public class ViewResizerUtil {
         float dpToPx = resources.getDisplayMetrics().density;
 
         int screenWidthDp = 0;
-        if (BuildInfo.getInstance().isAutomotive && view != null) {
+        // Some automotive devices with wide displays show side UI components, which should not be
+        // included in the padding calculations.
+        if ((BuildInfo.getInstance().isAutomotive || BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) // Vivaldi
+                && view != null) {
             screenWidthDp = (int) (view.getMeasuredWidth() / dpToPx);
         }
         if (screenWidthDp == 0) {
             screenWidthDp = resources.getConfiguration().screenWidthDp;
         }
 
+        // Vivaldi (divide by 4)
         int padding =
-                (int) (((screenWidthDp - UiConfig.WIDE_DISPLAY_STYLE_MIN_WIDTH_DP) / 2.f) * dpToPx);
+                (int) (((screenWidthDp - UiConfig.WIDE_DISPLAY_STYLE_MIN_WIDTH_DP) / 4.f) * dpToPx);
         return Math.max(minWidePaddingPixels, padding);
     }
 }

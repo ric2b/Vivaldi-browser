@@ -40,7 +40,6 @@ public class SingleActionMessage implements MessageStateHandler, MessageContaine
     private final boolean mIsFullyVisibileCallbackEnabled;
     private boolean mMessageDismissed;
     private boolean mFullyVisibleBefore;
-    private boolean mFullyVisibleCallbackInvoked;
     private final boolean mAreExtraHistogramsEnabled;
 
     private long mMessageEnqueuedTime;
@@ -193,19 +192,8 @@ public class SingleActionMessage implements MessageStateHandler, MessageContaine
                     dismissReason == DismissReason.GESTURE,
                     MessagesMetrics.now() - mMessageShownTime);
         }
-        if (mAreExtraHistogramsEnabled) {
-            if (dismissReason == DismissReason.PRIMARY_ACTION
-                    || dismissReason == DismissReason.SECONDARY_ACTION
-                    || dismissReason == DismissReason.GESTURE
-                    || dismissReason == DismissReason.TIMER) {
-                if (getOnFullyVisibleCallback() != null && !mFullyVisibleCallbackInvoked) {
-                    MessagesMetrics.recordErrorFullyVisibleNotInformed(getMessageIdentifier());
-                }
-            }
-
-            if (!mFullyVisibleBefore) {
-                MessagesMetrics.recordDismissedWithoutFullyVisible(getMessageIdentifier());
-            }
+        if (mAreExtraHistogramsEnabled && !mFullyVisibleBefore) {
+            MessagesMetrics.recordDismissedWithoutFullyVisible(getMessageIdentifier());
         }
     }
 
@@ -247,7 +235,6 @@ public class SingleActionMessage implements MessageStateHandler, MessageContaine
         var callback = getOnFullyVisibleCallback();
         if (callback == null) return;
         if (fullyVisible == mModel.get(MessageBannerProperties.IS_FULLY_VISIBLE)) return;
-        mFullyVisibleCallbackInvoked = true;
 
         mModel.set(MessageBannerProperties.IS_FULLY_VISIBLE, fullyVisible);
         callback.onResult(fullyVisible);

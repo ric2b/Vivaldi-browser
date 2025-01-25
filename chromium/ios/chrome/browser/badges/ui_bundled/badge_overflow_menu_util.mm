@@ -15,6 +15,13 @@
 
 #import <UIKit/UIKit.h>
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 
 // The image used for password related badges.
@@ -68,6 +75,14 @@ UIAction* GetOverflowMenuElementForBadgeType(
       title = l10n_util::GetNSString(IDS_IOS_TRANSLATE_INFOBAR_MODAL_TITLE);
       image =
           CustomSymbolWithPointSize(kTranslateSymbol, kInfobarSymbolPointSize);
+
+      if (IsVivaldiRunning()) {
+        image =
+            [CustomSymbolWithPointSize(vOverflowTranslate,
+                                       kInfobarSymbolPointSize)
+                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+      } // End Vivaldi
+
       break;
     case kBadgeTypePermissionsCamera:
       action_identifier = kBadgeButtonPermissionsActionIdentifier;
@@ -92,16 +107,11 @@ UIAction* GetOverflowMenuElementForBadgeType(
                                          kInfobarSymbolPointSize);
       break;
     case kBadgeTypeIncognito:
-      NOTREACHED_IN_MIGRATION()
-          << "An overflow menu badge should not be an Incognito badge";
-      break;
+      NOTREACHED() << "An overflow menu badge should not be an Incognito badge";
     case kBadgeTypeOverflow:
-      NOTREACHED_IN_MIGRATION()
-          << "A overflow menu badge should not be an overflow badge";
-      break;
+      NOTREACHED() << "A overflow menu badge should not be an overflow badge";
     case kBadgeTypeNone:
-      NOTREACHED_IN_MIGRATION() << "A badge should not have kBadgeTypeNone";
-      break;
+      NOTREACHED() << "A badge should not have kBadgeTypeNone";
   }
 
   UIActionHandler handler = ^(UIAction* action) {

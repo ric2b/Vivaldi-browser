@@ -23,11 +23,11 @@ class InstanceRequestIds final {
   };
 
   explicit InstanceRequestIds(Role role);
-  ~InstanceRequestIds();
   InstanceRequestIds(const InstanceRequestIds&) = delete;
   InstanceRequestIds& operator=(const InstanceRequestIds&) = delete;
   InstanceRequestIds(InstanceRequestIds&&) noexcept = delete;
   InstanceRequestIds& operator=(InstanceRequestIds&&) noexcept = delete;
+  ~InstanceRequestIds();
 
   uint64_t GetNextRequestId(uint64_t instance_id);
   void ResetRequestId(uint64_t instance_id);

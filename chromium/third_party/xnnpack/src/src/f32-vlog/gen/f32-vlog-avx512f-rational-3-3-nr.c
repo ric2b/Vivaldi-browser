@@ -22,6 +22,8 @@
 #endif  // M_LN2
 
 // Extracts the exponent of the input `a` as a `float` value.
+#ifndef HAVE_XNN_SIGNED_GETEXP_F32
+#define HAVE_XNN_SIGNED_GETEXP_F32
 static XNN_INLINE xnn_simd_f32_t xnn_signed_getexp_f32(xnn_simd_f32_t a) {
   // Create a mask of the zeros in the input.
   __mmask16 zero_mask = _mm512_cmp_ps_mask(a, _mm512_setzero_ps(), _CMP_EQ_OQ);
@@ -40,13 +42,14 @@ static XNN_INLINE xnn_simd_f32_t xnn_signed_getexp_f32(xnn_simd_f32_t a) {
 
   return res;
 }
+#endif  // HAVE_XNN_SIGNED_GETEXP_F32
 
 
 void xnn_f32_vlog_ukernel__avx512f_rational_3_3_nr_u16(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -57,7 +60,7 @@ void xnn_f32_vlog_ukernel__avx512f_rational_3_3_nr_u16(
   // Some useful constants.
   XNN_SIMD_CONST_F32(vone, 1.0f);
   XNN_SIMD_CONST_F32(vln2, M_LN2);
-  XNN_SIMD_CONST_U32(vmantissa_bits_mask, 0x007FFFFFUL);
+  XNN_SIMD_CONST_F32_FROM_INT32(vmantissa_bits_mask, 0x007FFFFFUL);
 
   // Note that these two values are not _exactly_ `(float)M_SQRT2` and
   // `(float)M_SQRT1_2`, but are instead chosen such that their product is
@@ -155,7 +158,7 @@ void xnn_f32_vlog_ukernel__avx512f_rational_3_3_nr_u32(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -166,7 +169,7 @@ void xnn_f32_vlog_ukernel__avx512f_rational_3_3_nr_u32(
   // Some useful constants.
   XNN_SIMD_CONST_F32(vone, 1.0f);
   XNN_SIMD_CONST_F32(vln2, M_LN2);
-  XNN_SIMD_CONST_U32(vmantissa_bits_mask, 0x007FFFFFUL);
+  XNN_SIMD_CONST_F32_FROM_INT32(vmantissa_bits_mask, 0x007FFFFFUL);
 
   // Note that these two values are not _exactly_ `(float)M_SQRT2` and
   // `(float)M_SQRT1_2`, but are instead chosen such that their product is
@@ -326,7 +329,7 @@ void xnn_f32_vlog_ukernel__avx512f_rational_3_3_nr_u48(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -337,7 +340,7 @@ void xnn_f32_vlog_ukernel__avx512f_rational_3_3_nr_u48(
   // Some useful constants.
   XNN_SIMD_CONST_F32(vone, 1.0f);
   XNN_SIMD_CONST_F32(vln2, M_LN2);
-  XNN_SIMD_CONST_U32(vmantissa_bits_mask, 0x007FFFFFUL);
+  XNN_SIMD_CONST_F32_FROM_INT32(vmantissa_bits_mask, 0x007FFFFFUL);
 
   // Note that these two values are not _exactly_ `(float)M_SQRT2` and
   // `(float)M_SQRT1_2`, but are instead chosen such that their product is
@@ -513,7 +516,7 @@ void xnn_f32_vlog_ukernel__avx512f_rational_3_3_nr_u64(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params unused_params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -524,7 +527,7 @@ void xnn_f32_vlog_ukernel__avx512f_rational_3_3_nr_u64(
   // Some useful constants.
   XNN_SIMD_CONST_F32(vone, 1.0f);
   XNN_SIMD_CONST_F32(vln2, M_LN2);
-  XNN_SIMD_CONST_U32(vmantissa_bits_mask, 0x007FFFFFUL);
+  XNN_SIMD_CONST_F32_FROM_INT32(vmantissa_bits_mask, 0x007FFFFFUL);
 
   // Note that these two values are not _exactly_ `(float)M_SQRT2` and
   // `(float)M_SQRT1_2`, but are instead chosen such that their product is

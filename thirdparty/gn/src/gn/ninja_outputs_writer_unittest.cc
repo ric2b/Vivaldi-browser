@@ -36,8 +36,6 @@ void BackgroundDoWrite(TargetWriteInfo* write_info, const Target* target) {
   std::string rule = NinjaTargetWriter::RunAndWriteFile(target, nullptr,
                                                         &target_ninja_outputs);
 
-  DCHECK(!rule.empty());
-
   std::lock_guard<std::mutex> lock(write_info->lock);
   write_info->ninja_outputs_map.emplace(target,
                                         std::move(target_ninja_outputs));
@@ -142,18 +140,16 @@ group("zoo") {
   std::string expected = R"##({
   "//:bar": [
     "bar.output",
-    "obj/bar.stamp"
+    "phony/bar"
   ],
   "//:foo": [
-    "obj/foo.stamp"
+    "phony/foo"
   ],
   "//:zoo": [
-    "obj/zoo.stamp"
   ],
   "//:zoo(//toolchain:secondary)": [
-    "secondary/obj/zoo.stamp"
   ]
 })##";
 
-  EXPECT_EQ(generated, expected);
+  EXPECT_EQ(generated, expected) << generated << "\n" << expected;
 }

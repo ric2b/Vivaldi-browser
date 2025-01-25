@@ -73,6 +73,10 @@ int ff_qsv_codec_id_to_mfx(enum AVCodecID codec_id)
     case AV_CODEC_ID_AV1:
         return MFX_CODEC_AV1;
 #endif
+#if QSV_VERSION_ATLEAST(2, 11)
+    case AV_CODEC_ID_VVC:
+        return MFX_CODEC_VVC;
+#endif
 
     default:
         break;
@@ -464,8 +468,8 @@ static int ff_qsv_set_display_handle(AVCodecContext *avctx, QSVSession *qs)
     AVVAAPIDeviceContext *hwctx;
     int ret;
 
-    av_dict_set(&child_device_opts, "kernel_driver", "i915", 0);
-    av_dict_set(&child_device_opts, "driver",        "iHD",  0);
+    av_dict_set(&child_device_opts, "vendor_id", "0x8086", 0);
+    av_dict_set(&child_device_opts, "driver",    "iHD",    0);
 
     ret = av_hwdevice_ctx_create(&qs->va_device_ref, AV_HWDEVICE_TYPE_VAAPI, NULL, child_device_opts, 0);
     av_dict_free(&child_device_opts);
@@ -496,7 +500,7 @@ static int qsv_new_mfx_loader(AVCodecContext *avctx,
     mfxStatus sts;
     mfxLoader loader = NULL;
     mfxConfig cfg;
-    mfxVariant impl_value;
+    mfxVariant impl_value = {0};
 
     loader = MFXLoad();
     if (!loader) {

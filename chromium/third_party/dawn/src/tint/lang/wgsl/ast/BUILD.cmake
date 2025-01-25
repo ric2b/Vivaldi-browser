@@ -164,6 +164,8 @@ tint_add_target(tint_lang_wgsl_ast lib
   lang/wgsl/ast/requires.h
   lang/wgsl/ast/return_statement.cc
   lang/wgsl/ast/return_statement.h
+  lang/wgsl/ast/row_major_attribute.cc
+  lang/wgsl/ast/row_major_attribute.h
   lang/wgsl/ast/stage_attribute.cc
   lang/wgsl/ast/stage_attribute.h
   lang/wgsl/ast/statement.cc
@@ -307,7 +309,6 @@ tint_target_add_dependencies(tint_lang_wgsl_ast_test test
   tint_lang_core_type
   tint_lang_wgsl
   tint_lang_wgsl_ast
-  tint_lang_wgsl_ast_transform
   tint_lang_wgsl_common
   tint_lang_wgsl_features
   tint_lang_wgsl_program

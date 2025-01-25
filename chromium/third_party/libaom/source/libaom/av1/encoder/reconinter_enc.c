@@ -636,32 +636,6 @@ void aom_highbd_comp_avg_upsampled_pred_c(
   }
 }
 
-void aom_highbd_dist_wtd_comp_avg_upsampled_pred_c(
-    MACROBLOCKD *xd, const struct AV1Common *const cm, int mi_row, int mi_col,
-    const MV *const mv, uint8_t *comp_pred8, const uint8_t *pred8, int width,
-    int height, int subpel_x_q3, int subpel_y_q3, const uint8_t *ref8,
-    int ref_stride, int bd, const DIST_WTD_COMP_PARAMS *jcp_param,
-    int subpel_search) {
-  int i, j;
-  const int fwd_offset = jcp_param->fwd_offset;
-  const int bck_offset = jcp_param->bck_offset;
-  const uint16_t *pred = CONVERT_TO_SHORTPTR(pred8);
-  uint16_t *comp_pred = CONVERT_TO_SHORTPTR(comp_pred8);
-  aom_highbd_upsampled_pred_c(xd, cm, mi_row, mi_col, mv, comp_pred8, width,
-                              height, subpel_x_q3, subpel_y_q3, ref8,
-                              ref_stride, bd, subpel_search);
-
-  for (i = 0; i < height; i++) {
-    for (j = 0; j < width; j++) {
-      int tmp = pred[j] * bck_offset + comp_pred[j] * fwd_offset;
-      tmp = ROUND_POWER_OF_TWO(tmp, DIST_PRECISION_BITS);
-      comp_pred[j] = (uint16_t)tmp;
-    }
-    comp_pred += width;
-    pred += width;
-  }
-}
-
 void aom_highbd_comp_mask_upsampled_pred(
     MACROBLOCKD *xd, const struct AV1Common *const cm, int mi_row, int mi_col,
     const MV *const mv, uint8_t *comp_pred8, const uint8_t *pred8, int width,

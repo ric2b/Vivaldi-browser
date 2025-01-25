@@ -30,10 +30,6 @@ const char kOnDeviceModelChromeVersion[] =
 const char kOnDeviceModelCrashCount[] =
     "optimization_guide.on_device.model_crash_count";
 
-// Preference where number of timeouts of on device model is stored.
-const char kOnDeviceModelTimeoutCount[] =
-    "optimization_guide.on_device.timeout_count";
-
 const char kOnDeviceModelValidationResult[] =
     "optimization_guide.on_device.model_validation_result";
 
@@ -65,6 +61,9 @@ const char kLastTimeTestFeatureWasUsed[] =
 const char kLastTimeHistorySearchWasUsed[] =
     "optimization_guide.model_execution.last_time_history_search_used";
 
+const char kLastTimeHistoryQueryIntentWasUsed[] =
+    "optimization_guide.model_execution.last_time_history_query_intent_used";
+
 // A timestamp for the last time the on-device model was eligible for download.
 const char kLastTimeEligibleForOnDeviceModelDownload[] =
     "optimization_guide.on_device.last_time_eligible_for_download";
@@ -84,7 +83,6 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(localstate::kOnDeviceModelChromeVersion,
                                std::string());
   registry->RegisterIntegerPref(localstate::kOnDeviceModelCrashCount, 0);
-  registry->RegisterIntegerPref(localstate::kOnDeviceModelTimeoutCount, 0);
   registry->RegisterIntegerPref(localstate::kOnDevicePerformanceClass, 0);
   registry->RegisterTimePref(localstate::kLastTimeComposeWasUsed,
                              base::Time::Min());
@@ -95,6 +93,8 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterTimePref(localstate::kLastTimeTestFeatureWasUsed,
                              base::Time::Min());
   registry->RegisterTimePref(localstate::kLastTimeHistorySearchWasUsed,
+                             base::Time::Min());
+  registry->RegisterTimePref(localstate::kLastTimeHistoryQueryIntentWasUsed,
                              base::Time::Min());
   registry->RegisterTimePref(
       localstate::kLastTimeEligibleForOnDeviceModelDownload, base::Time::Min());
@@ -119,11 +119,14 @@ const char* GetOnDeviceFeatureRecentlyUsedPref(
       return prefs::localstate::kLastTimeTestFeatureWasUsed;
     case ModelBasedCapabilityKey::kHistorySearch:
       return prefs::localstate::kLastTimeHistorySearchWasUsed;
+    case ModelBasedCapabilityKey::kHistoryQueryIntent:
+      return prefs::localstate::kLastTimeHistoryQueryIntentWasUsed;
     case ModelBasedCapabilityKey::kFormsAnnotations:
     case ModelBasedCapabilityKey::kFormsPredictions:
     case ModelBasedCapabilityKey::kWallpaperSearch:
     case ModelBasedCapabilityKey::kTabOrganization:
     case ModelBasedCapabilityKey::kTextSafety:
+    case ModelBasedCapabilityKey::kBlingPrototyping:
       // This should not be called for features that are not on-device.
       NOTREACHED();
   }

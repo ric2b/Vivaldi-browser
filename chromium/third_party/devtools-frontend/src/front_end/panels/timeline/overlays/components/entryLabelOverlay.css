@@ -5,20 +5,15 @@
  */
 
 .label-parts-wrapper {
-  /* Move element by half of its own width to position so now it is covering the whole entry.
-    The reason we cannot directly place it in the middle of the entry is that the width of the whole entry label overlay
-    depends of which element is wider - the label or the entry it belongs to. Therefore we cannot make sure the
-    label won't be positioned in front of the entry box.  */
-  transform: translate(-50%);
   display: flex;
   flex-direction: column;
-  color: var(--color-selected-option);
   align-items: center;
 }
 
 .input-field {
+  background-color: var(--color-background-inverted);
+  color: var(--color-background);
   pointer-events: auto;
-  background-color: var(--sys-color-token-variable);
   border-radius: var(--sys-shape-corner-extra-small);
   white-space: nowrap;
   padding: var(--sys-size-3) var(--sys-size-4);
@@ -28,8 +23,9 @@
 }
 
 .input-field:focus {
-  background-color: var(--color-selected-option);
-  color: var(--sys-color-token-variable);
+  background-color: var(--color-background);
+  color: var(--color-background-inverted);
+  outline: 2px solid var(--color-background-inverted);
 }
 
 .connectorContainer {
@@ -39,18 +35,20 @@
 .entry-highlight-wrapper {
   box-sizing: border-box;
   border: 2px solid var(--sys-color-on-surface);
-}
 
-.label-box {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
+  &.cut-off-top {
+    border-top: none;
+  }
 
-.user-created-icon {
-  margin: var(--sys-size-3);
-  color: var(--sys-color-token-variable);
-  /* USER_CREATED_ICON_WIDTH */
-  width: 16px;
-  height: 16px;
+  &.cut-off-bottom {
+    border-bottom: none;
+  }
+
+  &.cut-off-right {
+    border-right: none;
+  }
+
+  &.cut-off-left {
+    border-left: none;
+  }
 }

@@ -69,6 +69,8 @@ class InProcessImporterBridge : public ImporterBridge {
 
   void AddExtensions(const std::vector<std::string>& extensions) override;
 
+  void AddOpenTabs(const std::vector<ImportedTabEntry>& tabs) override;
+
   void NotifyItemFailed(importer::ImportItem item,
                         const std::string& error) override;
 

@@ -130,11 +130,9 @@ Network::CertificateTransparencyCompliance SerializeCTPolicyCompliance(
         CT_POLICY_COMPLIANCE_DETAILS_NOT_AVAILABLE:
       return Network::CertificateTransparencyComplianceEnum::Unknown;
     case net::ct::CTPolicyCompliance::CT_POLICY_COUNT:
-      NOTREACHED_IN_MIGRATION();
-      return Network::CertificateTransparencyComplianceEnum::Unknown;
+      NOTREACHED();
   }
-  NOTREACHED_IN_MIGRATION();
-  return Network::CertificateTransparencyComplianceEnum::Unknown;
+  NOTREACHED();
 }
 
 namespace {
@@ -237,7 +235,7 @@ class CookieRetrieverNetworkService
     : public base::RefCounted<CookieRetrieverNetworkService> {
  public:
   static void Retrieve(network::mojom::CookieManager* cookie_manager,
-                       const std::vector<GURL> urls,
+                       const std::vector<GURL>& urls,
                        const net::NetworkIsolationKey& network_isolation_key,
                        const net::SiteForCookies& site_for_cookies,
                        std::unique_ptr<GetCookiesCallback> callback) {
@@ -564,8 +562,7 @@ String resourcePriority(net::RequestPriority priority) {
     case net::HIGHEST:
       return Network::ResourcePriorityEnum::VeryHigh;
   }
-  NOTREACHED_IN_MIGRATION();
-  return Network::ResourcePriorityEnum::Medium;
+  NOTREACHED();
 }
 
 String referrerPolicy(network::mojom::ReferrerPolicy referrer_policy) {
@@ -590,8 +587,7 @@ String referrerPolicy(network::mojom::ReferrerPolicy referrer_policy) {
     case network::mojom::ReferrerPolicy::kStrictOriginWhenCrossOrigin:
       return Network::Request::ReferrerPolicyEnum::StrictOriginWhenCrossOrigin;
   }
-  NOTREACHED_IN_MIGRATION();
-  return Network::Request::ReferrerPolicyEnum::NoReferrerWhenDowngrade;
+  NOTREACHED();
 }
 
 String referrerPolicy(net::ReferrerPolicy referrer_policy) {
@@ -785,8 +781,7 @@ String SignedExchangeErrorErrorFieldToString(SignedExchangeError::Field field) {
     case SignedExchangeError::Field::kSignatureTimestamps:
       return Network::SignedExchangeErrorFieldEnum::SignatureTimestamps;
   }
-  NOTREACHED_IN_MIGRATION();
-  return "";
+  NOTREACHED();
 }
 
 std::unique_ptr<Network::SignedExchangeError> BuildSignedExchangeError(
@@ -995,7 +990,14 @@ GetProtocolBlockedCookieReason(net::CookieInclusionStatus status) {
           net::CookieInclusionStatus::EXCLUDE_UNKNOWN_ERROR)) {
     blockedReasons->push_back(Network::CookieBlockedReasonEnum::UnknownError);
   }
-
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_PORT_MISMATCH)) {
+    blockedReasons->push_back(Network::CookieBlockedReasonEnum::PortMismatch);
+  }
+  if (status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_SCHEME_MISMATCH)) {
+    blockedReasons->push_back(Network::CookieBlockedReasonEnum::SchemeMismatch);
+  }
   return blockedReasons;
 }
 
@@ -2255,11 +2257,9 @@ String blockedReason(blink::ResourceRequestBlockedReason reason) {
     case blink::ResourceRequestBlockedReason::kConversionRequest:
       // This is actually never reached, as the conversion request
       // is marked as successful and no blocking reason is reported.
-      NOTREACHED_IN_MIGRATION();
-      return protocol::Network::BlockedReasonEnum::Other;
+      NOTREACHED();
   }
-  NOTREACHED_IN_MIGRATION();
-  return protocol::Network::BlockedReasonEnum::Other;
+  NOTREACHED();
 }
 
 Maybe<String> GetBlockedReasonFor(
@@ -2291,7 +2291,7 @@ Maybe<String> GetBlockedReasonFor(
       case network::mojom::BlockedByResponseReason::kCorpNotSameSite:
         return {protocol::Network::BlockedReasonEnum::CorpNotSameSite};
     }
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
   if (status.error_code != net::ERR_BLOCKED_BY_CLIENT &&
       status.error_code != net::ERR_BLOCKED_BY_RESPONSE)
@@ -2938,8 +2938,7 @@ void NetworkHandler::ContinueInterceptedRequest(
     const protocol::Binary& raw = raw_response.value();
 
     std::string raw_headers;
-    size_t header_size = net::HttpUtil::LocateEndOfHeaders(
-        reinterpret_cast<const char*>(raw.data()), raw.size());
+    size_t header_size = net::HttpUtil::LocateEndOfHeaders(raw);
     if (header_size == std::string::npos) {
       LOG(WARNING) << "Can't find headers in raw response";
       header_size = 0;

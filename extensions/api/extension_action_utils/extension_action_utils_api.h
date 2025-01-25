@@ -12,6 +12,7 @@
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/commands/command_service.h"
 #include "chrome/browser/extensions/external_install_error.h"
+#include "chrome/browser/extensions/extension_action_dispatcher.h"
 #include "chrome/browser/extensions/extension_error_ui.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
 #include "chrome/browser/profiles/profile.h"
@@ -91,10 +92,11 @@ class ExtensionActionUtilFactory : public BrowserContextKeyedServiceFactory {
       content::BrowserContext* context) const override;
 };
 
-class ExtensionActionUtil : public KeyedService,
-                            public extensions::ExtensionActionAPI::Observer,
-                            public extensions::ExtensionRegistryObserver,
-                            public CommandService::Observer {
+class ExtensionActionUtil
+    : public KeyedService,
+      public extensions::ExtensionActionDispatcher::Observer,
+      public extensions::ExtensionRegistryObserver,
+      public CommandService::Observer {
   friend struct base::DefaultSingletonTraits<ExtensionActionUtil>;
 
  public:

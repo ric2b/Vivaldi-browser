@@ -33,6 +33,7 @@ source_set("vivaldi_sync_settings") {
 
   deps = [
     "//base",
+    "//net",
     "//vivaldi/ios/ui/common:vivaldi_common",
     "//vivaldi/ios/ui/modal_page:vivaldi_modal_page",
     "cells:vivaldi_sync_settings_table_view_cells",

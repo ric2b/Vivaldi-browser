@@ -106,7 +106,6 @@ constexpr char kDefaultServiceProperty[] = "DefaultService";
 constexpr char kDefaultTechnologyProperty[] = "DefaultTechnology";
 constexpr char kDevicesProperty[] = "Devices";
 constexpr char kDhcpPropertyHostnameProperty[] = "DHCPProperty.Hostname";
-constexpr char kDisableLegacyDHCPCDProperty[] = "DisableLegacyDHCPCD";
 constexpr char kDisableWiFiVHTProperty[] = "DisableWiFiVHT";
 constexpr char kDisconnectWiFiOnEthernetProperty[] = "DisconnectWiFiOnEthernet";
 constexpr char kDNSProxyDOHProvidersProperty[] = "DNSProxyDOHProviders";
@@ -135,6 +134,7 @@ constexpr char kTetheringConfigProperty[] = "TetheringConfig";
 constexpr char kTetheringStatusProperty[] = "TetheringStatus";
 constexpr char kUninitializedTechnologiesProperty[] =
     "UninitializedTechnologies";
+constexpr char kUseLegacyDHCPCDProperty[] = "UseLegacyDHCPCD";
 constexpr char kWakeOnLanEnabledProperty[] = "WakeOnLanEnabled";
 constexpr char kWifiGlobalFTEnabledProperty[] = "WiFi.GlobalFTEnabled";
 constexpr char kWifiScanAllowRoamProperty[] = "WiFi.ScanAllowRoam";
@@ -168,7 +168,6 @@ constexpr char kErrorProperty[] = "Error";
 constexpr char kGuidProperty[] = "GUID";
 constexpr char kIPConfigProperty[] = "IPConfig";
 constexpr char kIsConnectedProperty[] = "IsConnected";
-constexpr char kLinkMonitorDisableProperty[] = "LinkMonitorDisable";
 constexpr char kManagedCredentialsProperty[] = "ManagedCredentials";
 constexpr char kMeteredProperty[] = "Metered";
 constexpr char kNameProperty[] = "Name";  // Also used for Device and Profile.
@@ -200,6 +199,7 @@ constexpr char kNetworkIDProperty[] = "NetworkID";
 constexpr char kNetworkConfigProperty[] = "NetworkConfig";
 
 // Property names in the NetworkConfig dict.
+constexpr char kNetworkConfigSessionIDProperty[] = "SessionID";
 constexpr char kNetworkConfigIPv4AddressProperty[] = "IPv4Address";
 constexpr char kNetworkConfigIPv4GatewayProperty[] = "IPv4Gateway";
 constexpr char kNetworkConfigIPv6AddressesProperty[] = "IPv6Addresses";
@@ -466,10 +466,10 @@ constexpr char kSelectedNetworkProperty[] = "Cellular.SelectedNetwork";
 constexpr char kSIMPresentProperty[] = "Cellular.SIMPresent";
 constexpr char kSIMSlotInfoProperty[] = "Cellular.SIMSlotInfo";
 constexpr char kSupportNetworkScanProperty[] = "Cellular.SupportNetworkScan";
-constexpr char kUseAttachAPNProperty[] = "Cellular.UseAttachAPN";
 constexpr char kPrimaryMultiplexedInterfaceProperty[] =
     "Cellular.PrimaryMultiplexedInterface";
 constexpr char kFlashingProperty[] = "Cellular.Flashing";
+constexpr char kInitializingProperty[] = "Cellular.Initializing";
 
 constexpr char kDBusObjectProperty[] = "DBus.Object";
 constexpr char kDBusServiceProperty[] = "DBus.Service";

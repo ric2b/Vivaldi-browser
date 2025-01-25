@@ -2,6 +2,10 @@
 
 #include "renderer/blink/vivaldi_render_frame_blink_proxy.h"
 
+#ifndef BLINK_MOJO_IMPL
+#define BLINK_MOJO_IMPL 1
+#endif
+
 #include "base/notreached.h"
 #include "build/build_config.h"
 #include "third_party/blink/public/platform/web_media_player.h"

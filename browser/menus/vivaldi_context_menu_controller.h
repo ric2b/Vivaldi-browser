@@ -15,9 +15,11 @@
 #include "browser/menus/vivaldi_render_view_context_menu.h"
 #include "extensions/schema/context_menu.h"
 #include "ui/base/models/image_model.h"
-#include "ui/base/models/simple_menu_model.h"
+#include "ui/menus/simple_menu_model.h"
+#include "ui/views/widget/widget_observer.h"
 
 class Profile;
+class VivaldiBrowserWindow;
 
 namespace content {
 class WebContents;
@@ -50,6 +52,7 @@ class ContextMenuPostitionDelegate {
 };
 
 class ContextMenuController : public ui::SimpleMenuModel::Delegate,
+                              public views::WidgetObserver,
                               public ContextMenuPostitionDelegate,
                               public VivaldiRenderViewContextMenu::Delegate {
  public:
@@ -57,11 +60,14 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   using Item = extensions::vivaldi::context_menu::Item;
   using Container = extensions::vivaldi::context_menu::Container;
   using Params = extensions::vivaldi::context_menu::Show::Params;
+  using UpdateItem = extensions::vivaldi::context_menu::UpdateItem;
 
   static ContextMenuController* Create(
-      content::WebContents* window_web_contents,
+      VivaldiBrowserWindow* browser_window,
       VivaldiRenderViewContextMenu* rv_context_menu,
       std::optional<Params> params);
+
+  static ContextMenuController* GetActive();
 
   ~ContextMenuController() override;
 
@@ -81,6 +87,9 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   void OnMenuWillShow(ui::SimpleMenuModel* source) override;
   void MenuClosed(ui::SimpleMenuModel* source) override;
 
+  // views::WidgetObserver overrides.
+  void OnWidgetDestroying(views::Widget* widget) override;
+
   // ContextMenuPostitionDelegate
   bool CanSetPosition() const override;
   void SetPosition(gfx::Rect* menu_bounds,
@@ -95,13 +104,14 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   bool GetShowShortcuts() override;
 
   bool IsCommandIdPersistent(int command_id) const;
+  bool Update(const std::vector<UpdateItem>& items);
 
  private:
   // When 'rv_context_menu' is a non-nullptr we will treat the root model of
   // that object as our root menu model. In that case it means it is the code of
   // VivaldiRenderViewContextMenu that will control how long this object will
   // live via MenuClosed.
-  ContextMenuController(content::WebContents* window_web_contents,
+  ContextMenuController(VivaldiBrowserWindow* browser_window,
                         VivaldiRenderViewContextMenu* rv_context_menu,
                         std::optional<Params> params);
   void InitModel();
@@ -128,6 +138,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
 
   static std::unique_ptr<ContextMenuController> active_controller_;
 
+  raw_ptr<VivaldiBrowserWindow> browser_window_;
   const raw_ptr<content::WebContents> window_web_contents_;
   raw_ptr<VivaldiRenderViewContextMenu> rv_context_menu_;
   bool with_developer_tools_;

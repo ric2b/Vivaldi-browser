@@ -70,6 +70,11 @@ bool ExtensionsGuestViewManagerDelegate::IsGuestAvailableToContextWithFeature(
     return false;
   }
 
+  // note(ondrej@vivaldi): VB-110533
+  if (!guest->owner_rfh()) {
+    return false;
+  }
+
   content::BrowserContext* context = guest->browser_context();
   ProcessMap* process_map = ProcessMap::Get(context);
   CHECK(process_map);

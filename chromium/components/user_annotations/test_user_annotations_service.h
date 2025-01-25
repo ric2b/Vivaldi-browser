@@ -11,6 +11,10 @@
 #include "components/user_annotations/user_annotations_service.h"
 #include "components/user_annotations/user_annotations_types.h"
 
+namespace autofill {
+class FormStructure;
+}
+
 namespace optimization_guide::proto {
 class UserAnnotationsEntry;
 }  // namespace optimization_guide::proto
@@ -39,18 +43,35 @@ class TestUserAnnotationsService : public UserAnnotationsService {
 
   // UserAnnotationsService:
   bool ShouldAddFormSubmissionForURL(const GURL& url) override;
-  void AddFormSubmission(optimization_guide::proto::AXTreeUpdate ax_tree_update,
-                         const autofill::FormData& form_data,
+  void AddFormSubmission(const GURL& url,
+                         const std::string& title,
+                         optimization_guide::proto::AXTreeUpdate ax_tree_update,
+                         std::unique_ptr<autofill::FormStructure> form,
                          ImportFormCallback callback) override;
   void RetrieveAllEntries(
       base::OnceCallback<void(UserAnnotationsEntries)> callback) override;
+  void RemoveEntry(EntryID entry_id, base::OnceClosure callback) override;
+  void RemoveAllEntries(base::OnceClosure callback) override;
   void RemoveAnnotationsInRange(const base::Time& delete_begin,
                                 const base::Time& delete_end) override;
+
+  // Returns the number of entries set via `ReplaceAllEntries()` ignoring
+  // the `begin` and `end` arguments.
+  void GetCountOfValuesContainedBetween(
+      base::Time begin,
+      base::Time end,
+      base::OnceCallback<void(int)> callback) override;
+  size_t count_entries_retrieved() const { return count_entries_retrieved_; }
 
   std::pair<base::Time, base::Time> last_received_remove_annotations_in_range()
       const {
     return last_received_remove_annotations_in_range_;
   }
+
+  void SaveAutofillProfile(
+      const autofill::AutofillProfile& autofill_profile,
+      base::OnceCallback<void(UserAnnotationsExecutionResult)> callback)
+      override;
 
  private:
   // An in-memory representation of the "database" of user annotation entries.
@@ -64,6 +85,9 @@ class TestUserAnnotationsService : public UserAnnotationsService {
 
   // Saves the last call for `RemoveAnnotationsInRange`.
   std::pair<base::Time, base::Time> last_received_remove_annotations_in_range_;
+
+  // The number of times entries have been retrieved.
+  size_t count_entries_retrieved_ = 0;
 };
 
 }  // namespace user_annotations

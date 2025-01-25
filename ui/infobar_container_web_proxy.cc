@@ -20,21 +20,28 @@ using extensions::vivaldi::infobars::InfobarButton;
 
 ConfirmInfoBarWebProxy::ConfirmInfoBarWebProxy(
     std::unique_ptr<infobars::InfoBarDelegate> delegate)
-    : InfoBarView(std::move(delegate)) {}
+    : InfoBar(std::move(delegate)) {}
 
 ConfirmInfoBarWebProxy::~ConfirmInfoBarWebProxy() {}
 
+void ConfirmInfoBarWebProxy::PlatformSpecificHide(bool animate) {
+  base::Value::List args(
+      extensions::vivaldi::infobars::OnInfobarRemoved::Create(
+          tab_id_, 0));
+  ::vivaldi::BroadcastEvent(
+      extensions::vivaldi::infobars::OnInfobarRemoved::kEventName,
+      std::move(args), profile_);
+}
+
 void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
-  // In some rare and specific cases, the infobar might show up
-  // in a Chromium PWA window even though it's been created like
-  // a web proxy infobar. Let the base class have a go at it first
-  // to handle that case.  See also VB-85190.
-  InfoBarView::PlatformSpecificShow(animate);
 
   content::WebContents* web_contents =
       infobars::ContentInfoBarManager::WebContentsFromInfoBar(this);
-  profile_ = Profile::FromBrowserContext(web_contents->GetBrowserContext());
-  tab_id_ = sessions::SessionTabHelper::IdForTab(web_contents).id();
+
+  if (web_contents) {
+    profile_ = Profile::FromBrowserContext(web_contents->GetBrowserContext());
+    tab_id_ = sessions::SessionTabHelper::IdForTab(web_contents).id();
+  }
 
   extensions::vivaldi::infobars::Infobar infobar;
 
@@ -99,6 +106,7 @@ void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
   }
   infobar.tab_id = tab_id_;
   infobar.identifier = delegate()->GetIdentifier();
+  infobar.is_closeable = delegate()->IsCloseable();
 
   base::Value::List args(
       extensions::vivaldi::infobars::OnInfobarCreated::Create(infobar));
@@ -119,43 +127,17 @@ InfoBarContainerWebProxy::~InfoBarContainerWebProxy() {
 }
 
 void InfoBarContainerWebProxy::PlatformSpecificAddInfoBar(
-    infobars::InfoBar* infobar,
-    size_t position) {}
+    infobars::InfoBar* new_infobar,
+    size_t position) {
+}
+
+  void InfoBarContainerWebProxy::PlatformSpecificReplaceInfoBar(
+    infobars::InfoBar* old_infobar,
+    infobars::InfoBar* new_infobar) {
+}
 
 void InfoBarContainerWebProxy::PlatformSpecificRemoveInfoBar(
     infobars::InfoBar* infobar) {
-  if (infobar->delegate()->GetIdentifier() ==
-          infobars::InfoBarDelegate::DEV_TOOLS_INFOBAR_DELEGATE ||
-      infobar->delegate()->GetIdentifier() ==
-          infobars::InfoBarDelegate::
-              EXTENSIONS_WEB_AUTH_FLOW_INFOBAR_DELEGATE) {
-    // This infobar is handled in a devtools- or a web_auth-window.
-    return;
-  }
-  ConfirmInfoBarWebProxy* infobar_proxy =
-      static_cast<ConfirmInfoBarWebProxy*>(infobar);
-
-  if (infobar->delegate()->GetIdentifier() ==
-      infobars::InfoBarDelegate::TAB_SHARING_INFOBAR_DELEGATE) {
-    // Can't handle this right now
-    base::Value::List args(
-        extensions::vivaldi::infobars::OnInfobarRemoved::Create(
-            infobar_proxy->tab_id(),
-            infobar_proxy->delegate()->GetIdentifier()));
-    ::vivaldi::BroadcastEvent(
-        extensions::vivaldi::infobars::OnInfobarRemoved::kEventName,
-        std::move(args), infobar_proxy->profile());
-    return;
-  }
-
-  ConfirmInfoBarDelegate* delegate = infobar_proxy->GetDelegate();
-
-  base::Value::List args(
-      extensions::vivaldi::infobars::OnInfobarRemoved::Create(
-          infobar_proxy->tab_id(), delegate->GetIdentifier()));
-  ::vivaldi::BroadcastEvent(
-      extensions::vivaldi::infobars::OnInfobarRemoved::kEventName,
-      std::move(args), infobar_proxy->profile());
 }
 
 }  // namespace vivaldi

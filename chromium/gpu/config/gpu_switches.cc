@@ -67,6 +67,10 @@ const char kEnableDawnFeatures[] = "enable-dawn-features";
 // Set the Dawn features(toggles) disabled on the creation of Dawn devices.
 const char kDisableDawnFeatures[] = "disable-dawn-features";
 
+// Start the GPU process for Dawn info collection immediately after the browser
+// starts. The default is to delay for 120 seconds.
+const char kCollectDawnInfoEagerly[] = "collect-dawn-info-eagerly";
+
 // Start the non-sandboxed GPU process for DX12 and Vulkan info collection
 // immediately after the browser starts. The default is to delay for 120
 // seconds.
@@ -143,6 +147,13 @@ const char kSkiaGraphiteBackendMetal[] = "metal";
 // enabling if both are specified.
 const char kDisableSkiaGraphite[] = "disable-skia-graphite";
 const char kEnableSkiaGraphite[] = "enable-skia-graphite";
+
+// Force disabling/enabling Skia Graphite's Pipeline Precompilation. Disabling
+// will take precedence over enabling if both are specified.
+const char kDisableSkiaGraphitePrecompilation[] =
+    "disable-skia-graphite-precompilation";
+const char kEnableSkiaGraphitePrecompilation[] =
+    "enable-skia-graphite-precompilation";
 
 const char kShaderCachePath[] = "shader-cache-path";
 

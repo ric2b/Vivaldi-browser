@@ -8,8 +8,8 @@ import * as LitHtml from '../lit-html/lit-html.js';
 import * as VisualLogging from '../visual_logging/visual_logging.js';
 
 import * as ARIAUtils from './ARIAUtils.js';
-import {type ContextMenu, type Provider} from './ContextMenu.js';
-import {html} from './Fragment.js';
+import type {ContextMenu, Provider} from './ContextMenu.js';
+import {html as xhtml} from './Fragment.js';
 import {Tooltip} from './Tooltip.js';
 import {
   addReferrerToURLIfNecessary,
@@ -18,6 +18,8 @@ import {
   openLinkExternallyLabel,
 } from './UIUtils.js';
 import {XElement} from './XElement.js';
+
+const {html} = LitHtml;
 
 export class XLink extends XElement {
   hrefInternal: Platform.DevToolsPath.UrlString|null;
@@ -33,7 +35,7 @@ export class XLink extends XElement {
     className = className || '';
     // clang-format off
     // TODO(dgozman): migrate css from 'devtools-link' to 'x-link'.
-    const element = html `
+    const element = xhtml `
   <x-link href='${url}' tabindex='${tabindex}' class='${className} devtools-link' ${preventClick ? 'no-click' : ''}
   jslog=${VisualLogging.link().track({click: true, keydown:'Enter|Space'}).context(jsLogContext)}>${Platform.StringUtilities.trimMiddle(linkText, MaxLengthForDisplayedURLs)}</x-link>`;
     // clang-format on
@@ -158,4 +160,4 @@ export class ContextMenuProvider implements Provider<Node> {
 
 customElements.define('x-link', XLink);
 
-export const sample = LitHtml.html`<p>Hello, <x-link>world!</x-link></p>`;
+export const sample = html`<p>Hello, <x-link>world!</x-link></p>`;

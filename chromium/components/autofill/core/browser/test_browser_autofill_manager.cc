@@ -12,7 +12,7 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/form_structure_test_api.h"
-#include "components/autofill/core/browser/mock_single_field_form_fill_router.h"
+#include "components/autofill/core/browser/mock_single_field_fill_router.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_autofill_driver.h"
 #include "components/autofill/core/browser/test_autofill_manager_waiter.h"
@@ -113,9 +113,8 @@ void TestBrowserAutofillManager::OnJavaScriptChangedAutofilledValue(
 
 void TestBrowserAutofillManager::OnFormSubmitted(
     const FormData& form,
-    const bool known_success,
     const mojom::SubmissionSource source) {
-  AutofillManager::OnFormSubmitted(form, known_success, source);
+  AutofillManager::OnFormSubmitted(form, source);
   ASSERT_TRUE(waiter_.Wait(0));
 }
 

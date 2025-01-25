@@ -17,15 +17,15 @@
 class TabUtilsTest : public PlatformTest {
  public:
   TabUtilsTest() {
-    TestChromeBrowserState::Builder browser_state_builder;
-    browser_state_ = std::move(browser_state_builder).Build();
+    TestProfileIOS::Builder profile_builder;
+    profile_ = std::move(profile_builder).Build();
     browser_ = std::make_unique<TestBrowser>(
-        browser_state_.get(), std::make_unique<FakeWebStateListDelegate>());
+        profile_.get(), std::make_unique<FakeWebStateListDelegate>());
     web_state_list_ = browser_->GetWebStateList();
   }
 
   web::WebTaskEnvironment task_environment_;
-  std::unique_ptr<TestChromeBrowserState> browser_state_;
+  std::unique_ptr<TestProfileIOS> profile_;
   std::unique_ptr<TestBrowser> browser_;
   raw_ptr<WebStateList> web_state_list_;
 };
@@ -34,8 +34,7 @@ class TabUtilsTest : public PlatformTest {
 // webStates to the desired `insertion_params` with one group.
 TEST_F(TabUtilsTest, MoveWebStateWithIdentifierToInsertionParams_oneGroup) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip}, {});
+  scoped_feature_list.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
 
   WebStateListBuilderFromDescription builder(web_state_list_);
   ASSERT_TRUE(builder.BuildWebStateListFromDescription("| a [ 0 b c ] d"));
@@ -88,8 +87,7 @@ TEST_F(TabUtilsTest, MoveWebStateWithIdentifierToInsertionParams_oneGroup) {
 TEST_F(TabUtilsTest,
        MoveWebStateWithIdentifierToInsertionParams_multipleGroups) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip}, {});
+  scoped_feature_list.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
 
   WebStateListBuilderFromDescription builder(web_state_list_);
   ASSERT_TRUE(
@@ -139,8 +137,7 @@ TEST_F(TabUtilsTest,
 TEST_F(TabUtilsTest,
        MoveWebStateWithIdentifierToInsertionParams_notSameCollection) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {kTabGroupsInGrid, kTabGroupsIPad, kModernTabStrip}, {});
+  scoped_feature_list.InitWithFeatures({kTabGroupsIPad, kModernTabStrip}, {});
 
   const int increase_index = 1;
 

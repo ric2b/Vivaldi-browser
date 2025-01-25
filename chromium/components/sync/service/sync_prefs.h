@@ -36,10 +36,10 @@ namespace syncer {
 class SyncPrefObserver {
  public:
   virtual void OnSyncManagedPrefChange(bool is_sync_managed) = 0;
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   virtual void OnFirstSetupCompletePrefChange(
       bool is_initial_sync_feature_setup_complete) = 0;
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
   // Called when any of the prefs related to the user's selected data types has
   // changed.
   virtual void OnSelectedTypesPrefChange() = 0;
@@ -84,10 +84,10 @@ class SyncPrefs {
   bool IsExplicitBrowserSignin() const;
 
   // ChromeOS Ash, IsInitialSyncFeatureSetupComplete() always returns true.
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   void SetInitialSyncFeatureSetupComplete();
   void ClearInitialSyncFeatureSetupComplete();
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
   // Whether the "Sync everything" toggle is enabled. This flag only has an
   // effect if Sync-the-feature is enabled. Note that even if this is true, some
@@ -111,6 +111,12 @@ class SyncPrefs {
   // Returns whether `type` is "managed" i.e. controlled by a custodian (i.e.
   // parent/guardian of a child account).
   bool IsTypeManagedByCustodian(UserSelectableType type) const;
+
+  // Returns true if no value exists for the type pref. Otherwise,
+  // returns false.
+  bool DoesTypeHaveDefaultValueForAccount(
+      const UserSelectableType type,
+      const signin::GaiaIdHash& gaia_id_hash);
 
   // Returns true if the type is disabled; that was either set by a user
   // choice, or when a policy enforces disabling the type. Otherwise, returns
@@ -149,7 +155,7 @@ class SyncPrefs {
   void KeepAccountSettingsPrefsOnlyForUsers(
       const std::vector<signin::GaiaIdHash>& available_gaia_ids);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Functions to deal with the Ash-specific state where sync-the-feature is
   // disabled because the user reset sync via dashboard.
   bool IsSyncFeatureDisabledViaDashboard() const;
@@ -172,12 +178,7 @@ class SyncPrefs {
   // correspond to the "managed" (aka policy-controlled) pref store.
   static void SetOsTypeDisabledByPolicy(PrefValueMap* policy_prefs,
                                         UserSelectableOsType type);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  bool IsAppsSyncEnabledByOs() const;
-  void SetAppsSyncEnabledByOs(bool apps_sync_enabled);
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   // Whether Sync is disabled on the client for all profiles and accounts.
   bool IsSyncClientDisabledByPolicy() const;
@@ -297,9 +298,9 @@ class SyncPrefs {
                                        UserSelectableType type);
 
   static const char* GetPrefNameForType(UserSelectableType type);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   static const char* GetPrefNameForOsType(UserSelectableOsType type);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   static bool IsTypeSupportedInTransportMode(UserSelectableType type);
 
@@ -307,9 +308,9 @@ class SyncPrefs {
 
   void OnSelectedTypesPrefChanged(const std::string& pref_name);
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   void OnFirstSetupCompletePrefChange();
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
   // Never null.
   const raw_ptr<PrefService> pref_service_;
@@ -326,9 +327,9 @@ class SyncPrefs {
 
   bool password_sync_allowed_ = true;
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   BooleanPrefMember pref_initial_sync_feature_setup_complete_;
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
   // Caches the value of the kEnableLocalSyncBackend pref to avoid it flipping
   // during the lifetime of the service.

@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">შეხებით ძებნა ფუნქციაა, რომელიც, მხოლოდ, მაშინ მუშაობს, როცა Vivaldi-ში ნაგულისხმევ საძიებო სისტემად Google აყენია. ის მონიშნულ სიტყვებს და მიმდინარე გვერდს Google-ში აგზავნის. ამ ფუნქციის გამორთვა <ph name="BEGIN_LINK" />მორგებს<ph name="END_LINK" /> გვერდიდან შეგიძლიათ.</translation>
 <translation id="1598449788754183301">ნორმალური/ინკოგნიტო ჩანართების გადართვა</translation>
 <translation id="1644574205037202324">ისტორია</translation>
-<translation id="17513872634828108">ჩანართების გახსნა</translation>
 <translation id="1829244130665387512">გვერდში ძებნა</translation>
 <translation id="1910514478706885609">გახსნა ახალი ჩანართების ნაკრებში</translation>
 <translation id="1925021887439448749">შეიყვანეთ მორგებული ვებ-მისამართი</translation>
 <translation id="2038563949887743358">საიტის სრული ვერსიის მოთხოვნის ჩართვა</translation>
-<translation id="2139186145475833000">მთავარ ეკრანზე დამატება</translation>
 <translation id="2149973817440762519">სანიშნეს ჩასწორება</translation>
 <translation id="2306442503286132111">სანიშნე შენახულია საქაღალდეში <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">გარეგნობა</translation>
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">მოწყობილობის ამჟამინდელი ენა</translation>
 <translation id="4167670741834902166">ახალი კონფიდენციალური ჩანართი</translation>
 <translation id="4195643157523330669">ახალ ჩანართში გახსნა</translation>
+<translation id="4225895483398857530">ხელსაწყოთა ზოლის მალსახმობი</translation>
 <translation id="4243710787042215766">ინკოგნიტო ჩანართში გახსნა</translation>
 <translation id="4304713468139749426">პაროლების მმართველი</translation>
 <translation id="451872707440238414">სანიშნეებში ძიება</translation>
@@ -74,6 +73,7 @@
 <translation id="8560602726703398413">თქვენი საკითხავი სია სანიშნეებშია</translation>
 <translation id="85991616550051997">საწყის გვერდზე გადასვლა</translation>
 <translation id="8820817407110198400">სანიშნეები</translation>
+<translation id="9042893549633094279">კონფიდენციალობა და უსაფრთხოება</translation>
 <translation id="9063523880881406963">საიტის სრული ვერსიის მოთხოვნის გამორთვა</translation>
 <translation id="9080642952018487277">ინკოგნიტო რეჟიმში გადასვლა</translation>
 <translation id="96681097142096641">გსურთ, იხილოთ გამარტივებული გვერდი?</translation>

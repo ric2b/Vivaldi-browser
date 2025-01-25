@@ -101,6 +101,9 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
 // debug mode.
 @property(nonatomic, assign) RemoteSuggestionsService* remoteSuggestionsService;
 
+// Whether the omnibox has a thumbnail.
+@property(nonatomic, assign) BOOL hasThumbnail;
+
 @end
 
 @implementation OmniboxPopupMediator {
@@ -235,9 +238,6 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
 
   [self updateMatches:result];
   self.open = !result.empty();
-  if (!self.open) {
-    [_cachedImages removeAllObjects];
-  }
   metrics::OmniboxFocusType inputFocusType =
       self.autocompleteController->input().focus_type();
   BOOL isFocusing =
@@ -275,6 +275,15 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
   }
 
   _debugInfoConsumer = debugInfoConsumer;
+}
+
+- (void)setOpen:(BOOL)open {
+  // When closing the popup.
+  if (_open && !open) {
+    [_cachedImages removeAllObjects];
+    [_debugInfoConsumer removeAllObjects];
+  }
+  _open = open;
 }
 
 #pragma mark - AutocompleteResultDataSource
@@ -427,9 +436,8 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
       _delegate->OnMatchSelectedForAppending(match);
     }
   } else {
-    NOTREACHED_IN_MIGRATION()
-        << "Suggestion type " << NSStringFromClass(suggestion.class)
-        << " not handled for trailing button tap.";
+    NOTREACHED() << "Suggestion type " << NSStringFromClass(suggestion.class)
+                 << " not handled for trailing button tap.";
   }
 }
 
@@ -595,6 +603,7 @@ const NSUInteger kMaxSuggestTileTypePosition = 15;
   formatter.incognito = _incognito;
   formatter.defaultSearchEngineIsGoogle = self.defaultSearchEngineIsGoogle;
   formatter.pedalData = [self.pedalAnnotator pedalForMatch:match];
+  formatter.isMultimodal = self.hasThumbnail;
 
   if (formatter.suggestionGroupId) {
     omnibox::GroupId groupId =

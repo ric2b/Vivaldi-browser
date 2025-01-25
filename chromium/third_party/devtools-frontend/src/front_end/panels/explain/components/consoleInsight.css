@@ -17,7 +17,6 @@
 }
 
 .wrapper {
-  padding: var(--sys-size-6) var(--sys-size-8);
   background-color: var(--sys-color-cdt-base-container);
   border-radius: 16px;
   /* stylelint-disable-next-line property-no-unknown */
@@ -54,6 +53,7 @@
 
 .animation-wrapper {
   overflow: hidden;
+  padding: var(--sys-size-6) var(--sys-size-8);
 }
 
 .wrapper.top {
@@ -207,8 +207,13 @@ textarea {
 
 .buttons {
   display: flex;
-  flex-wrap: wrap;
   gap: 5px;
+}
+
+@media (max-width: 500px) {
+  .buttons {
+    flex-wrap: wrap;
+  }
 }
 
 main .buttons {
@@ -222,7 +227,6 @@ main .buttons {
   font-size: 11px;
   align-items: flex-start;
   flex-direction: column;
-  max-width: 360px;
 }
 
 .link {
@@ -276,6 +280,7 @@ details {
 
   overflow: hidden;
   height: var(--collapsed-height);
+  margin-top: 10px;
 }
 
 details[open] {
@@ -298,15 +303,6 @@ h2:focus-visible {
 .info {
   width: 20px;
   height: 20px;
-}
-
-devtools-icon[name="spark"] {
-  color: var(--sys-color-primary-bright);
-}
-
-devtools-icon[name="dog-paw"] {
-  width: 16px;
-  height: 16px;
 }
 
 .badge {

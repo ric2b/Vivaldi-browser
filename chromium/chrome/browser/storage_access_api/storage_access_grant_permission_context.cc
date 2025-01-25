@@ -327,24 +327,38 @@ void StorageAccessGrantPermissionContext::DecidePermission(
     return;
   }
 
+  const url::Origin embedding_origin =
+      url::Origin::Create(request_data.embedding_origin);
+
   // Return early without prompting users if cookie access is already allowed.
   // This does not take previously granted SAA permission into account.
   scoped_refptr<content_settings::CookieSettings> cookie_settings =
       CookieSettingsFactory::GetForProfile(
           Profile::FromBrowserContext(browser_context()));
   net::CookieSettingOverrides overrides = rfh->GetCookieSettingOverrides();
-  overrides.Remove(net::CookieSettingOverride::kStorageAccessGrantEligible);
-  if (cookie_settings->IsFullCookieAccessAllowed(
-          request_data.requesting_origin, net::SiteForCookies(),
-          url::Origin::Create(request_data.embedding_origin), overrides)) {
+  if (overrides.Has(net::CookieSettingOverride::kStorageAccessGrantEligible) ||
+      overrides.Has(
+          net::CookieSettingOverride::kStorageAccessGrantEligibleViaHeader)) {
+    RecordOutcomeSample(RequestOutcome::kDeniedAborted);
+    // The caller already has the `kStorageAccessGrantEligible` or
+    // `kStorageAccessGrantEligibleViaHeader` override, which is impossible
+    // since those overrides should be used solely by the network service. This
+    // suggests the renderer is misbehaving.
+    mojo::ReportBadMessage(
+        "requestStorageAccess: inconsistent state. Requested permission for a "
+        "frame that already claims to have permission.");
+    std::move(callback).Run(CONTENT_SETTING_BLOCK);
+    return;
+  }
+  if (cookie_settings->IsFullCookieAccessAllowed(request_data.requesting_origin,
+                                                 net::SiteForCookies(),
+                                                 embedding_origin, overrides)) {
     RecordOutcomeSample(RequestOutcome::kAllowedByCookieSettings);
     std::move(callback).Run(CONTENT_SETTING_ALLOW);
     return;
   }
 
   const net::SchemefulSite requesting_site(request_data.requesting_origin);
-  const url::Origin embedding_origin =
-      url::Origin::Create(request_data.embedding_origin);
   const net::SchemefulSite embedding_site(embedding_origin);
 
   // Return early without prompting users if the requesting frame is same-site

@@ -72,6 +72,53 @@ void PotentiallyRecordNonAsciiCookieNameValue(
   }
 }
 
+void PotentiallyRecordCookieOriginMismatch(
+    RenderFrameHost* rfh,
+    CookieAccessDetails::Type access_type,
+    const net::CookieInclusionStatus& status) {
+  CHECK(rfh);
+
+  if (access_type != CookieAccessDetails::Type::kRead) {
+    return;
+  }
+
+  // Our data collection policy disallows collecting UKMs while prerendering.
+  // See //content/browser/preloading/prerender/README.md and ask the team to
+  // explore options to record data for prerendering pages if we need to
+  // support the case.
+  if (rfh->IsInLifecycleState(RenderFrameHost::LifecycleState::kPrerendering)) {
+    return;
+  }
+  const bool port_mismatch =
+      status.HasWarningReason(net::CookieInclusionStatus::WARN_PORT_MISMATCH) ||
+      status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_PORT_MISMATCH);
+
+  const bool scheme_mismatch =
+      status.HasWarningReason(
+          net::CookieInclusionStatus::WARN_SCHEME_MISMATCH) ||
+      status.HasExclusionReason(
+          net::CookieInclusionStatus::EXCLUDE_SCHEME_MISMATCH);
+
+  if (port_mismatch || scheme_mismatch) {
+    ukm::SourceId source_id = rfh->GetPageUkmSourceId();
+
+    auto event = ukm::builders::Cookies_Blocked_DueToOriginMismatch(source_id);
+
+    // The event itself is what we're interested in, the value of "true" here
+    // can be ignored.
+    if (port_mismatch) {
+      event.SetPortMismatch(true);
+    }
+
+    if (scheme_mismatch) {
+      event.SetSchemeMismatch(true);
+    }
+
+    event.Record(ukm::UkmRecorder::Get());
+  }
+}
+
 // Relies on checks in RecordPartitionedCookiesUKMs to confirm that that the
 // cookie name is not "receive-cookie-deprecation", that cookie is first party
 // partitioned and the RenderFrameHost is not prerendering.
@@ -204,14 +251,23 @@ bool ShouldReportDevToolsIssueForStatus(
          status.HasExclusionReason(
              net::CookieInclusionStatus::EXCLUDE_DOMAIN_NON_ASCII) ||
          status.HasExclusionReason(
+             net::CookieInclusionStatus::EXCLUDE_PORT_MISMATCH) ||
+         status.HasExclusionReason(
+             net::CookieInclusionStatus::EXCLUDE_SCHEME_MISMATCH) ||
+         status.HasExclusionReason(
              net::CookieInclusionStatus::
                  EXCLUDE_THIRD_PARTY_BLOCKED_WITHIN_FIRST_PARTY_SET) ||
          status.HasExclusionReason(
-             net::CookieInclusionStatus::EXCLUDE_THIRD_PARTY_PHASEOUT);
+             net::CookieInclusionStatus::EXCLUDE_THIRD_PARTY_PHASEOUT) ||
+         status.exemption_reason() ==
+             net::CookieInclusionStatus::ExemptionReason::k3PCDMetadata ||
+         status.exemption_reason() ==
+             net::CookieInclusionStatus::ExemptionReason::k3PCDHeuristics;
 }
 // LINT.ThenChange(//content/browser/renderer_host/cookie_utils.cc:should_report_legacy_tech_report)
 
 // LINT.IfChange(should_report_legacy_tech_report)
+// TODO(b/324847874): Add cookie exemptions to LTR
 bool ShouldReportLegacyTechIssueForStatus(
     const net::CookieInclusionStatus& status) {
   return status.HasExclusionReason(
@@ -345,6 +401,8 @@ void EmitCookieWarningsAndMetricsOnce(
           cookie->cookie_or_line->get_cookie().Name(),
           cookie->cookie_or_line->get_cookie().Value());
     }
+
+    PotentiallyRecordCookieOriginMismatch(rfh, cookie_details->type, status);
 
     // In order to anticipate the potential effects of the expiry limit in
     // rfc6265bis, we need to check how long it's been since the cookie was

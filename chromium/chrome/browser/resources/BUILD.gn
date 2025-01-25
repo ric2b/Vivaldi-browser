@@ -56,7 +56,6 @@ group("resources") {
       "settings_shared:resources",
       "side_panel/bookmarks:resources",
       "side_panel/commerce:resources",
-      "side_panel/companion:resources",
       "side_panel/customize_chrome:resources",
       "side_panel/history_clusters:resources",
       "side_panel/read_anything:resources",
@@ -107,11 +106,7 @@ group("resources") {
   }
 
   if (is_chromeos) {
-    public_deps += [ "dlp_internals:resources" ]
-  }
-
-  if (is_win || is_mac || is_linux || is_chromeos_lacros) {
-    public_deps += [ "browser_switch:resources" ]
+    public_deps += [ "chromeos/dlp_internals:resources" ]
   }
 
   if (is_win || is_mac || is_linux || is_chromeos) {
@@ -122,6 +117,8 @@ group("resources") {
     public_deps += [
       "app_home:resources",
       "app_settings:resources",
+      "browser_switch:resources",
+      "on_device_translation_internals:resources",
     ]
   }
 
@@ -132,14 +129,16 @@ group("resources") {
   if (!is_android && !is_chromeos_ash) {
     public_deps += [
       "inline_login:resources",
-      "intro:resources",
       "signin/profile_picker:resources",
       "welcome:resources",
     ]
   }
 
   if (enable_dice_support) {
-    public_deps += [ "signin/batch_upload:resources" ]
+    public_deps += [
+      "intro:resources",
+      "signin/batch_upload:resources",
+    ]
   }
 
   if (enable_webui_tab_strip) {
@@ -147,10 +146,7 @@ group("resources") {
   }
 
   if (enable_extensions) {
-    public_deps += [
-      "extensions:resources",
-      "sync_file_system_internals:resources",
-    ]
+    public_deps += [ "extensions:resources" ]
   }
 
   if (enable_pdf) {

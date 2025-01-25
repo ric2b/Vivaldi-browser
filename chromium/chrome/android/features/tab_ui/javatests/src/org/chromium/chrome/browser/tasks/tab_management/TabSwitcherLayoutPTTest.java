@@ -55,6 +55,7 @@ import org.chromium.chrome.test.transit.page.WebPageStation;
 import org.chromium.chrome.test.transit.tabmodel.TabThumbnailsCapturedCarryOn;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.omnibox.OmniboxFeatureList;
 import org.chromium.components.tab_groups.TabGroupColorId;
 import org.chromium.net.test.EmbeddedTestServer;
 
@@ -66,7 +67,8 @@ import java.util.concurrent.ExecutionException;
 @SuppressWarnings("ConstantConditions")
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@DisableFeatures({ChromeFeatureList.TAB_GROUP_PARITY_ANDROID})
+@DisableFeatures({OmniboxFeatureList.ANDROID_HUB_SEARCH})
+@EnableFeatures({ChromeFeatureList.TAB_GROUP_CREATION_DIALOG_ANDROID})
 @Restriction({Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
 @Batch(Batch.PER_CLASS)
 public class TabSwitcherLayoutPTTest {
@@ -130,6 +132,9 @@ public class TabSwitcherLayoutPTTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
+    @RequiresRestart(
+            "Flaky in arm64 (crbug.com/378137969 and crbug.com/378502216), affects flake rate of"
+                    + " other tests")
     public void testRenderGrid_10WebTabs() throws IOException {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         WebPageStation pageStation =
@@ -151,6 +156,9 @@ public class TabSwitcherLayoutPTTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
+    @RequiresRestart(
+            "Flaky in arm64 (crbug.com/378137969 and crbug.com/378502216), affects flake rate of"
+                    + " other tests")
     public void testRenderGrid_10WebTabs_InitialScroll() throws IOException {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         WebPageStation pageStation =
@@ -171,6 +179,7 @@ public class TabSwitcherLayoutPTTest {
     @MediumTest
     @Feature({"RenderTest"})
     @DisabledTest(message = "Test is flaky due to thumbnails not being reliably captured")
+    @RequiresRestart("Disable batching while re-enabling other tests")
     public void testRenderGrid_3WebTabs() throws IOException {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         WebPageStation pageStation =
@@ -220,8 +229,6 @@ public class TabSwitcherLayoutPTTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @DisabledTest(message = "Test is flaky due to thumbnails not being reliably captured")
-    @RequiresRestart("Disable batching while re-enabling other tests.")
     public void testRenderGrid_Incognito() throws IOException {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         // Prepare some incognito tabs and enter tab switcher.
@@ -249,14 +256,12 @@ public class TabSwitcherLayoutPTTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @EnableFeatures(ChromeFeatureList.TAB_GROUP_PARITY_ANDROID)
-    @DisabledTest(message = "Test is flaky due to thumbnails not being reliably captured")
     public void testRenderGrid_1TabGroup_ColorIcon() throws IOException {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
 
         WebPageStation firstPage = mInitialStateRule.startOnBlankPage();
         int firstTabId = firstPage.getLoadedTab().getId();
-        RegularNewTabPageStation secondPage = firstPage.openRegularTabAppMenu().openNewTab();
+        RegularNewTabPageStation secondPage = firstPage.openNewTabFast();
         int secondTabId = secondPage.getLoadedTab().getId();
         // Make sure all thumbnails are there before switching tabs.
         RegularTabSwitcherStation tabSwitcher = enterRegularHTSWithThumbnailChecking(secondPage);
@@ -265,7 +270,7 @@ public class TabSwitcherLayoutPTTest {
         editor = editor.addTabToSelection(1, secondTabId);
 
         NewTabGroupDialogFacility dialog =
-                editor.openAppMenuWithEditor().groupTabsWithParityEnabled();
+                editor.openAppMenuWithEditor().groupTabs();
         dialog = dialog.inputName("test_tab_group_name");
         dialog = dialog.pickColor(TabGroupColorId.RED);
         dialog.pressDone();
@@ -274,9 +279,9 @@ public class TabSwitcherLayoutPTTest {
         mRenderTestRule.render(
                 cta.findViewById(R.id.pane_frame), "1_tab_group_GTS_card_item_color_icon");
 
-        WebPageStation previousPage =
-                tabSwitcher.leaveHubToPreviousTabViaBack(WebPageStation.newBuilder());
-        assertFinalDestination(previousPage);
+        secondPage =
+                tabSwitcher.leaveHubToPreviousTabViaBack(RegularNewTabPageStation.newBuilder());
+        assertFinalDestination(secondPage);
     }
 
     @Test
@@ -324,7 +329,7 @@ public class TabSwitcherLayoutPTTest {
     @EnableAnimations
     public void testTabToGridAndBack_SoftCleanup_Ntp() {
         WebPageStation firstPage = mInitialStateRule.startOnBlankPage();
-        RegularNewTabPageStation ntp = firstPage.openRegularTabAppMenu().openNewTab();
+        RegularNewTabPageStation ntp = firstPage.openNewTabFast();
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         Runnable resetHTSStateOnUiThread =
                 () -> {

@@ -39,6 +39,7 @@
 #include "dawn/native/d3d11/DeviceD3D11.h"
 #include "dawn/native/d3d11/PlatformFunctionsD3D11.h"
 #include "dawn/native/d3d11/UtilsD3D11.h"
+#include "dawn/platform/DawnPlatform.h"
 
 namespace dawn::native::d3d11 {
 
@@ -140,9 +141,9 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     EnableFeature(Feature::Depth32FloatStencil8);
     EnableFeature(Feature::DepthClipControl);
     EnableFeature(Feature::TextureCompressionBC);
-    EnableFeature(Feature::SurfaceCapabilities);
     EnableFeature(Feature::D3D11MultithreadProtected);
     EnableFeature(Feature::Float32Filterable);
+    EnableFeature(Feature::Float32Blendable);
     EnableFeature(Feature::DualSourceBlending);
     EnableFeature(Feature::ClipDistances);
     EnableFeature(Feature::Unorm16TextureFormats);
@@ -299,6 +300,10 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
     if (gpu_info::IsIntelGen11OrOlder(vendorId, deviceId)) {
         deviceToggles->Default(Toggle::ClearColorWithDraw, true);
     }
+
+    // Use the Tint IR backend by default if the corresponding platform feature is enabled.
+    deviceToggles->Default(Toggle::UseTintIR,
+                           platform->IsFeatureEnabled(platform::Features::kWebGPUUseTintIR));
 }
 
 ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(

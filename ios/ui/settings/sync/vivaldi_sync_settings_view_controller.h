@@ -33,6 +33,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeSyncUserInfo = kItemTypeEnumZero,
 
   ItemTypeSyncStatus,
+  ItemTypeSyncStatusFooter,
 
   ItemTypeSyncWhatSegmentedControl,
   ItemTypeSyncAllInfoTextbox,
@@ -58,6 +59,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 @protocol VivaldiSyncSettingsViewControllerDelegate
 
+- (void)updateDeviceName:(NSString*)deviceName;
+
 // Called when the view controller is removed from its parent.
 - (void)vivaldiSyncSettingsViewControllerWasRemoved:
     (VivaldiSyncSettingsViewController*)controller;
@@ -65,7 +68,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 @end
 
 @interface VivaldiSyncSettingsViewController
-    : SettingsRootTableViewController <VivaldiSyncSettingsConsumer>
+    : SettingsRootTableViewController <VivaldiSyncSettingsConsumer,
+                                      TableViewLinkHeaderFooterItemDelegate>
 
 // ApplicationCommands handler.
 @property(nonatomic, weak) id<ApplicationCommands> applicationCommandsHandler;

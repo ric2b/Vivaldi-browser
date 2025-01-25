@@ -119,7 +119,7 @@ void DesktopWallpaperDataClassHandlerWin::GetDataOnFileThread(
       break;
     }
     scoped_refptr<base::RefCountedMemory> image_data(
-        base::RefCountedBytes::TakeVector(&buffer));
+        base::MakeRefCounted<base::RefCountedBytes>(std::move(buffer)));
     // Unretained is used because Chromium's URLDataSource and so this
     // class is destroyed on UI thread strictly after all outstanding
     // GotDataCallback callbacks runs on UI thread.

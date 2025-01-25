@@ -10,11 +10,12 @@
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
+#include "build/build_config.h"
 
 namespace language_detection {
-
-// Allows supplying a local model file. The file cannot be opened if we're in a
-// sanbox. You can use --no-sandbox when running tests that rely on this flag.
+// Allows supplying a local model file. The file cannot be opened if we're in
+// a sandbox. You can use --no-sandbox when running tests that rely on this
+// flag.
 // TODO(https://crbug.com/354069716): Move this to the model service in the
 // browser.
 BASE_FEATURE(kLanguageDetectionModelForTesting,

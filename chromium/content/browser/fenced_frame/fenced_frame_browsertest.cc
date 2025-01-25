@@ -385,12 +385,11 @@ IN_PROC_BROWSER_TEST_F(FencedFrameMPArchBrowserTest, FrameIteration) {
 
   // WebContentsImpl::ForEachFrameTree should include fenced frames.
   bool visited_fenced_frame_frame_tree = false;
-  web_contents()->ForEachFrameTree(
-      base::BindLambdaForTesting([&](FrameTree& frame_tree) {
-        if (&frame_tree == fenced_frame_rfh->frame_tree()) {
-          visited_fenced_frame_frame_tree = true;
-        }
-      }));
+  web_contents()->ForEachFrameTree([&](FrameTree& frame_tree) {
+    if (&frame_tree == fenced_frame_rfh->frame_tree()) {
+      visited_fenced_frame_frame_tree = true;
+    }
+  });
   EXPECT_TRUE(visited_fenced_frame_frame_tree);
 }
 
@@ -2300,8 +2299,7 @@ class FencedFrameNestedModesTest
         return "opaque-ads";
     }
 
-    NOTREACHED_IN_MIGRATION();
-    return "";
+    NOTREACHED();
   }
 
   base::test::ScopedFeatureList feature_list_;
@@ -2407,6 +2405,7 @@ class FledgeFencedFrameOriginContentBrowserClient
   // This is needed so that the interest group related APIs can run without
   // failing with the result AuctionResult::kSellerRejected.
   bool IsInterestGroupAPIAllowed(
+      content::BrowserContext* browser_context,
       content::RenderFrameHost* render_frame_host,
       ContentBrowserClient::InterestGroupApiOperation operation,
       const url::Origin& top_frame_origin,
@@ -2417,8 +2416,7 @@ class FledgeFencedFrameOriginContentBrowserClient
   bool IsPrivacySandboxReportingDestinationAttested(
       content::BrowserContext* browser_context,
       const url::Origin& destination_origin,
-      content::PrivacySandboxInvokingAPI invoking_api,
-      bool post_impression_reporting) override {
+      content::PrivacySandboxInvokingAPI invoking_api) override {
     return true;
   }
 
@@ -2471,11 +2469,8 @@ class FencedFrameParameterizedBrowserTest : public FencedFrameBrowserTestBase {
          // `FencedFrameConfig` object upon developer request.
          {blink::features::kFencedFramesAPIChanges, {}},
          {blink::features::kFencedFramesAutomaticBeaconCredentials, {}},
-         {blink::features::kFencedFramesReportingAttestationsChanges, {}},
          {blink::features::kFencedFramesLocalUnpartitionedDataAccess, {}},
-         {blink::features::
-              kFencedFramesCrossOriginEventReportingUnlabeledTraffic,
-          {}},
+         {blink::features::kFencedFramesCrossOriginEventReporting, {}},
          {blink::features::kFencedFramesReportEventHeaderChanges, {}}},
         {/* disabled_features */});
   }
@@ -6540,7 +6535,6 @@ class FencedFrameReportEventBrowserTest
       kExceedMaxEventDataLength,
       kUntrustedNetworkDisabled,
       kCrossOriginNoHeader,
-      kCrossOriginModeAB
     };
 
     // Outcome of reportEvent.
@@ -6576,9 +6570,6 @@ class FencedFrameReportEventBrowserTest
         return "This document is cross-origin to the document that contains "
                "reporting metadata, but the fenced frame's document was not "
                "served with the 'Allow-Cross-Origin-Event-Reporting' header.";
-      case Step::Result::kCrossOriginModeAB:
-        return "Cross-origin reporting beacons are not supported with Mode A/B "
-               "Chrome-facilitated testing traffic.";
       default:
         return "";
     }
@@ -8396,70 +8387,6 @@ IN_PROC_BROWSER_TEST_F(
         /*web_expected=*/true,
         /*os_expected=*/false);
   }
-}
-
-class FencedFrameReportEventFacilitatedTestingEnabledBrowserTest
-    : public FencedFrameReportEventBrowserTest {
- public:
-  FencedFrameReportEventFacilitatedTestingEnabledBrowserTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kCookieDeprecationFacilitatedTesting);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(
-    FencedFrameReportEventFacilitatedTestingEnabledBrowserTest,
-    NestedIframeCrossOriginNavigationWithOptIn) {
-  base::HistogramTester histogram_tester;
-  std::vector<Step> config = {
-      {
-          .is_embedder_initiated = true,
-          .is_opaque = true,
-          .destination = {"a.test",
-                          "/set-header"
-                          "?Supports-Loading-Mode: fenced-frame"
-                          "&Allow-Cross-Origin-Event-Reporting: ?1"},
-          .report_event_result = Step::Result::kSuccess,
-      },
-      {
-          .is_target_nested_iframe = true,
-          .event = {/*type=*/"click", /*reporting_destination=*/"buyer",
-                    /*data=*/"data", /*cross_origin_exposed=*/true},
-          .destination = {"b.test", "/fenced_frames/title1.html"},
-          .report_event_result = Step::Result::kCrossOriginModeAB,
-      },
-  };
-  RunTest(config);
-}
-
-IN_PROC_BROWSER_TEST_F(
-    FencedFrameReportEventFacilitatedTestingEnabledBrowserTest,
-    CustomURLNestedIframeCrossOriginNavigationWithOptIn) {
-  base::HistogramTester histogram_tester;
-  std::vector<Step> config = {
-      {
-          .is_embedder_initiated = true,
-          .is_opaque = true,
-          .use_custom_destination_url = true,
-          .destination = {"a.test",
-                          "/set-header"
-                          "?Supports-Loading-Mode: fenced-frame"
-                          "&Allow-Cross-Origin-Event-Reporting: ?1"},
-          .report_event_result = Step::Result::kSuccess,
-      },
-      {
-          .is_target_nested_iframe = true,
-          .use_custom_destination_url = true,
-          .event = {/*type=*/"N/a", /*reporting_destination=*/"N/a",
-                    /*data=*/"data", /*cross_origin_exposed=*/true},
-          .destination = {"b.test", "/fenced_frames/title1.html"},
-          .report_event_result = Step::Result::kCrossOriginModeAB,
-      },
-  };
-  RunTest(config);
 }
 
 // Parameterized on whether the feature is enabled or not.

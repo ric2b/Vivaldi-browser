@@ -12,9 +12,11 @@
 #include "services/webnn/public/cpp/graph_validation_utils.h"
 #include "services/webnn/public/cpp/operand_descriptor.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom-blink.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_conv_2d_filter_operand_layout.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_conv_transpose_2d_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_input_operand_layout.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_operand_descriptor.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer/array_buffer_contents.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer_view.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph.h"
@@ -26,6 +28,7 @@
 namespace blink {
 
 class MLOperator;
+class ScriptState;
 
 // Return the operators in topological order by searching from the named
 // output operands. It ensures operator 'j' appears before operator 'i' in the
@@ -79,6 +82,9 @@ Vector<uint32_t> CreateAllAxes(const wtf_size_t rank);
 // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-layernorm.
 Vector<uint32_t> CreateLayerNormalizationDefaultAxes(const wtf_size_t rank);
 
+// Create a default strides vector [1, ..., 1] for slice.
+Vector<uint32_t> CreateSliceDefaultStrides(wtf_size_t rank);
+
 // Helper to validate filer layout for Nhwc input layout.
 base::expected<void, String> ValidateFilterLayout(
     bool depthwise,
@@ -104,6 +110,12 @@ webnn::OperandDataType FromBlinkDataType(V8MLOperandDataType::Enum data_type);
 
 MODULES_EXPORT bool IsLogicalBinaryOperator(
     webnn::mojom::blink::ElementWiseBinary::Kind kind);
+
+MODULES_EXPORT void LogConsoleWarning(
+    ScriptState* script_state,
+    const String& message,
+    mojom::blink::ConsoleMessageSource message_source =
+        mojom::blink::ConsoleMessageSource::kJavaScript);
 
 }  // namespace blink
 

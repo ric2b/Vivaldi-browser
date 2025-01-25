@@ -10,6 +10,7 @@
 <translation id="132390688737681464">Adresleri Kaydet ve Doldur</translation>
 <translation id="1375198122581997741">Sürüm Hakkında</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> hiç veri göndermedi.</translation>
+<translation id="1555191101192706055">Ziyaret etmeye çalıştığınız sitedeki saldırganlar, gezinme şeklinizi etkileyen zararlı yazılımlar yüklemeniz için sizi kandırabilir; örneğin, ana sayfanızı değiştirebilir veya ziyaret ettiğiniz sitelerde size ekstra reklamlar gösterebilir.</translation>
 <translation id="1559528461873125649">Belirtilen dosya veya dizin yok</translation>
 <translation id="1640244768702815859"><ph name="BEGIN_LINK" />Sitenin ana sayfasını ziyaret etmeyi deneyin<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Desteklenmeyen protokol</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proxy'yi ve güvenlik duvarını kontrol edin<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Verildiği kuruluş: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Bu site güvenli bağlantı sağlayamıyor</translation>
+<translation id="2178904466768126352">Ziyaret etmeye çalıştığınız sitedeki saldırganlar, parolalarınız, fotoğraflarınız, mesajlarınız veya kredi kartı numaralarınız gibi verilerinizi çalan veya silen zararlı bir yazılım yükleyebilir.</translation>
 <translation id="2187317261103489799">Algıla (varsayılan)</translation>
 <translation id="2224337661447660594">İnternet bağlantısı yok</translation>
 <translation id="2283340219607151381">Adresleri kaydet ve doldur</translation>
@@ -92,6 +94,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Güvenlik duvarı ve antivirüs yapılandırmalarını kontrol edin<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Ağ Tanılayıcıları'nı çalıştırmayı deneyin<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Geçerli</translation>
+<translation id="4241830393007970744">Ziyaret etmeye çalıştığınız sitedeki saldırganlar, sizi kandırarak yazılım yüklemenizi veya şifreleriniz, telefon numaranız veya kredi kartı numaralarınız gibi bilgilerinizi ifşa etmelerini isteyebilir.</translation>
 <translation id="4250431568374086873">Bu siteye bağlantınız tam olarak güvenli değil</translation>
 <translation id="4265872034478892965">Yöneticiniz tarafından izin verildi</translation>
 <translation id="4305666528087210886">Dosyanıza erişilemedi</translation>
@@ -102,6 +105,7 @@
 <translation id="4522570452068850558">Ayrıntılar</translation>
 <translation id="4558551763791394412">Eklentilerinizi devre dışı bırakmayı deneyin.</translation>
 <translation id="4592951414987517459"><ph name="DOMAIN" /> ile olan bağlantınız modern bir şifre seti kullanılarak şifrelendi.</translation>
+<translation id="4598641255230617220">Yapıştır ve Git</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Bağlantınız kesildi</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows Ağ Tanılamayı Çalıştırmak<ph name="END_LINK" /></translation>
@@ -111,6 +115,7 @@
 <translation id="4764776831041365478"><ph name="URL" /> adresindeki web sayfası, geçici olarak kullanılamıyor veya kalıcı olarak yeni bir web adresine taşınmış olabilir.</translation>
 <translation id="483241715238664915">Uyarıları aç</translation>
 <translation id="4943872375798546930">Sonuç yok</translation>
+<translation id="5017554619425969104">Kopyaladığın metin</translation>
 <translation id="5023310440958281426">Yöneticinizin politikalarını inceleyin</translation>
 <translation id="5039804452771397117">İzin ver</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 çerez kullanımda)} other {(# çerez kullanımda)}}</translation>
@@ -165,11 +170,11 @@
 <translation id="7108819624672055576">Bir eklenti tarafından izin verildi</translation>
 <translation id="7111012039238467737">(Geçerli)</translation>
 <translation id="7113310725918019676"><ph name="DOMAIN" /> adresinden <ph name="BLOCKED_TYPE" /> içeriğine izin ver</translation>
+<translation id="7126644664682723998">Yapıştır ve Ara</translation>
 <translation id="7179323680825933600">Ödeme Yöntemlerini Kaydet ve Doldur</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> güvenlik standartlarına uymuyor.</translation>
 <translation id="7219179957768738017">Bağlantı <ph name="SSL_VERSION" /> kullanıyor.</translation>
 <translation id="7221855153210829124">Bildirimleri göster</translation>
-<translation id="7227747683324411744">Ziyaret etmeye çalıştığınız sitedeki saldırganlar, örneğin ana sayfanızı değiştirerek veya ziyaret ettiğiniz sitelerde size ekstra reklamlar göstererek, gezinme şeklinizi etkileyen zararlı yazılımları yüklemeniz için sizi kandırabilir.</translation>
 <translation id="7353601530677266744">Komut Satırı</translation>
 <translation id="7364115444476960850">Ulaşmaya çalıştığınız sayda Vivaldi'nin <ph name="BLOCKER_NAME" /> engelleyicisi tarafından engellendi</translation>
 <translation id="7419106976560586862">Profil Yolu</translation>
@@ -177,7 +182,6 @@
 <translation id="7518003948725431193">Şu web adresi için web sayfası bulunamadı:<ph name="URL" /></translation>
 <translation id="7549584377607005141">Bu Web sayfasının düzgün şekilde görüntülenmesi için, önceden girdiğiniz veriler gerekiyor. Bu verileri tekrar gönderebilirsiniz, ancak bunu yaptığınızda bu sayfanın daha önce gerçekleştirdiği işlemler de tekrar edilir.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> şu anda bu isteği işleme alamıyor.</translation>
-<translation id="7605377493722372900">Ziyaret etmeye çalıştığınız sitedeki saldırganlar, şifreniz, fotoğraflarınız, mesajlarınız veya kredi kartı numaranız gibi şeyleri çalan veya silen zararlı bir yazılım yükleyebilir.</translation>
 <translation id="7662298039739062396">Ayar bir eklenti tarafından denetleniyor</translation>
 <translation id="7663736086183791259">Sertifika <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">Sertifika</translation>
@@ -203,7 +207,6 @@
 <translation id="8288807391153049143">Sertifikayı göster</translation>
 <translation id="8289355894181816810">Bunun ne anlama geldiğini bilmiyorsanız ağ yöneticinizle bağlantı kurun.</translation>
 <translation id="8332188693563227489"><ph name="HOST_NAME" /> ana makinesine erişim reddedildi</translation>
-<translation id="8422228580902424274">Ziyaret etmeye çalıştığınız sitedeki saldırganlar sizi bir yazılım yüklemeniz ya da şifreniz, telefonunuz veya kredi kartı numaranız gibi şeyleri ifşa etmeniz için kandırabilir.</translation>
 <translation id="8473863474539038330">Adresler ve daha fazlası</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ana makinesinin yanıt vermesi çok uzun sürdü.</translation>
 <translation id="8503813439785031346">Kullanıcı adı</translation>

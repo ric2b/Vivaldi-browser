@@ -32,10 +32,7 @@
 #include "components/trusted_vault/features.h"
 #include "components/trusted_vault/proto/local_trusted_vault.pb.h"
 #include "components/trusted_vault/proto_string_bytes_conversion.h"
-#include "components/trusted_vault/recovery_key_store_connection.h"
-#include "components/trusted_vault/recovery_key_store_controller.h"
 #include "components/trusted_vault/securebox.h"
-#include "components/trusted_vault/test/mock_recovery_key_store_connection.h"
 #include "components/trusted_vault/test/mock_trusted_vault_connection.h"
 #include "components/trusted_vault/trusted_vault_connection.h"
 #include "components/trusted_vault/trusted_vault_histograms.h"
@@ -147,33 +144,6 @@ class MockDelegate : public StandaloneTrustedVaultBackend::Delegate {
   MOCK_METHOD(void, NotifyStateChanged, (), (override));
 };
 
-class FakeRecoveryKeyProvider
-    : public RecoveryKeyStoreController::RecoveryKeyProvider {
- public:
-  explicit FakeRecoveryKeyProvider(std::vector<uint8_t> public_key_bytes)
-      : public_key_bytes_(std::move(public_key_bytes)) {
-    CHECK(SecureBoxPublicKey::CreateByImport(public_key_bytes_))
-        << "public_key must be valid";
-  }
-
-  void GetCurrentRecoveryKeyStoreData(
-      RecoveryKeyStoreDataCallback callback) override {
-    trusted_vault_pb::Vault vault;
-    vault.set_vault_metadata("test vault metadata");
-    vault.set_recovery_key("test recovery key");
-    trusted_vault_pb::ApplicationKey* application_key =
-        vault.add_application_keys();
-    application_key->set_key_name(
-        "security_domain_member_key_encrypted_locally");
-    application_key->mutable_asymmetric_key_pair()->set_public_key(
-        public_key_bytes_.data(), public_key_bytes_.size());
-    std::move(callback).Run(std::move(vault));
-  }
-
- private:
-  const std::vector<uint8_t> public_key_bytes_;
-};
-
 class StandaloneTrustedVaultBackendTest : public testing::Test {
  public:
   StandaloneTrustedVaultBackendTest()
@@ -197,18 +167,9 @@ class StandaloneTrustedVaultBackendTest : public testing::Test {
         std::make_unique<testing::NiceMock<MockTrustedVaultConnection>>();
     connection_ = connection.get();
 
-    if (recovery_key_provider_holder_) {
-      auto recovery_key_store_connection =
-          std::make_unique<testing::NiceMock<MockRecoveryKeyStoreConnection>>();
-      recovery_key_store_connection_ = recovery_key_store_connection.get();
-      backend_ = base::MakeRefCounted<StandaloneTrustedVaultBackend>(
-          file_path_, std::move(delegate), std::move(connection),
-          std::move(recovery_key_provider_holder_),
-          std::move(recovery_key_store_connection));
-    } else {
-      backend_ = base::MakeRefCounted<StandaloneTrustedVaultBackend>(
-          file_path_, std::move(delegate), std::move(connection));
-    }
+    backend_ = base::MakeRefCounted<StandaloneTrustedVaultBackend>(
+        security_domain_id(), file_path_, std::move(delegate),
+        std::move(connection));
     backend_->SetClockForTesting(&clock_);
     backend_->ReadDataFromDisk();
 
@@ -230,6 +191,14 @@ class StandaloneTrustedVaultBackendTest : public testing::Test {
   base::SimpleTestClock* clock() { return &clock_; }
 
   StandaloneTrustedVaultBackend* backend() { return backend_.get(); }
+
+  SecurityDomainId security_domain_id() const {
+    return SecurityDomainId::kChromeSync;
+  }
+
+  std::string security_domain_name_for_uma() const {
+    return GetSecurityDomainNameForUma(security_domain_id());
+  }
 
   const base::FilePath& file_path() { return file_path_; }
 
@@ -292,25 +261,12 @@ class StandaloneTrustedVaultBackendTest : public testing::Test {
                                 device_private_key_material.end());
   }
 
-  MockRecoveryKeyStoreConnection* recovery_key_store_connection() {
-    return recovery_key_store_connection_;
-  }
-
-  void SetUpRecoveryKey(const std::vector<uint8_t>& public_key_bytes) {
-    recovery_key_provider_holder_ =
-        std::make_unique<FakeRecoveryKeyProvider>(public_key_bytes);
-  }
-
  private:
   base::ScopedTempDir temp_dir_;
   const base::FilePath file_path_;
   base::SimpleTestClock clock_;
   scoped_refptr<StandaloneTrustedVaultBackend> backend_;
   raw_ptr<testing::NiceMock<MockTrustedVaultConnection>> connection_ = nullptr;
-
-  std::unique_ptr<FakeRecoveryKeyProvider> recovery_key_provider_holder_;
-  raw_ptr<testing::NiceMock<MockRecoveryKeyStoreConnection>>
-      recovery_key_store_connection_ = nullptr;
 };
 
 TEST_F(StandaloneTrustedVaultBackendTest,
@@ -433,7 +389,7 @@ TEST_F(StandaloneTrustedVaultBackendTest, ShouldRecordNotFoundWhenReadingFile) {
   base::HistogramTester histogram_tester;
   backend()->ReadDataFromDisk();
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultFileReadStatus",
+      "TrustedVault.FileReadStatus." + security_domain_name_for_uma(),
       /*sample=*/TrustedVaultFileReadStatusForUMA::kNotFound,
       /*expected_bucket_count=*/1);
 }
@@ -447,7 +403,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   base::HistogramTester histogram_tester;
   backend()->ReadDataFromDisk();
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultFileReadStatus",
+      "TrustedVault.FileReadStatus." + security_domain_name_for_uma(),
       /*sample=*/TrustedVaultFileReadStatusForUMA::kMD5DigestMismatch,
       /*expected_bucket_count=*/1);
 }
@@ -459,7 +415,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   base::HistogramTester histogram_tester;
   backend()->ReadDataFromDisk();
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultFileReadStatus",
+      "TrustedVault.FileReadStatus." + security_domain_name_for_uma(),
       /*sample=*/
       TrustedVaultFileReadStatusForUMA::kFileProtoDeserializationFailed,
       /*expected_bucket_count=*/1);
@@ -477,7 +433,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   base::HistogramTester histogram_tester;
   backend()->ReadDataFromDisk();
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultFileReadStatus",
+      "TrustedVault.FileReadStatus." + security_domain_name_for_uma(),
       /*sample=*/
       TrustedVaultFileReadStatusForUMA::kDataProtoDeserializationFailed,
       /*expected_bucket_count=*/1);
@@ -506,7 +462,7 @@ TEST_F(StandaloneTrustedVaultBackendTest, ShouldReadAndFetchNonEmptyKeys) {
   base::HistogramTester histogram_tester;
   backend()->ReadDataFromDisk();
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultFileReadStatus",
+      "TrustedVault.FileReadStatus." + security_domain_name_for_uma(),
       /*sample=*/TrustedVaultFileReadStatusForUMA::kSuccess,
       /*expected_bucket_count=*/1);
 
@@ -554,9 +510,10 @@ TEST_F(StandaloneTrustedVaultBackendTest, ShouldStoreKeys) {
   backend()->StoreKeys(kGaiaId2, {kKey2}, /*last_key_version=*/8);
   // Keys for |kGaiaId2| overridden, so |kKey2| should be lost.
   backend()->StoreKeys(kGaiaId2, {kKey3, kKey4}, /*last_key_version=*/9);
-  histogram_tester.ExpectUniqueSample("Sync.TrustedVaultFileWriteSuccess",
-                                      /*sample=*/true,
-                                      /*expected_bucket_count=*/3);
+  histogram_tester.ExpectUniqueSample(
+      "TrustedVault.FileWriteSuccess." + security_domain_name_for_uma(),
+      /*sample=*/true,
+      /*expected_bucket_count=*/3);
 
   // Read the file from disk.
   trusted_vault_pb::LocalTrustedVault proto =
@@ -661,7 +618,8 @@ TEST_F(StandaloneTrustedVaultBackendTest, ShouldFetchPreviouslyStoredKeys) {
 
   // Instantiate a second backend to read the file.
   auto other_backend = base::MakeRefCounted<StandaloneTrustedVaultBackend>(
-      file_path(), std::make_unique<testing::NiceMock<MockDelegate>>(),
+      security_domain_id(), file_path(),
+      std::make_unique<testing::NiceMock<MockDelegate>>(),
       std::make_unique<testing::NiceMock<MockTrustedVaultConnection>>());
   other_backend->ReadDataFromDisk();
 
@@ -754,7 +712,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
 
   // Mimic browser restart and reset primary account.
   auto new_backend = base::MakeRefCounted<StandaloneTrustedVaultBackend>(
-      file_path(),
+      security_domain_id(), file_path(),
       /*delegate=*/std::make_unique<testing::NiceMock<MockDelegate>>(),
       /*connection=*/nullptr);
   new_backend->ReadDataFromDisk();
@@ -808,20 +766,22 @@ TEST_F(StandaloneTrustedVaultBackendTest, ShouldRegisterDevice) {
   SetPrimaryAccountWithUnknownAuthError(account_info);
   ASSERT_FALSE(device_registration_callback.is_null());
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultDeviceRegistrationState",
+      "TrustedVault.DeviceRegistrationState." + security_domain_name_for_uma(),
       /*sample=*/
       TrustedVaultDeviceRegistrationStateForUMA::
           kAttemptingRegistrationWithNewKeyPair,
       /*expected_bucket_count=*/1);
-  histogram_tester.ExpectUniqueSample("Sync.TrustedVaultDeviceRegistered",
-                                      /*sample=*/false,
-                                      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectUniqueSample(
+      "TrustedVault.DeviceRegistered." + security_domain_name_for_uma(),
+      /*sample=*/false,
+      /*expected_bucket_count=*/1);
 
   // Pretend that the registration completed successfully.
   std::move(device_registration_callback)
       .Run(TrustedVaultRegistrationStatus::kSuccess, kLastKeyVersion);
   histogram_tester.ExpectUniqueSample(
-      /*name=*/"Sync.TrustedVaultDeviceRegistrationOutcome",
+      /*name=*/"TrustedVault.DeviceRegistrationOutcome." +
+          security_domain_name_for_uma(),
       /*sample=*/TrustedVaultDeviceRegistrationOutcomeForUMA::kSuccess,
       /*expected_bucket_count=*/1);
 
@@ -973,7 +933,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
       account_info, StandaloneTrustedVaultBackend::RefreshTokenErrorState::
                         kPersistentAuthError);
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultDeviceRegistrationState",
+      "TrustedVault.DeviceRegistrationState." + security_domain_name_for_uma(),
       /*sample=*/
       TrustedVaultDeviceRegistrationStateForUMA::
           kAttemptingRegistrationWithNewKeyPair,
@@ -997,8 +957,9 @@ TEST_F(StandaloneTrustedVaultBackendTest,
 
   // The second attempt should NOT have logged the histogram, following the
   // histogram's definition that it should be logged once.
-  histogram_tester2.ExpectTotalCount("Sync.TrustedVaultDeviceRegistrationState",
-                                     /*expected_count=*/0);
+  histogram_tester2.ExpectTotalCount(
+      "TrustedVault.DeviceRegistrationState." + security_domain_name_for_uma(),
+      /*expected_count=*/0);
 }
 
 TEST_F(StandaloneTrustedVaultBackendTest,
@@ -1024,7 +985,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   SetPrimaryAccountWithUnknownAuthError(account_info);
 
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultDeviceRegistrationState",
+      "TrustedVault.DeviceRegistrationState." + security_domain_name_for_uma(),
       /*sample=*/
       TrustedVaultDeviceRegistrationStateForUMA::
           kAttemptingRegistrationWithNewKeyPair,
@@ -1048,7 +1009,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   SetPrimaryAccountWithUnknownAuthError(account_info);
 
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultDeviceRegistrationState",
+      "TrustedVault.DeviceRegistrationState." + security_domain_name_for_uma(),
       /*sample=*/
       TrustedVaultDeviceRegistrationStateForUMA::kLocalKeysAreStale,
       /*expected_bucket_count=*/1);
@@ -1123,7 +1084,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   EXPECT_CALL(*connection(), RegisterAuthenticationFactor).Times(0);
   SetPrimaryAccountWithUnknownAuthError(account_info);
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultDeviceRegistrationState",
+      "TrustedVault.DeviceRegistrationState." + security_domain_name_for_uma(),
       /*sample=*/
       TrustedVaultDeviceRegistrationStateForUMA::kThrottledClientSide,
       /*expected_bucket_count=*/1);
@@ -1136,7 +1097,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   clock()->Advance(StandaloneTrustedVaultBackend::kThrottlingDuration);
   SetPrimaryAccountWithUnknownAuthError(account_info);
   histogram_tester2.ExpectUniqueSample(
-      "Sync.TrustedVaultDeviceRegistrationState",
+      "TrustedVault.DeviceRegistrationState." + security_domain_name_for_uma(),
       /*sample=*/
       TrustedVaultDeviceRegistrationStateForUMA::
           kAttemptingRegistrationWithExistingKeyPair,
@@ -1176,7 +1137,8 @@ TEST_F(StandaloneTrustedVaultBackendTest,
            /*key_version=*/0);
 
   histogram_tester.ExpectUniqueSample(
-      /*name=*/"Sync.TrustedVaultDeviceRegistrationOutcome",
+      /*name=*/"TrustedVault.DeviceRegistrationOutcome." +
+          security_domain_name_for_uma(),
       /*sample=*/
       TrustedVaultDeviceRegistrationOutcomeForUMA::
           kTransientAccessTokenFetchError,
@@ -1674,14 +1636,16 @@ TEST_F(StandaloneTrustedVaultBackendTest, ShouldRedoDeviceRegistration) {
     SetPrimaryAccountWithUnknownAuthError(account_info);
     ASSERT_FALSE(device_registration_callback.is_null());
     histogram_tester.ExpectUniqueSample(
-        "Sync.TrustedVaultDeviceRegistrationState",
+        "TrustedVault.DeviceRegistrationState." +
+            security_domain_name_for_uma(),
         /*sample=*/
         TrustedVaultDeviceRegistrationStateForUMA::
             kAttemptingRegistrationWithExistingKeyPair,
         /*expected_bucket_count=*/1);
-    histogram_tester.ExpectUniqueSample("Sync.TrustedVaultDeviceRegistered",
-                                        /*sample=*/true,
-                                        /*expected_bucket_count=*/1);
+    histogram_tester.ExpectUniqueSample(
+        "TrustedVault.DeviceRegistered." + security_domain_name_for_uma(),
+        /*sample=*/true,
+        /*expected_bucket_count=*/1);
 
     // Pretend that the registration completed successfully.
     std::move(device_registration_callback)
@@ -1710,13 +1674,15 @@ TEST_F(StandaloneTrustedVaultBackendTest, ShouldRedoDeviceRegistration) {
     base::HistogramTester histogram_tester;
     SetPrimaryAccountWithUnknownAuthError(account_info);
     histogram_tester.ExpectUniqueSample(
-        "Sync.TrustedVaultDeviceRegistrationState",
+        "TrustedVault.DeviceRegistrationState." +
+            security_domain_name_for_uma(),
         /*sample=*/
         TrustedVaultDeviceRegistrationStateForUMA::kAlreadyRegisteredV1,
         /*expected_bucket_count=*/1);
-    histogram_tester.ExpectUniqueSample("Sync.TrustedVaultDeviceRegistered",
-                                        /*sample=*/true,
-                                        /*expected_bucket_count=*/1);
+    histogram_tester.ExpectUniqueSample(
+        "TrustedVault.DeviceRegistered." + security_domain_name_for_uma(),
+        /*sample=*/true,
+        /*expected_bucket_count=*/1);
   }
 }
 
@@ -1771,14 +1737,16 @@ TEST_F(StandaloneTrustedVaultBackendTest,
     base::HistogramTester histogram_tester;
     SetPrimaryAccountWithUnknownAuthError(account_info);
     histogram_tester.ExpectUniqueSample(
-        "Sync.TrustedVaultDeviceRegistrationState",
+        "TrustedVault.DeviceRegistrationState." +
+            security_domain_name_for_uma(),
         /*sample=*/
         TrustedVaultDeviceRegistrationStateForUMA::
             kAttemptingRegistrationWithExistingKeyPair,
         /*expected_bucket_count=*/1);
-    histogram_tester.ExpectUniqueSample("Sync.TrustedVaultDeviceRegistered",
-                                        /*sample=*/true,
-                                        /*expected_bucket_count=*/1);
+    histogram_tester.ExpectUniqueSample(
+        "TrustedVault.DeviceRegistered." + security_domain_name_for_uma(),
+        /*sample=*/true,
+        /*expected_bucket_count=*/1);
 
     // Pretend that the registration completed successfully and that constant
     // key version has changed between device registration requests.
@@ -1809,13 +1777,15 @@ TEST_F(StandaloneTrustedVaultBackendTest,
     base::HistogramTester histogram_tester;
     SetPrimaryAccountWithUnknownAuthError(account_info);
     histogram_tester.ExpectUniqueSample(
-        "Sync.TrustedVaultDeviceRegistrationState",
+        "TrustedVault.DeviceRegistrationState." +
+            security_domain_name_for_uma(),
         /*sample=*/
         TrustedVaultDeviceRegistrationStateForUMA::kAlreadyRegisteredV1,
         /*expected_bucket_count=*/1);
-    histogram_tester.ExpectUniqueSample("Sync.TrustedVaultDeviceRegistered",
-                                        /*sample=*/true,
-                                        /*expected_bucket_count=*/1);
+    histogram_tester.ExpectUniqueSample(
+        "TrustedVault.DeviceRegistered." + security_domain_name_for_uma(),
+        /*sample=*/true,
+        /*expected_bucket_count=*/1);
   }
 }
 
@@ -1843,13 +1813,14 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   base::HistogramTester histogram_tester;
   SetPrimaryAccountWithUnknownAuthError(account_info);
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultDeviceRegistrationState",
+      "TrustedVault.DeviceRegistrationState." + security_domain_name_for_uma(),
       /*sample=*/
       TrustedVaultDeviceRegistrationStateForUMA::kAlreadyRegisteredV1,
       /*expected_bucket_count=*/1);
-  histogram_tester.ExpectUniqueSample("Sync.TrustedVaultDeviceRegistered",
-                                      /*sample=*/true,
-                                      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectUniqueSample(
+      "TrustedVault.DeviceRegistered." + security_domain_name_for_uma(),
+      /*sample=*/true,
+      /*expected_bucket_count=*/1);
 }
 
 TEST_F(StandaloneTrustedVaultBackendTest, ShouldAddTrustedRecoveryMethod) {
@@ -2193,84 +2164,6 @@ TEST_F(StandaloneTrustedVaultBackendTest,
       .Run(TrustedVaultDownloadKeysStatus::kSuccess,
            {kInitialTrustedVaultKey, kNewTrustedVaultKey},
            kInitialLastKeyVersion + 1);
-}
-
-TEST_F(StandaloneTrustedVaultBackendTest,
-       ShouldRegisterRecoveryKeyAndUploadToKeyStore) {
-  base::test::SingleThreadTaskEnvironment environment{
-      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
-
-  const std::vector<uint8_t> kRecoveryPublicKey =
-      SecureBoxKeyPair::GenerateRandom()->public_key().ExportToBytes();
-  SetUpRecoveryKey(kRecoveryPublicKey);
-  ResetBackend();
-
-  const CoreAccountInfo account_info = MakeAccountInfoWithGaiaId("user");
-  const std::vector<uint8_t> kVaultKey = {1, 2, 3};
-  const int kLastKeyVersion = 1;
-  backend()->StoreKeys(account_info.gaia, {kVaultKey}, kLastKeyVersion);
-  SetPrimaryAccountWithUnknownAuthError(account_info);
-
-  base::RunLoop register_auth_factor_run_loop;
-  TrustedVaultConnection::RegisterAuthenticationFactorCallback
-      registration_callback;
-  std::vector<uint8_t> registered_public_key_bytes;
-  EXPECT_CALL(
-      *connection(),
-      RegisterAuthenticationFactor(
-          Eq(account_info),
-          MatchTrustedVaultKeyAndVersions(
-              GetTrustedVaultKeysWithVersions({kVaultKey}, kLastKeyVersion)),
-          _, Eq(AuthenticationFactorType(LockScreenKnowledgeFactor())), _))
-      .WillOnce([&](const CoreAccountInfo&,
-                    const MemberKeysSource& member_keys_source,
-                    const SecureBoxPublicKey& auth_factor_public_key,
-                    AuthenticationFactorType,
-                    TrustedVaultConnection::RegisterAuthenticationFactorCallback
-                        callback) {
-        register_auth_factor_run_loop.Quit();
-        registered_public_key_bytes = auth_factor_public_key.ExportToBytes();
-        registration_callback = std::move(callback);
-        return std::make_unique<TrustedVaultConnection::Request>();
-      });
-
-  base::RunLoop update_recovery_key_store_run_loop;
-  RecoveryKeyStoreConnection::UpdateRecoveryKeyStoreCallback
-      update_recovery_key_store_cb;
-  EXPECT_CALL(*recovery_key_store_connection(),
-              UpdateRecoveryKeyStore(account_info, _, _))
-      .WillOnce([&](const CoreAccountInfo& account_info,
-                    const trusted_vault_pb::Vault& request,
-                    RecoveryKeyStoreConnection::UpdateRecoveryKeyStoreCallback
-                        callback) {
-        update_recovery_key_store_run_loop.Quit();
-        update_recovery_key_store_cb = std::move(callback);
-        return std::make_unique<RecoveryKeyStoreConnection::Request>();
-      });
-
-  backend()->SetRecoveryKeyStoreUploadEnabled(account_info, true);
-
-  // The uploaded recovery key should be registered as an authentication factor
-  // with the security domain.
-  register_auth_factor_run_loop.Run();
-  std::move(registration_callback)
-      .Run(TrustedVaultRegistrationStatus::kSuccess, kLastKeyVersion);
-  EXPECT_THAT(registered_public_key_bytes, Eq(kRecoveryPublicKey));
-
-  // Wait for recovery key store upload to complete.
-  update_recovery_key_store_run_loop.Run();
-  std::move(update_recovery_key_store_cb)
-      .Run(UpdateRecoveryKeyStoreStatus::kSuccess);
-
-  const trusted_vault_pb::LocalTrustedVault proto =
-      ReadLocalTrustedVaultFile(file_path());
-  ASSERT_THAT(proto.user_size(), Eq(1));
-  EXPECT_TRUE(proto.user(0)
-                  .recovery_key_store_state()
-                  .recovery_key_is_registered_to_security_domain());
-  EXPECT_THAT(
-      ProtoStringToBytes(proto.user(0).recovery_key_store_state().public_key()),
-      Eq(kRecoveryPublicKey));
 }
 
 }  // namespace

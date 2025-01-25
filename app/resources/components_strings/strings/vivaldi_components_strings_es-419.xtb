@@ -106,7 +106,7 @@
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Se interrumpió la conexión</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Ejecutando los diagnósticos de Red de Windows<ph name="END_LINK" /></translation>
-<translation id="4736016046474602958">Bloqueador de Rastreadores</translation>
+<translation id="4736016046474602958">Bloqueador de rastreadores</translation>
 <translation id="4744603770635761495">Ruta ejecutable</translation>
 <translation id="4750917950439032686">Tu información (p. ej., contraseñas o números de tarjetas de crédito) es privada cuando se envía a este sitio.</translation>
 <translation id="4764776831041365478">Es posible que la página web en <ph name="URL" /> no funcione temporalmente o se haya trasladado de manera permanente a una nueva dirección web.</translation>
@@ -170,7 +170,6 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> no cumple con los estándares de seguridad.</translation>
 <translation id="7219179957768738017">La conexión usa <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Mostrar notificaciones</translation>
-<translation id="7227747683324411744">Los atacantes del sitio que intentas visitar podrían engañarte para que instales software dañino que afecta la manera en la que navegas. Por ejemplo, pueden cambiar la página principal o mostrarte anuncios adicionales en los sitios que visitas.</translation>
 <translation id="7353601530677266744">Línea de comandos</translation>
 <translation id="7364115444476960850">La página que intestaste acceder fue bloqueada por <ph name="BLOCKER_NAME" /> de Vivaldi</translation>
 <translation id="7419106976560586862">Ruta al perfil</translation>
@@ -178,7 +177,6 @@
 <translation id="7518003948725431193">No se encontró una página web para la siguiente dirección web: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Esta página web necesita los datos ingresados anteriormente para mostrarse correctamente. Puedes volver a enviar los datos, pero ten en cuenta que se repetirán las acciones que la página haya realizado anteriormente.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> no puede procesar esta solicitud en este momento.</translation>
-<translation id="7605377493722372900">Los atacantes del sitio que intentas visitar podrían instalar software dañino que roba o borra elementos como tu contraseña, fotos, mensajes o número de tarjeta de crédito.</translation>
 <translation id="7662298039739062396">Configuración controlada por una extensión</translation>
 <translation id="7663736086183791259">Certificado <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">Certificado</translation>
@@ -204,7 +202,6 @@
 <translation id="8288807391153049143">Mostrar certificado</translation>
 <translation id="8289355894181816810">Comunícate con el administrador de red si no entiendes bien lo que significa.</translation>
 <translation id="8332188693563227489">Se denegó el acceso a <ph name="HOST_NAME" /></translation>
-<translation id="8422228580902424274">Los atacantes del sitio que intentas visitar podrían engañarte para que instales software o reveles información como tu contraseña, teléfono o número de tarjeta de crédito.</translation>
 <translation id="8473863474539038330">Direcciones y más</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> tardó demasiado en responder.</translation>
 <translation id="8503813439785031346">Nombre de usuario</translation>

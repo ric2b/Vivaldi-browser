@@ -12,7 +12,7 @@
 namespace openscreen::cast {
 namespace {
 
-// Parse the data in |time| at |index| as a two-digit ascii number. Note this
+// Parse the data in `time` at `index` as a two-digit ascii number. Note this
 // function assumes the caller already did a bounds check and checked the inputs
 // are digits.
 uint8_t ParseAsn1TimeDoubleDigit(std::string_view time, size_t index) {
@@ -84,7 +84,7 @@ bool VerifySignedData(const EVP_MD* digest,
                       const ByteView& data,
                       const ByteView& signature) {
   // This code assumes the signature algorithm was RSASSA PKCS#1 v1.5 with
-  // |digest|.
+  // `digest`.
   bssl::ScopedEVP_MD_CTX ctx;
   if (!EVP_DigestVerifyInit(ctx.get(), nullptr, digest, nullptr, public_key)) {
     return false;

@@ -19,7 +19,7 @@ namespace ios {
 
 // static
 sync_bookmarks::BookmarkSyncService*
-AccountBookmarkSyncServiceFactory::GetForBrowserState(ProfileIOS* profile) {
+AccountBookmarkSyncServiceFactory::GetForProfile(ProfileIOS* profile) {
   return static_cast<sync_bookmarks::BookmarkSyncService*>(
       GetInstance()->GetServiceForBrowserState(profile, true));
 }
@@ -51,7 +51,7 @@ AccountBookmarkSyncServiceFactory::BuildServiceInstanceFor(
           BookmarkUndoServiceFactory::GetForProfileIfExists(profile),
           syncer::WipeModelUponSyncDisabledBehavior::kAlways));
   bookmark_sync_service->SetVivaldiSyncedFileStore(
-      SyncedFileStoreFactory::GetForBrowserState(profile));
+      SyncedFileStoreFactory::GetForProfile(profile));
   return bookmark_sync_service;
 }
 

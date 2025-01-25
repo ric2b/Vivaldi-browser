@@ -12,11 +12,11 @@
 #include <vector>
 
 #include "cast/streaming/impl/ntp_time.h"
-#include "cast/streaming/public/frame_id.h"
 #include "cast/streaming/impl/rtp_defines.h"
+#include "cast/streaming/impl/statistics_defines.h"
+#include "cast/streaming/public/frame_id.h"
 #include "cast/streaming/rtp_time.h"
 #include "cast/streaming/ssrc.h"
-#include "cast/streaming/impl/statistics_defines.h"
 #include "platform/base/span.h"
 
 namespace openscreen::cast {
@@ -28,11 +28,11 @@ struct RtcpCommonHeader {
   RtcpPacketType packet_type = RtcpPacketType::kNull;
 
   union {
-    // The number of report blocks if |packet_type| is kSenderReport or
+    // The number of report blocks if `packet_type` is kSenderReport or
     // kReceiverReport.
     int report_count;
 
-    // Indicates the type of an application-defined message if |packet_type| is
+    // Indicates the type of an application-defined message if `packet_type` is
     // kApplicationDefined or kPayloadSpecific.
     RtcpSubtype subtype;
 
@@ -42,11 +42,11 @@ struct RtcpCommonHeader {
   // The size (in bytes) of the RTCP packet, not including the header.
   int payload_size = 0;
 
-  // Serializes this header into the first |kRtcpCommonHeaderSize| bytes of the
-  // given |buffer| and adjusts |buffer| to point to the first byte after it.
+  // Serializes this header into the first `kRtcpCommonHeaderSize` bytes of the
+  // given `buffer` and adjusts `buffer` to point to the first byte after it.
   void AppendFields(ByteBuffer& buffer) const;
 
-  // Parse from the 4-byte wire format in |buffer|. Returns nullopt if the data
+  // Parse from the 4-byte wire format in `buffer`. Returns nullopt if the data
   // is corrupt.
   static std::optional<RtcpCommonHeader> Parse(ByteView buffer);
 };
@@ -100,30 +100,30 @@ struct RtcpReportBlock {
   using Delay = std::chrono::duration<int64_t, std::ratio<1, 65536>>;
   Delay delay_since_last_report{};
 
-  // Convenience helper to compute/assign the |packet_fraction_lost_numerator|,
-  // based on the |num_apparently_sent| and |num_received| packet counts since
+  // Convenience helper to compute/assign the `packet_fraction_lost_numerator`,
+  // based on the `num_apparently_sent` and `num_received` packet counts since
   // the last report was sent.
   void SetPacketFractionLostNumerator(int64_t num_apparently_sent,
                                       int64_t num_received);
 
-  // Convenience helper to compute/assign the |cumulative_packets_lost|, based
-  // on the |num_apparently_sent| and |num_received| packet counts since the
+  // Convenience helper to compute/assign the `cumulative_packets_lost`, based
+  // on the `num_apparently_sent` and `num_received` packet counts since the
   // start of the entire session.
   void SetCumulativePacketsLost(int64_t num_apparently_sent,
                                 int64_t num_received);
 
-  // Convenience helper to convert the given |local_clock_delay| to the
+  // Convenience helper to convert the given `local_clock_delay` to the
   // RtcpReportBlock::Delay timebase, then clamp and assign it to
-  // |delay_since_last_report|.
+  // `delay_since_last_report`.
   void SetDelaySinceLastReport(Clock::duration local_clock_delay);
 
-  // Serializes this report block in the first |kRtcpReportBlockSize| bytes of
-  // the given |buffer| and adjusts |buffer| to point to the first byte after
+  // Serializes this report block in the first `kRtcpReportBlockSize` bytes of
+  // the given `buffer` and adjusts `buffer` to point to the first byte after
   // it.
   void AppendFields(ByteBuffer& buffer) const;
 
-  // Scans the wire-format report blocks in |buffer|, searching for one with the
-  // matching |ssrc| and, if found, returns the parse result. Returns nullopt if
+  // Scans the wire-format report blocks in `buffer`, searching for one with the
+  // matching `ssrc` and, if found, returns the parse result. Returns nullopt if
   // the data is corrupt or no report block with the matching SSRC was found.
   static std::optional<RtcpReportBlock> ParseOne(ByteView buffer,
                                                  int report_count,
@@ -155,7 +155,7 @@ struct RtcpSenderReport {
 };
 
 // A pair of IDs that refers to a specific missing packet within a frame. If
-// |packet_id| is kAllPacketsLost, then it represents all the packets of a
+// `packet_id` is kAllPacketsLost, then it represents all the packets of a
 // frame.
 struct PacketNack {
   FrameId frame_id;

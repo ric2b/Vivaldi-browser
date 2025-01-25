@@ -32,7 +32,7 @@ QuicDispatcherImpl::QuicDispatcherImpl(
                      crypto_server_config,
                      version_manager.get(),
                      std::move(helper),
-                     /*session_helper*/ nullptr,
+                     /*session_helper=*/nullptr,
                      std::move(alarm_factory),
                      expected_server_connection_id_length,
                      generator),
@@ -67,7 +67,7 @@ std::unique_ptr<quic::QuicSession> QuicDispatcherImpl::CreateQuicSession(
       std::make_unique<OpenScreenServerSession>(
           std::move(connection), *connection_impl, *crypto_config(), config(),
           quic::ParsedQuicVersionVector{version});
-  connection_impl->set_session(session.get(), /*owns_session*/ false);
+  connection_impl->set_session(session.get(), /*owns_session=*/false);
 
   parent_factory_.connection().emplace(
       ToIPEndpoint(peer_address),

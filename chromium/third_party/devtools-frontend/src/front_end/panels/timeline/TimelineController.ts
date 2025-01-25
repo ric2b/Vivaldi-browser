@@ -8,8 +8,7 @@ import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
 import * as Extensions from '../../models/extensions/extensions.js';
 import * as LiveMetrics from '../../models/live-metrics/live-metrics.js';
-import type * as TimelineModel from '../../models/timeline_model/timeline_model.js';
-import * as TraceEngine from '../../models/trace/trace.js';
+import * as Trace from '../../models/trace/trace.js';
 
 const UIStrings = {
   /**
@@ -21,11 +20,11 @@ const UIStrings = {
 };
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/TimelineController.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
-export class TimelineController implements TraceEngine.TracingManager.TracingManagerClient {
+export class TimelineController implements Trace.TracingManager.TracingManagerClient {
   readonly primaryPageTarget: SDK.Target.Target;
   readonly rootTarget: SDK.Target.Target;
-  private tracingManager: TraceEngine.TracingManager.TracingManager|null;
-  #collectedEvents: TraceEngine.Types.TraceEvents.TraceEventData[] = [];
+  private tracingManager: Trace.TracingManager.TracingManager|null;
+  #collectedEvents: Trace.Types.Events.Event[] = [];
   #recordingStartTime: number|null = null;
   private readonly client: Client;
   private tracingCompletePromise: PromiseWithResolvers<void>|null = null;
@@ -61,7 +60,7 @@ export class TimelineController implements TraceEngine.TracingManager.TracingMan
     this.rootTarget = rootTarget;
     // Ensure the tracing manager is the one for the Root Target, NOT the
     // primaryPageTarget, as that is the one we have to invoke tracing against.
-    this.tracingManager = rootTarget.model(TraceEngine.TracingManager.TracingManager);
+    this.tracingManager = rootTarget.model(Trace.TracingManager.TracingManager);
     this.client = client;
   }
 
@@ -86,9 +85,9 @@ export class TimelineController implements TraceEngine.TracingManager.TracingMan
     //   └ default: on, option: enableJSSampling
     const categoriesArray = [
       Root.Runtime.experiments.isEnabled('timeline-show-all-events') ? '*' : '-*',
-      TraceEngine.Types.TraceEvents.Categories.Console,
-      TraceEngine.Types.TraceEvents.Categories.Loading,
-      TraceEngine.Types.TraceEvents.Categories.UserTiming,
+      Trace.Types.Events.Categories.Console,
+      Trace.Types.Events.Categories.Loading,
+      Trace.Types.Events.Categories.UserTiming,
       'devtools.timeline',
       disabledByDefault('devtools.timeline'),
       disabledByDefault('devtools.timeline.frame'),
@@ -144,10 +143,22 @@ export class TimelineController implements TraceEngine.TracingManager.TracingMan
     if (this.tracingManager) {
       this.tracingManager.stop();
     }
+    // When throttling is applied to the main renderer, it can slow down the
+    // collection of trace events once tracing has completed. Therefore we
+    // temporarily disable throttling whilst the final trace event collection
+    // takes place. Once it is done, we re-enable it (this is the existing
+    // behaviour within DevTools; the throttling settling is sticky + global).
+    const throttlingManager = SDK.CPUThrottlingManager.CPUThrottlingManager.instance();
+    const rateDuringRecording = throttlingManager.cpuThrottlingRate();
+    // 1 = no throttling (CPU is 1x'd)
+    throttlingManager.setCPUThrottlingRate(1);
 
     this.client.loadingStarted();
     await this.waitForTracingToStop();
     await this.allSourcesFinished();
+
+    // Now we re-enable throttling again to maintain the setting being persistent.
+    throttlingManager.setCPUThrottlingRate(rateDuringRecording);
 
     await LiveMetrics.LiveMetrics.instance().enable();
   }
@@ -189,7 +200,7 @@ export class TimelineController implements TraceEngine.TracingManager.TracingMan
     });
   }
 
-  traceEventsCollected(events: TraceEngine.Types.TraceEvents.TraceEventData[]): void {
+  traceEventsCollected(events: Trace.Types.Events.Event[]): void {
     this.#collectedEvents.push(...events);
   }
 
@@ -228,9 +239,8 @@ export interface Client {
   processingStarted(): void;
   loadingProgress(progress?: number): void;
   loadingComplete(
-      collectedEvents: TraceEngine.Types.TraceEvents.TraceEventData[],
-      exclusiveFilter: TimelineModel.TimelineModelFilter.TimelineModelFilter|null, isCpuProfile: boolean,
-      recordingStartTime: number|null, metadata: TraceEngine.Types.File.MetaData|null): Promise<void>;
+      collectedEvents: Trace.Types.Events.Event[], exclusiveFilter: Trace.Extras.TraceFilter.TraceFilter|null,
+      isCpuProfile: boolean, recordingStartTime: number|null, metadata: Trace.Types.File.MetaData|null): Promise<void>;
   loadingCompleteForTest(): void;
 }
 export interface RecordingOptions {

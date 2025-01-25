@@ -57,7 +57,7 @@ TEST(TlsWriteBufferTest, TestWrapAround) {
 
   constexpr size_t partial_buffer_size = buffer_size * 3 / 4;
   EXPECT_TRUE(buffer.Push(write_buffer.first(partial_buffer_size)));
-  // Buffer contents should now be: |111111111111····|[
+  // Buffer contents should now be: `111111111111····`
   auto region = buffer.GetReadableRegion();
   auto* const buffer_begin = region.data();
   ASSERT_TRUE(buffer_begin);
@@ -66,7 +66,7 @@ TEST(TlsWriteBufferTest, TestWrapAround) {
                           [](uint8_t byte) { return byte == 1; }));
 
   buffer.Consume(buffer_size / 2);
-  // Buffer contents should now be: |········1111····|
+  // Buffer contents should now be: `········1111····`
   region = buffer.GetReadableRegion();
   EXPECT_EQ(region.data(), buffer_begin + buffer_size / 2);
   EXPECT_EQ(region.size(), buffer_size / 4);
@@ -75,7 +75,7 @@ TEST(TlsWriteBufferTest, TestWrapAround) {
 
   std::fill_n(write_buffer_data, buffer_size, uint8_t{2});
   EXPECT_TRUE(buffer.Push(write_buffer.first(buffer_size / 2)));
-  // Buffer contents should now be: |2222····11112222|
+  // Buffer contents should now be: `2222····11112222`
   // Readable region should just be the end part.
   region = buffer.GetReadableRegion();
   EXPECT_EQ(region.data(), buffer_begin + buffer_size / 2);
@@ -86,7 +86,7 @@ TEST(TlsWriteBufferTest, TestWrapAround) {
                           [](uint8_t byte) { return byte == 2; }));
 
   buffer.Consume(buffer_size / 2);
-  // Buffer contents should now be: |2222············|
+  // Buffer contents should now be: `2222············`
   region = buffer.GetReadableRegion();
   EXPECT_EQ(region.data(), buffer_begin);
   EXPECT_EQ(region.size(), buffer_size / 4);
@@ -96,9 +96,9 @@ TEST(TlsWriteBufferTest, TestWrapAround) {
   std::fill_n(write_buffer_data, buffer_size, uint8_t{3});
   // The following Push() fails (not enough room).
   EXPECT_FALSE(buffer.Push(write_buffer));
-  // Buffer contents should still be: |2222············|
+  // Buffer contents should still be: `2222············`
   EXPECT_TRUE(buffer.Push(write_buffer.first(buffer_size * 3 / 4)));
-  // Buffer contents should now be: |2222333333333333|
+  // Buffer contents should now be: `2222333333333333`
   EXPECT_FALSE(buffer.Push(write_buffer));           // Not enough room.
   EXPECT_FALSE(buffer.Push(write_buffer.first(1)));  // Not enough room.
   region = buffer.GetReadableRegion();
@@ -110,7 +110,7 @@ TEST(TlsWriteBufferTest, TestWrapAround) {
                           [](uint8_t byte) { return byte == 3; }));
 
   buffer.Consume(buffer_size);
-  // Buffer contents should now be: |················|
+  // Buffer contents should now be: `················`
   EXPECT_TRUE(buffer.GetReadableRegion().empty());
 }
 

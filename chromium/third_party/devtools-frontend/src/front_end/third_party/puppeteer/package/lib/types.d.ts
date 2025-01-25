@@ -31,7 +31,7 @@ import { Session } from 'chromium-bidi/lib/cjs/protocol/protocol.js';
  */
 export declare class Accessibility {
     #private;
-    /* Excluded from this release type: __constructor */
+
     /**
      * Captures the current state of the accessibility tree.
      * The returned object represents the root accessible node of the page.
@@ -76,8 +76,6 @@ export declare class Accessibility {
     private collectInterestingNodes;
 }
 
-/* Excluded from this release type: Action */
-
 /**
  * @public
  */
@@ -92,18 +90,6 @@ export declare interface ActionOptions {
  * @public
  */
 export declare type ActionResult = 'continue' | 'abort' | 'respond';
-
-/* Excluded from this release type: addPageBinding */
-
-/* Excluded from this release type: ARIAQueryHandler */
-
-/* Excluded from this release type: assert */
-
-/* Excluded from this release type: AsyncDisposableStack */
-
-/* Excluded from this release type: asyncDisposeSymbol */
-
-/* Excluded from this release type: AsyncIterableUtil */
 
 /**
  * @public
@@ -128,8 +114,6 @@ export declare type Awaitable<T> = T | PromiseLike<T>;
  */
 export declare type AwaitableIterable<T> = Iterable<T> | AsyncIterable<T>;
 
-/* Excluded from this release type: AwaitableIterator */
-
 /**
  * @public
  */
@@ -139,10 +123,6 @@ export declare type AwaitablePredicate<T> = (value: T) => Awaitable<boolean>;
  * @public
  */
 export declare type AwaitedLocator<T> = T extends Locator<infer S> ? S : never;
-
-/* Excluded from this release type: Binding */
-
-/* Excluded from this release type: BindingPayload */
 
 /**
  * @public
@@ -210,7 +190,7 @@ export declare interface BoxModel {
  * @public
  */
 export declare abstract class Browser extends EventEmitter<BrowserEvents> {
-    /* Excluded from this release type: __constructor */
+
     /**
      * Gets the associated
      * {@link https://nodejs.org/api/child_process.html#class-childprocess | ChildProcess}.
@@ -261,9 +241,8 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      * You can find the debugger URL (`webSocketDebuggerUrl`) from
      * `http://HOST:PORT/json/version`.
      *
-     * See {@link
-     * https://chromedevtools.github.io/devtools-protocol/#how-do-i-access-the-browser-target
-     * | browser endpoint} for more information.
+     * See {@link https://chromedevtools.github.io/devtools-protocol/#how-do-i-access-the-browser-target | browser endpoint}
+     * for more information.
      *
      * @remarks The format is always `ws://HOST:PORT/devtools/browser/<id>`.
      */
@@ -297,7 +276,7 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      * ```ts
      * await page.evaluate(() => window.open('https://www.example.com/'));
      * const newWindowTarget = await browser.waitForTarget(
-     *   target => target.url() === 'https://www.example.com/'
+     *   target => target.url() === 'https://www.example.com/',
      * );
      * ```
      */
@@ -305,7 +284,7 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
     /**
      * Gets a list of all open {@link Page | pages} inside this {@link Browser}.
      *
-     * If there ar multiple {@link BrowserContext | browser contexts}, this
+     * If there are multiple {@link BrowserContext | browser contexts}, this
      * returns all {@link Page | pages} in all
      * {@link BrowserContext | browser contexts}.
      *
@@ -353,9 +332,9 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      * Whether Puppeteer is connected to this {@link Browser | browser}.
      */
     abstract get connected(): boolean;
-    /* Excluded from this release type: [disposeSymbol] */
-    /* Excluded from this release type: [asyncDisposeSymbol] */
-    /* Excluded from this release type: protocol */
+
+
+
     /**
      * Get debug information from Puppeteer.
      *
@@ -368,8 +347,6 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      */
     abstract get debugInfo(): DebugInfo;
 }
-
-/* Excluded from this release type: BrowserCloseCallback */
 
 /**
  * Generic browser options that can be passed when launching any browser or when
@@ -397,7 +374,7 @@ export declare interface BrowserConnectOptions {
      * Callback to decide if Puppeteer should connect to a given target or not.
      */
     targetFilter?: TargetFilterCallback;
-    /* Excluded from this release type: _isPageTarget */
+
     /**
      * @defaultValue Determined at run time:
      *
@@ -458,14 +435,14 @@ export declare interface BrowserConnectOptions {
  */
 export declare abstract class BrowserContext extends EventEmitter<BrowserContextEvents> {
     #private;
-    /* Excluded from this release type: __constructor */
+
     /**
      * Gets all active {@link Target | targets} inside this
      * {@link BrowserContext | browser context}.
      */
     abstract targets(): Target[];
-    /* Excluded from this release type: startScreenshot */
-    /* Excluded from this release type: waitForScreenshotOperations */
+
+
     /**
      * Waits until a {@link Target | target} matching the given `predicate`
      * appears and returns it.
@@ -477,7 +454,7 @@ export declare abstract class BrowserContext extends EventEmitter<BrowserContext
      * ```ts
      * await page.evaluate(() => window.open('https://www.example.com/'));
      * const newWindowTarget = await browserContext.waitForTarget(
-     *   target => target.url() === 'https://www.example.com/'
+     *   target => target.url() === 'https://www.example.com/',
      * );
      * ```
      */
@@ -552,8 +529,8 @@ export declare abstract class BrowserContext extends EventEmitter<BrowserContext
      * Identifier for this {@link BrowserContext | browser context}.
      */
     get id(): string | undefined;
-    /* Excluded from this release type: [disposeSymbol] */
-    /* Excluded from this release type: [asyncDisposeSymbol] */
+
+
 }
 
 /**
@@ -646,7 +623,7 @@ export declare const enum BrowserEvent {
      * contexts.
      */
     TargetDestroyed = "targetdestroyed",
-    /* Excluded from this release type: TargetDiscovered */
+
 }
 
 /**
@@ -657,7 +634,7 @@ export declare interface BrowserEvents extends Record<EventType, unknown> {
     [BrowserEvent.TargetCreated]: Target;
     [BrowserEvent.TargetDestroyed]: Target;
     [BrowserEvent.TargetChanged]: Target;
-    /* Excluded from this release type: targetdiscovered */
+
 }
 
 /**
@@ -711,41 +688,23 @@ export declare interface BrowserLaunchArgumentOptions {
  */
 export declare abstract class BrowserLauncher {
     #private;
-    /* Excluded from this release type: puppeteer */
-    /* Excluded from this release type: __constructor */
+
+
     get browser(): SupportedBrowser;
     launch(options?: PuppeteerNodeLaunchOptions): Promise<Browser>;
     abstract executablePath(channel?: ChromeReleaseChannel): string;
     abstract defaultArgs(object: BrowserLaunchArgumentOptions): string[];
-    /* Excluded from this release type: computeLaunchArguments */
-    /* Excluded from this release type: cleanUserDataDir */
-    /* Excluded from this release type: closeBrowser */
-    /* Excluded from this release type: waitForPageTarget */
-    /* Excluded from this release type: createCdpSocketConnection */
-    /* Excluded from this release type: createCdpPipeConnection */
-    /* Excluded from this release type: createBiDiOverCdpBrowser */
-    /* Excluded from this release type: createBiDiBrowser */
-    /* Excluded from this release type: getProfilePath */
-    /* Excluded from this release type: resolveExecutablePath */
+
+
+
+
+
+
+
+
+
+
 }
-
-/* Excluded from this release type: BrowserWebSocketTransport */
-
-/* Excluded from this release type: Callback */
-
-/* Excluded from this release type: CallbackRegistry */
-
-/* Excluded from this release type: CDP_BINDING_PREFIX */
-
-/* Excluded from this release type: CdpBrowser */
-
-/* Excluded from this release type: CdpBrowserContext */
-
-/* Excluded from this release type: CdpCDPSession */
-
-/* Excluded from this release type: CdpDialog */
-
-/* Excluded from this release type: CdpElementHandle */
 
 /**
  * @public
@@ -753,22 +712,6 @@ export declare abstract class BrowserLauncher {
 export declare type CDPEvents = {
     [Property in keyof ProtocolMapping.Events]: ProtocolMapping.Events[Property][0];
 };
-
-/* Excluded from this release type: CdpFrame */
-
-/* Excluded from this release type: CdpHTTPRequest */
-
-/* Excluded from this release type: CdpHTTPResponse */
-
-/* Excluded from this release type: CdpJSHandle */
-
-/* Excluded from this release type: CdpKeyboard */
-
-/* Excluded from this release type: CdpMouse */
-
-/* Excluded from this release type: CdpPage */
-
-/* Excluded from this release type: CdpPreloadScript */
 
 /**
  * The `CDPSession` instances are used to talk raw Chrome Devtools Protocol.
@@ -787,7 +730,7 @@ export declare type CDPEvents = {
  * const client = await page.createCDPSession();
  * await client.send('Animation.enable');
  * client.on('Animation.animationCreated', () =>
- *   console.log('Animation created!')
+ *   console.log('Animation created!'),
  * );
  * const response = await client.send('Animation.getPlaybackRate');
  * console.log('playback rate is ' + response.playbackRate);
@@ -799,9 +742,9 @@ export declare type CDPEvents = {
  * @public
  */
 export declare abstract class CDPSession extends EventEmitter<CDPSessionEvents> {
-    /* Excluded from this release type: __constructor */
+
     abstract connection(): Connection | undefined;
-    /* Excluded from this release type: parentSession */
+
     abstract send<T extends keyof ProtocolMapping.Commands>(method: T, params?: ProtocolMapping.Commands[T]['paramsType'][0], options?: CommandOptions): Promise<ProtocolMapping.Commands[T]['returnType']>;
     /**
      * Detaches the cdpSession from the target. Once detached, the cdpSession object
@@ -820,9 +763,9 @@ export declare abstract class CDPSession extends EventEmitter<CDPSessionEvents> 
  * @public
  */
 export declare namespace CDPSessionEvent {
-    /* Excluded from this release type: Disconnected */
-    /* Excluded from this release type: Swapped */
-    /* Excluded from this release type: Ready */
+
+
+
     const SessionAttached: "sessionattached";
     const SessionDetached: "sessiondetached";
 }
@@ -831,18 +774,12 @@ export declare namespace CDPSessionEvent {
  * @public
  */
 export declare interface CDPSessionEvents extends CDPEvents, Record<EventType, unknown> {
-    /* Excluded from this release type: [CDPSessionEvent.Disconnected] */
-    /* Excluded from this release type: [CDPSessionEvent.Swapped] */
-    /* Excluded from this release type: [CDPSessionEvent.Ready] */
+
+
+
     [CDPSessionEvent.SessionAttached]: CDPSession;
     [CDPSessionEvent.SessionDetached]: CDPSession;
 }
-
-/* Excluded from this release type: CdpTarget */
-
-/* Excluded from this release type: CdpTouchscreen */
-
-/* Excluded from this release type: CdpWebWorker */
 
 /**
  * @public
@@ -883,8 +820,6 @@ export declare interface ChromeHeadlessShellSettings {
      */
     version?: string;
 }
-
-/* Excluded from this release type: ChromeLauncher */
 
 /**
  * @public
@@ -931,8 +866,6 @@ export declare interface ChromeSettings {
     version?: string;
 }
 
-/* Excluded from this release type: ChromeTargetManager */
-
 /**
  * @public
  */
@@ -942,8 +875,6 @@ export declare interface ClickOptions extends MouseClickOptions {
      */
     offset?: Offset;
 }
-
-/* Excluded from this release type: ClientProvider */
 
 /**
  * @public
@@ -963,14 +894,6 @@ export declare interface CommonEventEmitter<Events extends Record<EventType, unk
     listenerCount(event: keyof Events): number;
     removeAllListeners(event?: keyof Events): this;
 }
-
-/* Excluded from this release type: CommonPuppeteerSettings */
-
-/* Excluded from this release type: ComplexPSelector */
-
-/* Excluded from this release type: ComplexPSelectorList */
-
-/* Excluded from this release type: CompoundPSelector */
 
 /**
  * Defines options to configure Puppeteer's behavior during installation and
@@ -1045,7 +968,7 @@ export declare const
 /**
  * @public
  */
-connect: (options: ConnectOptions) => Promise<Browser>;
+connect: (options: Puppeteer_2.ConnectOptions) => Promise<Puppeteer_2.Browser>;
 
 /**
  * @public
@@ -1054,10 +977,10 @@ export declare class Connection extends EventEmitter<CDPSessionEvents> {
     #private;
     constructor(url: string, transport: ConnectionTransport, delay?: number, timeout?: number);
     static fromSession(session: CDPSession): Connection | undefined;
-    /* Excluded from this release type: delay */
+
     get timeout(): number;
-    /* Excluded from this release type: _closed */
-    /* Excluded from this release type: _sessions */
+
+
     /**
      * @param sessionId - The session id
      * @returns The current CDP session if it exists
@@ -1065,18 +988,18 @@ export declare class Connection extends EventEmitter<CDPSessionEvents> {
     session(sessionId: string): CDPSession | null;
     url(): string;
     send<T extends keyof ProtocolMapping.Commands>(method: T, params?: ProtocolMapping.Commands[T]['paramsType'][0], options?: CommandOptions): Promise<ProtocolMapping.Commands[T]['returnType']>;
-    /* Excluded from this release type: _rawSend */
-    /* Excluded from this release type: closeBrowser */
-    /* Excluded from this release type: onMessage */
+
+
+
     dispose(): void;
-    /* Excluded from this release type: isAutoAttached */
-    /* Excluded from this release type: _createSession */
+
+
     /**
      * @param targetInfo - The target info
      * @returns The CDP session that is created
      */
     createSession(targetInfo: Protocol.Target.TargetInfo): Promise<CDPSession>;
-    /* Excluded from this release type: getPendingProtocolErrors */
+
 }
 
 /**
@@ -1116,17 +1039,13 @@ export declare interface ConnectOptions extends BrowserConnectOptions {
     capabilities?: SupportedWebDriverCapabilities;
 }
 
-/* Excluded from this release type: _connectToCdpBrowser */
-
-/* Excluded from this release type: ConsoleAPICalledCallback */
-
 /**
  * ConsoleMessage objects are dispatched by page via the 'console' event.
  * @public
  */
 export declare class ConsoleMessage {
     #private;
-    /* Excluded from this release type: __constructor */
+
     /**
      * The type of the console message.
      */
@@ -1391,8 +1310,8 @@ export declare type CookieSourceScheme = 'Unset' | 'NonSecure' | 'Secure';
  */
 export declare class Coverage {
     #private;
-    /* Excluded from this release type: __constructor */
-    /* Excluded from this release type: updateClient */
+
+
     /**
      * @param options - Set of configurable options for coverage defaults to
      * `resetOnNavigation : true, reportAnonymousScripts : false,`
@@ -1455,14 +1374,6 @@ export declare interface CoverageEntry {
     }>;
 }
 
-/* Excluded from this release type: createClientError */
-
-/* Excluded from this release type: createEvaluationError */
-
-/* Excluded from this release type: createIncrementalIdGenerator */
-
-/* Excluded from this release type: createProtocolErrorMessage */
-
 /**
  * @public
  */
@@ -1477,7 +1388,7 @@ export declare interface Credentials {
 export declare class CSSCoverage {
     #private;
     constructor(client: CDPSession);
-    /* Excluded from this release type: updateClient */
+
     start(options?: {
         resetOnNavigation?: boolean;
     }): Promise<void>;
@@ -1495,8 +1406,6 @@ export declare interface CSSCoverageOptions {
     resetOnNavigation?: boolean;
 }
 
-/* Excluded from this release type: CSSSelector */
-
 /**
  * @public
  */
@@ -1510,10 +1419,6 @@ export declare interface CustomQueryHandler {
      */
     queryAll?: (node: Node, selector: string) => Iterable<Node>;
 }
-
-/* Excluded from this release type: CustomQueryHandlerRegistry */
-
-/* Excluded from this release type: customQueryHandlers */
 
 declare interface CustomQuerySelector {
     querySelector(root: Node, selector: string): Awaitable<Node | null>;
@@ -1540,10 +1445,6 @@ declare namespace CustomQuerySelectors {
 
 declare const customQuerySelectors: CustomQuerySelectorRegistry;
 
-/* Excluded from this release type: debug_2 */
-
-/* Excluded from this release type: debugError */
-
 /**
  * @public
  * @experimental
@@ -1559,8 +1460,6 @@ export declare interface DebugInfo {
  */
 export declare const DEFAULT_INTERCEPT_RESOLUTION_PRIORITY = 0;
 
-/* Excluded from this release type: DEFAULT_VIEWPORT */
-
 /**
  * @public
  */
@@ -1571,13 +1470,7 @@ export declare const
 /**
  * @public
  */
-defaultArgs: (options?: BrowserLaunchArgumentOptions) => string[];
-
-/* Excluded from this release type: Deferred */
-
-/* Excluded from this release type: DeferredOptions */
-
-/* Excluded from this release type: DelegatedLocator */
+defaultArgs: (options?: Puppeteer_2.BrowserLaunchArgumentOptions) => string[];
 
 /**
  * @public
@@ -1633,7 +1526,7 @@ export declare interface Device {
  *   page.click('#connect-bluetooth'),
  * ]);
  * await devicePrompt.select(
- *   await devicePrompt.waitForDevice(({name}) => name.includes('My Device'))
+ *   await devicePrompt.waitForDevice(({name}) => name.includes('My Device')),
  * );
  * ```
  *
@@ -1645,7 +1538,7 @@ export declare class DeviceRequestPrompt {
      * Current list of selectable devices.
      */
     devices: DeviceRequestPromptDevice[];
-    /* Excluded from this release type: __constructor */
+
     /**
      * Resolve to the first device in the prompt matching a filter.
      */
@@ -1674,12 +1567,8 @@ export declare class DeviceRequestPromptDevice {
      * Device name as it appears in a prompt.
      */
     name: string;
-    /* Excluded from this release type: __constructor */
+
 }
-
-/* Excluded from this release type: DeviceRequestPromptManager */
-
-/* Excluded from this release type: DevToolsTarget */
 
 /**
  * Dialog instances are dispatched by the {@link Page} via the `dialog` event.
@@ -1707,8 +1596,8 @@ export declare class DeviceRequestPromptDevice {
  */
 export declare abstract class Dialog {
     #private;
-    /* Excluded from this release type: handled */
-    /* Excluded from this release type: __constructor */
+
+
     /**
      * The type of the dialog.
      */
@@ -1722,7 +1611,7 @@ export declare abstract class Dialog {
      * is not a `prompt`.
      */
     defaultValue(): string;
-    /* Excluded from this release type: handle */
+
     /**
      * A promise that resolves when the dialog has been accepted.
      *
@@ -1736,12 +1625,6 @@ export declare abstract class Dialog {
      */
     dismiss(): Promise<void>;
 }
-
-/* Excluded from this release type: DisposableStack */
-
-/* Excluded from this release type: Disposed */
-
-/* Excluded from this release type: disposeSymbol */
 
 /**
  * @public
@@ -1783,22 +1666,21 @@ export declare type ElementFor<TagName extends keyof HTMLElementTagNameMap | key
  */
 export declare abstract class ElementHandle<ElementType extends Node = Element> extends JSHandle<ElementType> {
     #private;
-    /* Excluded from this release type: [_isElementHandle] */
-    /* Excluded from this release type: isolatedHandle */
-    /* Excluded from this release type: bindIsolatedHandle */
-    /* Excluded from this release type: handle */
-    /* Excluded from this release type: __constructor */
-    /* Excluded from this release type: id */
-    /* Excluded from this release type: disposed */
-    /* Excluded from this release type: getProperty */
-    /* Excluded from this release type: getProperties */
-    /* Excluded from this release type: evaluate */
-    /* Excluded from this release type: evaluateHandle */
-    /* Excluded from this release type: jsonValue */
-    /* Excluded from this release type: toString */
-    /* Excluded from this release type: remoteObject */
-    /* Excluded from this release type: dispose */
-    /* Excluded from this release type: asElement */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     /**
      * Frame corresponding to the current handle.
      */
@@ -1859,10 +1741,10 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
      * ```ts
      * const tweetHandle = await page.$('.tweet');
      * expect(await tweetHandle.$eval('.like', node => node.innerText)).toBe(
-     *   '100'
+     *   '100',
      * );
      * expect(await tweetHandle.$eval('.retweets', node => node.innerText)).toBe(
-     *   '10'
+     *   '10',
      * );
      * ```
      *
@@ -1910,7 +1792,7 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
      * ```ts
      * const feedHandle = await page.$('.feed');
      * expect(
-     *   await feedHandle.$$eval('.tweet', nodes => nodes.map(n => n.innerText))
+     *   await feedHandle.$$eval('.tweet', nodes => nodes.map(n => n.innerText)),
      * ).toEqual(['Hello!', 'Hi!']);
      * ```
      *
@@ -2008,7 +1890,7 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
      *
      * ```ts
      * const element: ElementHandle<Element> = await page.$(
-     *   '.class-name-of-anchor'
+     *   '.class-name-of-anchor',
      * );
      * // DO NOT DISPOSE `element`, this will be always be the same handle.
      * const anchor: ElementHandle<HTMLAnchorElement> =
@@ -2100,15 +1982,26 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
      * absolute.
      */
     abstract uploadFile(this: ElementHandle<HTMLInputElement>, ...paths: string[]): Promise<void>;
-    /* Excluded from this release type: queryAXTree */
+
     /**
      * This method scrolls element into view if needed, and then uses
      * {@link Touchscreen.tap} to tap in the center of the element.
      * If the element is detached from DOM, the method throws an error.
      */
     tap(this: ElementHandle<Element>): Promise<void>;
-    touchStart(this: ElementHandle<Element>): Promise<void>;
-    touchMove(this: ElementHandle<Element>): Promise<void>;
+    /**
+     * This method scrolls the element into view if needed, and then
+     * starts a touch in the center of the element.
+     * @returns A {@link TouchHandle} representing the touch that was started
+     */
+    touchStart(this: ElementHandle<Element>): Promise<TouchHandle>;
+    /**
+     * This method scrolls the element into view if needed, and then
+     * moves the touch to the center of the element.
+     * @param touch - An optional {@link TouchHandle}. If provided, this touch
+     * will be moved. If not provided, the first active touch will be moved.
+     */
+    touchMove(this: ElementHandle<Element>, touch?: TouchHandle): Promise<void>;
     touchEnd(this: ElementHandle<Element>): Promise<void>;
     /**
      * Calls {@link https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/focus | focus} on the element.
@@ -2181,8 +2074,8 @@ export declare abstract class ElementHandle<ElementType extends Node = Element> 
         encoding: 'base64';
     }): Promise<string>;
     screenshot(options?: Readonly<ScreenshotOptions>): Promise<Uint8Array>;
-    /* Excluded from this release type: assertConnectedElement */
-    /* Excluded from this release type: scrollIntoViewIfNeeded */
+
+
     /**
      * Resolves to true if the element is visible in the current viewport. If an
      * element is an SVG, we check if the svg owner element is in the viewport
@@ -2237,18 +2130,10 @@ export declare interface ElementScreenshotOptions extends ScreenshotOptions {
     scrollIntoView?: boolean;
 }
 
-/* Excluded from this release type: EmulatedState */
-
-/* Excluded from this release type: EmulationManager */
-
-/* Excluded from this release type: Environment */
-
 /**
  * @public
  */
 export declare type ErrorCode = 'aborted' | 'accessdenied' | 'addressunreachable' | 'blockedbyclient' | 'blockedbyresponse' | 'connectionaborted' | 'connectionclosed' | 'connectionfailed' | 'connectionrefused' | 'connectionreset' | 'internetdisconnected' | 'namenotresolved' | 'timedout' | 'failed';
-
-/* Excluded from this release type: ErrorLike */
 
 /**
  * @public
@@ -2259,8 +2144,6 @@ export declare type EvaluateFunc<T extends unknown[]> = (...params: InnerParams<
  * @public
  */
 export declare type EvaluateFuncWith<V, T extends unknown[]> = (...params: [V, ...InnerParams<T>]) => Awaitable<unknown>;
-
-/* Excluded from this release type: evaluationString */
 
 /**
  * The EventEmitter class that many Puppeteer classes extend.
@@ -2276,7 +2159,7 @@ export declare type EvaluateFuncWith<V, T extends unknown[]> = (...params: [V, .
  */
 export declare class EventEmitter<Events extends Record<EventType, unknown>> implements CommonEventEmitter<EventsWithWildcard<Events>> {
     #private;
-    /* Excluded from this release type: __constructor */
+
     /**
      * Bind an event listener to fire when an event occurs.
      * @param type - the event type you'd like to listen to. Can be a string or symbol.
@@ -2321,7 +2204,7 @@ export declare class EventEmitter<Events extends Record<EventType, unknown>> imp
      * @returns `this` to enable you to chain method calls.
      */
     removeAllListeners(type?: keyof EventsWithWildcard<Events>): this;
-    /* Excluded from this release type: [disposeSymbol] */
+
 }
 
 /**
@@ -2336,8 +2219,6 @@ export declare type EventsWithWildcard<Events extends Record<EventType, unknown>
  */
 export declare type EventType = string | symbol;
 
-/* Excluded from this release type: ExceptionThrownCallback */
-
 /**
  * @public
  */
@@ -2348,9 +2229,7 @@ export declare const
 /**
  * @public
  */
-executablePath: (channel?: ChromeReleaseChannel | undefined) => string;
-
-/* Excluded from this release type: ExecutionContext */
+executablePath: (channel?: Puppeteer_2.ChromeReleaseChannel) => string;
 
 /**
  * Defines experiment options for Puppeteer.
@@ -2375,12 +2254,10 @@ export declare class ExtensionTransport implements ConnectionTransport {
     static connectTab(tabId: number): Promise<ExtensionTransport>;
     onmessage?: (message: string) => void;
     onclose?: () => void;
-    /* Excluded from this release type: __constructor */
+
     send(message: string): void;
     close(): void;
 }
-
-/* Excluded from this release type: FetchRequestId */
 
 /**
  * File choosers let you react to the page requesting for a file.
@@ -2406,7 +2283,7 @@ export declare class ExtensionTransport implements ConnectionTransport {
  */
 export declare class FileChooser {
     #private;
-    /* Excluded from this release type: __constructor */
+
     /**
      * Whether file chooser allow for
      * {@link https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/file#attr-multiple | multiple}
@@ -2428,12 +2305,6 @@ export declare class FileChooser {
      */
     cancel(): Promise<void>;
 }
-
-/* Excluded from this release type: filterAsync */
-
-/* Excluded from this release type: FilteredLocator */
-
-/* Excluded from this release type: FirefoxLauncher */
 
 /**
  * @public
@@ -2474,14 +2345,10 @@ export declare interface FirefoxSettings {
     version?: string;
 }
 
-/* Excluded from this release type: FirefoxTargetManager */
-
 /**
  * @public
  */
 export declare type FlattenHandle<T> = T extends HandleOr<infer U> ? U : never;
-
-/* Excluded from this release type: FlattenLazyArg */
 
 /**
  * Represents a DOM frame.
@@ -2538,11 +2405,11 @@ export declare type FlattenHandle<T> = T extends HandleOr<infer U> ? U : never;
  */
 export declare abstract class Frame extends EventEmitter<FrameEvents> {
     #private;
-    /* Excluded from this release type: _id */
-    /* Excluded from this release type: _parentId */
-    /* Excluded from this release type: _name */
-    /* Excluded from this release type: _hasStartedLoading */
-    /* Excluded from this release type: __constructor */
+
+
+
+
+
     /**
      * The page associated with the frame.
      */
@@ -2608,11 +2475,11 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      * @returns A promise which resolves to the main resource response.
      */
     abstract waitForNavigation(options?: WaitForOptions): Promise<HTTPResponse | null>;
-    /* Excluded from this release type: client */
-    /* Excluded from this release type: accessibility */
-    /* Excluded from this release type: mainRealm */
-    /* Excluded from this release type: isolatedRealm */
-    /* Excluded from this release type: clearDocumentHandle */
+
+
+
+
+
     /**
      * @returns The frame element associated with this frame (if any).
      */
@@ -2833,7 +2700,7 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      * await frame.waitForFunction(
      *   selector => !!document.querySelector(selector),
      *   {}, // empty options object
-     *   selector
+     *   selector,
      * );
      * ```
      *
@@ -2855,7 +2722,7 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      * what point to consider the content setting successful.
      */
     abstract setContent(html: string, options?: WaitForOptions): Promise<void>;
-    /* Excluded from this release type: setFrameContent */
+
     /**
      * The frame's `name` attribute as specified in the tag.
      *
@@ -2896,7 +2763,7 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      * @deprecated Use the `detached` getter.
      */
     isDetached(): boolean;
-    /* Excluded from this release type: disposed */
+
     /**
      * Adds a `<script>` tag into the page with the desired url or content.
      *
@@ -3005,7 +2872,7 @@ export declare abstract class Frame extends EventEmitter<FrameEvents> {
      * The frame's title.
      */
     title(): Promise<string>;
-    /* Excluded from this release type: waitForDevicePrompt */
+
 }
 
 /**
@@ -3059,29 +2926,17 @@ export declare interface FrameAddStyleTagOptions {
     content?: string;
 }
 
-/* Excluded from this release type: FrameEvent */
-
 /**
  * @public
  */
 export declare interface FrameEvents extends Record<EventType, unknown> {
-    /* Excluded from this release type: [FrameEvent.FrameNavigated] */
-    /* Excluded from this release type: [FrameEvent.FrameSwapped] */
-    /* Excluded from this release type: [FrameEvent.LifecycleEvent] */
-    /* Excluded from this release type: [FrameEvent.FrameNavigatedWithinDocument] */
-    /* Excluded from this release type: [FrameEvent.FrameDetached] */
-    /* Excluded from this release type: [FrameEvent.FrameSwappedByActivation] */
+
+
+
+
+
+
 }
-
-/* Excluded from this release type: FrameManager */
-
-/* Excluded from this release type: FrameManagerEvent */
-
-/* Excluded from this release type: FrameManagerEvents */
-
-/* Excluded from this release type: FrameProvider */
-
-/* Excluded from this release type: FrameTree */
 
 /**
  * @public
@@ -3112,12 +2967,6 @@ export declare interface FrameWaitForFunctionOptions {
     signal?: AbortSignal;
 }
 
-/* Excluded from this release type: fromAbortSignal */
-
-/* Excluded from this release type: fromEmitterEvent */
-
-/* Excluded from this release type: FunctionLocator */
-
 /**
  * @public
  */
@@ -3136,22 +2985,6 @@ export declare interface GeolocationOptions {
     accuracy?: number;
 }
 
-/* Excluded from this release type: getCapturedLogs */
-
-/* Excluded from this release type: getFeatures */
-
-/* Excluded from this release type: GetIdFn */
-
-/* Excluded from this release type: getQueryHandlerAndSelector */
-
-/* Excluded from this release type: getReadableAsTypedArray */
-
-/* Excluded from this release type: getReadableFromProtocolStream */
-
-/* Excluded from this release type: getSourcePuppeteerURLIfAvailable */
-
-/* Excluded from this release type: getSourceUrlComment */
-
 /**
  * @public
  */
@@ -3168,28 +3001,20 @@ export declare interface GoToOptions extends WaitForOptions {
     referrerPolicy?: string;
 }
 
-/* Excluded from this release type: handleError */
-
 /**
  * @public
  */
 export declare type HandleFor<T> = T extends Node ? ElementHandle<T> : JSHandle<T>;
-
-/* Excluded from this release type: HandleMapper */
 
 /**
  * @public
  */
 export declare type HandleOr<T> = HandleFor<T> | JSHandle<T> | T;
 
-/* Excluded from this release type: HandlePredicate */
-
 /**
  * @public
  */
 export declare type Handler<T = unknown> = (event: T) => void;
-
-/* Excluded from this release type: headersArray */
 
 /**
  * Represents an HTTP request sent by a page.
@@ -3223,20 +3048,21 @@ export declare type Handler<T = unknown> = (event: T) => void;
  * @public
  */
 export declare abstract class HTTPRequest {
-    /* Excluded from this release type: id */
-    /* Excluded from this release type: _interceptionId */
-    /* Excluded from this release type: _failureText */
-    /* Excluded from this release type: _response */
-    /* Excluded from this release type: _fromMemoryCache */
-    /* Excluded from this release type: _redirectChain */
-    /* Excluded from this release type: interception */
+    #private;
+
+
+
+
+
+
+
     /**
      * Warning! Using this client can break Puppeteer. Use with caution.
      *
      * @experimental
      */
     abstract get client(): CDPSession;
-    /* Excluded from this release type: __constructor */
+
     /**
      * The URL of the request
      */
@@ -3280,9 +3106,9 @@ export declare abstract class HTTPRequest {
      * is finalized.
      */
     enqueueInterceptAction(pendingHandler: () => void | PromiseLike<unknown>): void;
-    /* Excluded from this release type: _abort */
-    /* Excluded from this release type: _respond */
-    /* Excluded from this release type: _continue */
+
+
+
     /**
      * Awaits pending interception handlers and then decides how to fulfill
      * the request interception.
@@ -3463,7 +3289,7 @@ export declare abstract class HTTPRequest {
      * throw an exception immediately.
      */
     abort(errorCode?: ErrorCode, priority?: number): Promise<void>;
-    /* Excluded from this release type: getResponse */
+
 }
 
 /**
@@ -3473,7 +3299,7 @@ export declare abstract class HTTPRequest {
  * @public
  */
 export declare abstract class HTTPResponse {
-    /* Excluded from this release type: __constructor */
+
     /**
      * The IP address and port number used to connect to the remote
      * server.
@@ -3558,12 +3384,6 @@ export declare abstract class HTTPResponse {
     abstract frame(): Frame | null;
 }
 
-/* Excluded from this release type: importDebug */
-
-/* Excluded from this release type: InitializationStatus */
-
-/* Excluded from this release type: InnerLazyParams */
-
 /**
  * @public
  */
@@ -3598,41 +3418,13 @@ export declare interface InternalNetworkConditions extends NetworkConditions {
     offline: boolean;
 }
 
-/* Excluded from this release type: IntervalPoller */
-
-/* Excluded from this release type: isDate */
-
-/* Excluded from this release type: _isElementHandle */
-
-/* Excluded from this release type: isErrnoException */
-
-/* Excluded from this release type: isErrorLike */
-
-/* Excluded from this release type: isNumber */
-
-/* Excluded from this release type: IsolatedWorld */
-
-/* Excluded from this release type: IsolatedWorldChart */
-
-/* Excluded from this release type: IsolatedWorldEmitter */
-
-/* Excluded from this release type: IsPageTargetCallback */
-
-/* Excluded from this release type: isPlainObject */
-
-/* Excluded from this release type: isRegExp */
-
-/* Excluded from this release type: isString */
-
-/* Excluded from this release type: isTargetClosedError */
-
 /**
  * @public
  */
 export declare class JSCoverage {
     #private;
-    /* Excluded from this release type: __constructor */
-    /* Excluded from this release type: updateClient */
+
+
     start(options?: {
         resetOnNavigation?: boolean;
         reportAnonymousScripts?: boolean;
@@ -3705,9 +3497,9 @@ export declare abstract class JSHandle<T = unknown> {
      * Used for nominally typing {@link JSHandle}.
      */
     _?: T;
-    /* Excluded from this release type: __constructor */
-    /* Excluded from this release type: realm */
-    /* Excluded from this release type: disposed */
+
+
+
     /**
      * Evaluates the given function with the current handle as its first argument.
      */
@@ -3766,15 +3558,15 @@ export declare abstract class JSHandle<T = unknown> {
      * Useful during debugging.
      */
     abstract toString(): string;
-    /* Excluded from this release type: id */
+
     /**
      * Provides access to the
      * {@link https://chromedevtools.github.io/devtools-protocol/tot/Runtime/#type-RemoteObject | Protocol.Runtime.RemoteObject}
      * backing this handle.
      */
     abstract remoteObject(): Protocol.Runtime.RemoteObject;
-    /* Excluded from this release type: [disposeSymbol] */
-    /* Excluded from this release type: [asyncDisposeSymbol] */
+
+
 }
 
 /**
@@ -3819,7 +3611,7 @@ export declare abstract class JSHandle<T = unknown> {
  * @public
  */
 export declare abstract class Keyboard {
-    /* Excluded from this release type: __constructor */
+
     /**
      * Dispatches a `keydown` event.
      *
@@ -3929,10 +3721,6 @@ export declare interface KeyboardTypeOptions {
     delay?: number;
 }
 
-/* Excluded from this release type: KeyDefinition */
-
-/* Excluded from this release type: _keyDefinitions */
-
 /**
  * @public
  */
@@ -3993,7 +3781,7 @@ export declare const
 /**
  * @public
  */
-launch: (options?: PuppeteerLaunchOptions) => Promise<Browser>;
+launch: (options?: Puppeteer_2.PuppeteerLaunchOptions) => Promise<Puppeteer_2.Browser>;
 
 /**
  * Generic launch options that can be passed when launching any browser.
@@ -4005,9 +3793,13 @@ export declare interface LaunchOptions {
      */
     channel?: ChromeReleaseChannel;
     /**
-     * Path to a browser executable to use instead of the bundled Chromium. Note
-     * that Puppeteer is only guaranteed to work with the bundled Chromium, so use
+     * Path to a browser executable to use instead of the bundled browser. Note
+     * that Puppeteer is only guaranteed to work with the bundled browser, so use
      * this setting at your own risk.
+     *
+     * @remarks
+     * When using this is recommended to set the `browser` property as well
+     * as Puppeteer will default to `chrome` by default.
      */
     executablePath?: string;
     /**
@@ -4073,10 +3865,6 @@ export declare interface LaunchOptions {
     waitForInitialPage?: boolean;
 }
 
-/* Excluded from this release type: LazyArg */
-
-/* Excluded from this release type: LifecycleWatcher */
-
 /**
  * Locators describe a strategy of locating objects and performing an action on
  * them. If the action fails because the object is not ready for the action, the
@@ -4100,9 +3888,9 @@ export declare abstract class Locator<T> extends EventEmitter<LocatorEvents> {
      * Used for nominally typing {@link Locator}.
      */
     _?: T;
-    /* Excluded from this release type: visibility */
-    /* Excluded from this release type: _timeout */
-    /* Excluded from this release type: operators */
+
+
+
     get timeout(): number;
     /**
      * Creates a new locator instance by cloning the current locator and setting
@@ -4142,9 +3930,9 @@ export declare abstract class Locator<T> extends EventEmitter<LocatorEvents> {
      * @defaultValue `true`
      */
     setWaitForStableBoundingBox<ElementType extends Element>(this: Locator<ElementType>, value: boolean): Locator<ElementType>;
-    /* Excluded from this release type: copyOptions */
-    /* Excluded from this release type: _clone */
-    /* Excluded from this release type: _wait */
+
+
+
     /**
      * Clones the locator.
      */
@@ -4177,8 +3965,8 @@ export declare abstract class Locator<T> extends EventEmitter<LocatorEvents> {
      * @public
      */
     filter<S extends T>(predicate: Predicate<T, S>): Locator<S>;
-    /* Excluded from this release type: filterHandle */
-    /* Excluded from this release type: mapHandle */
+
+
     /**
      * Clicks the located element.
      */
@@ -4236,10 +4024,6 @@ export declare interface LocatorScrollOptions extends ActionOptions {
  * @public
  */
 export declare type LowerCasePaperFormat = 'letter' | 'legal' | 'tabloid' | 'ledger' | 'a0' | 'a1' | 'a2' | 'a3' | 'a4' | 'a5' | 'a6';
-
-/* Excluded from this release type: MAIN_WORLD */
-
-/* Excluded from this release type: MappedLocator */
 
 /**
  * @public
@@ -4322,7 +4106,7 @@ export declare interface Metrics {
  *     selection.addRange(range);
  *   },
  *   fromJSHandle,
- *   toJSHandle
+ *   toJSHandle,
  * );
  * ```
  *
@@ -4354,7 +4138,7 @@ export declare interface Metrics {
  * @public
  */
 export declare abstract class Mouse {
-    /* Excluded from this release type: __constructor */
+
     /**
      * Resets the mouse to the default state: No buttons pressed; position at
      * (0,0).
@@ -4397,14 +4181,14 @@ export declare abstract class Mouse {
      *
      * ```ts
      * await page.goto(
-     *   'https://mdn.mozillademos.org/en-US/docs/Web/API/Element/wheel_event$samples/Scaling_an_element_via_the_wheel?revision=1587366'
+     *   'https://mdn.mozillademos.org/en-US/docs/Web/API/Element/wheel_event$samples/Scaling_an_element_via_the_wheel?revision=1587366',
      * );
      *
      * const elem = await page.$('div');
      * const boundingBox = await elem.boundingBox();
      * await page.mouse.move(
      *   boundingBox.x + boundingBox.width / 2,
-     *   boundingBox.y + boundingBox.height / 2
+     *   boundingBox.y + boundingBox.height / 2,
      * );
      *
      * await page.mouse.wheel({deltaY: -100});
@@ -4533,12 +4317,6 @@ export declare interface Moveable {
     move(): this;
 }
 
-/* Excluded from this release type: MutationPoller */
-
-/* Excluded from this release type: Mutex */
-
-/* Excluded from this release type: NETWORK_IDLE_TIME */
-
 /**
  * @public
  */
@@ -4557,16 +4335,6 @@ export declare interface NetworkConditions {
     latency: number;
 }
 
-/* Excluded from this release type: NetworkEventManager */
-
-/* Excluded from this release type: NetworkManager */
-
-/* Excluded from this release type: NetworkManagerEvent */
-
-/* Excluded from this release type: NetworkManagerEvents */
-
-/* Excluded from this release type: NetworkRequestId */
-
 /**
  * @public
  */
@@ -4578,8 +4346,6 @@ export declare interface NewDocumentScriptEvaluation {
  * @public
  */
 export declare type NodeFor<ComplexSelector extends string> = ParseSelector<ComplexSelector>;
-
-/* Excluded from this release type: NodeLocator */
 
 /**
  * @public
@@ -4594,8 +4360,6 @@ export declare interface Offset {
      */
     y: number;
 }
-
-/* Excluded from this release type: OtherTarget */
 
 /**
  * Page provides methods to interact with a single tab or
@@ -4648,9 +4412,9 @@ export declare interface Offset {
  */
 export declare abstract class Page extends EventEmitter<PageEvents> {
     #private;
-    /* Excluded from this release type: _isDragging */
-    /* Excluded from this release type: _timeoutSettings */
-    /* Excluded from this release type: __constructor */
+
+
+
     /**
      * `true` if the service worker are being bypassed, `false` otherwise.
      */
@@ -4667,8 +4431,8 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * `true` if the page has JavaScript enabled, `false` otherwise.
      */
     abstract isJavaScriptEnabled(): boolean;
-    /* Excluded from this release type: on */
-    /* Excluded from this release type: off */
+
+
     /**
      * This method is typically coupled with an action that triggers file
      * choosing.
@@ -4929,7 +4693,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * {@link https://pptr.dev/guides/page-interactions#prefixed-selector-syntax | prefix}.
      */
     locator<Ret>(func: () => Awaitable<Ret>): Locator<Ret>;
-    /* Excluded from this release type: locatorRace */
+
     /**
      * Finds the first element that matches the selector. If no element matches
      * the selector, the return value resolves to `null`.
@@ -5006,7 +4770,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * const aHandle = await page.evaluateHandle(() => document.body);
      * const resultHandle = await page.evaluateHandle(
      *   body => body.innerHTML,
-     *   aHandle
+     *   aHandle,
      * );
      * console.log(await resultHandle.jsonValue());
      * await resultHandle.dispose();
@@ -5020,7 +4784,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * ```ts
      * const button = await page.evaluateHandle(() =>
-     *   document.querySelector('button')
+     *   document.querySelector('button'),
      * );
      * // can call `click` because `button` is an `ElementHandle`
      * await button.click();
@@ -5093,7 +4857,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * // as `value` is not on `Element`
      * const searchValue = await page.$eval(
      *   '#search',
-     *   (el: HTMLInputElement) => el.value
+     *   (el: HTMLInputElement) => el.value,
      * );
      * ```
      *
@@ -5108,7 +4872,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * // or if you want to be more explicit, provide it as the generic type.
      * const searchValue = await page.$eval<string>(
      *   '#search',
-     *   (el: HTMLInputElement) => el.value
+     *   (el: HTMLInputElement) => el.value,
      * );
      * ```
      *
@@ -5178,7 +4942,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * ```ts
      * const allInputValues = await page.$$eval('input', elements =>
-     *   elements.map(e => e.textContent)
+     *   elements.map(e => e.textContent),
      * );
      * ```
      *
@@ -5270,7 +5034,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *   const page = await browser.newPage();
      *   page.on('console', msg => console.log(msg.text()));
      *   await page.exposeFunction('md5', text =>
-     *     crypto.createHash('md5').update(text).digest('hex')
+     *     crypto.createHash('md5').update(text).digest('hex'),
      *   );
      *   await page.evaluate(async () => {
      *     // use window.md5 to compute hashes
@@ -5470,10 +5234,10 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * ```ts
      * const firstRequest = await page.waitForRequest(
-     *   'https://example.com/resource'
+     *   'https://example.com/resource',
      * );
      * const finalRequest = await page.waitForRequest(
-     *   request => request.url() === 'https://example.com'
+     *   request => request.url() === 'https://example.com',
      * );
      * return finalRequest.response()?.ok();
      * ```
@@ -5494,11 +5258,11 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * ```ts
      * const firstResponse = await page.waitForResponse(
-     *   'https://example.com/resource'
+     *   'https://example.com/resource',
      * );
      * const finalResponse = await page.waitForResponse(
      *   response =>
-     *     response.url() === 'https://example.com' && response.status() === 200
+     *     response.url() === 'https://example.com' && response.status() === 200,
      * );
      * const finalResponse = await page.waitForResponse(async response => {
      *   return (await response.text()).includes('<html>');
@@ -5521,7 +5285,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * @returns A promise which resolves once the network is idle.
      */
     waitForNetworkIdle(options?: WaitForNetworkIdleOptions): Promise<void>;
-    /* Excluded from this release type: waitForNetworkIdle$ */
+
     /**
      * Waits for a frame matching the given conditions to appear.
      *
@@ -5642,11 +5406,11 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *   {name: 'prefers-color-scheme', value: 'dark'},
      * ]);
      * await page.evaluate(
-     *   () => matchMedia('(prefers-color-scheme: dark)').matches
+     *   () => matchMedia('(prefers-color-scheme: dark)').matches,
      * );
      * // → true
      * await page.evaluate(
-     *   () => matchMedia('(prefers-color-scheme: light)').matches
+     *   () => matchMedia('(prefers-color-scheme: light)').matches,
      * );
      * // → false
      *
@@ -5654,11 +5418,11 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *   {name: 'prefers-reduced-motion', value: 'reduce'},
      * ]);
      * await page.evaluate(
-     *   () => matchMedia('(prefers-reduced-motion: reduce)').matches
+     *   () => matchMedia('(prefers-reduced-motion: reduce)').matches,
      * );
      * // → true
      * await page.evaluate(
-     *   () => matchMedia('(prefers-reduced-motion: no-preference)').matches
+     *   () => matchMedia('(prefers-reduced-motion: no-preference)').matches,
      * );
      * // → false
      *
@@ -5667,19 +5431,19 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *   {name: 'prefers-reduced-motion', value: 'reduce'},
      * ]);
      * await page.evaluate(
-     *   () => matchMedia('(prefers-color-scheme: dark)').matches
+     *   () => matchMedia('(prefers-color-scheme: dark)').matches,
      * );
      * // → true
      * await page.evaluate(
-     *   () => matchMedia('(prefers-color-scheme: light)').matches
+     *   () => matchMedia('(prefers-color-scheme: light)').matches,
      * );
      * // → false
      * await page.evaluate(
-     *   () => matchMedia('(prefers-reduced-motion: reduce)').matches
+     *   () => matchMedia('(prefers-reduced-motion: reduce)').matches,
      * );
      * // → true
      * await page.evaluate(
-     *   () => matchMedia('(prefers-reduced-motion: no-preference)').matches
+     *   () => matchMedia('(prefers-reduced-motion: no-preference)').matches,
      * );
      * // → false
      *
@@ -5883,7 +5647,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * @defaultValue `true`
      */
     abstract setCacheEnabled(enabled?: boolean): Promise<void>;
-    /* Excluded from this release type: _maybeWriteTypedArrayToFile */
+
     /**
      * Captures a screencast of this {@link Page | page}.
      *
@@ -5925,8 +5689,8 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * You must have {@link https://ffmpeg.org/ | ffmpeg} installed on your system.
      */
     screencast(options?: Readonly<ScreencastOptions>): Promise<ScreenRecorder>;
-    /* Excluded from this release type: _startScreencast */
-    /* Excluded from this release type: _stopScreencast */
+
+
     /**
      * Captures a screenshot of this {@link Page | page}.
      *
@@ -5948,7 +5712,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
         encoding: 'base64';
     }): Promise<string>;
     screenshot(options?: Readonly<ScreenshotOptions>): Promise<Uint8Array>;
-    /* Excluded from this release type: _screenshot */
+
     /**
      * Generates a PDF of the page with the `print` CSS media type.
      *
@@ -6284,7 +6048,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * await page.waitForFunction(
      *   selector => !!document.querySelector(selector),
      *   {},
-     *   selector
+     *   selector,
      * );
      * ```
      *
@@ -6296,7 +6060,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * await page.waitForFunction(
      *   async username => {
      *     const githubResponse = await fetch(
-     *       `https://api.github.com/users/${username}`
+     *       `https://api.github.com/users/${username}`,
      *     );
      *     const githubUser = await githubResponse.json();
      *     // show the avatar
@@ -6307,7 +6071,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *     img.remove();
      *   },
      *   {},
-     *   username
+     *   username,
      * );
      * ```
      *
@@ -6335,18 +6099,14 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *   page.click('#connect-bluetooth'),
      * ]);
      * await devicePrompt.select(
-     *   await devicePrompt.waitForDevice(({name}) => name.includes('My Device'))
+     *   await devicePrompt.waitForDevice(({name}) => name.includes('My Device')),
      * );
      * ```
      */
     abstract waitForDevicePrompt(options?: WaitTimeoutOptions): Promise<DeviceRequestPrompt>;
-    /* Excluded from this release type: [disposeSymbol] */
-    /* Excluded from this release type: [asyncDisposeSymbol] */
+
+
 }
-
-/* Excluded from this release type: PageBinding */
-
-/* Excluded from this release type: pageBindingInitString */
 
 /**
  * All the events that a page instance may emit.
@@ -6533,8 +6293,6 @@ export declare interface PageEvents extends Record<EventType, unknown> {
     [PageEvent.WorkerDestroyed]: WebWorker;
 }
 
-/* Excluded from this release type: PageTarget */
-
 /**
  * All the valid paper format types when printing a PDF.
  *
@@ -6550,37 +6308,23 @@ export declare interface PageEvents extends Record<EventType, unknown> {
  *
  * - `Ledger`: 17in x 11in
  *
- * - `A0`: 33.1in x 46.8in
+ * - `A0`: 33.1102in x 46.811in
  *
- * - `A1`: 23.4in x 33.1in
+ * - `A1`: 23.3858in x 33.1102in
  *
- * - `A2`: 16.54in x 23.4in
+ * - `A2`: 16.5354in x 23.3858in
  *
- * - `A3`: 11.7in x 16.54in
+ * - `A3`: 11.6929in x 16.5354in
  *
- * - `A4`: 8.27in x 11.7in
+ * - `A4`: 8.2677in x 11.6929in
  *
- * - `A5`: 5.83in x 8.27in
+ * - `A5`: 5.8268in x 8.2677in
  *
- * - `A6`: 4.13in x 5.83in
+ * - `A6`: 4.1339in x 5.8268in
  *
  * @public
  */
 export declare type PaperFormat = Uppercase<LowerCasePaperFormat> | Capitalize<LowerCasePaperFormat> | LowerCasePaperFormat;
-
-/* Excluded from this release type: PaperFormatDimensions */
-
-/* Excluded from this release type: paperFormats */
-
-/* Excluded from this release type: ParsedPDFOptions */
-
-/* Excluded from this release type: ParsedPDFOptionsInterface */
-
-/* Excluded from this release type: parsePDFOptions */
-
-/* Excluded from this release type: parsePSelectors */
-
-/* Excluded from this release type: PCombinator */
 
 /**
  * @license
@@ -6724,10 +6468,6 @@ export declare interface PDFOptions {
  */
 export declare type Permission = 'geolocation' | 'midi' | 'notifications' | 'camera' | 'microphone' | 'background-sync' | 'ambient-light-sensor' | 'accelerometer' | 'gyroscope' | 'magnetometer' | 'accessibility-events' | 'clipboard-read' | 'clipboard-write' | 'clipboard-sanitized-write' | 'payment-handler' | 'persistent-storage' | 'idle-detection' | 'midi-sysex';
 
-/* Excluded from this release type: PierceQueryHandler */
-
-/* Excluded from this release type: PipeTransport */
-
 /**
  * @public
  */
@@ -6736,23 +6476,11 @@ export declare interface Point {
     y: number;
 }
 
-/* Excluded from this release type: Poller */
-
-/* Excluded from this release type: PollingOptions */
-
-/* Excluded from this release type: PPseudoSelector */
-
-/* Excluded from this release type: PQueryHandler */
-
 declare namespace PQuerySelector {
     export {
 
     }
 }
-
-/* Excluded from this release type: pQuerySelector */
-
-/* Excluded from this release type: pQuerySelectorAll */
 
 /**
  * A list of pre-defined network conditions to be used with
@@ -6766,19 +6494,19 @@ declare namespace PQuerySelector {
  *   const browser = await puppeteer.launch();
  *   const page = await browser.newPage();
  *   await page.emulateNetworkConditions(
- *     PredefinedNetworkConditions['Slow 3G']
+ *     PredefinedNetworkConditions['Slow 3G'],
  *   );
  *   await page.goto('https://www.google.com');
  *   await page.emulateNetworkConditions(
- *     PredefinedNetworkConditions['Fast 3G']
+ *     PredefinedNetworkConditions['Fast 3G'],
  *   );
  *   await page.goto('https://www.google.com');
  *   await page.emulateNetworkConditions(
- *     PredefinedNetworkConditions['Slow 4G']
+ *     PredefinedNetworkConditions['Slow 4G'],
  *   ); // alias to Fast 3G.
  *   await page.goto('https://www.google.com');
  *   await page.emulateNetworkConditions(
- *     PredefinedNetworkConditions['Fast 4G']
+ *     PredefinedNetworkConditions['Fast 4G'],
  *   );
  *   await page.goto('https://www.google.com');
  *   // other actions...
@@ -6844,7 +6572,7 @@ export declare type ProtocolType = 'cdp' | 'webDriverBiDi';
  * @public
  */
 export declare class Puppeteer {
-    /* Excluded from this release type: customQueryHandlers */
+
     /**
      * Registers a {@link CustomQueryHandler | custom query handler}.
      *
@@ -6882,9 +6610,9 @@ export declare class Puppeteer {
      * Unregisters all custom query handlers.
      */
     static clearCustomQueryHandlers(): void;
-    /* Excluded from this release type: _isPuppeteerCore */
-    /* Excluded from this release type: _changedBrowsers */
-    /* Excluded from this release type: __constructor */
+
+
+
     /**
      * This method attaches Puppeteer to an existing browser instance.
      *
@@ -6899,12 +6627,184 @@ export declare class Puppeteer {
 /**
  * @public
  */
-declare const puppeteer: PuppeteerNode;
+declare const puppeteer: Puppeteer_2.PuppeteerNode;
 export default puppeteer;
 
-/* Excluded from this release type: PUPPETEER_REVISIONS */
-
-/* Excluded from this release type: PUPPETEER_WORLD */
+declare namespace Puppeteer_2 {
+    export {
+        Protocol,
+        Session,
+        BrowserContextOptions,
+        TargetFilterCallback,
+        Permission,
+        WaitForTargetOptions,
+        BrowserEvent,
+        BrowserEvents,
+        DebugInfo,
+        Browser,
+        BrowserContextEvent,
+        BrowserContextEvents,
+        BrowserContext,
+        CDPEvents,
+        CDPSessionEvent,
+        CDPSessionEvents,
+        CommandOptions,
+        CDPSession,
+        Dialog,
+        Quad,
+        BoxModel,
+        BoundingBox,
+        Offset,
+        ClickOptions,
+        Point,
+        ElementScreenshotOptions,
+        ElementHandle,
+        AutofillData,
+        WaitForOptions,
+        GoToOptions,
+        FrameWaitForFunctionOptions,
+        FrameAddScriptTagOptions,
+        FrameAddStyleTagOptions,
+        FrameEvents,
+        Frame,
+        ContinueRequestOverrides,
+        InterceptResolutionState,
+        ResponseForRequest,
+        ResourceType,
+        DEFAULT_INTERCEPT_RESOLUTION_PRIORITY,
+        HTTPRequest,
+        InterceptResolutionAction,
+        ErrorCode,
+        ActionResult,
+        RemoteAddress,
+        HTTPResponse,
+        KeyDownOptions,
+        KeyboardTypeOptions,
+        KeyPressOptions,
+        Keyboard,
+        MouseOptions,
+        MouseClickOptions,
+        MouseWheelOptions,
+        MouseMoveOptions,
+        MouseButton,
+        Mouse,
+        TouchHandle,
+        Touchscreen,
+        JSHandle,
+        Metrics,
+        Credentials,
+        WaitForNetworkIdleOptions,
+        WaitTimeoutOptions,
+        WaitForSelectorOptions,
+        GeolocationOptions,
+        MediaFeature,
+        ScreenshotClip,
+        ScreenshotOptions,
+        ScreencastOptions,
+        QueryOptions,
+        PageEvent,
+        PageEvents,
+        NewDocumentScriptEvaluation,
+        Page,
+        TargetType,
+        Target,
+        WebWorker,
+        VisibilityOption,
+        ActionOptions,
+        LocatorClickOptions,
+        LocatorScrollOptions,
+        LocatorEvent,
+        LocatorEvents,
+        Locator,
+        Predicate,
+        Mapper,
+        AwaitedLocator,
+        SerializedAXNode,
+        SnapshotOptions,
+        Accessibility,
+        Connection,
+        CoverageEntry,
+        JSCoverageEntry,
+        JSCoverageOptions,
+        CSSCoverageOptions,
+        Coverage,
+        JSCoverage,
+        CSSCoverage,
+        DeviceRequestPromptDevice,
+        DeviceRequestPrompt,
+        ExtensionTransport,
+        PuppeteerLifeCycleEvent,
+        ProtocolLifeCycleEvent,
+        NetworkConditions,
+        InternalNetworkConditions,
+        PredefinedNetworkConditions,
+        TracingOptions,
+        Tracing,
+        ExperimentsConfiguration,
+        Configuration,
+        ChromeSettings,
+        ChromeHeadlessShellSettings,
+        FirefoxSettings,
+        ConnectionTransport,
+        ProtocolType,
+        SupportedWebDriverCapability,
+        SupportedWebDriverCapabilities,
+        BrowserConnectOptions,
+        ConnectOptions,
+        ConsoleMessageLocation,
+        ConsoleMessageType,
+        ConsoleMessage,
+        CookieSameSite,
+        CookiePriority,
+        CookieSourceScheme,
+        Cookie,
+        CookieParam,
+        DeleteCookiesRequest,
+        CustomQueryHandler,
+        Device,
+        KnownDevices,
+        PuppeteerError,
+        TimeoutError,
+        TouchError,
+        ProtocolError,
+        UnsupportedOperation,
+        EventType,
+        Handler,
+        CommonEventEmitter,
+        EventsWithWildcard,
+        EventEmitter,
+        FileChooser,
+        PDFMargin,
+        LowerCasePaperFormat,
+        PaperFormat,
+        PDFOptions,
+        SupportedBrowser,
+        Puppeteer,
+        SecurityDetails,
+        AwaitablePredicate,
+        Moveable,
+        AwaitableIterable,
+        Awaitable,
+        HandleFor,
+        HandleOr,
+        FlattenHandle,
+        InnerParams,
+        ElementFor,
+        EvaluateFunc,
+        EvaluateFuncWith,
+        NodeFor,
+        KeyInput,
+        Viewport,
+        BrowserLaunchArgumentOptions,
+        ChromeReleaseChannel,
+        LaunchOptions,
+        PuppeteerNodeLaunchOptions,
+        BrowserLauncher,
+        PuppeteerLaunchOptions,
+        PuppeteerNode,
+        ScreenRecorder
+    }
+}
 
 /**
  * @license
@@ -6917,8 +6817,8 @@ export default puppeteer;
  * @public
  */
 export declare class PuppeteerError extends Error {
-    /* Excluded from this release type: __constructor */
-    /* Excluded from this release type: [Symbol.toStringTag] */
+
+
 }
 
 /**
@@ -6989,9 +6889,9 @@ export declare type PuppeteerLifeCycleEvent =
  */
 export declare class PuppeteerNode extends Puppeteer {
     #private;
-    /* Excluded from this release type: defaultBrowserRevision */
-    /* Excluded from this release type: configuration */
-    /* Excluded from this release type: __constructor */
+
+
+
     /**
      * This method attaches Puppeteer to an existing browser instance.
      *
@@ -7040,8 +6940,8 @@ export declare class PuppeteerNode extends Puppeteer {
      * The default executable path.
      */
     executablePath(channel?: ChromeReleaseChannel): string;
-    /* Excluded from this release type: browserVersion */
-    /* Excluded from this release type: defaultDownloadPath */
+
+
     /**
      * The name of the browser that was last launched.
      */
@@ -7091,18 +6991,10 @@ export declare class PuppeteerNode extends Puppeteer {
  */
 export declare type PuppeteerNodeLaunchOptions = BrowserLaunchArgumentOptions & LaunchOptions & BrowserConnectOptions;
 
-/* Excluded from this release type: PuppeteerURL */
-
-/* Excluded from this release type: PuppeteerUtil */
-
-/* Excluded from this release type: PuppeteerUtilWrapper */
-
 /**
  * @public
  */
 export declare type Quad = [Point, Point, Point, Point];
-
-/* Excluded from this release type: QueryHandler */
 
 /**
  * @public
@@ -7119,22 +7011,6 @@ export declare interface QueryOptions {
     isolate: boolean;
 }
 
-/* Excluded from this release type: QuerySelector */
-
-/* Excluded from this release type: QuerySelectorAll */
-
-/* Excluded from this release type: QueuedEventGroup */
-
-/* Excluded from this release type: RaceLocator */
-
-/* Excluded from this release type: RAFPoller */
-
-/* Excluded from this release type: Realm */
-
-/* Excluded from this release type: RedirectInfo */
-
-/* Excluded from this release type: releaseObject */
-
 /**
  * @public
  */
@@ -7142,10 +7018,6 @@ export declare interface RemoteAddress {
     ip?: string;
     port?: number;
 }
-
-/* Excluded from this release type: removeMatchingFlags */
-
-/* Excluded from this release type: ResolvedLaunchArgs */
 
 /**
  * Resource types for HTTPRequests as perceived by the rendering engine.
@@ -7162,16 +7034,17 @@ export declare type ResourceType = Lowercase<Protocol.Network.ResourceType>;
 export declare interface ResponseForRequest {
     status: number;
     /**
-     * Optional response headers. All values are converted to strings.
+     * Optional response headers.
+     *
+     * The record values will be converted to string following:
+     * Arrays' values will be mapped to String
+     * (Used when you need multiple headers with the same name).
+     * Non-arrays will be converted to String.
      */
-    headers: Record<string, unknown>;
+    headers: Record<string, string | string[] | unknown>;
     contentType: string;
     body: string | Uint8Array;
 }
-
-/* Excluded from this release type: RETRY_DELAY */
-
-/* Excluded from this release type: rewriteError */
 
 /**
  * @public
@@ -7217,17 +7090,15 @@ export declare interface ScreencastOptions {
  */
 export declare class ScreenRecorder extends PassThrough {
     #private;
-    /* Excluded from this release type: __constructor */
+
     /**
      * Stops the recorder.
      *
      * @public
      */
     stop(): Promise<void>;
-    /* Excluded from this release type: [asyncDisposeSymbol] */
-}
 
-/* Excluded from this release type: ScreenRecorderOptions */
+}
 
 /**
  * @public
@@ -7298,10 +7169,6 @@ export declare interface ScreenshotOptions {
     captureBeyondViewport?: boolean;
 }
 
-/* Excluded from this release type: ScriptInjector */
-
-/* Excluded from this release type: scriptInjector */
-
 /**
  * The SecurityDetails class represents the security details of a
  * response that was received over a secure connection.
@@ -7310,7 +7177,7 @@ export declare interface ScreenshotOptions {
  */
 export declare class SecurityDetails {
     #private;
-    /* Excluded from this release type: __constructor */
+
     /**
      * The name of the issuer of the certificate.
      */
@@ -7421,10 +7288,6 @@ export declare interface SerializedAXNode {
 
 export { Session }
 
-/* Excluded from this release type: setDefaultScreenshotOptions */
-
-/* Excluded from this release type: setLogCapture */
-
 /**
  * @public
  */
@@ -7441,10 +7304,6 @@ export declare interface SnapshotOptions {
     root?: ElementHandle<Node>;
 }
 
-/* Excluded from this release type: SOURCE_URL_REGEX */
-
-/* Excluded from this release type: STATUS_TEXTS */
-
 /**
  * @license
  * Copyright 2020 Google Inc.
@@ -7457,8 +7316,6 @@ export declare interface SnapshotOptions {
  */
 export declare type SupportedBrowser = 'chrome' | 'firefox';
 
-/* Excluded from this release type: supportedMetrics */
-
 /**
  * WebDriver BiDi capabilities that are not set by Puppeteer itself.
  *
@@ -7469,6 +7326,9 @@ export declare interface SupportedWebDriverCapabilities {
     alwaysMatch?: SupportedWebDriverCapability;
 }
 
+/**
+ * @public
+ */
 export declare type SupportedWebDriverCapability = Exclude<Session.CapabilityRequest, 'unhandledPromptBehavior' | 'acceptInsecureCerts'>;
 
 /**
@@ -7479,7 +7339,7 @@ export declare type SupportedWebDriverCapability = Exclude<Session.CapabilityReq
  * @public
  */
 export declare abstract class Target {
-    /* Excluded from this release type: __constructor */
+
     /**
      * If the target is not of type `"service_worker"` or `"shared_worker"`, returns `null`.
      */
@@ -7522,20 +7382,10 @@ export declare abstract class Target {
     abstract opener(): Target | undefined;
 }
 
-/* Excluded from this release type: TargetCloseError */
-
-/* Excluded from this release type: TargetFactory */
-
 /**
  * @public
  */
 export declare type TargetFilterCallback = (target: Target) => boolean;
-
-/* Excluded from this release type: TargetManager */
-
-/* Excluded from this release type: TargetManagerEvent */
-
-/* Excluded from this release type: TargetManagerEvents */
 
 /**
  * @public
@@ -7548,20 +7398,8 @@ export declare enum TargetType {
     BROWSER = "browser",
     WEBVIEW = "webview",
     OTHER = "other",
-    /* Excluded from this release type: TAB */
+
 }
-
-/* Excluded from this release type: TaskManager */
-
-/* Excluded from this release type: TaskQueue */
-
-/* Excluded from this release type: TextContent */
-
-/* Excluded from this release type: TextQueryHandler */
-
-/* Excluded from this release type: throwIfDetached */
-
-/* Excluded from this release type: timeout */
 
 /**
  * TimeoutError is emitted whenever certain operations are terminated due to
@@ -7576,14 +7414,40 @@ export declare enum TargetType {
 export declare class TimeoutError extends PuppeteerError {
 }
 
-/* Excluded from this release type: TimeoutSettings */
+/**
+ * TouchError is thrown when an attempt is made to move or end a touch that does
+ * not exist.
+ * @public
+ */
+export declare class TouchError extends PuppeteerError {
+}
+
+/**
+ * The TouchHandle interface exposes methods to manipulate touches that have been started
+ * @public
+ */
+export declare interface TouchHandle {
+    /**
+     * Dispatches a `touchMove` event for this touch.
+     * @param x - Horizontal position of the move.
+     * @param y - Vertical position of the move.
+     */
+    move(x: number, y: number): Promise<void>;
+    /**
+     * Dispatches a `touchend` event for this touch.
+     */
+    end(): Promise<void>;
+}
 
 /**
  * The Touchscreen class exposes touchscreen events.
  * @public
  */
 export declare abstract class Touchscreen {
-    /* Excluded from this release type: __constructor */
+
+
+
+
     /**
      * Dispatches a `touchstart` and `touchend` event.
      * @param x - Horizontal position of the tap.
@@ -7594,10 +7458,11 @@ export declare abstract class Touchscreen {
      * Dispatches a `touchstart` event.
      * @param x - Horizontal position of the tap.
      * @param y - Vertical position of the tap.
+     * @returns A handle for the touch that was started.
      */
-    abstract touchStart(x: number, y: number): Promise<void>;
+    abstract touchStart(x: number, y: number): Promise<TouchHandle>;
     /**
-     * Dispatches a `touchMove` event.
+     * Dispatches a `touchMove` event on the first touch that is active.
      * @param x - Horizontal position of the move.
      * @param y - Vertical position of the move.
      *
@@ -7608,11 +7473,11 @@ export declare abstract class Touchscreen {
      * {@link https://developer.chrome.com/blog/a-more-compatible-smoother-touch/#chromes-new-model-the-throttled-async-touchmove-model | throttles}
      * touch move events.
      */
-    abstract touchMove(x: number, y: number): Promise<void>;
+    touchMove(x: number, y: number): Promise<void>;
     /**
-     * Dispatches a `touchend` event.
+     * Dispatches a `touchend` event on the first touch that is active.
      */
-    abstract touchEnd(): Promise<void>;
+    touchEnd(): Promise<void>;
 }
 
 /**
@@ -7633,8 +7498,8 @@ export declare abstract class Touchscreen {
  */
 export declare class Tracing {
     #private;
-    /* Excluded from this release type: __constructor */
-    /* Excluded from this release type: updateClient */
+
+
     /**
      * Starts a trace for the current page.
      * @remarks
@@ -7659,10 +7524,6 @@ export declare interface TracingOptions {
     categories?: string[];
 }
 
-/* Excluded from this release type: transposeIterableHandle */
-
-/* Excluded from this release type: unitToPixels */
-
 /**
  * Puppeteer will throw this error if a method is not
  * supported by the currently used protocol
@@ -7671,12 +7532,6 @@ export declare interface TracingOptions {
  */
 export declare class UnsupportedOperation extends PuppeteerError {
 }
-
-/* Excluded from this release type: UTILITY_WORLD_NAME */
-
-/* Excluded from this release type: validateDialogType */
-
-/* Excluded from this release type: valueFromRemoteObject */
 
 /**
  * @license
@@ -7777,7 +7632,7 @@ export declare interface WaitForOptions {
      * @defaultValue `'load'`
      */
     waitUntil?: PuppeteerLifeCycleEvent | PuppeteerLifeCycleEvent[];
-    /* Excluded from this release type: ignoreSameDocumentNavigation */
+
     /**
      * A signal object that allows you to cancel the call.
      */
@@ -7833,10 +7688,6 @@ export declare interface WaitForTargetOptions {
     signal?: AbortSignal;
 }
 
-/* Excluded from this release type: WaitTask */
-
-/* Excluded from this release type: WaitTaskOptions */
-
 /**
  * @public
  */
@@ -7856,8 +7707,6 @@ export declare interface WaitTimeoutOptions {
     signal?: AbortSignal;
 }
 
-/* Excluded from this release type: WEB_PERMISSION_TO_PROTOCOL_PERMISSION */
-
 /**
  * This class represents a
  * {@link https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API | WebWorker}.
@@ -7870,10 +7719,10 @@ export declare interface WaitTimeoutOptions {
  *
  * ```ts
  * page.on('workercreated', worker =>
- *   console.log('Worker created: ' + worker.url())
+ *   console.log('Worker created: ' + worker.url()),
  * );
  * page.on('workerdestroyed', worker =>
- *   console.log('Worker destroyed: ' + worker.url())
+ *   console.log('Worker destroyed: ' + worker.url()),
  * );
  *
  * console.log('Current workers:');
@@ -7886,9 +7735,9 @@ export declare interface WaitTimeoutOptions {
  */
 export declare abstract class WebWorker extends EventEmitter<Record<EventType, unknown>> {
     #private;
-    /* Excluded from this release type: timeoutSettings */
-    /* Excluded from this release type: __constructor */
-    /* Excluded from this release type: mainRealm */
+
+
+
     /**
      * The URL of this web worker.
      */
@@ -7940,11 +7789,5 @@ export declare abstract class WebWorker extends EventEmitter<Record<EventType, u
     evaluateHandle<Params extends unknown[], Func extends EvaluateFunc<Params> = EvaluateFunc<Params>>(func: Func | string, ...args: Params): Promise<HandleFor<Awaited<ReturnType<Func>>>>;
     close(): Promise<void>;
 }
-
-/* Excluded from this release type: withSourcePuppeteerURLIfNone */
-
-/* Excluded from this release type: WorkerTarget */
-
-/* Excluded from this release type: XPathQueryHandler */
 
 export { }

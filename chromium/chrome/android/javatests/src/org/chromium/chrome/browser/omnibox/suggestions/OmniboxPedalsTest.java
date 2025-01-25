@@ -72,14 +72,15 @@ import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteMatchBuilder;
 import org.chromium.components.omnibox.AutocompleteResult;
+import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.components.omnibox.OmniboxSuggestionType;
 import org.chromium.components.omnibox.action.OmniboxActionJni;
 import org.chromium.components.omnibox.action.OmniboxPedalId;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.test.util.GmsCoreVersionRestriction;
-import org.chromium.ui.test.util.UiDisableIf;
 
 import java.util.Arrays;
 import java.util.List;
@@ -107,6 +108,7 @@ public class OmniboxPedalsTest {
 
     @Before
     public void setUp() throws InterruptedException {
+        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(false);
         sActivityTestRule.loadUrl("about:blank");
         mOmniboxUtils = new OmniboxTestUtils(sActivityTestRule.getActivity());
         mJniMocker.mock(OmniboxActionJni.TEST_HOOKS, mOmniboxActionJni);
@@ -213,7 +215,7 @@ public class OmniboxPedalsTest {
 
     @Test
     @MediumTest
-    @DisableIf.Device(type = {UiDisableIf.TABLET}) // https://crbug.com/338976917
+    @DisableIf.Device(DeviceFormFactor.TABLET) // https://crbug.com/338976917
     @Restriction(GmsCoreVersionRestriction.RESTRICTION_TYPE_VERSION_GE_22W30)
     public void testManagePasswordsNoUpmFlow() throws InterruptedException {
         ThreadUtils.runOnUiThreadBlocking(

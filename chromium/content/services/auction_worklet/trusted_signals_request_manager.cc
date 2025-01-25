@@ -22,10 +22,19 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
+#include "base/strings/stringprintf.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
+#include "content/common/content_export.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
 #include "content/services/auction_worklet/public/cpp/auction_network_events_delegate.h"
+#include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom.h"
+#include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
+#include "content/services/auction_worklet/trusted_kvv2_signals.h"
 #include "content/services/auction_worklet/trusted_signals.h"
+#include "content/services/auction_worklet/trusted_signals_kvv2_helper.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
 #include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
@@ -299,8 +308,9 @@ TrustedSignalsRequestManager::RequestBiddingSignals(
     int32_t max_trusted_bidding_signals_url_length,
     LoadSignalsCallback load_signals_callback) {
   DCHECK_EQ(Type::kBiddingSignals, type_);
+  DCHECK(!public_key_);
 
-  std::unique_ptr<RequestImpl> request = std::make_unique<RequestImpl>(
+  auto request = std::make_unique<RequestImpl>(
       this, interest_group_name,
       keys ? std::set<std::string>(keys->begin(), keys->end())
            : std::set<std::string>(),
@@ -317,11 +327,49 @@ TrustedSignalsRequestManager::RequestScoringSignals(
     LoadSignalsCallback load_signals_callback) {
   DCHECK_EQ(Type::kScoringSignals, type_);
 
-  std::unique_ptr<RequestImpl> request = std::make_unique<RequestImpl>(
+  auto request = std::make_unique<RequestImpl>(
       this, render_url,
       std::set<std::string>(ad_component_render_urls.begin(),
                             ad_component_render_urls.end()),
       max_trusted_scoring_signals_url_length, std::move(load_signals_callback));
+  QueueRequest(request.get());
+  return request;
+}
+
+std::unique_ptr<TrustedSignalsRequestManager::Request>
+TrustedSignalsRequestManager::RequestKVv2BiddingSignals(
+    const std::string& interest_group_name,
+    const std::optional<std::vector<std::string>>& keys,
+    const url::Origin& joining_origin,
+    blink::mojom::InterestGroup::ExecutionMode execution_mode,
+    LoadSignalsCallback load_signals_callback) {
+  DCHECK_EQ(Type::kBiddingSignals, type_);
+  DCHECK(public_key_);
+
+  auto request = std::make_unique<RequestImpl>(
+      this, interest_group_name,
+      keys ? std::set<std::string>(keys->begin(), keys->end())
+           : std::set<std::string>(),
+      joining_origin, execution_mode, std::move(load_signals_callback));
+  QueueRequest(request.get());
+  return request;
+}
+
+std::unique_ptr<TrustedSignalsRequestManager::Request>
+TrustedSignalsRequestManager::RequestKVv2ScoringSignals(
+    const GURL& render_url,
+    const std::vector<std::string>& ad_component_render_urls,
+    const url::Origin& bidder_owner_origin,
+    const url::Origin& bidder_joining_origin,
+    LoadSignalsCallback load_signals_callback) {
+  DCHECK_EQ(Type::kScoringSignals, type_);
+
+  auto request = std::make_unique<RequestImpl>(
+      this, render_url,
+      std::set<std::string>(ad_component_render_urls.begin(),
+                            ad_component_render_urls.end()),
+      bidder_owner_origin, bidder_joining_origin,
+      std::move(load_signals_callback));
   QueueRequest(request.get());
   return request;
 }
@@ -375,6 +423,108 @@ void TrustedSignalsRequestManager::StartBatchedTrustedSignalsRequest() {
   // No need to continue running the timer, if it's running.
   timer_.Stop();
 
+  // Trusted Signals KVv2 feature call flow.
+  if (public_key_) {
+    DCHECK(base::FeatureList::IsEnabled(
+        blink::features::kFledgeTrustedSignalsKVv2Support));
+
+    BatchedTrustedSignalsRequest* batched_request =
+        batched_requests_
+            .emplace(std::make_unique<BatchedTrustedSignalsRequest>())
+            .first->get();
+    batched_request->requests = std::move(queued_requests_);
+
+    if (type_ == Type::kBiddingSignals) {
+      // Append all interest group names and keys into a single set, and clear
+      // them from each request, as they're no longer needed.
+      std::set<std::string> interest_group_names;
+      std::set<std::string> bidding_keys;
+
+      auto helper_builder(
+          std::make_unique<TrustedBiddingSignalsKVv2RequestHelperBuilder>(
+              top_level_origin_.host(), experiment_group_id_,
+              public_key_->Clone(), trusted_bidding_signals_slot_size_param_));
+
+      for (auto& request : batched_request->requests) {
+        CHECK(request->interest_group_name_.has_value());
+        CHECK(request->bidder_keys_.has_value());
+        CHECK(request->joining_origin_.has_value());
+        CHECK(request->execution_mode_.has_value());
+
+        request->SetKVv2IsolationIndex(helper_builder->AddTrustedSignalsRequest(
+            request->interest_group_name_.value(),
+            request->bidder_keys_.value(), request->joining_origin_.value(),
+            request->execution_mode_.value()));
+        interest_group_names.emplace(
+            std::move(request->interest_group_name_).value());
+        bidding_keys.insert(request->bidder_keys_->begin(),
+                            request->bidder_keys_->end());
+        request->bidder_keys_.reset();
+        request->batched_request_ = batched_request;
+      }
+
+      // Using `Unretained(`) for `OnKVv2SignalsLoaded()` is safe because it is
+      // triggered by
+      // `TrustedKVv2Signals::HandleKVv2DownloadResultOnV8Thread()`, which is
+      // protected by a WeakPtr. Additionally, the trusted_kvv2_signals object
+      // is owned by the `batched_requests_` of the
+      // trusted_signals_request_manager object, ensuring its lifetime is
+      // managed appropriately.
+      batched_request->trusted_kvv2_signals =
+          TrustedKVv2Signals::LoadKVv2BiddingSignals(
+              url_loader_factory_, /*auction_network_events_handler=*/
+              CreateNewAuctionNetworkEventsHandlerRemote(
+                  auction_network_events_handler_),
+              interest_group_names, bidding_keys, trusted_signals_url_,
+              std::move(helper_builder), v8_helper_,
+              base::BindOnce(&TrustedSignalsRequestManager::OnKVv2SignalsLoaded,
+                             base::Unretained(this), batched_request));
+    } else {
+      // Append all render urls and ad component render urls into a single set,
+      // and clear them from each request, as they're no longer needed.
+      std::set<std::string> render_urls;
+      std::set<std::string> ad_component_render_urls;
+
+      auto helper_builder(
+          std::make_unique<TrustedScoringSignalsKVv2RequestHelperBuilder>(
+              top_level_origin_.host(), experiment_group_id_,
+              public_key_->Clone()));
+
+      for (auto& request : batched_request->requests) {
+        CHECK(request->render_url_.has_value());
+        CHECK(request->ad_component_render_urls_.has_value());
+        CHECK(request->bidder_owner_origin_.has_value());
+        CHECK(request->bidder_joining_origin_.has_value());
+
+        request->SetKVv2IsolationIndex(helper_builder->AddTrustedSignalsRequest(
+            request->render_url_.value(),
+            request->ad_component_render_urls_.value(),
+            request->bidder_owner_origin_.value(),
+            request->bidder_joining_origin_.value()));
+        render_urls.emplace(request->render_url_->spec());
+        ad_component_render_urls.insert(
+            request->ad_component_render_urls_->begin(),
+            request->ad_component_render_urls_->end());
+        request->render_url_.reset();
+        request->batched_request_ = batched_request;
+      }
+
+      // The claim regarding the `Unretained()` lifetime guarantee is the same
+      // as in the bidding signals case.
+      batched_request->trusted_kvv2_signals =
+          TrustedKVv2Signals::LoadKVv2ScoringSignals(
+              url_loader_factory_, /*auction_network_events_handler=*/
+              CreateNewAuctionNetworkEventsHandlerRemote(
+                  auction_network_events_handler_),
+              render_urls, ad_component_render_urls, trusted_signals_url_,
+              std::move(helper_builder), v8_helper_,
+              base::BindOnce(&TrustedSignalsRequestManager::OnKVv2SignalsLoaded,
+                             base::Unretained(this), batched_request));
+    }
+
+    return;
+  }
+
   std::unique_ptr<TrustedSignalsUrlBuilder> url_builder;
   bool split_fetch = base::FeatureList::IsEnabled(
       blink::features::kFledgeSplitTrustedSignalsFetchingURL);
@@ -401,6 +551,10 @@ void TrustedSignalsRequestManager::StartBatchedTrustedSignalsRequest() {
   queued_requests_.clear();
 
   return;
+}
+
+bool TrustedSignalsRequestManager::HasPublicKey() {
+  return !public_key_.is_null();
 }
 
 TrustedSignalsRequestManager::RequestImpl::RequestImpl(
@@ -441,10 +595,43 @@ TrustedSignalsRequestManager::RequestImpl::RequestImpl(
   }
 }
 
+TrustedSignalsRequestManager::RequestImpl::RequestImpl(
+    TrustedSignalsRequestManager* trusted_signals_request_manager,
+    const std::string& interest_group_name,
+    std::set<std::string> bidder_keys,
+    const url::Origin& joining_origin,
+    blink::mojom::InterestGroup::ExecutionMode execution_mode,
+    LoadSignalsCallback load_signals_callback)
+    : interest_group_name_(interest_group_name),
+      bidder_keys_(std::move(bidder_keys)),
+      joining_origin_(joining_origin),
+      execution_mode_(execution_mode),
+      load_signals_callback_(std::move(load_signals_callback)),
+      trusted_signals_request_manager_(trusted_signals_request_manager) {}
+
+TrustedSignalsRequestManager::RequestImpl::RequestImpl(
+    TrustedSignalsRequestManager* trusted_signals_request_manager,
+    const GURL& render_url,
+    std::set<std::string> ad_component_render_urls,
+    const url::Origin& bidder_owner_origin,
+    const url::Origin& bidder_joining_origin,
+    LoadSignalsCallback load_signals_callback)
+    : render_url_(render_url),
+      ad_component_render_urls_(std::move(ad_component_render_urls)),
+      bidder_owner_origin_(bidder_owner_origin),
+      bidder_joining_origin_(bidder_joining_origin),
+      load_signals_callback_(std::move(load_signals_callback)),
+      trusted_signals_request_manager_(trusted_signals_request_manager) {}
+
 TrustedSignalsRequestManager::RequestImpl::~RequestImpl() {
   if (trusted_signals_request_manager_) {
     trusted_signals_request_manager_->OnRequestDestroyed(this);
   }
+}
+
+void TrustedSignalsRequestManager::RequestImpl::SetKVv2IsolationIndex(
+    TrustedSignalsKVv2RequestHelperBuilder::IsolationIndex index) {
+  kvv2_isolation_index_ = index;
 }
 
 TrustedSignalsRequestManager::BatchedTrustedSignalsRequest::
@@ -485,6 +672,42 @@ void TrustedSignalsRequestManager::OnSignalsLoaded(
     // other than the current element's pointer potentially now pointing to a
     // destroyed object.
     std::move(request->load_signals_callback_).Run(result, error_msg);
+  }
+  batched_requests_.erase(batched_requests_.find(batched_request));
+}
+
+void TrustedSignalsRequestManager::OnKVv2SignalsLoaded(
+    BatchedTrustedSignalsRequest* batched_request,
+    std::optional<TrustedSignalsKVv2ResponseParser::TrustedSignalsResultMap>
+        result_map,
+    std::optional<std::string> error_msg) {
+  DCHECK(batched_requests_.find(batched_request) != batched_requests_.end());
+  for (RequestImpl* request : batched_request->requests) {
+    DCHECK_EQ(request->batched_request_, batched_request);
+
+    // Remove association with `this` and `batched_request` before invoking
+    // callback, which may destroy the Request.
+    request->trusted_signals_request_manager_ = nullptr;
+    request->batched_request_ = nullptr;
+
+    if (result_map.has_value()) {
+      DCHECK(request->kvv2_isolation_index_);
+      auto result_it = result_map->find(request->kvv2_isolation_index_.value());
+      if (result_it != result_map->end()) {
+        std::move(request->load_signals_callback_)
+            .Run(result_it->second, error_msg);
+      } else {
+        std::move(request->load_signals_callback_)
+            .Run(nullptr,
+                 base::StringPrintf(
+                     "Failed to locate compression group \"%d\" and "
+                     "partition \"%d\" in the result map.",
+                     request->kvv2_isolation_index_->compression_group_id,
+                     request->kvv2_isolation_index_->partition_id));
+      }
+    } else {
+      std::move(request->load_signals_callback_).Run(nullptr, error_msg);
+    }
   }
   batched_requests_.erase(batched_requests_.find(batched_request));
 }

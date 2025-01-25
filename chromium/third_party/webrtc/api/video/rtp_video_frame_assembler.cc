@@ -43,6 +43,10 @@
 #include "rtc_base/logging.h"
 #include "rtc_base/numerics/sequence_number_unwrapper.h"
 
+#ifdef RTC_ENABLE_H265
+#include "modules/rtp_rtcp/source/video_rtp_depacketizer_h265.h"
+#endif
+
 namespace webrtc {
 namespace {
 std::unique_ptr<VideoRtpDepacketizer> CreateDepacketizer(
@@ -61,9 +65,11 @@ std::unique_ptr<VideoRtpDepacketizer> CreateDepacketizer(
     case RtpVideoFrameAssembler::kGeneric:
       return std::make_unique<VideoRtpDepacketizerGeneric>();
     case RtpVideoFrameAssembler::kH265:
-      // TODO(bugs.webrtc.org/13485): Implement VideoRtpDepacketizerH265
-      RTC_DCHECK_NOTREACHED();
+#ifdef RTC_ENABLE_H265
+      return std::make_unique<VideoRtpDepacketizerH265>();
+#else
       return nullptr;
+#endif
   }
   RTC_DCHECK_NOTREACHED();
   return nullptr;
@@ -175,22 +181,23 @@ RtpVideoFrameAssembler::Impl::AssembleFrames(
 
       const video_coding::PacketBuffer::Packet& last_packet = *packet;
       result.push_back(std::make_unique<RtpFrameObject>(
-          first_packet->seq_num(),                //
-          last_packet.seq_num(),                  //
-          last_packet.marker_bit,                 //
-          /*times_nacked=*/0,                     //
-          /*first_packet_received_time=*/0,       //
-          /*last_packet_received_time=*/0,        //
-          first_packet->timestamp,                //
-          /*ntp_time_ms=*/0,                      //
-          /*timing=*/VideoSendTiming(),           //
-          first_packet->payload_type,             //
-          first_packet->codec(),                  //
-          last_packet.video_header.rotation,      //
-          last_packet.video_header.content_type,  //
-          first_packet->video_header,             //
-          last_packet.video_header.color_space,   //
-          /*packet_infos=*/RtpPacketInfos(),      //
+          first_packet->seq_num(),                              //
+          last_packet.seq_num(),                                //
+          last_packet.marker_bit,                               //
+          /*times_nacked=*/0,                                   //
+          /*first_packet_received_time=*/0,                     //
+          /*last_packet_received_time=*/0,                      //
+          first_packet->timestamp,                              //
+          /*ntp_time_ms=*/0,                                    //
+          /*timing=*/VideoSendTiming(),                         //
+          first_packet->payload_type,                           //
+          first_packet->codec(),                                //
+          last_packet.video_header.rotation,                    //
+          last_packet.video_header.content_type,                //
+          first_packet->video_header,                           //
+          last_packet.video_header.color_space,                 //
+          last_packet.video_header.frame_instrumentation_data,  //
+          /*packet_infos=*/RtpPacketInfos(),                    //
           std::move(bitstream)));
     }
   }

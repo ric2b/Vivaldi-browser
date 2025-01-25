@@ -12,6 +12,7 @@
 #include "cast/streaming/remoting.pb.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "platform/base/span.h"
 
 using testing::_;
 using testing::Invoke;
@@ -27,7 +28,7 @@ class FakeMessenger {
     received_count_++;
   }
 
-  void OnSentRpc(const std::vector<uint8_t>& message) {
+  void OnSentRpc(ByteView message) {
     EXPECT_TRUE(sent_rpc_.ParseFromArray(message.data(), message.size()));
     sent_count_++;
   }

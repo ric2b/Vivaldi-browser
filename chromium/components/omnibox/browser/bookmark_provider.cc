@@ -18,14 +18,17 @@
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/keyword_provider.h"
+#include "components/omnibox/browser/match_compare.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_triggered_feature_service.h"
 #include "components/omnibox/browser/scoring_functor.h"
 #include "components/omnibox/browser/titled_url_match_utils.h"
 #include "components/prefs/pref_service.h"
+#include "components/query_parser/query_parser.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
+#include "third_party/omnibox_proto/groups.pb.h"
 #include "ui/base/page_transition_types.h"
 #include "url/url_constants.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -125,6 +128,11 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
         match.transition = ui::PAGE_TRANSITION_KEYWORD;
       }
 
+      if (input.current_page_classification() ==
+          metrics::OmniboxEventProto_PageClassification_ANDROID_HUB) {
+        match.suggestion_group_id = omnibox::GROUP_MOBILE_BOOKMARKS;
+      }
+
       matches_.push_back(match);
     }
   }
@@ -140,13 +148,21 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
   size_t num_matches = std::min(matches_.size(), max_matches);
   std::partial_sort(matches_.begin(), matches_.begin() + num_matches,
                     matches_.end(), AutocompleteMatch::MoreRelevant);
-  ResizeMatches(
-      num_matches,
-      OmniboxFieldTrial::IsMlUrlScoringUnlimitedNumCandidatesEnabled());
+  if (input.current_page_classification() !=
+      PageClassification::OmniboxEventProto_PageClassification_ANDROID_HUB) {
+    ResizeMatches(
+        num_matches,
+        OmniboxFieldTrial::IsMlUrlScoringUnlimitedNumCandidatesEnabled());
+  }
 }
 
 query_parser::MatchingAlgorithm BookmarkProvider::GetMatchingAlgorithm(
     AutocompleteInput input) {
+  if (input.current_page_classification() ==
+      PageClassification::OmniboxEventProto_PageClassification_ANDROID_HUB) {
+    return query_parser::MatchingAlgorithm::ALWAYS_PREFIX_SEARCH;
+  }
+
   // TODO(yoangela): This might have to check whether we're in @bookmarks mode
   //  specifically, since we might still get bookmarks suggestions in
   //  non-bookmarks keyword mode. This is enough of an edge case it makes sense
@@ -229,7 +245,7 @@ std::pair<int, int> BookmarkProvider::CalculateBookmarkMatchRelevance(
 
   // Bookmarks with javascript scheme ("bookmarklets") that do not have title
   // matches get a lower base and lower maximum score because returning them
-  // for matches in their (often very long) URL looks stupid and is often not
+  // for matches in their (often very long) URL looks bad and is often not
   // intended by the user.
   const GURL& url(bookmark_match.node->GetTitledUrlNodeUrl());
   const bool bookmarklet_without_title_match =
@@ -239,7 +255,7 @@ std::pair<int, int> BookmarkProvider::CalculateBookmarkMatchRelevance(
   PrefService* prefs = client_->GetPrefs();
   bool bookmark_boost =
       prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowBookmarks);
-  vivaldi_bookmark_boost_score = bookmark_boost ? 450 : 0;
+  vivaldi_bookmark_boost_score = bookmark_boost ? 380 : 0;
   const int kBaseBookmarkScore = bookmarklet_without_title_match
                                      ? 400
                                      : 900 + vivaldi_bookmark_boost_score;

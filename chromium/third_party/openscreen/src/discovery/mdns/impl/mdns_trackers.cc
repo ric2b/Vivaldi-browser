@@ -143,8 +143,8 @@ MdnsRecordTracker::MdnsRecordTracker(
   OSP_CHECK(dns_type_ != DnsType::kNSEC);
   OSP_CHECK(dns_type_ != DnsType::kANY);
 
-  // Validate that, if the provided |record| is an NSEC record, then it provides
-  // a negative response for |dns_type|.
+  // Validate that, if the provided `record` is an NSEC record, then it provides
+  // a negative response for `dns_type`.
   OSP_DCHECK(record_.dns_type() != DnsType::kNSEC ||
              IsNegativeResponseForType(record_, dns_type_));
 

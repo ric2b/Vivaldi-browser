@@ -3,7 +3,6 @@
 # and can review changes to //site and //docs, but may not be the right
 # people to review changes to the infrastructure/code.
 
-brucedawson@chromium.org
 dcheng@chromium.org
 ellyjones@chromium.org
 jessemckenna@google.com

@@ -19,6 +19,7 @@
 <translation id="115443833402798225">Ahnmatae de hangul</translation>
 <translation id="1155759005174418845">Català</translation>
 <translation id="1168100932582989117">Servidors de noms de Google</translation>
+<translation id="1170788066030116158">Data de creació</translation>
 <translation id="1172970565351728681">Temps restant aproximat: <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Canvia el nom</translation>
 <translation id="1173916544412572294">Xarxa <ph name="NETWORK_INDEX" /> de <ph name="NETWORK_COUNT" />, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, <ph name="SIGNAL_STRENGTH" />%, d'intensitat del senyal, <ph name="BATTERY_STATUS" />% de bateria al telèfon, detalls</translation>
@@ -43,7 +44,7 @@
 <translation id="134645005685694099">El dispositiu no té prou espai d'emmagatzematge per mantenir la sincronització de fitxers activada. Els fitxers nous ja no se sincronitzaran automàticament.</translation>
 <translation id="1353686479385938207"><ph name="PROVIDER_NAME" />: <ph name="NETWORK_NAME" /></translation>
 <translation id="1358735829858566124">El fitxer o directori no es pot fer servir.</translation>
-<translation id="1363028406613469049">Pista</translation>
+<translation id="1363028406613469049">Fes un seguiment</translation>
 <translation id="1378727793141957596">Us donem la benvinguda a Google Drive.</translation>
 <translation id="1379911846207762492">Pots fer que els fitxers estiguin disponibles sense connexió per accedir-hi quan no tinguis Internet.</translation>
 <translation id="1383876407941801731">Cerca</translation>
@@ -83,7 +84,7 @@
 <translation id="1665611772925418501">El fitxer no s'ha pogut modificar.</translation>
 <translation id="1673103856845176271">No s'ha pogut accedir al fitxer per qüestions de seguretat.</translation>
 <translation id="169515659049020177">Maj</translation>
-<translation id="1715848075824334077">Persona en bicicleta</translation>
+<translation id="1715848075824334077">Persona amb bicicleta</translation>
 <translation id="1722487484194605434">S'estan comprimint <ph name="NUMBER_OF_ITEMS" /> elements...</translation>
 <translation id="1722687688096767818">S'està afegint el perfil...</translation>
 <translation id="1726100011689679555">Servidors de noms</translation>
@@ -421,6 +422,7 @@
 <translation id="4387004326333427325">S'ha rebutjat el certificat d'autenticació de manera remota</translation>
 <translation id="4394214039309501350">Enllaç extern</translation>
 <translation id="4394980935660306080">Aquesta setmana</translation>
+<translation id="4397435965699247285">OneDrive no està disponible sense connexió</translation>
 <translation id="4398096759193130964">Restaura els elements o arrossega'ls a una carpeta nova fora de la paperera</translation>
 <translation id="4401287888955153199">Extreu-ho tot</translation>
 <translation id="4410695710508688828">L'operació d'extracció ha fallat. <ph name="ERROR_MESSAGE" /></translation>

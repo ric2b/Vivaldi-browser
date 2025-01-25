@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Chyba</translation>
 <translation id="1175364870820465910">&amp;Tlačiť...</translation>
 <translation id="1181037720776840403">Odstrániť</translation>
+<translation id="1184037892196730210">Nepodarilo sa spustiť vysielanie na obrazovke</translation>
 <translation id="1187722533808055681">Prebudenia z nečinnosti</translation>
 <translation id="122082903575839559">Algoritmus podpisu certifikátu</translation>
 <translation id="1221825588892235038">Len výber</translation>
@@ -37,6 +38,7 @@
 <translation id="1601560923496285236">Použiť</translation>
 <translation id="1603914832182249871">(Súkromný režim)</translation>
 <translation id="1627276047960621195">Deskriptory súborov</translation>
+<translation id="1654713139320245449">Nenašli sa žiadne ciele nahrávania. Potrebujete pomoc?</translation>
 <translation id="166278006618318542">Algoritmus verejného kľúča subjektu</translation>
 <translation id="1682548588986054654">Nové súkromné okno</translation>
 <translation id="1708338024780164500">(Neaktívny)</translation>
@@ -168,6 +170,7 @@
 <translation id="3838085852053358637">Načítanie rozšírenia zlyhalo</translation>
 <translation id="383891835335927981">Žiadne stránky neboli priblížené ani oddialené</translation>
 <translation id="385051799172605136">Naspäť</translation>
+<translation id="3861977424605124250">Zobraziť pri spustení</translation>
 <translation id="3867944738977021751">Polia certifikátu</translation>
 <translation id="3905761538810670789">Opraviť aplikáciu</translation>
 <translation id="3908501907586732282">Povoliť rozšírenie</translation>
@@ -365,6 +368,7 @@
 <translation id="7287143125007575591">Prístup bol odmietnutý.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Kontrolovať pravopis počas písania</translation>
+<translation id="7359680654975233185">Nepodarilo sa spustiť vysielanie listu</translation>
 <translation id="7385854874724088939">Pri pokuse o tlač sa vyskytla chyba. Skontrolujte svoju tlačiareň a skúste to znova.</translation>
 <translation id="7412226954991670867">Pamäť GPU</translation>
 <translation id="7421925624202799674">&amp;Zobraziť zdrojový kód stránky</translation>
@@ -378,6 +382,7 @@
 <translation id="7661259717474717992">Povoliť stránkam ukladať a čítať údaje súborov cookie</translation>
 <translation id="7663719505383602579">Prijímač: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Nainštalované vaším správcom</translation>
+<translation id="7685038817958445325">Nepodarilo sa spustiť vysielanie</translation>
 <translation id="7685049629764448582">Pamäť jazyka JavaScript</translation>
 <translation id="7701869757853594372">POUŽÍVATEĽ – popisovače</translation>
 <translation id="7704305437604973648">Úloha</translation>

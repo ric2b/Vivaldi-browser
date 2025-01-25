@@ -78,7 +78,7 @@ class ExtensionApiFrameIdMap {
     // window.
     int window_id;
 
-    // The extennsion API document ID of the document in the frame.
+    // The extension API document ID of the document in the frame.
     DocumentId document_id;
 
     // The extension API document ID of the parent document of the frame.
@@ -152,6 +152,10 @@ class ExtensionApiFrameIdMap {
   static content::RenderFrameHost* GetRenderFrameHostById(
       content::WebContents* web_contents,
       int frame_id);
+
+  // Find the current RenderFrameHost for given an extension frame ID.
+  // Returns nullptr if not found.
+  content::RenderFrameHost* GetRenderFrameHostByFrameId(int frame_id);
 
   // Find the current RenderFrameHost for a given extension documentID.
   // Returns nullptr if not found.

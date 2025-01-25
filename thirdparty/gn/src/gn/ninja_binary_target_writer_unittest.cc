@@ -49,7 +49,7 @@ TEST_F(NinjaBinaryTargetWriterTest, CSources) {
       "  source_file_part = input2.cc\n"
       "  source_name_part = input2\n"
       "\n"
-      "build obj/foo/bar.stamp: stamp obj/foo/bar.input1.o "
+      "build phony/foo/bar: phony obj/foo/bar.input1.o "
       "obj/foo/bar.input2.o ../../foo/input3.o ../../foo/input4.obj\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str);
@@ -77,10 +77,9 @@ TEST_F(NinjaBinaryTargetWriterTest, NoSourcesSourceSet) {
       "target_out_dir = obj/foo\n"
       "target_output_name = bar\n"
       "\n"
-      "\n"
-      "build obj/foo/bar.stamp: stamp\n";
+      "\n";
   std::string out_str = out.str();
-  EXPECT_EQ(expected, out_str);
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
 }
 
 TEST_F(NinjaBinaryTargetWriterTest, NoSourcesStaticLib) {
@@ -148,7 +147,7 @@ TEST_F(NinjaBinaryTargetWriterTest, Inputs) {
         "  source_file_part = source1.cc\n"
         "  source_name_part = source1\n"
         "\n"
-        "build obj/foo/bar.stamp: stamp obj/foo/bar.source1.o\n";
+        "build phony/foo/bar: phony obj/foo/bar.source1.o\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
@@ -179,18 +178,18 @@ TEST_F(NinjaBinaryTargetWriterTest, Inputs) {
         "target_out_dir = obj/foo\n"
         "target_output_name = bar\n"
         "\n"
-        "build obj/foo/bar.inputs.stamp: stamp "
+        "build phony/foo/bar.inputs: phony "
         "../../foo/input1 ../../foo/input2\n"
         "build obj/foo/bar.source1.o: cxx ../../foo/source1.cc | "
-        "obj/foo/bar.inputs.stamp\n"
+        "phony/foo/bar.inputs\n"
         "  source_file_part = source1.cc\n"
         "  source_name_part = source1\n"
         "build obj/foo/bar.source2.o: cxx ../../foo/source2.cc | "
-        "obj/foo/bar.inputs.stamp\n"
+        "phony/foo/bar.inputs\n"
         "  source_file_part = source2.cc\n"
         "  source_name_part = source2\n"
         "\n"
-        "build obj/foo/bar.stamp: stamp obj/foo/bar.source1.o "
+        "build phony/foo/bar: phony obj/foo/bar.source1.o "
         "obj/foo/bar.source2.o\n";
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;

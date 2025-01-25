@@ -355,9 +355,10 @@ bool KURL::HasPath() const {
   return parsed_.path.is_valid();
 }
 
-String KURL::LastPathComponent() const {
-  if (!is_valid_)
-    return StringViewForInvalidComponent().ToString();
+StringView KURL::LastPathComponent() const {
+  if (!is_valid_) {
+    return StringViewForInvalidComponent();
+  }
   DCHECK(!string_.IsNull());
 
   // When the output ends in a slash, WebCore has different expectations than
@@ -376,9 +377,10 @@ String KURL::LastPathComponent() const {
 
   // Bug: https://bugs.webkit.org/show_bug.cgi?id=21015 this function returns
   // a null string when the path is empty, which we duplicate here.
-  if (file.is_empty())
-    return String();
-  return ComponentString(file);
+  if (file.is_empty()) {
+    return StringView();
+  }
+  return ComponentStringView(file);
 }
 
 String KURL::Protocol() const {
@@ -386,11 +388,7 @@ String KURL::Protocol() const {
   return protocol_;
 }
 
-String KURL::Host() const {
-  return ComponentString(parsed_.host);
-}
-
-StringView KURL::HostView() const {
+StringView KURL::Host() const {
   return ComponentStringView(parsed_.host);
 }
 
@@ -407,55 +405,69 @@ uint16_t KURL::Port() const {
   return static_cast<uint16_t>(port);
 }
 
-// TODO(csharrison): Migrate pass() and user() to return a StringView. Most
-// consumers just need to know if the string is empty.
+StringView KURL::Pass() const {
+  if (!parsed_.password.is_valid()) {
+    return StringView();
+  }
 
-String KURL::Pass() const {
-  // Bug: https://bugs.webkit.org/show_bug.cgi?id=21015 this function returns
-  // a null string when the password is empty, which we duplicate here.
-  if (parsed_.password.is_empty())
-    return String();
-  return ComponentString(parsed_.password);
+  return ComponentStringView(parsed_.password);
 }
 
-String KURL::User() const {
-  return ComponentString(parsed_.username);
+StringView KURL::User() const {
+  if (!parsed_.username.is_valid()) {
+    return StringView();
+  }
+  return ComponentStringView(parsed_.username);
 }
 
-String KURL::FragmentIdentifier() const {
+StringView KURL::FragmentIdentifier() const {
   // Empty but present refs ("foo.com/bar#") should result in the empty
-  // string, which componentString will produce. Nonexistent refs
+  // string, which ComponentStringView will produce. Nonexistent refs
   // should be the null string.
-  if (!parsed_.ref.is_valid())
-    return String();
-  return ComponentString(parsed_.ref);
+  if (!parsed_.ref.is_valid()) {
+    return StringView();
+  }
+  return ComponentStringView(parsed_.ref);
+}
+
+StringView KURL::FragmentIdentifierWithLeadingNumberSign() const {
+  if (!parsed_.ref.is_valid()) {
+    return StringView();
+  }
+  if (!is_valid_ || parsed_.ref.is_empty()) {
+    return StringViewForInvalidComponent();
+  }
+  return StringView(GetString(), parsed_.ref.begin - 1, parsed_.ref.len + 1);
 }
 
 bool KURL::HasFragmentIdentifier() const {
   return parsed_.ref.is_valid();
 }
 
-String KURL::BaseAsString() const {
-  // FIXME: There is probably a more efficient way to do this?
-  return string_.GetString().Left(PathAfterLastSlash());
+StringView KURL::BaseAsString() const {
+  return StringView(string_.GetString(), 0, PathAfterLastSlash());
 }
 
-String KURL::Query() const {
-  if (parsed_.query.is_valid())
-    return ComponentString(parsed_.query);
-
-  // TODO(tsepez): not reachable?
-  // Bug: https://bugs.webkit.org/show_bug.cgi?id=21015 this function returns
-  // an empty string when the query is empty rather than a null (not sure
-  // which is right).
-  // Returns a null if the query is not specified, instead of empty.
-  if (parsed_.query.is_valid())
-    return g_empty_string;
-  return String();
+StringView KURL::Query() const {
+  if (!parsed_.query.is_valid()) {
+    return StringView();
+  }
+  return ComponentStringView(parsed_.query);
 }
 
-String KURL::GetPath() const {
-  return ComponentString(parsed_.path);
+StringView KURL::QueryWithLeadingQuestionMark() const {
+  if (!parsed_.query.is_valid()) {
+    return StringView();
+  }
+  if (!is_valid_ || parsed_.query.is_empty()) {
+    return StringViewForInvalidComponent();
+  }
+  return StringView(GetString(), parsed_.query.begin - 1,
+                    parsed_.query.len + 1);
+}
+
+StringView KURL::GetPath() const {
+  return ComponentStringView(parsed_.path);
 }
 
 namespace {
@@ -497,10 +509,10 @@ bool KURL::SetProtocol(const String& protocol) {
     return false;
 
   DCHECK_EQ(protocol_component.begin, 0);
-  const size_t protocol_length =
-      base::checked_cast<size_t>(protocol_component.len);
+  const wtf_size_t protocol_length =
+      base::checked_cast<wtf_size_t>(protocol_component.len);
   const String new_protocol_canon =
-      String(canon_protocol.data(), protocol_length);
+      String(base::span(canon_protocol.view()).first(protocol_length));
 
   if (SchemeRegistry::IsSpecialScheme(Protocol())) {
     // https://url.spec.whatwg.org/#scheme-state
@@ -782,16 +794,14 @@ void KURL::SetPath(const String& input) {
   ReplaceComponents(replacements);
 }
 
-String DecodeURLEscapeSequences(const String& string, DecodeURLMode mode) {
+String DecodeURLEscapeSequences(const StringView& string, DecodeURLMode mode) {
   StringUTF8Adaptor string_utf8(string);
   url::RawCanonOutputT<char16_t> unescaped;
   url::DecodeURLEscapeSequences(string_utf8.AsStringView(), mode, &unescaped);
-  return StringImpl::Create8BitIfPossible(
-      reinterpret_cast<UChar*>(unescaped.data()),
-      base::checked_cast<wtf_size_t>(unescaped.length()));
+  return StringImpl::Create8BitIfPossible(unescaped.view());
 }
 
-String EncodeWithURLEscapeSequences(const String& not_encoded_string) {
+String EncodeWithURLEscapeSequences(const StringView& not_encoded_string) {
   std::string utf8 =
       UTF8Encoding().Encode(not_encoded_string, WTF::kNoUnencodables);
 
@@ -801,7 +811,7 @@ String EncodeWithURLEscapeSequences(const String& not_encoded_string) {
     buffer.Resize(input_length * 3);
 
   url::EncodeURIComponent(utf8, &buffer);
-  String escaped(buffer.data(), static_cast<unsigned>(buffer.length()));
+  String escaped(base::span(buffer.view()));
   // Unescape '/'; it's safe and much prettier.
   escaped.Replace("%2F", "/");
   return escaped;
@@ -950,13 +960,11 @@ void KURL::Init(const KURL& base,
   // expensive for large URLs. However, since many URLs are generated from
   // existing AtomicStrings (which already have their hashes computed), the fast
   // path can often avoid this work.
-  if (!relative.IsNull() &&
-      StringView(output.data(), static_cast<unsigned>(output.length())) ==
-          relative) {
+  const auto output_url_span = base::as_byte_span(output.view());
+  if (!relative.IsNull() && StringView(output_url_span) == relative) {
     string_ = AtomicString(relative.Impl());
   } else {
-    string_ =
-        AtomicString(reinterpret_cast<LChar*>(output.data()), output.length());
+    string_ = AtomicString(output_url_span);
   }
 
   InitProtocolMetadata();
@@ -1082,8 +1090,7 @@ void KURL::ReplaceComponents(const url::Replacements<CHAR>& replacements,
   if (replacements_valid || !preserve_validity) {
     is_valid_ = replacements_valid;
     parsed_ = new_parsed;
-    string_ =
-        AtomicString(reinterpret_cast<LChar*>(output.data()), output.length());
+    string_ = AtomicString(base::as_byte_span(output.view()));
     InitProtocolMetadata();
     AssertStringSpecIsASCII();
   }

@@ -20,12 +20,16 @@
 namespace web {
 class BrowserState;
 }
+#else
+namespace content {
+class WebContents;
+}
 #endif
 
 namespace adblock_filter {
 class RuleManager;
 class KnownRuleSourcesHandler;
-class TabHandler;
+class StateAndLogs;
 class CosmeticFilter;
 
 class RuleService : public KeyedService {
@@ -62,6 +66,11 @@ class RuleService : public KeyedService {
 
 #if BUILDFLAG(IS_IOS)
   virtual void SetIncognitoBrowserState(web::BrowserState* browser_state) = 0;
+#else
+  virtual bool HasDocumentActivationForRuleSource(
+      adblock_filter::RuleGroup group,
+      content::WebContents* web_contents,
+      uint32_t rule_source_id) = 0;
 #endif
 
   // Gets the checksum of the index used for fast-finding of the rules.
@@ -78,7 +87,7 @@ class RuleService : public KeyedService {
 
   virtual RuleManager* GetRuleManager() = 0;
   virtual KnownRuleSourcesHandler* GetKnownSourcesHandler() = 0;
-  virtual TabHandler* GetTabHandler() = 0;
+  virtual StateAndLogs* GetStateAndLogs() = 0;
 };
 
 }  // namespace adblock_filter

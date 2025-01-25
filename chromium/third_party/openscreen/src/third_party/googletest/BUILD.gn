@@ -42,6 +42,7 @@ if (build_with_chromium) {
       cflags_cc += [
         "-Wno-exit-time-destructors",
         "-Wno-inconsistent-missing-override",
+        "-Wno-sign-compare",
       ]
     }
 
@@ -56,6 +57,10 @@ if (build_with_chromium) {
     cflags_cc = []
     if (is_clang) {
       cflags_cc += [ "-Wno-exit-time-destructors" ]
+    }
+
+    if (is_win) {
+      cflags_cc += [ "-Wno-sign-compare" ]
     }
   }
 

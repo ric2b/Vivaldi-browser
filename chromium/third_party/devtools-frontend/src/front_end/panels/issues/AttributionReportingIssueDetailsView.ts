@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as Protocol from '../../generated/protocol.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
+import type * as Protocol from '../../generated/protocol.js';
 import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
 
 import {AffectedItem, AffectedResourcesView} from './AffectedResourcesView.js';
@@ -43,10 +43,11 @@ export class AttributionReportingIssueDetailsView extends AffectedResourcesView 
   override update(): void {
     this.clear();
     const issues = this.issue.getAttributionReportingIssues();
-    if (issues.size > 0) {
-      this.#appendDetails(issues.values().next().value.code(), issues);
-    } else {
+    const issue = issues.values().next();
+    if (issue.done) {
       this.updateAffectedResourceCount(0);
+    } else {
+      this.#appendDetails(issue.value.code(), issues);
     }
   }
 
@@ -63,6 +64,8 @@ export class AttributionReportingIssueDetailsView extends AffectedResourcesView 
       case IssuesManager.AttributionReportingIssue.IssueCode.OS_TRIGGER_IGNORED:
       case IssuesManager.AttributionReportingIssue.IssueCode.SOURCE_IGNORED:
       case IssuesManager.AttributionReportingIssue.IssueCode.TRIGGER_IGNORED:
+      case IssuesManager.AttributionReportingIssue.IssueCode.INVALID_INFO_HEADER:
+      case IssuesManager.AttributionReportingIssue.IssueCode.NAVIGATION_REGISTRATION_UNIQUE_SCOPE_ALREADY_SET:
         this.appendColumnTitle(header, i18nString(UIStrings.request));
         this.appendColumnTitle(header, i18nString(UIStrings.invalidHeaderValue));
         break;
@@ -78,6 +81,11 @@ export class AttributionReportingIssueDetailsView extends AffectedResourcesView 
         break;
       case IssuesManager.AttributionReportingIssue.IssueCode.SOURCE_AND_TRIGGER_HEADERS:
       case IssuesManager.AttributionReportingIssue.IssueCode.WEB_AND_OS_HEADERS:
+      case IssuesManager.AttributionReportingIssue.IssueCode.NO_WEB_OR_OS_SUPPORT:
+      case IssuesManager.AttributionReportingIssue.IssueCode.NO_REGISTER_SOURCE_HEADER:
+      case IssuesManager.AttributionReportingIssue.IssueCode.NO_REGISTER_TRIGGER_HEADER:
+      case IssuesManager.AttributionReportingIssue.IssueCode.NO_REGISTER_OS_SOURCE_HEADER:
+      case IssuesManager.AttributionReportingIssue.IssueCode.NO_REGISTER_OS_TRIGGER_HEADER:
         this.appendColumnTitle(header, i18nString(UIStrings.request));
         break;
       case IssuesManager.AttributionReportingIssue.IssueCode.NAVIGATION_REGISTRATION_WITHOUT_TRANSIENT_USER_ACTIVATION:
@@ -111,6 +119,8 @@ export class AttributionReportingIssueDetailsView extends AffectedResourcesView 
       case IssuesManager.AttributionReportingIssue.IssueCode.OS_TRIGGER_IGNORED:
       case IssuesManager.AttributionReportingIssue.IssueCode.SOURCE_IGNORED:
       case IssuesManager.AttributionReportingIssue.IssueCode.TRIGGER_IGNORED:
+      case IssuesManager.AttributionReportingIssue.IssueCode.INVALID_INFO_HEADER:
+      case IssuesManager.AttributionReportingIssue.IssueCode.NAVIGATION_REGISTRATION_UNIQUE_SCOPE_ALREADY_SET:
         this.#appendRequestOrEmptyCell(element, details.request);
         this.appendIssueDetailCell(element, details.invalidParameter || '');
         break;
@@ -126,6 +136,11 @@ export class AttributionReportingIssueDetailsView extends AffectedResourcesView 
         break;
       case IssuesManager.AttributionReportingIssue.IssueCode.SOURCE_AND_TRIGGER_HEADERS:
       case IssuesManager.AttributionReportingIssue.IssueCode.WEB_AND_OS_HEADERS:
+      case IssuesManager.AttributionReportingIssue.IssueCode.NO_WEB_OR_OS_SUPPORT:
+      case IssuesManager.AttributionReportingIssue.IssueCode.NO_REGISTER_SOURCE_HEADER:
+      case IssuesManager.AttributionReportingIssue.IssueCode.NO_REGISTER_TRIGGER_HEADER:
+      case IssuesManager.AttributionReportingIssue.IssueCode.NO_REGISTER_OS_SOURCE_HEADER:
+      case IssuesManager.AttributionReportingIssue.IssueCode.NO_REGISTER_OS_TRIGGER_HEADER:
         this.#appendRequestOrEmptyCell(element, details.request);
         break;
       case IssuesManager.AttributionReportingIssue.IssueCode.NAVIGATION_REGISTRATION_WITHOUT_TRANSIENT_USER_ACTIVATION:

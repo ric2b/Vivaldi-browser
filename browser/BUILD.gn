@@ -92,6 +92,8 @@ static_library("browser") {
     "vivaldi_default_bookmarks_updater_client_impl.cc",
     "vivaldi_default_bookmarks_updater_client_impl.h",
     "vivaldi_gitignore.cc",
+    "vivaldi_version_utils.cc",
+    "vivaldi_version_utils.h",
   ]
 
   if (!is_android) {

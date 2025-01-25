@@ -22,6 +22,7 @@
 
 // SETTER
 - (void)setPlaceholder:(NSString*)placeholder;
+- (void)setSearchText:(NSString*)searchTerms;
 
 @end
 

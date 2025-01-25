@@ -21,6 +21,11 @@
 
 namespace webnn::dml {
 
+// Note that the element count is considered as 1 when the given dimensions is
+// empty.
+uint64_t CalculatePhysicalElementCount(base::span<const uint32_t> dimensions,
+                                       base::span<const uint32_t> strides = {});
+
 uint64_t CalculateDMLBufferTensorSize(DML_TENSOR_DATA_TYPE data_type,
                                       const std::vector<uint32_t>& dimensions,
                                       const std::vector<uint32_t>& strides);
@@ -32,6 +37,8 @@ Microsoft::WRL::ComPtr<ID3D12Device> GetD3D12Device(IDMLDevice1* dml_device);
 
 // Returns the maximum feature level supported by the DML device.
 DML_FEATURE_LEVEL GetMaxSupportedDMLFeatureLevel(IDMLDevice1* dml_device);
+
+std::string_view DMLFeatureLevelToString(DML_FEATURE_LEVEL dml_feature_level);
 
 // Creates a transition barrier which is used to specify the resource is
 // transitioning from `before` to `after` states.

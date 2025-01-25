@@ -154,6 +154,28 @@ class SearchEnginesRepairPrepopulatedTemplateUrlsFunction
   ~SearchEnginesRepairPrepopulatedTemplateUrlsFunction() override = default;
   ExtensionFunction::ResponseAction Run() override;
 };
+
+class SearchEnginesGetSwitchPromptDataFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("searchEngines.getSwitchPromptData",
+                             SEARCH_ENGINES_GET_SWITCH_PROMPT_DATA)
+  SearchEnginesGetSwitchPromptDataFunction() = default;
+
+ private:
+  ~SearchEnginesGetSwitchPromptDataFunction() override = default;
+  ExtensionFunction::ResponseAction Run() override;
+};
+
+class SearchEnginesMarkSwitchPromptAsSeenFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("searchEngines.markSwitchPromptAsSeen",
+                             SEARCH_ENGINES_MARK_SWITCH_PROMPT_AS_SEEN)
+  SearchEnginesMarkSwitchPromptAsSeenFunction() = default;
+
+ private:
+  ~SearchEnginesMarkSwitchPromptAsSeenFunction() override = default;
+  ExtensionFunction::ResponseAction Run() override;
+};
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_SEARCH_ENGINES_SEARCH_ENGINES_API_H_

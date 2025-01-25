@@ -126,9 +126,6 @@ public abstract class Layout {
     protected final float mDpToPx;
     protected final float mPxToDp;
 
-    // Vivaldi
-    private float mEventOffset;
-
     /**
      * The {@link Layout} is not usable until sizeChanged is called.
      * This is convenient this way so we can pre-create the layout before the host is fully defined.

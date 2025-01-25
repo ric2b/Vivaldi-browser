@@ -48,8 +48,9 @@ class NoteNode;
     : UIViewController
 
 @property(nonatomic, weak) id<NoteAddEditViewControllerDelegate> delegate;
-@property (strong, nonatomic) UIBarButtonItem *toggleButton;
-@property (assign, nonatomic) BOOL isToggledOn;
+@property(nonatomic, strong) UIBarButtonItem *toggleButton;
+@property(nonatomic, assign) BOOL isToggledOn;
+
 // Snackbar commands handler.
 @property(nonatomic, weak) id<SnackbarCommands> snackbarCommandsHandler;
 

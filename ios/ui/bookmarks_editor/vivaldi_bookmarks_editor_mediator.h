@@ -9,7 +9,7 @@
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_editor_consumer.h"
 
 @protocol VivaldiBookmarksEditorConsumer;
-class ChromeBrowserState;
+class ProfileIOS;
 @protocol SnackbarCommands;
 
 using bookmarks::BookmarkModel;
@@ -30,7 +30,7 @@ using bookmarks::BookmarkNode;
 - (instancetype)
     initWithBookmarkModel:(BookmarkModel*)bookmarkModel
              bookmarkNode:(const bookmarks::BookmarkNode*)bookmarkNode
-             browserState:(ChromeBrowserState*)browserState
+             profile:(ProfileIOS*)profile
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;

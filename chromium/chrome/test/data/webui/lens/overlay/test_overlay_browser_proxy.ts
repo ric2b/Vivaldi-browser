@@ -6,6 +6,7 @@ import type {BrowserProxy} from 'chrome-untrusted://lens-overlay/browser_proxy.j
 import type {CenterRotatedBox} from 'chrome-untrusted://lens-overlay/geometry.mojom-webui.js';
 import type {LensPageHandlerInterface, LensPageRemote, SemanticEvent, UserAction} from 'chrome-untrusted://lens-overlay/lens.mojom-webui.js';
 import {LensPageCallbackRouter} from 'chrome-untrusted://lens-overlay/lens.mojom-webui.js';
+import type {Language} from 'chrome-untrusted://lens-overlay/translate.mojom-webui.js';
 import type {ClickModifiers} from 'chrome-untrusted://resources/mojo/ui/base/mojom/window_open_disposition.mojom-webui.js';
 import {TestBrowserProxy} from 'chrome-untrusted://webui-test/test_browser_proxy.js';
 
@@ -15,6 +16,10 @@ import {TestBrowserProxy} from 'chrome-untrusted://webui-test/test_browser_proxy
  */
 export class TestLensOverlayPageHandler extends TestBrowserProxy implements
     LensPageHandlerInterface {
+  private browserLocale: string = '';
+  private sourceLanguagesToFetch: Language[] = [];
+  private targetLanguagesToFetch: Language[] = [];
+
   constructor() {
     super([
       'activityRequestedByOverlay',
@@ -38,6 +43,9 @@ export class TestLensOverlayPageHandler extends TestBrowserProxy implements
       'saveAsImage',
       'recordUkmAndTaskCompletionForLensOverlayInteraction',
       'recordLensOverlaySemanticEvent',
+      'maybeShowTranslateFeaturePromo',
+      'maybeCloseTranslateFeaturePromo',
+      'fetchSupportedLanguages',
     ]);
   }
 
@@ -127,6 +135,35 @@ export class TestLensOverlayPageHandler extends TestBrowserProxy implements
 
   recordLensOverlaySemanticEvent(semanticEvent: SemanticEvent) {
     this.methodCalled('recordLensOverlaySemanticEvent', semanticEvent);
+  }
+
+  maybeShowTranslateFeaturePromo() {
+    this.methodCalled('maybeShowTranslateFeaturePromo');
+  }
+
+  maybeCloseTranslateFeaturePromo() {
+    this.methodCalled('maybeCloseTranslateFeaturePromo');
+  }
+
+  fetchSupportedLanguages(): Promise<{
+    browserLocale: string,
+    sourceLanguages: Language[],
+    targetLanguages: Language[],
+  }> {
+    this.methodCalled('fetchSupportedLanguages');
+    return Promise.resolve({
+      browserLocale: this.browserLocale,
+      sourceLanguages: structuredClone(this.sourceLanguagesToFetch),
+      targetLanguages: structuredClone(this.targetLanguagesToFetch),
+    });
+  }
+
+  setLanguagesToFetchForTesting(
+      locale: string, sourceLanguages: Language[],
+      targetLanguages: Language[]) {
+    this.browserLocale = locale;
+    this.sourceLanguagesToFetch = sourceLanguages;
+    this.targetLanguagesToFetch = targetLanguages;
   }
 }
 

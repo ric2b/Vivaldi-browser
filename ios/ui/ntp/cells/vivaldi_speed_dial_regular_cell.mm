@@ -283,7 +283,12 @@ const CGFloat thumbnailCropYOffset = 14.f;
         self.thumbView.backgroundColor =
             [UIColor colorNamed: vSearchbarBackgroundColor];
         self.fallbackTitleLabel.hidden = NO;
-        self.fallbackTitleLabel.text = item.host;
+
+        if ([item.title length] > 0) {
+          self.fallbackTitleLabel.text = item.title;
+        } else {
+          self.fallbackTitleLabel.text = item.host;
+        }
       }
     }
   }

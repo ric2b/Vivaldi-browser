@@ -58,7 +58,7 @@ public class CookiesFetcherTest {
     public void setUp() {
         Mockito.when(mProfile1.getOriginalProfile()).thenReturn(mProfile1);
         Mockito.when(mIncognitoProfile1.getOriginalProfile()).thenReturn(mProfile1);
-        Mockito.when(mIncognitoProfile1.isPrimaryOTRProfile()).thenReturn(true);
+        Mockito.when(mIncognitoProfile1.isPrimaryOtrProfile()).thenReturn(true);
 
         jniMocker.mock(CookiesFetcherJni.TEST_HOOKS, mCookiesFetcherJni);
 
@@ -152,16 +152,16 @@ public class CookiesFetcherTest {
     }
 
     private static String fetchLegacyFileName() {
-        ThreadUtils.setThreadAssertsDisabledForTesting(true);
+        ThreadUtils.hasSubtleSideEffectsSetThreadAssertsDisabledForTesting(true);
         String fileName = CookiesFetcher.fetchLegacyFileName();
-        ThreadUtils.setThreadAssertsDisabledForTesting(false);
+        ThreadUtils.hasSubtleSideEffectsSetThreadAssertsDisabledForTesting(false);
         return fileName;
     }
 
     private static String fetchAbsoluteFilePath(CookiesFetcher fetcher) {
-        ThreadUtils.setThreadAssertsDisabledForTesting(true);
+        ThreadUtils.hasSubtleSideEffectsSetThreadAssertsDisabledForTesting(true);
         String fileName = fetcher.fetchAbsoluteFilePath();
-        ThreadUtils.setThreadAssertsDisabledForTesting(false);
+        ThreadUtils.hasSubtleSideEffectsSetThreadAssertsDisabledForTesting(false);
         return fileName;
     }
 

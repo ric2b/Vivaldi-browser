@@ -6,7 +6,7 @@ import * as Common from '../../../core/common/common.js';
 import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
-import {type NameValue} from '../../../core/sdk/NetworkRequest.js';
+import type {NameValue} from '../../../core/sdk/NetworkRequest.js';
 import type * as SDK from '../../../core/sdk/sdk.js';
 import * as Protocol from '../../../generated/protocol.js';
 import * as IssuesManager from '../../../models/issues_manager/issues_manager.js';
@@ -27,7 +27,7 @@ import {
   type HeaderEditedEvent,
   type HeaderEditorDescriptor,
   type HeaderRemovedEvent,
-  HeaderSectionRow,
+  type HeaderSectionRow,
   type HeaderSectionRowData,
   isValidHeaderName,
 } from './HeaderSectionRow.js';
@@ -120,7 +120,6 @@ class ResponseHeaderSectionBase extends HTMLElement {
 }
 
 export class EarlyHintsHeaderSection extends ResponseHeaderSectionBase {
-  static readonly litTagName = LitHtml.literal`devtools-early-hints-header-section`;
   #request?: SDK.NetworkRequest.NetworkRequest;
 
   set data(data: ResponseHeaderSectionData) {
@@ -141,9 +140,9 @@ export class EarlyHintsHeaderSection extends ResponseHeaderSectionBase {
     // clang-format off
     render(html`
       ${this.headerDetails.map(header => html`
-        <${HeaderSectionRow.litTagName} .data=${{
+        <devtools-header-section-row .data=${{
         header,
-      } as HeaderSectionRowData}></${HeaderSectionRow.litTagName}>
+      } as HeaderSectionRowData}></devtools-header-section-row>
       `)}
     `, this.shadow, { host: this });
     // clang-format on
@@ -153,7 +152,6 @@ export class EarlyHintsHeaderSection extends ResponseHeaderSectionBase {
 customElements.define('devtools-early-hints-header-section', EarlyHintsHeaderSection);
 
 export class ResponseHeaderSection extends ResponseHeaderSectionBase {
-  static readonly litTagName = LitHtml.literal`devtools-response-header-section`;
   #request?: SDK.NetworkRequest.NetworkRequest;
   #headerEditors: HeaderEditorDescriptor[] = [];
   #uiSourceCode: Workspace.UISourceCode.UISourceCode|null = null;
@@ -540,24 +538,24 @@ export class ResponseHeaderSection extends ResponseHeaderSectionBase {
     // clang-format off
     render(html`
       ${headerDescriptors.map((header, index) => html`
-        <${HeaderSectionRow.litTagName}
+        <devtools-header-section-row
             .data=${{header} as HeaderSectionRowData}
             @headeredited=${this.#onHeaderEdited}
             @headerremoved=${this.#onHeaderRemoved}
             @enableheaderediting=${this.#onEnableHeaderEditingClick}
             data-index=${index}
             jslog=${VisualLogging.item('response-header')}
-        ></${HeaderSectionRow.litTagName}>
+        ></devtools-header-section-row>
       `)}
       ${this.#isEditingAllowed === EditingAllowedStatus.ENABLED ? html`
-        <${Buttons.Button.Button.litTagName}
+        <devtools-button
           class="add-header-button"
           .variant=${Buttons.Button.Variant.OUTLINED}
           .iconUrl=${plusIconUrl}
           @click=${this.#onAddHeaderClick}
           jslog=${VisualLogging.action('add-header').track({click: true})}>
           ${i18nString(UIStrings.addHeader)}
-        </${Buttons.Button.Button.litTagName}>
+        </devtools-button>
       ` : LitHtml.nothing}
     `, this.shadow, {host: this});
     // clang-format on

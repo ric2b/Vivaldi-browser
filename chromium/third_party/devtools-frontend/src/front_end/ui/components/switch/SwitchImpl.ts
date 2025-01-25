@@ -7,6 +7,8 @@ import * as VisualLogging from '../../visual_logging/visual_logging.js';
 
 import switchStyles from './switch.css.js';
 
+const {html} = LitHtml;
+
 export class SwitchChangeEvent extends Event {
   static readonly eventName = 'switchchange';
 
@@ -16,7 +18,6 @@ export class SwitchChangeEvent extends Event {
 }
 
 export class Switch extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-switch`;
   readonly #shadow = this.attachShadow({mode: 'open'});
   #checked = false;
   #disabled = false;
@@ -63,7 +64,7 @@ export class Switch extends HTMLElement {
     const jslog = this.#jslogContext && VisualLogging.toggle(this.#jslogContext).track({change: true});
     /* eslint-disable rulesdir/inject_checkbox_styles */
     // clang-format off
-    LitHtml.render(LitHtml.html`
+    LitHtml.render(html`
     <label role="button">
       <input type="checkbox"
         @change=${this.#handleChange}

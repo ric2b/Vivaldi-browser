@@ -1,0 +1,29 @@
+# Copyright 2024 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/rules.gni")
+
+bundle_data_xcassets("assets") {
+  catalog = "Assets.xcassets"
+  sources = [
+    # vivaldi_feedback_happy_face
+    "Assets.xcassets/vivaldi_feedback_happy_face.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_feedback_happy_face.imageset/vivaldi_feedback_happy_face.pdf",
+
+    # vivaldi_feedback_sad_face
+    "Assets.xcassets/vivaldi_feedback_sad_face.imageset/Contents.json",
+    "Assets.xcassets/vivaldi_feedback_sad_face.imageset/vivaldi_feedback_sad_face.pdf",
+    "Assets.xcassets/vivaldi_feedback_sad_face.imageset/vivaldi_feedback_sad_face_dark.pdf",
+  ]
+}
+
+bundle_data("animation_files") {
+  sources = [
+    "happy_animation_confetti_dark.json",
+    "happy_animation_confetti.json",
+    "happy_animation_dark.json",
+    "happy_animation.json",
+    "sad_animation_dark.json",
+    "sad_animation.json",
+  ]
+  outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
+}

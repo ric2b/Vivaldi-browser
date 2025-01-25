@@ -102,7 +102,7 @@ class SESSIONS_EXPORT LiveTabContext {
       const std::string& viv_ext_data);
 
  protected:
-  virtual ~LiveTabContext() {}
+  virtual ~LiveTabContext() = default;
 };
 
 }  // namespace sessions

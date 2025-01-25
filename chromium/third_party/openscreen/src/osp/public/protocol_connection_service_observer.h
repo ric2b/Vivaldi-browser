@@ -15,6 +15,17 @@ namespace openscreen::osp {
 
 class ProtocolConnectionServiceObserver {
  public:
+  ProtocolConnectionServiceObserver() = default;
+  ProtocolConnectionServiceObserver(const ProtocolConnectionServiceObserver&) =
+      delete;
+  ProtocolConnectionServiceObserver& operator=(
+      const ProtocolConnectionServiceObserver&) = delete;
+  ProtocolConnectionServiceObserver(
+      ProtocolConnectionServiceObserver&&) noexcept = delete;
+  ProtocolConnectionServiceObserver& operator=(
+      ProtocolConnectionServiceObserver&&) noexcept = delete;
+  virtual ~ProtocolConnectionServiceObserver() = default;
+
   // Called when the state becomes kRunning.
   virtual void OnRunning() = 0;
   // Called when the state becomes kStopped.
@@ -30,9 +41,6 @@ class ProtocolConnectionServiceObserver {
 
   virtual void OnIncomingConnection(
       std::unique_ptr<ProtocolConnection> connection) = 0;
-
- protected:
-  virtual ~ProtocolConnectionServiceObserver() = default;
 };
 
 }  // namespace openscreen::osp

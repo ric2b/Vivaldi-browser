@@ -26,6 +26,16 @@
 #import "ios/chrome/browser/ui/infobars/presentation/infobar_modal_positioner.h"
 #import "ios/chrome/browser/ui/infobars/presentation/infobar_modal_transition_driver.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 @interface InfobarCoordinator () <InfobarCoordinatorImplementation,
                                   InfobarBannerPositioner,
                                   InfobarModalPositioner> {
@@ -80,7 +90,6 @@
   // Cancel any scheduled automatic dismissal block.
   _autoDismissBannerTimer.Stop();
   _animatedFullscreenDisabler = nullptr;
-  _badgeDelegate = nil;
   _infobarDelegate = nil;
 }
 
@@ -155,33 +164,6 @@
   }
 }
 
-- (void)presentInfobarModal {
-  DCHECK(self.started);
-  ProceduralBlock modalPresentation = ^{
-    DCHECK(self.infobarBannerState !=
-           InfobarBannerPresentationState::Presented);
-    DCHECK(self.baseViewController);
-    self.modalTransitionDriver = [[InfobarModalTransitionDriver alloc]
-        initWithTransitionMode:InfobarModalTransitionBase];
-    self.modalTransitionDriver.modalPositioner = self;
-    __weak __typeof(self) weakSelf = self;
-    [self presentInfobarModalFrom:self.baseViewController
-                           driver:self.modalTransitionDriver
-                       completion:^{
-                         [weakSelf infobarModalPresentedFromBanner:NO];
-                       }];
-  };
-
-  // Dismiss InfobarBanner first if being presented.
-  if (self.baseViewController.presentedViewController &&
-      self.baseViewController.presentedViewController ==
-          self.bannerViewController) {
-    [self dismissInfobarBannerAnimated:NO completion:modalPresentation];
-  } else {
-    modalPresentation();
-  }
-}
-
 #pragma mark InfobarBannerDelegate
 
 - (void)bannerInfobarButtonWasPressed:(id)sender {
@@ -236,6 +218,15 @@
   CGRect omniboxFrame = [topOmnibox convertRect:topOmnibox.bounds toView:nil];
   CGFloat omniboxMaxY = CGRectGetMaxY(omniboxFrame);
 
+  if (IsVivaldiRunning() &&
+      GetApplicationContext()
+          ->GetLocalState()->GetBoolean(prefs::kBottomOmnibox)) {
+    // Place the infobar just below the safe area insets when omnibox is at the
+    // bottom.
+    return [VivaldiGlobalHelpers safeAreaInsets].top +
+        kInfobarTopPaddingBottomOmnibox;
+  } // End Vivaldi
+
   // Use the top toolbar's layout guide when the omnibox is at the bottom.
   if (topOmnibox.hidden) {
     UIView* topToolbar =
@@ -285,52 +276,47 @@
 #pragma mark InfobarCoordinatorImplementation
 
 - (BOOL)configureModalViewController {
-  NOTREACHED_IN_MIGRATION() << "Subclass must implement.";
-  return NO;
+  NOTREACHED() << "Subclass must implement.";
 }
 
 - (BOOL)isInfobarAccepted {
-  NOTREACHED_IN_MIGRATION() << "Subclass must implement.";
-  return NO;
+  NOTREACHED() << "Subclass must implement.";
 }
 
 - (BOOL)infobarBannerActionWillPresentModal {
-  NOTREACHED_IN_MIGRATION() << "Subclass must implement.";
-  return NO;
+  NOTREACHED() << "Subclass must implement.";
 }
 
 - (void)infobarBannerWasPresented {
-  NOTREACHED_IN_MIGRATION() << "Subclass must implement.";
+  NOTREACHED() << "Subclass must implement.";
 }
 
 - (void)infobarModalPresentedFromBanner:(BOOL)presentedFromBanner {
-  NOTREACHED_IN_MIGRATION() << "Subclass must implement.";
+  NOTREACHED() << "Subclass must implement.";
 }
 
 - (void)dismissBannerIfReady {
-  NOTREACHED_IN_MIGRATION() << "Subclass must implement.";
+  NOTREACHED() << "Subclass must implement.";
 }
 
 - (BOOL)infobarActionInProgress {
-  NOTREACHED_IN_MIGRATION() << "Subclass must implement.";
-  return NO;
+  NOTREACHED() << "Subclass must implement.";
 }
 
 - (void)performInfobarAction {
-  NOTREACHED_IN_MIGRATION() << "Subclass must implement.";
+  NOTREACHED() << "Subclass must implement.";
 }
 
 - (void)infobarBannerWillBeDismissed:(BOOL)userInitiated {
-  NOTREACHED_IN_MIGRATION() << "Subclass must implement.";
+  NOTREACHED() << "Subclass must implement.";
 }
 
 - (void)infobarWasDismissed {
-  NOTREACHED_IN_MIGRATION() << "Subclass must implement.";
+  NOTREACHED() << "Subclass must implement.";
 }
 
 - (CGFloat)infobarModalHeightForWidth:(CGFloat)width {
-  NOTREACHED_IN_MIGRATION() << "Subclass must implement.";
-  return 0;
+  NOTREACHED() << "Subclass must implement.";
 }
 
 #pragma mark - Private

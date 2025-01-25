@@ -58,7 +58,8 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
 }
 
 - (CGFloat)minimumWidthForStyle:(VivaldiStartPageLayoutStyle)style {
-  return [self isTablet] ? [self iPadColumnWidth] : [self iPhoneColumnWidth];
+  return [self shouldShowTabletLayout] ?
+      [self iPadColumnWidth] : [self iPhoneColumnWidth];
 }
 
 - (void)prepareLayout {
@@ -150,10 +151,6 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
 }
 
 #pragma mark - Private
-- (BOOL)isTablet {
-  return UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad &&
-      VivaldiGlobalHelpers.isHorizontalTraitRegular;
-}
 
 - (CGFloat)horizontalSpacing {
   return self.layoutState == VivaldiStartPageLayoutStateNormal ?

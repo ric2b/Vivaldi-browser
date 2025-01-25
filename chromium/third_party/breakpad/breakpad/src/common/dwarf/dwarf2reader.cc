@@ -40,6 +40,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include <algorithm>
 #include <map>
@@ -67,6 +68,11 @@ const SectionMap::const_iterator GetSectionByName(const SectionMap&
   std::string macho_name("__");
   macho_name += name + 1;
   iter = sections.find(macho_name);
+
+  // .debug_str_offsets is alternatively named .debug_str_offs, so try both
+  if (iter == sections.end() && std::string(name) == ".debug_str_offsets") {
+    return GetSectionByName(sections, ".debug_str_offs");
+  }
   return iter;
 }
 

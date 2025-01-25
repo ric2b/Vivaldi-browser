@@ -57,6 +57,8 @@
 #include "base/win/windows_types.h"
 #include "base/win/windows_version.h"
 
+#include "base/command_line.h"
+
 namespace base {
 
 namespace {
@@ -674,6 +676,12 @@ bool CreateTemporaryDirInDir(const FilePath& base_dir,
     path_to_create = base_dir.Append(new_dir_name);
     if (::CreateDirectory(path_to_create.value().c_str(), NULL)) {
       *new_dir = path_to_create;
+      // Testcode windows
+      if (base::CommandLine::ForCurrentProcess()->GetProgram().BaseName() ==
+          FilePath(FILE_PATH_LITERAL("browser_tests.exe"))) {
+        LOG(ERROR) << "Created Temp dir: " << new_dir_name;
+      }
+      // End test code
       return true;
     }
   }
@@ -1128,11 +1136,6 @@ bool PreReadFile(const FilePath& file_path,
 }
 
 bool PreventExecuteMappingInternal(const FilePath& path, bool skip_path_check) {
-  if (!base::FeatureList::IsEnabled(
-          features::kEnforceNoExecutableFileHandles)) {
-    return true;
-  }
-
   bool is_path_safe = skip_path_check || IsPathSafeToSetAclOn(path);
 
   if (!is_path_safe) {

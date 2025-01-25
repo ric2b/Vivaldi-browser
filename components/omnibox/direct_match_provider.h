@@ -51,7 +51,8 @@ class DirectMatchProvider : public AutocompleteProvider {
   // Calculates the relevance score for |match|.
   int CalculateDirectMatchRelevance(
       const direct_match::DirectMatchService::DirectMatchUnit& match,
-      query_parser::Snippet::MatchPositions* match_positions) const;
+      query_parser::Snippet::MatchPositions* match_positions,
+      bool dm_boost) const;
 
   const raw_ptr<AutocompleteProviderClient> client_;
   const raw_ptr<direct_match::DirectMatchService> direct_match_service_;

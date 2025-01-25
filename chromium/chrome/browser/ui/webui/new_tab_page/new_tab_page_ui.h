@@ -11,8 +11,9 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
-#include "chrome/browser/new_tab_page/modules/file_suggestion/file_suggestion.mojom.h"
+#include "chrome/browser/new_tab_page/modules/file_suggestion/drive_suggestion.mojom.h"
 #include "chrome/browser/new_tab_page/modules/v2/calendar/google_calendar.mojom.h"
+#include "chrome/browser/new_tab_page/modules/v2/calendar/outlook_calendar.mojom.h"
 #include "chrome/browser/new_tab_page/modules/v2/most_relevant_tab_resumption/most_relevant_tab_resumption.mojom.h"
 #include "components/user_education/webui/help_bubble_handler.h"
 #include "ui/webui/resources/cr_components/help_bubble/help_bubble.mojom.h"
@@ -28,9 +29,12 @@
 #include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/webui/metrics_reporter/metrics_reporter.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom.h"
+#include "chrome/common/webui_url_constants.h"
 #include "components/page_image_service/mojom/page_image_service.mojom.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/browser/webui_config.h"
+#include "content/public/common/url_constants.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -61,11 +65,12 @@ class ColorChangeHandler;
 }  // namespace ui
 
 class BrowserCommandHandler;
-class FileSuggestionHandler;
+class DriveSuggestionHandler;
 #if !defined(OFFICIAL_BUILD)
 class FooHandler;
 #endif
 class GoogleCalendarPageHandler;
+class OutlookCalendarPageHandler;
 class GURL;
 class MostRelevantTabResumptionPageHandler;
 class MostVisitedHandler;
@@ -75,6 +80,19 @@ class PrefRegistrySimple;
 class PrefService;
 class Profile;
 class RealboxHandler;
+class NewTabPageUI;
+
+class NewTabPageUIConfig : public content::DefaultWebUIConfig<NewTabPageUI> {
+ public:
+  NewTabPageUIConfig()
+      : DefaultWebUIConfig(content::kChromeUIScheme,
+                           chrome::kChromeUINewTabPageHost) {}
+  // content::WebUIConfig:
+  std::unique_ptr<content::WebUIController> CreateWebUIController(
+      content::WebUI* web_ui,
+      const GURL& url) override;
+  bool IsWebUIEnabled(content::BrowserContext* browser_context) override;
+};
 
 class NewTabPageUI
     : public ui::MojoWebUIController,
@@ -137,10 +155,10 @@ class NewTabPageUI
           pending_receiver);
 
   // Instantiates the implementor of
-  // file_suggestion::mojom::FileSuggestionHandler mojo interface passing the
+  // file_suggestion::mojom::DriveSuggestionHandler mojo interface passing the
   // pending receiver that will be internally bound.
   void BindInterface(
-      mojo::PendingReceiver<file_suggestion::mojom::FileSuggestionHandler>
+      mojo::PendingReceiver<file_suggestion::mojom::DriveSuggestionHandler>
           pending_receiver);
 
   // Instantiates the implementor of
@@ -148,6 +166,13 @@ class NewTabPageUI
   // pending receiver that will be internally bound.
   void BindInterface(
       mojo::PendingReceiver<ntp::calendar::mojom::GoogleCalendarPageHandler>
+          pending_receiver);
+
+  // Instantiates the implementor of
+  // npt::calendar::mojom::OutlookCalendarPageHandler mojo interface passing the
+  // pending receiver that will be internally bound.
+  void BindInterface(
+      mojo::PendingReceiver<ntp::calendar::mojom::OutlookCalendarPageHandler>
           pending_receiver);
 
 #if !defined(OFFICIAL_BUILD)
@@ -255,7 +280,8 @@ class NewTabPageUI
 
   // Mojo implementations for modules:
   std::unique_ptr<GoogleCalendarPageHandler> google_calendar_handler_;
-  std::unique_ptr<FileSuggestionHandler> file_handler_;
+  std::unique_ptr<DriveSuggestionHandler> drive_handler_;
+  std::unique_ptr<OutlookCalendarPageHandler> outlook_calendar_handler_;
   PrefChangeRegistrar pref_change_registrar_;
 
   // Holds subscriptions for TabInterface callbacks.

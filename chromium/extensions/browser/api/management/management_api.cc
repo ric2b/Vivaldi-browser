@@ -159,10 +159,10 @@ management::ExtensionInfo CreateExtensionInfo(
       info.disabled_reason = management::ExtensionDisabledReason::kUnknown;
     }
 
-    info.may_enable = system->management_policy()->ExtensionMayModifySettings(
-                          source_extension, &extension, nullptr) &&
-                      !system->management_policy()->MustRemainDisabled(
-                          &extension, nullptr, nullptr);
+    info.may_enable =
+        system->management_policy()->ExtensionMayModifySettings(
+            source_extension, &extension, nullptr) &&
+        !system->management_policy()->MustRemainDisabled(&extension, nullptr);
   }
   const GURL update_url = delegate->GetEffectiveUpdateURL(extension, context);
   if (!update_url.is_empty()) {
@@ -257,7 +257,7 @@ management::ExtensionInfo CreateExtensionInfo(
         break;
       case LAUNCH_TYPE_INVALID:
       case NUM_LAUNCH_TYPES:
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
     }
 
     info.available_launch_types = GetAvailableLaunchTypes(extension, delegate);
@@ -506,8 +506,7 @@ ExtensionFunction::ResponseAction ManagementSetEnabledFunction::Run() {
   // Enable extension.
 
   // Cannot enable policy disabled extensions.
-  if (policy->MustRemainDisabled(target_extension, /*reason=*/nullptr,
-                                 /*error=*/nullptr)) {
+  if (policy->MustRemainDisabled(target_extension, /*reason=*/nullptr)) {
     return RespondNow(Error(keys::kUserCantModifyError, extension_id_));
   }
 
@@ -1003,7 +1002,7 @@ ExtensionFunction::ResponseAction ManagementSetLaunchTypeFunction::Run() {
       launch_type = LAUNCH_TYPE_WINDOW;
       break;
     case management::LaunchType::kNone:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 
   delegate->SetLaunchType(browser_context(), params->id, launch_type);

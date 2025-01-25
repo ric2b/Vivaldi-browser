@@ -1,6 +1,8 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
+ * Copyright (C) 2002-2017 Németh László
+ *
  * The contents of this file are subject to the Mozilla Public License Version
  * 1.1 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -11,12 +13,7 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is Hunspell, based on MySpell.
- *
- * The Initial Developers of the Original Code are
- * Kevin Hendricks (MySpell) and Németh László (Hunspell).
- * Portions created by the Initial Developers are Copyright (C) 2002-2005
- * the Initial Developers. All Rights Reserved.
+ * Hunspell is based on MySpell which is Copyright (C) 2002 Kevin Hendricks.
  *
  * Contributor(s): David Einstein, Davide Prina, Giuseppe Modugno,
  * Gianluca Turconi, Simon Brouwer, Noll János, Bíró Árpád,
@@ -157,8 +154,6 @@ class AffixMgr {
   FLAG nongramsuggest;
   FLAG needaffix;
   int cpdmin;
-  bool parsedrep;
-  std::vector<replentry> reptable;
   RepList* iconvtable;
   RepList* oconvtable;
   bool parsedmaptable;
@@ -296,6 +291,7 @@ class AffixMgr {
 
   short get_syllable(const std::string& word);
   int cpdrep_check(const char* word, int len);
+  int cpdwordpair_check(const char * word, int len);
   int cpdpat_check(const char* word,
                    int len,
                    hentry* r1,
@@ -356,6 +352,7 @@ class AffixMgr {
   FLAG get_forbiddenword() const;
   FLAG get_nosuggest() const;
   FLAG get_nongramsuggest() const;
+  FLAG get_substandard() const;
   FLAG get_needaffix() const;
   FLAG get_onlyincompound() const;
   const char* get_derived() const;
@@ -387,7 +384,6 @@ class AffixMgr {
   bool parse_flag(const std::string& line, unsigned short* out, FileMgr* af);
   bool parse_num(const std::string& line, int* out, FileMgr* af);
   bool parse_cpdsyllable(const std::string& line, FileMgr* af);
-  bool parse_reptable(const std::string& line, FileMgr* af);
   bool parse_convtable(const std::string& line,
                       FileMgr* af,
                       RepList** rl,

@@ -12,7 +12,6 @@
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/picture_in_picture/auto_pip_setting_overlay_view.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_occlusion_tracker.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
@@ -22,6 +21,7 @@
 #include "chrome/browser/ui/views/overlay/simple_overlay_window_image_button.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/views/chrome_views_test_base.h"
+#include "components/global_media_controls/public/views/media_progress_view.h"
 #include "content/public/browser/overlay_window.h"
 #include "content/public/browser/video_picture_in_picture_window_controller.h"
 #include "content/public/browser/web_contents.h"
@@ -63,7 +63,6 @@ class MockOverlayView : public AutoPipSettingOverlayView {
   explicit MockOverlayView(views::View* anchor_view)
       : AutoPipSettingOverlayView(base::DoNothing(),
                                   GURL{"https://example.com"},
-                                  gfx::Rect(),
                                   anchor_view,
                                   views::BubbleBorder::Arrow::FLOAT) {}
   MOCK_METHOD(void, ShowBubble, (gfx::NativeView parent), (override));
@@ -107,6 +106,8 @@ class TestVideoPictureInPictureWindowController
   content::WebContents* GetWebContents() override { return web_contents_; }
   content::WebContents* GetChildWebContents() override { return nullptr; }
   bool TogglePlayPause() override { return false; }
+  void Play() override {}
+  void Pause() override {}
   void SkipAd() override {}
   void NextTrack() override {}
   void PreviousTrack() override {}
@@ -115,6 +116,7 @@ class TestVideoPictureInPictureWindowController
   void ToggleMicrophone() override {}
   void ToggleCamera() override {}
   void HangUp() override {}
+  MOCK_METHOD(void, SeekTo, (base::TimeDelta time));
   const gfx::Rect& GetSourceBounds() const override { return source_bounds_; }
   std::optional<gfx::Rect> GetWindowBounds() override { return std::nullopt; }
   std::optional<url::Origin> GetOrigin() override { return std::nullopt; }
@@ -469,7 +471,6 @@ TEST_F(VideoOverlayWindowViewsTest, HitTestFrameView) {
   EXPECT_EQ(non_client_view->HitTestPoint(point), true);
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 // With pillarboxing, the close button doesn't cover the video area. Make sure
 // hovering the button doesn't get handled like normal mouse exit events
 // causing the controls to hide.
@@ -497,8 +498,6 @@ TEST_F(VideoOverlayWindowViewsTest, DISABLED_NoMouseExitWithinWindowBounds) {
   overlay_window().OnMouseEvent(&exited_event);
   EXPECT_TRUE(overlay_window().AreControlsVisible());
 }
-
-#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 TEST_F(VideoOverlayWindowViewsTest, ShowControlsOnFocus) {
   EXPECT_FALSE(overlay_window().AreControlsVisible());
@@ -733,6 +732,13 @@ TEST_F(VideoOverlayWindowViewsTest, IsTrackedByTheOcclusionObserver) {
   EXPECT_EQ(0u, tracker->GetPictureInPictureWidgetsForTesting().size());
 }
 
+TEST_F(VideoOverlayWindowViewsTest, ProgressBarNotDrawnWhen2024UIIsDisabled) {
+  overlay_window().ForceControlsVisibleForTesting(true);
+  global_media_controls::MediaProgressView* progress_view =
+      overlay_window().progress_view_for_testing();
+  ASSERT_EQ(nullptr, progress_view);
+}
+
 class VideoOverlayWindowViewsWith2024UITest
     : public VideoOverlayWindowViewsTest {
  public:
@@ -774,4 +780,24 @@ TEST_F(VideoOverlayWindowViewsWith2024UITest, ShowsBackToTabImageButton) {
   EXPECT_CALL(pip_window_controller(), CloseAndFocusInitiator());
   button_clicker.NotifyClick(dummy_event);
   testing::Mock::VerifyAndClearExpectations(&pip_window_controller());
+}
+
+TEST_F(VideoOverlayWindowViewsWith2024UITest, ProgressBarSeeksVideo) {
+  overlay_window().ForceControlsVisibleForTesting(true);
+  global_media_controls::MediaProgressView* progress_view =
+      overlay_window().progress_view_for_testing();
+  ASSERT_NE(nullptr, progress_view);
+  EXPECT_TRUE(progress_view->IsDrawn());
+
+  gfx::Point point(progress_view->width() / 2, progress_view->height() / 2);
+  ui::MouseEvent pressed_event(ui::EventType::kMousePressed, point, point,
+                               ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
+                               ui::EF_LEFT_MOUSE_BUTTON);
+  EXPECT_CALL(pip_window_controller(), SeekTo(_));
+  progress_view->OnMousePressed(pressed_event);
+
+  ui::MouseEvent released_event = ui::MouseEvent(
+      ui::EventType::kMouseReleased, point, point, ui::EventTimeForNow(),
+      ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON);
+  progress_view->OnMouseReleased(released_event);
 }

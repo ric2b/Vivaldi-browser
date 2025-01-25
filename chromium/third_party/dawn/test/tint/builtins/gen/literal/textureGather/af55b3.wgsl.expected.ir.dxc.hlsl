@@ -1,5 +1,3 @@
-SKIP: FAILED
-
 struct VertexOutput {
   float4 pos;
   float4 prevent_dce;
@@ -15,7 +13,7 @@ RWByteAddressBuffer prevent_dce : register(u0);
 Texture2D<float4> arg_1 : register(t1, space1);
 SamplerState arg_2 : register(s2, space1);
 float4 textureGather_af55b3() {
-  float4 res = arg_1.GatherGreen(arg_2, (1.0f).xx, (1).xx);
+  float4 res = arg_1.GatherGreen(arg_2, (1.0f).xx, (int(1)).xx);
   return res;
 }
 
@@ -38,11 +36,7 @@ VertexOutput vertex_main_inner() {
 
 vertex_main_outputs vertex_main() {
   VertexOutput v_1 = vertex_main_inner();
-  VertexOutput v_2 = v_1;
-  VertexOutput v_3 = v_1;
-  vertex_main_outputs v_4 = {v_3.prevent_dce, v_2.pos};
-  return v_4;
+  vertex_main_outputs v_2 = {v_1.prevent_dce, v_1.pos};
+  return v_2;
 }
 
-
-tint executable returned error: exit status 0xe0000001

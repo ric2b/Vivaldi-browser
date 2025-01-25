@@ -8,9 +8,9 @@
 #include <memory>
 #include <vector>
 
-#include "ash/constants/ash_features.h"
+#include "ash/components/arc/app/arc_app_constants.h"
 #include "ash/constants/ash_pref_names.h"
-#include "ash/constants/ash_switches.h"
+#include "ash/constants/web_app_id_constants.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/webui/mall/app_id.h"
 #include "base/containers/contains.h"
@@ -18,7 +18,6 @@
 #include "base/no_destructor.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
-#include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/branding_buildflags.h"
 #include "build/buildflag.h"
@@ -27,13 +26,13 @@
 #include "chrome/browser/ash/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ash/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
-#include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/ui/ash/shelf/shelf_controller_helper.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/file_manager/app_id.h"
 #include "chromeos/ash/components/scalable_iph/scalable_iph_constants.h"
 #include "chromeos/ash/components/standalone_browser/feature_refs.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -215,14 +214,14 @@ class ChromeShelfPrefsTest : public testing::Test {
     static const base::NoDestructor<std::map<std::string, std::string>> kAppMap(
         {
             {app_constants::kChromeAppId, "chrome"},
-            {web_app::kContainerAppId, "container"},
-            {web_app::kGmailAppId, "gmail"},
-            {web_app::kGoogleCalendarAppId, "cal"},
+            {ash::kGeminiAppId, "gemini"},
+            {ash::kGmailAppId, "gmail"},
+            {ash::kGoogleCalendarAppId, "cal"},
             {file_manager::kFileManagerSwaAppId, "files"},
-            {web_app::kMessagesAppId, "messages"},
-            {web_app::kGoogleMeetAppId, "meet"},
+            {ash::kMessagesAppId, "messages"},
+            {ash::kGoogleMeetAppId, "meet"},
             {arc::kPlayStoreAppId, "play"},
-            {web_app::kYoutubeAppId, "youtube"},
+            {ash::kYoutubeAppId, "youtube"},
             {arc::kGooglePhotosAppId, "photos"},
         });
     std::vector<std::string> apps;
@@ -288,7 +287,7 @@ TEST_F(ChromeShelfPrefsTest, AddDefaultApps) {
 
   // Check that a pin was added for the gmail app.
   ASSERT_TRUE(syncable_service()
-                  .item_map_[web_app::kGmailAppId]
+                  .item_map_[ash::kGmailAppId]
                   ->item_pin_ordinal.IsValid());
 }
 
@@ -303,7 +302,7 @@ TEST_F(ChromeShelfPrefsTest, ProfileChanged) {
   EXPECT_EQ(pinned_apps_strs[0], app_constants::kChromeAppId);
 
   // Pinned apps should have the gmail app.
-  EXPECT_TRUE(base::Contains(pinned_apps_strs, web_app::kGmailAppId));
+  EXPECT_TRUE(base::Contains(pinned_apps_strs, ash::kGmailAppId));
 
   // Migration is no longer necessary.
   ASSERT_FALSE(shelf_prefs_->ShouldPerformConsistencyMigrations());
@@ -313,83 +312,8 @@ TEST_F(ChromeShelfPrefsTest, ProfileChanged) {
   ASSERT_TRUE(shelf_prefs_->ShouldPerformConsistencyMigrations());
 }
 
-// If Lacros is the only browser, then it should be pinned instead of ash.
-TEST_F(ChromeShelfPrefsTest, LacrosOnlyPinnedApp) {
-  // Enable lacros-only.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(ash::standalone_browser::GetFeatureRefs(), {});
-  base::test::ScopedCommandLine scoped_command_line;
-  scoped_command_line.GetProcessCommandLine()->AppendSwitch(
-      ash::switches::kEnableLacrosForTesting);
-  AddRegularUser("test@test.com");
-
-  // Migration is necessary to begin with.
-  ASSERT_TRUE(shelf_prefs_->ShouldPerformConsistencyMigrations());
-  std::vector<std::string> pinned_apps_strs = GetPinnedAppIds();
-
-  // Pinned apps should have the chrome app as the first item.
-  ASSERT_GE(pinned_apps_strs.size(), 1u);
-  EXPECT_EQ(pinned_apps_strs[0], app_constants::kLacrosAppId);
-
-  // Pinned apps should have the gmail app.
-  EXPECT_TRUE(base::Contains(pinned_apps_strs, web_app::kGmailAppId));
-}
-
-// When moving from ash-only to lacros-only, the shelf position of the chrome
-// app should stay constant.
-TEST_F(ChromeShelfPrefsTest, ShelfPositionAfterLacrosMigration) {
-  // Set up ash-chrome in the middle position.
-  syncer::StringOrdinal ordinal1 =
-      syncer::StringOrdinal::CreateInitialOrdinal();
-  syncer::StringOrdinal ordinal2 = ordinal1.CreateAfter();
-  syncer::StringOrdinal ordinal3 = ordinal2.CreateAfter();
-
-  syncable_service().item_map_["dummy1"] = MakeSyncItem("dummy1", ordinal1);
-  syncable_service().item_map_[app_constants::kChromeAppId] =
-      MakeSyncItem(app_constants::kChromeAppId, ordinal2);
-  syncable_service().item_map_["dummy2"] = MakeSyncItem("dummy2", ordinal3);
-
-  // Enable lacros-only.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(ash::standalone_browser::GetFeatureRefs(), {});
-  base::test::ScopedCommandLine scoped_command_line;
-  scoped_command_line.GetProcessCommandLine()->AppendSwitch(
-      ash::switches::kEnableLacrosForTesting);
-  AddRegularUser("test@test.com");
-
-  // Perform migration
-  std::vector<std::string> pinned_apps_strs = GetPinnedAppIds();
-
-  // Confirm that the ash-chrome position gets replaced by lacros-chrome.
-  EXPECT_TRUE(base::Contains(pinned_apps_strs, app_constants::kLacrosAppId));
-  EXPECT_FALSE(base::Contains(pinned_apps_strs, app_constants::kChromeAppId));
-}
-
-TEST_F(ChromeShelfPrefsTest, PinMallBeforeDefaultApps) {
-  std::string second_pin_app_id;
-  {
-    std::vector<std::string> pinned_apps_strs = GetPinnedAppIds();
-    second_pin_app_id = pinned_apps_strs[1];
-  }
-  {
-    base::test::ScopedFeatureList feature_list;
-    feature_list.InitWithFeatures(
-        /*enabled_features=*/{chromeos::features::kCrosMall},
-        /*disabled_features=*/{chromeos::features::kCrosMallSwa});
-
-    std::vector<std::string> pinned_apps_strs = GetPinnedAppIds();
-    EXPECT_EQ(pinned_apps_strs[1], web_app::kMallAppId);
-    // Mall should have pushed back any default apps.
-    EXPECT_EQ(pinned_apps_strs[2], second_pin_app_id);
-  }
-}
-
 TEST_F(ChromeShelfPrefsTest, PinMallSystemApp) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      /*enabled_features=*/{chromeos::features::kCrosMall,
-                            chromeos::features::kCrosMallSwa},
-      /*disabled_features=*/{});
+  base::test::ScopedFeatureList feature_list{chromeos::features::kCrosMall};
 
   std::string second_pin_app_id;
   {
@@ -414,11 +338,7 @@ TEST_F(ChromeShelfPrefsTest, PinMallSystemApp) {
 }
 
 TEST_F(ChromeShelfPrefsTest, PinMallSystemAppOnceOnly) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      /*enabled_features=*/{chromeos::features::kCrosMall,
-                            chromeos::features::kCrosMallSwa},
-      /*disabled_features=*/{});
+  base::test::ScopedFeatureList feature_list{chromeos::features::kCrosMall};
 
   apps::AppPtr app = std::make_unique<apps::App>(apps::AppType::kSystemWeb,
                                                  ash::kMallSystemAppId);
@@ -463,7 +383,7 @@ TEST_F(ChromeShelfPrefsTest, PinPreloadApps) {
 
   EXPECT_EQ(GetPinned(),
             base::StrCat(
-                {"chrome, ", IsGoogleChromeBranded() ? "container, " : "",
+                {"chrome, ", IsGoogleChromeBranded() ? "gemini, " : "",
                  "gmail, cal, files, messages, meet, play, youtube, photos"}));
 
   // Simulate installation finishing in unpredictable order.
@@ -478,7 +398,7 @@ TEST_F(ChromeShelfPrefsTest, PinPreloadApps) {
   EXPECT_EQ(
       GetPinned(),
       base::StrCat(
-          {"app4, chrome, app2, ", IsGoogleChromeBranded() ? "container, " : "",
+          {"app4, chrome, app2, ", IsGoogleChromeBranded() ? "gemini, " : "",
            "gmail, cal, files, messages, meet, play, youtube, photos"}));
 
   // Install app3, comes after gmail.
@@ -486,7 +406,7 @@ TEST_F(ChromeShelfPrefsTest, PinPreloadApps) {
   EXPECT_EQ(
       GetPinned(),
       base::StrCat(
-          {"app4, chrome, app2, ", IsGoogleChromeBranded() ? "container, " : "",
+          {"app4, chrome, app2, ", IsGoogleChromeBranded() ? "gemini, " : "",
            "gmail, app3, cal, files, messages, meet, play, youtube, photos"}));
 
   // Install app5, which should not get pinned since it is not in first list.
@@ -494,7 +414,7 @@ TEST_F(ChromeShelfPrefsTest, PinPreloadApps) {
   EXPECT_EQ(
       GetPinned(),
       base::StrCat(
-          {"app4, chrome, app2, ", IsGoogleChromeBranded() ? "container, " : "",
+          {"app4, chrome, app2, ", IsGoogleChromeBranded() ? "gemini, " : "",
            "gmail, app3, cal, files, messages, meet, play, youtube, photos"}));
 
   // Install app1, comes after chrome.
@@ -503,7 +423,7 @@ TEST_F(ChromeShelfPrefsTest, PinPreloadApps) {
       GetPinned(),
       base::StrCat(
           {"app4, chrome, app1, app2, ",
-           IsGoogleChromeBranded() ? "container, " : "",
+           IsGoogleChromeBranded() ? "gemini, " : "",
            "gmail, app3, cal, files, messages, meet, play, youtube, photos"}));
 }
 
@@ -517,7 +437,7 @@ TEST_F(ChromeShelfPrefsTest, PinPreloadRepeats) {
 
   std::vector<apps::PackageId> pin_order({app1, app2, app3, chrome});
   std::string default_apps = base::StrCat(
-      {"chrome, ", IsGoogleChromeBranded() ? "container, " : "",
+      {"chrome, ", IsGoogleChromeBranded() ? "gemini, " : "",
        "gmail, cal, files, messages, meet, play, youtube, photos"});
 
   // Request to pin app1, and app2, but only install app1.
@@ -543,7 +463,7 @@ TEST_F(ChromeShelfPrefsTest, PinPreloadEmpty) {
   InstallApp(chrome);
   EXPECT_EQ(GetPinned(),
             base::StrCat(
-                {"chrome, ", IsGoogleChromeBranded() ? "container, " : "",
+                {"chrome, ", IsGoogleChromeBranded() ? "gemini, " : "",
                  "gmail, cal, files, messages, meet, play, youtube, photos"}));
   auto get_prefs = [&]() {
     return profile_->GetPrefs()
@@ -563,7 +483,7 @@ TEST_F(ChromeShelfPrefsTest, PinPreloadEmpty) {
   InstallApp(app1);
   EXPECT_EQ(GetPinned(),
             base::StrCat(
-                {"chrome, ", IsGoogleChromeBranded() ? "container, " : "",
+                {"chrome, ", IsGoogleChromeBranded() ? "gemini, " : "",
                  "gmail, cal, files, messages, meet, play, youtube, photos"}));
 
   // Further calls to OnGetPinPreloadApps() should not write additional values

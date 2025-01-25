@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/browsing_data/model/tabs_closure_util.h"
 
+#import "base/memory/raw_ptr.h"
 #import "base/time/time.h"
 #import "ios/chrome/browser/sessions/model/fake_tab_restore_service.h"
 #import "ios/chrome/browser/sessions/model/ios_chrome_tab_restore_service_factory.h"
@@ -57,26 +58,22 @@ std::set<web::WebStateID> GetWebStateIDs(WebStateIDToTime tabs) {
 class TabsClosureUtilTest : public PlatformTest {
  public:
   TabsClosureUtilTest() {
-    // Create a TestChromeBrowserState with required services.
-    TestChromeBrowserState::Builder builder;
+    // Create a TestProfileIOS with required services.
+    TestProfileIOS::Builder builder;
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
-        AuthenticationServiceFactory::GetDefaultFactory());
+        AuthenticationServiceFactory::GetFactoryWithDelegate(
+            std::make_unique<FakeAuthenticationServiceDelegate>()));
     builder.AddTestingFactory(
         SessionRestorationServiceFactory::GetInstance(),
         TestSessionRestorationService::GetTestingFactory());
     builder.AddTestingFactory(IOSChromeTabRestoreServiceFactory::GetInstance(),
                               FakeTabRestoreService::GetTestingFactory());
-    browser_state_ = std::move(builder).Build();
-
-    // Initialize the AuthenticationService.
-    AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
-        browser_state_.get(),
-        std::make_unique<FakeAuthenticationServiceDelegate>());
+    profile_ = std::move(builder).Build();
 
     scene_state_ = OCMClassMock([SceneState class]);
     OCMStub([scene_state_ sceneSessionID]).andReturn(@(kSceneSessionID));
-    browser_ = Browser::Create(browser_state_.get(), scene_state_);
+    browser_ = Browser::Create(profile_.get(), scene_state_);
   }
 
   Browser* browser() { return browser_.get(); }
@@ -115,7 +112,7 @@ class TabsClosureUtilTest : public PlatformTest {
     auto web_state = std::make_unique<web::FakeWebState>();
     web_state->SetIsRealized(realized);
     web_state->SetVisibleURL(url);
-    web_state->SetBrowserState(browser_->GetBrowserState());
+    web_state->SetBrowserState(browser_->GetProfile());
     web_state->SetNavigationManager(std::move(navigation_manager));
     web_state->SetNavigationItemCount(1);
 
@@ -148,12 +145,12 @@ class TabsClosureUtilTest : public PlatformTest {
  private:
   web::WebTaskEnvironment task_environment_;
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
-  std::unique_ptr<ChromeBrowserState> browser_state_;
+  std::unique_ptr<ProfileIOS> profile_;
   __strong SceneState* scene_state_;
   std::unique_ptr<Browser> browser_;
 
-  web::WebState* web_state0_;
-  web::WebState* web_state1_;
+  raw_ptr<web::WebState> web_state0_;
+  raw_ptr<web::WebState> web_state1_;
 };
 
 // Tests `GetTabsInfoForCache` with several time ranges.

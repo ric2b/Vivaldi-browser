@@ -25,12 +25,11 @@
 #include "components/history/core/browser/url_database.h"
 #include "components/history/core/browser/url_row.h"
 #include "components/history_embeddings/answerer.h"
-#include "components/history_embeddings/passage_embeddings_service_controller.h"
+#include "components/history_embeddings/intent_classifier.h"
 #include "components/history_embeddings/sql_database.h"
 #include "components/history_embeddings/vector_database.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/optimization_guide/core/model_quality/model_quality_log_entry.h"
-#include "components/optimization_guide/core/optimization_guide_decider.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
 #include "components/os_crypt/async/common/encryptor.h"
 #include "content/public/browser/render_frame_host.h"
@@ -39,8 +38,7 @@
 class HistoryEmbeddingsInteractiveTest;
 
 namespace optimization_guide {
-class OptimizationGuideModelExecutor;
-class OptimizationGuideModelProvider;
+class OptimizationGuideDecider;
 }  // namespace optimization_guide
 
 namespace page_content_annotations {
@@ -54,7 +52,6 @@ class OSCryptAsync;
 
 namespace history_embeddings {
 
-class Answerer;
 class Embedder;
 
 // Counts the # of ' ' vanilla-space characters in `s`.
@@ -111,6 +108,10 @@ struct SearchResult {
   // a log entry yet, for example after initial search and before answering.
   SearchResult Clone();
 
+  // Returns true if this search result is related to the given `other`
+  // result returned by HistoryEmbeddingsService::Search (same session/query).
+  bool IsContinuationOf(const SearchResult& other);
+
   // Gets the answer text from within the `answerer_result`.
   const std::string& AnswerText() const;
 
@@ -144,18 +145,22 @@ using QualityLogEntry =
 class HistoryEmbeddingsService : public KeyedService,
                                  public history::HistoryServiceObserver {
  public:
+  // Number of low-order bits to use in session_id for sequence number.
+  static constexpr uint64_t kSessionIdSequenceBits = 16;
+  static constexpr uint64_t kSessionIdSequenceBitMask =
+      (1 << kSessionIdSequenceBits) - 1;
+
   // `history_service` is never nullptr and must outlive `this`.
   // Storage uses its `history_dir() location for the database.
   HistoryEmbeddingsService(
+      os_crypt_async::OSCryptAsync* os_crypt_async,
       history::HistoryService* history_service,
       page_content_annotations::PageContentAnnotationsService*
           page_content_annotations_service,
-      optimization_guide::OptimizationGuideModelProvider* model_provider,
       optimization_guide::OptimizationGuideDecider* optimization_guide_decider,
-      PassageEmbeddingsServiceController* service_controller,
-      os_crypt_async::OSCryptAsync* os_crypt_async,
-      optimization_guide::OptimizationGuideModelExecutor*
-          optimization_guide_model_executor);
+      std::unique_ptr<Embedder> embedder,
+      std::unique_ptr<Answerer> answerer,
+      std::unique_ptr<IntentClassifier> intent_classifier);
   HistoryEmbeddingsService(const HistoryEmbeddingsService&) = delete;
   HistoryEmbeddingsService& operator=(const HistoryEmbeddingsService&) = delete;
   ~HistoryEmbeddingsService() override;
@@ -180,10 +185,16 @@ class HistoryEmbeddingsService : public KeyedService,
   // The `callback` may be called back later with another search result
   // containing an answer. This two-phase result callback scheme lets callers
   // receive initial search results without having to wait longer for answers.
-  virtual void Search(std::string query,
-                      std::optional<base::Time> time_range_start,
-                      size_t count,
-                      SearchResultCallback callback);
+  // The `previous_search_result` may be nullptr to signal the beginning of a
+  // completely new search session; if it is non-null and the session_id was
+  // set, the new session_id is set based on the previous to indicate a
+  // continuing search session. Returns a stub result that can be used to detect
+  // if a later published SearchResult instance is related to this search.
+  virtual SearchResult Search(SearchResult* previous_search_result,
+                              std::string query,
+                              std::optional<base::Time> time_range_start,
+                              size_t count,
+                              SearchResultCallback callback);
 
   // Weak `this` provider method.
   base::WeakPtr<HistoryEmbeddingsService> AsWeakPtr();
@@ -191,10 +202,10 @@ class HistoryEmbeddingsService : public KeyedService,
   // Submit quality logging data after user selects an item from search result.
   // Note, the `result` contains a log entry that will be consumed by this call.
   void SendQualityLog(SearchResult& result,
-                      optimization_guide::proto::UserFeedback user_feedback,
                       std::set<size_t> selections,
                       size_t num_entered_characters,
-                      bool from_omnibox_history_scope);
+                      optimization_guide::proto::UserFeedback user_feedback,
+                      optimization_guide::proto::UiSurface ui_surface);
 
   // KeyedService:
   void Shutdown() override;
@@ -202,6 +213,28 @@ class HistoryEmbeddingsService : public KeyedService,
   // history::HistoryServiceObserver:
   void OnHistoryDeletions(history::HistoryService* history_service,
                           const history::DeletionInfo& deletion_info) override;
+
+  // This can be overridden to gate answer generation for some accounts.
+  virtual bool IsAnswererUseAllowed() const;
+
+  // Asynchronously gets passages and embeddings from storage for given
+  // `url_id`. Calls `callback` with the data or nullopt if no data is found in
+  // the HistoryEmbeddings database.
+  void GetUrlData(history::URLID url_id,
+                  base::OnceCallback<void(std::optional<UrlPassagesEmbeddings>)>
+                      callback) const;
+
+  // Asynchronously gets passages and embeddings from storage where visits
+  // are within a given time range. Calls `callback` with the data.
+  // The `limit` and `offset` can be used to control data range with
+  // standard SQL style paging.
+  void GetUrlDataInTimeRange(
+      base::Time from_time,
+      base::Time to_time,
+      size_t limit,
+      size_t offset,
+      base::OnceCallback<void(std::vector<UrlPassagesEmbeddings>)> callback)
+      const;
 
  private:
   friend class HistoryEmbeddingsBrowserTest;
@@ -247,6 +280,14 @@ class HistoryEmbeddingsService : public KeyedService,
     // Retrieves passages and embeddings from the database for use as a cache
     // to avoid recomputing embeddings that exist for identical passages.
     std::optional<UrlPassagesEmbeddings> GetUrlData(history::URLID url_id);
+
+    // Retrieves passages and embeddings from the database that have visit times
+    // within specified range.
+    std::vector<UrlPassagesEmbeddings> GetUrlDataInTimeRange(
+        base::Time from_time,
+        base::Time to_time,
+        size_t limit,
+        size_t offset);
 
     // A VectorDatabase implementation that holds data in memory.
     VectorDatabaseInMemory vector_database;
@@ -317,14 +358,21 @@ class HistoryEmbeddingsService : public KeyedService,
 
   // Called on main sequence after the history worker thread finalizes
   // the initial search result with URL rows. Calls the `callback` and
-  // then proceeds to v2 answer generation if enabled.
+  // then proceeds to intent check and v2 answer generation if needed.
   void OnPrimarySearchResultReady(SearchResultCallback callback,
                                   SearchResult result);
+
+  // Invoked after the intent classifier computes query answerability.
+  void OnQueryIntentComputed(SearchResultCallback callback,
+                             SearchResult result,
+                             ComputeIntentStatus status,
+                             bool query_is_answerable);
 
   // Called after the answerer finishes computing an answer. Combines
   // the `answer_result` into `search_result` and invokes `callback`
   // with new search result complete with answer.
-  void OnAnswerComputed(SearchResultCallback callback,
+  void OnAnswerComputed(base::Time start_time,
+                        SearchResultCallback callback,
                         SearchResult search_result,
                         AnswererResult answerer_result);
 
@@ -373,12 +421,15 @@ class HistoryEmbeddingsService : public KeyedService,
   // The embedder used to compute embeddings.
   std::unique_ptr<Embedder> embedder_;
 
+  // The answerer used to answer queries with context. May be nullptr if
+  // the kHistoryEmbeddingsAnswers feature is disabled.
+  std::unique_ptr<Answerer> answerer_;
+
+  // The intent classifier used to determine query intent and answerability.
+  std::unique_ptr<IntentClassifier> intent_classifier_;
+
   // Metadata about the embedder.
   std::optional<EmbedderMetadata> embedder_metadata_;
-
-  // The answerer used to answer queries with context. May be nullptr if
-  // the kEnableAnswers parameter is false.
-  std::unique_ptr<Answerer> answerer_;
 
   // Storage is bound to a separate sequence.
   // This will be null if the feature flag is disabled.

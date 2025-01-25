@@ -28,9 +28,11 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "absl/base/optimization.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -281,6 +283,68 @@ struct TestShard {
   int total_shards = 1;
 };
 
+// https://bazel.build/reference/test-encyclopedia#initial-conditions
+absl::Duration GetBazelTestTimeout() {
+  const char *test_timeout_env = std::getenv("TEST_TIMEOUT");
+  if (test_timeout_env == nullptr) return absl::InfiniteDuration();
+  int timeout_s = 0;
+  CHECK(absl::SimpleAtoi(test_timeout_env, &timeout_s))
+      << "Failed to parse TEST_TIMEOUT: \"" << test_timeout_env << "\"";
+  return absl::Seconds(timeout_s);
+}
+
+void ReportErrorWhenNotEnoughTimeToRunEverything(absl::Time start_time,
+                                                 absl::Duration test_time_limit,
+                                                 int executed_tests_in_shard,
+                                                 int fuzz_test_count,
+                                                 int shard_count) {
+  static const absl::Duration bazel_test_timeout = GetBazelTestTimeout();
+  constexpr float kTimeoutSafetyFactor = 1.2;
+  const auto required_test_time = kTimeoutSafetyFactor * test_time_limit;
+  const auto remaining_duration =
+      bazel_test_timeout - (absl::Now() - start_time);
+  if (required_test_time <= remaining_duration) return;
+  std::string error =
+      "Cannot fuzz a fuzz test within the given timeout. Please ";
+  if (executed_tests_in_shard == 0) {
+    // Increasing number of shards won't help.
+    const absl::Duration suggested_timeout =
+        required_test_time * ((fuzz_test_count - 1) / shard_count + 1);
+    absl::StrAppend(&error, "set the `timeout` to ", suggested_timeout,
+                    " or reduce the fuzzing time, ");
+  } else {
+    constexpr int kMaxShardCount = 50;
+    const int suggested_shard_count = std::min(
+        (fuzz_test_count - 1) / executed_tests_in_shard + 1, kMaxShardCount);
+    const int suggested_tests_per_shard =
+        (fuzz_test_count - 1) / suggested_shard_count + 1;
+    if (suggested_tests_per_shard > executed_tests_in_shard) {
+      // We wouldn't be able to execute the suggested number of tests without
+      // timeout. This case can only happen if we would in fact need more than
+      // `kMaxShardCount` shards, indicating that there are simply too many fuzz
+      // tests in a binary.
+      CHECK_EQ(suggested_shard_count, kMaxShardCount);
+      absl::StrAppend(&error,
+                      "split the fuzz tests into several test binaries where "
+                      "each binary has at most ",
+                      executed_tests_in_shard * kMaxShardCount, "tests ",
+                      "with `shard_count` = ", kMaxShardCount, ", ");
+    } else {
+      // In this case, `suggested_shard_count` must be greater than
+      // `shard_count`, otherwise we would have already executed all the tests
+      // without a timeout.
+      CHECK_GT(suggested_shard_count, shard_count);
+      absl::StrAppend(&error, "increase the `shard_count` to ",
+                      suggested_shard_count, ", ");
+    }
+  }
+  absl::StrAppend(&error, "to avoid this issue. ");
+  absl::StrAppend(&error,
+                  "(https://bazel.build/reference/be/"
+                  "common-definitions#common-attributes-tests)");
+  CHECK(false) << error;
+}
+
 TestShard SetUpTestSharding() {
   TestShard test_shard;
   if (const char *test_total_shards_env = std::getenv("TEST_TOTAL_SHARDS");
@@ -320,25 +384,61 @@ TestShard SetUpTestSharding() {
   return test_shard;
 }
 
-int PruneNonreproducibleAndCountRemainingCrashes(
-    const Environment &env, absl::Span<const std::string> crashing_input_files,
+// Prunes non-reproducible and duplicate crashes and returns the crash metadata
+// of the remaining crashes.
+absl::flat_hash_set<std::string> PruneOldCrashesAndGetRemainingCrashMetadata(
+    const std::filesystem::path &crashing_dir, const Environment &env,
     CentipedeCallbacksFactory &callbacks_factory) {
+  const std::vector<std::string> crashing_input_files =
+      // The corpus database layout assumes the crash input files are located
+      // directly in the crashing subdirectory, so we don't list recursively.
+      ValueOrDie(RemoteListFiles(crashing_dir.c_str(), /*recursively=*/false));
   ScopedCentipedeCallbacks scoped_callbacks(callbacks_factory, env);
   BatchResult batch_result;
-  int num_remaining_crashes = 0;
+  absl::flat_hash_set<std::string> remaining_crash_metadata;
 
   for (const std::string &crashing_input_file : crashing_input_files) {
     ByteArray crashing_input;
     CHECK_OK(RemoteFileGetContents(crashing_input_file, crashing_input));
-    if (scoped_callbacks.callbacks()->Execute(env.binary, {crashing_input},
-                                              batch_result)) {
-      // The crash is not reproducible.
+    const bool is_reproducible = !scoped_callbacks.callbacks()->Execute(
+        env.binary, {crashing_input}, batch_result);
+    const bool is_duplicate =
+        is_reproducible &&
+        !remaining_crash_metadata.insert(batch_result.failure_description())
+             .second;
+    if (!is_reproducible || is_duplicate) {
       CHECK_OK(RemotePathDelete(crashing_input_file, /*recursively=*/false));
-    } else {
-      ++num_remaining_crashes;
     }
   }
-  return num_remaining_crashes;
+  return remaining_crash_metadata;
+}
+
+void DeduplicateAndStoreNewCrashes(
+    const std::filesystem::path &crashing_dir, const WorkDir &workdir,
+    absl::flat_hash_set<std::string> crash_metadata) {
+  const std::vector<std::string> new_crashing_input_files =
+      // The crash reproducer directory may contain subdirectories with
+      // input files that don't individually cause a crash. We ignore those
+      // for now and don't list the files recursively.
+      ValueOrDie(RemoteListFiles(workdir.CrashReproducerDirPath(),
+                                 /*recursively=*/false));
+  const std::filesystem::path crash_metadata_dir =
+      workdir.CrashMetadataDirPath();
+
+  CHECK_OK(RemoteMkdir(crashing_dir.c_str()));
+  for (const std::string &crashing_input_file : new_crashing_input_files) {
+    const std::string crashing_input_file_name =
+        std::filesystem::path(crashing_input_file).filename();
+    const std::string crash_metadata_file =
+        crash_metadata_dir / crashing_input_file_name;
+    std::string new_crash_metadata;
+    CHECK_OK(RemoteFileGetContents(crash_metadata_file, new_crash_metadata));
+    const bool is_duplicate = !crash_metadata.insert(new_crash_metadata).second;
+    if (is_duplicate) continue;
+    CHECK_OK(
+        RemotePathRename(crashing_input_file,
+                         (crashing_dir / crashing_input_file_name).c_str()));
+  }
 }
 
 // Seeds the corpus files in `env.workdir` with the previously distilled corpus
@@ -370,9 +470,11 @@ SeedCorpusConfig GetSeedCorpusConfig(const Environment &env,
   };
 }
 
+// TODO(b/368325638): Add tests for this.
 int UpdateCorpusDatabaseForFuzzTests(
     Environment env, const fuzztest::internal::Configuration &fuzztest_config,
     CentipedeCallbacksFactory &callbacks_factory) {
+  absl::Time start_time = absl::Now();
   LOG(INFO) << "Starting the update of the corpus database for fuzz tests:"
             << "\nBinary: " << env.binary
             << "\nCorpus database: " << fuzztest_config.corpus_database
@@ -404,8 +506,6 @@ int UpdateCorpusDatabaseForFuzzTests(
   std::string pcs_file_path;
   BinaryInfo binary_info = PopulateBinaryInfoAndSavePCsIfNecessary(
       env, callbacks_factory, pcs_file_path);
-  // We limit the number of crash reports until we have crash deduplication.
-  env.max_num_crash_reports = 1;
 
   LOG(INFO) << "Test shard index: " << test_shard_index
             << " Total test shards: " << total_test_shards;
@@ -435,6 +535,10 @@ int UpdateCorpusDatabaseForFuzzTests(
   for (int i = resuming_fuzztest_idx; i < fuzztest_config.fuzz_tests.size();
        ++i) {
     if (i % total_test_shards != test_shard_index) continue;
+    ReportErrorWhenNotEnoughTimeToRunEverything(
+        start_time, fuzztest_config.time_limit,
+        /*executed_tests_in_shard=*/i / total_test_shards,
+        fuzztest_config.fuzz_tests.size(), total_test_shards);
     env.workdir = base_workdir_path / fuzztest_config.fuzz_tests[i];
     if (RemotePathExists(env.workdir) && !is_resuming) {
       // This could be a workdir from a failed run that used a different version
@@ -496,34 +600,13 @@ int UpdateCorpusDatabaseForFuzzTests(
           RemotePathRename(corpus_file, (coverage_dir / file_name).c_str()));
     }
 
+    // Deduplicate and update the crashing inputs.
     const std::filesystem::path crashing_dir = fuzztest_db_path / "crashing";
-    const std::vector<std::string> crashing_input_files =
-        // The corpus database layout assumes the crash input files are located
-        // directly in the crashing subdirectory, so we don't list recursively.
-        ValueOrDie(
-            RemoteListFiles(crashing_dir.c_str(), /*recursively=*/false));
-    const int num_remaining_crashes =
-        PruneNonreproducibleAndCountRemainingCrashes(env, crashing_input_files,
-                                                     callbacks_factory);
-
-    // Before we implement crash deduplication, we only save a single newly
-    // found crashing input, and only if there were no previously found crashes.
-    if (num_remaining_crashes == 0) {
-      const std::vector<std::string> new_crashing_input_files =
-          // The crash reproducer directory may contain subdirectories with
-          // input files that don't individually cause a crash. We ignore those
-          // for now and don't list the files recursively.
-          *RemoteListFiles(workdir.CrashReproducerDirPath(),
-                           /*recursively=*/false);
-      if (!new_crashing_input_files.empty()) {
-        const std::string crashing_input_file_name =
-            std::filesystem::path(new_crashing_input_files[0]).filename();
-        CHECK_OK(RemoteMkdir(crashing_dir.c_str()));
-        CHECK_OK(RemotePathRename(
-            new_crashing_input_files[0],
-            (crashing_dir / crashing_input_file_name).c_str()));
-      }
-    }
+    absl::flat_hash_set<std::string> crash_metadata =
+        PruneOldCrashesAndGetRemainingCrashMetadata(crashing_dir, env,
+                                                    callbacks_factory);
+    DeduplicateAndStoreNewCrashes(crashing_dir, workdir,
+                                  std::move(crash_metadata));
   }
   CHECK_OK(RemotePathDelete(base_workdir_path.c_str(), /*recursively=*/true));
 

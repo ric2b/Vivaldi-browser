@@ -8,12 +8,12 @@
 #import <Foundation/Foundation.h>
 
 #import "ios/chrome/browser/bookmarks/ui_bundled/editor/bookmarks_editor_mutator.h"
-#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
 class AuthenticationService;
 @protocol BookmarksEditorConsumer;
 @protocol BookmarksEditorMediatorDelegate;
 class PrefService;
+class ProfileIOS;
 @protocol SnackbarCommands;
 
 namespace bookmarks {
@@ -49,8 +49,7 @@ class SyncService;
                     prefs:(PrefService*)prefs
     authenticationService:(AuthenticationService*)authenticationService
               syncService:(syncer::SyncService*)syncService
-             browserState:(ChromeBrowserState*)browserState
-    NS_DESIGNATED_INITIALIZER;
+                  profile:(ProfileIOS*)profile NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
 

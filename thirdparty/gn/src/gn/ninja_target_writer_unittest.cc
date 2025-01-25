@@ -133,6 +133,103 @@ TEST(NinjaTargetWriter, WriteInputDepsStampOrPhonyAndGetDep) {
     // Since there is only one dependency, a stamp file will be returned
     // directly without writing any additional rules.
     ASSERT_EQ(1u, dep.size());
+    EXPECT_EQ("phony/foo/base", dep[0].value());
+  }
+
+  {
+    std::ostringstream stream;
+    NinjaActionTargetWriter writer(&action, stream);
+    writer.Run();
+    EXPECT_EQ(
+        "rule __foo_action___rule\n"
+        "  command =  ../../foo/script.py\n"
+        "  description = ACTION //foo:action()\n"
+        "  restat = 1\n"
+        "\n"
+        "build: __foo_action___rule | ../../foo/script.py"
+        " ../../foo/action_source.txt ./target\n"
+        "\n"
+        "build phony/foo/action: phony\n",
+        stream.str());
+  }
+
+  // Input deps for action which should depend on the base since its a hard dep
+  // that is a (indirect) dependency, as well as the the action source.
+  {
+    std::ostringstream stream;
+    TestingNinjaTargetWriter writer(&action, setup.toolchain(), stream);
+    std::vector<OutputFile> dep = writer.WriteInputDepsStampOrPhonyAndGetDep(
+        std::vector<const Target*>(), 10u);
+
+    ASSERT_EQ(1u, dep.size());
+    EXPECT_EQ("phony/foo/action.inputdeps", dep[0].value());
+    EXPECT_EQ(
+        "build phony/foo/action.inputdeps: phony ../../foo/script.py "
+        "../../foo/action_source.txt ./target\n",
+        stream.str());
+  }
+}
+
+TEST(NinjaTargetWriter, WriteInputDepsStampOrPhonyAndGetDepUseStampFiles) {
+  TestWithScope setup;
+  Err err;
+  setup.build_settings()->set_no_stamp_files(false);
+
+  // Make a base target that's a hard dep (action).
+  Target base_target(setup.settings(), Label(SourceDir("//foo/"), "base"));
+  base_target.set_output_type(Target::ACTION);
+  base_target.visibility().SetPublic();
+  base_target.SetToolchain(setup.toolchain());
+  base_target.action_values().set_script(SourceFile("//foo/script.py"));
+
+  // Dependent target that also includes a source prerequisite (should get
+  // included) and a source (should not be included).
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "target"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.visibility().SetPublic();
+  target.SetToolchain(setup.toolchain());
+  target.config_values().inputs().push_back(SourceFile("//foo/input.txt"));
+  target.sources().push_back(SourceFile("//foo/source.txt"));
+  target.public_deps().push_back(LabelTargetPair(&base_target));
+
+  // Dependent action to test that action sources will be treated the same as
+  // inputs.
+  Target action(setup.settings(), Label(SourceDir("//foo/"), "action"));
+  action.set_output_type(Target::ACTION);
+  action.visibility().SetPublic();
+  action.SetToolchain(setup.toolchain());
+  action.action_values().set_script(SourceFile("//foo/script.py"));
+  action.sources().push_back(SourceFile("//foo/action_source.txt"));
+  action.public_deps().push_back(LabelTargetPair(&target));
+
+  ASSERT_TRUE(base_target.OnResolved(&err));
+  ASSERT_TRUE(target.OnResolved(&err));
+  ASSERT_TRUE(action.OnResolved(&err));
+
+  // Input deps for the base (should be only the script itself).
+  {
+    std::ostringstream stream;
+    TestingNinjaTargetWriter writer(&base_target, setup.toolchain(), stream);
+    std::vector<OutputFile> dep = writer.WriteInputDepsStampOrPhonyAndGetDep(
+        std::vector<const Target*>(), 10u);
+
+    // Since there is only one dependency, it should just be returned and
+    // nothing written to the stream.
+    ASSERT_EQ(1u, dep.size());
+    EXPECT_EQ("../../foo/script.py", dep[0].value());
+    EXPECT_EQ("", stream.str());
+  }
+
+  // Input deps for the target (should depend on the base).
+  {
+    std::ostringstream stream;
+    TestingNinjaTargetWriter writer(&target, setup.toolchain(), stream);
+    std::vector<OutputFile> dep = writer.WriteInputDepsStampOrPhonyAndGetDep(
+        std::vector<const Target*>(), 10u);
+
+    // Since there is only one dependency, a stamp file will be returned
+    // directly without writing any additional rules.
+    ASSERT_EQ(1u, dep.size());
     EXPECT_EQ("obj/foo/base.stamp", dep[0].value());
   }
 
@@ -200,6 +297,6 @@ TEST(NinjaTargetWriter, WriteInputDepsStampOrPhonyAndGetDepWithToolchainDeps) {
   // Since there is more than one dependency, a stamp file will be returned
   // and the rule for the stamp file will be written to the stream.
   ASSERT_EQ(1u, dep.size());
-  EXPECT_EQ("obj/foo/setup.stamp", dep[0].value());
+  EXPECT_EQ("phony/foo/setup", dep[0].value());
   EXPECT_EQ("", stream.str());
 }

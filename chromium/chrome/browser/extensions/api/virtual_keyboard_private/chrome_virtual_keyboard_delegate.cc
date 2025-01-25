@@ -73,8 +73,7 @@ keyboard::ContainerType ConvertKeyboardModeToContainerType(
       break;
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return keyboard::ContainerType::kFullWidth;
+  NOTREACHED();
 }
 
 // Returns the ui::TextInputClient of the active InputMethod or nullptr.
@@ -523,12 +522,8 @@ void ChromeVirtualKeyboardDelegate::OnHasInputDevices(
   features.Append(GenerateFeatureFlag(
       "multiword",
       base::FeatureList::IsEnabled(ash::features::kAssistMultiWord)));
-  features.Append(GenerateFeatureFlag(
-      "stylushandwriting",
-      base::FeatureList::IsEnabled(ash::features::kImeStylusHandwriting)));
-  features.Append(GenerateFeatureFlag(
-      "roundCorners", base::FeatureList::IsEnabled(
-                          ash::features::kVirtualKeyboardRoundCorners)));
+  features.Append(GenerateFeatureFlag("stylushandwriting", false));
+  features.Append(GenerateFeatureFlag("roundCorners", false));
   features.Append(
       GenerateFeatureFlag("systemjapanesephysicaltyping",
                           base::FeatureList::IsEnabled(

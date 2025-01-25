@@ -15,8 +15,8 @@
 #include <vector>      // For std::vector.
 
 #include <gtest/gtest.h>
-#include <fp16/fp16.h>
 #include "xnnpack.h"
+#include "xnnpack/math.h"
 #include "xnnpack/node-type.h"
 #include "xnnpack/operator.h"
 #include "xnnpack/subgraph.h"
@@ -68,7 +68,7 @@ class StaticReshapeTest
 
 using StaticReshapeTestInt8 = StaticReshapeTest<int8_t>;
 using StaticReshapeTestUint8 = StaticReshapeTest<uint8_t>;
-using StaticReshapeTestF16 = StaticReshapeTest<uint16_t>;
+using StaticReshapeTestF16 = StaticReshapeTest<xnn_float16>;
 using StaticReshapeTestF32 = StaticReshapeTest<float>;
 
 TEST_F(StaticReshapeTestInt8, define)
@@ -220,8 +220,6 @@ TEST_F(StaticReshapeTestInt8, matches_operator_api)
   const int32_t zero_point = i8dist(rng);
   const float scale = scale_dist(rng);
   std::generate(input.begin(), input.end(), [&]() { return i8dist(rng); });
-  std::fill(operator_output.begin(), operator_output.end(), INT8_C(0xA5));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), INT8_C(0xA5));
 
   std::vector<size_t> output_dims = dims;
   std::shuffle(output_dims.begin(), output_dims.end(), rng);
@@ -283,8 +281,6 @@ TEST_F(StaticReshapeTestUint8, matches_operator_api)
   const int32_t zero_point = u8dist(rng);
   const float scale = scale_dist(rng);
   std::generate(input.begin(), input.end(), [&]() { return u8dist(rng); });
-  std::fill(operator_output.begin(), operator_output.end(), UINT8_C(0xA5));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT8_C(0xA5));
 
   std::vector<size_t> output_dims = dims;
   std::shuffle(output_dims.begin(), output_dims.end(), rng);
@@ -343,9 +339,7 @@ TEST_F(StaticReshapeTestUint8, matches_operator_api)
 
 TEST_F(StaticReshapeTestF16, matches_operator_api)
 {
-  std::generate(input.begin(), input.end(), [&]() { return fp16_ieee_from_fp32_value(f32dist(rng)); });
-  std::fill(operator_output.begin(), operator_output.end(), UINT16_C(0x7E00) /* NaN */);
-  std::fill(subgraph_output.begin(), subgraph_output.end(), UINT16_C(0x7E00) /* NaN */);
+  std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
 
   std::vector<size_t> output_dims = dims;
   std::shuffle(output_dims.begin(), output_dims.end(), rng);
@@ -402,8 +396,6 @@ TEST_F(StaticReshapeTestF16, matches_operator_api)
 TEST_F(StaticReshapeTestF32, matches_operator_api)
 {
   std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
-  std::fill(operator_output.begin(), operator_output.end(), nanf(""));
-  std::fill(subgraph_output.begin(), subgraph_output.end(), nanf(""));
 
   std::vector<size_t> output_dims = dims;
   std::shuffle(output_dims.begin(), output_dims.end(), rng);

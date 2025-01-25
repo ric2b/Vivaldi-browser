@@ -37,8 +37,13 @@ NSString* vlanguageSetting = @"vivaldi_setting_languages";
 // Image name for contents setting
 NSString* vContentsSetting = @"vivaldi_setting_contents";
 
+// Image name for share feedback
+NSString* vShareFeedbackSetting = @"vivaldi_setting_share_feedback";
 // Image name for about
 NSString* vAboutSetting  = @"vivaldi_setting_version";
 
 // Image name for toolbar menu
 NSString* vToolbarMenu  = @"toolbar_menu";
+
+// Image name for page zoom
+NSString* vPageZoomIcon = @"textformat.size";

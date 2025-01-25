@@ -138,7 +138,9 @@ def _replace_ast(destination: str, dest_ast: ast.Module, source: str,
     return result
 
 
-def copy_packages(source: str, destination: str, packages: List[str]) -> str:
+def copy_packages(source_content: str, destination_content: str,
+                  source_packages: List[str],
+                  destination_packages: List[str]) -> str:
     """Copies GCS packages from source to destination.
 
     Args:
@@ -149,49 +151,65 @@ def copy_packages(source: str, destination: str, packages: List[str]) -> str:
     Returns:
       Destination DEPS file content with packages copied.
     """
-    source_deps = _get_deps(ast.parse(source, mode='exec'))
-    for package in packages:
-        if package not in source_deps:
-            raise Exception('Package %s not found in source' % package)
-        dest_deps = _get_deps(ast.parse(destination, mode='exec'))
-        if package not in dest_deps:
-            raise Exception('Package %s not found in destination' % package)
-        destination = _replace_ast(
-            destination, _get_gcs_object_list_ast(dest_deps[package]), source,
-            _get_gcs_object_list_ast(source_deps[package]))
+    source_deps = _get_deps(ast.parse(source_content, mode='exec'))
+    for i in range(len(source_packages)):
+        source_package = source_packages[i]
+        destination_package = destination_packages[i]
+        if source_package not in source_deps:
+            raise Exception('Package %s not found in source' % source_package)
+        dest_deps = _get_deps(ast.parse(destination_content, mode='exec'))
+        if destination_package not in dest_deps:
+            raise Exception('Package %s not found in destination' %
+                            destination_package)
+        destination_content = _replace_ast(
+            destination_content,
+            _get_gcs_object_list_ast(dest_deps[destination_package]),
+            source_content,
+            _get_gcs_object_list_ast(source_deps[source_package]))
 
-    return destination
+    return destination_content
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source',
+    parser.add_argument('--source-deps',
                         required=True,
                         help='Source DEPS file where content will be copied '
                         'from')
-    parser.add_argument('--package',
+    parser.add_argument('--source-package',
                         action='append',
                         required=True,
                         help='List of DEPS packages to update')
-    parser.add_argument('--destination',
+    parser.add_argument('--destination-deps',
                         required=True,
                         help='Destination DEPS file, where content will be '
                         'saved')
+    parser.add_argument('--destination-package',
+                        action='append',
+                        required=True,
+                        help='List of DEPS packages to update')
     args = parser.parse_args()
 
-    if not args.package:
-        parser.error('No packages specified to roll, aborting...')
+    if not args.source_package:
+        parser.error('No source packages specified to roll, aborting...')
 
-    with open(args.source) as f:
+    if not args.destination_package:
+        parser.error('No destination packages specified to roll, aborting...')
+
+    if len(args.destination_package) != len(args.source_package):
+        parser.error('Source and destination packages must be of the same '
+                     'length, aborting...')
+
+    with open(args.source_deps) as f:
         source_content = f.read()
 
-    with open(args.destination) as f:
+    with open(args.destination_deps) as f:
         destination_content = f.read()
 
     new_content = copy_packages(source_content, destination_content,
-                                args.package)
+                                args.source_package, args.destination_package)
 
-    with open(args.destination, 'w') as f:
+    with open(args.destination_deps, 'w') as f:
         f.write(new_content)
 
     print('Run:')

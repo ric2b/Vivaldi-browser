@@ -54,14 +54,15 @@ const char kDataContentType[] = "Content-Type: application/octet-stream";
 std::unique_ptr<ConnectorDataPipeGetter> CreateFileDataPipeGetterBlocking(
     const std::string& boundary,
     const std::string& metadata,
-    const base::FilePath& path) {
+    const base::FilePath& path,
+    bool is_obfuscated) {
   // FLAG_WIN_SHARE_DELETE is necessary to allow the file to be renamed by the
   // user clicking "Open Now" without causing download errors.
   base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ |
                             base::File::FLAG_WIN_SHARE_DELETE);
 
-  return ConnectorDataPipeGetter::CreateMultipartPipeGetter(boundary, metadata,
-                                                            std::move(file));
+  return ConnectorDataPipeGetter::CreateMultipartPipeGetter(
+      boundary, metadata, std::move(file), is_obfuscated);
 }
 
 }  // namespace
@@ -91,6 +92,7 @@ MultipartUploadRequest::MultipartUploadRequest(
     const std::string& metadata,
     const base::FilePath& path,
     uint64_t file_size,
+    bool is_obfuscated,
     const net::NetworkTrafficAnnotationTag& traffic_annotation,
     Callback callback)
     : ConnectorUploadRequest(std::move(url_loader_factory),
@@ -98,6 +100,7 @@ MultipartUploadRequest::MultipartUploadRequest(
                              metadata,
                              path,
                              file_size,
+                             is_obfuscated,
                              traffic_annotation,
                              std::move(callback)),
       boundary_(net::GenerateMimeMultipartBoundary()),
@@ -159,12 +162,14 @@ void MultipartUploadRequest::SetRequestHeaders(
       data_size = data_size_;
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
   request->headers.SetHeader("X-Goog-Upload-Header-Content-Length",
                              base::NumberToString(data_size));
 
   if (!access_token_.empty()) {
+    LogAuthenticatedCookieResets(
+        *request, SafeBrowsingAuthenticatedEndpoint::kDeepScanning);
     SetAccessTokenAndClearCookieInResourceRequest(request, access_token_);
   }
   request->credentials_mode = network::mojom::CredentialsMode::kOmit;
@@ -191,7 +196,7 @@ void MultipartUploadRequest::SendRequest() {
       SendPageRequest(std::move(resource_request));
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 
@@ -285,7 +290,7 @@ void MultipartUploadRequest::CreateDatapipe(
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
       base::BindOnce(&CreateFileDataPipeGetterBlocking, boundary_, metadata_,
-                     path_),
+                     path_, is_obfuscated_),
       base::BindOnce(&MultipartUploadRequest::DataPipeCreatedCallback,
                      weak_factory_.GetWeakPtr(), std::move(request)));
 }
@@ -298,11 +303,6 @@ void MultipartUploadRequest::OnURLLoaderComplete(
   int response_code = 0;
   if (url_loader_->ResponseInfo() && url_loader_->ResponseInfo()->headers)
     response_code = url_loader_->ResponseInfo()->headers->response_code();
-
-  if (!access_token_.empty()) {
-    MaybeLogCookieReset(*url_loader_,
-                        SafeBrowsingAuthenticatedEndpoint::kDeepScanning);
-  }
 
   RetryOrFinish(url_loader_->NetError(), response_code,
                 std::move(response_body));
@@ -360,11 +360,12 @@ MultipartUploadRequest::CreateFileRequest(
     const std::string& metadata,
     const base::FilePath& path,
     uint64_t file_size,
+    bool is_obfuscated,
     const net::NetworkTrafficAnnotationTag& traffic_annotation,
     MultipartUploadRequest::Callback callback) {
   if (!factory_) {
     return std::make_unique<MultipartUploadRequest>(
-        url_loader_factory, base_url, metadata, path, file_size,
+        url_loader_factory, base_url, metadata, path, file_size, is_obfuscated,
         traffic_annotation, std::move(callback));
   }
 
@@ -373,8 +374,8 @@ MultipartUploadRequest::CreateFileRequest(
   // passed as the `get_data_result` argument.
   return factory_->CreateFileRequest(url_loader_factory, base_url, metadata,
                                      BinaryUploadService::Result::SUCCESS, path,
-                                     file_size, traffic_annotation,
-                                     std::move(callback));
+                                     file_size, is_obfuscated,
+                                     traffic_annotation, std::move(callback));
 }
 
 // static

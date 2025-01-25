@@ -68,6 +68,10 @@ typedef sigjmp_buf checkasm_context;
 #include "include/common/bitdepth.h"
 #include "include/common/intops.h"
 
+#if ARCH_ARM
+#include "src/arm/arm-arch.h"
+#endif
+
 int xor128_rand(void);
 #define rnd xor128_rand
 
@@ -254,7 +258,7 @@ void checkasm_simd_warmup(void);
  * handled orthogonally from integer parameters passed in GPR registers. */
 #define IGNORED_FP_ARGS 8
 #endif
-#ifdef HAVE_C11_GENERIC
+#if HAVE_C11_GENERIC
 #define clobber_type(arg) _Generic((void (*)(void*, arg))NULL,\
      void (*)(void*, int32_t ): clobber_mask |= 1 << mpos++,\
      void (*)(void*, uint32_t): clobber_mask |= 1 << mpos++,\
@@ -302,12 +306,12 @@ void checkasm_simd_warmup(void);
 /* Use a dummy argument, to offset the real parameters by 2, not only 1.
  * This makes sure that potential 8-byte-alignment of parameters is kept
  * the same even when the extra parameters have been removed. */
-void checkasm_checked_call_vfp(void *func, int dummy, ...);
+extern void (*checkasm_checked_call_ptr)(void *func, int dummy, ...);
 #define declare_new(ret, ...)\
     ret (*checked_call)(void *, int dummy, __VA_ARGS__,\
                         int, int, int, int, int, int, int, int,\
                         int, int, int, int, int, int, int) =\
-    (void *)checkasm_checked_call_vfp;
+    (void *)checkasm_checked_call_ptr;
 #define call_new(...)\
     (checkasm_set_signal_handler_state(1),\
      checked_call(func_new, 0, __VA_ARGS__, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0));\
@@ -330,6 +334,17 @@ void checkasm_stack_clobber(uint64_t clobber, ...);
                   7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0));\
     checkasm_set_signal_handler_state(0)
 #elif ARCH_RISCV
+#define declare_new(ret, ...)\
+    ret (*checked_call)(void *, int, int, int, int, int, int, int,\
+                        __VA_ARGS__, int, int, int, int, int, int, int, int,\
+                        int, int, int, int, int, int, int) =\
+    (void *)checkasm_checked_call;
+#define call_new(...)\
+    (checkasm_set_signal_handler_state(1),\
+     checked_call(func_new, 0, 0, 0, 0, 0, 0, 0, __VA_ARGS__,\
+                  7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0));\
+    checkasm_set_signal_handler_state(0)
+#elif ARCH_LOONGARCH
 #define declare_new(ret, ...)\
     ret (*checked_call)(void *, int, int, int, int, int, int, int,\
                         __VA_ARGS__, int, int, int, int, int, int, int, int,\

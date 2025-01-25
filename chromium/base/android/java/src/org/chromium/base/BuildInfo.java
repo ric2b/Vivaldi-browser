@@ -101,6 +101,9 @@ public class BuildInfo {
     /** Whether we're running on an Android Foldable OS device or not. */
     public final boolean isFoldable;
 
+    /** Whether we're running on an Android Desktop OS device or not. */
+    public final boolean isDesktop;
+
     /**
      * version of the FEATURE_VULKAN_DEQP_LEVEL, if available. Queried only on Android T or above
      */
@@ -116,7 +119,7 @@ public class BuildInfo {
     /** The versionCode of Play Services. Can be overridden in tests. */
     private String mGmsVersionCode;
 
-    private Object mCertLock = new Object();
+    private final Object mCertLock = new Object();
 
     private static class Holder {
         private static final BuildInfo INSTANCE = new BuildInfo();
@@ -176,6 +179,7 @@ public class BuildInfo {
             isFoldable ? "1" : "0",
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? Build.SOC_MANUFACTURER : "",
             isDebugApp() ? "1" : "0",
+            isDesktop ? "1" : "0",
         };
     }
 
@@ -385,16 +389,14 @@ public class BuildInfo {
             // should not have such a modification.
             isAutomotive = false;
         }
-        // NOTE(jarle@vivaldi.com) Vivaldi has it's own automotive mode for now.
-        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
-            this.isAutomotive = false;
-        else
-        this.isAutomotive = isAutomotive;
+        this.isAutomotive = isAutomotive || BuildConfig.IS_OEM_AUTOMOTIVE_BUILD; // Vivaldi AUTO-232
 
         // Detect whether device is foldable.
         this.isFoldable =
                 Build.VERSION.SDK_INT >= VERSION_CODES.R
                         && pm.hasSystemFeature(PackageManager.FEATURE_SENSOR_HINGE_ANGLE);
+
+        this.isDesktop = pm.hasSystemFeature(PackageManager.FEATURE_PC);
 
         int vulkanLevel = 0;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

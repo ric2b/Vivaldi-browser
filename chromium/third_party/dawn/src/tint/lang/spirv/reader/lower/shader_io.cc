@@ -31,7 +31,7 @@
 
 #include "src/tint/lang/core/ir/builder.h"
 #include "src/tint/lang/core/ir/module.h"
-#include "src/tint/lang/core/ir/transform/common/referenced_module_vars.h"
+#include "src/tint/lang/core/ir/referenced_module_vars.h"
 #include "src/tint/lang/core/ir/validator.h"
 
 namespace tint::spirv::reader::lower {
@@ -62,7 +62,7 @@ struct State {
     Hashset<core::ir::Var*, 4> output_variables{};
 
     /// The mapping from functions to their transitively referenced output variables.
-    core::ir::ReferencedModuleVars referenced_output_vars{
+    core::ir::ReferencedModuleVars<core::ir::Module> referenced_output_vars{
         ir, [](const core::ir::Var* var) {
             auto* view = var->Result(0)->Type()->As<core::type::MemoryView>();
             return view && view->AddressSpace() == core::AddressSpace::kOut;
@@ -280,16 +280,10 @@ struct State {
                     to_destroy.Push(lve);
                 },
                 [&](core::ir::Access* a) {
-                    if (!a->Indices().IsEmpty()) {
-                        // Remove the pointer from the source and destination type.
-                        a->SetOperand(core::ir::Access::kObjectOperandOffset, object);
-                        a->Result(0)->SetType(a->Result(0)->Type()->UnwrapPtr());
-                        ReplaceInputPointerUses(var, a->Result(0));
-                    } else {
-                        // Fold the access away and replace its uses.
-                        ReplaceInputPointerUses(var, a->Result(0));
-                        to_destroy.Push(a);
-                    }
+                    // Remove the pointer from the source and destination type.
+                    a->SetOperand(core::ir::Access::kObjectOperandOffset, object);
+                    a->Result(0)->SetType(a->Result(0)->Type()->UnwrapPtr());
+                    ReplaceInputPointerUses(var, a->Result(0));
                 },
                 TINT_ICE_ON_NO_MATCH);
         });
@@ -390,7 +384,7 @@ struct State {
 }  // namespace
 
 Result<SuccessType> ShaderIO(core::ir::Module& ir) {
-    auto result = ValidateAndDumpIfNeeded(ir, "ShaderIO transform");
+    auto result = ValidateAndDumpIfNeeded(ir, "spirv.ShaderIO");
     if (result != Success) {
         return result.Failure();
     }

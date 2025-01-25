@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.omnibox;
 
+import android.text.TextUtils;
+
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -17,6 +19,8 @@ import org.chromium.base.lifetime.Destroyable;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.omnibox.status.StatusProperties.StatusIconResource;
+import org.chromium.chrome.browser.omnibox.suggestions.CachedZeroSuggestionsManager;
+import org.chromium.chrome.browser.omnibox.suggestions.CachedZeroSuggestionsManager.SearchEngineMetadata;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileKeyedMap;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
@@ -47,6 +51,7 @@ public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserve
     private final @NonNull TemplateUrlService mTemplateUrlService;
     private final @NonNull FaviconHelper mFaviconHelper;
     private final int mSearchEngineLogoTargetSizePixels;
+    private SearchEngineMetadata mDefaultSearchEngineMetadata;
     private Boolean mNeedToCheckForSearchEnginePromo;
     private boolean mDoesDefaultSearchEngineHaveLogo;
     private @Nullable StatusIconResource mSearchEngineLogo;
@@ -90,6 +95,8 @@ public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserve
 
         mTemplateUrlService = TemplateUrlServiceFactory.getForProfile(profile);
         mTemplateUrlService.addObserver(this);
+        mDefaultSearchEngineMetadata = CachedZeroSuggestionsManager.readSearchEngineMetadata();
+
         onTemplateURLServiceChanged();
     }
 
@@ -114,23 +121,33 @@ public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserve
     @Override
     public void onTemplateURLServiceChanged() {
         mDoesDefaultSearchEngineHaveLogo = mTemplateUrlService.doesDefaultSearchEngineHaveLogo();
+        var templateUrl = mTemplateUrlService.getDefaultSearchEngineTemplateUrl();
+
+        if (BuildConfig.IS_VIVALDI) // Vivaldi Ref. VAB-9090
+            templateUrl = mTemplateUrlService.vivaldiGetDefaultSearchEngine(
+                    mIsOffTheRecord ?
+                           TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_PRIVATE :
+                           TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_MAIN);
+        // End Vivaldi
+
+        if (templateUrl == null) {
+            recordEvent(Events.FETCH_FAILED_NULL_URL);
+            return;
+        }
+
+        if (mDefaultSearchEngineMetadata == null
+                || !TextUtils.equals(
+                        mDefaultSearchEngineMetadata.keyword, templateUrl.getKeyword())) {
+            mDefaultSearchEngineMetadata = new SearchEngineMetadata(templateUrl.getKeyword());
+            CachedZeroSuggestionsManager.eraseCachedData();
+            CachedZeroSuggestionsManager.saveSearchEngineMetadata(mDefaultSearchEngineMetadata);
+        }
 
         if (mTemplateUrlService.isDefaultSearchEngineGoogle()) {
             mSearchEngineLogo = new StatusIconResource(R.drawable.ic_logo_googleg_20dp, 0);
         } else {
             mSearchEngineLogo = null;
             recordEvent(Events.FETCH_NON_GOOGLE_LOGO_REQUEST);
-
-            var templateUrl = mTemplateUrlService.getDefaultSearchEngineTemplateUrl();
-            if (BuildConfig.IS_VIVALDI) // Vivaldi Ref. VAB-9090
-                templateUrl = mTemplateUrlService.vivaldiGetDefaultSearchEngine(
-                        mIsOffTheRecord ?
-                                TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_PRIVATE :
-                                TemplateUrlService.DefaultSearchType.DEFAULT_SEARCH_MAIN);
-            if (templateUrl == null) {
-                recordEvent(Events.FETCH_FAILED_NULL_URL);
-                return;
-            }
 
             var logoUrl = new GURL(templateUrl.getURL()).getOrigin();
             // Vivaldi Ref. VAB-8763 Note(simonb@vivaldi.com) Gets saved Icon resource from Vivaldi.
@@ -238,7 +255,7 @@ public class SearchEngineUtils implements Destroyable, TemplateUrlServiceObserve
      * @param event The {@link Events} to be reported.
      */
     @VisibleForTesting
-    void recordEvent(@Events int event) {
+    static void recordEvent(@Events int event) {
         RecordHistogram.recordEnumeratedHistogram(
                 "AndroidSearchEngineLogo.Events", event, Events.MAX);
     }

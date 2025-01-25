@@ -14,17 +14,34 @@
 
 import m from 'mithril';
 import {TRACK_SHELL_WIDTH} from './css_constants';
-import {globals} from './globals';
 import {getMaxMajorTicks, generateTicks, TickType} from './gridline_helper';
 import {Size2D} from '../base/geom';
 import {Panel} from './panel_container';
 import {TimeScale} from '../base/time_scale';
 import {canvasClip} from '../base/canvas_utils';
+import {SearchOverviewTrack} from './search_overview_track';
+import {TraceImpl} from '../core/trace_impl';
+import {getOrCreate} from '../base/utils';
+
+// We want to create the overview track only once per trace, but this
+// class can be delete and re-instantiated when switching between pages via
+// the sidebar. So we cache the overview track and bind it to the lifetime of
+// the TraceImpl object.
+const trackTraceMap = new WeakMap<TraceImpl, SearchOverviewTrack>();
 
 // This is used to display the summary of search results.
 export class TickmarkPanel implements Panel {
   readonly kind = 'panel';
   readonly selectable = false;
+  private searchOverviewTrack: SearchOverviewTrack;
+
+  constructor(private readonly trace: TraceImpl) {
+    this.searchOverviewTrack = getOrCreate(
+      trackTraceMap,
+      trace,
+      () => new SearchOverviewTrack(trace),
+    );
+  }
 
   render(): m.Children {
     return m('.tickbar');
@@ -43,7 +60,7 @@ export class TickmarkPanel implements Panel {
   }
 
   private renderTrack(ctx: CanvasRenderingContext2D, size: Size2D): void {
-    const visibleWindow = globals.timeline.visibleWindow;
+    const visibleWindow = this.trace.timeline.visibleWindow;
     const timescale = new TimeScale(visibleWindow, {
       left: 0,
       right: size.width,
@@ -53,7 +70,7 @@ export class TickmarkPanel implements Panel {
     if (size.width > 0 && timespan.duration > 0n) {
       const maxMajorTicks = getMaxMajorTicks(size.width);
 
-      const offset = globals.timestampOffset();
+      const offset = this.trace.timeline.timestampOffset();
       const tickGen = generateTicks(timespan, maxMajorTicks, offset);
       for (const {type, time} of tickGen) {
         const px = Math.floor(timescale.timeToPx(time));
@@ -63,9 +80,6 @@ export class TickmarkPanel implements Panel {
       }
     }
 
-    const searchOverviewRenderer = globals.searchOverviewTrack;
-    if (searchOverviewRenderer) {
-      searchOverviewRenderer.render(ctx, size);
-    }
+    this.searchOverviewTrack.render(ctx, size);
   }
 }

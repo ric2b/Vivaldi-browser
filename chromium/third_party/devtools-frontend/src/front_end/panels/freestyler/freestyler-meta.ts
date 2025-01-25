@@ -4,7 +4,7 @@
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
-import type * as Root from '../../core/root/root.js';
+import * as Root from '../../core/root/root.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import type * as Freestyler from './freestyler.js';
@@ -14,34 +14,30 @@ import type * as Freestyler from './freestyler.js';
   * Temporary string that should not be translated
   * as they may change often during development.
   */
-const UIStringsTemp = {
+const UIStrings = {
   /**
-   * @description The title of the command menu action for showing the Freestyler panel.
+   * @description The title of the AI assistance panel.
    */
-  showAiAssistant: 'Show  AI assistant',
+  aiAssistance: 'AI assistance',
   /**
-   * @description The title of the AI assistant panel.
+   * @description The title of the command menu action for showing the AI assistance panel.
    */
-  aiAssistant: 'AI assistant',
+  showAiAssistance: 'Show AI assistance',
   /**
-   * @description The setting title to enable the freestyler via
+   * @description The setting title to enable the AI assistance via
    * the settings tab.
    */
-  enableFreestyler: 'Enable AI assistant',
+  enableAiAssistance: 'Enable AI assistance',
   /**
-   *@description Text of a tooltip to redirect to the AI assistant panel with
-   *the current element as context
+   *@description Text of a tooltip to redirect to the AI assistance panel with
+   * the current element as context
    */
-  askAiAssistant: 'Ask AI assistant',
+  askAi: 'Ask AI',
   /**
    * @description Message shown to the user if the DevTools locale is not
    * supported.
    */
-  wrongLocale: 'To use this feature, update your Language preference in DevTools Settings to English',
-  /**
-   * @description Message shown to the user if the age check is not successful.
-   */
-  ageRestricted: 'This feature is only available to users who are 18 years of age or older',
+  wrongLocale: 'To use this feature, set your language preference to English in DevTools settings',
   /**
    * @description Message shown to the user if the user's region is not
    * supported.
@@ -51,25 +47,18 @@ const UIStringsTemp = {
    * @description Message shown to the user if the enterprise policy does
    * not allow this feature.
    */
-  policyRestricted: 'Your organization turned off this feature. Contact your administrators for more information',
+  policyRestricted: 'This setting is managed by your administrator',
 };
 
-// TODO(nvitkov): b/346933425
-// const str_ = i18n.i18n.registerUIStrings('panels/freestyler/freestyler-meta.ts', UIStrings);
-// const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
-/* eslint-disable  rulesdir/l10n_i18nString_call_only_with_uistrings */
-const i18nLazyString = i18n.i18n.lockedLazyString;
-const i18nString = i18n.i18n.lockedString;
+const str_ = i18n.i18n.registerUIStrings('panels/freestyler/freestyler-meta.ts', UIStrings);
+const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
+const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
 
-const setting = 'freestyler-enabled';
+const setting = 'ai-assistance-enabled';
 
 function isLocaleRestricted(): boolean {
   const devtoolsLocale = i18n.DevToolsLocale.DevToolsLocale.instance();
   return !devtoolsLocale.locale.startsWith('en-');
-}
-
-function isAgeRestricted(config?: Root.Runtime.HostConfig): boolean {
-  return config?.aidaAvailability?.blockedByAge === true;
 }
 
 function isGeoRestricted(config?: Root.Runtime.HostConfig): boolean {
@@ -88,26 +77,37 @@ async function loadFreestylerModule(): Promise<typeof Freestyler> {
   return loadedFreestylerModule;
 }
 
-function isFeatureAvailable(config?: Root.Runtime.HostConfig): boolean {
-  return (config?.aidaAvailability?.enabled && config?.devToolsFreestylerDogfood?.enabled) === true;
+function isFreestylerFeatureAvailable(config?: Root.Runtime.HostConfig): boolean {
+  return (config?.aidaAvailability?.enabled && config?.devToolsFreestyler?.enabled) === true;
 }
 
-function isDrJonesFeatureAvailable(config?: Root.Runtime.HostConfig): boolean {
-  return (config?.aidaAvailability?.enabled && config?.devToolsFreestylerDogfood?.enabled &&
-          config?.devToolsExplainThisResourceDogfood?.enabled) === true;
+function isDrJonesNetworkFeatureAvailable(config?: Root.Runtime.HostConfig): boolean {
+  return (config?.aidaAvailability?.enabled && (config?.devToolsAiAssistanceNetworkAgent?.enabled)) === true;
+}
+
+function isDrJonesPerformanceFeatureAvailable(config?: Root.Runtime.HostConfig): boolean {
+  return (config?.aidaAvailability?.enabled && (config?.devToolsAiAssistancePerformanceAgent?.enabled)) === true;
+}
+
+function isDrJonesFileFeatureAvailable(config?: Root.Runtime.HostConfig): boolean {
+  return (config?.aidaAvailability?.enabled && (config?.devToolsAiAssistanceFileAgent?.enabled)) === true;
+}
+
+function isAnyFeatureAvailable(config?: Root.Runtime.HostConfig): boolean {
+  return isFreestylerFeatureAvailable(config) || isDrJonesNetworkFeatureAvailable(config) ||
+      isDrJonesPerformanceFeatureAvailable(config) || isDrJonesFileFeatureAvailable(config);
 }
 
 UI.ViewManager.registerViewExtension({
   location: UI.ViewManager.ViewLocationValues.DRAWER_VIEW,
   id: 'freestyler',
-  commandPrompt: i18nLazyString(UIStringsTemp.showAiAssistant),
-  title: i18nLazyString(UIStringsTemp.aiAssistant),
+  commandPrompt: i18nLazyString(UIStrings.showAiAssistance),
+  title: i18nLazyString(UIStrings.aiAssistance),
   order: 10,
   isPreviewFeature: true,
   persistence: UI.ViewManager.ViewPersistence.CLOSEABLE,
   hasToolbar: false,
-  condition: config => isFeatureAvailable(config) && !isPolicyRestricted(config) &&
-      Common.Settings.Settings.instance().moduleSetting(setting).get(),
+  condition: config => isAnyFeatureAvailable(config) && !isPolicyRestricted(config),
   async loadView() {
     const Freestyler = await loadFreestylerModule();
     return Freestyler.FreestylerPanel.instance();
@@ -115,25 +115,22 @@ UI.ViewManager.registerViewExtension({
 });
 
 Common.Settings.registerSettingExtension({
-  category: Common.Settings.SettingCategory.GLOBAL,
+  category: Common.Settings.SettingCategory.NONE,
   settingName: setting,
   settingType: Common.Settings.SettingType.BOOLEAN,
-  title: i18nLazyString(UIStringsTemp.enableFreestyler),
-  defaultValue: isFeatureAvailable,
-  reloadRequired: true,
-  condition: isFeatureAvailable,
+  title: i18nLazyString(UIStrings.enableAiAssistance),
+  defaultValue: false,
+  reloadRequired: false,
+  condition: isAnyFeatureAvailable,
   disabledCondition: config => {
     if (isLocaleRestricted()) {
-      return {disabled: true, reason: i18nString(UIStringsTemp.wrongLocale)};
-    }
-    if (isAgeRestricted(config)) {
-      return {disabled: true, reason: i18nString(UIStringsTemp.ageRestricted)};
+      return {disabled: true, reason: i18nString(UIStrings.wrongLocale)};
     }
     if (isGeoRestricted(config)) {
-      return {disabled: true, reason: i18nString(UIStringsTemp.geoRestricted)};
+      return {disabled: true, reason: i18nString(UIStrings.geoRestricted)};
     }
     if (isPolicyRestricted(config)) {
-      return {disabled: true, reason: i18nString(UIStringsTemp.policyRestricted)};
+      return {disabled: true, reason: i18nString(UIStrings.policyRestricted)};
     }
 
     return {disabled: false};
@@ -141,18 +138,47 @@ Common.Settings.registerSettingExtension({
 });
 
 UI.ActionRegistration.registerActionExtension({
-  actionId: 'freestyler.element-panel-context',
+  actionId: 'freestyler.elements-floating-button',
   contextTypes(): [] {
     return [];
   },
-  setting,
+  experiment: Root.Runtime.ExperimentName.FLOATING_ENTRY_POINTS_FOR_AI_ASSISTANCE,
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
-  title: i18nLazyString(UIStringsTemp.askAiAssistant),
+  title: i18nLazyString(UIStrings.askAi),
   async loadActionDelegate() {
     const Freestyler = await loadFreestylerModule();
     return new Freestyler.ActionDelegate();
   },
-  condition: config => isFeatureAvailable(config) && !isPolicyRestricted(config),
+  condition: config => isFreestylerFeatureAvailable(config) && !isPolicyRestricted(config),
+});
+
+UI.ActionRegistration.registerActionExtension({
+  actionId: 'freestyler.element-panel-context',
+  contextTypes(): [] {
+    return [];
+  },
+  category: UI.ActionRegistration.ActionCategory.GLOBAL,
+  title: i18nLazyString(UIStrings.askAi),
+  async loadActionDelegate() {
+    const Freestyler = await loadFreestylerModule();
+    return new Freestyler.ActionDelegate();
+  },
+  condition: config => isFreestylerFeatureAvailable(config) && !isPolicyRestricted(config),
+});
+
+UI.ActionRegistration.registerActionExtension({
+  actionId: 'drjones.network-floating-button',
+  contextTypes(): [] {
+    return [];
+  },
+  experiment: Root.Runtime.ExperimentName.FLOATING_ENTRY_POINTS_FOR_AI_ASSISTANCE,
+  category: UI.ActionRegistration.ActionCategory.GLOBAL,
+  title: i18nLazyString(UIStrings.askAi),
+  async loadActionDelegate() {
+    const Freestyler = await loadFreestylerModule();
+    return new Freestyler.ActionDelegate();
+  },
+  condition: config => isDrJonesNetworkFeatureAvailable(config) && !isPolicyRestricted(config),
 });
 
 UI.ActionRegistration.registerActionExtension({
@@ -160,12 +186,54 @@ UI.ActionRegistration.registerActionExtension({
   contextTypes(): [] {
     return [];
   },
-  setting,
   category: UI.ActionRegistration.ActionCategory.GLOBAL,
-  title: i18nLazyString(UIStringsTemp.askAiAssistant),
+  title: i18nLazyString(UIStrings.askAi),
   async loadActionDelegate() {
     const Freestyler = await loadFreestylerModule();
     return new Freestyler.ActionDelegate();
   },
-  condition: config => isDrJonesFeatureAvailable(config) && !isPolicyRestricted(config),
+  condition: config => isDrJonesNetworkFeatureAvailable(config) && !isPolicyRestricted(config),
+});
+
+UI.ActionRegistration.registerActionExtension({
+  actionId: 'drjones.performance-panel-context',
+  contextTypes(): [] {
+    return [];
+  },
+  category: UI.ActionRegistration.ActionCategory.GLOBAL,
+  title: i18nLazyString(UIStrings.askAi),
+  async loadActionDelegate() {
+    const Freestyler = await loadFreestylerModule();
+    return new Freestyler.ActionDelegate();
+  },
+  condition: config => isDrJonesPerformanceFeatureAvailable(config) && !isPolicyRestricted(config),
+});
+
+UI.ActionRegistration.registerActionExtension({
+  actionId: 'drjones.sources-floating-button',
+  contextTypes(): [] {
+    return [];
+  },
+  experiment: Root.Runtime.ExperimentName.FLOATING_ENTRY_POINTS_FOR_AI_ASSISTANCE,
+  category: UI.ActionRegistration.ActionCategory.GLOBAL,
+  title: i18nLazyString(UIStrings.askAi),
+  async loadActionDelegate() {
+    const Freestyler = await loadFreestylerModule();
+    return new Freestyler.ActionDelegate();
+  },
+  condition: config => isDrJonesFileFeatureAvailable(config) && !isPolicyRestricted(config),
+});
+
+UI.ActionRegistration.registerActionExtension({
+  actionId: 'drjones.sources-panel-context',
+  contextTypes() {
+    return [];
+  },
+  category: UI.ActionRegistration.ActionCategory.GLOBAL,
+  title: i18nLazyString(UIStrings.askAi),
+  async loadActionDelegate() {
+    const Freestyler = await loadFreestylerModule();
+    return new Freestyler.ActionDelegate();
+  },
+  condition: config => isDrJonesFileFeatureAvailable(config) && !isPolicyRestricted(config),
 });

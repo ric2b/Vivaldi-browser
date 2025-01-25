@@ -159,7 +159,6 @@ void ImeService::RunInMainSequence(ImeSequencedTask task, int task_id) {
 
 bool ImeService::IsFeatureEnabled(const char* feature_name) {
   static const base::Feature* kConsideredFeatures[] = {
-      &features::kAssistEmojiEnhanced,
       &features::kAssistMultiWord,
       &features::kAutocorrectParamsTuning,
       &features::kFirstPartyVietnameseInput,
@@ -250,8 +249,8 @@ void ImeService::SimpleDownloadFinishedV2(SimpleDownloadCallbackV2 callback,
   }
 }
 
-const MojoSystemThunks* ImeService::GetMojoSystemThunks() {
-  return MojoEmbedderGetSystemThunks32();
+const void* ImeService::Unused4() {
+  return nullptr;
 }
 
 const MojoSystemThunks2* ImeService::GetMojoSystemThunks2() {

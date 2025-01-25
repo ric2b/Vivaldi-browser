@@ -40,19 +40,19 @@ class CDEFBlockTest : public ::testing::TestWithParam<cdef_dir_param_t> {
  public:
   ~CDEFBlockTest() override = default;
   void SetUp() override {
-    cdef = GET_PARAM(0);
-    ref_cdef = GET_PARAM(1);
-    bsize = GET_PARAM(2);
-    boundary = GET_PARAM(3);
-    depth = GET_PARAM(4);
+    cdef_ = GET_PARAM(0);
+    ref_cdef_ = GET_PARAM(1);
+    bsize_ = GET_PARAM(2);
+    boundary_ = GET_PARAM(3);
+    depth_ = GET_PARAM(4);
   }
 
  protected:
-  BLOCK_SIZE bsize;
-  int boundary;
-  int depth;
-  CdefFilterBlockFunctions cdef;
-  CdefFilterBlockFunctions ref_cdef;
+  BLOCK_SIZE bsize_;
+  int boundary_;
+  int depth_;
+  CdefFilterBlockFunctions cdef_;
+  CdefFilterBlockFunctions ref_cdef_;
 };
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(CDEFBlockTest);
 
@@ -215,13 +215,13 @@ class CDEFFindDirTest : public ::testing::TestWithParam<find_dir_param_t> {
  public:
   ~CDEFFindDirTest() override = default;
   void SetUp() override {
-    finddir = GET_PARAM(0);
-    ref_finddir = GET_PARAM(1);
+    finddir_ = GET_PARAM(0);
+    ref_finddir_ = GET_PARAM(1);
   }
 
  protected:
-  find_dir_t finddir;
-  find_dir_t ref_finddir;
+  find_dir_t finddir_;
+  find_dir_t ref_finddir_;
 };
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(CDEFFindDirTest);
 
@@ -304,13 +304,13 @@ class CDEFFindDirDualTest
  public:
   ~CDEFFindDirDualTest() override = default;
   void SetUp() override {
-    finddir = GET_PARAM(0);
-    ref_finddir = GET_PARAM(1);
+    finddir_ = GET_PARAM(0);
+    ref_finddir_ = GET_PARAM(1);
   }
 
  protected:
-  find_dir_dual_t finddir;
-  find_dir_dual_t ref_finddir;
+  find_dir_dual_t finddir_;
+  find_dir_dual_t ref_finddir_;
 };
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(CDEFFindDirDualTest);
 
@@ -575,35 +575,35 @@ GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(CDEFCopyRect16to16Test);
 #endif  // CONFIG_AV1_HIGHBITDEPTH
 
 TEST_P(CDEFBlockTest, TestSIMDNoMismatch) {
-  test_cdef(bsize, 1, cdef, ref_cdef, boundary, depth);
+  test_cdef(bsize_, 1, cdef_, ref_cdef_, boundary_, depth_);
 }
 
 TEST_P(CDEFBlockHighbdTest, TestSIMDHighbdNoMismatch) {
-  test_cdef(bsize, 1, cdef, ref_cdef, boundary, depth);
+  test_cdef(bsize_, 1, cdef_, ref_cdef_, boundary_, depth_);
 }
 
 TEST_P(CDEFSpeedTest, DISABLED_TestSpeed) {
-  test_cdef_speed(bsize, 4, cdef, ref_cdef, boundary, depth);
+  test_cdef_speed(bsize_, 4, cdef_, ref_cdef_, boundary_, depth_);
 }
 
 TEST_P(CDEFSpeedHighbdTest, DISABLED_TestSpeed) {
-  test_cdef_speed(bsize, 4, cdef, ref_cdef, boundary, depth);
+  test_cdef_speed(bsize_, 4, cdef_, ref_cdef_, boundary_, depth_);
 }
 
 TEST_P(CDEFFindDirTest, TestSIMDNoMismatch) {
-  test_finddir(finddir, ref_finddir);
+  test_finddir(finddir_, ref_finddir_);
 }
 
 TEST_P(CDEFFindDirSpeedTest, DISABLED_TestSpeed) {
-  test_finddir_speed(finddir, ref_finddir);
+  test_finddir_speed(finddir_, ref_finddir_);
 }
 
 TEST_P(CDEFFindDirDualTest, TestSIMDNoMismatch) {
-  test_finddir_dual(finddir, ref_finddir);
+  test_finddir_dual(finddir_, ref_finddir_);
 }
 
 TEST_P(CDEFFindDirDualSpeedTest, DISABLED_TestSpeed) {
-  test_finddir_dual_speed(finddir, ref_finddir);
+  test_finddir_dual_speed(finddir_, ref_finddir_);
 }
 
 TEST_P(CDEFCopyRect8to16Test, TestSIMDNoMismatch) {

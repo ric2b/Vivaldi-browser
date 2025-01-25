@@ -8,7 +8,6 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/strings/sys_string_conversions.h"
-#import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/tracker.h"
 #import "components/omnibox/browser/location_bar_model_impl.h"
 #import "components/omnibox/browser/omnibox_edit_model.h"
@@ -33,7 +32,6 @@
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/infobars/model/infobar_metrics_recorder.h"
 #import "ios/chrome/browser/lens_overlay/coordinator/lens_overlay_availability.h"
-#import "ios/chrome/browser/lens_overlay/ui/lens_overlay_entrypoint_view.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_constants.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_consumer.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_mediator.h"
@@ -129,7 +127,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 @property(nonatomic, strong) LocationBarMediator* mediator;
 @property(nonatomic, strong) LocationBarSteadyViewMediator* steadyViewMediator;
 @property(nonatomic, strong) LocationBarViewController* viewController;
-@property(nonatomic, readonly) ChromeBrowserState* browserState;
+@property(nonatomic, readonly) ProfileIOS* profile;
 @property(nonatomic, readonly) WebStateList* webStateList;
 
 // Tracks calls in progress to -cancelOmniboxEdit to avoid calling it from
@@ -146,8 +144,8 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
 #pragma mark - Accessors
 
-- (ChromeBrowserState*)browserState {
-  return self.browser ? self.browser->GetBrowserState() : nullptr;
+- (ProfileIOS*)profile {
+  return self.browser ? self.browser->GetProfile() : nullptr;
 }
 
 - (WebStateList*)webStateList {
@@ -178,7 +176,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
       startDispatchingToTarget:self
                    forProtocol:@protocol(LoadQueryCommands)];
 
-  BOOL isIncognito = self.browserState->IsOffTheRecord();
+  BOOL isIncognito = self.profile->IsOffTheRecord();
 
   self.viewController = [[LocationBarViewController alloc] init];
   self.viewController.incognito = isIncognito;
@@ -188,8 +186,11 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   self.viewController.dispatcher =
       static_cast<id<ActivityServiceCommands, ApplicationCommands,
                      PopupMenuCommands, // Vivaldi
-                     LoadQueryCommands, OmniboxCommands>>(
+                     LoadQueryCommands, LensOverlayCommands, OmniboxCommands>>(
           self.browser->GetCommandDispatcher());
+  self.viewController.tracker =
+      feature_engagement::TrackerFactory::GetForProfile(
+          self.browser->GetProfile());
   self.viewController.voiceSearchEnabled =
       ios::provider::IsVoiceSearchEnabled();
   self.viewController.layoutGuideCenter =
@@ -201,7 +202,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   _locationBar = std::make_unique<WebLocationBarImpl>(self);
   _locationBar->SetURLLoader(self);
   _locationBarModelDelegate.reset(new LocationBarModelDelegateIOS(
-      self.browser->GetWebStateList(), self.browserState));
+      self.browser->GetWebStateList(), self.profile));
   _locationBarModel = std::make_unique<LocationBarModelImpl>(
       _locationBarModelDelegate.get(), kMaxURLDisplayChars);
 
@@ -209,10 +210,10 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
       initWithBaseViewController:nil
                          browser:self.browser
                    omniboxClient:std::make_unique<ChromeOmniboxClientIOS>(
-                                     _locationBar.get(), self.browserState,
+                                     _locationBar.get(), self.profile,
                                      feature_engagement::TrackerFactory::
-                                         GetForBrowserState(
-                                             self.browserState))];
+                                         GetForProfile(self.profile))
+                   isLensOverlay:NO];
   self.omniboxCoordinator.focusDelegate = self.delegate;
 
   self.omniboxCoordinator.presenterDelegate = self.popupPresenterDelegate;
@@ -246,19 +247,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
         didMoveToParentViewController:self.viewController];
   }
 
-  if (!isIncognito && IsLensOverlayAvailable()) {
-    UIButton* lensOverlayEntrypoint = LensOverlay::NewEntrypointButton();
-
-    [LayoutGuideCenterForBrowser(self.browser)
-        referenceView:lensOverlayEntrypoint
-            underName:kLensOverlayEntrypointGuide];
-    [lensOverlayEntrypoint addTarget:self
-                              action:@selector(openLensOverlay)
-                    forControlEvents:UIControlEventTouchUpInside];
-
-    [self.viewController setPlaceholderView:lensOverlayEntrypoint];
-  }
-
   // Create button factory that wil be used by the ViewController to get
   // BadgeButtons for a BadgeType.
   BadgeButtonFactory* buttonFactory = [[BadgeButtonFactory alloc] init];
@@ -289,9 +277,9 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   _badgeFullscreenUIUpdater = std::make_unique<FullscreenUIUpdater>(
       fullscreenController, self.badgeViewController);
 
-  self.mediator = [[LocationBarMediator alloc] init];
+  self.mediator = [[LocationBarMediator alloc] initWithIsIncognito:isIncognito];
   self.mediator.templateURLService =
-      ios::TemplateURLServiceFactory::GetForBrowserState(self.browserState);
+      ios::TemplateURLServiceFactory::GetForProfile(self.profile);
   self.mediator.consumer = self.viewController;
   self.mediator.webStateList = self.webStateList;
 
@@ -302,6 +290,9 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
       OverlayPresenter::FromBrowser(self.browser,
                                     OverlayModality::kWebContentArea);
   self.steadyViewMediator.consumer = self;
+  self.steadyViewMediator.tracker =
+      feature_engagement::TrackerFactory::GetForProfile(
+          self.browser->GetProfile());
 
   _omniboxFullscreenUIUpdater = std::make_unique<FullscreenUIUpdater>(
       fullscreenController, self.viewController);
@@ -401,7 +392,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
     destination_url_entered_without_scheme:
         (bool)destination_url_entered_without_scheme {
   if (url.SchemeIs(url::kJavaScriptScheme)) {
-    LoadJavaScriptURL(url, self.browserState,
+    LoadJavaScriptURL(url, self.profile,
                       self.webStateList->GetActiveWebState());
   } else {
     // TODO(crbug.com/40550038): Is it ok to call `cancelOmniboxEdit` after
@@ -415,7 +406,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
     }
     NSMutableDictionary<NSString*, NSString*>* combinedExtraHeaders =
         [web_navigation_util::VariationHeadersForURL(
-            url, self.browserState->IsOffTheRecord()) mutableCopy];
+            url, self.profile->IsOffTheRecord()) mutableCopy];
     [combinedExtraHeaders addEntriesFromDictionary:web_params.extra_headers];
     web_params.extra_headers = [combinedExtraHeaders copy];
     UrlLoadParams params = UrlLoadParams::InCurrentTab(web_params);
@@ -432,15 +423,11 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 }
 
 - (void)focusOmnibox {
-#if !defined(__IPHONE_16_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_16_0
-  // Dismiss the edit menu.
-  [[UIMenuController sharedMenuController] hideMenu];
-#endif
 
   // When the NTP and fakebox are visible, make the fakebox animates into place
   // before focusing the omnibox.
   if (IsVisibleURLNewTabPage([self webState]) &&
-      !self.browserState->IsOffTheRecord()) {
+      !self.profile->IsOffTheRecord()) {
 
     if (IsVivaldiRunning()) {
       [self.omniboxCoordinator focusOmnibox];
@@ -483,9 +470,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
 - (void)locationBarCopyTapped {
   StoreURLInPasteboard(self.webState->GetVisibleURL());
-  id<HelpCommands> helpHandler =
-      HandlerForProtocol(self.browser->GetCommandDispatcher(), HelpCommands);
-  [helpHandler presentInProductHelpWithType:InProductHelpType::kShareButton];
 }
 
 - (void)locationBarRequestScribbleTargetFocus {
@@ -493,26 +477,25 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 }
 
 - (void)recordShareButtonPressed {
-  if (!self.browserState) {
+  if (!self.profile) {
     return;
   }
 
   base::UmaHistogramEnumeration(
       "iOS.LocationBar.ShareButton.PerProfileType",
-      profile_metrics::GetBrowserProfileType(self.browserState));
+      profile_metrics::GetBrowserProfileType(self.profile));
 }
 
 - (void)locationBarVisitCopyLinkTapped {
   default_browser::NotifyOmniboxURLCopyPasteAndNavigate(
-      self.browserState->IsOffTheRecord(),
-      feature_engagement::TrackerFactory::GetForBrowserState(self.browserState),
+      self.profile->IsOffTheRecord(),
+      feature_engagement::TrackerFactory::GetForProfile(self.profile),
       self.browser->GetSceneState());
 }
 
 - (void)locationBarSearchCopiedTextTapped {
   default_browser::NotifyOmniboxTextCopyPasteAndNavigate(
-      feature_engagement::TrackerFactory::GetForBrowserState(
-          self.browserState));
+      feature_engagement::TrackerFactory::GetForProfile(self.profile));
 }
 
 - (void)searchCopiedImage {
@@ -555,6 +538,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   [self.omniboxCoordinator updateOmniboxState];
   [self.viewController updateLocationText:text clipTail:clipTail];
   [self.viewController updateForNTP:NO];
+  [self.mediator locationUpdated];
 }
 
 - (void)updateLocationIcon:(UIImage*)icon
@@ -585,6 +569,14 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   [self.viewController setLoadingState:[self isPageLoading]];
   [self.steadyViewConsumer updateLocationShareable:shareable];
   // End Vivaldi
+}
+
+- (void)attemptShowingLensOverlayIPH {
+  [self.viewController attemptShowingLensOverlayIPH];
+}
+
+- (void)recordLensOverlayAvailability {
+  [self.viewController recordLensOverlayAvailability];
 }
 
 #pragma mark - URLDragDataSource
@@ -618,8 +610,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
       nullptr, &searchURL);
   if (type != metrics::OmniboxInputType::URL || !searchURL.is_valid()) {
     searchURL = GetDefaultSearchURLForSearchTerms(
-        ios::TemplateURLServiceFactory::GetForBrowserState(self.browserState),
-        query);
+        ios::TemplateURLServiceFactory::GetForProfile(self.profile), query);
   }
   if (searchURL.is_valid()) {
     // It is necessary to include PAGE_TRANSITION_FROM_ADDRESS_BAR in the
@@ -673,25 +664,13 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   } else {
     web::NavigationManager::WebLoadParams webParams =
         ImageSearchParamGenerator::LoadParamsForImage(
-            image, ios::TemplateURLServiceFactory::GetForBrowserState(
-                       browser->GetBrowserState()));
+            image, ios::TemplateURLServiceFactory::GetForProfile(
+                       browser->GetProfile()));
     UrlLoadParams params = UrlLoadParams::InCurrentTab(webParams);
     UrlLoadingBrowserAgent::FromBrowser(browser)->Load(params);
   }
 
   [self cancelOmniboxEdit];
-}
-
-// Creates and shows the lens overlay UI.
-- (void)openLensOverlay {
-  feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
-  tracker->NotifyEvent(feature_engagement::events::kLensOverlayEntrypointUsed);
-  [HandlerForProtocol(self.browser->GetCommandDispatcher(), LensOverlayCommands)
-      createAndShowLensUI:YES
-               entrypoint:LensOverlayEntrypoint::kLocationBar
-               completion:nil];
 }
 
 #pragma mark - VIVALDI

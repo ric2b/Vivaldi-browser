@@ -35,9 +35,9 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/buildflags.h"
-#include "components/saved_tab_groups/features.h"
-#include "components/saved_tab_groups/saved_tab_group.h"
-#include "components/saved_tab_groups/types.h"
+#include "components/saved_tab_groups/public/features.h"
+#include "components/saved_tab_groups/public/saved_tab_group.h"
+#include "components/saved_tab_groups/public/types.h"
 #include "components/sessions/content/content_live_tab.h"
 #include "components/sessions/content/content_platform_specific_tab_data.h"
 #include "components/sessions/core/live_tab_context.h"
@@ -48,15 +48,12 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/session_storage_namespace.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/base/window_open_disposition.h"
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
 #include "chrome/browser/sessions/tab_loader.h"
 #endif
-
-#if defined(TOOLKIT_VIEWS)
-#include "chrome/browser/ui/side_search/side_search_utils.h"
-#endif  // defined(TOOLKIT_VIEWS)
 
 #include "app/vivaldi_apptools.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
@@ -73,14 +70,16 @@ namespace {
 // app window in those cases.
 bool ShouldCreateAppWindowForAppName(Profile* profile,
                                      const std::string& app_name) {
-  if (app_name.empty())
+  if (app_name.empty()) {
     return false;
+  }
 
   // Only need to check that the app is installed if |app_name| is for a
   // platform app or web app. (|app_name| could also be for a devtools window.)
   const std::string app_id = web_app::GetAppIdFromApplicationName(app_name);
-  if (app_id.empty())
+  if (app_id.empty()) {
     return true;
+  }
 
   return apps::IsInstalledApp(profile, app_id);
 }
@@ -128,19 +127,7 @@ sessions::LiveTab* BrowserLiveTabContext::GetActiveLiveTab() const {
 
 std::map<std::string, std::string> BrowserLiveTabContext::GetExtraDataForTab(
     int index) const {
-  std::map<std::string, std::string> extra_data;
-
-#if defined(TOOLKIT_VIEWS)
-  if (IsSideSearchEnabled(browser_->profile())) {
-    std::optional<std::pair<std::string, std::string>> side_search_data =
-        side_search::MaybeGetSideSearchTabRestoreData(
-            browser_->tab_strip_model()->GetWebContentsAt(index));
-    if (side_search_data.has_value())
-      extra_data.insert(side_search_data.value());
-  }
-#endif  // defined(TOOLKIT_VIEWS)
-
-  return extra_data;
+  return std::map<std::string, std::string>();
 }
 
 std::map<std::string, std::string>
@@ -204,7 +191,7 @@ const gfx::Rect BrowserLiveTabContext::GetRestoredBounds() const {
   return browser_->window()->GetRestoredBounds();
 }
 
-ui::WindowShowState BrowserLiveTabContext::GetRestoredState() const {
+ui::mojom::WindowShowState BrowserLiveTabContext::GetRestoredState() const {
   return browser_->window()->GetRestoredState();
 }
 
@@ -251,7 +238,7 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
         tab.extension_app_id, group_id, select, tab.pinned, base::TimeTicks(),
         base::Time(), storage_namespace, tab.user_agent_override,
         tab.extra_data,
-        /*from_session_restore=*/false, /*is_active_browser=*/std::nullopt,
+        /*from_session_restore=*/vivaldi::IsVivaldiRunning(), /*is_active_browser=*/std::nullopt,
         viv_page_action_overrides, viv_ext_data);
 
     if (is_grouped_tab_unsaved || group_deleted_from_model) {
@@ -261,7 +248,7 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
       // Save the group if it was not saved.
       if (!tab_group_service->GetGroup(group_id.value()).has_value() &&
           tab_groups::IsTabGroupsSaveV2Enabled()) {
-        tab_group_service->AddGroup(
+        tab_group_service->SaveGroup(
             tab_groups::SavedTabGroupUtils::CreateSavedTabGroupFromLocalId(
                 tab.group.value()));
       }
@@ -375,7 +362,7 @@ sessions::LiveTabContext* BrowserLiveTabContext::Create(
     sessions::SessionWindow::WindowType type,
     const std::string& app_name,
     const gfx::Rect& bounds,
-    ui::WindowShowState show_state,
+    ui::mojom::WindowShowState show_state,
     const std::string& workspace,
     const std::string& user_title,
     const std::map<std::string, std::string>& extra_data,

@@ -29,7 +29,7 @@ FakeClock::FakeClock(Clock::time_point start_time)
 FakeClock::~FakeClock() {
   OSP_CHECK_EQ(std::this_thread::get_id(), control_thread_id_);
   OSP_CHECK(task_runners_.empty());
-  // Set |now_| to kInvalid to flag that this FakeClock has been destroyed.
+  // Set `now_` to kInvalid to flag that this FakeClock has been destroyed.
   now_.store(kInvalid, std::memory_order_release);
 }
 

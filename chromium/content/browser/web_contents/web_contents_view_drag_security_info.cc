@@ -53,6 +53,12 @@ bool WebContentsViewDragSecurityInfo::IsImageAccessibleFromFrame() const {
 // explicit user intent.
 bool WebContentsViewDragSecurityInfo::IsValidDragTarget(
     RenderWidgetHostImpl* target_rwh) const {
+
+  // note(ondrej@vivaldi): VB-106861
+  if (!target_rwh) {
+    return false;
+  }
+
   // `is_initiated_` is false when the drag started outside of the browser or
   // from a different top-level WebContents. The drag is allowed if that is the
   // case.
@@ -74,7 +80,7 @@ bool WebContentsViewDragSecurityInfo::IsValidDragTarget(
       }
       // WebViewGuests are top-level WebContents so allow dragging between
       // them.
-      if (source_web_contents->GetBrowserPluginGuest() &&
+      if (source_web_contents && source_web_contents->GetBrowserPluginGuest() &&
           target_web_contents->GetBrowserPluginGuest()) {
         return true;
       }

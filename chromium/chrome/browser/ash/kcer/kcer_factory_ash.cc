@@ -14,9 +14,6 @@
 #include "base/check_is_test.h"
 #include "base/feature_list.h"
 #include "base/task/bind_post_task.h"
-#include "chrome/browser/ash/crosapi/chaps_service_ash.h"
-#include "chrome/browser/ash/crosapi/crosapi_ash.h"
-#include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/net/nss_service.h"
 #include "chrome/browser/net/nss_service_factory.h"
@@ -249,19 +246,7 @@ void KcerFactoryAsh::RegisterProfilePrefs(
 base::WeakPtr<Kcer> KcerFactoryAsh::GetKcerImpl(Profile* profile) {
   if (ash::IsSigninBrowserContext(profile) ||
       ash::IsLockScreenBrowserContext(profile)) {
-    if (ash::switches::IsSigninFrameClientCertsEnabled()) {
-      // Sign-in and lock screen profiles should only have access to the device
-      // token.
-      return ExtraInstances::GetDeviceKcer();
-    } else {
-      return ExtraInstances::GetEmptyKcer();
-    }
-  }
-
-  if (ash::IsLockScreenAppBrowserContext(profile)) {
-    // Returning an empty Kcer here is not a strict requirement, but seem to be
-    // the status quo for now.
-    return ExtraInstances::GetEmptyKcer();
+    return ExtraInstances::GetDeviceKcer();
   }
 
   if (!ash::IsUserBrowserContext(profile)) {

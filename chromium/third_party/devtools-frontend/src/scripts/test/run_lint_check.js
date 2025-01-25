@@ -11,6 +11,15 @@ const {extname, join} = require('path');
 const globby = require('globby');
 const yargs = require('yargs/yargs');
 const {hideBin} = require('yargs/helpers');
+const {spawn} = require('child_process');
+const {readFileSync} = require('fs');
+
+const {
+  devtoolsRootPath,
+  litAnalyzerExecutablePath,
+  nodePath,
+  tsconfigJsonPath,
+} = require('../devtools_paths.js');
 
 const flags = yargs(hideBin(process.argv))
                   .option('fix', {
@@ -24,12 +33,7 @@ const flags = yargs(hideBin(process.argv))
                         yargs.positional('files', {
                           describe: 'File(s), glob(s), or directories',
                           type: 'array',
-                          default: [
-                            'front_end',
-                            'inspector_overlay',
-                            'scripts',
-                            'test',
-                          ],
+                          default: ['front_end', 'inspector_overlay', 'scripts', 'test'],
                         });
                       })
                   .parse();
@@ -50,7 +54,9 @@ async function runESLint(files) {
   // This was originally reported in https://github.com/eslint/eslint/issues/9977
   // The suggested workaround is to use the CLIEngine to pre-emptively filter out these
   // problematic paths.
-  files = await Promise.all(files.map(async file => (await cli.isPathIgnored(file)) ? null : file));
+  files = await Promise.all(
+      files.map(async file => ((await cli.isPathIgnored(file)) ? null : file)),
+  );
   files = files.filter(file => file !== null);
 
   const results = await cli.lintFiles(files);
@@ -84,10 +90,112 @@ async function runStylelint(files) {
   return !errored;
 }
 
+/**
+ * Runs the `lit-analyzer` on the `files`.
+ *
+ * The configuration for the `lit-analyzer` is parsed from the options for
+ * the "ts-lit-plugin" from the toplevel `tsconfig.json` file.
+ *
+ * @param {string[]} files the input files to analyze.
+ */
+async function runLitAnalyzer(files) {
+  const readLitAnalyzerConfigFromCompilerOptions = () => {
+    const {compilerOptions} = JSON.parse(
+        readFileSync(tsconfigJsonPath(), 'utf-8'),
+    );
+    const {plugins} = compilerOptions;
+    const tsLitPluginOptions = plugins.find(
+        plugin => plugin.name === 'ts-lit-plugin',
+    );
+    if (tsLitPluginOptions === null) {
+      throw new Error(
+          `Failed to find ts-lit-plugin options in ${tsconfigJsonPath()}`,
+      );
+    }
+    return tsLitPluginOptions;
+  };
+
+  const {rules} = readLitAnalyzerConfigFromCompilerOptions();
+  const getLitAnalyzerResult = async subsetFiles => {
+    const args = [
+      litAnalyzerExecutablePath(),
+      ...Object.entries(rules).flatMap(([k, v]) => [`--rules.${k}`, v]),
+      ...subsetFiles,
+    ];
+
+    const result = {
+      output: '',
+      error: '',
+      status: false,
+    };
+
+    return await new Promise(resolve => {
+      const litAnalyzerProcess = spawn(nodePath(), args, {
+        encoding: 'utf-8',
+        cwd: devtoolsRootPath(),
+      });
+
+      litAnalyzerProcess.stdout.on('data', data => {
+        result.output += `\n${data.toString()}`;
+      });
+      litAnalyzerProcess.stderr.on('data', data => {
+        result.error += `\n${data.toString()}`;
+      });
+
+      litAnalyzerProcess.on('error', message => {
+        result.error += `\n${message}`;
+        resolve(result);
+      });
+
+      litAnalyzerProcess.on('exit', code => {
+        result.status = code === 0;
+        resolve(result);
+      });
+    });
+  };
+
+  const getSplitFiles = filesToSplit => {
+    if (process.platform !== 'win32') {
+      return [filesToSplit];
+    }
+
+    const splitFiles = [[]];
+    let index = 0;
+    for (const file of filesToSplit) {
+      // Windows max input is 8191 so we should be conservative
+      if (splitFiles[index].join(' ').length + file.length < 6144) {
+        splitFiles[index].push(file);
+      } else {
+        index++;
+        splitFiles[index] = [file];
+      }
+    }
+    return splitFiles;
+  };
+
+  const results = await Promise.all(
+      getSplitFiles(files).map(filesBatch => {
+        return getLitAnalyzerResult(filesBatch);
+      }),
+  );
+  for (const result of results) {
+    if (result.output) {
+      console.log(result.output);
+    }
+    if (result.error) {
+      console.log(result.error);
+    }
+  }
+
+  return results.every(r => r.status);
+}
+
 async function run() {
   const scripts = [];
   const styles = [];
-  for (const path of globby.sync(flags.files, {expandDirectories: {extensions: ['css', 'js', 'ts']}})) {
+  for (const path of globby.sync(flags.files, {
+         expandDirectories: {extensions: ['css', 'js', 'ts']},
+       })) {
     if (extname(path) === '.css') {
       styles.push(path);
     } else {
@@ -98,6 +206,7 @@ async function run() {
   let succeed = true;
   if (scripts.length !== 0) {
     succeed &&= await runESLint(scripts);
+    succeed &&= await runLitAnalyzer(scripts);
   }
   if (styles.length !== 0) {
     succeed &&= await runStylelint(styles);
@@ -110,6 +219,6 @@ run()
       process.exit(succeed ? 0 : 1);
     })
     .catch(err => {
-      console.log(`[lint]: ${err.message}`);
+      console.log(`[lint]: ${err.message}`, err.stack);
       process.exit(1);
     });

@@ -36,7 +36,7 @@ class TaskRunnerImpl final : public TaskRunner {
     // chooses to clear queued WakeUps before entering WaitForTaskToBePosted.
 
     // Blocks until some event occurs, which means new tasks may have been
-    // posted.  Wait may only block up to |timeout| where 0 means don't block at
+    // posted.  Wait may only block up to `timeout` where 0 means don't block at
     // all (not block forever).
     virtual Error WaitForTaskToBePosted(Clock::duration timeout) = 0;
 
@@ -100,15 +100,15 @@ class TaskRunnerImpl final : public TaskRunner {
   using TaskWithMetadata = Task;
 #endif  // defined(ENABLE_TRACE_LOGGING)
 
-  // Helper that runs all tasks in |running_tasks_| and then clears it.
+  // Helper that runs all tasks in `running_tasks_` and then clears it.
   void RunRunnableTasks();
 
   // Look at all tasks in the delayed task queue, then schedule them if the
   // minimum delay time has elapsed.
   void ScheduleDelayedTasks();
 
-  // Transfers all ready-to-run tasks from |tasks_| to |running_tasks_|. If
-  // there are no ready-to-run tasks, and |is_running_| is true, this method
+  // Transfers all ready-to-run tasks from `tasks_` to `running_tasks_`. If
+  // there are no ready-to-run tasks, and `is_running_` is true, this method
   // will block waiting for new tasks. Returns true if any tasks were
   // transferred.
   bool GrabMoreRunnableTasks();
@@ -119,24 +119,24 @@ class TaskRunnerImpl final : public TaskRunner {
   // only meant to be read/written on the thread executing RunUntilStopped().
   bool is_running_;
 
-  // This mutex is used for |tasks_| and |delayed_tasks_|, and also for
+  // This mutex is used for `tasks_` and `delayed_tasks_`, and also for
   // notifying the run loop to wake up when it is waiting for a task to be added
-  // to the queue in |run_loop_wakeup_|.
+  // to the queue in `run_loop_wakeup_`.
   std::mutex task_mutex_;
   std::vector<TaskWithMetadata> tasks_;  // ABSL_GUARDED_BY(task_mutex_)
   std::multimap<Clock::time_point, TaskWithMetadata>
       delayed_tasks_;  // ABSL_GUARDED_BY(task_mutex_)
 
-  // When |task_waiter_| is nullptr, |run_loop_wakeup_| is used for sleeping the
-  // task runner.  Otherwise, |run_loop_wakeup_| isn't used and |task_waiter_|
-  // is used instead (along with |waiter_timeout_|).
+  // When `task_waiter_` is nullptr, `run_loop_wakeup_` is used for sleeping the
+  // task runner.  Otherwise, `run_loop_wakeup_` isn't used and `task_waiter_`
+  // is used instead (along with `waiter_timeout_`).
   std::condition_variable run_loop_wakeup_;
   TaskWaiter* const task_waiter_;
   Clock::duration waiter_timeout_;
 
-  // To prevent excessive re-allocation of the underlying array of the |tasks_|
-  // vector, use an A/B vector-swap mechanism. |running_tasks_| starts out
-  // empty, and is swapped with |tasks_| when it is time to run the Tasks.
+  // To prevent excessive re-allocation of the underlying array of the `tasks_`
+  // vector, use an A/B vector-swap mechanism. `running_tasks_` starts out
+  // empty, and is swapped with `tasks_` when it is time to run the Tasks.
   std::vector<TaskWithMetadata> running_tasks_;
 
   std::thread::id task_runner_thread_id_;

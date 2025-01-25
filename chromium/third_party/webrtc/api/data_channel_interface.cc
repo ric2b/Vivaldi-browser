@@ -11,6 +11,7 @@
 #include "api/data_channel_interface.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 #include "absl/functional/any_invocable.h"
@@ -57,15 +58,15 @@ uint64_t DataChannelInterface::MaxSendQueueSize() {
 }
 
 // TODO(tommi): Remove method once downstream implementations have been removed.
-bool DataChannelInterface::Send(const DataBuffer& buffer) {
+bool DataChannelInterface::Send(const DataBuffer& /* buffer */) {
   RTC_DCHECK_NOTREACHED();
   return false;
 }
 
 // TODO(tommi): Remove implementation once method is pure virtual.
 void DataChannelInterface::SendAsync(
-    DataBuffer buffer,
-    absl::AnyInvocable<void(RTCError) &&> on_complete) {
+    DataBuffer /* buffer */,
+    absl::AnyInvocable<void(RTCError) &&> /* on_complete */) {
   RTC_DCHECK_NOTREACHED();
 }
 

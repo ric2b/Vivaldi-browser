@@ -46,6 +46,14 @@ describe('Button', () => {
     assert.strictEqual(clicks, expectedClickCount);
   }
 
+  it('changes to `disabled` state are reflect in the property', () => {
+    const button = renderButton();
+    button.disabled = false;
+    assert.isFalse(button.disabled);
+    button.disabled = true;
+    assert.isTrue(button.disabled);
+  });
+
   it('primary button can be clicked', () => {
     testClick({
       variant: Buttons.Button.Variant.PRIMARY,
@@ -156,6 +164,20 @@ describe('Button', () => {
         '');
     const innerButton = button.shadowRoot?.querySelector('button') as HTMLButtonElement;
     assert.isFalse(innerButton.classList.contains('small'));
+  });
+
+  it('prevents only "keydown" events for Enter and Space to bubble up', () => {
+    const button = renderButton({variant: Buttons.Button.Variant.PRIMARY});
+    const onKeydown = sinon.spy();
+    button.addEventListener('keydown', onKeydown);
+
+    const innerButton = button.shadowRoot!.querySelector('button') as HTMLButtonElement;
+    dispatchKeyDownEvent(innerButton, {bubbles: true, composed: true, key: 'Enter'});
+    dispatchKeyDownEvent(innerButton, {bubbles: true, composed: true, key: ' '});
+    dispatchKeyDownEvent(innerButton, {bubbles: true, composed: true, key: 'x'});
+
+    assert.isTrue(onKeydown.calledOnce);
+    assert.strictEqual(onKeydown.getCall(0).args[0].key, 'x');
   });
 
   describe('in forms', () => {

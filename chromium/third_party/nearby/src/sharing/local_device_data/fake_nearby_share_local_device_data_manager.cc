@@ -15,7 +15,6 @@
 #include "sharing/local_device_data/fake_nearby_share_local_device_data_manager.h"
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -31,7 +30,6 @@
 namespace nearby {
 namespace sharing {
 class NearbyShareClientFactory;
-class NearbyShareProfileInfoProvider;
 
 namespace {
 
@@ -48,10 +46,8 @@ FakeNearbyShareLocalDeviceDataManager::Factory::~Factory() = default;
 
 std::unique_ptr<NearbyShareLocalDeviceDataManager>
 FakeNearbyShareLocalDeviceDataManager::Factory::CreateInstance(
-    nearby::Context* context, SharingRpcClientFactory* rpc_client_factory,
-    NearbyShareProfileInfoProvider* profile_info_provider) {
+    nearby::Context* context, SharingRpcClientFactory* rpc_client_factory) {
   latest_rpc_client_factory_ = rpc_client_factory;
-  latest_profile_info_provider_ = profile_info_provider;
 
   auto instance = std::make_unique<FakeNearbyShareLocalDeviceDataManager>(
       kDefaultDeviceName);
@@ -96,16 +92,6 @@ std::string FakeNearbyShareLocalDeviceDataManager::GetDeviceName() const {
   return device_name_;
 }
 
-std::optional<std::string> FakeNearbyShareLocalDeviceDataManager::GetFullName()
-    const {
-  return full_name_;
-}
-
-std::optional<std::string> FakeNearbyShareLocalDeviceDataManager::GetIconUrl()
-    const {
-  return icon_url_;
-}
-
 DeviceNameValidationResult
 FakeNearbyShareLocalDeviceDataManager::ValidateDeviceName(
     absl::string_view name) {
@@ -128,10 +114,6 @@ DeviceNameValidationResult FakeNearbyShareLocalDeviceDataManager::SetDeviceName(
   return DeviceNameValidationResult::kValid;
 }
 
-void FakeNearbyShareLocalDeviceDataManager::DownloadDeviceData() {
-  ++num_download_device_data_calls_;
-}
-
 void FakeNearbyShareLocalDeviceDataManager::UploadContacts(
     std::vector<nearby::sharing::proto::Contact> contacts,
     UploadCompleteCallback callback) {
@@ -149,31 +131,6 @@ void FakeNearbyShareLocalDeviceDataManager::UploadCertificates(
     callback(upload_certificate_result_);
   }
 }
-void FakeNearbyShareLocalDeviceDataManager::SetFullName(
-    const absl::optional<std::string>& full_name) {
-  if (full_name_ == full_name) return;
-
-  full_name_ = full_name;
-  NotifyLocalDeviceDataChanged(
-      /*did_device_name_change=*/false,
-      /*did_full_name_change=*/true,
-      /*did_icon_change=*/false);
-}
-
-void FakeNearbyShareLocalDeviceDataManager::SetIconUrl(
-    const absl::optional<std::string>& icon_url) {
-  if (icon_url_ == icon_url) return;
-
-  icon_url_ = icon_url;
-  NotifyLocalDeviceDataChanged(
-      /*did_device_name_change=*/false,
-      /*did_full_name_change=*/false,
-      /*did_icon_change=*/true);
-}
-
-void FakeNearbyShareLocalDeviceDataManager::OnStart() {}
-
-void FakeNearbyShareLocalDeviceDataManager::OnStop() {}
 
 }  // namespace sharing
 }  // namespace nearby

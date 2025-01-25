@@ -1197,7 +1197,7 @@ MaybeError ValidateAndParseShaderModule(
 
     if (device->IsToggleEnabled(Toggle::DumpShaders)) {
         std::ostringstream dumpedMsg;
-        dumpedMsg << "// Dumped WGSL:\n" << wgslDesc->code << "\n";
+        dumpedMsg << "// Dumped WGSL:\n" << std::string_view(wgslDesc->code) << "\n";
         device->EmitLog(WGPULoggingType_Info, dumpedMsg.str().c_str());
     }
 
@@ -1283,11 +1283,25 @@ MaybeError ValidateCompatibilityWithPipelineLayout(DeviceBase* device,
             std::get<TextureBindingInfo>(textureInfo.bindingLayout);
 
         DAWN_INVALID_IF(
-            sampledTextureBindingInfo.sampleType == wgpu::TextureSampleType::UnfilterableFloat,
+            sampledTextureBindingInfo.sampleType != wgpu::TextureSampleType::Float &&
+                // TODO(crbug.com/376497143): remove Depth as it's invalid WebGPU. See deprecation
+                // warning below.
+                sampledTextureBindingInfo.sampleType != wgpu::TextureSampleType::Depth &&
+                sampledTextureBindingInfo.sampleType != kInternalResolveAttachmentSampleType,
             "Texture binding (group:%u, binding:%u) is %s but used statically with a sampler "
             "(group:%u, binding:%u) that's %s",
-            pair.texture.group, pair.texture.binding, wgpu::TextureSampleType::UnfilterableFloat,
+            pair.texture.group, pair.texture.binding, sampledTextureBindingInfo.sampleType,
             pair.sampler.group, pair.sampler.binding, wgpu::SamplerBindingType::Filtering);
+
+        // TODO(crbug.com/376497143): remove this deprecation warning.
+        if (sampledTextureBindingInfo.sampleType == wgpu::TextureSampleType::Depth) {
+            const char* msg =
+                "Using a TextureType::Depth with SamplerType::Filtering is deprecated."
+                "TextureType::Depth can only be used with SamplerType::NonFiltering or "
+                "SamplerType::Comparison.";
+            device->EmitWarningOnce(msg);
+            device->GetInstance()->EmitDeprecationWarning(msg);
+        }
     }
 
     // Validate compatibility of the pixel local storage.
@@ -1376,7 +1390,7 @@ ShaderModuleBase::ShaderModuleBase(DeviceBase* device,
     GetObjectTrackingList()->Track(this);
 }
 
-ShaderModuleBase::ShaderModuleBase(DeviceBase* device, ObjectBase::ErrorTag tag, const char* label)
+ShaderModuleBase::ShaderModuleBase(DeviceBase* device, ObjectBase::ErrorTag tag, StringView label)
     : Base(device, tag, label), mType(Type::Undefined) {}
 
 ShaderModuleBase::~ShaderModuleBase() = default;
@@ -1386,7 +1400,7 @@ void ShaderModuleBase::DestroyImpl() {
 }
 
 // static
-Ref<ShaderModuleBase> ShaderModuleBase::MakeError(DeviceBase* device, const char* label) {
+Ref<ShaderModuleBase> ShaderModuleBase::MakeError(DeviceBase* device, StringView label) {
     return AcquireRef(new ShaderModuleBase(device, ObjectBase::kError, label));
 }
 
@@ -1394,19 +1408,19 @@ ObjectType ShaderModuleBase::GetType() const {
     return ObjectType::ShaderModule;
 }
 
-bool ShaderModuleBase::HasEntryPoint(const std::string& entryPoint) const {
+bool ShaderModuleBase::HasEntryPoint(absl::string_view entryPoint) const {
     return mEntryPoints.contains(entryPoint);
 }
 
-ShaderModuleEntryPoint ShaderModuleBase::ReifyEntryPointName(const char* entryPointName,
+ShaderModuleEntryPoint ShaderModuleBase::ReifyEntryPointName(StringView entryPointName,
                                                              SingleShaderStage stage) const {
     ShaderModuleEntryPoint entryPoint;
-    if (entryPointName) {
-        entryPoint.defaulted = false;
-        entryPoint.name = entryPointName;
-    } else {
+    if (entryPointName.IsUndefined()) {
         entryPoint.defaulted = true;
         entryPoint.name = mDefaultEntryPointNames[stage];
+    } else {
+        entryPoint.defaulted = false;
+        entryPoint.name = entryPointName;
     }
     return entryPoint;
 }
@@ -1415,7 +1429,7 @@ std::optional<bool> ShaderModuleBase::GetStrictMath() const {
     return mStrictMath;
 }
 
-const EntryPointMetadata& ShaderModuleBase::GetEntryPoint(const std::string& entryPoint) const {
+const EntryPointMetadata& ShaderModuleBase::GetEntryPoint(absl::string_view entryPoint) const {
     DAWN_ASSERT(HasEntryPoint(entryPoint));
     return *mEntryPoints.at(entryPoint);
 }
@@ -1560,13 +1574,13 @@ Future ShaderModuleBase::APIGetCompilationInfo2(
         void Complete(EventCompletionType completionType) override {
             WGPUCompilationInfoRequestStatus status =
                 WGPUCompilationInfoRequestStatus_InstanceDropped;
-            const WGPUCompilationInfo* compilationInfo = nullptr;
+            const CompilationInfo* compilationInfo = nullptr;
             if (completionType == EventCompletionType::Ready) {
                 status = WGPUCompilationInfoRequestStatus_Success;
                 compilationInfo = mShaderModule->mCompilationMessages->GetCompilationInfo();
             }
 
-            mCallback(status, compilationInfo, mUserdata1.ExtractAsDangling(),
+            mCallback(status, ToAPI(compilationInfo), mUserdata1.ExtractAsDangling(),
                       mUserdata2.ExtractAsDangling());
         }
     };

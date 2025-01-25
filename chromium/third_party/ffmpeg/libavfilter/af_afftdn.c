@@ -20,6 +20,7 @@
 
 #include <float.h>
 
+#include "libavutil/avassert.h"
 #include "libavutil/avstring.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/mem.h"
@@ -354,8 +355,9 @@ static void process_frame(AVFilterContext *ctx,
                           double *prior, double *prior_band_excit, int track_noise)
 {
     AVFilterLink *outlink = ctx->outputs[0];
+    FilterLink      *outl = ff_filter_link(outlink);
     const double *abs_var = dnch->abs_var;
-    const double ratio = outlink->frame_count_out ? s->ratio : 1.0;
+    const double ratio = outl->frame_count_out ? s->ratio : 1.0;
     const double rratio = 1. - ratio;
     const int *bin2band = s->bin2band;
     double *noisy_data = dnch->noisy_data;
@@ -376,6 +378,8 @@ static void process_frame(AVFilterContext *ctx,
         case AV_SAMPLE_FMT_DBLP:
             noisy_data[i] = mag = hypot(fft_data_dbl[i].re, fft_data_dbl[i].im);
             break;
+        default:
+            av_assert0(0);
         }
 
         power = mag * mag;
@@ -970,6 +974,8 @@ static void sample_noise_block(AudioFFTDeNoiseContext *s,
             mag2 = fft_out_dbl[n].re * fft_out_dbl[n].re +
                    fft_out_dbl[n].im * fft_out_dbl[n].im;
             break;
+        default:
+            av_assert2(0);
         }
 
         mag2 = fmax(mag2, s->sample_floor);

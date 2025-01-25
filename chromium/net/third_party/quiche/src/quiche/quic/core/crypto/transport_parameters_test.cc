@@ -38,6 +38,7 @@ const uint64_t kFakeInitialMaxStreamDataUni = 3000;
 const uint64_t kFakeInitialMaxStreamsBidi = 21;
 const uint64_t kFakeInitialMaxStreamsUni = 22;
 const bool kFakeDisableMigration = true;
+const bool kFakeReliableStreamReset = true;
 const uint64_t kFakeInitialRoundTripTime = 53;
 const uint8_t kFakePreferredStatelessResetTokenData[16] = {
     0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87,
@@ -191,6 +192,8 @@ TEST_P(TransportParametersTest, Comparator) {
   new_params.version_information = CreateFakeVersionInformation();
   orig_params.disable_active_migration = true;
   new_params.disable_active_migration = true;
+  orig_params.reliable_stream_reset = true;
+  new_params.reliable_stream_reset = true;
   EXPECT_EQ(orig_params, new_params);
   EXPECT_TRUE(orig_params == new_params);
   EXPECT_FALSE(orig_params != new_params);
@@ -285,6 +288,7 @@ TEST_P(TransportParametersTest, CopyConstructor) {
   orig_params.max_ack_delay.set_value(kMaxAckDelayForTest);
   orig_params.min_ack_delay_us.set_value(kMinAckDelayUsForTest);
   orig_params.disable_active_migration = kFakeDisableMigration;
+  orig_params.reliable_stream_reset = kFakeReliableStreamReset;
   orig_params.preferred_address = CreateFakePreferredAddress();
   orig_params.active_connection_id_limit.set_value(
       kActiveConnectionIdLimitForTest);
@@ -292,6 +296,7 @@ TEST_P(TransportParametersTest, CopyConstructor) {
       CreateFakeInitialSourceConnectionId();
   orig_params.retry_source_connection_id = CreateFakeRetrySourceConnectionId();
   orig_params.initial_round_trip_time_us.set_value(kFakeInitialRoundTripTime);
+  orig_params.discard_length = 2000;
   std::string google_handshake_message;
   ASSERT_TRUE(absl::HexStringToBytes(kFakeGoogleHandshakeMessage,
                                      &google_handshake_message));
@@ -325,11 +330,13 @@ TEST_P(TransportParametersTest, RoundTripClient) {
   orig_params.max_ack_delay.set_value(kMaxAckDelayForTest);
   orig_params.min_ack_delay_us.set_value(kMinAckDelayUsForTest);
   orig_params.disable_active_migration = kFakeDisableMigration;
+  orig_params.reliable_stream_reset = kFakeReliableStreamReset;
   orig_params.active_connection_id_limit.set_value(
       kActiveConnectionIdLimitForTest);
   orig_params.initial_source_connection_id =
       CreateFakeInitialSourceConnectionId();
   orig_params.initial_round_trip_time_us.set_value(kFakeInitialRoundTripTime);
+  orig_params.discard_length = 2000;
   std::string google_handshake_message;
   ASSERT_TRUE(absl::HexStringToBytes(kFakeGoogleHandshakeMessage,
                                      &google_handshake_message));
@@ -376,6 +383,7 @@ TEST_P(TransportParametersTest, RoundTripServer) {
   orig_params.max_ack_delay.set_value(kMaxAckDelayForTest);
   orig_params.min_ack_delay_us.set_value(kMinAckDelayUsForTest);
   orig_params.disable_active_migration = kFakeDisableMigration;
+  orig_params.reliable_stream_reset = kFakeReliableStreamReset;
   orig_params.preferred_address = CreateFakePreferredAddress();
   orig_params.active_connection_id_limit.set_value(
       kActiveConnectionIdLimitForTest);
@@ -556,6 +564,9 @@ TEST_P(TransportParametersTest, ParseClientParams) {
       // disable_active_migration
       0x0c,  // parameter id
       0x00,  // length
+      // reliable_stream_reset
+      0xc0, 0x17, 0xf7, 0x58, 0x6d, 0x2c, 0xb5, 0x71,  // parameter id
+      0x00,  // length
       // active_connection_id_limit
       0x0e,  // parameter id
       0x01,  // length
@@ -564,6 +575,11 @@ TEST_P(TransportParametersTest, ParseClientParams) {
       0x0f,  // parameter id
       0x08,  // length
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x23, 0x45,
+      // discard
+      0x57, 0x3e,  // parameter id
+      0x10,  // length
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
       // google_handshake_message
       0x66, 0xab,  // parameter id
       0x24,  // length
@@ -631,6 +647,7 @@ TEST_P(TransportParametersTest, ParseClientParams) {
   EXPECT_EQ(kMaxAckDelayForTest, new_params.max_ack_delay.value());
   EXPECT_EQ(kMinAckDelayUsForTest, new_params.min_ack_delay_us.value());
   EXPECT_EQ(kFakeDisableMigration, new_params.disable_active_migration);
+  EXPECT_EQ(kFakeReliableStreamReset, new_params.reliable_stream_reset);
   EXPECT_EQ(kActiveConnectionIdLimitForTest,
             new_params.active_connection_id_limit.value());
   ASSERT_TRUE(new_params.initial_source_connection_id.has_value());
@@ -642,6 +659,7 @@ TEST_P(TransportParametersTest, ParseClientParams) {
   ASSERT_TRUE(new_params.google_connection_options.has_value());
   EXPECT_EQ(CreateFakeGoogleConnectionOptions(),
             new_params.google_connection_options.value());
+  EXPECT_EQ(16, new_params.discard_length);
   std::string expected_google_handshake_message;
   ASSERT_TRUE(absl::HexStringToBytes(kFakeGoogleHandshakeMessage,
                                      &expected_google_handshake_message));
@@ -803,6 +821,9 @@ TEST_P(TransportParametersTest, ParseServerParams) {
       // disable_active_migration
       0x0c,  // parameter id
       0x00,  // length
+      // reliable_stream_reset
+      0xc0, 0x17, 0xf7, 0x58, 0x6d, 0x2c, 0xb5, 0x71,  // parameter id
+      0x00,  // length
       // preferred_address
       0x0d,  // parameter id
       0x31,  // length
@@ -897,6 +918,7 @@ TEST_P(TransportParametersTest, ParseServerParams) {
   EXPECT_EQ(kMaxAckDelayForTest, new_params.max_ack_delay.value());
   EXPECT_EQ(kMinAckDelayUsForTest, new_params.min_ack_delay_us.value());
   EXPECT_EQ(kFakeDisableMigration, new_params.disable_active_migration);
+  EXPECT_EQ(kFakeReliableStreamReset, new_params.reliable_stream_reset);
   ASSERT_NE(nullptr, new_params.preferred_address.get());
   EXPECT_EQ(CreateFakeV4SocketAddress(),
             new_params.preferred_address->ipv4_socket_address);
@@ -1028,6 +1050,7 @@ TEST_P(TransportParametersTest, SerializationOrderIsRandom) {
   orig_params.max_ack_delay.set_value(kMaxAckDelayForTest);
   orig_params.min_ack_delay_us.set_value(kMinAckDelayUsForTest);
   orig_params.disable_active_migration = kFakeDisableMigration;
+  orig_params.reliable_stream_reset = kFakeReliableStreamReset;
   orig_params.active_connection_id_limit.set_value(
       kActiveConnectionIdLimitForTest);
   orig_params.initial_source_connection_id =
@@ -1072,6 +1095,7 @@ TEST_P(TransportParametersTest, Degrease) {
   orig_params.max_ack_delay.set_value(kMaxAckDelayForTest);
   orig_params.min_ack_delay_us.set_value(kMinAckDelayUsForTest);
   orig_params.disable_active_migration = kFakeDisableMigration;
+  orig_params.reliable_stream_reset = kFakeReliableStreamReset;
   orig_params.active_connection_id_limit.set_value(
       kActiveConnectionIdLimitForTest);
   orig_params.initial_source_connection_id =
@@ -1130,6 +1154,7 @@ class TransportParametersTicketSerializationTest : public QuicTest {
     original_params_.max_ack_delay.set_value(kMaxAckDelayForTest);
     original_params_.min_ack_delay_us.set_value(kMinAckDelayUsForTest);
     original_params_.disable_active_migration = kFakeDisableMigration;
+    original_params_.reliable_stream_reset = kFakeReliableStreamReset;
     original_params_.preferred_address = CreateFakePreferredAddress();
     original_params_.active_connection_id_limit.set_value(
         kActiveConnectionIdLimitForTest);

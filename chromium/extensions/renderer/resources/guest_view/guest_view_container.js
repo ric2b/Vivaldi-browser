@@ -27,6 +27,7 @@ function GuestViewContainer(element, viewType) {
   this.setupGuestProperty();
   this.guest = new GuestView(viewType);
   this.setupAttributes();
+  this.setupEvents();
 
   this.internalElement = this.createInternalElement();
 
@@ -175,6 +176,7 @@ GuestViewContainer.prototype.buildContainerParams = function() {
 GuestViewContainer.prototype.onElementAttached = function() {};
 GuestViewContainer.prototype.onElementDetached = function() {};
 GuestViewContainer.prototype.setupAttributes = function() {};
+GuestViewContainer.prototype.setupEvents = function() {};
 
 // Exports.
 exports.$set('GuestViewContainer', GuestViewContainer);

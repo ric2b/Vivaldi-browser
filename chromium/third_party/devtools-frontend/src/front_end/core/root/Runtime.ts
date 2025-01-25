@@ -103,7 +103,9 @@ export class Runtime {
   }
 
   loadLegacyModule(modulePath: string): Promise<void> {
-    return import(`../../${modulePath}`);
+    const importPath =
+        `../../${modulePath}`;  // Extracted as a variable so esbuild doesn't attempt to bundle all the things.
+    return import(importPath);
   }
 }
 
@@ -296,9 +298,12 @@ export const enum ExperimentName {
   TIMELINE_DEBUG_MODE = 'timeline-debug-mode',
   TIMELINE_OBSERVATIONS = 'timeline-observations',
   TIMELINE_ENHANCED_TRACES = 'timeline-enhanced-traces',
-  GEN_AI_SETTINGS_PANEL = 'gen-ai-settings-panel',
   TIMELINE_SERVER_TIMINGS = 'timeline-server-timings',
-  TIMELINE_LAYOUT_SHIFT_DETAILS = 'timeline-layout-shift-details',
+  FLOATING_ENTRY_POINTS_FOR_AI_ASSISTANCE = 'floating-entry-points-for-ai-assistance',
+  TIMELINE_EXPERIMENTAL_INSIGHTS = 'timeline-experimental-insights',
+  TIMELINE_DIM_UNRELATED_EVENTS = 'timeline-dim-unrelated-events',
+  TIMELINE_ALTERNATIVE_NAVIGATION = 'timeline-alternative-navigation',
+  // when adding to this enum, you'll need to also add to REGISTERED_EXPERIMENTS in EnvironmentHelpers.ts
 }
 
 export interface AidaAvailability {
@@ -315,17 +320,39 @@ export interface HostConfigConsoleInsights {
   enabled: boolean;
 }
 
-export interface HostConfigFreestylerDogfood {
+export enum HostConfigFreestylerExecutionMode {
+  ALL_SCRIPTS = 'ALL_SCRIPTS',
+  SIDE_EFFECT_FREE_SCRIPTS_ONLY = 'SIDE_EFFECT_FREE_SCRIPTS_ONLY',
+  NO_SCRIPTS = 'NO_SCRIPTS',
+}
+
+export interface HostConfigFreestyler {
+  modelId: string;
+  temperature: number;
+  enabled: boolean;
+  userTier: string;
+  executionMode?: HostConfigFreestylerExecutionMode;
+}
+
+export interface HostConfigAiAssistanceNetworkAgent {
   modelId: string;
   temperature: number;
   enabled: boolean;
   userTier: string;
 }
 
-export interface HostConfigExplainThisResourceDogfood {
+export interface HostConfigAiAssistancePerformanceAgent {
   modelId: string;
   temperature: number;
   enabled: boolean;
+  userTier: string;
+}
+
+export interface HostConfigAiAssistanceFileAgent {
+  modelId: string;
+  temperature: number;
+  enabled: boolean;
+  userTier: string;
 }
 
 export interface HostConfigVeLogging {
@@ -335,6 +362,11 @@ export interface HostConfigVeLogging {
 
 export interface HostConfigPrivacyUI {
   enabled: boolean;
+}
+
+export interface HostConfigEnableOriginBoundCookies {
+  portBindingEnabled: boolean;
+  schemeBindingEnabled: boolean;
 }
 
 // We use `RecursivePartial` here to enforce that DevTools code is able to
@@ -347,8 +379,10 @@ export interface HostConfigPrivacyUI {
 export type HostConfig = Platform.TypeScriptUtilities.RecursivePartial<{
   aidaAvailability: AidaAvailability,
   devToolsConsoleInsights: HostConfigConsoleInsights,
-  devToolsFreestylerDogfood: HostConfigFreestylerDogfood,
-  devToolsExplainThisResourceDogfood: HostConfigExplainThisResourceDogfood,
+  devToolsFreestyler: HostConfigFreestyler,
+  devToolsAiAssistanceNetworkAgent: HostConfigAiAssistanceNetworkAgent,
+  devToolsAiAssistanceFileAgent: HostConfigAiAssistanceFileAgent,
+  devToolsAiAssistancePerformanceAgent: HostConfigAiAssistancePerformanceAgent,
   devToolsVeLogging: HostConfigVeLogging,
   devToolsPrivacyUI: HostConfigPrivacyUI,
   /**
@@ -356,6 +390,7 @@ export type HostConfig = Platform.TypeScriptUtilities.RecursivePartial<{
    * or guest mode, rather than a "normal" profile.
    */
   isOffTheRecord: boolean,
+  devToolsEnableOriginBoundCookies: HostConfigEnableOriginBoundCookies,
 }>;
 
 /**

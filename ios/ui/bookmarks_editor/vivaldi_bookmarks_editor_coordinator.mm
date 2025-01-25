@@ -244,14 +244,12 @@ using bookmarks::BookmarkNode;
 }
 
 - (void)setupBookmarkEditingMediator {
-  ChromeBrowserState *browserState =
-      self.browser->GetBrowserState()->GetOriginalChromeBrowserState();
-  BookmarkModel *bookmarkModel =
-      ios::BookmarkModelFactory::GetForBrowserState(browserState);
+  ProfileIOS *profile = self.browser->GetProfile()->GetOriginalProfile();
+  BookmarkModel *bookmarkModel = ios::BookmarkModelFactory::GetForProfile(profile);
   self.mediator =
     [[VivaldiBookmarksEditorMediator alloc] initWithBookmarkModel:bookmarkModel
         bookmarkNode:self.editingItem.bookmarkNode
-        browserState:browserState];
+            profile:profile];
   self.mediator.isEditing = self.isEditing;
   self.mediator.consumer = self;
   self.mediator.snackbarCommandsHandler = _snackbarCommandsHandler;

@@ -19,12 +19,17 @@ void xnn_qs8_rsum_ukernel__neon_u32_acc2(
     size_t batch,
     const int8_t* input,
     int32_t* output,
-    const union xnn_qs8_rsum_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_qs8_rsum_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(input != NULL);
   assert(output != NULL);
   assert(params != NULL);
+
+  XNN_ALIGN(16) static const int8_t onemask_table[32] = {
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  };
 
   int32x4_t vacc0 = vmovq_n_s32(0);
   int32x4_t vacc1 = vmovq_n_s32(0);
@@ -67,7 +72,7 @@ void xnn_qs8_rsum_ukernel__neon_u32_acc2(
     }
     if (XNN_UNLIKELY(batch != 0)) {
       const int8x16_t vt = vld1q_s8(input);
-      const int8x16_t vonemask = vld1q_s8(&params->neon.onemask_table[16 - batch]);
+      const int8x16_t vonemask = vld1q_s8(&onemask_table[16 - batch]);
       const int8x16_t vtm = vmulq_s8(vt, vonemask);
       vacc16 = vpadalq_s8(vacc16, vtm);
     }

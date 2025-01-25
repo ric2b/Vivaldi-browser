@@ -233,10 +233,16 @@ enum aome_enc_control_id {
    * unsigned int parameter.
    *
    * This parameter controls the level at which rate-distortion optimization of
-   * transform coefficients favours sharpness in the block.
+   * transform coefficients favors sharpness in the block.
    *
-   * Valid range: 0..7. The default is 0. Values 1-7 will avoid eob and skip
-   * block optimization and will change rdmult in favour of block sharpness.
+   * Valid range: 0..7. The default is 0.
+   *
+   * Values 1-7 will avoid eob and skip block optimization and will change
+   * rdmult in favor of block sharpness.
+   *
+   * In all-intra mode: it also sets the `loop_filter_sharpness` syntax element
+   * in the bitstream. Larger values increasingly reduce how much the filtering
+   * can change the sample values on block edges to favor perceived sharpness.
    */
   AOME_SET_SHARPNESS = AOME_SET_ENABLEAUTOALTREF + 2,  // 16
 
@@ -725,8 +731,8 @@ enum aome_enc_control_id {
    * control sets the minimum level of flatness from which the matrices
    * are determined.
    *
-   * By default, the encoder sets this minimum at half the available
-   * range.
+   * By default, the encoder sets this minimum at level 5 (4 in allintra
+   * mode).
    */
   AV1E_SET_QM_MIN = 64,
 
@@ -737,8 +743,8 @@ enum aome_enc_control_id {
    * As quantisation levels increase, the matrices get flatter. This
    * control sets the maximum level of flatness possible.
    *
-   * By default, the encoder sets this maximum at the top of the
-   * available range.
+   * By default, the encoder sets this maximum at level 9 (10 in allintra
+   * mode)
    */
   AV1E_SET_QM_MAX = 65,
 
@@ -1659,6 +1665,13 @@ typedef enum {
  *
  * Changes the encoder to tune for certain types of input material.
  *
+ * \note
+ * AOM_TUNE_SSIMULACRA2 is restricted to all intra mode (AOM_USAGE_ALL_INTRA).
+ * Setting the tuning option to AOM_TUNE_SSIMULACRA2 causes the following
+ * options to be set (expressed as command-line options):
+ *   * --enable-qm=1
+ *   * --sharpness=7
+ *   * --enable-cdef=3
  */
 typedef enum {
   AOM_TUNE_PSNR = 0,
@@ -1670,6 +1683,14 @@ typedef enum {
   AOM_TUNE_VMAF_NEG_MAX_GAIN = 7,
   AOM_TUNE_BUTTERAUGLI = 8,
   AOM_TUNE_VMAF_SALIENCY_MAP = 9,
+/*!\brief Allows detection of the presence of AOM_TUNE_SSIMULACRA2 at compile
+ * time.
+ */
+#define AOM_HAVE_TUNE_SSIMULACRA2 1
+  /* Increases image quality and consistency, guided by the SSIMULACRA2 metric
+   * and subjective quality checks. Shares the rdmult code with AOM_TUNE_SSIM.
+   */
+  AOM_TUNE_SSIMULACRA2 = 10,
 } aom_tune_metric;
 
 /*!\brief Distortion metric to use for RD optimization.
@@ -1726,9 +1747,14 @@ typedef struct aom_svc_ref_frame_config {
   // or 1 (use as reference). The index 0 - 6 refers to the references:
   // last(0), last2(1), last3(2), golden(3), bwdref(4), altref2(5), altref(6).
   // ref_idx[i]: maps a reference to one of the 8 buffers slots, values are
-  // 0 - 7.
+  // 0 - 7. The ref_idx for a unused reference (reference[i] = 1, and not used
+  // for refresh, see below) can be set to the ref_idx of the first reference
+  // used (usually LAST).
   // refresh[i] is a boolean flag to indicate if a buffer is updated/refreshed
   // with the current encoded frame. Values are 0 (no refresh) or 1 (refresh).
+  // The refresh is done internally by looking at the ref_idx[j], for j = 0 - 6,
+  // so to refresh a buffer slot (i) a reference must be mapped to that slot
+  // (i = ref_idx[j]).
   // Examples for usage (for RTC encoding) are in: examples/svc_encoder_rtc.c.
   int reference[7]; /**< Reference flag for each of the 7 references. */
   /*! Buffer slot index (0..7) for each of 7 references indexed above. */

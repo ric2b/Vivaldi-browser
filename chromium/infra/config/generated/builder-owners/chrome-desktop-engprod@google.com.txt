@@ -2,11 +2,6 @@ ci/Win Builder
 ci/Win Builder (dbg)
 ci/Win x64 Builder
 ci/Win10 Tests x64
-ci/chromeos-amd64-generic-lacros-dbg
-ci/lacros-amd64-generic-rel
-ci/lacros-arm-generic-rel
-ci/linux-lacros-builder-rel
-ci/linux-lacros-dbg
 ci/win-arm64-dbg
 ci/win-arm64-rel
 ci/win-official

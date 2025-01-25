@@ -14,7 +14,6 @@
 #include "cc/paint/paint_flags.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/accessibility/ax_action_data.h"
-#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/default_style.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -213,15 +212,8 @@ void TabbedPaneTab::OnStateChanged() {
     UpdateTitleColor();
   }
 
-    // TabbedPaneTab design spec dictates special handling of font weight for
-    // the windows platform when dealing with border style tabs.
-#if BUILDFLAG(IS_WIN)
-  gfx::Font::Weight font_weight = gfx::Font::Weight::BOLD;
-#else
-  gfx::Font::Weight font_weight = gfx::Font::Weight::MEDIUM;
-#endif
-  int font_size_delta = ui::kLabelFontSizeDelta;
-
+  // TabbedPaneTab design spec dictates special handling of font weight for
+  // the windows platform when dealing with border style tabs.
   if (tabbed_pane_->GetStyle() == TabbedPane::TabStripStyle::kHighlight) {
     // Notify assistive tools to update this tab's selected status. The way
     // ChromeOS accessibility is implemented right now, firing almost any event
@@ -236,16 +228,17 @@ void TabbedPaneTab::OnStateChanged() {
 
     // Style the tab text according to the spec for highlight style tabs. We no
     // longer have windows specific bolding of text in this case.
-    font_size_delta = 1;
-    if (state_ == State::kActive)
-      font_weight = gfx::Font::Weight::BOLD;
-    else
-      font_weight = gfx::Font::Weight::MEDIUM;
+    int font_size_delta = 1;
+    gfx::Font::Weight font_weight = (state_ == State::kActive)
+                                        ? font_weight = gfx::Font::Weight::BOLD
+                                        : gfx::Font::Weight::MEDIUM;
+    ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
+    title_->SetFontList(
+        rb.GetFontListForDetails(ui::ResourceBundle::FontDetails(
+            std::string(), font_size_delta, font_weight)));
+  } else {
+    title_->SetTextStyle(views::style::STYLE_BODY_3_EMPHASIS);
   }
-
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  title_->SetFontList(rb.GetFontListForDetails(ui::ResourceBundle::FontDetails(
-      std::string(), font_size_delta, font_weight)));
 
   UpdateAccessibleSelection();
 }
@@ -304,6 +297,7 @@ void TabbedPaneTab::UpdateAccessibleName() {
     GetViewAccessibility().SetName(title_->GetText(),
                                    ax::mojom::NameFrom::kContents);
   }
+  tabbed_pane_->UpdateAccessibleName();
 }
 
 void TabbedPaneTab::UpdateAccessibleSelection() {
@@ -544,6 +538,7 @@ TabbedPane::TabbedPane(TabbedPane::Orientation orientation,
       ui::Accelerator(ui::VKEY_TAB, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN));
   AddAccelerator(ui::Accelerator(ui::VKEY_TAB, ui::EF_CONTROL_DOWN));
   GetViewAccessibility().SetRole(ax::mojom::Role::kTabList);
+  UpdateAccessibleName();
 }
 
 TabbedPane::~TabbedPane() = default;
@@ -595,6 +590,8 @@ void TabbedPane::SelectTab(TabbedPaneTab* new_selected_tab, bool animate) {
 
     NotifyAccessibilityEvent(ax::mojom::Event::kSelectedChildrenChanged, true);
   }
+
+  UpdateAccessibleName();
   tab_strip_->SchedulePaint();
 
   FocusManager* focus_manager = new_selected_tab->contents()->GetFocusManager();
@@ -672,10 +669,13 @@ bool TabbedPane::AcceleratorPressed(const ui::Accelerator& accelerator) {
   return MoveSelectionBy(accelerator.IsShiftDown() ? -1 : 1);
 }
 
-void TabbedPane::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+void TabbedPane::UpdateAccessibleName() {
   const TabbedPaneTab* const selected_tab = GetSelectedTab();
+
   if (selected_tab) {
-    node_data->SetName(selected_tab->GetTitleText());
+    GetViewAccessibility().SetName(selected_tab->GetTitleText());
+  } else {
+    GetViewAccessibility().RemoveName();
   }
 }
 

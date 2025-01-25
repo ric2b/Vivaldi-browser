@@ -30,6 +30,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/omnibox/autocomplete_controller_emitter_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -59,6 +60,7 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/prefs/pref_service.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -181,7 +183,7 @@ class AutocompleteChangeObserver : public AutocompleteController::Observer {
  public:
   explicit AutocompleteChangeObserver(Profile* profile) {
     scoped_observation_.Observe(
-        AutocompleteControllerEmitter::GetForBrowserContext(profile));
+        AutocompleteControllerEmitterFactory::GetForBrowserContext(profile));
   }
 
   AutocompleteChangeObserver(const AutocompleteChangeObserver&) = delete;
@@ -1072,6 +1074,43 @@ void ViewBoundsWaiter::OnViewBoundsChanged(views::View* observed_view) {
   if (!observed_view_->bounds().IsEmpty()) {
     run_loop_.Quit();
   }
+}
+
+namespace {
+
+class WebModalShowWaiter
+    : public web_modal::WebContentsModalDialogManager::Observer {
+ public:
+  explicit WebModalShowWaiter(content::WebContents* web_contents) {
+    web_modal::WebContentsModalDialogManager::CreateForWebContents(
+        web_contents);
+    manager_ =
+        web_modal::WebContentsModalDialogManager::FromWebContents(web_contents);
+    observation_.Observe(manager_);
+  }
+
+  void Wait() {
+    if (manager_->IsDialogActive()) {
+      return;
+    }
+    run_loop_.Run();
+  }
+
+ private:
+  // WebContentsModalDialogManager::Observer:
+  void OnWillShow() override { run_loop_.Quit(); }
+
+  base::RunLoop run_loop_;
+  raw_ptr<web_modal::WebContentsModalDialogManager> manager_;
+  base::ScopedObservation<web_modal::WebContentsModalDialogManager,
+                          web_modal::WebContentsModalDialogManager::Observer>
+      observation_{this};
+};
+
+}  // namespace
+
+void WaitForWebModalDialog(content::WebContents* web_contents) {
+  WebModalShowWaiter(web_contents).Wait();
 }
 
 }  // namespace ui_test_utils

@@ -44,14 +44,14 @@ class SenderPacketRouter : public BandwidthEstimator,
   class Sender {
    public:
     // Called to provide the Sender with what looks like a RTCP packet meant for
-    // it specifically (among other Senders) to process. |arrival_time|
+    // it specifically (among other Senders) to process. `arrival_time`
     // indicates when the packet arrived (i.e., when it was received from the
     // platform).
     virtual void OnReceivedRtcpPacket(Clock::time_point arrival_time,
                                       ByteView packet) = 0;
 
-    // Populates the given |buffer| with a RTCP/RTP packet that will be sent
-    // immediately. Returns the portion of |buffer| contaning the packet, or an
+    // Populates the given `buffer` with a RTCP/RTP packet that will be sent
+    // immediately. Returns the portion of `buffer` contaning the packet, or an
     // empty Span if nothing is ready to send.
     virtual ByteBuffer GetRtcpPacketForImmediateSend(
         Clock::time_point send_time,
@@ -77,7 +77,7 @@ class SenderPacketRouter : public BandwidthEstimator,
   };
 
   // Constructs an instance with default burst parameters appropriate for the
-  // given |max_burst_bitrate|.
+  // given `max_burst_bitrate`.
   explicit SenderPacketRouter(Environment& environment,
                               int max_burst_bitrate = kDefaultMaxBurstBitrate);
 
@@ -145,7 +145,7 @@ class SenderPacketRouter : public BandwidthEstimator,
                         std::vector<uint8_t> packet) final;
 
   // Helper to return an iterator pointing to the entry corresponding to the
-  // given |receiver_ssrc|, or "end" if not found.
+  // given `receiver_ssrc`, or "end" if not found.
   SenderEntries::iterator FindEntry(Ssrc receiver_ssrc);
 
   // Examine the next send time for all Senders, and decide whether to schedule
@@ -160,7 +160,7 @@ class SenderPacketRouter : public BandwidthEstimator,
   int SendJustTheRtcpPackets(Clock::time_point send_time);
 
   // Send zero or more RTP packets from each Sender, up to a maximum of
-  // |num_packets_to_send|, and return the number of packets sent.
+  // `num_packets_to_send`, and return the number of packets sent.
   int SendJustTheRtpPackets(Clock::time_point send_time,
                             int num_packets_to_send);
 

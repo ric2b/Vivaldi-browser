@@ -4,7 +4,8 @@
 
 import * as Common from '../../../core/common/common.js';
 import * as Root from '../../../core/root/root.js';
-import type * as TraceEngine from '../../../models/trace/trace.js';
+import type * as Trace from '../../../models/trace/trace.js';
+import * as Adorners from '../../../ui/components/adorners/adorners.js';
 import * as UI from '../../../ui/legacy/legacy.js';
 import type * as Overlays from '../overlays/overlays.js';
 
@@ -12,30 +13,30 @@ import {SidebarAnnotationsTab} from './SidebarAnnotationsTab.js';
 import {SidebarInsightsTab} from './SidebarInsightsTab.js';
 
 export interface ActiveInsight {
-  name: string;
-  navigationId: string;
-  createOverlayFn: (() => Overlays.Overlays.TimelineOverlay[]);
+  model: Trace.Insights.Types.InsightModel<{}>;
+  insightSetKey: string;
+  overlays: Overlays.Overlays.TimelineOverlay[];
 }
 
 export class RemoveAnnotation extends Event {
   static readonly eventName = 'removeannotation';
 
-  constructor(public removedAnnotation: TraceEngine.Types.File.Annotation) {
+  constructor(public removedAnnotation: Trace.Types.File.Annotation) {
     super(RemoveAnnotation.eventName, {bubbles: true, composed: true});
   }
 }
 
-export class EventReferenceClick extends Event {
-  static readonly eventName = 'sidebarmetricclick';
+export class RevealAnnotation extends Event {
+  static readonly eventName = 'revealannotation';
 
-  constructor(public metricEvent: TraceEngine.Types.TraceEvents.TraceEventData) {
-    super(EventReferenceClick.eventName, {bubbles: true, composed: true});
+  constructor(public annotation: Trace.Types.File.Annotation) {
+    super(RevealAnnotation.eventName, {bubbles: true, composed: true});
   }
 }
 
 declare global {
   interface GlobalEventHandlersEventMap {
-    [EventReferenceClick.eventName]: EventReferenceClick;
+    [RevealAnnotation.eventName]: RevealAnnotation;
   }
 }
 
@@ -54,6 +55,8 @@ export class SidebarWidget extends UI.Widget.VBox {
   #insightsView = new InsightsView();
   #annotationsView = new AnnotationsView();
 
+  #annotationCount = 0;
+
   /**
    * Track if the user has opened the sidebar before. We do this so that the
    * very first time they record/import a trace after the sidebar ships, we can
@@ -62,7 +65,7 @@ export class SidebarWidget extends UI.Widget.VBox {
    * SplitWidget tracks its state in its own setting.
    */
   #userHasOpenedSidebarOnce =
-      Common.Settings.Settings.instance().createSetting<boolean>('timeline-user-has-opened-siderbar-once', false);
+      Common.Settings.Settings.instance().createSetting<boolean>('timeline-user-has-opened-sidebar-once', false);
 
   userHasOpenedSidebarOnce(): boolean {
     return this.#userHasOpenedSidebarOnce.get();
@@ -71,43 +74,80 @@ export class SidebarWidget extends UI.Widget.VBox {
   constructor() {
     super();
     this.setMinimumSize(MIN_SIDEBAR_WIDTH_PX, 0);
+    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_INSIGHTS)) {
+      this.#tabbedPane.appendTab(
+          SidebarTabs.INSIGHTS, 'Insights', this.#insightsView, undefined, undefined, false, false, 0,
+          'timeline.insights-tab');
+    }
+    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_ANNOTATIONS)) {
+      this.#tabbedPane.appendTab(
+          SidebarTabs.ANNOTATIONS, 'Annotations', this.#annotationsView, undefined, undefined, false, false, 1,
+          'timeline.annotations-tab');
+    }
+
+    // Default the selected tab to Insights. In wasShown() we will change this
+    // if this is a trace that has no insights.
+    this.#tabbedPane.selectTab(SidebarTabs.INSIGHTS);
   }
 
   override wasShown(): void {
     this.#userHasOpenedSidebarOnce.set(true);
     this.#tabbedPane.show(this.element);
-    if (!this.#tabbedPane.hasTab(SidebarTabs.INSIGHTS) &&
-        Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_INSIGHTS)) {
-      this.#tabbedPane.appendTab(
-          SidebarTabs.INSIGHTS, 'Insights', this.#insightsView, undefined, undefined, false, false, 0,
-          'timeline.insights-tab');
+    this.#updateAnnotationsCountBadge();
+
+    // Swap to the Annotations tab if:
+    // 1. Insights is currently selected.
+    // 2. The Insights tab is disabled (which means we have no insights for this trace)
+    // 3. The annotations tab exists (we can remove this check once annotations
+    //    are non-experimental)
+    if (this.#tabbedPane.selectedTabId === SidebarTabs.INSIGHTS &&
+        this.#tabbedPane.tabIsDisabled(SidebarTabs.INSIGHTS) && this.#tabbedPane.hasTab(SidebarTabs.ANNOTATIONS)) {
+      this.#tabbedPane.selectTab(SidebarTabs.ANNOTATIONS);
     }
-    if (!this.#tabbedPane.hasTab(SidebarTabs.ANNOTATIONS) &&
-        Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_ANNOTATIONS)) {
-      this.#tabbedPane.appendTab(
-          'annotations', 'Annotations', this.#annotationsView, undefined, undefined, false, false, 1,
-          'timeline.annotations-tab');
-    }
-    // TODO: automatically select the right tab depending on what content is
-    // available to us.
   }
 
   setAnnotations(
-      updatedAnnotations: TraceEngine.Types.File.Annotation[],
-      annotationEntryToColorMap: Map<TraceEngine.Types.TraceEvents.TraceEventData, string>): void {
+      updatedAnnotations: Trace.Types.File.Annotation[],
+      annotationEntryToColorMap: Map<Trace.Types.Events.Event, string>): void {
     this.#annotationsView.setAnnotations(updatedAnnotations, annotationEntryToColorMap);
+    this.#annotationCount = updatedAnnotations.length;
+    this.#updateAnnotationsCountBadge();
   }
 
-  setTraceParsedData(traceParsedData: TraceEngine.Handlers.Types.TraceParseData|null): void {
-    this.#insightsView.setTraceParsedData(traceParsedData);
+  #updateAnnotationsCountBadge(): void {
+    let countAdorner: Adorners.Adorner.Adorner|null = null;
+    if (this.#annotationCount > 0) {
+      countAdorner = new Adorners.Adorner.Adorner();
+      const countSpan = document.createElement('span');
+      countSpan.textContent = this.#annotationCount.toString();
+      countAdorner.data = {
+        name: 'countWrapper',
+        content: countSpan,
+      };
+      countAdorner.classList.add('annotations-count');
+    }
+    this.#tabbedPane.setSuffixElement('annotations', countAdorner);
   }
 
-  setInsights(insights: TraceEngine.Insights.Types.TraceInsightData|null): void {
+  setParsedTrace(parsedTrace: Trace.Handlers.Types.ParsedTrace|null): void {
+    this.#insightsView.setParsedTrace(parsedTrace);
+  }
+
+  setInsights(insights: Trace.Insights.Types.TraceInsightSets|null): void {
     this.#insightsView.setInsights(insights);
+
+    this.#tabbedPane.setTabEnabled(
+        SidebarTabs.INSIGHTS,
+        insights !== null,
+    );
   }
 
   setActiveInsight(activeInsight: ActiveInsight|null): void {
     this.#insightsView.setActiveInsight(activeInsight);
+
+    if (activeInsight) {
+      this.#tabbedPane.selectTab(SidebarTabs.INSIGHTS);
+    }
   }
 }
 
@@ -120,11 +160,11 @@ class InsightsView extends UI.Widget.VBox {
     this.element.appendChild(this.#component);
   }
 
-  setTraceParsedData(data: TraceEngine.Handlers.Types.TraceParseData|null): void {
-    this.#component.traceParsedData = data;
+  setParsedTrace(data: Trace.Handlers.Types.ParsedTrace|null): void {
+    this.#component.parsedTrace = data;
   }
 
-  setInsights(data: TraceEngine.Insights.Types.TraceInsightData|null): void {
+  setInsights(data: Trace.Insights.Types.TraceInsightSets|null): void {
     this.#component.insights = data;
   }
 
@@ -143,8 +183,10 @@ class AnnotationsView extends UI.Widget.VBox {
   }
 
   setAnnotations(
-      annotations: TraceEngine.Types.File.Annotation[],
-      annotationEntryToColorMap: Map<TraceEngine.Types.TraceEvents.TraceEventData, string>): void {
+      annotations: Trace.Types.File.Annotation[],
+      annotationEntryToColorMap: Map<Trace.Types.Events.Event, string>): void {
+    // The component will only re-render when set the annotations, so we should
+    // set the `annotationEntryToColorMap` first.
     this.#component.annotationEntryToColorMap = annotationEntryToColorMap;
     this.#component.annotations = annotations;
   }

@@ -6,8 +6,6 @@
 
 #include <vector>
 
-#include "absl/strings/str_join.h"
-#include "absl/strings/str_split.h"
 #include "discovery/dnssd/impl/conversion_layer.h"
 #include "discovery/dnssd/impl/service_key.h"
 #include "discovery/dnssd/public/dns_sd_instance.h"

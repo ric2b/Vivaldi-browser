@@ -35,9 +35,9 @@
 #include <string_view>
 #include <type_traits>
 
+#include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "build/build_config.h"
-#include "third_party/abseil-cpp/absl/base/attributes.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/integer_to_string_conversion.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_impl.h"
@@ -84,15 +84,14 @@ class WTF_EXPORT String {
 
   // Construct a string with latin1 data.
   explicit String(base::span<const LChar> latin1_data);
-  String(const LChar* characters, unsigned length);
-  String(const char* characters, unsigned length);
-  explicit String(const std::string& s) : String(s.c_str(), s.length()) {}
+  explicit String(base::span<const char> latin1_data)
+      : String(base::as_bytes(latin1_data)) {}
+  explicit String(const std::string& s) : String(base::as_byte_span(s)) {}
 
 #if defined(ARCH_CPU_64_BITS)
-  // Only define size_t constructors if size_t is 64 bit otherwise
-  // we'd have a duplicate define.
-  String(const UChar* characters, size_t length);
-  String(const char* characters, size_t length);
+  // Delete a size_t constructor if size_t is 64 bit.
+  // Use constructors with base::span instead.
+  String(const UChar* characters, size_t length) = delete;
 #endif  // defined(ARCH_CPU_64_BITS)
 
   // Construct a string with latin1 data, from a null-terminated source. The
@@ -102,8 +101,8 @@ class WTF_EXPORT String {
   // `uint8_t[N]`.
   explicit String(const LChar* characters)
       : String(reinterpret_cast<const char*>(characters)) {}
-  String(const char* characters)
-      : String(characters, characters ? strlen(characters) : 0) {}
+  String(const char* characters)  // NOLINT(google-explicit-constructor)
+      : String(base::span(characters, characters ? strlen(characters) : 0)) {}
 
   // Construct a string referencing an existing StringImpl.
   String(StringImpl* impl) : impl_(impl) {}
@@ -154,6 +153,16 @@ class WTF_EXPORT String {
     return impl_->Span16();
   }
 
+  // This exposes the underlying representation of the string. Use with
+  // care. When interpreting the string as a sequence of code units
+  // Span8()/Span16() should be used.
+  base::span<const uint8_t> RawByteSpan() const {
+    if (!impl_) {
+      return {};
+    }
+    return impl_->RawByteSpan();
+  }
+
   const LChar* Characters8() const {
     if (!impl_)
       return nullptr;
@@ -201,7 +210,7 @@ class WTF_EXPORT String {
   template <typename IntegerType>
   static String Number(IntegerType number) {
     IntegerToStringConverter<IntegerType> converter(number);
-    return StringImpl::Create(converter.Characters8(), converter.length());
+    return StringImpl::Create(converter.Span());
   }
 
   [[nodiscard]] static String Number(float);
@@ -397,14 +406,14 @@ class WTF_EXPORT String {
   [[nodiscard]] String EncodeForDebugging() const;
 
   // Returns an uninitialized string. The characters needs to be written
-  // into the buffer returned in data before the returned string is used.
+  // into the buffer returned in `data` before the returned string is used.
   // Failure to do this will have unpredictable results.
   [[nodiscard]] static String CreateUninitialized(unsigned length,
-                                                  UChar*& data) {
+                                                  base::span<UChar>& data) {
     return StringImpl::CreateUninitialized(length, data);
   }
   [[nodiscard]] static String CreateUninitialized(unsigned length,
-                                                  LChar*& data) {
+                                                  base::span<LChar>& data) {
     return StringImpl::CreateUninitialized(length, data);
   }
 
@@ -515,35 +524,25 @@ class WTF_EXPORT String {
   }
 #endif
 
-  [[nodiscard]] static String Make8BitFrom16BitSource(const UChar*, wtf_size_t);
-  template <wtf_size_t inlineCapacity>
-  [[nodiscard]] static String Make8BitFrom16BitSource(
-      const Vector<UChar, inlineCapacity>& buffer) {
-    return Make8BitFrom16BitSource(buffer.data(), buffer.size());
-  }
+  [[nodiscard]] static String Make8BitFrom16BitSource(base::span<const UChar>);
+  [[nodiscard]] static String Make16BitFrom8BitSource(base::span<const LChar>);
 
-  [[nodiscard]] static String Make16BitFrom8BitSource(const LChar*, wtf_size_t);
-
-  // String::fromUTF8 will return a null string if
+  // String::FromUTF8 will return a null string if
   // the input data contains invalid UTF-8 sequences.
   // Does not strip BOMs.
-  [[nodiscard]] static String FromUTF8(const LChar*, size_t);
-  [[nodiscard]] static String FromUTF8(const LChar*);
-  [[nodiscard]] static String FromUTF8(const char* s, size_t length) {
-    return FromUTF8(reinterpret_cast<const LChar*>(s), length);
+  [[nodiscard]] static String FromUTF8(base::span<const uint8_t>);
+  [[nodiscard]] static String FromUTF8(const uint8_t*, size_t);
+  [[nodiscard]] static String FromUTF8(const char* s);
+  [[nodiscard]] static String FromUTF8(std::string_view s) {
+    return FromUTF8(base::as_byte_span(s));
   }
-  [[nodiscard]] static String FromUTF8(const char* s) {
-    return FromUTF8(reinterpret_cast<const LChar*>(s));
-  }
-  [[nodiscard]] static String FromUTF8(std::string_view);
 
   // Tries to convert the passed in string to UTF-8, but will fall back to
   // Latin-1 if the string is not valid UTF-8.
-  [[nodiscard]] static String FromUTF8WithLatin1Fallback(const LChar*, size_t);
-  [[nodiscard]] static String FromUTF8WithLatin1Fallback(const char* s,
-                                                         size_t length) {
-    return FromUTF8WithLatin1Fallback(reinterpret_cast<const LChar*>(s),
-                                      length);
+  [[nodiscard]] static String FromUTF8WithLatin1Fallback(
+      base::span<const uint8_t>);
+  [[nodiscard]] static String FromUTF8WithLatin1Fallback(std::string_view s) {
+    return FromUTF8WithLatin1Fallback(base::as_byte_span(s));
   }
 
   bool IsLowerASCII() const { return !impl_ || impl_->IsLowerASCII(); }
@@ -615,8 +614,7 @@ inline void swap(String& a, String& b) {
 
 template <wtf_size_t inlineCapacity>
 String::String(const Vector<UChar, inlineCapacity>& vector)
-    : impl_(vector.size() ? StringImpl::Create(vector.data(), vector.size())
-                          : StringImpl::empty_) {}
+    : impl_(vector.size() ? StringImpl::Create(vector) : StringImpl::empty_) {}
 
 template <>
 inline const LChar* String::GetCharacters<LChar>() const {
@@ -727,17 +725,14 @@ class WTF_EXPORT NewlineThenWhitespaceStringsTable {
 // double-quotes, and escapes characters other than ASCII printables.
 WTF_EXPORT std::ostream& operator<<(std::ostream&, const String&);
 
-inline StringView::StringView(const String& string
-                                  ABSL_ATTRIBUTE_LIFETIME_BOUND,
+inline StringView::StringView(const String& string LIFETIME_BOUND,
                               unsigned offset,
                               unsigned length)
     : StringView(string.Impl(), offset, length) {}
-inline StringView::StringView(const String& string
-                                  ABSL_ATTRIBUTE_LIFETIME_BOUND,
+inline StringView::StringView(const String& string LIFETIME_BOUND,
                               unsigned offset)
     : StringView(string.Impl(), offset) {}
-inline StringView::StringView(
-    const String& string ABSL_ATTRIBUTE_LIFETIME_BOUND)
+inline StringView::StringView(const String& string LIFETIME_BOUND)
     : StringView(string.Impl()) {}
 
 }  // namespace WTF

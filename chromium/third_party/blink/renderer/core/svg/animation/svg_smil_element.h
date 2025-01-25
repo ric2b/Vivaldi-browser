@@ -157,6 +157,8 @@ class CORE_EXPORT SVGSMILElement : public SVGElement, public SVGTests {
       const QualifiedName&,
       const AtomicString&,
       MutableCSSPropertyValueSet*) override;
+  SVGAnimatedPropertyBase* PropertyFromAttribute(
+      const QualifiedName& attribute_name) const override;
 
   void AddedEventListener(const AtomicString& event_type,
                           RegisteredEventListener&) final;
@@ -312,10 +314,6 @@ class CORE_EXPORT SVGSMILElement : public SVGElement, public SVGTests {
   friend class ConditionEventListener;
 };
 
-template <>
-inline bool IsElementOfType<const SVGSMILElement>(const Node& node) {
-  return IsA<SVGSMILElement>(node);
-}
 template <>
 struct DowncastTraits<SVGSMILElement> {
   static bool AllowFrom(const Node& node) {

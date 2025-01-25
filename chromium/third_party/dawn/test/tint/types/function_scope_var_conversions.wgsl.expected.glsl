@@ -4,8 +4,8 @@ void constant_with_non_constant() {
   float a = 0.0f;
   vec2 b = vec2(1.0f, a);
 }
-
-void tint_symbol() {
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+void main() {
   bool bool_var1 = true;
   bool bool_var2 = true;
   bool bool_var3 = true;
@@ -28,10 +28,4 @@ void tint_symbol() {
   bvec3 v3bool_var4 = bvec3(true);
   bvec4 v4bool_var5 = bvec4(true, false, true, false);
   constant_with_non_constant();
-}
-
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-void main() {
-  tint_symbol();
-  return;
 }

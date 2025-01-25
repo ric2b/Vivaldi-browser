@@ -60,8 +60,8 @@ namespace openscreen::cast {
 //      that is reasonable for the application).
 class BandwidthEstimator {
  public:
-  // |max_packets_per_timeslice| and |timeslice_duration| should match the burst
-  // configuration in SenderPacketRouter. |start_time| should be a recent
+  // `max_packets_per_timeslice` and `timeslice_duration` should match the burst
+  // configuration in SenderPacketRouter. `start_time` should be a recent
   // point-in-time before the first packet is sent.
   BandwidthEstimator(int max_packets_per_timeslice,
                      Clock::duration timeslice_duration,
@@ -73,11 +73,11 @@ class BandwidthEstimator {
   // data flows are being tracked.
   Clock::duration history_window() const { return history_window_; }
 
-  // Records |when| burst-sending was active or inactive. For the active case,
-  // |num_packets_sent| should include all network packets sent, including
+  // Records `when` burst-sending was active or inactive. For the active case,
+  // `num_packets_sent` should include all network packets sent, including
   // non-payload packets (since both affect the modeled utilization/capacity).
   // For the inactive case, this method should be called with zero for
-  // |num_packets_sent|.
+  // `num_packets_sent`.
   void OnBurstComplete(int num_packets_sent, Clock::time_point when);
 
   // Records when a RTCP packet was received. It's important for Senders to call
@@ -123,11 +123,11 @@ class BandwidthEstimator {
     }
 
     // Advance the end of the time window being tracked such that the
-    // most-recent timeslice includes |until|. Too-old timeslices are dropped
+    // most-recent timeslice includes `until`. Too-old timeslices are dropped
     // and new ones are initialized to a zero amount.
     void AdvanceToIncludeTime(Clock::time_point until);
 
-    // Accumulate the given |amount| into the timeslice that includes |when|.
+    // Accumulate the given `amount` into the timeslice that includes `when`.
     void Accumulate(int32_t amount, Clock::time_point when);
 
     // Return the sum of all the amounts in recent history. This clamps to the
@@ -138,13 +138,13 @@ class BandwidthEstimator {
     const Clock::duration timeslice_duration_;
 
     // The beginning of the oldest timeslice in the recent-history time window,
-    // the one pointed to by |tail_|.
+    // the one pointed to by `tail_`.
     Clock::time_point begin_time_;
 
     // A ring buffer tracking the accumulated amount for each timeslice.
     int32_t history_ring_[kNumTimeslices]{};
 
-    // The index of the oldest timeslice in the |history_ring_|. This can also
+    // The index of the oldest timeslice in the `history_ring_`. This can also
     // be thought of, equivalently, as the index just after the most-recent
     // timeslice.
     index_mod_256_t tail_ = 0;

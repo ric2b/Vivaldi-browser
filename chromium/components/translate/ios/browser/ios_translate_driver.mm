@@ -66,7 +66,13 @@ void IOSTranslateDriver::Initialize(
   web_state_observation_.Observe(web_state_);
 
   LanguageDetectionModel* language_detection_model = nullptr;
+
+#if defined(VIVALDI_BUILD)
+  if (language_detection_model_service_) {
+#else
   if (language_detection_model_service_ && IsTFLiteLanguageDetectionEnabled()) {
+#endif // End Vivaldi
+
     language_detection_model =
         language_detection_model_service_->GetLanguageDetectionModel();
   }

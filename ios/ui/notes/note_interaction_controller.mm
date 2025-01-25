@@ -73,11 +73,11 @@ enum class PresentedState {
   Browser* _browser;  // weak
 
   // The browser state of the current user.
-  ChromeBrowserState* _currentBrowserState;  // weak
+  ProfileIOS* _currentProfile;  // weak
 
   // The browser state to use, might be different from _currentBrowserState if
   // it is incognito.
-  ChromeBrowserState* _browserState;  // weak
+  ProfileIOS* _profile;  // weak
 
   // The parent controller on top of which the UI needs to be presented.
   __weak UIViewController* _parentController;
@@ -159,17 +159,16 @@ enum class PresentedState {
     _browser = browser;
     // notes are always opened with the main browser state, even in
     // incognito mode.
-    _currentBrowserState = browser->GetBrowserState();
-    _browserState = _currentBrowserState->GetOriginalChromeBrowserState();
+    _currentProfile = browser->GetProfile();
+    _profile = _currentProfile->GetOriginalProfile();
     _parentController = parentController;
     // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
     // clean up.
     _handler = static_cast<id<ApplicationCommands, BrowserCommands>>(
         browser->GetCommandDispatcher());
     _webStateList = browser->GetWebStateList();
-    _noteModel =
-        vivaldi::NotesModelFactory::GetForBrowserState(_browserState);
-    _mediator = [[NoteMediator alloc] initWithBrowserState:_browserState];
+    _noteModel = vivaldi::NotesModelFactory::GetForProfile(_profile);
+    _mediator = [[NoteMediator alloc] initWithProfile:_profile];
     _currentPresentedState = PresentedState::NONE;
     DCHECK(_noteModel);
     DCHECK(_parentController);
@@ -381,7 +380,7 @@ noteHomeViewControllerWantsDismissal:(NoteHomeViewController*)controller
                         navigationToUrls:(const std::vector<GURL>&)urls {
   [self noteHomeViewControllerWantsDismissal:controller
                                 navigationToUrls:urls
-                                     inIncognito:_currentBrowserState
+                                     inIncognito:_currentProfile
                                                      ->IsOffTheRecord()
                                           newTab:NO];
 }

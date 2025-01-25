@@ -25,8 +25,6 @@
 #include "components/user_manager/user_manager.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 
-class PrefRegistrySimple;
-
 namespace base {
 class OneShotTimer;
 }
@@ -89,14 +87,6 @@ class DemoSession : public session_manager::SessionManagerObserver,
     kMaxValue = kAppListQuery
   };
 
-  // The list of countries that Demo Mode supports, ie the countries we have
-  // created OUs and admin users for in the admin console.
-  // Sorted by country code except US is first.
-  static constexpr char kSupportedCountries[][3] = {
-      "US", "AT", "AU", "BE", "BR", "CA", "DE", "DK", "ES",
-      "FI", "FR", "GB", "IE", "IN", "IT", "JP", "LU", "MX",
-      "NL", "NO", "NZ", "PL", "PT", "SE", "ZA"};
-
   static constexpr char kCountryNotSelectedId[] = "N/A";
 
   DemoSession(const DemoSession&) = delete;
@@ -104,6 +94,11 @@ class DemoSession : public session_manager::SessionManagerObserver,
 
   static std::string DemoConfigToString(DemoModeConfig config);
 
+  // TODO(b/366092466): Refactor demo code that not related to ChromeOS UI to
+  // //chromeos/ash/components/demo_mode.
+
+  // DO NOT USE. Please use `IsDeviceInDemoMode()` in
+  // chromeos/ash/components/demo_mode/utils/demo_session_utils.h
   // Whether the device is set up to run demo sessions.
   static bool IsDeviceInDemoMode();
 
@@ -148,8 +143,6 @@ class DemoSession : public session_manager::SessionManagerObserver,
   // `title`: The display name of the country in the current locale.
   // `selected`: Whether the country is currently selected.
   static base::Value::List GetCountryList();
-
-  static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
   // Records the launch of an app in Demo mode from the specified source.
   static void RecordAppLaunchSource(AppLaunchSource source);

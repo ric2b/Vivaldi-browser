@@ -9,7 +9,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
-#include "ui/base/ui_base_types.h"
+#include "ui/base/mojom/menu_source_type.mojom-forward.h"
 
 namespace gfx {
 class Point;
@@ -42,7 +42,7 @@ class ToolkitDelegateViews : public RenderViewContextMenuBase::ToolkitDelegate {
 
   void RunMenuAt(views::Widget* parent,
                  const gfx::Point& point,
-                 ui::MenuSourceType type);
+                 ui::mojom::MenuSourceType type);
   views::MenuItemView* menu_view() { return menu_view_; }
 
   views::MenuItemView* VivaldiInit(ui::SimpleMenuModel* menu_model,
@@ -53,7 +53,7 @@ class ToolkitDelegateViews : public RenderViewContextMenuBase::ToolkitDelegate {
                       ui::MenuModel* menu_model);
   void VivaldiRunMenuAt(views::Widget* parent,
                         const gfx::Rect& rect,
-                        ui::MenuSourceType type);
+                        ui::mojom::MenuSourceType type);
   views::MenuItemView* vivaldi_get_menu_view() const { return  menu_view_; }
  protected:
   // ToolkitDelegate:

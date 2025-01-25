@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <vector>
 
 #include "osp/impl/quic/quic_connection.h"
 #include "osp/impl/quic/quic_protocol_connection.h"
@@ -16,19 +15,19 @@
 
 namespace openscreen::osp {
 
-struct ServiceStreamPair {
-  QuicStream* stream = nullptr;
-  QuicProtocolConnection* protocol_connection = nullptr;
-};
-
 // There is one instance of this class per QuicConnectionImpl instance, see
 // ServiceConnectionData. The responsibility of this class is to manage all
 // QuicStreams for the corresponding QuicConnection.
 class QuicStreamManager final : public QuicStream::Delegate {
  public:
-  class Delegate : public QuicProtocolConnection::Owner {
+  class Delegate {
    public:
-    ~Delegate() override = default;
+    Delegate();
+    Delegate(const Delegate&) = delete;
+    Delegate& operator=(const Delegate&) = delete;
+    Delegate(Delegate&&) noexcept = delete;
+    Delegate& operator=(Delegate&&) noexcept = delete;
+    virtual ~Delegate();
 
     virtual void OnDataReceived(uint64_t instance_id,
                                 uint64_t protocol_connection_id,
@@ -49,13 +48,7 @@ class QuicStreamManager final : public QuicStream::Delegate {
   void OnClose(uint64_t stream_id) override;
 
   std::unique_ptr<QuicProtocolConnection> OnIncomingStream(QuicStream* stream);
-  void AddStreamPair(const ServiceStreamPair& stream_pair);
-  // This is called when `connection` is about to be destroyed. However, the
-  // underlying QuicStream of `connection` is still working. So we should not
-  // remove the corresponding item from `streams_`.
-  // As a comparison, OnClose is called when a underlying QuicStream is about to
-  // be closed. So we should remove the corresponding item from `streams_`.
-  void DropProtocolConnection(QuicProtocolConnection& connection);
+  void AddStream(QuicProtocolConnection& protocol_connection);
 
   void set_quic_connection(QuicConnection* quic_connection) {
     quic_connection_ = quic_connection;
@@ -65,7 +58,7 @@ class QuicStreamManager final : public QuicStream::Delegate {
   Delegate& delegate_;
   // This class manages all QuicStreams for `quic_connection_`;
   QuicConnection* quic_connection_ = nullptr;
-  std::map<uint64_t, ServiceStreamPair> streams_;
+  std::map<uint64_t, QuicProtocolConnection*> streams_by_id_;
 };
 
 }  // namespace openscreen::osp

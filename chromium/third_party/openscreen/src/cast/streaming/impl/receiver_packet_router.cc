@@ -84,7 +84,7 @@ void ReceiverPacketRouter::OnReceivedPacket(const IPEndpoint& source,
     return;
   }
   // At this point, a valid packet has been matched with a receiver. Lock-in
-  // the remote endpoint as the |source| of this |packet| so that only packets
+  // the remote endpoint as the `source` of this `packet` so that only packets
   // from the same source are permitted from here onwards.
   if (environment_.remote_endpoint().port == 0) {
     environment_.set_remote_endpoint(source);

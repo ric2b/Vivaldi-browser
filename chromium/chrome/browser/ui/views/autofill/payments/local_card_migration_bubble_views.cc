@@ -23,6 +23,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/color/color_id.h"
@@ -85,7 +86,7 @@ void LocalCardMigrationBubbleViews::Hide() {
 
   if (controller_) {
     controller_->OnBubbleClosed(
-        GetPaymentsBubbleClosedReasonFromWidget(GetWidget()));
+        GetPaymentsUiClosedReasonFromWidget(GetWidget()));
   }
   controller_ = nullptr;
 }
@@ -150,7 +151,7 @@ std::u16string LocalCardMigrationBubbleViews::GetWindowTitle() const {
 void LocalCardMigrationBubbleViews::WindowClosing() {
   if (controller_) {
     controller_->OnBubbleClosed(
-        GetPaymentsBubbleClosedReasonFromWidget(GetWidget()));
+        GetPaymentsUiClosedReasonFromWidget(GetWidget()));
     controller_ = nullptr;
   }
 }
@@ -176,5 +177,8 @@ void LocalCardMigrationBubbleViews::Init() {
   AddChildView(explanatory_message);
   SetID(DialogViewId::MAIN_CONTENT_VIEW_MIGRATION_BUBBLE);
 }
+
+BEGIN_METADATA(LocalCardMigrationBubbleViews)
+END_METADATA
 
 }  // namespace autofill

@@ -57,7 +57,7 @@ void QuicConnectionImpl::OnConnectionClosed(
     const std::string& error_details,
     quic::ConnectionCloseSource source) {
   TRACE_SCOPED(TraceCategory::kQuic, "QuicConnectionImpl::OnConnectionClosed");
-  delegate_.OnConnectionClosed(instance_id_);
+  delegate_.OnConnectionClosed(instance_name_);
   if (dispatcher_) {
     dispatcher_->OnConnectionClosed(server_connection_id, error_code,
                                     error_details, source);
@@ -99,15 +99,14 @@ bool QuicConnectionImpl::TryAddNewConnectionId(
 void QuicConnectionImpl::OnConnectionIdRetired(
     const quic::QuicConnectionId& server_connection_id) {
   if (dispatcher_) {
-    return dispatcher_->OnConnectionIdRetired(server_connection_id);
+    dispatcher_->OnConnectionIdRetired(server_connection_id);
   }
 }
 
 void QuicConnectionImpl::OnServerPreferredAddressAvailable(
     const quic::QuicSocketAddress& server_preferred_address) {
   if (dispatcher_) {
-    return dispatcher_->OnServerPreferredAddressAvailable(
-        server_preferred_address);
+    dispatcher_->OnServerPreferredAddressAvailable(server_preferred_address);
   }
 }
 

@@ -7,25 +7,37 @@
 #include <string>
 #include <vector>
 
+#include "base/functional/bind.h"
+#include "base/test/bind.h"
+#include "base/test/test_future.h"
 #include "chrome/browser/autofill/autofill_uitest_util.h"
 #include "chrome/browser/extensions/api/autofill_private/autofill_private_event_router.h"
 #include "chrome/browser/extensions/api/autofill_private/autofill_private_event_router_factory.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/user_annotations/user_annotations_service_factory.h"
 #include "components/autofill/content/browser/test_autofill_client_injector.h"
 #include "components/autofill/content/browser/test_content_autofill_client.h"
+#include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/payments/mandatory_reauth_metrics.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
+#include "components/autofill/core/browser/payments/payments_request_details.h"
+#include "components/autofill/core/browser/payments/test_payments_network_interface.h"
 #include "components/autofill/core/browser/payments_data_manager.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/device_reauth/mock_device_authenticator.h"
 #include "components/prefs/pref_service.h"
+#include "components/sync/test/test_sync_service.h"
+#include "components/user_annotations/test_user_annotations_service.h"
+#include "components/user_annotations/user_annotations_types.h"
 #include "content/public/test/browser_test.h"
 
 namespace {
+
+using ::testing::Eq;
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 using autofill::autofill_metrics::MandatoryReauthAuthenticationFlowEvent;
@@ -181,7 +193,6 @@ class AutofillPrivateApiUnitTest : public extensions::ExtensionApiTest {
   AutofillPrivateApiUnitTest& operator=(const AutofillPrivateApiUnitTest&) =
       delete;
   ~AutofillPrivateApiUnitTest() override = default;
-
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
     autofill_client()
@@ -189,11 +200,34 @@ class AutofillPrivateApiUnitTest : public extensions::ExtensionApiTest {
         ->payments_data_manager()
         .SetSyncingForTest(
             /*is_syncing_for_test=*/true);
+    UserAnnotationsServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+        profile(),
+        base::BindLambdaForTesting([](content::BrowserContext* context)
+                                       -> std::unique_ptr<KeyedService> {
+          return std::make_unique<
+              user_annotations::TestUserAnnotationsService>();
+        }));
+  }
+
+  void TearDownOnMainThread() override {
+    InProcessBrowserTest::TearDownOnMainThread();
   }
 
   autofill::TestContentAutofillClient* autofill_client() {
     return test_autofill_client_injector_
         [browser()->tab_strip_model()->GetActiveWebContents()];
+  }
+
+  user_annotations::TestUserAnnotationsService* user_annotations_service() {
+    return static_cast<user_annotations::TestUserAnnotationsService*>(
+        UserAnnotationsServiceFactory::GetForProfile(profile()));
+  }
+
+  user_annotations::UserAnnotationsEntries GetAllUserAnnotationsEntries() {
+    base::test::TestFuture<user_annotations::UserAnnotationsEntries>
+        test_future;
+    user_annotations_service()->RetrieveAllEntries(test_future.GetCallback());
+    return test_future.Take();
   }
 
  protected:
@@ -209,6 +243,8 @@ class AutofillPrivateApiUnitTest : public extensions::ExtensionApiTest {
  private:
   autofill::TestAutofillClientInjector<autofill::TestContentAutofillClient>
       test_autofill_client_injector_;
+  raw_ptr<user_annotations::TestUserAnnotationsService>
+      user_annotations_service_;
 };
 
 // Test to verify all the CVCs(server and local) are bulk deleted when the API
@@ -254,6 +290,117 @@ IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest, BulkDeleteAllCvcs) {
       EXPECT_EQ(card->number(), local_card.number());
     }
   }
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest, RetrieveAllUserAnnotations) {
+  ASSERT_EQ(user_annotations_service()->count_entries_retrieved(), 0u);
+  RunAutofillSubtest("getUserAnnotationsEntries");
+  ASSERT_EQ(user_annotations_service()->count_entries_retrieved(), 1u);
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest, RemoveUserAnnotationEntry) {
+  // Seed user annotations service with entries.
+  ASSERT_TRUE(RunAutofillSubtest("deleteUserAnnotationsEntry"));
+  optimization_guide::proto::UserAnnotationsEntry entry_1;
+  entry_1.set_entry_id(123);
+  optimization_guide::proto::UserAnnotationsEntry entry_2;
+  entry_2.set_entry_id(321);
+  user_annotations_service()->ReplaceAllEntries({entry_1, entry_2});
+  EXPECT_EQ(GetAllUserAnnotationsEntries().size(), 2u);
+
+  // By default, the test deletes the entry whose id is 123.
+  RunAutofillSubtest("deleteUserAnnotationsEntry");
+
+  user_annotations::UserAnnotationsEntries entries =
+      GetAllUserAnnotationsEntries();
+  EXPECT_EQ(entries.size(), 1u);
+  EXPECT_EQ(entries[0].entry_id(), 321u);
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest, RemoveAllUserAnnotations) {
+  // Seed user annotations service with entries.
+  optimization_guide::proto::UserAnnotationsEntry entry;
+  entry.set_entry_id(0);
+  user_annotations_service()->ReplaceAllEntries({entry});
+  EXPECT_EQ(GetAllUserAnnotationsEntries().size(), 1u);
+
+  RunAutofillSubtest("deleteAllUserAnnotationsEntries");
+  EXPECT_TRUE(GetAllUserAnnotationsEntries().empty());
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest,
+                       PredictionImprovementsIphFeatureUsed) {
+  using NotifyIphMockCallback =
+      testing::MockFunction<void(autofill::AutofillClient::IphFeature)>;
+  NotifyIphMockCallback mock_callback;
+  autofill_client()->set_notify_iph_feature_used_mock_callback(
+      base::BindRepeating(&NotifyIphMockCallback::Call,
+                          base::Unretained(&mock_callback)));
+
+  EXPECT_CALL(
+      mock_callback,
+      Call(autofill::AutofillClient::IphFeature::kPredictionImprovements));
+
+  RunAutofillSubtest("predictionImprovementsIphFeatureUsed");
+  EXPECT_TRUE(GetAllUserAnnotationsEntries().empty());
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest, LogServerCardLinkClicked) {
+  base::HistogramTester histogram_tester;
+  ASSERT_TRUE(RunAutofillSubtest("logServerCardLinkClicked"));
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.ServerCardLinkClicked",
+      autofill::AutofillMetrics::PaymentsSigninState::kSignedOut, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest, RemoveVirtualCard) {
+  autofill::TestPersonalDataManager* personal_data_manager =
+      autofill_client()->GetPersonalDataManager();
+  autofill_client()
+      ->GetPaymentsAutofillClient()
+      ->set_test_payments_network_interface(
+          std::make_unique<autofill::payments::TestPaymentsNetworkInterface>(
+              autofill_client()->GetURLLoaderFactory(),
+              autofill_client()->GetIdentityManager(), personal_data_manager));
+  // Required for adding the server card.
+  personal_data_manager->payments_data_manager().SetSyncingForTest(
+      /*is_syncing_for_test=*/true);
+  autofill::CreditCard virtual_card = autofill::test::GetVirtualCard();
+  virtual_card.set_server_id("a123");
+  virtual_card.set_instrument_id(123);
+  personal_data_manager->test_payments_data_manager().AddServerCreditCard(
+      virtual_card);
+  EXPECT_TRUE(RunAutofillSubtest("removeVirtualCard"));
+  EXPECT_THAT(
+      autofill_client()
+          ->GetPaymentsAutofillClient()
+          ->GetPaymentsNetworkInterface()
+          ->update_virtual_card_enrollment_request_details(),
+      ::testing::AllOf(
+          ::testing::Field(
+              &autofill::payments::UpdateVirtualCardEnrollmentRequestDetails::
+                  instrument_id,
+              123),
+          ::testing::Field(
+              &autofill::payments::UpdateVirtualCardEnrollmentRequestDetails::
+                  virtual_card_enrollment_request_type,
+              autofill::VirtualCardEnrollmentRequestType::kUnenroll)));
+}
+
+IN_PROC_BROWSER_TEST_F(AutofillPrivateApiUnitTest,
+                       SetAutofillSyncToggleEnabled) {
+  autofill::TestPersonalDataManager* personal_data_manager =
+      autofill_client()->GetPersonalDataManager();
+  syncer::TestSyncService test_sync_service;
+  personal_data_manager->test_address_data_manager().SetSyncServiceForTest(
+      &test_sync_service);
+  test_sync_service.GetUserSettings()->SetSelectedType(
+      syncer::UserSelectableType::kAutofill, false);
+  EXPECT_FALSE(test_sync_service.GetUserSettings()->GetSelectedTypes().Has(
+      syncer::UserSelectableType::kAutofill));
+  EXPECT_TRUE(RunAutofillSubtest("setAutofillSyncToggleEnabled"));
+  EXPECT_TRUE(test_sync_service.GetUserSettings()->GetSelectedTypes().Has(
+      syncer::UserSelectableType::kAutofill));
 }
 
 }  // namespace

@@ -158,7 +158,7 @@
 <translation id="3627588569887975815">Abrir ligação numa janela em modo incó&amp;gnito</translation>
 <translation id="3678156199662914018">Extensão: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Pedido de partilha de ecrã de <ph name="APP_NAME" /></translation>
-<translation id="3708684582558000260">Não permitir que os sites fechados concluam o envio ou a receção de dados</translation>
+<translation id="3708684582558000260">Não permitir que os websites fechados concluam o envio ou a receção de dados</translation>
 <translation id="3711931198657368127">Co&amp;lar e ir para <ph name="URL" /></translation>
 <translation id="3719826155360621982">Página inicial</translation>
 <translation id="3727187387656390258">Inspecionar pop-up</translation>
@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Falha ao carregar a extensão</translation>
 <translation id="383891835335927981">A ampliação dos websites não foi aumentada nem diminuída</translation>
 <translation id="385051799172605136">Voltar</translation>
+<translation id="3861977424605124250">Mostrar no arranque</translation>
 <translation id="3867944738977021751">Campos do certificado</translation>
 <translation id="3905761538810670789">Reparar aplicação</translation>
 <translation id="3908501907586732282">Ativar extensão</translation>

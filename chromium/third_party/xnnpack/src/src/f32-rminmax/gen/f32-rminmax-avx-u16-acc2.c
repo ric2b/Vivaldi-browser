@@ -19,13 +19,14 @@ void xnn_f32_rminmax_ukernel__avx_u16_acc2(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
   assert(input != NULL);
   assert(output != NULL);
-  assert(params != NULL);
+
+  static const int32_t mask_table[14] = {-1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0};
 
   __m256 vmin0 = _mm256_broadcast_ss(input);
   __m256 vmax0 = vmin0;
@@ -53,7 +54,7 @@ void xnn_f32_rminmax_ukernel__avx_u16_acc2(
   if XNN_UNLIKELY(batch != 0) {
     assert(batch >= 1 * sizeof(float));
     assert(batch <= 7 * sizeof(float));
-    const __m256i vmask = _mm256_loadu_si256((const __m256i*) ((uintptr_t) &params->avx.mask_table[7] - batch));
+    const __m256i vmask = _mm256_loadu_si256((const __m256i*) ((uintptr_t) &mask_table[7] - batch));
 
     const __m256 vt = _mm256_maskload_ps(input, vmask);
 

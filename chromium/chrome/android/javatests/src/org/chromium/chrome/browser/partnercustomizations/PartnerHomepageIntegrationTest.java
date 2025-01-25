@@ -193,7 +193,7 @@ public class PartnerHomepageIntegrationTest {
         try {
             tabClosed.waitForCallback(0);
         } catch (TimeoutException e) {
-            Assert.fail("Never closed all of the tabs");
+            throw new AssertionError("Never closed all of the tabs", e);
         }
         Assert.assertEquals(
                 "Expected no tabs to be present",
@@ -236,6 +236,6 @@ public class PartnerHomepageIntegrationTest {
                     Assert.assertEquals(preference.isChecked(), expected);
                 });
 
-        homepagePreferenceActivity.finish();
+        mHomepageSettingsTestRule.finishActivity();
     }
 }

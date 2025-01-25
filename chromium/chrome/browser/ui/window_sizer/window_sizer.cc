@@ -21,6 +21,7 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/prefs/pref_service.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -67,9 +68,10 @@ class DefaultStateProvider : public WindowSizer::StateProvider {
   DefaultStateProvider& operator=(const DefaultStateProvider&) = delete;
 
   // Overridden from WindowSizer::StateProvider:
-  bool GetPersistentState(gfx::Rect* bounds,
-                          gfx::Rect* work_area,
-                          ui::WindowShowState* show_state) const override {
+  bool GetPersistentState(
+      gfx::Rect* bounds,
+      gfx::Rect* work_area,
+      ui::mojom::WindowShowState* show_state) const override {
     DCHECK(bounds);
     DCHECK(show_state);
 
@@ -92,15 +94,17 @@ class DefaultStateProvider : public WindowSizer::StateProvider {
     *bounds = pref_bounds.value();
     if (pref_area)
       *work_area = pref_area.value();
-    if (*show_state == ui::SHOW_STATE_DEFAULT && maximized.value())
-      *show_state = ui::SHOW_STATE_MAXIMIZED;
+    if (*show_state == ui::mojom::WindowShowState::kDefault &&
+        maximized.value()) {
+      *show_state = ui::mojom::WindowShowState::kMaximized;
+    }
 
     return true;
   }
 
   bool GetLastActiveWindowState(
       gfx::Rect* bounds,
-      ui::WindowShowState* show_state) const override {
+      ui::mojom::WindowShowState* show_state) const override {
     DCHECK(show_state);
     // Legacy Applications and Devtools are always restored with the same
     // position.
@@ -146,17 +150,18 @@ class DefaultStateProvider : public WindowSizer::StateProvider {
     if (window) {
         *bounds = window->GetRestoredBounds();
 
-      // On Mac GetRestoredBounds already returns the maximized bounds for
-      // maximized windows. Additionally creating a window with a maximized
-      // show state results in an invisible window if the window is a PWA
-      // (i.e. out-of-process remote cocoa) window (https://crbug.com/1441966).
-      // Never using SHOW_STATE_MAXIMIZED on Mac is also consistent with
-      // NativeWidgetMac::Show, which does not support SHOW_STATE_MAXIMIZED
-      // either.
+        // On Mac GetRestoredBounds already returns the maximized bounds for
+        // maximized windows. Additionally creating a window with a maximized
+        // show state results in an invisible window if the window is a PWA
+        // (i.e. out-of-process remote cocoa) window
+        // (https://crbug.com/1441966). Never using WindowShowState::kMaximized
+        // on Mac is also consistent with NativeWidgetMac::Show, which does not
+        // support WindowShowState::kMaximized either.
 #if !BUILDFLAG(IS_MAC)
-      if (*show_state == ui::SHOW_STATE_DEFAULT && window->IsMaximized()) {
-        *show_state = ui::SHOW_STATE_MAXIMIZED;
-      }
+        if (*show_state == ui::mojom::WindowShowState::kDefault &&
+            window->IsMaximized()) {
+          *show_state = ui::mojom::WindowShowState::kMaximized;
+        }
 #endif
       return true;
     }
@@ -205,7 +210,7 @@ void WindowSizer::GetBrowserWindowBoundsAndShowState(
     const gfx::Rect& specified_bounds,
     const Browser* browser,
     gfx::Rect* window_bounds,
-    ui::WindowShowState* show_state) {
+    ui::mojom::WindowShowState* show_state) {
   return GetBrowserWindowBoundsAndShowState(
       std::make_unique<DefaultStateProvider>(browser), specified_bounds,
       browser, window_bounds, show_state);
@@ -219,7 +224,7 @@ void WindowSizer::GetBrowserWindowBoundsAndShowState(
     const gfx::Rect& specified_bounds,
     const Browser* browser,
     gfx::Rect* bounds,
-    ui::WindowShowState* show_state) {
+    ui::mojom::WindowShowState* show_state) {
   DCHECK(bounds);
   DCHECK(show_state);
 #if BUILDFLAG(IS_CHROMEOS)
@@ -237,7 +242,7 @@ void WindowSizer::GetBrowserWindowBoundsAndShowState(
 void WindowSizer::DetermineWindowBoundsAndShowState(
     const gfx::Rect& specified_bounds,
     gfx::Rect* bounds,
-    ui::WindowShowState* show_state) {
+    ui::mojom::WindowShowState* show_state) {
   if (bounds->IsEmpty()) {
     // See if there's last active window's placement information.
     if (GetLastActiveWindowBounds(bounds, show_state))
@@ -275,7 +280,7 @@ void WindowSizer::AdjustWorkAreaForPlatform(gfx::Rect& work_area) {}
 
 bool WindowSizer::GetLastActiveWindowBounds(
     gfx::Rect* bounds,
-    ui::WindowShowState* show_state) const {
+    ui::mojom::WindowShowState* show_state) const {
   DCHECK(bounds);
   DCHECK(show_state);
   if (!state_provider_.get() ||
@@ -288,8 +293,9 @@ bool WindowSizer::GetLastActiveWindowBounds(
   return true;
 }
 
-bool WindowSizer::GetSavedWindowBounds(gfx::Rect* bounds,
-                                       ui::WindowShowState* show_state) const {
+bool WindowSizer::GetSavedWindowBounds(
+    gfx::Rect* bounds,
+    ui::mojom::WindowShowState* show_state) const {
   DCHECK(bounds);
   DCHECK(show_state);
   gfx::Rect saved_work_area;
@@ -419,10 +425,10 @@ void WindowSizer::AdjustBoundsToBeVisibleOnDisplay(
 }
 
 // static
-ui::WindowShowState WindowSizer::GetWindowDefaultShowState(
+ui::mojom::WindowShowState WindowSizer::GetWindowDefaultShowState(
     const Browser* browser) {
   if (!browser)
-    return ui::SHOW_STATE_DEFAULT;
+    return ui::mojom::WindowShowState::kDefault;
 
   // Only tabbed browsers and dev tools use the command line.
   bool use_command_line =
@@ -436,7 +442,7 @@ ui::WindowShowState WindowSizer::GetWindowDefaultShowState(
 
   if (use_command_line && base::CommandLine::ForCurrentProcess()->HasSwitch(
                               switches::kStartMaximized)) {
-    return ui::SHOW_STATE_MAXIMIZED;
+    return ui::mojom::WindowShowState::kMaximized;
   }
 
   return browser->initial_show_state();

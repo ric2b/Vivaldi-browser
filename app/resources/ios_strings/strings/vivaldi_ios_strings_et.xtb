@@ -4,22 +4,23 @@
 <translation id="1063263220330818888">Privaatne otsing</translation>
 <translation id="1137850887415122856">Privaatsete kaartide lukustamiseks on vaja Touch ID’d, Face ID’d või lukustuskoodi.</translation>
 <translation id="1310184829257917508">Küsitakse, kas avada link teisest rakendusest privaatsel kaardil</translation>
-<translation id="1512201558627495343">Uus privaatne kaart</translation>
 <translation id="207677936531967364">Uue privaatse kaardi sisu</translation>
+<translation id="2418705169960294134">Uus privaatne kaart</translation>
 <translation id="2899836479226240291">Kui soovid lingid automaatselt Vivaldis avada, määra Vivaldi oma vaikimisi brauseriks.</translation>
-<translation id="3365529507898144230">Salvesta pilt</translation>
+<translation id="3463990832590571933">Ava uuel privaatsel kaardil</translation>
 <translation id="3473652525653758699">Uus privaatne aken</translation>
 <translation id="3501504415290398157">Ava privaatsete kaartide lukk <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />’ga</translation>
 <translation id="3692650606013198282">Ava privaatsel kaardil</translation>
-<translation id="3709782636417497984">Ava privaatsel kaardil</translation>
 <translation id="3981599532037327317">Ava ${url} privaatsel kaardil</translation>
 <translation id="398477389655464998">Kopeeri link esiletõstu juurde</translation>
-<translation id="4620246317052452550">Loetud</translation>
 <translation id="4755216899422789286">Ava URL-id Vivaldis</translation>
+<translation id="5431239785743546285">Loetud</translation>
 <translation id="6233792867654386826">Avab sisestatud URL-id Vivaldis.</translation>
 <translation id="6827597288286078054">Privaatne otsing</translation>
 <translation id="7307970171564921489">Ava privaatsete kaartide lukk <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />’ga</translation>
 <translation id="7347289093190902150">Kas avada privaatsel kaardil?</translation>
 <translation id="7549299604720382000">Uus privaatne kaart</translation>
+<translation id="7920949005883349320">Privaatsus ja turvalisus</translation>
+<translation id="8031932676440435547">Salvesta pilt</translation>
 <translation id="8326104954595890674">Uus privaatne kaart</translation>
 </translationbundle>

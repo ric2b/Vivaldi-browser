@@ -11,14 +11,17 @@
 
 #include "base/functional/callback_forward.h"
 #include "base/time/time.h"
+#include "base/types/optional_ref.h"
 #include "net/base/net_export.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_options.h"
+#include "net/cookies/cookie_setting_override.h"
 #include "net/cookies/site_for_cookies.h"
 #include "net/first_party_sets/first_party_set_metadata.h"
 #include "net/first_party_sets/first_party_sets_cache_filter.h"
+#include "net/storage_access_api/status.h"
 #include "url/origin.h"
 
 class GURL;
@@ -69,6 +72,80 @@ enum class StorageAccessStatus {
   // Applies to context that has unpartitioned cookie access.
   kActive = 2
 };
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// The values of this enum correspond to possible reasons the
+// `Sec-Fetch-Storage-Access` header may be omitted from a request, as well as
+// the possible values of the header when it is included.
+//
+// LINT.IfChange(SecFetchStorageAccessValueOutcome)
+enum class SecFetchStorageAccessValueOutcome {
+  // Applies when the `Sec-Fetch-Storage-Access` header is disabled.
+  kOmittedFeatureDisabled = 0,
+  // Applies when the request is same-site.
+  kOmittedSameSite = 1,
+  // Applies when credentials are omitted on the request, or if the request does
+  // not have a cookie store.
+  kOmittedRequestOmitsCredentials = 2,
+  // Applies when the request's `privacy_mode` is either `PRIVACY_MODE_ENABLED`
+  // or `PRIVACY_MODE_ENABLED_WITHOUT_CLIENT_CERTS`
+  kOmittedByPrivacyMode = 3,
+  // Applies when the `Sec-Fetch-Storage-Access` header is included on a
+  // request and has the value `none`.
+  kValueNone = 4,
+  // Applies when the `Sec-Fetch-Storage-Access` header is included on a
+  // request and has the value `inactive`.
+  kValueInactive = 5,
+  // Applies when the `Sec-Fetch-Storage-Access` header is included on a
+  // request and has the value `active`.
+  kValueActive = 6,
+  kMaxValue = kValueActive
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/storage/enums.xml:SecFetchStorageAccessValueOutcome)
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// The values of this enum correspond to the possible outcomes of a call to
+// URLRequest::ShouldSetLoadWithStorageAccess().
+//
+// LINT.IfChange(ActivateStorageAccessLoadOutcome)
+enum class ActivateStorageAccessLoadOutcome {
+  // Applies when the `Activate-Storage-Access` header behavior is not enabled
+  // under the existing feature flags or content settings.
+  kFailureHeaderDisabled = 0,
+  // Applies when a response includes the `Activate-Storage-Access: load`
+  // header, but its corresponding request either has an omitted storage access
+  // status, or has a storage access status of `none`.
+  kFailureInvalidStatus = 1,
+  // Applies when a response includes the `Activate-Storage-Access: load`
+  // header, and that header is honored by the browser.
+  kSuccess = 2,
+  kMaxValue = kSuccess
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/storage/enums.xml:ActivateStorageAccessLoadOutcome)
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// The values of this enum correspond to the possible outcomes of a call to
+// URLRequestHttpJob::NeedsRetryWithStorageAccess().
+//
+// LINT.IfChange(ActivateStorageAccessRetryOutcome)
+enum class ActivateStorageAccessRetryOutcome {
+  // Applies when the `Activate-Storage-Access` header behavior is not enabled
+  // under the existing feature flags or content settings.
+  kFailureHeaderDisabled = 0,
+  // Applies when a response includes a well-formed
+  // `Activate-Storage-Access: retry; ..." header, but the corresponding
+  // request's `Sec-Fetch-Storage-Access` header is not `inactive`.
+  kFailureIneffectiveRetry = 1,
+  // Applies when a response includes a well-formed
+  // "Activate-Storage-Access: retry; ..." header, and that header is honored
+  // by the browser.
+  kSuccess = 2,
+  kMaxValue = kSuccess
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/storage/enums.xml:ActivateStorageAccessRetryOutcome)
 
 // Helper to fire telemetry indicating if a given request for storage was
 // allowed or not by the provided |result|.
@@ -372,6 +449,14 @@ NET_EXPORT void DCheckIncludedAndExcludedCookieLists(
 NET_EXPORT bool IsForceThirdPartyCookieBlockingEnabled();
 
 NET_EXPORT bool PartitionedCookiesDisabledByCommandLine();
+
+// Adds or removes the kStorageAccessGrantEligible override, as appropriate.
+// Mutates `overrides` in place.
+NET_EXPORT void AddOrRemoveStorageAccessApiOverride(
+    const GURL& url,
+    StorageAccessApiStatus api_status,
+    base::optional_ref<const url::Origin> request_initiator,
+    CookieSettingOverrides& overrides);
 
 }  // namespace cookie_util
 

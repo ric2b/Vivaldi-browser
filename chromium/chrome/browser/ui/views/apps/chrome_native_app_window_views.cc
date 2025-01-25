@@ -16,7 +16,6 @@
 #include "base/no_destructor.h"
 #include "base/not_fatal_until.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
@@ -33,6 +32,7 @@
 #include "extensions/browser/extension_util.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/base/models/image_model.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/image/image_skia.h"
@@ -174,7 +174,7 @@ void ChromeNativeAppWindowViews::InitializeDefaultWindow(
     }
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   if (create_params.is_ime_window)
     return;
 #endif
@@ -228,13 +228,14 @@ gfx::Rect ChromeNativeAppWindowViews::GetRestoredBounds() const {
   return widget()->GetRestoredBounds();
 }
 
-ui::WindowShowState ChromeNativeAppWindowViews::GetRestoredState() const {
+ui::mojom::WindowShowState ChromeNativeAppWindowViews::GetRestoredState()
+    const {
   if (IsMaximized())
-    return ui::SHOW_STATE_MAXIMIZED;
+    return ui::mojom::WindowShowState::kMaximized;
   if (IsFullscreen())
-    return ui::SHOW_STATE_FULLSCREEN;
+    return ui::mojom::WindowShowState::kFullscreen;
 
-  return ui::SHOW_STATE_NORMAL;
+  return ui::mojom::WindowShowState::kNormal;
 }
 
 ui::ZOrderLevel ChromeNativeAppWindowViews::GetZOrderLevel() const {

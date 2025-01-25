@@ -9,7 +9,7 @@
 #include "browser/menus/vivaldi_speech_menu_controller.h"
 
 #include "browser/menus/vivaldi_render_view_context_menu.h"
-#include "ui/base/cocoa/text_services_context_menu.h"
+#include "ui/menus/cocoa/text_services_context_menu.h"
 #include "ui/strings/grit/ui_strings.h"
 
 namespace vivaldi {

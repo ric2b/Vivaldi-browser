@@ -55,7 +55,7 @@ target="_blank">chromium</a> Git repository) necessary to build ChromiumOS.
 The `.gclient` configuration file provides variables which affect which
 repositories are synced and how they are set up.
 
-To configure your gclient checkout to include the `chrome-internal repository,
+To configure your gclient checkout to include the `chrome-internal` repository,
 edit your `chromium/.gclient` file to include the `checkout_src_internal`
 variable. The `cros_boards` variable pulls down board-specific code. Finally,
 the `target_os` variable pulls down ChromeOS-specific code.

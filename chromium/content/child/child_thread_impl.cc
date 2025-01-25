@@ -78,7 +78,6 @@
 #include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
 #include "services/tracing/public/cpp/background_tracing/background_tracing_agent_impl.h"
 #include "services/tracing/public/cpp/background_tracing/background_tracing_agent_provider_impl.h"
-#include "third_party/abseil-cpp/absl/base/attributes.h"
 
 #if BUILDFLAG(IS_POSIX)
 #include "base/posix/global_descriptors.h"
@@ -90,7 +89,7 @@
 #endif  // BUILDFLAG(IS_POSIX)
 
 #if BUILDFLAG(IS_APPLE)
-#include "base/mac/mach_port_rendezvous.h"
+#include "base/apple/mach_port_rendezvous.h"
 #endif
 
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
@@ -114,7 +113,7 @@ namespace {
 // How long to wait for a connection to the browser process before giving up.
 const int kConnectionTimeoutS = 15;
 
-ABSL_CONST_INIT thread_local ChildThreadImpl* child_thread_impl = nullptr;
+constinit thread_local ChildThreadImpl* child_thread_impl = nullptr;
 
 // This isn't needed on Windows because there the sandbox's job object
 // terminates child processes automatically. For unsandboxed processes (i.e.
@@ -873,11 +872,11 @@ const mojo::Remote<mojom::FontCacheWin>& ChildThreadImpl::GetFontCacheWin() {
 #endif
 
 void ChildThreadImpl::RecordAction(const base::UserMetricsAction& action) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void ChildThreadImpl::RecordComputedAction(const std::string& action) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void ChildThreadImpl::BindHostReceiver(mojo::GenericPendingReceiver receiver) {

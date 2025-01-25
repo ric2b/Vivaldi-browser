@@ -12,6 +12,7 @@
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/metrics/user_action_tester.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/plus_addresses/plus_address_service_factory.h"
 #include "chrome/browser/plus_addresses/plus_address_setting_service_factory.h"
@@ -20,10 +21,10 @@
 #include "components/plus_addresses/fake_plus_address_service.h"
 #include "components/plus_addresses/features.h"
 #include "components/plus_addresses/metrics/plus_address_metrics.h"
-#include "components/plus_addresses/plus_address_test_environment.h"
+#include "components/plus_addresses/plus_address_prefs.h"
 #include "components/plus_addresses/plus_address_types.h"
 #include "components/plus_addresses/settings/mock_plus_address_setting_service.h"
-#include "components/signin/public/identity_manager/identity_test_environment.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/web_contents_tester.h"
@@ -77,10 +78,7 @@ class PlusAddressCreationControllerAndroidEnabledTest
         browser_context(),
         base::BindLambdaForTesting([&](content::BrowserContext* context)
                                        -> std::unique_ptr<KeyedService> {
-          return std::make_unique<FakePlusAddressService>(
-              &plus_environment_.pref_service(),
-              plus_environment_.identity_env().identity_manager(),
-              &plus_address_setting_service());
+          return std::make_unique<FakePlusAddressService>();
         }));
     // TODO: crbug.com/322279583 - Use FakePlusAddressSettingService from the
     // PlusAddressTestEnvironment instead.
@@ -116,7 +114,6 @@ class PlusAddressCreationControllerAndroidEnabledTest
 
  private:
   base::test::ScopedFeatureList features_{features::kPlusAddressesEnabled};
-  test::PlusAddressTestEnvironment plus_environment_;
 };
 
 // Tests that accepting the bottomsheet calls Autofill to fill the plus address
@@ -124,6 +121,7 @@ class PlusAddressCreationControllerAndroidEnabledTest
 TEST_F(PlusAddressCreationControllerAndroidEnabledTest, AcceptCreation) {
   base::test::ScopedFeatureList features_{
       features::kPlusAddressUserOnboardingEnabled};
+  base::UserActionTester user_action_tester;
   std::unique_ptr<content::WebContents> web_contents =
       ChromeRenderViewHostTestHarness::CreateTestWebContents();
 
@@ -159,6 +157,14 @@ TEST_F(PlusAddressCreationControllerAndroidEnabledTest, AcceptCreation) {
           metrics::PlusAddressModalCompletionStatus::kModalConfirmed,
           /*notice_shown=*/false),
       0, 1);
+  // The pref is not set if the first time onboarding notice has been already
+  // shown.
+  EXPECT_EQ(
+      profile()->GetPrefs()->GetTime(prefs::kFirstPlusAddressCreationTime),
+      base::Time());
+  EXPECT_EQ(user_action_tester.GetActionCount(
+                "PlusAddresses.OfferedPlusAddressAccepted"),
+            1);
 }
 
 // Tests that no notice is shown if the onboarding feature is disabled.
@@ -226,6 +232,10 @@ TEST_F(PlusAddressCreationControllerAndroidEnabledTest, ShowNoticeAccept) {
           metrics::PlusAddressModalCompletionStatus::kModalConfirmed,
           /*notice_shown=*/true),
       0, 1);
+  // The pref is set only when the first time onboarding notice is shown.
+  EXPECT_EQ(profile()->GetTestingPrefService()->GetTime(
+                prefs::kFirstPlusAddressCreationTime),
+            base::Time::Now());
 }
 
 // Tests that the notice is shown if the  `kPlusAddressUserOnboardingEnabled`,
@@ -407,6 +417,7 @@ TEST_F(PlusAddressCreationControllerAndroidEnabledTest,
 }
 
 TEST_F(PlusAddressCreationControllerAndroidEnabledTest, ModalCanceled) {
+  base::UserActionTester user_action_tester;
   std::unique_ptr<content::WebContents> web_contents =
       ChromeRenderViewHostTestHarness::CreateTestWebContents();
 
@@ -438,6 +449,9 @@ TEST_F(PlusAddressCreationControllerAndroidEnabledTest, ModalCanceled) {
           metrics::PlusAddressModalCompletionStatus::kModalCanceled,
           /*notice_shown=*/false),
       0, 1);
+  EXPECT_EQ(user_action_tester.GetActionCount(
+                "PlusAddresses.OfferedPlusAddressDeclined"),
+            1);
 }
 
 TEST_F(PlusAddressCreationControllerAndroidEnabledTest,

@@ -17,7 +17,7 @@ class AuthContext;
 
 proto::CastMessage CreateAuthChallengeMessage(const AuthContext& auth_context);
 
-// |request_id| must be unique for |sender_id|.
+// `request_id` must be unique for `sender_id`.
 ErrorOr<proto::CastMessage> CreateAppAvailabilityRequest(
     const std::string& sender_id,
     int request_id,

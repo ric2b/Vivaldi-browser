@@ -49,6 +49,7 @@
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/tab_group_sync/tab_group_sync_tab_state.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -78,7 +79,7 @@
 #include "components/safe_browsing/content/common/file_type_policies.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_search_api/safe_search_util.h"
-#include "components/saved_tab_groups/features.h"
+#include "components/saved_tab_groups/public/features.h"
 #include "components/services/quarantine/public/mojom/quarantine.mojom.h"
 #include "components/services/quarantine/quarantine_impl.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -151,7 +152,7 @@
 #include "chrome/browser/safe_browsing/download_protection/deep_scanning_request.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
-#include "components/enterprise/obfuscation/core/utils.h"
+#include "components/enterprise/obfuscation/core/download_obfuscator.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -400,17 +401,15 @@ void HandleInsecureDownloadInfoBarResult(
 #endif
 
 void MaybeReportDangerousDownloadBlocked(
-    DownloadPrefs::DownloadRestriction download_restriction,
+    policy::DownloadRestriction download_restriction,
     std::string danger_type,
     std::string download_path,
     download::DownloadItem* download) {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   if (download_restriction !=
-          DownloadPrefs::DownloadRestriction::POTENTIALLY_DANGEROUS_FILES &&
-      download_restriction !=
-          DownloadPrefs::DownloadRestriction::DANGEROUS_FILES &&
-      download_restriction !=
-          DownloadPrefs::DownloadRestriction::MALICIOUS_FILES) {
+          policy::DownloadRestriction::POTENTIALLY_DANGEROUS_FILES &&
+      download_restriction != policy::DownloadRestriction::DANGEROUS_FILES &&
+      download_restriction != policy::DownloadRestriction::MALICIOUS_FILES) {
     return;
   }
 
@@ -475,8 +474,7 @@ download::DownloadDangerType SavePackageDangerType(
       return download::DOWNLOAD_DANGER_TYPE_BLOCKED_SCAN_FAILED;
 
     default:
-      NOTREACHED_IN_MIGRATION();
-      return download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS;
+      NOTREACHED();
   }
 }
 #endif  // BUILDFLAG(FULL_SAFE_BROWSING)
@@ -680,7 +678,7 @@ bool ChromeDownloadManagerDelegate::DetermineDownloadTarget(
       action = DownloadPathReservationTracker::OVERWRITE;
     }
   } else if (download_prefs_->download_restriction() ==
-             DownloadPrefs::DownloadRestriction::ALL_FILES) {
+             policy::DownloadRestriction::ALL_FILES) {
     // If download will be blocked, no need to prompt the user.
     action = DownloadPathReservationTracker::UNIQUIFY;
   } else if (!download_path.empty()) {
@@ -769,6 +767,33 @@ bool ChromeDownloadManagerDelegate::IsDownloadReadyForCompletion(
     DownloadItem* item,
     base::OnceClosure internal_complete_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+#if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
+  if (item->GetDangerType() == download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED) {
+    // For obfuscated files, deobfuscate after validation.
+    enterprise_obfuscation::DownloadObfuscationData* obfuscation_data =
+        static_cast<enterprise_obfuscation::DownloadObfuscationData*>(
+            item->GetUserData(
+                enterprise_obfuscation::DownloadObfuscationData::kUserDataKey));
+
+    if (obfuscation_data && obfuscation_data->is_obfuscated) {
+      base::ThreadPool::PostTaskAndReplyWithResult(
+          FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+          base::BindOnce(&enterprise_obfuscation::DeobfuscateFileInPlace,
+                         item->GetFullPath()),
+          base::BindOnce(
+              &ChromeDownloadManagerDelegate::OnDeobfuscationComplete,
+              weak_ptr_factory_.GetWeakPtr(),
+              std::move(internal_complete_callback)));
+
+      // Ensure that deobfuscation is ran only once.
+      // TODO(crbug.com/367259664): Move to `OnDeobfuscationComplete` after
+      // adding better error handling.
+      obfuscation_data->is_obfuscated = false;
+      return false;
+    }
+  }
+#endif
+
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   // If this is a chrome triggered download, return true;
   if (!item->RequireSafetyChecks()) {
@@ -843,6 +868,21 @@ bool ChromeDownloadManagerDelegate::IsDownloadReadyForCompletion(
   return true;
 }
 
+#if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
+void ChromeDownloadManagerDelegate::OnDeobfuscationComplete(
+    base::OnceClosure callback,
+    base::expected<void, enterprise_obfuscation::Error> deobfuscation_result) {
+  if (!deobfuscation_result.has_value()) {
+    // TODO(crbug.com/367259664): Add better error handling for deobfuscation.
+    DVLOG(1) << "Failed to deobfuscate download file.";
+  }
+
+  if (callback) {
+    std::move(callback).Run();
+  }
+}
+#endif
+
 void ChromeDownloadManagerDelegate::ShouldCompleteDownloadInternal(
     uint32_t download_id,
     base::OnceClosure user_complete_callback) {
@@ -915,8 +955,15 @@ bool ChromeDownloadManagerDelegate::ShouldObfuscateDownload(
     return false;
   }
 
-  // Skip obfuscation for chrome-initiated downloads.
-  if (item && !item->RequireSafetyChecks()) {
+  // Skip obfuscation for chrome-initiated, save package or parallel downloads.
+  if (!item || !item->RequireSafetyChecks() || item->IsSavePackageDownload() ||
+      item->IsParallelDownload()) {
+    return false;
+  }
+
+  // Skip obfuscation for large files if size is known.
+  if (static_cast<size_t>(item->GetTotalBytes()) >
+      safe_browsing::BinaryUploadService::kMaxUploadSizeBytes) {
     return false;
   }
 
@@ -927,9 +974,15 @@ bool ChromeDownloadManagerDelegate::ShouldObfuscateDownload(
   if (profile) {
     auto settings =
         safe_browsing::DeepScanningRequest::ShouldUploadBinary(item);
-    return settings.has_value() &&
-           settings.value().block_until_verdict ==
-               enterprise_connectors::BlockUntilVerdict::kBlock;
+    if (settings.has_value() &&
+        settings.value().block_until_verdict ==
+            enterprise_connectors::BlockUntilVerdict::kBlock) {
+      item->SetUserData(
+          enterprise_obfuscation::DownloadObfuscationData::kUserDataKey,
+          std::make_unique<enterprise_obfuscation::DownloadObfuscationData>(
+              true));
+      return true;
+    }
   }
 #endif
   return false;
@@ -1039,7 +1092,7 @@ void ChromeDownloadManagerDelegate::SanitizeDownloadParameters(
 void ChromeDownloadManagerDelegate::OpenDownloadUsingPlatformHandler(
     DownloadItem* download) {
   base::FilePath platform_path(
-      GetPlatformDownloadPath(download, PLATFORM_TARGET_PATH));
+      GetPlatformDownloadPath(download, PLATFORM_CURRENT_PATH));
   DCHECK(!platform_path.empty());
   platform_util::OpenItem(profile_, platform_path, platform_util::OPEN_FILE,
                           platform_util::OpenOperationCallback());
@@ -1758,13 +1811,8 @@ void ChromeDownloadManagerDelegate::CheckSavePackageScanningDone(
       break;
 
     default:
-      // These other results should never be returned, but if they are somehow
-      // then scanning policies are fail-open, so the save package should be
-      // allowed to complete.
-      NOTREACHED_IN_MIGRATION();
-      enterprise_connectors::RunSavePackageScanningCallback(item,
-                                                            /*allowed*/ true);
-      break;
+      // These other results should never be returned.
+      NOTREACHED();
   }
 
 }
@@ -1885,7 +1933,7 @@ bool ChromeDownloadManagerDelegate::ShouldBlockFile(
     return false;
   }
 
-  DownloadPrefs::DownloadRestriction download_restriction =
+  policy::DownloadRestriction download_restriction =
       download_prefs_->download_restriction();
 
   if (IsDangerTypeBlocked(danger_type))
@@ -1896,14 +1944,14 @@ bool ChromeDownloadManagerDelegate::ShouldBlockFile(
                    DownloadFileType::NOT_DANGEROUS);
 
   switch (download_restriction) {
-    case (DownloadPrefs::DownloadRestriction::NONE):
+    case (policy::DownloadRestriction::NONE):
       return false;
 
-    case (DownloadPrefs::DownloadRestriction::POTENTIALLY_DANGEROUS_FILES):
+    case (policy::DownloadRestriction::POTENTIALLY_DANGEROUS_FILES):
       return danger_type != download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS ||
              file_type_dangerous;
 
-    case (DownloadPrefs::DownloadRestriction::DANGEROUS_FILES): {
+    case (policy::DownloadRestriction::DANGEROUS_FILES): {
       return (danger_type == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT ||
               danger_type == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE ||
               danger_type == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL ||
@@ -1912,7 +1960,7 @@ bool ChromeDownloadManagerDelegate::ShouldBlockFile(
               file_type_dangerous);
     }
 
-    case (DownloadPrefs::DownloadRestriction::MALICIOUS_FILES): {
+    case (policy::DownloadRestriction::MALICIOUS_FILES): {
       return (danger_type == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT ||
               danger_type == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST ||
               danger_type == download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL ||
@@ -1920,7 +1968,7 @@ bool ChromeDownloadManagerDelegate::ShouldBlockFile(
                   download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE);
     }
 
-    case (DownloadPrefs::DownloadRestriction::ALL_FILES):
+    case (policy::DownloadRestriction::ALL_FILES):
       return true;
 
     default:
@@ -1955,9 +2003,6 @@ void ChromeDownloadManagerDelegate::MaybeSendDangerousDownloadCanceledReport(
     DownloadItem* download,
     bool is_shutdown) {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
-  if (!DownloadProtectionService::ShouldSendDangerousDownloadReport(download)) {
-    return;
-  }
   safe_browsing::SafeBrowsingService* sb_service =
       g_browser_process->safe_browsing_service();
   if (!sb_service) {
@@ -2021,9 +2066,6 @@ void ChromeDownloadManagerDelegate::CheckDownloadAllowed(
     return;
   }
 
-  CanDownloadCallback cb = base::BindOnce(
-      &ChromeDownloadManagerDelegate::OnCheckDownloadAllowedComplete,
-      weak_ptr_factory_.GetWeakPtr(), std::move(check_download_allowed_cb));
 #if BUILDFLAG(IS_ANDROID)
   if (ShouldOpenPdfInline() && mime_type == pdf::kPDFMimeType) {
     // If this is a forward/back navigation, the native page should trigger a
@@ -2036,6 +2078,13 @@ void ChromeDownloadManagerDelegate::CheckDownloadAllowed(
     }
     NewNavigationObserver::GetInstance()->StartObserving(web_contents);
   }
+#endif
+
+  CanDownloadCallback cb = base::BindOnce(
+      &ChromeDownloadManagerDelegate::OnCheckDownloadAllowedComplete,
+      weak_ptr_factory_.GetWeakPtr(), std::move(check_download_allowed_cb));
+
+#if BUILDFLAG(IS_ANDROID)
   DownloadControllerBase::Get()->AcquireFileAccessPermission(
       web_contents_getter,
       base::BindOnce(&OnDownloadAcquireFileAccessPermissionDone,
@@ -2156,7 +2205,7 @@ bool ChromeDownloadManagerDelegate::ShouldOpenPdfInline() {
 
 bool ChromeDownloadManagerDelegate::IsDownloadRestrictedByPolicy() {
   return download_prefs_->download_restriction() ==
-         DownloadPrefs::DownloadRestriction::ALL_FILES;
+         policy::DownloadRestriction::ALL_FILES;
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 

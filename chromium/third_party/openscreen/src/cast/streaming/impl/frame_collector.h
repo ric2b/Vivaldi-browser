@@ -8,9 +8,9 @@
 #include <vector>
 
 #include "cast/streaming/impl/frame_crypto.h"
-#include "cast/streaming/public/frame_id.h"
 #include "cast/streaming/impl/rtcp_common.h"
 #include "cast/streaming/impl/rtp_packet_parser.h"
+#include "cast/streaming/public/frame_id.h"
 #include "platform/base/span.h"
 
 namespace openscreen::cast {
@@ -28,8 +28,8 @@ class FrameCollector {
 
   // Examine the parsed packet, representing part of the whole frame, and
   // collect any data/metadata from it that helps complete the frame. Returns
-  // false if the |part| contained invalid data. On success, this method takes
-  // the data contained within the |buffer|, into which |part.payload| is
+  // false if the `part` contained invalid data. On success, this method takes
+  // the data contained within the `buffer`, into which `part.payload` is
   // pointing, in lieu of copying the data.
   [[nodiscard]] bool CollectRtpPacket(const RtpPacketParser::ParseResult& part,
                                       std::vector<uint8_t>* buffer);
@@ -38,7 +38,7 @@ class FrameCollector {
   // assembled.
   bool is_complete() const { return num_missing_packets_ == 0; }
 
-  // Appends zero or more elements to |nacks| representing which packets are not
+  // Appends zero or more elements to `nacks` representing which packets are not
   // yet collected. If all packets for the frame are missing, this appends a
   // single element containing the special kAllPacketsLost packet ID. Otherwise,
   // one element is appended for each missing packet, in increasing order of
@@ -60,7 +60,7 @@ class FrameCollector {
  private:
   struct PayloadChunk {
     std::vector<uint8_t> buffer;
-    ByteView payload;  // Once set, is within |buffer.data()|.
+    ByteView payload;  // Once set, is within `buffer.data()`.
 
     PayloadChunk();
     ~PayloadChunk();
@@ -69,7 +69,7 @@ class FrameCollector {
   };
 
   // Storage for frame metadata and data. Once the frame has been completely
-  // collected and assembled, |frame_.data| is set to non-null, and this is
+  // collected and assembled, `frame_.data` is set to non-null, and this is
   // exposed externally (read-only).
   EncryptedFrame frame_;
 

@@ -72,8 +72,11 @@ ruleTester.run('check_e2e_tests', rule, {
     },
     {
       code: `import {describe, it} from '../../shared/mocha-extensions.js';
-      // Explaining comment
-      describe.skipOnPlatforms(['mac'], '[crbug.com/123456]: e2e-test', async () => {
+
+      describe('e2e-test', async () => {
+        // Explaining comment
+        it.skipOnPlatforms(['mac'], '[crbug.com/123456]: e2e-test', async () => {
+        });
       });
       `,
       filename: 'test/e2e/folder/file.ts',
@@ -122,6 +125,16 @@ ruleTester.run('check_e2e_tests', rule, {
       errors: [{message: rule.meta.messages.missingBugId}],
     },
     {
+      code: `describe('e2e-test', async () => {
+        // Explaining comment
+        itScreenshot.skip(\`normal test \${withVariable}\`, async () => {
+        });
+      });
+      `,
+      filename: 'test/e2e/folder/file.ts',
+      errors: [{message: rule.meta.messages.missingBugId}],
+    },
+    {
       code: `import {describe, it} from '../../shared/mocha-extensions.js';
 
       describe('e2e-test', async () => {
@@ -142,7 +155,9 @@ ruleTester.run('check_e2e_tests', rule, {
     },
     {
       code: `import {describe, it} from '../../shared/mocha-extensions.js';
-      describe.skipOnPlatforms(['mac'], 'e2e-test', async () => {
+      describe('e2e-test', async () => {
+        it.skipOnPlatforms(['mac'], 'e2e-test', async () => {
+        });
       });
       `,
       filename: 'test/e2e/folder/file.ts',

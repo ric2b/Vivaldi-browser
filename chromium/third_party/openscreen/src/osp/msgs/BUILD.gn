@@ -4,82 +4,103 @@
 
 import("../../gni/openscreen.gni")
 
-if (!is_win) {
-  visibility = [ "./*" ]
-  openscreen_source_set("msgs") {
-    visibility += [
-      "../..:gn_all",
-      "../impl/*",
-      "../public/*",
-    ]
-    public = [ target_gen_dir + "/osp_messages.h" ]
-    sources = [ target_gen_dir + "/osp_messages.cc" ]
+visibility = [ "./*" ]
+openscreen_source_set("msgs") {
+  visibility += [
+    "../..:gn_all",
+    "../impl/*",
+    "../public/*",
+  ]
+  public = [ target_gen_dir + "/osp_messages.h" ]
+  sources = [ target_gen_dir + "/osp_messages.cc" ]
 
-    public_deps = [ ":cddl_gen" ]
-    deps = [
-      "../../third_party/abseil",
-      "../../third_party/tinycbor",
-    ]
+  public_deps = [ ":cddl_gen" ]
+  deps = [ "../../third_party/tinycbor" ]
 
-    configs = [ ":msgs_internal_config" ]
-    public_configs = [ ":cddl_gen_config" ]
+  configs = [ ":msgs_internal_config" ]
+  public_configs = [ ":cddl_gen_config" ]
+}
+
+config("msgs_internal_config") {
+  cflags = [ "-Wall" ]
+
+  if (is_clang) {
+    cflags += [ "-Wno-shadow" ]
   }
 
-  config("msgs_internal_config") {
-    cflags = [ "-Wall" ]
-
-    if (is_clang) {
-      cflags += [ "-Wno-shadow" ]
-    }
-  }
-
-  config("cddl_gen_config") {
-    include_dirs = [ "$root_gen_dir" + "/" + rebase_path("../..", "//") ]
-  }
-
-  action("cddl_gen") {
-    script = "../../tools/cddl/cddl.py"
-    sources = [ "osp_messages.cddl" ]
-    outputs_src = rebase_path([
-                                "osp_messages.h",
-                                "osp_messages.cc",
-                              ],
-                              "//")
-    outputs = []
-    foreach(o, outputs_src) {
-      outputs += [ root_gen_dir + "/" + o ]
-    }
-
-    cddl_label = "../../tools/cddl:cddl($host_toolchain)"
-    cddl_path = get_label_info(cddl_label, "root_out_dir") + "/cddl"
-    args = [
-             "--cddl",
-
-             # Path should be rebased because |root_build_dir| for current toolchain
-             # may be different from |root_out_dir| of cddl built on host toolchain.
-             "./" + rebase_path(cddl_path, root_build_dir),
-             "--header",
-             outputs_src[0],
-             "--cc",
-             outputs_src[1],
-             "--gen-dir",
-             rebase_path(root_gen_dir, root_build_dir),
-             "--log",
-             rebase_path("cddl.log", "//"),
-           ] + rebase_path(sources, root_build_dir)
-
-    deps = [ cddl_label ]
-  }
-
-  openscreen_source_set("unittests") {
-    testonly = true
-    visibility += [ "../..:openscreen_unittests_all" ]
-    public = []
-    sources = [ "messages_unittest.cc" ]
-
-    deps = [
-      ":msgs",
-      "../../third_party/googletest:gtest",
+  if (is_win) {
+    # On Windows, some of the libc++ reserved macros are incorrectly reported
+    # as errors.
+    cflags += [
+      "-Wno-reserved-macro-identifier",
+      "-Wno-reserved-identifier",
+      "-Wno-c++98-compat",
+      "-Wno-c++98-compat-pedantic",
+      "-Wno-old-style-cast",
+      "-Wno-covered-switch-default",
+      "-Wno-missing-prototypes",
+      "-Wno-tautological-unsigned-zero-compare",
+      "-Wno-sign-conversion",
+      "-Wno-extra-semi-stmt",
+      "-Wno-dtor-name",
+      "-Wno-switch-default",
+      "-Wno-undef",
+      "-Wno-float-equal",
+      "-Wno-unsafe-buffer-usage",
+      "-Wno-unused-macros",
+      "-Wno-newline-eof",
+      "-Wno-implicit-int-conversion",
     ]
   }
+}
+
+config("cddl_gen_config") {
+  include_dirs = [ "$root_gen_dir" + "/" + rebase_path("../..", "//") ]
+}
+
+action("cddl_gen") {
+  script = "../../tools/cddl/cddl.py"
+  sources = [ "osp_messages.cddl" ]
+  outputs_src = rebase_path([
+                              "osp_messages.h",
+                              "osp_messages.cc",
+                            ],
+                            "//")
+  outputs = []
+  foreach(o, outputs_src) {
+    outputs += [ root_gen_dir + "/" + o ]
+  }
+
+  cddl_label = "../../tools/cddl:cddl($host_toolchain)"
+  cddl_path = get_label_info(cddl_label, "root_out_dir") + "/cddl"
+  args =
+      [
+        "--cddl",
+
+        # Path should be rebased because |root_build_dir| for current toolchain
+        # may be different from |root_out_dir| of cddl built on host toolchain.
+        "./" + rebase_path(cddl_path, root_build_dir),
+        "--header",
+        outputs_src[0],
+        "--cc",
+        outputs_src[1],
+        "--gen-dir",
+        rebase_path(root_gen_dir, root_build_dir),
+        "--log",
+        rebase_path("cddl.log", "//"),
+      ] + rebase_path(sources, root_build_dir)
+
+  deps = [ cddl_label ]
+}
+
+openscreen_source_set("unittests") {
+  testonly = true
+  visibility += [ "../..:openscreen_unittests_all" ]
+  public = []
+  sources = [ "messages_unittest.cc" ]
+
+  deps = [
+    ":msgs",
+    "../../third_party/googletest:gtest",
+  ]
 }

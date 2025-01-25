@@ -73,33 +73,13 @@ Path SVGCircleElement::AsPath() const {
   return path;
 }
 
-void SVGCircleElement::CollectStyleForPresentationAttribute(
-    const QualifiedName& name,
-    const AtomicString& value,
-    MutableCSSPropertyValueSet* style) {
-  SVGAnimatedPropertyBase* property = PropertyFromAttribute(name);
-  if (property == cx_) {
-    AddPropertyToPresentationAttributeStyle(style, CSSPropertyID::kCx,
-                                            cx_->CssValue());
-  } else if (property == cy_) {
-    AddPropertyToPresentationAttributeStyle(style, CSSPropertyID::kCy,
-                                            cy_->CssValue());
-  } else if (property == r_) {
-    AddPropertyToPresentationAttributeStyle(style, CSSPropertyID::kR,
-                                            r_->CssValue());
-  } else {
-    SVGGeometryElement::CollectStyleForPresentationAttribute(name, value,
-                                                             style);
-  }
-}
-
 void SVGCircleElement::SvgAttributeChanged(
     const SvgAttributeChangedParams& params) {
   const QualifiedName& attr_name = params.name;
   if (attr_name == svg_names::kRAttr || attr_name == svg_names::kCxAttr ||
       attr_name == svg_names::kCyAttr) {
     UpdateRelativeLengthsInformation();
-    GeometryPresentationAttributeChanged(attr_name);
+    GeometryPresentationAttributeChanged(params.property);
     return;
   }
 
@@ -136,14 +116,9 @@ void SVGCircleElement::SynchronizeAllSVGAttributes() const {
 
 void SVGCircleElement::CollectExtraStyleForPresentationAttribute(
     MutableCSSPropertyValueSet* style) {
-  for (auto* property :
-       (SVGAnimatedPropertyBase*[]){cx_.Get(), cy_.Get(), r_.Get()}) {
-    DCHECK(property->HasPresentationAttributeMapping());
-    if (property->IsAnimating()) {
-      CollectStyleForPresentationAttribute(property->AttributeName(),
-                                           g_empty_atom, style);
-    }
-  }
+  auto pres_attrs = std::to_array<const SVGAnimatedPropertyBase*>(
+      {cx_.Get(), cy_.Get(), r_.Get()});
+  AddAnimatedPropertiesToPresentationAttributeStyle(pres_attrs, style);
   SVGGeometryElement::CollectExtraStyleForPresentationAttribute(style);
 }
 

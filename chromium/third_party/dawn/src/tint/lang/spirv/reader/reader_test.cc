@@ -110,7 +110,7 @@ TEST_F(SpirvReaderTest, Load_VectorComponent) {
 )");
     ASSERT_EQ(got, Success);
     EXPECT_EQ(got, R"(
-%main = @compute @workgroup_size(1, 1, 1) func():void {
+%main = @compute @workgroup_size(1u, 1u, 1u) func():void {
   $B1: {
     %2:ptr<function, vec4<u32>, read_write> = var
     %3:u32 = load_vector_element %2, 2u
@@ -144,7 +144,7 @@ TEST_F(SpirvReaderTest, Store_VectorComponent) {
 )");
     ASSERT_EQ(got, Success);
     EXPECT_EQ(got, R"(
-%main = @compute @workgroup_size(1, 1, 1) func():void {
+%main = @compute @workgroup_size(1u, 1u, 1u) func():void {
   $B1: {
     %2:ptr<function, vec4<u32>, read_write> = var
     store_vector_element %2, 2u, 42u
@@ -291,6 +291,191 @@ $B1: {  # root
 )");
 }
 
+TEST_F(SpirvReaderTest, ClipDistances) {
+    auto got = Run(R"(
+               OpCapability Shader
+               OpCapability ClipDistance
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Vertex %main "main" %main_position_Output %main_clip_distances_Output %main___point_size_Output
+               OpName %main_position_Output "main_position_Output"
+               OpName %main_clip_distances_Output "main_clip_distances_Output"
+               OpName %main___point_size_Output "main___point_size_Output"
+               OpName %main_inner "main_inner"
+               OpMemberName %VertexOutputs 0 "position"
+               OpMemberName %VertexOutputs 1 "clipDistance"
+               OpName %VertexOutputs "VertexOutputs"
+               OpName %main "main"
+               OpDecorate %main_position_Output BuiltIn Position
+               OpDecorate %_arr_float_uint_1 ArrayStride 4
+               OpDecorate %main_clip_distances_Output BuiltIn ClipDistance
+               OpDecorate %main___point_size_Output BuiltIn PointSize
+               OpMemberDecorate %VertexOutputs 0 Offset 0
+               OpMemberDecorate %VertexOutputs 1 Offset 16
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%main_position_Output = OpVariable %_ptr_Output_v4float Output
+       %uint = OpTypeInt 32 0
+     %uint_1 = OpConstant %uint 1
+%_arr_float_uint_1 = OpTypeArray %float %uint_1
+%_ptr_Output__arr_float_uint_1 = OpTypePointer Output %_arr_float_uint_1
+%main_clip_distances_Output = OpVariable %_ptr_Output__arr_float_uint_1 Output
+%_ptr_Output_float = OpTypePointer Output %float
+%main___point_size_Output = OpVariable %_ptr_Output_float Output
+%VertexOutputs = OpTypeStruct %v4float %_arr_float_uint_1
+         %14 = OpTypeFunction %VertexOutputs
+         %16 = OpConstantNull %VertexOutputs
+       %void = OpTypeVoid
+         %19 = OpTypeFunction %void
+    %float_1 = OpConstant %float 1
+ %main_inner = OpFunction %VertexOutputs None %14
+         %15 = OpLabel
+               OpReturnValue %16
+               OpFunctionEnd
+       %main = OpFunction %void None %19
+         %20 = OpLabel
+         %21 = OpFunctionCall %VertexOutputs %main_inner
+         %22 = OpCompositeExtract %v4float %21 0
+               OpStore %main_position_Output %22 None
+         %23 = OpCompositeExtract %_arr_float_uint_1 %21 1
+               OpStore %main_clip_distances_Output %23 None
+               OpStore %main___point_size_Output %float_1 None
+               OpReturn
+               OpFunctionEnd
+)");
+    ASSERT_EQ(got, Success);
+    EXPECT_EQ(got, R"(
+tint_symbol_2 = struct @align(16) {
+  tint_symbol:vec4<f32> @offset(0)
+  tint_symbol_1:array<f32, 1> @offset(16)
+}
+
+tint_symbol_6 = struct @align(16) {
+  tint_symbol_3:vec4<f32> @offset(0), @builtin(position)
+  tint_symbol_4:array<f32, 1> @offset(16), @builtin(clip_distances)
+  tint_symbol_5:f32 @offset(20), @builtin(__point_size)
+}
+
+$B1: {  # root
+  %1:ptr<private, vec4<f32>, read_write> = var
+  %2:ptr<private, array<f32, 1>, read_write> = var
+  %3:ptr<private, f32, read_write> = var
+}
+
+%4 = func():tint_symbol_2 {
+  $B2: {
+    ret tint_symbol_2(vec4<f32>(0.0f), array<f32, 1>(0.0f))
+  }
+}
+%main_inner = func():void {
+  $B3: {
+    %6:tint_symbol_2 = call %4
+    %7:vec4<f32> = access %6, 0u
+    store %1, %7
+    %8:array<f32, 1> = access %6, 1u
+    store %2, %8
+    store %3, 1.0f
+    ret
+  }
+}
+%main = @vertex func():tint_symbol_6 {
+  $B4: {
+    %10:void = call %main_inner
+    %11:vec4<f32> = load %1
+    %12:array<f32, 1> = load %2
+    %13:f32 = load %3
+    %14:tint_symbol_6 = construct %11, %12, %13
+    ret %14
+  }
+}
+)");
+}
+
+TEST_F(SpirvReaderTest, ClipDistances_gl_PerVertex) {
+    auto got = Run(R"(
+               OpCapability Shader
+               OpCapability ClipDistance
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Vertex %main "main" %_
+               OpSource GLSL 450
+               OpName %main "main"
+               OpName %gl_PerVertex "gl_PerVertex"
+               OpMemberName %gl_PerVertex 0 "gl_Position"
+               OpMemberName %gl_PerVertex 1 "gl_ClipDistance"
+               OpName %_ ""
+               OpDecorate %gl_PerVertex Block
+               OpMemberDecorate %gl_PerVertex 0 BuiltIn Position
+               OpMemberDecorate %gl_PerVertex 1 BuiltIn ClipDistance
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+       %uint = OpTypeInt 32 0
+     %uint_2 = OpConstant %uint 2
+%_arr_float_uint_2 = OpTypeArray %float %uint_2
+%gl_PerVertex = OpTypeStruct %v4float %_arr_float_uint_2
+%_ptr_Output_gl_PerVertex = OpTypePointer Output %gl_PerVertex
+          %_ = OpVariable %_ptr_Output_gl_PerVertex Output
+        %int = OpTypeInt 32 1
+      %int_1 = OpConstant %int 1
+      %int_0 = OpConstant %int 0
+    %float_0 = OpConstant %float 0
+%_ptr_Output_float = OpTypePointer Output %float
+         %21 = OpConstantComposite %v4float %float_0 %float_0 %float_0 %float_0
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+         %19 = OpAccessChain %_ptr_Output_float %_ %int_1 %int_0
+               OpStore %19 %float_0
+         %20 = OpAccessChain %_ptr_Output_float %_ %int_1 %int_1
+               OpStore %20 %float_0
+         %23 = OpAccessChain %_ptr_Output_v4float %_ %int_0
+               OpStore %23 %21
+               OpReturn
+               OpFunctionEnd
+)");
+    ASSERT_EQ(got, Success);
+    EXPECT_EQ(got, R"(
+tint_symbol_2 = struct @align(16) {
+  tint_symbol:vec4<f32> @offset(0)
+  tint_symbol_1:array<f32, 2> @offset(16)
+}
+
+tint_symbol_3 = struct @align(16) {
+  tint_symbol:vec4<f32> @offset(0), @builtin(position)
+  tint_symbol_1:array<f32, 2> @offset(16), @builtin(clip_distances)
+}
+
+$B1: {  # root
+  %1:ptr<private, tint_symbol_2, read_write> = var
+}
+
+%main_inner = func():void {
+  $B2: {
+    %3:ptr<private, f32, read_write> = access %1, 1i, 0i
+    store %3, 0.0f
+    %4:ptr<private, f32, read_write> = access %1, 1i, 1i
+    store %4, 0.0f
+    %5:ptr<private, vec4<f32>, read_write> = access %1, 0i
+    store %5, vec4<f32>(0.0f)
+    ret
+  }
+}
+%main = @vertex func():tint_symbol_3 {
+  $B3: {
+    %7:void = call %main_inner
+    %8:ptr<private, vec4<f32>, read_write> = access %1, 0u
+    %9:vec4<f32> = load %8
+    %10:ptr<private, array<f32, 2>, read_write> = access %1, 1u
+    %11:array<f32, 2> = load %10
+    %12:tint_symbol_3 = construct %9, %11
+    ret %12
+  }
+}
+)");
+}
+
 TEST_F(SpirvReaderTest, SampleMask) {
     auto got = Run(R"(
                OpCapability Shader
@@ -345,6 +530,115 @@ $B1: {  # root
     %11:array<u32, 1> = load %1
     %12:u32 = access %11, 0u
     ret %12
+  }
+}
+)");
+}
+
+TEST_F(SpirvReaderTest, BlendSrc) {
+    auto got = Run(R"(
+               OpCapability Shader
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %frag_main "frag_main" %frag_main_loc0_idx0_Output %frag_main_loc0_idx1_Output
+               OpExecutionMode %frag_main OriginUpperLeft
+               OpName %frag_main_loc0_idx0_Output "frag_main_loc0_idx0_Output"
+               OpName %frag_main_loc0_idx1_Output "frag_main_loc0_idx1_Output"
+               OpName %frag_main_inner "frag_main_inner"
+               OpMemberName %FragOutput 0 "color"
+               OpMemberName %FragOutput 1 "blend"
+               OpName %FragOutput "FragOutput"
+               OpName %output "output"
+               OpName %frag_main "frag_main"
+               OpDecorate %frag_main_loc0_idx0_Output Location 0
+               OpDecorate %frag_main_loc0_idx0_Output Index 0
+               OpDecorate %frag_main_loc0_idx1_Output Location 0
+               OpDecorate %frag_main_loc0_idx1_Output Index 1
+               OpMemberDecorate %FragOutput 0 Offset 0
+               OpMemberDecorate %FragOutput 1 Offset 16
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%frag_main_loc0_idx0_Output = OpVariable %_ptr_Output_v4float Output
+%frag_main_loc0_idx1_Output = OpVariable %_ptr_Output_v4float Output
+ %FragOutput = OpTypeStruct %v4float %v4float
+          %8 = OpTypeFunction %FragOutput
+%_ptr_Function_FragOutput = OpTypePointer Function %FragOutput
+         %12 = OpConstantNull %FragOutput
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+       %uint = OpTypeInt 32 0
+     %uint_0 = OpConstant %uint 0
+  %float_0_5 = OpConstant %float 0.5
+    %float_1 = OpConstant %float 1
+         %17 = OpConstantComposite %v4float %float_0_5 %float_0_5 %float_0_5 %float_1
+     %uint_1 = OpConstant %uint 1
+       %void = OpTypeVoid
+         %25 = OpTypeFunction %void
+%frag_main_inner = OpFunction %FragOutput None %8
+          %9 = OpLabel
+     %output = OpVariable %_ptr_Function_FragOutput Function %12
+         %13 = OpAccessChain %_ptr_Function_v4float %output %uint_0
+               OpStore %13 %17 None
+         %20 = OpAccessChain %_ptr_Function_v4float %output %uint_1
+               OpStore %20 %17 None
+         %22 = OpLoad %FragOutput %output None
+               OpReturnValue %22
+               OpFunctionEnd
+  %frag_main = OpFunction %void None %25
+         %26 = OpLabel
+         %27 = OpFunctionCall %FragOutput %frag_main_inner
+         %28 = OpCompositeExtract %v4float %27 0
+               OpStore %frag_main_loc0_idx0_Output %28 None
+         %29 = OpCompositeExtract %v4float %27 1
+               OpStore %frag_main_loc0_idx1_Output %29 None
+               OpReturn
+               OpFunctionEnd
+)");
+
+    ASSERT_EQ(got, Success);
+    EXPECT_EQ(got, R"(
+tint_symbol_2 = struct @align(16) {
+  tint_symbol:vec4<f32> @offset(0)
+  tint_symbol_1:vec4<f32> @offset(16)
+}
+
+tint_symbol_5 = struct @align(16) {
+  tint_symbol_3:vec4<f32> @offset(0), @location(0), @blend_src(0)
+  tint_symbol_4:vec4<f32> @offset(16), @location(0), @blend_src(1)
+}
+
+$B1: {  # root
+  %1:ptr<private, vec4<f32>, read_write> = var
+  %2:ptr<private, vec4<f32>, read_write> = var
+}
+
+%3 = func():tint_symbol_2 {
+  $B2: {
+    %4:ptr<function, tint_symbol_2, read_write> = var, tint_symbol_2(vec4<f32>(0.0f))
+    %5:ptr<function, vec4<f32>, read_write> = access %4, 0u
+    store %5, vec4<f32>(0.5f, 0.5f, 0.5f, 1.0f)
+    %6:ptr<function, vec4<f32>, read_write> = access %4, 1u
+    store %6, vec4<f32>(0.5f, 0.5f, 0.5f, 1.0f)
+    %7:tint_symbol_2 = load %4
+    ret %7
+  }
+}
+%frag_main_inner = func():void {
+  $B3: {
+    %9:tint_symbol_2 = call %3
+    %10:vec4<f32> = access %9, 0u
+    store %1, %10
+    %11:vec4<f32> = access %9, 1u
+    store %2, %11
+    ret
+  }
+}
+%frag_main = @fragment func():tint_symbol_5 {
+  $B4: {
+    %13:void = call %frag_main_inner
+    %14:vec4<f32> = load %1
+    %15:vec4<f32> = load %2
+    %16:tint_symbol_5 = construct %14, %15
+    ret %16
   }
 }
 )");

@@ -44,6 +44,12 @@ void BirchWeatherProvider::RequestBirchDataFetch() {
     Shell::Get()->birch_model()->SetWeatherItems({});
     return;
   }
+  if (!Shell::Get()->session_controller()->IsActiveUserSessionStarted() ||
+      Shell::Get()->session_controller()->IsActiveAccountManaged()) {
+    // Weather not allowed for managed accounts.
+    Shell::Get()->birch_model()->SetWeatherItems({});
+    return;
+  }
   const auto* pref_service =
       Shell::Get()->session_controller()->GetLastActiveUserPrefService();
   if (!pref_service ||
@@ -100,15 +106,10 @@ void BirchWeatherProvider::RequestBirchDataFetch() {
 }
 
 void BirchWeatherProvider::FetchWeather() {
-  // Use the prod endpoint by default. This results in the alpha server being
-  // used for canary/dev channel and the prod server being used for beta/stable.
-  const bool prefer_prod_endpoint = base::GetFieldTrialParamByFeatureAsBool(
-      features::kBirchWeather, "prod_weather_endpoint", true);
   Shell::Get()
       ->ambient_controller()
       ->ambient_backend_controller()
       ->FetchWeather("chromeos-system-ui",
-                     /*prefer_alpha_endpoint=*/!prefer_prod_endpoint,
                      base::BindOnce(&BirchWeatherProvider::OnWeatherInfoFetched,
                                     weak_factory_.GetWeakPtr()));
 }

@@ -142,10 +142,9 @@ static inline void acc_transpose_M(int64_t *M, const int64_t *M_trn,
 // by taking each different pair of columns, and multiplying all the elements of
 // the first one with all the elements of the second one, with a special case
 // when multiplying a column by itself.
-static inline void compute_stats_win7_sve(int16_t *dgd_avg, int dgd_avg_stride,
-                                          int16_t *src_avg, int src_avg_stride,
-                                          int width, int height, int64_t *M,
-                                          int64_t *H, int downsample_factor) {
+static inline void compute_stats_win7_downsampled_sve(
+    int16_t *dgd_avg, int dgd_avg_stride, int16_t *src_avg, int src_avg_stride,
+    int width, int height, int64_t *M, int64_t *H, int downsample_factor) {
   const int wiener_win = 7;
   const int wiener_win2 = wiener_win * wiener_win;
 
@@ -276,10 +275,9 @@ static inline void compute_stats_win7_sve(int16_t *dgd_avg, int dgd_avg_stride,
 // by taking each different pair of columns, and multiplying all the elements of
 // the first one with all the elements of the second one, with a special case
 // when multiplying a column by itself.
-static inline void compute_stats_win5_sve(int16_t *dgd_avg, int dgd_avg_stride,
-                                          int16_t *src_avg, int src_avg_stride,
-                                          int width, int height, int64_t *M,
-                                          int64_t *H, int downsample_factor) {
+static inline void compute_stats_win5_downsampled_sve(
+    int16_t *dgd_avg, int dgd_avg_stride, int16_t *src_avg, int src_avg_stride,
+    int width, int height, int64_t *M, int64_t *H, int downsample_factor) {
   const int wiener_win = 5;
   const int wiener_win2 = wiener_win * wiener_win;
 
@@ -389,12 +387,10 @@ static inline void compute_stats_win5_sve(int16_t *dgd_avg, int dgd_avg_stride,
   copy_upper_triangle(H, H_tmp, wiener_win2, downsample_factor);
 }
 
-void av1_compute_stats_sve(int wiener_win, const uint8_t *dgd,
-                           const uint8_t *src, int16_t *dgd_avg,
-                           int16_t *src_avg, int h_start, int h_end,
-                           int v_start, int v_end, int dgd_stride,
-                           int src_stride, int64_t *M, int64_t *H,
-                           int use_downsampled_wiener_stats) {
+static inline void av1_compute_stats_downsampled_sve(
+    int wiener_win, const uint8_t *dgd, const uint8_t *src, int16_t *dgd_avg,
+    int16_t *src_avg, int h_start, int h_end, int v_start, int v_end,
+    int dgd_stride, int src_stride, int64_t *M, int64_t *H) {
   assert(wiener_win == WIENER_WIN || wiener_win == WIENER_WIN_CHROMA);
 
   const int wiener_win2 = wiener_win * wiener_win;
@@ -406,8 +402,7 @@ void av1_compute_stats_sve(int wiener_win, const uint8_t *dgd,
   memset(M, 0, sizeof(*M) * wiener_win * wiener_win);
 
   const uint8_t avg = find_average_sve(dgd_start, dgd_stride, width, height);
-  const int downsample_factor =
-      use_downsampled_wiener_stats ? WIENER_STATS_DOWNSAMPLE_FACTOR : 1;
+  const int downsample_factor = WIENER_STATS_DOWNSAMPLE_FACTOR;
 
   // dgd_avg and src_avg have been memset to zero before calling this
   // function, so round up the stride to the next multiple of 8 so that we
@@ -427,7 +422,7 @@ void av1_compute_stats_sve(int wiener_win, const uint8_t *dgd,
   compute_sub_avg(dgd_win, dgd_stride, avg, dgd_avg, dgd_avg_stride,
                   width + 2 * wiener_halfwin, height + 2 * wiener_halfwin, 1);
 
-  // Compute (src - avg), downsample if necessary and store in src-avg.
+  // Compute (src - avg), downsample and store in src-avg.
   const uint8_t *src_start = src + h_start + v_start * src_stride;
   compute_sub_avg(src_start, src_stride * downsample_factor, avg, src_avg,
                   src_avg_stride, width, height, downsample_factor);
@@ -440,26 +435,89 @@ void av1_compute_stats_sve(int wiener_win, const uint8_t *dgd,
 
   if (downsample_height > 0) {
     if (wiener_win == WIENER_WIN) {
-      compute_stats_win7_sve(dgd_avg, dgd_avg_stride, src_avg, src_avg_stride,
-                             width, downsample_height, M, H, downsample_factor);
+      compute_stats_win7_downsampled_sve(
+          dgd_avg, dgd_avg_stride, src_avg, src_avg_stride, width,
+          downsample_height, M, H, downsample_factor);
     } else {
-      compute_stats_win5_sve(dgd_avg, dgd_avg_stride, src_avg, src_avg_stride,
-                             width, downsample_height, M, H, downsample_factor);
+      compute_stats_win5_downsampled_sve(
+          dgd_avg, dgd_avg_stride, src_avg, src_avg_stride, width,
+          downsample_height, M, H, downsample_factor);
     }
   }
 
   if (downsample_remainder > 0) {
     const int remainder_offset = height - downsample_remainder;
     if (wiener_win == WIENER_WIN) {
-      compute_stats_win7_sve(
+      compute_stats_win7_downsampled_sve(
           dgd_avg + remainder_offset * dgd_avg_stride, dgd_avg_stride,
           src_avg + downsample_height * src_avg_stride, src_avg_stride, width,
           1, M, H, downsample_remainder);
     } else {
-      compute_stats_win5_sve(
+      compute_stats_win5_downsampled_sve(
           dgd_avg + remainder_offset * dgd_avg_stride, dgd_avg_stride,
           src_avg + downsample_height * src_avg_stride, src_avg_stride, width,
           1, M, H, downsample_remainder);
     }
   }
+}
+
+void av1_compute_stats_sve(int wiener_win, const uint8_t *dgd,
+                           const uint8_t *src, int16_t *dgd_avg,
+                           int16_t *src_avg, int h_start, int h_end,
+                           int v_start, int v_end, int dgd_stride,
+                           int src_stride, int64_t *M, int64_t *H,
+                           int use_downsampled_wiener_stats) {
+  assert(wiener_win == WIENER_WIN || wiener_win == WIENER_WIN_CHROMA);
+
+  if (use_downsampled_wiener_stats) {
+    av1_compute_stats_downsampled_sve(wiener_win, dgd, src, dgd_avg, src_avg,
+                                      h_start, h_end, v_start, v_end,
+                                      dgd_stride, src_stride, M, H);
+    return;
+  }
+
+  const int wiener_win2 = wiener_win * wiener_win;
+  const int wiener_halfwin = wiener_win >> 1;
+  const int32_t width = h_end - h_start;
+  const int32_t height = v_end - v_start;
+  const uint8_t *dgd_start = &dgd[v_start * dgd_stride + h_start];
+  memset(H, 0, sizeof(*H) * wiener_win2 * wiener_win2);
+  memset(M, 0, sizeof(*M) * wiener_win * wiener_win);
+
+  const uint8_t avg = find_average_sve(dgd_start, dgd_stride, width, height);
+
+  // dgd_avg and src_avg have been memset to zero before calling this
+  // function, so round up the stride to the next multiple of 8 so that we
+  // don't have to worry about a tail loop when computing M.
+  const int dgd_avg_stride = ((width + 2 * wiener_halfwin) & ~7) + 8;
+  const int src_avg_stride = (width & ~7) + 8;
+
+  // Compute (dgd - avg) and store it in dgd_avg.
+  // The wiener window will slide along the dgd frame, centered on each pixel.
+  // For the top left pixel and all the pixels on the side of the frame this
+  // means half of the window will be outside of the frame. As such the actual
+  // buffer that we need to subtract the avg from will be 2 * wiener_halfwin
+  // wider and 2 * wiener_halfwin higher than the original dgd buffer.
+  const int vert_offset = v_start - wiener_halfwin;
+  const int horiz_offset = h_start - wiener_halfwin;
+  const uint8_t *dgd_win = dgd + horiz_offset + vert_offset * dgd_stride;
+  compute_sub_avg(dgd_win, dgd_stride, avg, dgd_avg, dgd_avg_stride,
+                  width + 2 * wiener_halfwin, height + 2 * wiener_halfwin, 1);
+
+  // Compute (src - avg), and store in src-avg.
+  const uint8_t *src_start = src + h_start + v_start * src_stride;
+  compute_sub_avg(src_start, src_stride, avg, src_avg, src_avg_stride, width,
+                  height, 1);
+
+  if (wiener_win == WIENER_WIN) {
+    compute_stats_win7_sve(dgd_avg, dgd_avg_stride, src_avg, src_avg_stride,
+                           width, height, M, H);
+  } else {
+    compute_stats_win5_sve(dgd_avg, dgd_avg_stride, src_avg, src_avg_stride,
+                           width, height, M, H);
+  }
+
+  // H is a symmetric matrix, so we only need to fill out the upper triangle.
+  // We can copy it down to the lower triangle outside the (i, j) loops.
+  diagonal_copy_stats_neon(wiener_win2, H);
 }

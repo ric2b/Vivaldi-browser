@@ -134,6 +134,8 @@ enum class Toggle {
     UsePackedDepth24UnormStencil8Format,
     D3D12ForceStencilComponentReplicateSwizzle,
     D3D12ExpandShaderResourceStateTransitionsToCopySource,
+    GLDepthBiasModifier,
+    VulkanMonolithicPipelineCache,
 
     // Unresolved issues.
     NoWorkaroundSampleMaskBecomesZeroForAllButLastColorTarget,

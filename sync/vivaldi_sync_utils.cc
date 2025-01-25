@@ -6,6 +6,7 @@
 #include "base/hash/sha1.h"
 #include "base/logging.h"
 #include "base/notreached.h"
+#include "components/sync/base/client_tag_hash.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/hash_util.h"
 #include "components/sync/base/unique_position.h"
@@ -14,7 +15,7 @@
 
 namespace syncer {
 
-std::string GenerateSyncableNotesHash(
+syncer::UniquePosition::Suffix GenerateSyncableNotesHash(
     const std::string& originator_cache_guid,
     const std::string& originator_client_item_id) {
   // Blank PB with just the field in it has termination symbol,
@@ -25,21 +26,9 @@ std::string GenerateSyncableNotesHash(
   serialized_type.AppendToString(&hash_input);
   hash_input.append(originator_cache_guid + originator_client_item_id);
 
-  std::string encode_output;
-  encode_output = base::Base64Encode(base::SHA1HashString(hash_input));
-  return encode_output;
-}
-
-std::string GetUniqueNotesTagFromUpdate(const sync_pb::SyncEntity& update) {
-  if (!update.has_originator_cache_guid() ||
-      !update.has_originator_client_item_id()) {
-    LOG(ERROR) << "Update is missing requirements for notes position."
-               << " This is a server bug.";
-    return UniquePosition::RandomSuffix();
-  }
-
-  return GenerateSyncableNotesHash(update.originator_cache_guid(),
-                                   update.originator_client_item_id());
+  return syncer::UniquePosition::GenerateSuffix(
+      syncer::ClientTagHash::FromUnhashed(
+          NOTES, originator_cache_guid + originator_client_item_id));
 }
 
 // ProtoEnumToString

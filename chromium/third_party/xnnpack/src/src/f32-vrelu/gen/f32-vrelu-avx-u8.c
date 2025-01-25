@@ -15,18 +15,18 @@
 #include "xnnpack/common.h"
 
 
-static const int32_t mask_table[14] = {-1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0};
-
 void xnn_f32_vrelu_ukernel__avx_u8(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_relu_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_relu_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
   assert(input != NULL);
   assert(output != NULL);
+
+  static const int32_t mask_table[14] = {-1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0};
 
   const __m256 vzero = _mm256_setzero_ps();
 

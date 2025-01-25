@@ -334,7 +334,6 @@ public class AwPrerenderTest extends AwParameterizedTest {
     @Test
     @LargeTest
     @Feature({"AndroidWebView"})
-    @Features.EnableFeatures({BlinkFeatures.PRERENDER2_NO_VARY_SEARCH})
     @Features.DisableFeatures({BlinkFeatures.PRERENDER2_MEMORY_CONTROLS})
     public void testNoVarySearchHeader() throws Throwable {
         setSpeculativeLoadingAllowed(SpeculativeLoadingAllowedFlags.PRERENDER_ENABLED);
@@ -364,7 +363,6 @@ public class AwPrerenderTest extends AwParameterizedTest {
     @Test
     @LargeTest
     @Feature({"AndroidWebView"})
-    @Features.EnableFeatures({BlinkFeatures.PRERENDER2_NO_VARY_SEARCH})
     @Features.DisableFeatures({BlinkFeatures.PRERENDER2_MEMORY_CONTROLS})
     public void testNoVarySearchHeaderMultipleParams() throws Throwable {
         setSpeculativeLoadingAllowed(SpeculativeLoadingAllowedFlags.PRERENDER_ENABLED);
@@ -400,7 +398,6 @@ public class AwPrerenderTest extends AwParameterizedTest {
     @Test
     @LargeTest
     @Feature({"AndroidWebView"})
-    @Features.EnableFeatures({BlinkFeatures.PRERENDER2_NO_VARY_SEARCH})
     @Features.DisableFeatures({BlinkFeatures.PRERENDER2_MEMORY_CONTROLS})
     public void testNoVarySearchHeaderUnignorableSearchParam() throws Throwable {
         setSpeculativeLoadingAllowed(SpeculativeLoadingAllowedFlags.PRERENDER_ENABLED);
@@ -432,7 +429,10 @@ public class AwPrerenderTest extends AwParameterizedTest {
     @Test
     @LargeTest
     @Feature({"AndroidWebView"})
-    @Features.DisableFeatures({BlinkFeatures.PRERENDER2_MEMORY_CONTROLS})
+    @Features.DisableFeatures({
+        BlinkFeatures.PRERENDER2_MEMORY_CONTROLS,
+        "Prerender2FallbackPrefetchSpecRules"
+    })
     public void testAwContentsIoThreadClientHandleFrameTreeSwapForward() throws Throwable {
         setSpeculativeLoadingAllowed(SpeculativeLoadingAllowedFlags.PRERENDER_ENABLED);
         loadInitialPage();
@@ -488,7 +488,10 @@ public class AwPrerenderTest extends AwParameterizedTest {
     @Test
     @LargeTest
     @Feature({"AndroidWebView"})
-    @Features.DisableFeatures({BlinkFeatures.PRERENDER2_MEMORY_CONTROLS})
+    @Features.DisableFeatures({
+        BlinkFeatures.PRERENDER2_MEMORY_CONTROLS,
+        "Prerender2FallbackPrefetchSpecRules"
+    })
     public void testAwContentsIoThreadClientHandleFrameTreeSwapBack() throws Throwable {
         setSpeculativeLoadingAllowed(SpeculativeLoadingAllowedFlags.PRERENDER_ENABLED);
         loadInitialPage();
@@ -588,11 +591,82 @@ public class AwPrerenderTest extends AwParameterizedTest {
                 currentShouldInterceptRequestCallCount);
     }
 
+    // Tests ShouldInterceptRequest interaction with subresource requests (sendBeacon) sent from a
+    // prerendered page.
+    @Test
+    @LargeTest
+    @Feature({"AndroidWebView"})
+    @Features.DisableFeatures({
+        BlinkFeatures.PRERENDER2_MEMORY_CONTROLS,
+        "Prerender2FallbackPrefetchSpecRules"
+    })
+    public void testPrerenderingAndShouldInterceptRequestForSubresources() throws Throwable {
+        setSpeculativeLoadingAllowed(SpeculativeLoadingAllowedFlags.PRERENDER_ENABLED);
+        loadInitialPage();
+
+        final String prerenderingUrl =
+                mTestServer.getURL("/android_webview/test/data/prerender-send-beacon.html");
+        final String setupScriptUrl = mTestServer.getURL(PRERENDER_SETUP_SCRIPT_URL);
+        // Beacon to be sent during prerendering.
+        final String beaconUrl = mTestServer.getURL("/beacon");
+        // Beacon to be sent during the prerenderingchange event (after activation).
+        final String beaconUrl2 = mTestServer.getURL("/beacon-prerenderingchange");
+
+        final TestAwContentsClient.ShouldInterceptRequestHelper shouldInterceptRequestHelper =
+                mContentsClient.getShouldInterceptRequestHelper();
+        int currentShouldInterceptRequestCallCount = shouldInterceptRequestHelper.getCallCount();
+        shouldInterceptRequestHelper.clearUrls();
+
+        injectSpeculationRulesAndWait(prerenderingUrl);
+
+        // Wait for 3 requests: main resource, setup script, and first beacon.
+        shouldInterceptRequestHelper.waitForCallback(currentShouldInterceptRequestCallCount, 3);
+        Assert.assertEquals(
+                shouldInterceptRequestHelper.getUrls(),
+                Arrays.asList(prerenderingUrl, setupScriptUrl, beaconUrl));
+
+        // Check if the main resource request was intercepted during prerendering.
+        AwContentsClient.AwWebResourceRequest request =
+                shouldInterceptRequestHelper.getRequestsForUrl(prerenderingUrl);
+        Assert.assertNotNull(request);
+        HashMap<String, String> requestHeaders = request.requestHeaders;
+        Assert.assertNotNull(requestHeaders);
+        Assert.assertEquals(requestHeaders.get("Sec-Purpose"), "prefetch;prerender");
+
+        // Check if the first subresource request (sendBeacon) was intercepted during prerendering.
+        AwContentsClient.AwWebResourceRequest beaconRequest =
+                shouldInterceptRequestHelper.getRequestsForUrl(beaconUrl);
+        Assert.assertNotNull(beaconRequest);
+        HashMap<String, String> beaconRequestHeaders = beaconRequest.requestHeaders;
+        Assert.assertNotNull(beaconRequestHeaders);
+        Assert.assertEquals(beaconRequestHeaders.get("Sec-Purpose"), "prefetch;prerender");
+
+        // Activate the page. This should not be intercepted.
+        activatePage(prerenderingUrl, ActivationBy.JAVASCRIPT);
+
+        // Wait for the second beacon request that is sent after activation.
+        shouldInterceptRequestHelper.waitForNext();
+        Assert.assertEquals(
+                shouldInterceptRequestHelper.getUrls(),
+                Arrays.asList(prerenderingUrl, setupScriptUrl, beaconUrl, beaconUrl2));
+
+        // Check if the second subresource request (sendBeacon) was intercepted after activation.
+        AwContentsClient.AwWebResourceRequest beaconRequest2 =
+                shouldInterceptRequestHelper.getRequestsForUrl(beaconUrl2);
+        Assert.assertNotNull(beaconRequest2);
+        HashMap<String, String> beaconRequestHeaders2 = beaconRequest2.requestHeaders;
+        Assert.assertNotNull(beaconRequestHeaders2);
+        Assert.assertFalse(beaconRequestHeaders2.containsKey("Sec-Purpose"));
+    }
+
     // Tests prerendering can succeed with a custom response served by ShouldInterceptRequest.
     @Test
     @LargeTest
     @Feature({"AndroidWebView"})
-    @Features.DisableFeatures({BlinkFeatures.PRERENDER2_MEMORY_CONTROLS})
+    @Features.DisableFeatures({
+        BlinkFeatures.PRERENDER2_MEMORY_CONTROLS,
+        "Prerender2FallbackPrefetchSpecRules"
+    })
     public void testPrerenderingWithCustomResponse() throws Throwable {
         setSpeculativeLoadingAllowed(SpeculativeLoadingAllowedFlags.PRERENDER_ENABLED);
         loadInitialPage();
@@ -677,7 +751,10 @@ public class AwPrerenderTest extends AwParameterizedTest {
     @Test
     @LargeTest
     @Feature({"AndroidWebView"})
-    @Features.DisableFeatures({BlinkFeatures.PRERENDER2_MEMORY_CONTROLS})
+    @Features.DisableFeatures({
+        BlinkFeatures.PRERENDER2_MEMORY_CONTROLS,
+        "Prerender2FallbackPrefetchSpecRules"
+    })
     public void testRedirectedPrerenderingAndShouldOverrideUrlLoading() throws Throwable {
         setSpeculativeLoadingAllowed(SpeculativeLoadingAllowedFlags.PRERENDER_ENABLED);
         loadInitialPage();
@@ -737,7 +814,10 @@ public class AwPrerenderTest extends AwParameterizedTest {
     @Test
     @LargeTest
     @Feature({"AndroidWebView"})
-    @Features.DisableFeatures({BlinkFeatures.PRERENDER2_MEMORY_CONTROLS})
+    @Features.DisableFeatures({
+        BlinkFeatures.PRERENDER2_MEMORY_CONTROLS,
+        "Prerender2FallbackPrefetchSpecRules"
+    })
     public void testSubframeOfPrerenderedPageAndShouldInterceptRequest() throws Throwable {
         setSpeculativeLoadingAllowed(SpeculativeLoadingAllowedFlags.PRERENDER_ENABLED);
         loadInitialPage();

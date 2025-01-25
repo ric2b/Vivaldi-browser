@@ -17,7 +17,7 @@ void xnn_qs16_qs8_vcvt_ukernel__scalar_u2(
     size_t batch,
     const int16_t* input,
     int8_t* output,
-    const union xnn_qs16_qs8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_qs16_qs8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(int16_t) == 0);
@@ -25,7 +25,7 @@ void xnn_qs16_qs8_vcvt_ukernel__scalar_u2(
   assert(output != NULL);
 
   const int32_t vmultiplier = params->scalar.multiplier;
-  const int64_t vbias = (int64_t) params->scalar.bias;
+  const int64_t vbias = (int64_t) ((int32_t) (((uint32_t) (int32_t) params->scalar.output_zero_point << 16)) + 0x8000);
   for (; batch >= 2 * sizeof(int16_t); batch -= 2 * sizeof(int16_t)) {
 
     const int32_t vx0 = (int32_t) input[0];

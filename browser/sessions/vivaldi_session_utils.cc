@@ -2,6 +2,7 @@
 
 #include "browser/sessions/vivaldi_session_utils.h"
 
+#include "app/vivaldi_constants.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
@@ -138,7 +139,7 @@ std::optional<double> GetWorkspaceId(sessions::SessionTab* tab) {
   std::string ext_data = tab->viv_ext_data;
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
   std::optional<base::Value> json =
-     base::JSONReader::Read(ext_data, options);
+      base::JSONReader::Read(ext_data, options);
   std::optional<double> value;
   if (json && json->is_dict()) {
     value = json->GetDict().FindDouble(kVivaldiWorkspace);
@@ -501,7 +502,7 @@ int Open(Browser* browser, Index_Node* node,
     : kErrorFileMissing;
 }
 
-int OpenPersistentTabs(Browser* browser) {
+int OpenPersistentTabs(Browser* browser, bool discard) {
   Index_Model* model = IndexServiceFactory::GetForBrowserContext(
       browser->profile());
   if (!model) {
@@ -517,18 +518,23 @@ int OpenPersistentTabs(Browser* browser) {
   Index_Node* node = model->root_node()->GetById(
       Index_Node::persistent_node_id());
   if (node) {
-    extensions::SessionsPrivateAPI::SendOnPersistentLoad(browser->profile(),
-      true);
-    vivaldi::SessionOptions opts;
-    opts.newWindow_ = false;
-    opts.oneWindow_ = true;
-    opts.withWorkspace_ = true;
-    Open(browser, node, opts);
-    // Can only be opened once after it has been saved so deleting now.
-    DeleteSessionFile(browser->profile(), node);
-    model->Remove(node);
-    extensions::SessionsPrivateAPI::SendOnPersistentLoad(browser->profile(),
-      false);
+    if (discard) {
+      DeleteSessionFile(browser->profile(), node);
+      model->Remove(node);
+    } else {
+      extensions::SessionsPrivateAPI::SendOnPersistentLoad(browser->profile(),
+        true);
+      vivaldi::SessionOptions opts;
+      opts.newWindow_ = false;
+      opts.oneWindow_ = true;
+      opts.withWorkspace_ = true;
+      Open(browser, node, opts);
+      // Can only be opened once after it has been saved so deleting now.
+      DeleteSessionFile(browser->profile(), node);
+      model->Remove(node);
+      extensions::SessionsPrivateAPI::SendOnPersistentLoad(browser->profile(),
+        false);
+    }
   }
   return kNoError;
 }
@@ -1222,6 +1228,23 @@ int SetTabStack(content::BrowserContext* browser_context,
   return kNoError;
 }
 
+void SetTabStackForImportedTab(const base::Uuid id, sessions::SessionTab* tab) {
+  // The tab has to have NO prior Json set....
+  DCHECK(tab);
+
+  // We want to keep what's in the tab ext data (in case we imported something
+  // of value) just change the tab stack.
+  if (tab->viv_ext_data.empty()) {
+    // Write empty dict into ext data first.
+    base::Value root(base::Value::Type::DICT);
+    std::string serialized_json;
+    base::JSONWriter::Write(base::ValueView(root), &serialized_json);
+    tab->viv_ext_data = serialized_json;
+  }
+
+  SetTabStackId(tab, id.AsLowercaseString());
+}
+
 int SetWindow(content::BrowserContext* browser_context, base::FilePath path,
               std::vector<int32_t> ids,
               const std::vector<GroupAlias>& group_aliases) {
@@ -1651,4 +1674,25 @@ bool IsVivaldiPanel(const sessions::tab_restore::Entry& entry) {
   return vivaldi::ParseVivPanelId(tab.viv_ext_data).has_value();
 }
 
+bool IsRestorableInVivaldi(const sessions::tab_restore::Entry& entry) {
+  // Never restore panels or web-widgets.
+  if (IsVivaldiPanel(entry))
+    return false;
+
+  // Restore, if the tab has a history.
+  auto& tab = static_cast<const sessions::tab_restore::Tab&>(entry);
+  if (tab.navigations.size() > 1)
+    return true;
+
+  // Makes no sense to restore a tab with no history.
+  if (tab.navigations.empty())
+    return false;
+
+  // Don't restore new-tab-url in the history only.
+  if (base::StartsWith(tab.navigations[0].original_request_url().spec(),
+                 vivaldi::kVivaldiNewTabURL))
+    return false;
+
+  return true;
+}
 }  // namespace sessions

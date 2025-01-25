@@ -13,16 +13,12 @@
 // limitations under the License.
 
 import m from 'mithril';
-import {Duration, duration, time} from '../../base/time';
-import {raf} from '../../core/raf_scheduler';
-import {BottomTab, NewBottomTabArgs} from '../../frontend/bottom_tab';
-import {GenericSliceDetailsTabConfig} from '../../frontend/generic_slice_details_tab';
+import {Duration, duration, Time, time} from '../../base/time';
 import {hasArgs, renderArguments} from '../../frontend/slice_args';
 import {renderDetails} from '../../frontend/slice_details';
 import {
   getDescendantSliceTree,
   getSlice,
-  getSliceFromConstraints,
   SliceDetails,
   SliceTreeNode,
 } from '../../trace_processor/sql_utils/slice';
@@ -35,9 +31,9 @@ import {
   Table,
   TableData,
   widgetColumn,
-} from '../../frontend/tables/table';
+} from '../../widgets/table';
 import {TreeTable, TreeTableAttrs} from '../../frontend/widgets/treetable';
-import {NUM, STR} from '../../trace_processor/query_result';
+import {LONG, NUM, STR} from '../../trace_processor/query_result';
 import {DetailsShell} from '../../widgets/details_shell';
 import {GridLayout, GridLayoutColumn} from '../../widgets/grid_layout';
 import {Section} from '../../widgets/section';
@@ -51,14 +47,10 @@ import {
   getScrollJankCauseStage,
 } from './scroll_jank_cause_link_utils';
 import {ScrollJankCauseMap} from './scroll_jank_cause_map';
-import {
-  getScrollJankSlices,
-  getSliceForTrack,
-  ScrollJankSlice,
-} from './scroll_jank_slice';
 import {sliceRef} from '../../frontend/widgets/slice';
-import {SCROLL_JANK_V3_TRACK_KIND} from '../../public/track_kinds';
-import {globals} from '../../frontend/globals';
+import {JANKS_TRACK_URI, renderSliceRef} from './selection_utils';
+import {TrackEventDetailsPanel} from '../../public/details_panel';
+import {Trace} from '../../public/trace';
 
 // Given a node in the slice tree, return a path from root to it.
 function getPath(slice: SliceTreeNode): string[] {
@@ -105,15 +97,17 @@ function durationDelta(value: duration, base?: duration): string {
   return `${delta > 0 ? '+' : ''}${Duration.humanise(delta)}`;
 }
 
-export class EventLatencySliceDetailsPanel extends BottomTab<GenericSliceDetailsTabConfig> {
-  static readonly kind = 'dev.perfetto.EventLatencySliceDetailsPanel';
-
-  private loaded = false;
+export class EventLatencySliceDetailsPanel implements TrackEventDetailsPanel {
   private name = '';
   private topEventLatencyId: SliceSqlId | undefined = undefined;
 
   private sliceDetails?: SliceDetails;
-  private jankySlice?: ScrollJankSlice;
+  private jankySlice?: {
+    ts: time;
+    dur: duration;
+    id: number;
+    causeOfJank: string;
+  };
 
   // Whether this stage has caused jank. This is also true for top level
   // EventLatency slices where a descendant is a cause of jank.
@@ -133,31 +127,24 @@ export class EventLatencySliceDetailsPanel extends BottomTab<GenericSliceDetails
 
   private tracksByTrackId: Map<number, string>;
 
-  static create(
-    args: NewBottomTabArgs<GenericSliceDetailsTabConfig>,
-  ): EventLatencySliceDetailsPanel {
-    return new EventLatencySliceDetailsPanel(args);
-  }
-
-  constructor(args: NewBottomTabArgs<GenericSliceDetailsTabConfig>) {
-    super(args);
-
+  constructor(
+    private readonly trace: Trace,
+    private readonly id: number,
+  ) {
     this.tracksByTrackId = new Map<number, string>();
-    globals.trackManager.getAllTracks().forEach((td) => {
+    this.trace.tracks.getAllTracks().forEach((td) => {
       td.tags?.trackIds?.forEach((trackId) => {
         this.tracksByTrackId.set(trackId, td.uri);
       });
     });
-
-    this.loadData();
   }
 
-  async loadData() {
-    const queryResult = await this.engine.query(`
+  async load() {
+    const queryResult = await this.trace.engine.query(`
       SELECT
         name
-      FROM ${this.config.sqlTableName}
-      WHERE id = ${this.config.id}
+      FROM slice
+      WHERE id = ${this.id}
       `);
 
     const iter = queryResult.firstRow({
@@ -170,16 +157,14 @@ export class EventLatencySliceDetailsPanel extends BottomTab<GenericSliceDetails
     await this.loadJankSlice();
     await this.loadRelevantThreads();
     await this.loadEventLatencyBreakdown();
-
-    this.loaded = true;
   }
 
   async loadSlice() {
     this.sliceDetails = await getSlice(
-      this.engine,
-      asSliceSqlId(this.config.id),
+      this.trace.engine,
+      asSliceSqlId(this.id),
     );
-    raf.scheduleRedraw();
+    this.trace.scheduleFullRedraw();
   }
 
   async loadJankSlice() {
@@ -195,14 +180,25 @@ export class EventLatencySliceDetailsPanel extends BottomTab<GenericSliceDetails
       );
     }
 
-    const possibleSlices = await getScrollJankSlices(
-      this.engine,
-      this.topEventLatencyId,
-    );
-    // We may not get any slices if the EventLatency doesn't indicate any
-    // jank occurred.
-    if (possibleSlices.length > 0) {
-      this.jankySlice = possibleSlices[0];
+    const it = (
+      await this.trace.engine.query(`
+      SELECT ts, dur, id, cause_of_jank as causeOfJank
+      FROM chrome_janky_frame_presentation_intervals
+      WHERE event_latency_id = ${this.topEventLatencyId}`)
+    ).iter({
+      id: NUM,
+      ts: LONG,
+      dur: LONG,
+      causeOfJank: STR,
+    });
+
+    if (it.valid()) {
+      this.jankySlice = {
+        id: it.id,
+        ts: Time.fromRaw(it.ts),
+        dur: Duration.fromRaw(it.dur),
+        causeOfJank: it.causeOfJank,
+      };
     }
   }
 
@@ -215,7 +211,7 @@ export class EventLatencySliceDetailsPanel extends BottomTab<GenericSliceDetails
     if (this.sliceDetails.name === 'EventLatency' && !this.jankySlice) return;
 
     const possibleScrollJankStage = await getScrollJankCauseStage(
-      this.engine,
+      this.trace.engine,
       this.topEventLatencyId,
     );
     if (this.sliceDetails.name === 'EventLatency') {
@@ -238,7 +234,7 @@ export class EventLatencySliceDetailsPanel extends BottomTab<GenericSliceDetails
 
     if (this.relevantThreadStage) {
       this.relevantThreadTracks = await getEventLatencyCauseTracks(
-        this.engine,
+        this.trace.engine,
         this.relevantThreadStage,
       );
     }
@@ -249,51 +245,55 @@ export class EventLatencySliceDetailsPanel extends BottomTab<GenericSliceDetails
       return;
     }
     this.eventLatencyBreakdown = await getDescendantSliceTree(
-      this.engine,
+      this.trace.engine,
       this.topEventLatencyId,
     );
 
-    // TODO(altimin): this should be based on an stdlib table and consider only
-    // EventLatencies within the same scroll.
-    // This is a copy of the statement in event_latency_track. It should move to
-    // stdlib instead of living in the UI code.
-    const whereClause = `
-    EXTRACT_ARG(arg_set_id, 'event_latency.event_type') IN (
-      'FIRST_GESTURE_SCROLL_UPDATE',
-      'GESTURE_SCROLL_UPDATE',
-      'INERTIAL_GESTURE_SCROLL_UPDATE')
-    AND HAS_DESCENDANT_SLICE_WITH_NAME(
-      id,
-      'SubmitCompositorFrameToPresentationCompositorFrame')`;
-    const prevEventLatency = await getSliceFromConstraints(this.engine, {
-      filters: [
-        `name = 'EventLatency'`,
-        `id < ${this.topEventLatencyId}`,
-        whereClause,
-      ],
-      orderBy: [{fieldName: 'id', direction: 'DESC'}],
-      limit: 1,
-    });
-    if (prevEventLatency.length > 0) {
+    // TODO(altimin): this should only consider EventLatencies within the same scroll.
+    const prevEventLatency = (
+      await this.trace.engine.query(`
+      INCLUDE PERFETTO MODULE chrome.event_latency;
+      SELECT
+        id
+      FROM chrome_event_latencies
+      WHERE event_type IN (
+        'FIRST_GESTURE_SCROLL_UPDATE',
+        'GESTURE_SCROLL_UPDATE',
+        'INERTIAL_GESTURE_SCROLL_UPDATE')
+      AND is_presented
+      AND id < ${this.topEventLatencyId}
+      ORDER BY id DESC
+      LIMIT 1
+      ;
+    `)
+    ).maybeFirstRow({id: NUM});
+    if (prevEventLatency !== undefined) {
       this.prevEventLatencyBreakdown = await getDescendantSliceTree(
-        this.engine,
-        prevEventLatency[0].id,
+        this.trace.engine,
+        asSliceSqlId(prevEventLatency.id),
       );
     }
 
-    const nextEventLatency = await getSliceFromConstraints(this.engine, {
-      filters: [
-        `name = 'EventLatency'`,
-        `id > ${this.topEventLatencyId}`,
-        whereClause,
-      ],
-      orderBy: ['id'],
-      limit: 1,
-    });
-    if (nextEventLatency.length > 0) {
+    const nextEventLatency = (
+      await this.trace.engine.query(`
+      INCLUDE PERFETTO MODULE chrome.event_latency;
+      SELECT
+        id
+      FROM chrome_event_latencies
+      WHERE event_type IN (
+        'FIRST_GESTURE_SCROLL_UPDATE',
+        'GESTURE_SCROLL_UPDATE',
+        'INERTIAL_GESTURE_SCROLL_UPDATE')
+      AND is_presented
+      AND id > ${this.topEventLatencyId}
+      ORDER BY id DESC
+      LIMIT 1;
+    `)
+    ).maybeFirstRow({id: NUM});
+    if (nextEventLatency !== undefined) {
       this.nextEventLatencyBreakdown = await getDescendantSliceTree(
-        this.engine,
-        nextEventLatency[0].id,
+        this.trace.engine,
+        asSliceSqlId(nextEventLatency.id),
       );
     }
   }
@@ -334,7 +334,7 @@ export class EventLatencySliceDetailsPanel extends BottomTab<GenericSliceDetails
 
     const columns: ColumnDescriptor<RelevantThreadRow>[] = [
       widgetColumn<RelevantThreadRow>('Relevant Thread', (x) =>
-        getCauseLink(x.tracks, this.tracksByTrackId, x.ts, x.dur),
+        getCauseLink(this.trace, x.tracks, this.tracksByTrackId, x.ts, x.dur),
       ),
       widgetColumn<RelevantThreadRow>('Description', (x) => {
         if (x.description === '') {
@@ -382,7 +382,7 @@ export class EventLatencySliceDetailsPanel extends BottomTab<GenericSliceDetails
   private async getOldestAncestorSliceId(): Promise<number> {
     let eventLatencyId = -1;
     if (!this.sliceDetails) return eventLatencyId;
-    const queryResult = await this.engine.query(`
+    const queryResult = await this.trace.engine.query(`
       SELECT
         id
       FROM ancestor_slice(${this.sliceDetails.id})
@@ -416,16 +416,15 @@ export class EventLatencySliceDetailsPanel extends BottomTab<GenericSliceDetails
             : 'EventLatency in context of other Input events',
           right: this.sliceDetails ? '' : 'N/A',
         }),
-        m(TreeNode, {
-          left: this.jankySlice
-            ? getSliceForTrack(
-                this.jankySlice,
-                SCROLL_JANK_V3_TRACK_KIND,
-                'Jank Interval',
-              )
-            : 'Jank Interval',
-          right: this.jankySlice ? '' : 'N/A',
-        }),
+        this.jankySlice &&
+          m(TreeNode, {
+            left: renderSliceRef({
+              trace: this.trace,
+              id: this.jankySlice.id,
+              trackUri: JANKS_TRACK_URI,
+              title: this.jankySlice.causeOfJank,
+            }),
+          }),
       ),
     );
   }
@@ -499,7 +498,7 @@ export class EventLatencySliceDetailsPanel extends BottomTab<GenericSliceDetails
     );
   }
 
-  viewTab() {
+  render() {
     if (this.sliceDetails) {
       const slice = this.sliceDetails;
 
@@ -530,12 +529,12 @@ export class EventLatencySliceDetailsPanel extends BottomTab<GenericSliceDetails
           GridLayout,
           m(
             GridLayoutColumn,
-            renderDetails(slice),
+            renderDetails(this.trace, slice),
             hasArgs(slice.args) &&
               m(
                 Section,
                 {title: 'Arguments'},
-                m(Tree, renderArguments(this.engine, slice.args)),
+                m(Tree, renderArguments(this.trace, slice.args)),
               ),
           ),
           m(GridLayoutColumn, rightSideWidgets),
@@ -544,13 +543,5 @@ export class EventLatencySliceDetailsPanel extends BottomTab<GenericSliceDetails
     } else {
       return m(DetailsShell, {title: 'Slice', description: 'Loading...'});
     }
-  }
-
-  isLoading() {
-    return !this.loaded;
-  }
-
-  getTitle(): string {
-    return `Current Selection`;
   }
 }

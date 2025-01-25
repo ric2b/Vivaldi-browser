@@ -17,6 +17,8 @@ FakeQuicConnectionFactoryBridge::FakeQuicConnectionFactoryBridge(
     const IPEndpoint& controller_endpoint)
     : controller_endpoint_(controller_endpoint) {}
 
+FakeQuicConnectionFactoryBridge::~FakeQuicConnectionFactoryBridge() = default;
+
 void FakeQuicConnectionFactoryBridge::OnConnectionClosed(
     QuicConnection* connection) {
   if (connection == connections_.controller) {
@@ -73,13 +75,12 @@ void FakeQuicConnectionFactoryBridge::RunTasks(bool is_client) {
   const size_t num_streams = connections_.controller->streams().size();
   OSP_CHECK_EQ(num_streams, connections_.receiver->streams().size());
 
-  auto stream_it_pair =
-      std::make_pair(connections_.controller->streams().begin(),
-                     connections_.receiver->streams().begin());
+  auto controller_streams_it = connections_.controller->streams().begin();
+  auto receiver_streams_it = connections_.receiver->streams().begin();
 
   for (size_t i = 0; i < num_streams; ++i) {
-    auto* controller_stream = stream_it_pair.first->second.get();
-    auto* receiver_stream = stream_it_pair.second->second.get();
+    auto* controller_stream = controller_streams_it->second.get();
+    auto* receiver_stream = receiver_streams_it->second.get();
 
     std::vector<uint8_t> written_data = controller_stream->TakeWrittenData();
     OSP_CHECK(controller_stream->TakeReceivedData().empty());
@@ -100,32 +101,15 @@ void FakeQuicConnectionFactoryBridge::RunTasks(bool is_client) {
           ByteView(written_data.data(), written_data.size()));
     }
 
-    // Close the read end for closed write ends
-    if (controller_stream->write_end_closed()) {
-      receiver_stream->CloseReadEnd();
-    }
-    if (receiver_stream->write_end_closed()) {
-      controller_stream->CloseReadEnd();
-    }
-
-    if (controller_stream->both_ends_closed() &&
-        receiver_stream->both_ends_closed()) {
-      controller_stream->delegate().OnClose(controller_stream->GetStreamId());
-      receiver_stream->delegate().OnClose(receiver_stream->GetStreamId());
-
-      controller_stream->delegate().OnReceived(controller_stream,
-                                               ByteView(nullptr, size_t(0)));
-      receiver_stream->delegate().OnReceived(receiver_stream,
-                                             ByteView(nullptr, size_t(0)));
-
-      stream_it_pair.first =
-          connections_.controller->streams().erase(stream_it_pair.first);
-      stream_it_pair.second =
-          connections_.receiver->streams().erase(stream_it_pair.second);
+    if (controller_stream->is_closed() && receiver_stream->is_closed()) {
+      controller_streams_it =
+          connections_.controller->streams().erase(controller_streams_it);
+      receiver_streams_it =
+          connections_.receiver->streams().erase(receiver_streams_it);
     } else {
-      // The stream pair must always be advanced at the same time.
-      ++stream_it_pair.first;
-      ++stream_it_pair.second;
+      // The two iterators must always be advanced at the same time.
+      ++controller_streams_it;
+      ++receiver_streams_it;
     }
   }
 }
@@ -159,6 +143,7 @@ FakeClientQuicConnectionFactory::FakeClientQuicConnectionFactory(
     TaskRunner& task_runner,
     FakeQuicConnectionFactoryBridge* bridge)
     : QuicConnectionFactoryClient(task_runner), bridge_(bridge) {}
+
 FakeClientQuicConnectionFactory::~FakeClientQuicConnectionFactory() = default;
 
 ErrorOr<std::unique_ptr<QuicConnection>>
@@ -196,6 +181,7 @@ FakeServerQuicConnectionFactory::FakeServerQuicConnectionFactory(
     TaskRunner& task_runner,
     FakeQuicConnectionFactoryBridge* bridge)
     : QuicConnectionFactoryServer(task_runner), bridge_(bridge) {}
+
 FakeServerQuicConnectionFactory::~FakeServerQuicConnectionFactory() = default;
 
 void FakeServerQuicConnectionFactory::SetServerDelegate(

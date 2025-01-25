@@ -17,6 +17,8 @@
 #include "components/attribution_reporting/aggregatable_debug_reporting_config.h"
 #include "components/attribution_reporting/aggregatable_dedup_key.h"
 #include "components/attribution_reporting/aggregatable_filtering_id_max_bytes.h"
+#include "components/attribution_reporting/aggregatable_named_budget_candidate.h"
+#include "components/attribution_reporting/aggregatable_named_budget_defs.h"
 #include "components/attribution_reporting/aggregatable_trigger_config.h"
 #include "components/attribution_reporting/aggregatable_trigger_data.h"
 #include "components/attribution_reporting/aggregatable_values.h"
@@ -336,6 +338,28 @@ bool StructTraits<attribution_reporting::mojom::AttributionScopesDataDataView,
 }
 
 // static
+bool StructTraits<
+    attribution_reporting::mojom::AggregatableNamedBudgetDefsDataView,
+    attribution_reporting::AggregatableNamedBudgetDefs>::
+    Read(attribution_reporting::mojom::AggregatableNamedBudgetDefsDataView data,
+         attribution_reporting::AggregatableNamedBudgetDefs* out) {
+  attribution_reporting::AggregatableNamedBudgetDefs::BudgetMap budget_map;
+  if (!data.ReadBudgets(&budget_map)) {
+    return false;
+  }
+
+  std::optional<attribution_reporting::AggregatableNamedBudgetDefs> budgets =
+      attribution_reporting::AggregatableNamedBudgetDefs::FromBudgetMap(
+          std::move(budget_map));
+  if (!budgets.has_value()) {
+    return false;
+  }
+
+  *out = *std::move(budgets);
+  return true;
+}
+
+// static
 bool StructTraits<attribution_reporting::mojom::SourceRegistrationDataView,
                   attribution_reporting::SourceRegistration>::
     Read(attribution_reporting::mojom::SourceRegistrationDataView data,
@@ -365,6 +389,11 @@ bool StructTraits<attribution_reporting::mojom::SourceRegistrationDataView,
   }
 
   if (!data.ReadAttributionScopesData(&out->attribution_scopes_data)) {
+    return false;
+  }
+
+  if (!data.ReadAggregatableNamedBudgetDefs(
+          &out->aggregatable_named_budget_defs)) {
     return false;
   }
 
@@ -429,14 +458,8 @@ bool StructTraits<attribution_reporting::mojom::AggregatableTriggerDataDataView,
     return false;
   }
 
-  auto aggregatable_trigger_data =
-      attribution_reporting::AggregatableTriggerData::Create(
-          key_piece, std::move(source_keys), std::move(filters));
-  if (!aggregatable_trigger_data) {
-    return false;
-  }
-
-  *out = *std::move(aggregatable_trigger_data);
+  *out = attribution_reporting::AggregatableTriggerData(
+      key_piece, std::move(source_keys), std::move(filters));
   return true;
 }
 
@@ -493,6 +516,27 @@ bool StructTraits<attribution_reporting::mojom::AggregatableValuesDataView,
   return true;
 }
 
+bool StructTraits<
+    attribution_reporting::mojom::AggregatableNamedBudgetCandidateDataView,
+    attribution_reporting::AggregatableNamedBudgetCandidate>::
+    Read(attribution_reporting::mojom::AggregatableNamedBudgetCandidateDataView
+             data,
+         attribution_reporting::AggregatableNamedBudgetCandidate* out) {
+  attribution_reporting::FilterPair filters;
+  if (!data.ReadFilters(&filters)) {
+    return false;
+  }
+
+  std::optional<std::string> name;
+  if (!data.ReadName(&name)) {
+    return false;
+  }
+
+  *out = attribution_reporting::AggregatableNamedBudgetCandidate(
+      std::move(name), std::move(filters));
+  return true;
+}
+
 // static
 bool StructTraits<attribution_reporting::mojom::TriggerRegistrationDataView,
                   attribution_reporting::TriggerRegistration>::
@@ -536,6 +580,11 @@ bool StructTraits<attribution_reporting::mojom::TriggerRegistrationDataView,
   }
 
   if (!data.ReadAttributionScopes(&out->attribution_scopes)) {
+    return false;
+  }
+
+  if (!data.ReadAggregatableNamedBudgetCandidates(
+          &out->aggregatable_named_budget_candidates)) {
     return false;
   }
 

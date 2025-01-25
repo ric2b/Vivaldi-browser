@@ -564,6 +564,7 @@ int GetTooltipID(DeskTemplateType type, TooltipStatus status) {
       return kSaveAsTemplateButtonTooltipIDs[static_cast<int>(status)];
     case DeskTemplateType::kSaveAndRecall:
       return kSaveForLaterButtonTooltipIDs[static_cast<int>(status)];
+    case DeskTemplateType::kCoral:
     case DeskTemplateType::kFloatingWorkspace:
     case DeskTemplateType::kUnknown:
       NOTREACHED();
@@ -584,7 +585,11 @@ OverviewGrid::OverviewGrid(
               ? std::make_unique<SplitViewDragIndicators>(root_window)
               : nullptr),
       bounds_(GetGridBoundsInScreen(root_window)),
-      window_occlusion_calculator_(window_occlusion_calculator) {
+      window_occlusion_calculator_(window_occlusion_calculator),
+      enter_animation_task_pool_(root_window_->layer()->GetCompositor(),
+                                 // A rough estimate for how long the UI thread
+                                 // is congested. Can be adjusted if needed.
+                                 /*initial_blackout_period=*/kTransition / 3) {
   TRACE_EVENT0("ui", "OverviewGrid::OverviewGrid");
 
   for (aura::Window* window : windows) {
@@ -607,6 +612,19 @@ OverviewGrid::OverviewGrid(
     UpdateNumSavedDeskUnsupportedWindows(overview_item_base->GetWindows(),
                                          /*increment=*/true);
     item_list_.push_back(std::move(overview_item_base));
+  }
+
+  if (split_view_drag_indicators_) {
+    if (chromeos::features::AreOverviewSessionInitOptimizationsEnabled()) {
+      // Initializing the widget before it's visible is not required but can
+      // save a couple milliseconds when rendering the first frame of
+      // `SplitViewDragIndicators`.
+      enter_animation_task_pool_.AddTask(
+          base::BindOnce(&SplitViewDragIndicators::InitWidget,
+                         base::Unretained(split_view_drag_indicators_.get())));
+    } else {
+      split_view_drag_indicators_->InitWidget();
+    }
   }
 }
 
@@ -702,6 +720,14 @@ void OverviewGrid::Shutdown(OverviewEnterExitType exit_type) {
   }
 
   if (birch_bar_widget_) {
+    // Shutdown the selection widget so its ownership is not passed as well.
+    base::ranges::for_each(
+        birch_bar_view_->chips(), [](BirchChipButtonBase* chip) {
+          if (auto* chip_button = views::AsViewClass<BirchChipButton>(chip)) {
+            chip_button->ShutdownSelectionWidget();
+          }
+        });
+
     // Cache the widget since we may need to pass the ownership to animation
     // observer.
     auto birch_bar_widget = std::move(birch_bar_widget_);
@@ -1383,6 +1409,8 @@ void OverviewGrid::OnStartingAnimationComplete(bool canceled) {
   if (canceled)
     return;
 
+  enter_animation_task_pool_.Flush();
+
   if (ShouldInitDesksWidget()) {
     auto presentation_time_recorder = CreatePresentationTimeHistogramRecorder(
         root_window_->layer()->GetCompositor(),
@@ -1919,9 +1947,7 @@ bool OverviewGrid::MaybeDropItemOnDeskMiniViewOrNewDeskButton(
   if (chromeos::features::IsDeskProfilesEnabled() && windows.size() == 1) {
     if (auto lacros_profile_id = windows[0]->GetProperty(kLacrosProfileId);
         lacros_profile_id != 0) {
-      target_desk->SetLacrosProfileId(
-          lacros_profile_id,
-          DeskProfilesSelectProfileSource::kNewDeskButtonDrop);
+      target_desk->SetLacrosProfileId(lacros_profile_id);
     }
   }
 
@@ -2203,7 +2229,7 @@ void OverviewGrid::ShowSavedDeskLibrary() {
                                         /*expanding_bar_view=*/true);
   } else {
     desks_bar_view_->UpdateDeskIconButtonState(
-        desks_bar_view_->library_button(),
+        &desks_bar_view_->GetOrCreateLibraryButton(),
         /*target_state=*/DeskIconButton::State::kActive);
   }
 
@@ -2270,7 +2296,7 @@ void OverviewGrid::HideSavedDeskLibrary(bool exit_overview) {
   // saved desk. We have animation of adding a new desk for the library
   // button, thus to avoid the animation glitches, directly update the state
   // for the library button instead of applying the scale animation to it.
-  desks_bar_view_->library_button()->UpdateState(
+  desks_bar_view_->GetOrCreateLibraryButton().UpdateState(
       DeskIconButton::State::kExpanded);
 }
 
@@ -2894,17 +2920,29 @@ void OverviewGrid::MaybeInitDesksWidget() {
 
   base::ScopedUmaHistogramTimer latency_recorder(
       "Ash.Overview.DeskBarInitLatency");
+  const gfx::Rect initial_widget_bounds = GetDesksWidgetBounds();
   desks_widget_ = DeskBarViewBase::CreateDeskWidget(
-      root_window_, GetDesksWidgetBounds(), DeskBarViewBase::Type::kOverview);
+      root_window_, initial_widget_bounds, DeskBarViewBase::Type::kOverview);
 
-  // The following order of function calls is significant: SetContentsView()
-  // must be called before OverviewDeskBarView:: Init(). This is needed because
-  // the desks mini views need to access the widget to get the root window in
-  // order to know how to layout themselves.
-  desks_bar_view_ =
-      desks_widget_->SetContentsView(std::make_unique<OverviewDeskBarView>(
-          weak_ptr_factory_.GetWeakPtr(), window_occlusion_calculator_));
-  desks_bar_view_->Init();
+  if (chromeos::features::AreOverviewSessionInitOptimizationsEnabled()) {
+    auto desk_bar_view = std::make_unique<OverviewDeskBarView>(
+        weak_ptr_factory_.GetWeakPtr(), window_occlusion_calculator_,
+        initial_widget_bounds);
+    // Initializing the desk bar before calling `SetContentsView()` prevents
+    // a second unnecessary desk bar layout when rendering the first frame.
+    desk_bar_view->Init(desks_widget_->GetNativeWindow());
+    desks_bar_view_ = desks_widget_->SetContentsView(std::move(desk_bar_view));
+  } else {
+    // The following order of function calls was significant: SetContentsView()
+    // had to be called before OverviewDeskBarView:: Init(). This was needed
+    // because the desks mini views needed to access the widget to get the root
+    // window in order to know how to layout themselves.
+    desks_bar_view_ =
+        desks_widget_->SetContentsView(std::make_unique<OverviewDeskBarView>(
+            weak_ptr_factory_.GetWeakPtr(), window_occlusion_calculator_,
+            initial_widget_bounds));
+    desks_bar_view_->Init(desks_widget_->GetNativeWindow());
+  }
 
   // If the feature ContinuousOverviewScrollAnimation is enabled and a
   // continuous scroll is now starting, move the desk bar up so we can slowly

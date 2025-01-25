@@ -238,6 +238,12 @@ inline constexpr char kSafeBrowsingAutomaticDeepScanningIPHSeen[] =
 inline constexpr char kSafeBrowsingAutomaticDeepScanPerformed[] =
     "safe_browsing.automatic_deep_scan_performed";
 
+// Records a mapping from app names to most recent redirect to that
+// app. This is used to avoid sending reports of external app redirects
+// for common apps.
+inline constexpr char kExternalAppRedirectTimestamps[] =
+    "safe_browsing.external_app_redirect_timestamps";
+
 }  // namespace prefs
 
 namespace safe_browsing {
@@ -490,7 +496,7 @@ bool MatchesPasswordProtectionChangePasswordURL(const GURL& url,
                                                 const PrefService& prefs);
 
 // Helper function to match a |target_url| against |url_list|.
-bool MatchesURLList(const GURL& target_url, const std::vector<GURL> url_list);
+bool MatchesURLList(const GURL& target_url, const std::vector<GURL>& url_list);
 
 }  // namespace safe_browsing
 

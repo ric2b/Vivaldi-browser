@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot privzeti iskalnik v Vivaldiju. Iskanju Google pošlje izbrano besedo in trenutno stran kot kontekst. Izklopite ga lahko v <ph name="BEGIN_LINK" />Nastavitve<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Preklop na običajne/zasebne zavihke</translation>
 <translation id="1644574205037202324">Zgodovina</translation>
-<translation id="17513872634828108">Odprti zavihki</translation>
 <translation id="1829244130665387512">Poiščite na strani</translation>
 <translation id="1910514478706885609">Odpri v novem nizu zavihkov</translation>
 <translation id="1925021887439448749">Vnesite spletni naslov po meri</translation>
 <translation id="2038563949887743358">Vklop možnosti Zahteva za namizno spletno mesto</translation>
-<translation id="2139186145475833000">Dodaj na začetni zaslon</translation>
 <translation id="2149973817440762519">Uredi zaznamek</translation>
 <translation id="2306442503286132111">Zaznamek je shranjen v mapi <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Videz</translation>
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">Trenutni jezik naprave</translation>
 <translation id="4167670741834902166">Nov zasebni zavihek</translation>
 <translation id="4195643157523330669">Odpri v novem zavihku</translation>
+<translation id="4225895483398857530">Bližnjica orodne vrstice</translation>
 <translation id="4243710787042215766">Odpri v zasebnem zavihku</translation>
 <translation id="4304713468139749426">Upravitelj gesel</translation>
 <translation id="451872707440238414">Iščite med zaznamki</translation>
@@ -74,6 +73,7 @@ Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot p
 <translation id="8560602726703398413">Poiščite svoj bralni seznam v zaznamkih</translation>
 <translation id="85991616550051997">Pojdi na domačo stran</translation>
 <translation id="8820817407110198400">Zaznamki</translation>
+<translation id="9042893549633094279">Zasebnost in varnost</translation>
 <translation id="9063523880881406963">Izklop možnosti Zahteva za namizno spletno mesto</translation>
 <translation id="9080642952018487277">Vstopi v zasebni način</translation>
 <translation id="96681097142096641">Si želite ogledati poenostavljeno stran?</translation>

@@ -181,16 +181,6 @@ void VivaldiInitProfile(Profile* profile) {
       vivaldi_partners::RemovedPartnersTracker::Create(profile,
                                                        bookmarks_model);
 
-#if !BUILDFLAG(IS_ANDROID)
-    // Workaround for VB-105645. The menu configuration code is located in a
-    // module that does not link to prefs and more.
-    if (!profile->IsGuestSession()) {
-      bool compact =
-          profile->GetPrefs()->GetBoolean(vivaldiprefs::kMenuCompact);
-      vivaldi::SetUsingCompactLegacyMenu(compact);
-    }
-#endif
-
     // Manages its own lifetime.
     new VivaldiProfileObserver(profile);
     content::URLDataSource::Add(profile,

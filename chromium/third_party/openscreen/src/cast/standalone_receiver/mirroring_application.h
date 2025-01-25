@@ -14,7 +14,6 @@
 #include "platform/base/error.h"
 #include "platform/base/ip_address.h"
 #include "util/scoped_wake_lock.h"
-#include "util/serial_delete_ptr.h"
 
 namespace openscreen {
 
@@ -57,7 +56,7 @@ class MirroringApplication final : public ApplicationAgent::Application,
   const std::vector<std::string> app_ids_;
   ApplicationAgent& agent_;
 
-  SerialDeletePtr<ScopedWakeLock> wake_lock_;
+  ScopedWakeLockPtr wake_lock_;
   std::unique_ptr<Environment> environment_;
   std::unique_ptr<StreamingPlaybackController> controller_;
   std::unique_ptr<ReceiverSession> current_session_;

@@ -150,8 +150,7 @@ public class FoldTransitionController {
         restoreTabSwitcherState(savedInstanceState, mLayoutManagerSupplier.get());
 
         if (ChromeApplicationImpl.isVivaldi() && mPanelManagerOneshotSupplier.get() != null) {
-            restorePanelState(savedInstanceState, mPanelManagerOneshotSupplier.get(),
-                    null, null);//TODO PARAMS
+            restorePanelState(savedInstanceState, mPanelManagerOneshotSupplier.get());
         } // End Vivaldi
     }
 
@@ -340,9 +339,8 @@ public class FoldTransitionController {
     }
 
     /** Vivaldi **/
-    private static void restorePanelState(@NonNull Bundle savedInstanceState,
-            PanelManager panelManager, @NonNull LayoutManager layoutManager,
-            Handler layoutStateHandler) {
+    private static void restorePanelState(
+            @NonNull Bundle savedInstanceState, PanelManager panelManager) {
         boolean open = savedInstanceState.getBoolean(PANEL_OPEN_STATE, false);
         if (open) {
             String url = savedInstanceState.getString(PANEL_URL, "");

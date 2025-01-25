@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Trykk for søk er en funksjon som bare er tilgjengelig når Google er satt som standard søkemotor i Vivaldi. Den sender et ord og omkringliggende kontekst til Google Søk. Du kan skru det av i <ph name="BEGIN_LINK" />innstillingene<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Veksle mellom normale/private faner</translation>
 <translation id="1644574205037202324">Historikk</translation>
-<translation id="17513872634828108">Åpne faner</translation>
 <translation id="1829244130665387512">Søk i siden</translation>
 <translation id="1910514478706885609">Åpne i ny fanestabel</translation>
 <translation id="1925021887439448749">Skriv inn en egendefinert nettadresse</translation>
 <translation id="2038563949887743358">Slå på Bruk skrivebordsversjon</translation>
-<translation id="2139186145475833000">Legg til på hjemskjermen</translation>
 <translation id="2149973817440762519">Rediger bokmerke</translation>
 <translation id="2306442503286132111">Bokmerke lagret i mappen <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Utseende</translation>
@@ -36,7 +34,9 @@
 <translation id="4137746084635924146">Nåværende enhetsspråk</translation>
 <translation id="4167670741834902166">Ny privatfane</translation>
 <translation id="4195643157523330669">Åpne i ny fane</translation>
+<translation id="4225895483398857530">Verktøylinje-snarvei</translation>
 <translation id="4243710787042215766">Åpne i privat fane</translation>
+<translation id="4304713468139749426">Passordbehandler</translation>
 <translation id="451872707440238414">Søk i bokmerkene dine</translation>
 <translation id="4526803704855831732">Privatfaner</translation>
 <translation id="4719086422742491124">Lær om temaer på nettsteder uten å forlate siden. Velg et eller flere søkeord på siden for å søke.
@@ -73,6 +73,7 @@ For å justere søkeordet, trykk lenge for å velge. For å finjustere søket, d
 <translation id="8560602726703398413">Finn leselisten din i Bokmerker</translation>
 <translation id="85991616550051997">Gå til hjemmesiden</translation>
 <translation id="8820817407110198400">Bokmerker</translation>
+<translation id="9042893549633094279">Personvern og sikkerhet</translation>
 <translation id="9063523880881406963">Slå av Bruk skrivebordsversjon</translation>
 <translation id="9080642952018487277">Gå inn i privat modus</translation>
 <translation id="96681097142096641">Vis forenklet side?</translation>

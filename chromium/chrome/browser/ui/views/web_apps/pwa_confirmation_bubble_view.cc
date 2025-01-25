@@ -16,7 +16,7 @@
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/extensions/security_dialog_tracker.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/browser/ui/views/web_apps/web_app_info_image_source.h"
 #include "chrome/browser/ui/views/web_apps/web_app_views_utils.h"
@@ -53,9 +53,6 @@
 #include "components/metrics/structured/structured_events.h"  // nogncheck
 #include "components/metrics/structured/structured_metrics_client.h"  // nogncheck
 #endif
-
-#include "chrome/browser/profiles/profile.h"
-#include "ui/vivaldi_browser_window.h"
 
 namespace {
 
@@ -192,6 +189,11 @@ void PWAConfirmationBubbleView::OnWidgetInitialized() {
     ok_button->SetProperty(views::kElementIdentifierKey,
                            PWAConfirmationBubbleView::kInstallButton);
   }
+
+  // Mark PWA install dialogs as security-sensitive for extension.
+  // This prevents extension bubbles from obsecuring a PWA install dialog.
+  extensions::SecurityDialogTracker::GetInstance()->AddSecurityDialog(
+      GetWidget());
 }
 
 bool PWAConfirmationBubbleView::OnCloseRequested(
@@ -303,75 +305,6 @@ void PWAConfirmationBubbleView::OnBeforeBubbleWidgetInit(
     views::Widget* widget) const {
   params->name = "PWAConfirmationBubbleView";
 }
-
-namespace web_app {
-
-void ShowPWAInstallBubble(
-    content::WebContents* web_contents,
-    std::unique_ptr<web_app::WebAppInstallInfo> web_app_info,
-    std::unique_ptr<webapps::MlInstallOperationTracker> install_tracker,
-    AppInstallationAcceptanceCallback callback,
-    PwaInProductHelpState iph_state) {
-  Browser* browser = chrome::FindBrowserWithTab(web_contents);
-  if (!browser) {
-    return;
-  }
-
-  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
-  if (window) {
-    auto* browser_context = web_contents->GetBrowserContext();
-    auto* pwa_confirmation_bubble = new PWAConfirmationBubbleView(
-        window->GetBubbleDialogAnchor(), web_contents->GetWeakPtr(), nullptr,
-        std::move(web_app_info), std::move(install_tracker),
-        std::move(callback), iph_state,
-        Profile::FromBrowserContext(browser_context)
-            ->GetPrefs(),
-        feature_engagement::TrackerFactory::GetForBrowserContext(browser_context));
-
-    pwa_confirmation_bubble->SetArrow(views::BubbleBorder::Arrow::FLOAT);
-    pwa_confirmation_bubble->set_parent_window(window->GetNativeView());
-
-    views::BubbleDialogDelegateView::CreateBubble(pwa_confirmation_bubble)->Show();
-    return;
-  }
-
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  views::View* anchor_view =
-      browser_view->toolbar_button_provider()->GetAnchorView(
-          PageActionIconType::kPwaInstall);
-  PageActionIconView* icon =
-      browser_view->toolbar_button_provider()->GetPageActionIconView(
-          PageActionIconType::kPwaInstall);
-  auto* browser_context = web_contents->GetBrowserContext();
-  PrefService* prefs = Profile::FromBrowserContext(browser_context)->GetPrefs();
-
-#if BUILDFLAG(IS_CHROMEOS)
-  if (base::FeatureList::IsEnabled(metrics::structured::kAppDiscoveryLogging)) {
-    webapps::AppId app_id =
-        web_app::GenerateAppIdFromManifestId(web_app_info->manifest_id);
-    cros_events::AppDiscovery_Browser_AppInstallDialogShown()
-        .SetAppId(app_id)
-        .Record();
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
-  feature_engagement::Tracker* tracker =
-      feature_engagement::TrackerFactory::GetForBrowserContext(browser_context);
-  auto* pwa_confirmation_bubble = new PWAConfirmationBubbleView(
-      anchor_view, web_contents->GetWeakPtr(), icon, std::move(web_app_info),
-      std::move(install_tracker), std::move(callback), iph_state, prefs,
-      tracker);
-
-  views::BubbleDialogDelegateView::CreateBubble(pwa_confirmation_bubble)->Show();
-  base::RecordAction(base::UserMetricsAction("WebAppInstallShown"));
-
-  if (icon) {
-    icon->Update();
-    DCHECK(icon->GetVisible());
-  }
-}
-
-}  // namespace web_app
 
 BEGIN_METADATA(PWAConfirmationBubbleView)
 END_METADATA

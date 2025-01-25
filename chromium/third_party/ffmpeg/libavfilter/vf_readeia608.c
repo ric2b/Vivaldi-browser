@@ -32,7 +32,7 @@
 #include "libavutil/pixdesc.h"
 
 #include "avfilter.h"
-#include "internal.h"
+#include "filters.h"
 #include "video.h"
 
 #define LAG 25

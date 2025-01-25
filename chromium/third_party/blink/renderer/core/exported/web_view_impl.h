@@ -628,6 +628,9 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   // words, after the frame has painted something.
   void DidFirstVisuallyNonEmptyPaint();
 
+  // Caleld once the first contentful paint happens on the main frame.
+  void OnFirstContentfulPaint();
+
   scheduler::WebAgentGroupScheduler& GetWebAgentGroupScheduler();
 
   // Returns true if the page supports app-region: drag/no-drag.
@@ -707,6 +710,10 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   // Request the window to close from the renderer by sending the request to the
   // browser.
   void DoDeferredCloseWindowSoon();
+
+#if BUILDFLAG(IS_CHROMEOS)
+  void UpdateUseOverlayScrollbar(bool use_overlay_scrollbar);
+#endif
 
   WebViewImpl(
       WebViewClient*,
@@ -970,7 +977,7 @@ class CORE_EXPORT WebViewImpl final : public WebView,
   // Handle to the local main frame host. Only valid when the MainFrame is
   // local. It is ok to use WTF::Unretained(this) for callbacks made on this
   // interface because the callbacks will be associated with the lifecycle
-  // of this AssociatedRemote and the lifetiime of the main LocalFrame.
+  // of this AssociatedRemote and the lifetime of the main LocalFrame.
   mojo::AssociatedRemote<mojom::blink::LocalMainFrameHost>
       local_main_frame_host_remote_;
 
@@ -1015,8 +1022,6 @@ class CORE_EXPORT WebViewImpl final : public WebView,
 
   // All the registered observers.
   base::ObserverList<WebViewObserver> observers_;
-
-  base::WeakPtrFactory<WebViewImpl> weak_ptr_factory_{this};
 };
 
 // WebView is always implemented by WebViewImpl, so explicitly allow the

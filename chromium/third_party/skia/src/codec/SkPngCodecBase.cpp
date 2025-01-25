@@ -8,13 +8,16 @@
 #include "src/codec/SkPngCodecBase.h"
 
 #include <cstddef>
+#include <tuple>
 #include <utility>
 
+#include "include/codec/SkCodec.h"
 #include "include/codec/SkEncodedImageFormat.h"
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkRect.h"
 #include "include/core/SkStream.h"
 #include "include/private/SkEncodedInfo.h"
 #include "include/private/base/SkAssert.h"
@@ -82,10 +85,30 @@ SkEncodedImageFormat SkPngCodecBase::onGetEncodedFormat() const {
 }
 
 SkCodec::Result SkPngCodecBase::initializeXforms(const SkImageInfo& dstInfo,
-                                                 const Options& options) {
+                                                 const Options& options,
+                                                 int frameWidth) {
+    if (frameWidth != dstInfo.width() && options.fSubset) {
+        return kInvalidParameters;
+    }
+    fXformWidth = frameWidth;
+
+    {
+        size_t encodedBitsPerPixel = static_cast<size_t>(getEncodedInfo().bitsPerPixel());
+
+        // We assume that `frameWidth` and `bitsPerPixel` have been already sanitized
+        // earlier (and that the multiplication and addition below won't overflow).
+        SkASSERT(0 < frameWidth);
+        SkASSERT(frameWidth < 0xFFFFFF);
+        SkASSERT(encodedBitsPerPixel < 128);
+
+        size_t encodedBitsPerRow = static_cast<size_t>(frameWidth) * encodedBitsPerPixel;
+        fEncodedRowBytes = (encodedBitsPerRow + 7) / 8;  // Round up to the next byte.
+
 #if defined(SK_DEBUG)
-    fDstMinRowBytes = dstInfo.minRowBytes();
+        size_t dstBytesPerPixel = dstInfo.bytesPerPixel();
+        fDstRowBytes = static_cast<size_t>(frameWidth) * dstBytesPerPixel;
 #endif
+    }
 
     // Reset fSwizzler and this->colorXform().  We can't do this in onRewind() because the
     // interlaced scanline decoder may need to rewind.
@@ -110,17 +133,20 @@ SkCodec::Result SkPngCodecBase::initializeXforms(const SkImageInfo& dstInfo,
 
     if (skipFormatConversion && !options.fSubset) {
         fXformMode = kColorOnly_XformMode;
-        goto Success;
-    }
+    } else {
+        if (SkEncodedInfo::kPalette_Color == this->getEncodedInfo().color()) {
+            if (!this->createColorTable(dstInfo)) {
+                return kInvalidInput;
+            }
+        }
 
-    if (SkEncodedInfo::kPalette_Color == this->getEncodedInfo().color()) {
-        if (!this->createColorTable(dstInfo)) {
-            return kInvalidInput;
+        Result result =
+                this->initializeSwizzler(dstInfo, options, skipFormatConversion, frameWidth);
+        if (result != kSuccess) {
+            return result;
         }
     }
 
-    this->initializeSwizzler(dstInfo, options, skipFormatConversion);
-Success:
     this->allocateStorage(dstInfo);
 
     // We can't call `initializeXformParams` here, because `swizzleWidth` may
@@ -132,15 +158,8 @@ Success:
 }
 
 void SkPngCodecBase::initializeXformParams() {
-    switch (fXformMode) {
-        case kColorOnly_XformMode:
-            fXformWidth = this->dstInfo().width();
-            break;
-        case kSwizzleColor_XformMode:
-            fXformWidth = this->swizzler()->swizzleWidth();
-            break;
-        default:
-            break;
+    if (fXformMode == kSwizzleColor_XformMode) {
+        fXformWidth = this->swizzler()->swizzleWidth();
     }
 }
 
@@ -165,9 +184,10 @@ void SkPngCodecBase::allocateStorage(const SkImageInfo& dstInfo) {
     }
 }
 
-void SkPngCodecBase::initializeSwizzler(const SkImageInfo& dstInfo,
-                                        const Options& options,
-                                        bool skipFormatConversion) {
+SkCodec::Result SkPngCodecBase::initializeSwizzler(const SkImageInfo& dstInfo,
+                                                   const Options& options,
+                                                   bool skipFormatConversion,
+                                                   int frameWidth) {
     SkImageInfo swizzlerInfo = dstInfo;
     Options swizzlerOptions = options;
     fXformMode = kSwizzleOnly_XformMode;
@@ -189,6 +209,14 @@ void SkPngCodecBase::initializeSwizzler(const SkImageInfo& dstInfo,
         swizzlerOptions.fZeroInitialized = kNo_ZeroInitialized;
     }
 
+    SkIRect frameRect = SkIRect::MakeWH(frameWidth, 1);
+    const SkIRect* frameRectPtr = nullptr;
+    if (options.fSubset) {
+        SkASSERT(frameWidth == dstInfo.width());
+    } else {
+        frameRectPtr = &frameRect;
+    }
+
     if (skipFormatConversion) {
         // We cannot skip format conversion when there is a color table.
         SkASSERT(!fColorTable);
@@ -208,26 +236,14 @@ void SkPngCodecBase::initializeSwizzler(const SkImageInfo& dstInfo,
                 SkASSERT(false);
                 break;
         }
-        fSwizzler = SkSwizzler::MakeSimple(srcBPP, swizzlerInfo, swizzlerOptions);
+        fSwizzler = SkSwizzler::MakeSimple(srcBPP, swizzlerInfo, swizzlerOptions, frameRectPtr);
     } else {
         const SkPMColor* colors = get_color_ptr(fColorTable.get());
-        fSwizzler = SkSwizzler::Make(this->getEncodedInfo(), colors, swizzlerInfo, swizzlerOptions);
+        fSwizzler = SkSwizzler::Make(
+                this->getEncodedInfo(), colors, swizzlerInfo, swizzlerOptions, frameRectPtr);
     }
-    SkASSERT(fSwizzler);
-}
 
-size_t SkPngCodecBase::getEncodedInfoRowSize() {
-    size_t width = getEncodedInfo().width();
-    size_t bitsPerPixel = static_cast<size_t>(getEncodedInfo().bitsPerPixel());
-
-    // We assume that `width` and `bitsPerPixel` have been already sanitized
-    // earlier (and that the multiplication and addition below won't overflow).
-    SkASSERT(width < 0xFFFFFF);
-    SkASSERT(bitsPerPixel < 128);
-
-    size_t bitsPerRow = width * bitsPerPixel;
-    size_t bytesPerRow = (bitsPerRow + 7) / 8;  // Round up to the next byte.
-    return bytesPerRow;
+    return !!fSwizzler ? kSuccess : kUnimplemented;
 }
 
 SkSampler* SkPngCodecBase::getSampler(bool createIfNecessary) {
@@ -235,13 +251,18 @@ SkSampler* SkPngCodecBase::getSampler(bool createIfNecessary) {
         return fSwizzler.get();
     }
 
-    this->initializeSwizzler(this->dstInfo(), this->options(), true);
+    // Ok to ignore `initializeSwizzler`'s result, because if it fails, then
+    // `fSwizzler` will be `nullptr` and we want to return `nullptr` upon
+    // failure.
+    std::ignore = this->initializeSwizzler(
+            this->dstInfo(), this->options(), true, this->dstInfo().width());
+
     return fSwizzler.get();
 }
 
 void SkPngCodecBase::applyXformRow(SkSpan<uint8_t> dstRow, SkSpan<const uint8_t> srcRow) {
-    SkASSERT(dstRow.size() >= fDstMinRowBytes);
-    SkASSERT(srcRow.size() >= getEncodedInfoRowSize());
+    SkASSERT(dstRow.size() >= fDstRowBytes);
+    SkASSERT(srcRow.size() >= fEncodedRowBytes);
     applyXformRow(dstRow.data(), srcRow.data());
 }
 

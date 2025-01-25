@@ -12,6 +12,7 @@ namespace {
 const int kNumNotesToSend = 10;
 const int kNumSpeedDialToSend = 100;
 const int kNumExtensionsToSend = 100;
+const int kNumTabsToSend = 100;
 
 }  // namespace
 
@@ -79,6 +80,28 @@ void ExternalProcessImporterBridge::AddExtensions(
     it = end_group;
   }
   DCHECK_EQ(0, ex_left);
+}
+
+void ExternalProcessImporterBridge::AddOpenTabs(
+    const std::vector<ImportedTabEntry>& tabs) {
+  observer_->OnTabImportStart(tabs.size());
+
+  // |notes_left| is required for the checks below as Windows has a
+  // Debug bounds-check which prevents pushing an iterator beyond its end()
+  // (i.e., |it + 2 < s.end()| crashes in debug mode if |i + 1 == s.end()|).
+  int tabs_left = tabs.end() - tabs.begin();
+  for (std::vector<ImportedTabEntry>::const_iterator it = tabs.begin();
+       it < tabs.end();) {
+    std::vector<ImportedTabEntry> tabs_group;
+    std::vector<ImportedTabEntry>::const_iterator end_group =
+        it + std::min(tabs_left, kNumTabsToSend);
+    tabs_group.assign(it, end_group);
+
+    observer_->OnTabImportGroup(tabs_group);
+    tabs_left -= end_group - it;
+    it = end_group;
+  }
+  DCHECK_EQ(0, tabs_left);
 }
 
 void ExternalProcessImporterBridge::NotifyItemFailed(importer::ImportItem item,

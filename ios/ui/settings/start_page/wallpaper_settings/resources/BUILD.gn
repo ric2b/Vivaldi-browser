@@ -67,5 +67,9 @@ bundle_data_xcassets("wallpaper_assets") {
     # ios_background_12
     "Wallpapers.xcassets/ios_background_12.imageset/Contents.json",
     "Wallpapers.xcassets/ios_background_12.imageset/ios_background_12.jpg",
+
+    # ios_background_13
+    "Wallpapers.xcassets/ios_background_13.imageset/Contents.json",
+    "Wallpapers.xcassets/ios_background_13.imageset/ios_background_13.jpg",
   ]
 }

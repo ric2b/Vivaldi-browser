@@ -60,7 +60,9 @@ class QuicServerTest : public Test {
     std::unique_ptr<ProtocolConnection> stream;
     EXPECT_CALL(mock_connect_request_callback, OnConnectSucceed(_, _))
         .WillOnce(Invoke([this](uint64_t request_id, uint64_t instance_id) {
-          quic_bridge_.GetQuicClient()->CreateProtocolConnection(instance_id);
+          client_connection_ =
+              quic_bridge_.GetQuicClient()->CreateProtocolConnection(
+                  instance_id);
         }));
     EXPECT_CALL(quic_bridge_.mock_server_observer(),
                 OnIncomingConnectionMock(_))
@@ -93,9 +95,8 @@ class QuicServerTest : public Test {
     new (&message.message.str) std::string("message from server");
     ASSERT_TRUE(msgs::EncodePresentationConnectionMessage(message, &buffer));
     connection->Write(ByteView(buffer.data(), buffer.size()));
-    connection->CloseWriteEnd();
 
-    ssize_t decode_result = 0;
+    msgs::CborResult decode_result = 0;
     msgs::PresentationConnectionMessage received_message;
     EXPECT_CALL(mock_message_callback,
                 OnStreamMessage(
@@ -113,7 +114,7 @@ class QuicServerTest : public Test {
     quic_bridge_.RunTasksUntilIdle();
 
     ASSERT_GT(decode_result, 0);
-    EXPECT_EQ(decode_result, static_cast<ssize_t>(buffer.size() - 1));
+    EXPECT_EQ(decode_result, static_cast<int64_t>(buffer.size() - 1));
     EXPECT_EQ(received_message.connection_id, message.connection_id);
     ASSERT_EQ(received_message.message.which,
               decltype(received_message.message.which)::kString);
@@ -125,6 +126,7 @@ class QuicServerTest : public Test {
   FakeTaskRunner task_runner_;
   FakeQuicBridge quic_bridge_;
   QuicServer* server_;
+  std::unique_ptr<ProtocolConnection> client_connection_;
 };
 
 }  // namespace
@@ -144,10 +146,16 @@ TEST_F(QuicServerTest, OpenImmediate) {
   std::unique_ptr<ProtocolConnection> connection1 = ExpectIncomingConnection();
   ASSERT_TRUE(connection1);
 
-  std::unique_ptr<ProtocolConnection> connection2 =
+  std::unique_ptr<ProtocolConnection> connection2;
+  EXPECT_CALL(quic_bridge_.mock_client_observer(), OnIncomingConnectionMock(_))
+      .WillOnce(Invoke(
+          [&connection2](std::unique_ptr<ProtocolConnection>& connection) {
+            connection2 = std::move(connection);
+          }));
+  std::unique_ptr<ProtocolConnection> connection3 =
       server_->CreateProtocolConnection(connection1->GetInstanceID());
 
-  SendTestMessage(connection2.get());
+  SendTestMessage(connection3.get());
 
   server_->Stop();
 }
@@ -196,7 +204,7 @@ TEST_F(QuicServerTest, RequestIds) {
   EXPECT_EQ(1u, server_->GetInstanceRequestIds().GetNextRequestId(instance_id));
   EXPECT_EQ(3u, server_->GetInstanceRequestIds().GetNextRequestId(instance_id));
 
-  connection->CloseWriteEnd();
+  connection->Close();
   connection.reset();
   quic_bridge_.RunTasksUntilIdle();
   EXPECT_EQ(5u, server_->GetInstanceRequestIds().GetNextRequestId(instance_id));

@@ -191,11 +191,11 @@ export class PostSelectionRendererElement extends PolymerElement {
     this.notifyPostSelectionUpdated();
   }
 
-  handleDownGesture(event: GestureEvent): boolean {
+  handleGestureStart(event: GestureEvent): boolean {
     this.currentDragTarget =
-        this.dragTargetFromPoint(event.clientX, event.clientY);
+        this.dragTargetFromPoint(event.startX, event.startY);
 
-    if (this.shouldHandleDownGesture()) {
+    if (this.shouldHandleGestureStart()) {
       // User is dragging the post selection (if enabled) or resizing.
       this.originalBounds = {
         left: this.left,
@@ -208,7 +208,7 @@ export class PostSelectionRendererElement extends PolymerElement {
     return false;
   }
 
-  handleDragGesture(event: GestureEvent) {
+  handleGestureDrag(event: GestureEvent) {
     const imageBounds = this.selectionOverlayRect;
     const normalizedX = (event.clientX - imageBounds.left) / imageBounds.width;
     const normalizedY = (event.clientY - imageBounds.top) / imageBounds.height;
@@ -274,7 +274,7 @@ export class PostSelectionRendererElement extends PolymerElement {
     this.rerender();
   }
 
-  handleUpGesture() {
+  handleGestureEnd() {
     if (this.areBoundsChanging()) {
       // Issue Lens request for new bounds
       BrowserProxyImpl.getInstance().handler.issueLensRegionRequest(
@@ -298,6 +298,22 @@ export class PostSelectionRendererElement extends PolymerElement {
   cancelGesture() {
     this.originalBounds = {left: 0, top: 0, width: 0, height: 0};
     this.currentDragTarget = DragTarget.NONE;
+  }
+
+  handleRightClick(event: PointerEvent) {
+    const boundingRect = this.$.postSelection.getBoundingClientRect();
+    if (this.dragTargetFromPoint(event.clientX, event.clientY) !==
+            DragTarget.NONE ||
+        (event.clientX >= boundingRect.left &&
+         event.clientX <= boundingRect.right &&
+         event.clientY >= boundingRect.top &&
+         event.clientY <= boundingRect.bottom)) {
+      this.dispatchEvent(
+          new CustomEvent('restore-selected-region-context-menu', {
+            bubbles: true,
+            composed: true,
+          }));
+    }
   }
 
   private setSelection(region: CenterRotatedBox) {
@@ -527,7 +543,7 @@ export class PostSelectionRendererElement extends PolymerElement {
     return DragTarget.NONE;
   }
 
-  private shouldHandleDownGesture(): boolean {
+  private shouldHandleGestureStart(): boolean {
     return this.currentDragTarget !== DragTarget.NONE;
   }
 

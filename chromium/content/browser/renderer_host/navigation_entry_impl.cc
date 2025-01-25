@@ -151,7 +151,7 @@ void RecursivelyGenerateFrameState(
   blink::ExplodedPageState exploded_page_state;
   if (!blink::DecodePageState(node->frame_entry->page_state().ToEncodedData(),
                               &exploded_page_state)) {
-    NOTREACHED_IN_MIGRATION();
+    DUMP_WILL_BE_NOTREACHED();
     return;
   }
   blink::ExplodedFrameState frame_state = exploded_page_state.top;
@@ -1001,7 +1001,8 @@ NavigationEntryImpl::ConstructCommitNavigationParams(
           /*lcpp_hint=*/nullptr, blink::CreateDefaultRendererContentSettings(),
           /*cookie_deprecation_label=*/std::nullopt,
           /*visited_link_salt=*/std::nullopt,
-          /*local_surface_id=*/std::nullopt);
+          /*local_surface_id=*/std::nullopt,
+          /*initial_permission_statuses=*/std::nullopt);
 #if BUILDFLAG(IS_ANDROID)
   // `data_url_as_string` is saved in NavigationEntry but should only be used by
   // main frames, because loadData* navigations can only happen on the main

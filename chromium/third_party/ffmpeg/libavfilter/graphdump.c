@@ -26,7 +26,7 @@
 #include "libavutil/mem.h"
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
-#include "internal.h"
+#include "filters.h"
 
 static int print_link_prop(AVBPrint *buf, AVFilterLink *link)
 {

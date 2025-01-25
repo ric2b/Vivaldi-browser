@@ -12,7 +12,6 @@ import {commandLineArgs} from './conductor/commandline.js';
 import {
   BUILD_WITH_CHROMIUM,
   CHECKOUT_ROOT,
-  defaultChromePath,
   GEN_DIR,
   isContainedInDirectory,
   PathPair,
@@ -129,7 +128,7 @@ class MochaTests extends Tests {
           '--config',
           path.join(this.suite.buildPath, 'mocharc.js'),
           '-u',
-          path.join(this.suite.buildPath, '..', 'shared', 'mocha-interface.js'),
+          path.join(this.suite.buildPath, '..', 'conductor', 'mocha-interface.js'),
         ],
         /* positionalTestArgs= */ false,  // Mocha interprets positional arguments as test files itself. Work around
                                           // that by passing the tests as dashed args instead.
@@ -139,18 +138,6 @@ class MochaTests extends Tests {
 
 class KarmaTests extends Tests {
   override run(tests: PathPair[]) {
-    if (os.type() === 'Windows_NT') {
-      const result = runProcess(
-          'python3',
-          [
-            path.join(SOURCE_ROOT, 'scripts', 'deps', 'set_lpac_acls.py'),
-            path.dirname(options['chrome-binary'] ?? defaultChromePath()),
-          ],
-          {encoding: 'utf-8', stdio: 'inherit'});
-      if (result.error || (result.status ?? 1) !== 0) {
-        return false;
-      }
-    }
     return super.run(tests, [
       path.join(SOURCE_ROOT, 'node_modules', 'karma', 'bin', 'karma'),
       'start',

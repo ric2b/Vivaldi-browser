@@ -19,4 +19,10 @@ BASE_DECLARE_FEATURE(kViewMarkdownAsHTML);
 
 bool IsViewMarkdownAsHTMLEnabled();
 
+// Feature flag to enable new speed dial dialog.
+BASE_DECLARE_FEATURE(kShowNewSpeedDialDialog);
+
+// Whether new speed dial dialog is enabled
+bool IsNewSpeedDialDialogEnabled();
+
 #endif  // IOS_CHROME_BROWSER_FEATURES_VIVALDI_FEATURES_H_

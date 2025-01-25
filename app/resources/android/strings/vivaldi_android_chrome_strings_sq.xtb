@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Kërkimi me Prekje funksionon vetëm po të caktoni Google si motorin standard të kërkimit brenda Vivaldit. Fjalët dhe konteksti i caktuar do të dërgohen në Google Search. Ky funksion mund të çaktivizohet te <ph name="BEGIN_LINK" />Parametrat<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Tregoj/Fsheh skedat normale dhe private</translation>
 <translation id="1644574205037202324">Historiku</translation>
-<translation id="17513872634828108">Skedat e hapura</translation>
 <translation id="1829244130665387512">Gjej te faqja</translation>
 <translation id="1910514478706885609">Hap në grupin e ri të skedave</translation>
 <translation id="1925021887439448749">Shkruani adresën e personalizuar të internetit</translation>
 <translation id="2038563949887743358">Aktivizoj opsionin për uebsajtet për kompjuter</translation>
-<translation id="2139186145475833000">Shtoj te faqja bazë e sistemit</translation>
 <translation id="2149973817440762519">Përpunoj faqen interesante</translation>
 <translation id="2306442503286132111">Regjistroi faqen interesante në dosjen <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Paraqitja</translation>
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">Gjuha e aparatit aktual</translation>
 <translation id="4167670741834902166">Skedë private të re</translation>
 <translation id="4195643157523330669">Hap në skedë të re</translation>
+<translation id="4225895483398857530">Kombinimi për brezin e instrumenteve</translation>
 <translation id="4243710787042215766">Hap në skedën private</translation>
 <translation id="4304713468139749426">Përgjegjësi i fjalëkalimeve</translation>
 <translation id="451872707440238414">Kërkoni te faqet interesante</translation>
@@ -74,6 +73,7 @@ Termi i kërkuar mund të ndryshohet duke u mbajtur shtypur. Për ta përpunuar 
 <translation id="8560602726703398413">Lista e leximeve ndodhet te faqet interesante</translation>
 <translation id="85991616550051997">Shkoj te faqja kryesore</translation>
 <translation id="8820817407110198400">Faqet interesante</translation>
+<translation id="9042893549633094279">Privatësia dhe siguria</translation>
 <translation id="9063523880881406963">Çaktivizoj opsionin për uebsajtet për kompjuter</translation>
 <translation id="9080642952018487277">Hyni në këndin privat</translation>
 <translation id="96681097142096641">Do shihni faqen e thjeshtë?</translation>

@@ -241,7 +241,7 @@ PingManager::PingManager(
       kReadPersistedReportsDelay);
 }
 
-PingManager::~PingManager() {}
+PingManager::~PingManager() = default;
 
 // All SafeBrowsing request responses are handled here.
 void PingManager::OnURLLoaderComplete(
@@ -263,10 +263,6 @@ void PingManager::OnThreatDetailsReportURLLoaderComplete(
   std::string suffix = (has_access_token ? "YesAccessToken" : "NoAccessToken");
   RecordHttpResponseOrErrorCode((metric + suffix).c_str(), source->NetError(),
                                 response_code);
-  if (has_access_token) {
-    MaybeLogCookieReset(*source,
-                        SafeBrowsingAuthenticatedEndpoint::kThreatDetails);
-  }
   OnURLLoaderComplete(source, std::move(response_body));
 }
 
@@ -453,6 +449,8 @@ void PingManager::ReportThreatDetailsOnGotAccessToken(
   resource_request->method = "POST";
 
   if (!access_token.empty()) {
+    LogAuthenticatedCookieResets(
+        *resource_request, SafeBrowsingAuthenticatedEndpoint::kThreatDetails);
     SetAccessTokenAndClearCookieInResourceRequest(resource_request.get(),
                                                   access_token);
   }
@@ -503,7 +501,7 @@ GURL PingManager::SafeBrowsingHitUrl(
       threat_list = "phishcsdhit";
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 
   std::string threat_source = "none";
@@ -527,7 +525,7 @@ GURL PingManager::SafeBrowsingHitUrl(
       threat_source = "asb";
       break;
     case safe_browsing::ThreatSource::UNKNOWN:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 
   return GURL(base::StringPrintf(

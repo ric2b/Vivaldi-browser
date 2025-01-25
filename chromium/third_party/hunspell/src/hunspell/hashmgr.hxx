@@ -1,6 +1,8 @@
 /* ***** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
+ * Copyright (C) 2002-2017 Németh László
+ *
  * The contents of this file are subject to the Mozilla Public License Version
  * 1.1 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -11,12 +13,7 @@
  * for the specific language governing rights and limitations under the
  * License.
  *
- * The Original Code is Hunspell, based on MySpell.
- *
- * The Initial Developers of the Original Code are
- * Kevin Hendricks (MySpell) and Németh László (Hunspell).
- * Portions created by the Initial Developers are Copyright (C) 2002-2005
- * the Initial Developers. All Rights Reserved.
+ * Hunspell is based on MySpell which is Copyright (C) 2002 Kevin Hendricks.
  *
  * Contributor(s): David Einstein, Davide Prina, Giuseppe Modugno,
  * Gianluca Turconi, Simon Brouwer, Noll János, Bíró Árpád,
@@ -91,6 +88,12 @@
 
 enum flag { FLAG_CHAR, FLAG_LONG, FLAG_NUM, FLAG_UNI };
 
+// morphological description of a dictionary item can contain
+// arbitrary number "ph:" (MORPH_PHON) fields to store typical
+// phonetic or other misspellings of that word.
+// ratio of lines/lines with "ph:" in the dic file: 1/MORPH_PHON_RATIO
+#define MORPH_PHON_RATIO 500
+
 class HashMgr {
 #ifdef HUNSPELL_CHROME_CLIENT
   // Not owned by this class, owned by the Hunspell object.
@@ -115,6 +118,10 @@ class HashMgr {
   unsigned short* aliasflen;
   int numaliasm;  // morphological desciption `compression' with aliases
   char** aliasm;
+  // reptable created from REP table of aff file and from "ph:" fields
+  // of the dic file. It contains phonetic and other common misspellings
+  // (letters, letter groups and words) for better suggestions
+  std::vector<replentry> reptable;
 
  public:
 #ifdef HUNSPELL_CHROME_CLIENT
@@ -151,16 +158,19 @@ class HashMgr {
   int get_aliasf(int index, unsigned short** fvec, FileMgr* af) const;
   int is_aliasm() const;
   char* get_aliasm(int index) const;
+  const std::vector<replentry>& get_reptable() const;
 
  private:
   int get_clen_and_captype(const std::string& word, int* captype);
+  int get_clen_and_captype(const std::string& word, int* captype, std::vector<w_char> &workbuf);
   int load_tables(const char* tpath, const char* key);
   int add_word(const std::string& word,
                int wcl,
                unsigned short* ap,
                int al,
                const std::string* desc,
-               bool onlyupcase);
+               bool onlyupcase,
+               int captype);
   int load_config(const char* affpath, const char* key);
   bool parse_aliasf(const std::string& line, FileMgr* af);
 
@@ -204,6 +214,7 @@ class HashMgr {
                                   const std::string* dp,
                                   int captype);
   bool parse_aliasm(const std::string& line, FileMgr* af);
+  bool parse_reptable(const std::string& line, FileMgr* af);
   int remove_forbidden_flag(const std::string& word);
 };
 

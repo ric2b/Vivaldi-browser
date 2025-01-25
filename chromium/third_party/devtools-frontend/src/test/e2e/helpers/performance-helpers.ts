@@ -70,9 +70,6 @@ export async function openCaptureSettings(sectionClassName: string) {
               veImpression('Toggle', 'timeline-disable-js-sampling'),
               veImpression('DropDown', 'cpu-throttling'),
               veImpression('DropDown', 'preferred-network-condition'),
-              veImpression('Toggle', 'hardware-concurrency'),
-              veImpression('TextField', 'hardware-concurrency'),
-              veImpression('Action', 'hardware-concurrency-reset'),
               veImpression('Toggle', 'timeline-show-extension-data'),
             ]),
       ],
@@ -105,28 +102,32 @@ export async function navigateToBottomUpTab() {
   await click(BOTTOM_UP_SELECTOR);
   await expectVeEvents(
       [
-        veClick('Toolbar: sidebar > PanelTabHeader: bottom-up'),
-        veImpression(
-            'Pane', 'bottom-up',
+        veClick('Section: timeline.flame-chart-view > Toolbar: sidebar > PanelTabHeader: bottom-up'),
+        veImpressionsUnder(
+            'Section: timeline.flame-chart-view',
             [
               veImpression(
-                  'Toolbar', undefined,
+                  'Pane', 'bottom-up',
                   [
-                    veImpression('Toggle', 'match-case'),
-                    veImpression('Toggle', 'regular-expression'),
-                    veImpression('Toggle', 'match-whole-word'),
-                    veImpression('TextField', 'filter'),
-                    veImpression('DropDown', 'timeline-tree-group-by'),
-                  ]),
-              veImpression('TableHeader', 'self'),
-              veImpression('TableHeader', 'total'),
-              veImpression('TableHeader', 'activity'),
-              veImpression(
-                  'TableRow', undefined,
-                  [
-                    veImpression('TableCell', 'self'),
-                    veImpression('TableCell', 'total'),
-                    veImpression('TableCell', 'activity', [veImpression('Link', 'url')]),
+                    veImpression(
+                        'Toolbar', undefined,
+                        [
+                          veImpression('Toggle', 'match-case'),
+                          veImpression('Toggle', 'regular-expression'),
+                          veImpression('Toggle', 'match-whole-word'),
+                          veImpression('TextField', 'filter'),
+                          veImpression('DropDown', 'timeline-tree-group-by'),
+                        ]),
+                    veImpression('TableHeader', 'self'),
+                    veImpression('TableHeader', 'total'),
+                    veImpression('TableHeader', 'activity'),
+                    veImpression(
+                        'TableRow', undefined,
+                        [
+                          veImpression('TableCell', 'self'),
+                          veImpression('TableCell', 'total'),
+                          veImpression('TableCell', 'activity', [veImpression('Link', 'url')]),
+                        ]),
                   ]),
             ]),
 
@@ -138,30 +139,36 @@ export async function navigateToCallTreeTab() {
   await click(CALL_TREE_SELECTOR);
   await expectVeEvents(
       [
-        veClick('Toolbar: sidebar > PanelTabHeader: call-tree'),
-        veImpression(
-            'Pane', 'call-tree',
+        veClick('Section: timeline.flame-chart-view > Toolbar: sidebar > PanelTabHeader: call-tree'),
+        veImpressionsUnder(
+            'Section: timeline.flame-chart-view',
             [
+
               veImpression(
-                  'Toolbar', undefined,
+                  'Pane', 'call-tree',
                   [
-                    veImpression('Toggle', 'match-case'),
-                    veImpression('Toggle', 'regular-expression'),
-                    veImpression('Toggle', 'match-whole-word'),
-                    veImpression('TextField', 'filter'),
-                    veImpression('DropDown', 'timeline-tree-group-by'),
+                    veImpression(
+                        'Toolbar', undefined,
+                        [
+                          veImpression('Toggle', 'match-case'),
+                          veImpression('Toggle', 'regular-expression'),
+                          veImpression('Toggle', 'match-whole-word'),
+                          veImpression('TextField', 'filter'),
+                          veImpression('DropDown', 'timeline-tree-group-by'),
+                        ]),
+                    veImpression('TableHeader: self'),
+                    veImpression('TableHeader: total'),
+                    veImpression('TableHeader: activity'),
+                    veImpression(
+                        'TableRow', undefined,
+                        [
+                          veImpression('TableCell: self'),
+                          veImpression('TableCell: total'),
+                          veImpression('TableCell: activity'),
+                        ]),
                   ]),
-              veImpression('TableHeader: self'),
-              veImpression('TableHeader: total'),
-              veImpression('TableHeader: activity'),
-              veImpression(
-                  'TableRow', undefined,
-                  [
-                    veImpression('TableCell: self'),
-                    veImpression('TableCell: total'),
-                    veImpression('TableCell: activity'),
-                  ]),
-            ]),
+            ],
+            ),
       ],
       'Panel: timeline');
 }
@@ -171,25 +178,30 @@ export async function setFilter(filter: string) {
   await filterBoxElement.type(filter);
   await expectVeEvents(
       [veChange(''), veImpression('Action', 'clear')],
-      'Panel: timeline > Pane: bottom-up > Toolbar > TextField: filter');
+      'Panel: timeline > Section: timeline.flame-chart-view > Pane: bottom-up > Toolbar > TextField: filter');
 }
 
 export async function toggleCaseSensitive() {
   const matchCaseButton = await waitForAria('Match case');
   await matchCaseButton.click();
-  await expectVeEvents([veClick('Panel: timeline > Pane: bottom-up > Toolbar > Toggle: match-case')]);
+  await expectVeEvents([veClick(
+      'Panel: timeline > Section: timeline.flame-chart-view > Pane: bottom-up > Toolbar > Toggle: match-case')]);
 }
 
 export async function toggleRegExButtonBottomUp() {
   const regexButton = await waitFor('[aria-label="Use regular expression"]');
   await regexButton.click();
-  await expectVeEvents([veClick('Panel: timeline > Pane: bottom-up > Toolbar > Toggle: regular-expression')]);
+  await expectVeEvents([
+    veClick(
+        'Panel: timeline > Section: timeline.flame-chart-view > Pane: bottom-up > Toolbar > Toggle: regular-expression'),
+  ]);
 }
 
 export async function toggleMatchWholeWordButtonBottomUp() {
   const wholeWordButton = await waitForAria('Match whole word');
   await wholeWordButton.click();
-  await expectVeEvents([veClick('Panel: timeline > Pane: bottom-up > Toolbar > Toggle: match-whole-word')]);
+  await expectVeEvents([veClick(
+      'Panel: timeline > Section: timeline.flame-chart-view > Pane: bottom-up > Toolbar > Toggle: match-whole-word')]);
 }
 
 export async function startRecording() {
@@ -270,7 +282,7 @@ export async function navigateToSelectorStatsTab() {
               veImpression('TableRow', undefined, [veImpression('TableCell')]),
             ]),
       ],
-      'Panel: timeline');
+      'Panel: timeline > Section: timeline.flame-chart-view');
 }
 
 export async function selectRecalculateStylesEvent() {
@@ -340,7 +352,7 @@ export function veImpressionForPerformancePanel(options?: {timelineLegacyLanding
           veImpression('Action', 'timeline.record-reload'),
           veImpression('Action', 'timeline.clear'),
           veImpression('Action', 'timeline.load-from-file'),
-          veImpression('Action', 'timeline.save-to-file'),
+          veImpression('DropDown', 'timeline.save-to-file-more-options'),
           veImpression('DropDown', 'history'),
           veImpression('Toggle', 'timeline-show-screenshots'),
           veImpression('Toggle', 'timeline-show-memory'),

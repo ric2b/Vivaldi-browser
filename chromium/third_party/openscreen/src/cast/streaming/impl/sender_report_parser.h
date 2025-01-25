@@ -32,7 +32,7 @@ class SenderReportParser {
   explicit SenderReportParser(RtcpSession& session);
   ~SenderReportParser();
 
-  // Parses the RTCP |packet|, and returns a parsed sender report if the packet
+  // Parses the RTCP `packet`, and returns a parsed sender report if the packet
   // contained one. Returns nullopt if the data is corrupt or the packet did not
   // contain a sender report.
   std::optional<SenderReportWithId> Parse(ByteView packet);

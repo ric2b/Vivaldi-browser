@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
-#include "third_party/blink/renderer/core/aom/accessible_node.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
@@ -295,9 +294,9 @@ void FillWidgetProperties(AXObject& ax_object,
     properties.emplace_back(CreateProperty(
         AXPropertyNameEnum::Valuetext,
         CreateValue(
-            ax_object
-                .GetAOMPropertyOrARIAAttribute(AOMStringProperty::kValueText)
-                .GetString())));
+            node_data
+                .GetStringAttribute(ax::mojom::blink::StringAttribute::kValue)
+                .c_str())));
   }
 }
 
@@ -354,6 +353,48 @@ void FillWidgetStates(AXObject& ax_object,
   }
 }
 
+// TODO(crbug/41469336): also show related elements from ElementInternals
+void AccessibilityChildrenFromAttribute(const AXObject& ax_object,
+                                        const QualifiedName& attribute,
+                                        AXObject::AXObjectVector& children) {
+  if (!ax_object.GetElement()) {
+    return;
+  }
+  HeapVector<Member<Element>>* elements =
+      ax_object.GetElement()->GetAttrAssociatedElements(
+          attribute,
+          /*resolve_reference_target=*/true);
+  if (!elements) {
+    return;
+  }
+  AXObjectCacheImpl& cache = ax_object.AXObjectCache();
+  for (const auto& element : *elements) {
+    if (AXObject* child = cache.Get(element)) {
+      // Only aria-labelledby and aria-describedby can target hidden elements.
+      if (!child) {
+        continue;
+      }
+      if (child->IsIgnored() && attribute != html_names::kAriaLabelledbyAttr &&
+          attribute != html_names::kAriaLabeledbyAttr &&
+          attribute != html_names::kAriaDescribedbyAttr) {
+        continue;
+      }
+      children.push_back(child);
+    }
+  }
+}
+
+void AriaDescribedbyElements(AXObject& ax_object,
+                             AXObject::AXObjectVector& describedby) {
+  AccessibilityChildrenFromAttribute(
+      ax_object, html_names::kAriaDescribedbyAttr, describedby);
+}
+
+void AriaOwnsElements(AXObject& ax_object, AXObject::AXObjectVector& owns) {
+  AccessibilityChildrenFromAttribute(ax_object, html_names::kAriaOwnsAttr,
+                                     owns);
+}
+
 std::unique_ptr<AXProperty> CreateRelatedNodeListProperty(
     const String& key,
     AXRelatedObjectVector& nodes) {
@@ -368,7 +409,7 @@ std::unique_ptr<AXProperty> CreateRelatedNodeListProperty(
     const QualifiedName& attr,
     AXObject& ax_object) {
   std::unique_ptr<AXValue> node_list_value = CreateRelatedNodeListValue(nodes);
-  const AtomicString& attr_value = ax_object.GetAttribute(attr);
+  const AtomicString& attr_value = ax_object.AriaAttribute(attr);
   node_list_value->setValue(protocol::StringValue::create(attr_value));
   return CreateProperty(key, std::move(node_list_value));
 }
@@ -376,7 +417,7 @@ std::unique_ptr<AXProperty> CreateRelatedNodeListProperty(
 void FillRelationships(AXObject& ax_object,
                        protocol::Array<AXProperty>& properties) {
   AXObject::AXObjectVector results;
-  ax_object.AriaDescribedbyElements(results);
+  AriaDescribedbyElements(ax_object, results);
   if (!results.empty()) {
     properties.emplace_back(CreateRelatedNodeListProperty(
         AXPropertyNameEnum::Describedby, results,
@@ -384,7 +425,7 @@ void FillRelationships(AXObject& ax_object,
   }
   results.clear();
 
-  ax_object.AriaOwnsElements(results);
+  AriaOwnsElements(ax_object, results);
   if (!results.empty()) {
     properties.emplace_back(
         CreateRelatedNodeListProperty(AXPropertyNameEnum::Owns, results,
@@ -441,6 +482,17 @@ void FillSparseAttributes(AXObject& ax_object,
         CreateProperty(AXPropertyNameEnum::Roledescription,
                        CreateValue(WTF::String(role_description.c_str()),
                                    AXValueTypeEnum::String)));
+  }
+
+  if (node_data.HasIntListAttribute(
+          ax::mojom::blink::IntListAttribute::kActionsIds)) {
+    const auto ax_ids = node_data.GetIntListAttribute(
+        ax::mojom::blink::IntListAttribute::kActionsIds);
+    AXObject::AXObjectVector ax_objects;
+    GetObjectsFromAXIDs(ax_object.AXObjectCache(), ax_ids, &ax_objects);
+    properties.emplace_back(
+        CreateRelatedNodeListProperty(AXPropertyNameEnum::Actions, ax_objects,
+                                      html_names::kAriaActionsAttr, ax_object));
   }
 
   if (node_data.HasIntAttribute(

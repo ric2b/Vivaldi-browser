@@ -8,6 +8,8 @@ import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 
 import srgbOverlayStyles from './srgbOverlay.css.js';
 
+const {html} = LitHtml;
+
 const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 type SrgbOverlayProps = {
@@ -31,7 +33,6 @@ function isColorInSrgbGamut(hsv: Common.ColorUtils.Color3D): boolean {
 }
 
 export class SrgbOverlay extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-spectrum-srgb-overlay`;
   readonly #shadow = this.attachShadow({mode: 'open'});
 
   constructor() {
@@ -102,7 +103,7 @@ export class SrgbOverlay extends HTMLElement {
       }
 
       LitHtml.render(
-          LitHtml.html`
+          html`
           <span class="label" style="right: ${width - closestPoint.x}px">sRGB</span>
           <svg>
             <polyline points=${

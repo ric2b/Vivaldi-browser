@@ -4,10 +4,18 @@
 
 import {assert} from 'chai';
 
-import {getBrowserAndPages, waitFor, waitForNone} from '../../shared/helper.js';
-
+import {
+  click,
+  getBrowserAndPages,
+  waitFor,
+  waitForFunction,
+  waitForNone,
+} from '../../shared/helper.js';
 import {openSoftContextMenuAndClickOnItem} from '../helpers/context-menu-helpers.js';
-import {openFileWithQuickOpen, runCommandWithQuickOpen} from '../helpers/quick_open-helpers.js';
+import {
+  openFileWithQuickOpen,
+  runCommandWithQuickOpen,
+} from '../helpers/quick_open-helpers.js';
 import {
   openFileInSourcesPanel,
   openSnippetsSubPane,
@@ -139,6 +147,35 @@ describe('The Sources panel', () => {
       // Expand navigator view.
       await toggleNavigatorSidebar(frontend);
       await waitFor('.navigator-tabbed-pane');
+    });
+
+    it('which can scroll the navigator element into view on source file change', async () => {
+      async function openFirstSnippetInList() {
+        const sourcesView = await waitFor('#sources-panel-sources-view');
+        await click('[aria-label="More tabs"]', {root: sourcesView});
+        await click('[aria-label="Script snippet #1"]');
+      }
+
+      await openSourcesPanel();
+      await openSnippetsSubPane();
+
+      const numSnippets = 50;
+      for (let i = 0; i < numSnippets; ++i) {
+        await click('[aria-label="New snippet"]');
+        await waitFor(`[aria-label="Script snippet #${i + 1}"]`);
+      }
+
+      const snippetsPanel = await waitFor('[aria-label="Snippets panel"]');
+      const scrollTopBeforeFileChange = await snippetsPanel.evaluate(panel => panel.scrollTop);
+
+      await openFirstSnippetInList();
+
+      await waitForFunction(async () => {
+        const scrollTopAfterFileChange = await snippetsPanel.evaluate(panel => panel.scrollTop);
+        return scrollTopBeforeFileChange !== scrollTopAfterFileChange;
+      });
+
+      assert.notStrictEqual(scrollTopBeforeFileChange, await snippetsPanel.evaluate(panel => panel.scrollTop));
     });
   });
 });

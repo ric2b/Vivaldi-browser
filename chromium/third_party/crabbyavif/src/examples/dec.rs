@@ -42,8 +42,7 @@ fn main() {
     {
         let settings = Settings {
             strictness: Strictness::None,
-            enable_decoding_gainmap: true,
-            enable_parsing_gainmap_metadata: true,
+            image_content_to_decode: ImageContentType::All,
             allow_progressive: true,
             ..Settings::default()
         };

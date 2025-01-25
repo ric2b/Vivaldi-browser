@@ -38,6 +38,7 @@
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/renderer_cancellation_throttle.h"
+#include "content/browser/renderer_host/spare_render_process_host_manager_impl.h"
 #include "content/browser/site_info.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
@@ -172,7 +173,7 @@ class NavigationControllerBrowserTestBase : public ContentBrowserTest {
 #if BUILDFLAG(IS_ANDROID)
       shell()->LoadDataAsStringWithBaseURL(history_url, data, base_url);
 #else
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
 #endif
     } else {
       shell()->LoadDataWithBaseURL(history_url, data, base_url);
@@ -498,7 +499,7 @@ IN_PROC_BROWSER_TEST_P(LoadDataWithBaseURLWithPossiblyEmptyURLsBrowserTest,
     shell()->LoadDataAsStringWithBaseURL(supplied_history_url, data,
                                          supplied_base_url);
 #else
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
 #endif
   } else {
     shell()->LoadDataWithBaseURL(supplied_history_url, data, supplied_base_url);
@@ -533,13 +534,6 @@ IN_PROC_BROWSER_TEST_P(LoadDataWithBaseURLWithPossiblyEmptyURLsBrowserTest,
 
   // data: URL loads always have HTTP status code 200.
   EXPECT_EQ(200, current_rfh->last_http_status_code());
-  // If there is no base URL, then the URL is loaded like a regular data: URL,
-  // for which origin_to_commit should be set.
-  if (base_url_empty()) {
-    EXPECT_TRUE(data_observer.origin_to_commit().has_value());
-  } else {
-    EXPECT_FALSE(data_observer.origin_to_commit().has_value());
-  }
 
   // Verify that the page is not classified as an error page.
   EXPECT_EQ(PAGE_TYPE_NORMAL, entry->GetPageType());
@@ -1507,7 +1501,7 @@ IN_PROC_BROWSER_TEST_P(LoadDataWithBaseURLBrowserTest,
 #if BUILDFLAG(IS_ANDROID)
     shell()->LoadDataAsStringWithBaseURL(history_url, data, base_url);
 #else
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
 #endif
   } else {
     shell()->LoadDataWithBaseURL(history_url, data, base_url);
@@ -16111,24 +16105,26 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
                        UtilizationOfSpareRenderProcessHost) {
   GURL first_url = embedded_test_server()->GetURL("a.com", "/title1.html");
   GURL second_url = embedded_test_server()->GetURL("b.com", "/title2.html");
-  RenderProcessHost* prev_spare = nullptr;
-  RenderProcessHost* curr_spare = nullptr;
+  std::vector<int> prev_spare_ids;
+  std::vector<int> curr_spare_ids;
   RenderProcessHost* prev_host = nullptr;
   RenderProcessHost* curr_host = nullptr;
 
+  auto& spare_manager = SpareRenderProcessHostManagerImpl::Get();
+
   // In the current implementation the spare is not warmed-up until the first
   // real navigation.  It might be okay to change that in the future.
-  curr_spare = RenderProcessHostImpl::GetSpareRenderProcessHostForTesting();
+  curr_spare_ids = spare_manager.GetSpareIds();
+  EXPECT_TRUE(curr_spare_ids.empty());
   curr_host = shell()->web_contents()->GetPrimaryMainFrame()->GetProcess();
-  EXPECT_FALSE(curr_spare);
 
   // Navigate to the first URL.
   prev_host = curr_host;
-  prev_spare = curr_spare;
+  prev_spare_ids = curr_spare_ids;
   EXPECT_TRUE(NavigateToURL(shell(), first_url));
-  curr_spare = RenderProcessHostImpl::GetSpareRenderProcessHostForTesting();
+  curr_spare_ids = spare_manager.GetSpareIds();
   curr_host = shell()->web_contents()->GetPrimaryMainFrame()->GetProcess();
-  EXPECT_NE(curr_spare, curr_host);
+  EXPECT_FALSE(base::Contains(curr_spare_ids, curr_host->GetID()));
   // No process swap when navigating away from the initial blank page.
   EXPECT_EQ(prev_host, curr_host);
   // We should always keep a spare RenderProcessHost around in site-per-process
@@ -16136,12 +16132,13 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   // flexibility to platform-specific decisions - e.g. on the desktop there
   // might be no spare outside of site-per-process, but on Android the spare
   // might still be opportunistically warmed up).
-  if (AreAllSitesIsolatedForTesting())
-    EXPECT_TRUE(curr_spare);
+  if (AreAllSitesIsolatedForTesting()) {
+    EXPECT_FALSE(curr_spare_ids.empty());
+  }
 
   // Perform a cross-site omnibox navigation.
   prev_host = curr_host;
-  prev_spare = curr_spare;
+  prev_spare_ids = curr_spare_ids;
 
   // With BackForwardCache the old process won't get deleted on navigation as it
   // is still in use by the bfcached document, disable back/forward cache to
@@ -16155,38 +16152,41 @@ IN_PROC_BROWSER_TEST_P(NavigationControllerBrowserTest,
   // Wait until the |prev_host| goes away - this ensures that the spare will be
   // picked up by subsequent back navigation below.
   prev_host_watcher.Wait();
-  curr_spare = RenderProcessHostImpl::GetSpareRenderProcessHostForTesting();
+  curr_spare_ids = spare_manager.GetSpareIds();
   curr_host = shell()->web_contents()->GetPrimaryMainFrame()->GetProcess();
   // The cross-site omnibox navigation should swap processes.
   EXPECT_NE(prev_host, curr_host);
   // If present, the spare RenderProcessHost should have been be used.
-  if (prev_spare)
-    EXPECT_EQ(prev_spare, curr_host);
+  if (!prev_spare_ids.empty()) {
+    EXPECT_TRUE(base::Contains(prev_spare_ids, curr_host->GetID()));
+  }
   // A new spare should be warmed-up in site-per-process mode.
   if (AreAllSitesIsolatedForTesting()) {
-    EXPECT_TRUE(curr_spare);
-    EXPECT_NE(prev_spare, curr_spare);
+    EXPECT_FALSE(curr_spare_ids.empty());
+    EXPECT_NE(prev_spare_ids, curr_spare_ids);
   }
 
   // Perform a back navigation.
   prev_host = curr_host;
-  prev_spare = curr_spare;
+  prev_spare_ids = curr_spare_ids;
   TestNavigationObserver back_load_observer(shell()->web_contents());
   NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
       shell()->web_contents()->GetController());
   controller.GoBack();
   back_load_observer.Wait();
-  curr_spare = RenderProcessHostImpl::GetSpareRenderProcessHostForTesting();
+  curr_spare_ids = spare_manager.GetSpareIds();
   curr_host = shell()->web_contents()->GetPrimaryMainFrame()->GetProcess();
   // The cross-site back navigation should swap processes.
   EXPECT_NE(prev_host, curr_host);
   // If present, the spare RenderProcessHost should have been used.
-  if (prev_spare)
-    EXPECT_EQ(prev_spare, curr_host);
+  if (!prev_spare_ids.empty()) {
+    EXPECT_TRUE(base::Contains(prev_spare_ids, curr_host->GetID()));
+  }
   // A new spare should be warmed-up in site-per-process mode.
   if (AreAllSitesIsolatedForTesting()) {
-    EXPECT_TRUE(curr_spare);
-    EXPECT_NE(prev_spare, curr_spare);
+    EXPECT_FALSE(curr_spare_ids.empty());
+
+    EXPECT_NE(prev_spare_ids, curr_spare_ids);
   }
 }
 

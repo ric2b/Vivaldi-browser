@@ -1250,9 +1250,9 @@ struct HistoryAddPageArgs {
   //   HistoryAddPageArgs(
   //       GURL(), base::Time(), nullptr, 0, std::nullopt, GURL(),
   //       RedirectList(), ui::PAGE_TRANSITION_LINK,
-  //       false, SOURCE_BROWSED, false, true,
+  //       false, SOURCE_BROWSED, false, true, false,
   //       std::nullopt, std::nullopt, std::nullopt, std::nullopt,
-  //       std::nullopt, std::nullopt, false)
+  //       std::nullopt, std::nullopt)
   HistoryAddPageArgs();
   HistoryAddPageArgs(const GURL& url,
                      base::Time time,
@@ -1266,14 +1266,14 @@ struct HistoryAddPageArgs {
                      VisitSource source,
                      bool did_replace_entry,
                      bool consider_for_ntp_most_visited,
+                     bool is_ephemeral = false,
                      std::optional<std::u16string> title = std::nullopt,
                      std::optional<GURL> top_level_url = std::nullopt,
                      std::optional<Opener> opener = std::nullopt,
                      std::optional<int64_t> bookmark_id = std::nullopt,
                      std::optional<std::string> app_id = std::nullopt,
                      std::optional<VisitContextAnnotations::OnVisitFields>
-                         context_annotations = std::nullopt,
-                     bool is_ephemeral = false);
+                         context_annotations = std::nullopt);
   HistoryAddPageArgs(const HistoryAddPageArgs& other);
   ~HistoryAddPageArgs();
 
@@ -1293,6 +1293,7 @@ struct HistoryAddPageArgs {
   // doesn't guarantee it's relevant for Most Visited, since other requirements
   // exist (e.g. certain page transition types).
   bool consider_for_ntp_most_visited;
+  bool is_ephemeral;
   std::optional<std::u16string> title;
   // `top_level_url` is a GURL representing the top-level frame that this
   // navigation originated from.
@@ -1301,7 +1302,6 @@ struct HistoryAddPageArgs {
   std::optional<int64_t> bookmark_id;
   std::optional<std::string> app_id;
   std::optional<VisitContextAnnotations::OnVisitFields> context_annotations;
-  bool is_ephemeral;
 };
 
 }  // namespace history

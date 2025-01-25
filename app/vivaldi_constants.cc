@@ -34,6 +34,9 @@ const char kVivaldiMailURL[] = "chrome-extension://" VIVALDI_APP_ID
 // Defines the URL that should be opened in an empty new tab or window.
 const char kVivaldiNewTabURL[] = "chrome://vivaldi-webui/startpage";
 
+const char kVivaldiCrashStartPageURL[] = "chrome-extension://" VIVALDI_APP_ID
+                               "/components/session-recovery/session-recovery.html";
+
 // Error message reported to extensions trying to use Vivaldi reserved APIs
 const char kVivaldiReservedApiError[] =
     "Access denied while trying to set a reserved property.";

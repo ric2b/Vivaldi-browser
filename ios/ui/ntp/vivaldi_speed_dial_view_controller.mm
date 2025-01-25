@@ -4,9 +4,11 @@
 
 #import <UIKit/UIKit.h>
 
+#import "components/direct_match/direct_match_service.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/direct_match/direct_match_service_factory.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
@@ -17,10 +19,11 @@
 #import "ios/ui/settings/start_page/vivaldi_start_page_prefs.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-
 @interface VivaldiSpeedDialViewController ()
           <VivaldiSpeedDialContainerDelegate,
-          SpeedDialHomeConsumer>
+          SpeedDialHomeConsumer> {
+  direct_match::DirectMatchService* _directMatchService;
+}
 // The view that holds the speed dial folder children
 @property(weak,nonatomic) VivaldiSpeedDialContainerView* speedDialContainerView;
 // The background Image for Speed Dial
@@ -30,8 +33,8 @@
 // FaviconLoader is a keyed service that uses LargeIconService to retrieve
 // favicon images.
 @property(assign,nonatomic) FaviconLoader* faviconLoader;
-// The user's browser state model used.
-@property(assign,nonatomic) ChromeBrowserState* browserState;
+// The user's profile model used.
+@property(assign,nonatomic) ProfileIOS* profile;
 // Current browser
 @property(assign,nonatomic) Browser* browser;
 // The mediator that provides data for this view controller.
@@ -52,7 +55,7 @@
 @synthesize speedDialContainerView = _speedDialContainerView;
 @synthesize bookmarks = _bookmarks;
 @synthesize browser = _browser;
-@synthesize browserState = _browserState;
+@synthesize profile = _profile;
 @synthesize mediator = _mediator;
 @synthesize currentItem = _currentItem;
 @synthesize parentItem = _parentItem;
@@ -85,9 +88,10 @@
   self = [super init];
   if (self) {
     _bookmarks = bookmarks;
-    _browserState =
-        browser->GetBrowserState()->GetOriginalChromeBrowserState();
-    [VivaldiStartPagePrefs setPrefService:_browserState->GetPrefs()];
+    _profile = browser->GetProfile()->GetOriginalProfile();
+    _directMatchService =
+        direct_match::DirectMatchServiceFactory::GetForProfile(_profile);
+    [VivaldiStartPagePrefs setPrefService:_profile->GetPrefs()];
   }
   return self;
 }
@@ -162,8 +166,8 @@
   if (!loadable)
     return;
   self.mediator = [[VivaldiSpeedDialHomeMediator alloc]
-                      initWithBrowserState:self.browserState
-                             bookmarkModel:self.bookmarks];
+                      initWithProfile:self.profile
+                        bookmarkModel:self.bookmarks];
   self.mediator.consumer = self;
   [self.mediator computeSpeedDialChildItems:self.currentItem];
 }
@@ -249,6 +253,7 @@
   [self.speedDialContainerView configureWith:items
                                       parent:self.currentItem
                                faviconLoader:self.faviconLoader
+                          directMatchService:_directMatchService
                                  layoutStyle:[self currentLayoutStyle]
                                 layoutColumn:[self currentLayoutColumn]
                                 showAddGroup:NO

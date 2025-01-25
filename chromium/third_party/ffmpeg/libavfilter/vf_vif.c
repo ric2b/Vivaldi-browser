@@ -31,8 +31,8 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "avfilter.h"
+#include "filters.h"
 #include "framesync.h"
-#include "internal.h"
 
 #define NUM_DATA_BUFS 13
 
@@ -550,6 +550,8 @@ static int config_output(AVFilterLink *outlink)
     AVFilterContext *ctx = outlink->src;
     VIFContext *s = ctx->priv;
     AVFilterLink *mainlink = ctx->inputs[0];
+    FilterLink *il = ff_filter_link(mainlink);
+    FilterLink *ol = ff_filter_link(outlink);
     FFFrameSyncIn *in;
     int ret;
 
@@ -557,7 +559,7 @@ static int config_output(AVFilterLink *outlink)
     outlink->h = mainlink->h;
     outlink->time_base = mainlink->time_base;
     outlink->sample_aspect_ratio = mainlink->sample_aspect_ratio;
-    outlink->frame_rate = mainlink->frame_rate;
+    ol->frame_rate = il->frame_rate;
     if ((ret = ff_framesync_init(&s->fs, ctx, 2)) < 0)
         return ret;
 

@@ -54,6 +54,8 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
             base::WeakPtr<ContextMenuPostitionDelegate> delegate) override;
   bool Show() override;
   void SetIcon(const gfx::Image& icon, int id) override;
+  void SetTitle(const std::u16string& title, int id) override;
+  void Refresh() override;
   void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) override;
   bool HasDarkTextColor() override;
   bool IsViews() override { return true; }
@@ -61,7 +63,7 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
  private:
   void RunMenuAt(views::Widget* parent,
                  const gfx::Rect& rect,
-                 ui::MenuSourceType type);
+                 ui::mojom::MenuSourceType type);
 
   std::unique_ptr<ToolkitDelegateViews> toolkit_delegate_;
   const raw_ptr<content::WebContents> web_contents_;

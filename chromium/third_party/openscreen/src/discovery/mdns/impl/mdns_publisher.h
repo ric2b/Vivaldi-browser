@@ -44,7 +44,7 @@ class MdnsQuerier;
 // due to the shared announce + goodbye message queue.
 class MdnsPublisher : public MdnsResponder::RecordHandler {
  public:
-  // |sender|, |ownership_manager|, and  |task_runner| must all persist for the
+  // `sender`, `ownership_manager`, and  `task_runner` must all persist for the
   // duration of this object's lifetime
   MdnsPublisher(MdnsSender& sender,
                 MdnsProbeManager& ownership_manager,
@@ -58,7 +58,7 @@ class MdnsPublisher : public MdnsResponder::RecordHandler {
   // ClaimExclusiveOwnership() method and for PTR records the name being pointed
   // to must have been claimed in the same fashion, but the domain name in the
   // top-level MdnsRecord entity does not.
-  // NOTE: This call is only valid for |dns_type| values:
+  // NOTE: This call is only valid for `dns_type` values:
   // - DnsType::kA
   // - DnsType::kPTR
   // - DnsType::kTXT
@@ -83,10 +83,10 @@ class MdnsPublisher : public MdnsResponder::RecordHandler {
  private:
   // Class responsible for sending announcement and goodbye messages for
   // MdnsRecord instances when they are published, updated, or unpublished. The
-  // announcement messages will be sent |target_announcement_attempts| times,
+  // announcement messages will be sent `target_announcement_attempts` times,
   // first at an interval of 1 second apart, and then with delay increasing by a
   // factor of 2 with each successive announcement.
-  // NOTE: |publisher| must be the MdnsPublisher instance from which this
+  // NOTE: `publisher` must be the MdnsPublisher instance from which this
   // instance was created.
   class RecordAnnouncer {
    public:
@@ -152,18 +152,18 @@ class MdnsPublisher : public MdnsResponder::RecordHandler {
                                              max_announcement_attempts_);
   }
 
-  // Removes the given record from the |records_| map. A goodbye record is only
-  // sent for this removal if |should_announce_deletion| is true.
+  // Removes the given record from the `records_` map. A goodbye record is only
+  // sent for this removal if `should_announce_deletion` is true.
   Error RemoveRecord(const MdnsRecord& record, bool should_announce_deletion);
 
   // Returns whether the provided record has had its name claimed so far.
   bool IsRecordNameClaimed(const MdnsRecord& record) const;
 
-  // Processes the |records_to_send_| queue, sending out the records together as
+  // Processes the `records_to_send_` queue, sending out the records together as
   // a single MdnsMessage.
   void ProcessRecordQueue();
 
-  // Adds a new record to the |records_to_send_| queue or ensures that the
+  // Adds a new record to the `records_to_send_` queue or ensures that the
   // record with lower ttl is present if it differs from an existing record by
   // only that one field.
   void QueueRecord(MdnsRecord record);

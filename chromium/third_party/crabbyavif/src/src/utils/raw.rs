@@ -87,14 +87,28 @@ impl RawWriter {
             }
             let plane_data = plane_data.unwrap();
             for y in 0..plane_data.height {
-                // TODO: Handle row16.
-                let row = if let Ok(row) = image.row(plane, y) {
-                    row
+                if image.depth == 8 {
+                    let row = image.row(plane, y);
+                    if row.is_err() {
+                        return false;
+                    }
+                    let row = &row.unwrap()[..plane_data.width as usize];
+                    if self.file.unwrap_ref().write_all(row).is_err() {
+                        return false;
+                    }
                 } else {
-                    return false;
-                };
-                if self.file.unwrap_ref().write_all(row).is_err() {
-                    return false;
+                    let row = image.row16(plane, y);
+                    if row.is_err() {
+                        return false;
+                    }
+                    let row = &row.unwrap()[..plane_data.width as usize];
+                    let mut row16: Vec<u8> = Vec::new();
+                    for &pixel in row {
+                        row16.extend_from_slice(&pixel.to_le_bytes());
+                    }
+                    if self.file.unwrap_ref().write_all(&row16[..]).is_err() {
+                        return false;
+                    }
                 }
             }
         }

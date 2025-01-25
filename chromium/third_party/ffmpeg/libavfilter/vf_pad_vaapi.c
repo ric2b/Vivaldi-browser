@@ -21,7 +21,7 @@
 #include "libavutil/opt.h"
 
 #include "avfilter.h"
-#include "internal.h"
+#include "filters.h"
 #include "vaapi_vpp.h"
 #include "video.h"
 
@@ -278,6 +278,6 @@ const AVFilter ff_vf_pad_vaapi = {
     .uninit         = &ff_vaapi_vpp_ctx_uninit,
     FILTER_INPUTS(pad_vaapi_inputs),
     FILTER_OUTPUTS(pad_vaapi_outputs),
-    FILTER_QUERY_FUNC(&ff_vaapi_vpp_query_formats),
+    FILTER_QUERY_FUNC2(&ff_vaapi_vpp_query_formats),
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
 };

@@ -4,11 +4,13 @@
 
 #include "third_party/blink/renderer/controller/performance_manager/renderer_resource_coordinator_impl.h"
 
+#include <optional>
 #include <utility>
 
 #include "base/check.h"
-#include "base/functional/bind.h"
+#include "base/memory/structured_shared_memory.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
+#include "third_party/blink/public/common/performance/performance_scenarios.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -27,7 +29,9 @@
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_copier.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "third_party/perfetto/include/perfetto/tracing/track.h"
 
 using performance_manager::mojom::blink::IframeAttributionData;
 using performance_manager::mojom::blink::IframeAttributionDataPtr;
@@ -167,8 +171,8 @@ void RendererResourceCoordinatorImpl::OnScriptStateCreated(
     } break;
     case DOMWrapperWorld::WorldType::kForV8ContextSnapshotNonMain: {
       // This should not happen in the production browser.
-      NOTREACHED_IN_MIGRATION();
-    } break;
+      NOTREACHED();
+    }
     case DOMWrapperWorld::WorldType::kWorkerOrWorklet: {
       v8_desc->world_type = V8ContextWorldType::kWorkerOrWorklet;
     } break;
@@ -249,16 +253,19 @@ void RendererResourceCoordinatorImpl::OnBeforeContentFrameDetached(
       frame.GetFrameToken().GetAs<RemoteFrameToken>());
 }
 
-void RendererResourceCoordinatorImpl::FireBackgroundTracingTrigger(
-    const String& trigger_name) {
-  DispatchFireBackgroundTracingTrigger(trigger_name);
-}
-
 RendererResourceCoordinatorImpl::RendererResourceCoordinatorImpl(
     mojo::PendingRemote<ProcessCoordinationUnit> remote) {
   service_task_runner_ =
       Thread::MainThread()->GetTaskRunner(MainThreadTaskRunnerRestricted());
   service_.Bind(std::move(remote));
+  CHECK(service_task_runner_->RunsTasksInCurrentSequence());
+  // Unretained is safe because the renderer resource coordinator is a singleton
+  // that leaks at process shutdown.
+  service_->RequestSharedPerformanceScenarioRegions(
+      perfetto::ProcessTrack::Current().uuid,
+      WTF::BindOnce(
+          &RendererResourceCoordinatorImpl::OnSharedPerformanceScenarioRegions,
+          WTF::Unretained(this)));
 }
 
 void RendererResourceCoordinatorImpl::DispatchOnV8ContextCreated(
@@ -313,18 +320,17 @@ void RendererResourceCoordinatorImpl::DispatchOnV8ContextDestroyed(
   }
 }
 
-void RendererResourceCoordinatorImpl::DispatchFireBackgroundTracingTrigger(
-    const String& trigger_name) {
-  DCHECK(service_);
-  if (!service_task_runner_->RunsTasksInCurrentSequence()) {
-    blink::PostCrossThreadTask(
-        *service_task_runner_, FROM_HERE,
-        WTF::CrossThreadBindOnce(&RendererResourceCoordinatorImpl::
-                                     DispatchFireBackgroundTracingTrigger,
-                                 WTF::CrossThreadUnretained(this),
-                                 trigger_name));
-  } else {
-    service_->FireBackgroundTracingTrigger(trigger_name);
+void RendererResourceCoordinatorImpl::OnSharedPerformanceScenarioRegions(
+    base::ReadOnlySharedMemoryRegion global_region,
+    base::ReadOnlySharedMemoryRegion process_region) {
+  using Scope = blink::performance_scenarios::Scope;
+  if (global_region.IsValid()) {
+    global_performance_scenario_memory_.emplace(Scope::kGlobal,
+                                                std::move(global_region));
+  }
+  if (process_region.IsValid()) {
+    process_performance_scenario_memory_.emplace(Scope::kCurrentProcess,
+                                                 std::move(process_region));
   }
 }
 

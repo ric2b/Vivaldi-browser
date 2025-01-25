@@ -11,10 +11,10 @@
 #include "sync/file_sync/file_store_impl.h"
 
 // static
-file_sync::SyncedFileStore* SyncedFileStoreFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+file_sync::SyncedFileStore* SyncedFileStoreFactory::GetForProfile(
+  ProfileIOS* profile) {
   return static_cast<file_sync::SyncedFileStore*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 // static

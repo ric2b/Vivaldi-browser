@@ -10,6 +10,7 @@
 <translation id="132390688737681464">Desa i omple les adreces</translation>
 <translation id="1375198122581997741">Sobre la versió</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> no ha enviat dades.</translation>
+<translation id="1555191101192706055">Els atacants del lloc web que has provat de visitar poden enganyar-te perquè instal·lis programari nociu que afecti la manera com navegues. Per exemple, poden canviar-te la pàgina d'inici o mostrar-te anuncis addicionals als llocs web que visites.</translation>
 <translation id="1559528461873125649">No existeix el fitxer o el directori</translation>
 <translation id="1640244768702815859">Prova d'<ph name="BEGIN_LINK" />anar a la pàgina d'inici del lloc<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocol no admès</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Comprova el servidor intermediari i el tallafoc<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emès per a: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Aquest lloc no pot proporcionar una connexió segura</translation>
+<translation id="2178904466768126352">Els atacants del lloc web que has provat de visitar poden instal·lar programari nociu que et robi o suprimeixi dades com ara les contrasenyes, fotos, missatges o números de targeta de crèdit.</translation>
 <translation id="2187317261103489799">Detecta (predeterminat)</translation>
 <translation id="2224337661447660594">Sense connexió a internet</translation>
 <translation id="2283340219607151381">Desa i omple les adreces</translation>
@@ -92,6 +94,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Revisa la configuració del tallafoc i de l'antivirus<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" /> Prova d'executar els diagnòstics de xarxa<ph name="END_LINK" /> .</translation>
 <translation id="4235360514405112390">Vàlid</translation>
+<translation id="4241830393007970744">Els atacants del lloc web que has provat de visitar poden enganyar-te perquè instal·lis programari o perquè els donis dades com ara les contrasenyes, el telèfon o números de targeta de crèdit.</translation>
 <translation id="4250431568374086873">La teva connexió amb aquest lloc no és del tot segura</translation>
 <translation id="4265872034478892965">Permès per l'administrador</translation>
 <translation id="4305666528087210886">No s'ha pogut accedir al fitxer</translation>
@@ -102,6 +105,7 @@
 <translation id="4522570452068850558">Detalls</translation>
 <translation id="4558551763791394412">Prova a desactivar els complements.</translation>
 <translation id="4592951414987517459">La teva connexió a <ph name="DOMAIN" /> s'ha xifrat amb un sistema de xifratge modern.</translation>
+<translation id="4598641255230617220">Enganxa i vés-hi</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">La teva connexió s'ha interromput</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" /> Executa els diagnòstics de xarxa de Windows<ph name="END_LINK" /></translation>
@@ -111,6 +115,7 @@
 <translation id="4764776831041365478">És possible que la pàgina web de <ph name="URL" /> estigui temporalment inactiva o que s'hagi desplaçat permanentment a una nova adreça web.</translation>
 <translation id="483241715238664915">Activa els advertiments</translation>
 <translation id="4943872375798546930">Sense resultats</translation>
+<translation id="5017554619425969104">Text que has copiat</translation>
 <translation id="5023310440958281426">Consulta les polítiques de l'administrador</translation>
 <translation id="5039804452771397117">Permet</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1 {(1 en ús)} other {(# en ús)}}</translation>
@@ -165,11 +170,11 @@
 <translation id="7108819624672055576">Permès per un complement</translation>
 <translation id="7111012039238467737">(Vàlid)</translation>
 <translation id="7113310725918019676">Permet <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
+<translation id="7126644664682723998">Enganxa i cerca</translation>
 <translation id="7179323680825933600">Desa i omple els mètodes de pagament</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> no compleix la normativa de seguretat.</translation>
 <translation id="7219179957768738017">La connexió usa <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Mostra les notificacions</translation>
-<translation id="7227747683324411744">Els atacants del lloc web que proves de visitar poden enganyar-te perquè instal·lis programari nociu que afecti la manera com navegues. Per exemple, poden canviar-te la pàgina d'inici o mostrar-te anuncis addicionals als llocs web que visites.</translation>
 <translation id="7353601530677266744">Línia de comandes</translation>
 <translation id="7364115444476960850">La pàgina a la que intentaves accedir ha estat bloquejada per <ph name="BLOCKER_NAME" /> de Vivaldi</translation>
 <translation id="7419106976560586862">Ruta del perfil</translation>
@@ -177,7 +182,6 @@
 <translation id="7518003948725431193">No s'ha trobat cap pàgina web per a l'adreça: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Aquesta pàgina web necessita dades que has introduït anteiorment per poder mostrar-la correctament. Pot tornar a enviar les dades, però es tornarà a repetir qualsevol acció que la pàgina hagi dut a terme prèviament.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> no pot gestionar la sol·licitud en aquest moment.</translation>
-<translation id="7605377493722372900">Els atacants del lloc web que proves de visitar poden instal·lar programari nociu que et robi o et suprimeixi dades com ara la contrasenya, fotos, missatges o el número de la targeta de crèdit.</translation>
 <translation id="7662298039739062396">Ajust controlat per un complement</translation>
 <translation id="7663736086183791259">Certificat <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">Certificat</translation>
@@ -203,7 +207,6 @@
 <translation id="8288807391153049143">Mostra el certificat</translation>
 <translation id="8289355894181816810">Si no estàs segur de què significa això, contacta amb l'administrador de la xarxa.</translation>
 <translation id="8332188693563227489">S'ha rebutjat l'accés a <ph name="HOST_NAME" /></translation>
-<translation id="8422228580902424274">Els atacants del lloc que proves de visitar poden enganyar-te perquè instal·lis programari o perquè revelis dades com ara la contrasenya, el telèfon o el número de la targeta de crèdit.</translation>
 <translation id="8473863474539038330">Adreces i més</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ha trigat massa a respondre.</translation>
 <translation id="8503813439785031346">Nom d'usuari</translation>

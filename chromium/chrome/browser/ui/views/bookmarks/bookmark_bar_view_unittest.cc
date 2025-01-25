@@ -16,14 +16,13 @@
 #include "base/uuid.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
+#include "chrome/browser/bookmarks/bookmark_merged_surface_service_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engine_choice/search_engine_choice_service_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/ui/app_list/app_list_util.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -77,6 +76,9 @@ class BookmarkBarViewBaseTest : public ChromeViewsTestBase {
     profile_builder.AddTestingFactory(
         ManagedBookmarkServiceFactory::GetInstance(),
         ManagedBookmarkServiceFactory::GetDefaultFactory());
+    profile_builder.AddTestingFactory(
+        BookmarkMergedSurfaceServiceFactory::GetInstance(),
+        BookmarkMergedSurfaceServiceFactory::GetDefaultFactory());
     profile_ = profile_builder.Build();
 
     Browser::CreateParams params(profile(), true);
@@ -167,10 +169,6 @@ class BookmarkBarViewBaseTest : public ChromeViewsTestBase {
         std::make_unique<SearchTermsData>(),
         nullptr /* KeywordWebDataService */,
         nullptr /* TemplateURLServiceClient */, base::RepeatingClosure()
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-                                                    ,
-        profile->IsMainProfile()
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
     );
   }
 };
@@ -405,8 +403,9 @@ TEST_F(BookmarkBarViewTest, MoveNode) {
   EXPECT_EQ("a c", GetStringForVisibleButtons());
 }
 
+// TODO(crbug.com/375364962): Deflake and re-enable.
 // Assertions for changing the title of a node.
-TEST_F(BookmarkBarViewTest, ChangeTitle) {
+TEST_F(BookmarkBarViewTest, DISABLED_ChangeTitle) {
   const BookmarkNode* bookmark_bar_node = model()->bookmark_bar_node();
   AddNodesToBookmarkBarFromModelString("a b c d e f ");
   EXPECT_EQ(0u, test_helper_->GetBookmarkButtonCount());
@@ -634,6 +633,18 @@ TEST_F(BookmarkBarViewInWidgetTest, UpdateTooltipText) {
   EXPECT_EQ(u"a\na.com", button->GetTooltipText(p));
   button->SetText(u"new title");
   EXPECT_EQ(u"new title\na.com", button->GetTooltipText(p));
+}
+
+TEST_F(BookmarkBarViewTest, AccessibleRoleDescription) {
+  AddNodesToBookmarkBarFromModelString("a b c d e f ");
+  SizeUntilButtonsVisible(1);
+  views::LabelButton* button = test_helper_->GetBookmarkButton(0);
+
+  ui::AXNodeData data;
+  button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(
+      data.GetStringAttribute(ax::mojom::StringAttribute::kRoleDescription),
+      l10n_util::GetStringUTF8(IDS_ACCNAME_BOOKMARK_BUTTON_ROLE_DESCRIPTION));
 }
 
 }  // namespace

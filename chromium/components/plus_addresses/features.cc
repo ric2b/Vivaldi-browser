@@ -15,39 +15,28 @@ constexpr char kEnterprisePlusAddressOAuthScopeName[] = "oauth-scope";
 constexpr char kEnterprisePlusAddressServerUrlName[] = "server-url";
 constexpr char kPlusAddressManagementUrlName[] = "manage-url";
 constexpr char kPlusAddressLearnMoreUrlName[] = "learn-more";
-constexpr char kPlusAddressExcludedSitesName[] = "excluded-sites";
-constexpr char kPlusAddressErrorReportUrlName[] = "error-report-url";
-constexpr char kDisableForForbiddenUsersName[] = "disable-for-forbidden-users";
-constexpr char kShowForwardingEmailInSuggestionName[] = "show-forwarding-email";
+constexpr char kPlusAddressRequestTimeoutName[] = "request-timeout";
 
 }  // namespace
 
-#if BUILDFLAG(IS_ANDROID)
-// When enabled, mobile plus address creation bottom sheet shows enhanced UI for
-// different error states.
-BASE_FEATURE(kPlusAddressAndroidErrorStatesEnabled,
-             "PlusAddressAndroidErrorStatesEnabled",
+// When enabled, a HaTS survey is shown after the successful first time creation
+// flow.
+BASE_FEATURE(kPlusAddressAcceptedFirstTimeCreateSurvey,
+             "PlusAddressAcceptedFirstTimeCreateSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// When enabled, mobile manual fallbacks for addresses and passwords show plus
-// address filling information.
-BASE_FEATURE(kPlusAddressAndroidManualFallbackEnabled,
-             "PlusAddressAndroidManualFallbackEnabled",
+#if BUILDFLAG(IS_ANDROID)
+// When enabled, the user is shown the GMS core plus address management activity
+// instead of the web page in a Chrome custom tab.
+BASE_FEATURE(kPlusAddressAndroidOpenGmsCoreManagementPage,
+             "PlusAddressAndroidOpenGmsCoreManagementPage",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
-// When enabled, autofill stops overriding single field form fill suggestions
-// with plus address suggestions. Instead, it shows them together in the same
-// context menu.
-BASE_FEATURE(kPlusAddressAndSingleFieldFormFill,
-             "PlusAddressAndSingleFieldFormFill",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// When enabled, Chrome will fetch the blocklist data using the Component
-// Updater and employ that for blocking Plus Addresses. Otherwise, the blocklist
-// information is sourced from a Finch parameter.
-BASE_FEATURE(kPlusAddressBlocklistEnabled,
-             "PlusAddressBlocklistEnabled",
+// When enabled, a HaTS survey is shown after the declined the first plus
+// address creation flow.
+BASE_FEATURE(kPlusAddressDeclinedFirstTimeCreateSurvey,
+             "PlusAddressDeclinedFirstTimeCreateSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls the enabled/disabled state of the experimental feature.
@@ -63,16 +52,20 @@ const base::FeatureParam<std::string> kPlusAddressManagementUrl{
     &kPlusAddressesEnabled, kPlusAddressManagementUrlName, ""};
 const base::FeatureParam<std::string> kPlusAddressLearnMoreUrl{
     &kPlusAddressesEnabled, kPlusAddressLearnMoreUrlName, ""};
-const base::FeatureParam<std::string> kPlusAddressExcludedSites{
-    &kPlusAddressesEnabled, kPlusAddressExcludedSitesName, ""};
-const base::FeatureParam<std::string> kPlusAddressErrorReportUrl{
-    &kPlusAddressesEnabled, kPlusAddressErrorReportUrlName, ""};
-const base::FeatureParam<bool> kDisableForForbiddenUsers{
-    &kPlusAddressesEnabled, kDisableForForbiddenUsersName, false};
+const base::FeatureParam<base::TimeDelta> kPlusAddressRequestTimeout{
+    &kPlusAddressesEnabled, kPlusAddressRequestTimeoutName, base::Seconds(5)};
 
 // When enabled, plus addresses are supported within the context menu.
 BASE_FEATURE(kPlusAddressFallbackFromContextMenu,
              "PlusAddressFallbackFromContextMenu",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, if the user has an existing plus address for the current
+// domain, address profile suggestions will be updated to reflect the plus
+// address email instead of the stored one. Note that only profile emails
+// matching the user's GAIA account will be replaced.
+BASE_FEATURE(kPlusAddressFullFormFill,
+             "PlusAddressFullFormFill",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // When enabled, the `PlusAddressSettingService` will be consulted on whether
@@ -90,13 +83,11 @@ BASE_FEATURE(kPlusAddressInlineCreation,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
-#if BUILDFLAG(IS_IOS)
-// When enabled, mobile manual fallbacks for addresses and passwords show plus
-// address filling information.
-BASE_FEATURE(kPlusAddressIOSManualFallbackEnabled,
-             "PlusAddressIOSManualFallbackEnabled",
+// When enabled, plus address creation is offered also on login forms if the
+// password field is not visible.
+BASE_FEATURE(kPlusAddressOfferCreationIfPasswordFieldIsNotVisible,
+             "PlusAddressOfferCreationIfPasswordFieldIsNotVisible",
              base::FEATURE_DISABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_IOS)
 
 // When enabled, plus address creation is offered on all email fields that are
 // not a username field - even if they are on a login form or a change password
@@ -112,6 +103,12 @@ BASE_FEATURE(kPlusAddressOfferCreationOnSingleUsernameForms,
              "PlusAddressOfferCreationOnSingleUsernameForms",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// When enabled, we check whether the server response to a Create call returned
+// information about existing profiles and return those as the parsing result.
+BASE_FEATURE(kPlusAddressParseExistingProfilesFromCreateResponse,
+             "PlusAddressParseExistingProfilesFromCreateResponse",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // When enabled, plus addresses are preallocated to avoid having to query the
 // server for every reserve call.
 BASE_FEATURE(kPlusAddressPreallocation,
@@ -125,32 +122,22 @@ extern const base::FeatureParam<int> kPlusAddressPreallocationMinimumSize(
     "minimum-size",
     10);
 
-// When enabled, `GoogleGroupsManager::IsFeatureEnabledForProfile` is used to
-// check whether `kPlusAddressesEnabled` is enabled. Used as a killswitch.
-// TODO: crbug.com/348575889 - Clean up.
-BASE_FEATURE(kPlusAddressProfileAwareFeatureCheck,
-             "PlusAddressProfileAwareFeatureCheck",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// When enabled, creation suggestions do not contain a label prior to the user
-// acknowledging the notice.
-BASE_FEATURE(kPlusAddressSuggestionRedesign,
-             "PlusAddressSuggestionRedesign",
+// When enabled, plus address creation will be offered on forms that Password
+// Manager classifies as login forms if those forms have a predicted field
+// types that we believe not to be consistent with a login form - for example,
+// FIRST_NAME or LAST_NAME.
+// This therefore "refines" Password Manager predictions.
+// TODO(crbug.com/364555384): Eventually, this should either be removed or
+// integrated into Password Manager's own logic.
+BASE_FEATURE(kPlusAddressRefinedPasswordFormClassification,
+             "PlusAddressRefinedPasswordFormClassification",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// If set to `true`, then labels, when shown, contain information about the
-// forwarding address.
-const base::FeatureParam<bool> kShowForwardingEmailInSuggestion{
-    &kPlusAddressSuggestionRedesign, kShowForwardingEmailInSuggestionName,
-    false};
-
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-// When enabled, we show refined error states in the onboarding dialog on
-// Desktop.
-BASE_FEATURE(kPlusAddressUpdatedErrorStatesInOnboardingModal,
-             "PlusAddressUpdatedErrorStatesInOnboardingModal",
+// When enabled, a HaTS survey is shown after the user creates a 3rd+ plus
+// address.
+BASE_FEATURE(kPlusAddressUserCreatedMultiplePlusAddressesSurvey,
+             "PlusAddressUserCreatedMultiplePlusAddressesSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 // When enabled, the plus address creation dialogs or bottom sheets include
 // extended feature description and usage notice.

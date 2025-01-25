@@ -19,6 +19,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/check.h"
 #include "base/containers/buffer_iterator.h"
@@ -157,9 +158,15 @@ std::wstring GetLocalizedString(int base_message_id) {
   DEBUG_ALIAS_FOR_WCHARCSTR(selected_translation,
                             language_selector.selected_translation().c_str(),
                             16);
-  NOTREACHED_IN_MIGRATION() << "Unable to find resource id " << message_id;
+  NOTREACHED() << "Unable to find resource id " << message_id;
+}
 
-  return std::wstring();
+std::wstring GetLocalizedStringF(int base_message_id,
+                                 std::vector<std::wstring> replacements) {
+  // Replacements start at index 1, corresponding to placeholder `$1`.
+  replacements.insert(replacements.begin(), {});
+  return base::ReplaceStringPlaceholders(GetLocalizedString(base_message_id),
+                                         replacements, /*offsets=*/{});
 }
 
 // Here we generate the url spec with the Microsoft res:// scheme which is

@@ -2,20 +2,14 @@
 precision highp float;
 precision highp int;
 
-layout(binding = 0, std430) buffer prevent_dce_block_ssbo {
+layout(binding = 0, std430)
+buffer prevent_dce_block_1_ssbo {
   vec3 inner;
-} prevent_dce;
-
+} v;
 vec3 dpdyCoarse_ae1873() {
   vec3 res = dFdy(vec3(1.0f));
   return res;
 }
-
-void fragment_main() {
-  prevent_dce.inner = dpdyCoarse_ae1873();
-}
-
 void main() {
-  fragment_main();
-  return;
+  v.inner = dpdyCoarse_ae1873();
 }

@@ -9,6 +9,11 @@
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 
+#include "components/signature/vivaldi_signature.h"
+
+namespace base {
+class FilePath;
+}  // namespace base
 namespace network {
 class SimpleURLLoader;
 class SharedURLLoaderFactory;
@@ -17,14 +22,20 @@ class SharedURLLoaderFactory;
 namespace vivaldi {
 class SearchEnginesUpdater {
 public:
-  static void Update(
-      scoped_refptr<network::SharedURLLoaderFactory>
-           url_loader_factory = nullptr);
+ static void UpdateSearchEngines(scoped_refptr<network::SharedURLLoaderFactory>
+                                     url_loader_factory = nullptr);
+ static void UpdateSearchEnginesPrompt(
+     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory =
+         nullptr);
 
 private:
-  static void OnRequestResponse(
-      std::unique_ptr<network::SimpleURLLoader> guard,
-      std::unique_ptr<std::string> response_body);
+ static void Update(
+     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+     SignedResourceUrl url_id,
+     std::optional<base::FilePath> dest_path);
+ static void OnRequestResponse(std::unique_ptr<network::SimpleURLLoader> guard,
+                               const base::FilePath& download_path,
+                               std::unique_ptr<std::string> response_body);
 };
 }
 #endif // BROWSER_VIVALDI_SEARCH_ENGINES_UPDATER_H_

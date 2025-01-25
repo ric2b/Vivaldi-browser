@@ -11,11 +11,11 @@ skia_cc_binary(
     testonly = True,
     srcs = [
         "DM.cpp",
-        # "DMGpuTestProcs.cpp",
         "DMJsonWriter.cpp",
         "DMJsonWriter.h",
         "DMSrcSink.cpp",
         "DMSrcSink.h",
+        "//tools/flags:common_flags_config",
     ],
     data = [
         "//resources",
@@ -46,7 +46,6 @@ skia_cc_binary(
         "//tools:url_data_manager",
         "//tools/debugger",
         "//tools/flags:common_flags",
-        "//tools/flags:common_flags_config",
         "//tools/flags:ganesh_flags",
         "//tools/gpu:ganesh_gl_utils",
         "//tools/trace",

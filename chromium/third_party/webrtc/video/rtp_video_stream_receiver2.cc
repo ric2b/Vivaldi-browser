@@ -19,12 +19,17 @@
 
 #include "absl/algorithm/container.h"
 #include "absl/memory/memory.h"
+#include "absl/types/variant.h"
 #include "api/video/video_codec_type.h"
+#include "common_video/corruption_detection_converters.h"
+#include "common_video/corruption_detection_message.h"
+#include "common_video/frame_instrumentation_data.h"
 #include "media/base/media_constants.h"
 #include "modules/pacing/packet_router.h"
 #include "modules/remote_bitrate_estimator/include/remote_bitrate_estimator.h"
 #include "modules/rtp_rtcp/include/receive_statistics.h"
 #include "modules/rtp_rtcp/include/rtp_cvo.h"
+#include "modules/rtp_rtcp/source/corruption_detection_extension.h"
 #include "modules/rtp_rtcp/source/create_video_rtp_depacketizer.h"
 #include "modules/rtp_rtcp/source/frame_object.h"
 #include "modules/rtp_rtcp/source/rtp_dependency_descriptor_extension.h"
@@ -358,6 +363,7 @@ void RtpVideoStreamReceiver2::AddReceiveCodec(
       payload_type, raw_payload ? std::make_unique<VideoRtpDepacketizerRaw>()
                                 : CreateVideoRtpDepacketizer(video_codec));
   pt_codec_params_.emplace(payload_type, codec_params);
+  pt_codec_.emplace(payload_type, video_codec);
 }
 
 void RtpVideoStreamReceiver2::RemoveReceiveCodecs() {
@@ -367,6 +373,7 @@ void RtpVideoStreamReceiver2::RemoveReceiveCodecs() {
   payload_type_map_.clear();
   packet_buffer_.ResetSpsPpsIdrIsH264Keyframe();
   h26x_packet_buffer_.reset();
+  pt_codec_.clear();
 }
 
 std::optional<Syncable::Info> RtpVideoStreamReceiver2::GetSyncInfo() const {
@@ -377,8 +384,8 @@ std::optional<Syncable::Info> RtpVideoStreamReceiver2::GetSyncInfo() const {
   if (!last_sr.has_value()) {
     return std::nullopt;
   }
-  info.capture_time_ntp_secs = last_sr->last_remote_timestamp.seconds();
-  info.capture_time_ntp_frac = last_sr->last_remote_timestamp.fractions();
+  info.capture_time_ntp_secs = last_sr->last_remote_ntp_timestamp.seconds();
+  info.capture_time_ntp_frac = last_sr->last_remote_ntp_timestamp.fractions();
   info.capture_time_source_clock = last_sr->last_remote_rtp_timestamp;
 
   if (!last_received_rtp_timestamp_ || !last_received_rtp_system_time_) {
@@ -497,6 +504,23 @@ RtpVideoStreamReceiver2::ParseGenericDependenciesExtension(
   return kHasGenericDescriptor;
 }
 
+void RtpVideoStreamReceiver2::SetLastCorruptionDetectionIndex(
+    const absl::variant<FrameInstrumentationSyncData, FrameInstrumentationData>&
+        frame_instrumentation_data,
+    int spatial_idx) {
+  if (const auto* sync_data = absl::get_if<FrameInstrumentationSyncData>(
+          &frame_instrumentation_data)) {
+    last_corruption_detection_state_by_layer_[spatial_idx].sequence_index =
+        sync_data->sequence_index;
+  } else if (const auto* data = absl::get_if<FrameInstrumentationData>(
+                 &frame_instrumentation_data)) {
+    last_corruption_detection_state_by_layer_[spatial_idx].sequence_index =
+        data->sequence_index + data->sample_values.size();
+  } else {
+    RTC_DCHECK_NOTREACHED();
+  }
+}
+
 bool RtpVideoStreamReceiver2::OnReceivedPayloadData(
     rtc::CopyOnWriteBuffer codec_payload,
     const RtpPacketReceived& rtp_packet,
@@ -582,9 +606,7 @@ bool RtpVideoStreamReceiver2::OnReceivedPayloadData(
     return false;
   }
 
-  // Color space should only be transmitted in the last packet of a frame,
-  // therefore, neglect it otherwise so that last_color_space_ is not reset by
-  // mistake.
+  // Extensions that should only be transmitted in the last packet of a frame.
   if (video_header.is_last_packet_in_frame) {
     video_header.color_space = rtp_packet.GetExtension<ColorSpaceExtension>();
     if (video_header.color_space ||
@@ -595,6 +617,50 @@ bool RtpVideoStreamReceiver2::OnReceivedPayloadData(
       last_color_space_ = video_header.color_space;
     } else if (last_color_space_) {
       video_header.color_space = last_color_space_;
+    }
+
+    std::optional<int> spatial_id;
+    if (video_header.generic.has_value()) {
+      spatial_id = video_header.generic->spatial_index;
+      if (spatial_id >= kMaxSpatialLayers) {
+        RTC_LOG(LS_WARNING) << "Invalid spatial id: " << *spatial_id
+                            << ". Ignoring corruption detection mesaage.";
+        spatial_id.reset();
+      }
+    } else {
+      spatial_id = 0;
+    }
+
+    std::optional<CorruptionDetectionMessage> message =
+        rtp_packet.GetExtension<CorruptionDetectionExtension>();
+    if (message.has_value() && spatial_id.has_value()) {
+      if (message->sample_values().empty()) {
+        video_header.frame_instrumentation_data =
+            ConvertCorruptionDetectionMessageToFrameInstrumentationSyncData(
+                *message, last_corruption_detection_state_by_layer_[*spatial_id]
+                              .sequence_index);
+      } else {
+        // `OnReceivedPayloadData` might be called several times, however, we
+        // don't want to increase the sequence index each time.
+        if (!last_corruption_detection_state_by_layer_[*spatial_id]
+                 .timestamp.has_value() ||
+            rtp_packet.Timestamp() !=
+                last_corruption_detection_state_by_layer_[*spatial_id]
+                    .timestamp) {
+          video_header.frame_instrumentation_data =
+              ConvertCorruptionDetectionMessageToFrameInstrumentationData(
+                  *message,
+                  last_corruption_detection_state_by_layer_[*spatial_id]
+                      .sequence_index);
+          last_corruption_detection_state_by_layer_[*spatial_id].timestamp =
+              rtp_packet.Timestamp();
+        }
+      }
+
+      if (video_header.frame_instrumentation_data.has_value()) {
+        SetLastCorruptionDetectionIndex(
+            *video_header.frame_instrumentation_data, *spatial_id);
+      }
     }
   }
   video_header.video_frame_tracking_id =
@@ -628,7 +694,8 @@ bool RtpVideoStreamReceiver2::OnReceivedPayloadData(
   packet->times_nacked = times_nacked;
 
   if (codec_payload.size() == 0) {
-    NotifyReceiverOfEmptyPacket(packet->seq_num());
+    NotifyReceiverOfEmptyPacket(packet->seq_num(),
+                                IsH26xPayloadType(packet->payload_type));
     rtcp_feedback_buffer_.SendBufferedRtcpFeedback();
     return false;
   }
@@ -790,22 +857,23 @@ void RtpVideoStreamReceiver2::OnInsertedPacket(
 
       const video_coding::PacketBuffer::Packet& last_packet = *packet;
       OnAssembledFrame(std::make_unique<RtpFrameObject>(
-          first_packet->seq_num(),                           //
-          last_packet.seq_num(),                             //
-          last_packet.marker_bit,                            //
-          max_nack_count,                                    //
-          min_recv_time,                                     //
-          max_recv_time,                                     //
-          first_packet->timestamp,                           //
-          ntp_estimator_.Estimate(first_packet->timestamp),  //
-          last_packet.video_header.video_timing,             //
-          first_packet->payload_type,                        //
-          first_packet->codec(),                             //
-          last_packet.video_header.rotation,                 //
-          last_packet.video_header.content_type,             //
-          first_packet->video_header,                        //
-          last_packet.video_header.color_space,              //
-          RtpPacketInfos(std::move(packet_infos)),           //
+          first_packet->seq_num(),                              //
+          last_packet.seq_num(),                                //
+          last_packet.marker_bit,                               //
+          max_nack_count,                                       //
+          min_recv_time,                                        //
+          max_recv_time,                                        //
+          first_packet->timestamp,                              //
+          ntp_estimator_.Estimate(first_packet->timestamp),     //
+          last_packet.video_header.video_timing,                //
+          first_packet->payload_type,                           //
+          first_packet->codec(),                                //
+          last_packet.video_header.rotation,                    //
+          last_packet.video_header.content_type,                //
+          first_packet->video_header,                           //
+          last_packet.video_header.color_space,                 //
+          last_packet.video_header.frame_instrumentation_data,  //
+          RtpPacketInfos(std::move(packet_infos)),              //
           std::move(bitstream)));
       payloads.clear();
       packet_infos.clear();
@@ -1043,6 +1111,15 @@ RtpVideoStreamReceiver2::GetSenderReportStats() const {
   return rtp_rtcp_->GetSenderReportStats();
 }
 
+bool RtpVideoStreamReceiver2::IsH26xPayloadType(uint8_t payload_type) const {
+  RTC_DCHECK_RUN_ON(&packet_sequence_checker_);
+  auto it = pt_codec_.find(payload_type);
+  if (it == pt_codec_.end()) {
+    return false;
+  }
+  return it->second == kVideoCodecH264 || it->second == kVideoCodecH265;
+}
+
 void RtpVideoStreamReceiver2::ManageFrame(
     std::unique_ptr<RtpFrameObject> frame) {
   RTC_DCHECK_RUN_ON(&packet_sequence_checker_);
@@ -1056,7 +1133,8 @@ void RtpVideoStreamReceiver2::ReceivePacket(const RtpPacketReceived& packet) {
     // Padding or keep-alive packet.
     // TODO(nisse): Could drop empty packets earlier, but need to figure out how
     // they should be counted in stats.
-    NotifyReceiverOfEmptyPacket(packet.SequenceNumber());
+    NotifyReceiverOfEmptyPacket(packet.SequenceNumber(),
+                                IsH26xPayloadType(packet.PayloadType()));
     return;
   }
   if (packet.PayloadType() == red_payload_type_) {
@@ -1126,7 +1204,8 @@ void RtpVideoStreamReceiver2::ParseAndHandleEncapsulatingHeader(
   if (packet.payload()[0] == ulpfec_receiver_->ulpfec_payload_type()) {
     // Notify video_receiver about received FEC packets to avoid NACKing these
     // packets.
-    NotifyReceiverOfEmptyPacket(packet.SequenceNumber());
+    NotifyReceiverOfEmptyPacket(packet.SequenceNumber(),
+                                IsH26xPayloadType(packet.PayloadType()));
   }
   if (ulpfec_receiver_->AddReceivedRedPacket(packet)) {
     ulpfec_receiver_->ProcessReceivedFec();
@@ -1136,13 +1215,18 @@ void RtpVideoStreamReceiver2::ParseAndHandleEncapsulatingHeader(
 // In the case of a video stream without picture ids and no rtx the
 // RtpFrameReferenceFinder will need to know about padding to
 // correctly calculate frame references.
-void RtpVideoStreamReceiver2::NotifyReceiverOfEmptyPacket(uint16_t seq_num) {
+void RtpVideoStreamReceiver2::NotifyReceiverOfEmptyPacket(uint16_t seq_num,
+                                                          bool is_h26x) {
   RTC_DCHECK_RUN_ON(&packet_sequence_checker_);
   RTC_DCHECK_RUN_ON(&worker_task_checker_);
 
   OnCompleteFrames(reference_finder_->PaddingReceived(seq_num));
 
-  OnInsertedPacket(packet_buffer_.InsertPadding(seq_num));
+  if (is_h26x && h26x_packet_buffer_) {
+    OnInsertedPacket(h26x_packet_buffer_->InsertPadding(seq_num));
+  } else {
+    OnInsertedPacket(packet_buffer_.InsertPadding(seq_num));
+  }
   if (nack_module_) {
     nack_module_->OnReceivedPacket(seq_num, /*is_recovered=*/false);
   }
@@ -1177,10 +1261,10 @@ bool RtpVideoStreamReceiver2::DeliverRtcp(const uint8_t* rtcp_packet,
     return true;
   }
   int64_t time_since_received = env_.clock().CurrentNtpInMilliseconds() -
-                                last_sr->last_arrival_timestamp.ToMs();
+                                last_sr->last_arrival_ntp_timestamp.ToMs();
   // Don't use old SRs to estimate time.
   if (time_since_received <= 1) {
-    ntp_estimator_.UpdateRtcpTimestamp(*rtt, last_sr->last_remote_timestamp,
+    ntp_estimator_.UpdateRtcpTimestamp(*rtt, last_sr->last_remote_ntp_timestamp,
                                        last_sr->last_remote_rtp_timestamp);
     std::optional<int64_t> remote_to_local_clock_offset =
         ntp_estimator_.EstimateRemoteToLocalClockOffset();

@@ -231,6 +231,7 @@ static const FormatEntry format_entries[] = {
     [AV_PIX_FMT_XYZ12BE]     = { 1, 1, 1 },
     [AV_PIX_FMT_XYZ12LE]     = { 1, 1, 1 },
     [AV_PIX_FMT_AYUV64LE]    = { 1, 1},
+    [AV_PIX_FMT_AYUV64BE]    = { 1, 1 },
     [AV_PIX_FMT_P010LE]      = { 1, 1 },
     [AV_PIX_FMT_P010BE]      = { 1, 1 },
     [AV_PIX_FMT_P012LE]      = { 1, 1 },
@@ -266,8 +267,17 @@ static const FormatEntry format_entries[] = {
     [AV_PIX_FMT_VUYX]        = { 1, 1 },
     [AV_PIX_FMT_RGBAF16BE]   = { 1, 0 },
     [AV_PIX_FMT_RGBAF16LE]   = { 1, 0 },
+    [AV_PIX_FMT_RGBF16BE]    = { 1, 0 },
+    [AV_PIX_FMT_RGBF16LE]    = { 1, 0 },
+    [AV_PIX_FMT_RGBF32BE]    = { 1, 0 },
+    [AV_PIX_FMT_RGBF32LE]    = { 1, 0 },
     [AV_PIX_FMT_XV30LE]      = { 1, 1 },
     [AV_PIX_FMT_XV36LE]      = { 1, 1 },
+    [AV_PIX_FMT_XV36BE]      = { 1, 1 },
+    [AV_PIX_FMT_AYUV]        = { 1, 1 },
+    [AV_PIX_FMT_UYVA]        = { 1, 1 },
+    [AV_PIX_FMT_VYU444]      = { 1, 1 },
+    [AV_PIX_FMT_V30XLE]      = { 1, 1 },
 };
 
 /**
@@ -1080,8 +1090,12 @@ int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
 
     if (need_reinit) {
         ff_sws_init_range_convert(c);
-#if ARCH_LOONGARCH64
+#if ARCH_AARCH64
+        ff_sws_init_range_convert_aarch64(c);
+#elif ARCH_LOONGARCH64
         ff_sws_init_range_convert_loongarch(c);
+#elif ARCH_X86
+        ff_sws_init_range_convert_x86(c);
 #endif
     }
 
@@ -1129,7 +1143,7 @@ int sws_setColorspaceDetails(struct SwsContext *c, const int inv_table[4],
                 tmp_height = srcH;
             }
 
-            ret = av_image_alloc(c->cascaded_tmp, c->cascaded_tmpStride,
+            ret = av_image_alloc(c->cascaded_tmp[0], c->cascaded_tmpStride[0],
                                 tmp_width, tmp_height, tmp_format, 64);
             if (ret < 0)
                 return ret;
@@ -1609,7 +1623,7 @@ static av_cold int sws_init_single_context(SwsContext *c, SwsFilter *srcFilter,
         SwsContext *c2;
         c->cascaded_context[0] = NULL;
 
-        ret = av_image_alloc(c->cascaded_tmp, c->cascaded_tmpStride,
+        ret = av_image_alloc(c->cascaded_tmp[0], c->cascaded_tmpStride[0],
                             srcW, srcH, tmpFmt, 64);
         if (ret < 0)
             return ret;
@@ -1647,7 +1661,7 @@ static av_cold int sws_init_single_context(SwsContext *c, SwsFilter *srcFilter,
 
         c->cascaded_context[2] = NULL;
         if (dstFormat != tmpFmt) {
-            ret = av_image_alloc(c->cascaded1_tmp, c->cascaded1_tmpStride,
+            ret = av_image_alloc(c->cascaded_tmp[1], c->cascaded_tmpStride[1],
                                 dstW, dstH, tmpFmt, 64);
             if (ret < 0)
                 return ret;
@@ -1667,7 +1681,7 @@ static av_cold int sws_init_single_context(SwsContext *c, SwsFilter *srcFilter,
              dstFormat != AV_PIX_FMT_RGB48)) {
             enum AVPixelFormat tmpFormat = isBayer16BPS(srcFormat) ? AV_PIX_FMT_RGB48 : AV_PIX_FMT_RGB24;
 
-            ret = av_image_alloc(c->cascaded_tmp, c->cascaded_tmpStride,
+            ret = av_image_alloc(c->cascaded_tmp[0], c->cascaded_tmpStride[0],
                                 srcW, srcH, tmpFormat, 64);
             if (ret < 0)
                 return ret;
@@ -1710,7 +1724,7 @@ static av_cold int sws_init_single_context(SwsContext *c, SwsFilter *srcFilter,
                 c->srcRange != c->dstRange
             ) {
                 c->cascaded_mainindex = 1;
-                ret = av_image_alloc(c->cascaded_tmp, c->cascaded_tmpStride,
+                ret = av_image_alloc(c->cascaded_tmp[0], c->cascaded_tmpStride[0],
                                      srcW, srcH, tmpFormat, 64);
                 if (ret < 0)
                     return ret;
@@ -1948,14 +1962,10 @@ static av_cold int sws_init_single_context(SwsContext *c, SwsFilter *srcFilter,
         av_log(c, AV_LOG_INFO, "%s scaler, from %s to %s%s ",
                scaler,
                av_get_pix_fmt_name(srcFormat),
-#ifdef DITHER1XBPP
                dstFormat == AV_PIX_FMT_BGR555   || dstFormat == AV_PIX_FMT_BGR565   ||
                dstFormat == AV_PIX_FMT_RGB444BE || dstFormat == AV_PIX_FMT_RGB444LE ||
                dstFormat == AV_PIX_FMT_BGR444BE || dstFormat == AV_PIX_FMT_BGR444LE ?
                                                              "dithered " : "",
-#else
-               "",
-#endif
                av_get_pix_fmt_name(dstFormat));
 
         if (INLINE_MMXEXT(cpu_flags))
@@ -1996,7 +2006,7 @@ fail: // FIXME replace things by appropriate error codes
         if (srcW*(int64_t)srcH <= 4LL*dstW*dstH)
             return AVERROR(EINVAL);
 
-        ret = av_image_alloc(c->cascaded_tmp, c->cascaded_tmpStride,
+        ret = av_image_alloc(c->cascaded_tmp[0], c->cascaded_tmpStride[0],
                              tmpW, tmpH, tmpFormat, 64);
         if (ret < 0)
             return ret;
@@ -2042,6 +2052,7 @@ static int context_init_threaded(SwsContext *c,
         if (!c->slice_ctx[i])
             return AVERROR(ENOMEM);
 
+        c->nb_slice_ctx++;
         c->slice_ctx[i]->parent = c;
 
         ret = av_opt_copy((void*)c->slice_ctx[i], (void*)c);
@@ -2053,8 +2064,6 @@ static int context_init_threaded(SwsContext *c,
         ret = sws_init_single_context(c->slice_ctx[i], src_filter, dst_filter);
         if (ret < 0)
             return ret;
-
-        c->nb_slice_ctx++;
 
         if (c->slice_ctx[i]->dither == SWS_DITHER_ED) {
             av_log(c, AV_LOG_VERBOSE,
@@ -2491,8 +2500,8 @@ void sws_freeContext(SwsContext *c)
     sws_freeContext(c->cascaded_context[1]);
     sws_freeContext(c->cascaded_context[2]);
     memset(c->cascaded_context, 0, sizeof(c->cascaded_context));
-    av_freep(&c->cascaded_tmp[0]);
-    av_freep(&c->cascaded1_tmp[0]);
+    av_freep(&c->cascaded_tmp[0][0]);
+    av_freep(&c->cascaded_tmp[1][0]);
 
     av_freep(&c->gamma);
     av_freep(&c->inv_gamma);

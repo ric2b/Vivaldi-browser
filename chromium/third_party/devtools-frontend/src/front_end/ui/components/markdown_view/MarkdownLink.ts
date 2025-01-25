@@ -10,6 +10,8 @@ import * as VisualLogging from '../../visual_logging/visual_logging.js';
 import markdownLinkStyles from './markdownLink.css.js';
 import {getMarkdownLink} from './MarkdownLinksMap.js';
 
+const {html} = LitHtml;
+
 export interface MarkdownLinkData {
   key: string;
   title: string;
@@ -21,7 +23,6 @@ export interface MarkdownLinkData {
  * This makes sure that all links are accounted for and no bad links are introduced to devtools via markdown.
  */
 export class MarkdownLink extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-markdown-link`;
 
   readonly #shadow = this.attachShadow({mode: 'open'});
   #linkText: string = '';
@@ -41,7 +42,7 @@ export class MarkdownLink extends HTMLElement {
 
   #render(): void {
     // clang-format off
-    const output = LitHtml.html`<x-link class="devtools-link" href=${this.#linkUrl} jslog=${VisualLogging.link().track({click: true})}
+    const output = html`<x-link class="devtools-link" href=${this.#linkUrl} jslog=${VisualLogging.link().track({click: true})}
     >${this.#linkText}</x-link>`;
     LitHtml.render(output, this.#shadow, {host: this});
     // clang-format on

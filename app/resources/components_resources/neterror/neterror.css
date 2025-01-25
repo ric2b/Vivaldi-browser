@@ -1058,16 +1058,29 @@ html[dir='rtl'].offline .icon-offline {
   }
 }
 
+/* Vivaldia game section */
+#main-frame-error.interstitial-wrapper:has(~ #vivaldia) {
+  margin-bottom: 12px;
+}
+
 #vivaldia {
   padding-top: 0px;
 }
 
 .vivaldia-section {
-  float: left;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    'title icon'
+    'button icon';
+  grid-gap: 6px;
+  align-items: center;
+  max-width: max-content;
   font-size: 16px;
-  color: #ef3939;
   font-weight: bold;
-  background: #fff3f3;
+  line-height: 1.3;
+  color: #ef3939;
+  background: #ef393911;
   padding: 12px;
   border-radius: 12px;
 
@@ -1077,14 +1090,13 @@ html[dir='rtl'].offline .icon-offline {
     color: white;
     background: #ef3939;
     font-weight:normal;
-    margin-top: 40px;
     padding: 8px;
-    float:left;
     cursor: pointer;
     text-transform: none;
   }
 
   .logo-holder {
-    float:right;
+    grid-area: icon;
+    image-rendering: pixelated;
   }
 }

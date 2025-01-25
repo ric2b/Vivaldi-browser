@@ -61,6 +61,10 @@ mojom("interfaces") {
         {
           mojom = "chrome.mojom.ImportedSpeedDialEntry"
           cpp = "::ImportedSpeedDialEntry"
+        },
+        {
+          mojom = "chrome.mojom.ImportedTabEntry"
+          cpp = "::ImportedTabEntry"
         }
       ]
       traits_headers = [
@@ -71,6 +75,7 @@ mojom("interfaces") {
         "//components/favicon_base/favicon_usage_data.h",
         "//importer/imported_notes_entry.h",
         "//importer/imported_speeddial_entry.h",
+        "//importer/imported_tab_entry.h",
       ]
       traits_private_headers = [
         "profile_import_process_param_traits.h",

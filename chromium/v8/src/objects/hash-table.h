@@ -11,7 +11,9 @@
 #include "src/common/globals.h"
 #include "src/execution/isolate-utils.h"
 #include "src/objects/fixed-array.h"
+#include "src/objects/property-array.h"
 #include "src/objects/smi.h"
+#include "src/objects/tagged-field.h"
 #include "src/roots/roots.h"
 
 // Has to be the last include (doesn't have include guards):
@@ -111,15 +113,20 @@ class V8_EXPORT_PRIVATE HashTableBase : public NON_EXPORTED_BASE(FixedArray) {
 
   // Returns probe entry.
   inline static InternalIndex FirstProbe(uint32_t hash, uint32_t size) {
-    return InternalIndex(hash & (size - 1));
+    if (size <= (1 << PropertyArray::HashField::kSize)) {
+      return InternalIndex(hash & (size - 1));
+    }
+    // The hash stored in JSReceiver (see PropertyArray::HashField) only has 20
+    // bits. This is suboptimal, if the hash table size is larger than 1 << 20.
+    // This distributes the probes more evenly even in that case.
+    return InternalIndex((hash * (size >> PropertyArray::HashField::kSize)) &
+                         (size - 1));
   }
 
   inline static InternalIndex NextProbe(InternalIndex last, uint32_t number,
                                         uint32_t size) {
     return InternalIndex((last.as_uint32() + number) & (size - 1));
   }
-
-  OBJECT_CONSTRUCTORS(HashTableBase, FixedArray);
 };
 
 template <typename Derived, typename ShapeT>
@@ -179,7 +186,7 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) HashTable
   static_assert(kEntrySize > 0);
   static const int kEntryKeyIndex = 0;
   static const int kElementsStartOffset =
-      kHeaderSize + kElementsStartIndex * kTaggedSize;
+      OFFSET_OF_DATA_START(HashTableBase) + kElementsStartIndex * kTaggedSize;
   // Maximal capacity of HashTable. Based on maximal length of underlying
   // FixedArray. Staying below kMaxCapacity also ensures that EntryToIndex
   // cannot overflow.
@@ -206,7 +213,8 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) HashTable
 
   // Returns the index for a slot address in the object.
   static constexpr inline int SlotToIndex(Address object, Address slot) {
-    return static_cast<int>((slot - object - kHeaderSize) / kTaggedSize);
+    return static_cast<int>((slot - object - sizeof(HashTableBase)) /
+                            kTaggedSize);
   }
 
   // Ensure enough space for n additional elements.
@@ -275,8 +283,6 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) HashTable
                               InternalIndex expected);
 
   void Swap(InternalIndex entry1, InternalIndex entry2, WriteBarrierMode mode);
-
-  OBJECT_CONSTRUCTORS(HashTable, HashTableBase);
 };
 
 #define EXTERN_DECLARE_HASH_TABLE(DERIVED, SHAPE)                            \
@@ -373,8 +379,6 @@ class EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) ObjectHashTableBase
  protected:
   void AddEntry(InternalIndex entry, Tagged<Object> key, Tagged<Object> value);
   void RemoveEntry(InternalIndex entry);
-
-  OBJECT_CONSTRUCTORS(ObjectHashTableBase, HashTable<Derived, Shape>);
 };
 
 #define EXTERN_DECLARE_OBJECT_BASE_HASH_TABLE(DERIVED, SHAPE)      \
@@ -390,10 +394,6 @@ class V8_EXPORT_PRIVATE ObjectHashTable
     : public ObjectHashTableBase<ObjectHashTable, ObjectHashTableShape> {
  public:
   DECL_PRINTER(ObjectHashTable)
-
-  OBJECT_CONSTRUCTORS(
-      ObjectHashTable,
-      ObjectHashTableBase<ObjectHashTable, ObjectHashTableShape>);
 };
 
 EXTERN_DECLARE_OBJECT_BASE_HASH_TABLE(EphemeronHashTable, ObjectHashTableShape)
@@ -418,10 +418,6 @@ class V8_EXPORT_PRIVATE EphemeronHashTable
   friend class ObjectHashTableBase<EphemeronHashTable, ObjectHashTableShape>;
   inline void set_key(int index, Tagged<Object> value);
   inline void set_key(int index, Tagged<Object> value, WriteBarrierMode mode);
-
-  OBJECT_CONSTRUCTORS(
-      EphemeronHashTable,
-      ObjectHashTableBase<EphemeronHashTable, ObjectHashTableShape>);
 };
 
 // ObjectMultihashTable is a hash table that maps Object keys to N Object
@@ -461,16 +457,10 @@ class ObjectMultiHashTableBase
                entry) +
            ObjectMultiHashTableShape<N>::kEntryValueIndex;
   }
-
-  OBJECT_CONSTRUCTORS(ObjectMultiHashTableBase,
-                      HashTable<Derived, ObjectMultiHashTableShape<N>>);
 };
 
 class ObjectTwoHashTable
     : public ObjectMultiHashTableBase<ObjectTwoHashTable, 2> {
- public:
-  OBJECT_CONSTRUCTORS(ObjectTwoHashTable,
-                      ObjectMultiHashTableBase<ObjectTwoHashTable, 2>);
 };
 
 class ObjectHashSetShape : public ObjectHashTableShape {
@@ -489,9 +479,6 @@ class V8_EXPORT_PRIVATE ObjectHashSet
 
   inline bool Has(Isolate* isolate, Handle<Object> key, int32_t hash);
   inline bool Has(Isolate* isolate, Handle<Object> key);
-
-  OBJECT_CONSTRUCTORS(ObjectHashSet,
-                      HashTable<ObjectHashSet, ObjectHashSetShape>);
 };
 
 class NameToIndexShape : public BaseShape<Handle<Name>> {
@@ -531,9 +518,6 @@ class V8_EXPORT_PRIVATE NameToIndexHashTable
 
   DECL_PRINTER(NameToIndexHashTable)
 
-  OBJECT_CONSTRUCTORS(NameToIndexHashTable,
-                      HashTable<NameToIndexHashTable, NameToIndexShape>);
-
  private:
   static inline int EntryToValueIndex(InternalIndex entry) {
     return EntryToIndex(entry) + NameToIndexShape::kEntryValueIndex;
@@ -568,9 +552,6 @@ class RegisteredSymbolTable
                                            DirectHandle<Symbol>);
 
   DECL_PRINTER(RegisteredSymbolTable)
-  OBJECT_CONSTRUCTORS(
-      RegisteredSymbolTable,
-      HashTable<RegisteredSymbolTable, RegisteredSymbolTableShape>);
 
  private:
   static inline int EntryToValueIndex(InternalIndex entry) {

@@ -25,6 +25,7 @@
 
 #include "platform/api/network_interface.h"
 #include "platform/base/ip_address.h"
+#include "platform/base/span.h"
 #include "platform/impl/network_interface.h"
 #include "platform/impl/scoped_pipe.h"
 #include "util/osp_logging.h"
@@ -35,13 +36,13 @@ namespace {
 constexpr int kNetlinkRecvmsgBufSize = 8192;
 
 // Safely reads the system name for the interface from the (probably)
-// null-terminated string |kernel_name| and returns a std::string.
+// null-terminated string `kernel_name` and returns a std::string.
 std::string GetInterfaceName(std::string_view kernel_name) {
   OSP_CHECK_LT(kernel_name.length(), IFNAMSIZ);
   return std::string(kernel_name);
 }
 
-// Returns the type of the interface identified by the name |ifname|, if it can
+// Returns the type of the interface identified by the name `ifname`, if it can
 // be determined, otherwise returns InterfaceInfo::Type::kOther.
 InterfaceInfo::Type GetInterfaceType(const std::string& ifname) {
   // Determine type after name has been set.
@@ -81,10 +82,10 @@ InterfaceInfo::Type GetInterfaceType(const std::string& ifname) {
   return InterfaceInfo::Type::kOther;
 }
 
-// Reads an interface's name, hardware address, and type from |rta| and places
-// the results in |info|.  |rta| is the first attribute structure returned as
-// part of an RTM_NEWLINK message.  |attrlen| is the total length of the buffer
-// pointed to by |rta|.
+// Reads an interface's name, hardware address, and type from `rta` and places
+// the results in `info`.  `rta` is the first attribute structure returned as
+// part of an RTM_NEWLINK message.  `attrlen` is the total length of the buffer
+// pointed to by `rta`.
 void GetInterfaceAttributes(struct rtattr* rta,
                             unsigned int attrlen,
                             bool is_loopback,
@@ -94,9 +95,10 @@ void GetInterfaceAttributes(struct rtattr* rta,
       info->name =
           GetInterfaceName(reinterpret_cast<const char*>(RTA_DATA(rta)));
     } else if (rta->rta_type == IFLA_ADDRESS) {
-      OSP_CHECK_EQ(sizeof(info->hardware_address), RTA_PAYLOAD(rta));
-      std::memcpy(info->hardware_address.data(), RTA_DATA(rta),
-                  sizeof(info->hardware_address));
+      ByteView address_bytes(reinterpret_cast<uint8_t*>(RTA_DATA(rta)),
+                             RTA_PAYLOAD(rta));
+      info->hardware_address.assign(address_bytes.cbegin(),
+                                    address_bytes.cend());
     }
   }
 
@@ -108,9 +110,9 @@ void GetInterfaceAttributes(struct rtattr* rta,
 }
 
 // Reads the IPv4 or IPv6 address that comes from an RTM_NEWADDR message and
-// places the result in |address|. |rta| is the first attribute structure
-// returned by the message and |attrlen| is the total length of the buffer
-// pointed to by |rta|. |ifname| is the name of the interface to which we
+// places the result in `address`. `rta` is the first attribute structure
+// returned by the message and `attrlen` is the total length of the buffer
+// pointed to by `rta`. `ifname` is the name of the interface to which we
 // believe the address belongs based on interface index matching. It is only
 // used for sanity checking.
 std::optional<IPAddress> GetIPAddressOrNull(struct rtattr* rta,

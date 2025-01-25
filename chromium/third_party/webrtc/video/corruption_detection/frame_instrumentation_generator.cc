@@ -28,6 +28,7 @@
 #include "common_video/frame_instrumentation_data.h"
 #include "modules/include/module_common_types_public.h"
 #include "modules/video_coding/utility/qp_parser.h"
+#include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
 #include "video/corruption_detection/generic_mapping_functions.h"
 #include "video/corruption_detection/halton_frame_sampler.h"
@@ -35,11 +36,16 @@
 namespace webrtc {
 namespace {
 
+// Avoid holding on to frames that might have been dropped by encoder, as that
+// can lead to frame buffer pools draining.
+constexpr size_t kMaxPendingFrames = 3;
+
 std::optional<FilterSettings> GetCorruptionFilterSettings(
     const EncodedImage& encoded_image,
     VideoCodecType video_codec_type,
     int layer_id) {
-  /* TODO: b/358039777 - Uncomment when parameters are available in EncodedImage
+  /* TODO: bugs.webrtc.org/358039777 - Uncomment when parameters are available
+     in EncodedImage.
   if (encoded_image.CorruptionDetectionParameters()) {
     return FilterSettings{
         .std_dev = encoded_image.CorruptionDetectionParameters()->std_dev,
@@ -73,6 +79,9 @@ FrameInstrumentationGenerator::FrameInstrumentationGenerator(
     : video_codec_type_(video_codec_type) {}
 
 void FrameInstrumentationGenerator::OnCapturedFrame(VideoFrame frame) {
+  while (captured_frames_.size() >= kMaxPendingFrames) {
+    captured_frames_.pop();
+  }
   captured_frames_.push(frame);
 }
 
@@ -94,13 +103,11 @@ FrameInstrumentationGenerator::OnEncodedImage(
   }
   VideoFrame captured_frame = captured_frames_.front();
 
-  int layer_id = std::max(encoded_image.SpatialIndex().value_or(0),
-                          encoded_image.SimulcastIndex().value_or(0));
+  int layer_id = GetLayerId(encoded_image);
+
   bool is_key_frame =
       encoded_image.FrameType() == VideoFrameType::kVideoFrameKey;
-  if (is_key_frame) {
-    contexts_.erase(layer_id);
-  } else {
+  if (!is_key_frame) {
     for (const auto& [unused, context] : contexts_) {
       if (context.rtp_timestamp_of_last_key_frame ==
           rtp_timestamp_encoded_image) {
@@ -110,23 +117,48 @@ FrameInstrumentationGenerator::OnEncodedImage(
       }
     }
   }
-
   if (is_key_frame) {
     contexts_[layer_id].rtp_timestamp_of_last_key_frame =
         encoded_image.RtpTimestamp();
   } else if (contexts_.find(layer_id) == contexts_.end()) {
+    // TODO: bugs.webrtc.org/358039777 - Update this if statement such that LxTy
+    // scalability modes work properly. It is not a problem for LxTy_KEY
+    // scalability.
+    //
+    // For LxTy, it sometimes hinders calculating corruption score on the higher
+    // spatial layers. Because e.g. in L3T1 the first frame might not create 3
+    // spatial layers but, only 2. Then, we end up not creating this in the map
+    // and will therefore not get any corruption score until a new key frame is
+    // sent.
     RTC_LOG(LS_INFO) << "The first frame of a spatial or simulcast layer is "
                         "not a key frame.";
     return std::nullopt;
   }
 
   int sequence_index = contexts_[layer_id].frame_sampler.GetCurrentIndex();
-  // TODO: b/358039777 - Maybe allow other sample sizes as well
+  bool communicate_upper_bits = false;
+  if (is_key_frame) {
+    communicate_upper_bits = true;
+    // Increase until all the last 7 bits are zeroes.
+
+    // If this would overflow to 15 bits, reset to 0.
+    if (sequence_index > 0b0011'1111'1000'0000) {
+      sequence_index = 0;
+    } else if ((sequence_index & 0b0111'1111) != 0) {
+      // Last 7 bits are not all zeroes.
+      sequence_index >>= 7;
+      sequence_index += 1;
+      sequence_index <<= 7;
+    }
+    contexts_[layer_id].frame_sampler.SetCurrentIndex(sequence_index);
+  }
+
+  // TODO: bugs.webrtc.org/358039777 - Maybe allow other sample sizes as well
   std::vector<HaltonFrameSampler::Coordinates> sample_coordinates =
       contexts_[layer_id]
           .frame_sampler.GetSampleCoordinatesForFrameIfFrameShouldBeSampled(
               is_key_frame, captured_frame.rtp_timestamp(),
-              /*sample_size=*/13);
+              /*num_samples=*/13);
   if (sample_coordinates.empty()) {
     if (!is_key_frame) {
       return std::nullopt;
@@ -153,7 +185,7 @@ FrameInstrumentationGenerator::OnEncodedImage(
 
   FrameInstrumentationData data = {
       .sequence_index = sequence_index,
-      .communicate_upper_bits = is_key_frame,
+      .communicate_upper_bits = communicate_upper_bits,
       .std_dev = filter_settings->std_dev,
       .luma_error_threshold = filter_settings->luma_error_threshold,
       .chroma_error_threshold = filter_settings->chroma_error_threshold};
@@ -167,4 +199,26 @@ FrameInstrumentationGenerator::OnEncodedImage(
   return data;
 }
 
+std::optional<int> FrameInstrumentationGenerator::GetHaltonSequenceIndex(
+    int layer_id) const {
+  auto it = contexts_.find(layer_id);
+  if (it == contexts_.end()) {
+    return std::nullopt;
+  }
+  return it->second.frame_sampler.GetCurrentIndex();
+}
+
+void FrameInstrumentationGenerator::SetHaltonSequenceIndex(int index,
+                                                           int layer_id) {
+  if (index <= 0x3FFF) {
+    contexts_[layer_id].frame_sampler.SetCurrentIndex(index);
+  }
+  RTC_DCHECK_LE(index, 0x3FFF) << "Index must not be larger than 0x3FFF";
+}
+
+int FrameInstrumentationGenerator::GetLayerId(
+    const EncodedImage& encoded_image) const {
+  return std::max(encoded_image.SpatialIndex().value_or(0),
+                  encoded_image.SimulcastIndex().value_or(0));
+}
 }  // namespace webrtc

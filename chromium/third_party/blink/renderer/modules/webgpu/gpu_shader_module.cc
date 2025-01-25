@@ -36,6 +36,14 @@ GPUShaderModule* GPUShaderModule::Create(
   std::string wgsl_code = wtf_wgsl_code.Utf8();
   wgsl_desc.code = wgsl_code.c_str();
 
+  wgpu::ShaderModuleCompilationOptions compilation_options = {};
+  if (webgpu_desc->hasStrictMath() &&
+      device->GetHandle().HasFeature(
+          wgpu::FeatureName::ShaderModuleCompilationOptions)) {
+    compilation_options.strictMath = webgpu_desc->strictMath();
+    wgsl_desc.nextInChain = &compilation_options;
+  }
+
   wgpu::ShaderModuleDescriptor dawn_desc = {};
   dawn_desc.nextInChain = &wgsl_desc;
 
@@ -67,7 +75,8 @@ GPUShaderModule* GPUShaderModule::Create(
   //
   // TODO(crbug.com/dawn/2367): Get a real memory estimate from Tint.
   base::ClampedNumeric<int32_t> input_code_size = wgsl_code.size();
-  shader->tint_memory_estimate_.SetCurrentSize(input_code_size * 100);
+  shader->tint_memory_estimate_.Set(v8::Isolate::GetCurrent(),
+                                    input_code_size * 100);
 
   return shader;
 }
@@ -85,8 +94,7 @@ void GPUShaderModule::OnCompilationInfoCallback(
     const char* message = nullptr;
     switch (status) {
       case wgpu::CompilationInfoRequestStatus::Success:
-        NOTREACHED_IN_MIGRATION();
-        break;
+        NOTREACHED();
       case wgpu::CompilationInfoRequestStatus::Error:
         message = "Unexpected error in getCompilationInfo";
         break;
@@ -119,6 +127,10 @@ void GPUShaderModule::OnCompilationInfoCallback(
   }
 
   resolver->Resolve(result);
+}
+
+GPUShaderModule::~GPUShaderModule() {
+  tint_memory_estimate_.Clear(v8::Isolate::GetCurrent());
 }
 
 ScriptPromise<GPUCompilationInfo> GPUShaderModule::getCompilationInfo(

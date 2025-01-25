@@ -2465,6 +2465,7 @@ void av1_collect_motion_search_features_sb(AV1_COMP *const cpi, ThreadData *td,
   aom_free(sms_tree);
 }
 
+#if CONFIG_PARTITION_SEARCH_ORDER
 void av1_prepare_motion_search_features_block(
     AV1_COMP *const cpi, ThreadData *td, TileDataEnc *tile_data,
     const int mi_row, const int mi_col, const BLOCK_SIZE bsize,
@@ -2532,6 +2533,7 @@ void av1_prepare_motion_search_features_block(
 
   aom_free(sms_tree);
 }
+#endif  // CONFIG_PARTITION_SEARCH_ORDER
 #endif  // !CONFIG_REALTIME_ONLY
 
 static inline void init_simple_motion_search_mvs(

@@ -33,18 +33,18 @@ limitations under the License.
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "xla/hlo/analysis/tuple_points_to_analysis.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/hlo/ir/hlo_opcode.h"
+#include "xla/hlo/pass/hlo_pass_interface.h"
 #include "xla/layout.h"
 #include "xla/layout_util.h"
 #include "xla/map_util.h"
 #include "xla/service/call_graph.h"
 #include "xla/service/computation_layout.h"
-#include "xla/service/hlo_pass_interface.h"
 #include "xla/service/logical_buffer.h"
-#include "xla/service/tuple_points_to_analysis.h"
 #include "xla/shape.h"
 #include "xla/shape_layout.h"
 #include "xla/shape_util.h"
@@ -754,7 +754,8 @@ class LayoutAssignment : public HloModulePass {
       buffer_sets_cache_;
 
   // The set of BufferLayoutConstraints applied to the computation.
-  absl::node_hash_map<const LogicalBuffer*, BufferLayoutConstraint>
+  absl::flat_hash_map<const LogicalBuffer*,
+                      std::unique_ptr<BufferLayoutConstraint>>
       buffer_constraints_;
 
   // A vector which holds constraints as they are added. Can be cleared with

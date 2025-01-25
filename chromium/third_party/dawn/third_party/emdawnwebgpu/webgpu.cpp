@@ -17,7 +17,6 @@
 #include <map>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <set>
 #include <tuple>
 #include <unordered_map>
@@ -27,18 +26,40 @@
 using FutureID = uint64_t;
 static constexpr FutureID kNullFutureId = 0;
 using InstanceID = uint64_t;
+static constexpr InstanceID kNullInstanceId = 0;
 
 // ----------------------------------------------------------------------------
 // Declarations for JS emwgpu functions (defined in library_webgpu.js)
 // ----------------------------------------------------------------------------
 extern "C" {
-void emwgpuDelete(void* id);
+void emwgpuDelete(void* ptr);
+void emwgpuSetLabel(void* ptr, const char* data, size_t length);
 
 // Note that for the JS entry points, we pass uint64_t as pointer and decode it
 // on the other side.
 FutureID emwgpuWaitAny(FutureID const* futurePtr,
                        size_t futureCount,
                        uint64_t const* timeoutNSPtr);
+WGPUTextureFormat emwgpuGetPreferredFormat();
+
+// Device functions, i.e. creation functions to create JS backing objects given
+// a pre-allocated handle, and destruction implementations.
+void emwgpuDeviceCreateBuffer(WGPUDevice device,
+                              const WGPUBufferDescriptor* descriptor,
+                              WGPUBuffer buffer);
+void emwgpuDeviceCreateShaderModule(
+    WGPUDevice device,
+    const WGPUShaderModuleDescriptor* descriptor,
+    WGPUShaderModule shader);
+void emwgpuDeviceDestroy(WGPUDevice device);
+
+// Buffer mapping operations that has work that needs to be done on the JS side.
+void emwgpuBufferDestroy(WGPUBuffer buffer);
+const void* emwgpuBufferGetConstMappedRange(WGPUBuffer buffer,
+                                            size_t offset,
+                                            size_t size);
+void* emwgpuBufferGetMappedRange(WGPUBuffer buffer, size_t offset, size_t size);
+void emwgpuBufferUnmap(WGPUBuffer buffer);
 
 // Future/async operation that need to be forwarded to JS.
 void emwgpuAdapterRequestDevice(WGPUAdapter adapter,
@@ -47,9 +68,27 @@ void emwgpuAdapterRequestDevice(WGPUAdapter adapter,
                                 WGPUDevice device,
                                 WGPUQueue queue,
                                 const WGPUDeviceDescriptor* descriptor);
+void emwgpuBufferMapAsync(WGPUBuffer buffer,
+                          FutureID futureID,
+                          WGPUMapMode mode,
+                          size_t offset,
+                          size_t size);
+void emwgpuDeviceCreateComputePipelineAsync(
+    WGPUDevice device,
+    FutureID futureId,
+    const WGPUComputePipelineDescriptor* descriptor);
+void emwgpuDeviceCreateRenderPipelineAsync(
+    WGPUDevice device,
+    FutureID futureId,
+    const WGPURenderPipelineDescriptor* descriptor);
+void emwgpuDevicePopErrorScope(WGPUDevice device, FutureID futureId);
 void emwgpuInstanceRequestAdapter(WGPUInstance instance,
                                   FutureID futureId,
                                   const WGPURequestAdapterOptions* options);
+void emwgpuQueueOnSubmittedWorkDone(WGPUQueue queue, FutureID futureId);
+void emwgpuShaderModuleGetCompilationInfo(WGPUShaderModule shader,
+                                          FutureID futureId,
+                                          WGPUCompilationInfo* compilationInfo);
 }  // extern "C"
 
 // ----------------------------------------------------------------------------
@@ -89,12 +128,13 @@ class RefCounted : NonMovable {
     assert(oldRefCount >= 1);
   }
 
-  void Release() {
+  bool Release() {
     if (mRefCount.fetch_sub(1u, std::memory_order_release) == 1u) {
       std::atomic_thread_fence(std::memory_order_acquire);
       emwgpuDelete(this);
-      delete this;
+      return true;
     }
+    return false;
   }
 
  private:
@@ -112,12 +152,12 @@ class RefCountedWithExternalCount : public RefCounted {
     RefCounted::AddRef();
   }
 
-  void Release() {
+  bool Release() {
     if (mExternalRefCount.fetch_sub(1u, std::memory_order_release) == 1u) {
       std::atomic_thread_fence(std::memory_order_acquire);
       WillDropLastExternalRef();
     }
-    RefCounted::Release();
+    return RefCounted::Release();
   }
 
   void AddExternalRef() {
@@ -192,8 +232,8 @@ class Ref {
     }
   }
   static void Release(T value) {
-    if (value != nullptr) {
-      value->RefCounted::Release();
+    if (value != nullptr && value->RefCounted::Release()) {
+      delete value;
     }
   }
 
@@ -220,9 +260,14 @@ auto ReturnToAPI(Ref<T*>&& object) {
   return object.Detach();
 }
 
+// StringView utilities.
+WGPUStringView ToOutputStringView(const std::string& s) {
+  return {s.data(), s.size()};
+}
+
 // clang-format off
 // X Macro to help generate boilerplate code for all refcounted object types.
-#define WGPU_REFCOUNTED_OBJECTS(X) \
+#define WGPU_OBJECTS(X) \
   X(Adapter)             \
   X(BindGroup)           \
   X(BindGroupLayout)     \
@@ -243,7 +288,6 @@ auto ReturnToAPI(Ref<T*>&& object) {
   X(Sampler)             \
   X(ShaderModule)        \
   X(Surface)             \
-  X(SwapChain)           \
   X(Texture)             \
   X(TextureView)
 
@@ -252,22 +296,18 @@ auto ReturnToAPI(Ref<T*>&& object) {
 #define WGPU_PASSTHROUGH_OBJECTS(X) \
   X(BindGroup)           \
   X(BindGroupLayout)     \
-  X(Buffer)              \
   X(CommandBuffer)       \
   X(CommandEncoder)      \
   X(ComputePassEncoder)  \
   X(ComputePipeline)     \
   X(PipelineLayout)      \
   X(QuerySet)            \
-  X(Queue)               \
   X(RenderBundle)        \
   X(RenderBundleEncoder) \
   X(RenderPassEncoder)   \
   X(RenderPipeline)      \
   X(Sampler)             \
-  X(ShaderModule)        \
   X(Surface)             \
-  X(SwapChain)           \
   X(Texture)             \
   X(TextureView)
 // clang-format on
@@ -281,9 +321,15 @@ enum class EventCompletionType {
   Shutdown,
 };
 enum class EventType {
+  CompilationInfo,
+  CreateComputePipeline,
+  CreateRenderPipeline,
   DeviceLost,
+  MapAsync,
+  PopErrorScope,
   RequestAdapter,
   RequestDevice,
+  WorkDone,
 };
 
 class EventManager;
@@ -311,18 +357,19 @@ class TrackedEvent : NonMovable {
 // Compositable class for objects that provide entry point(s) that produce
 // Events, i.e. returns a Future.
 //
-// Note that while it would be nice to make it so that C++ entry points
-// implemented in here, and called from JS could use this abstraction in
-// signatures, pointers passed between JS and C++ in WASM do not cast properly
-// and results in undefined behavior. As an example, given:
+// Note that if passing pointers between JS and C++, to ensure that EventSource
+// inheritance is handled properly, EventSource must be the first class
+// inherited by subclasses. Otherwise the pointer is not cast properly and
+// results in corrupted data. As an example, given:
 //   (1) WGPUAdapter emwgpuCreateAdapter(const EventSource* source);
 //   (2) WGPUAdapter emwgpuCreateAdapter(WGPUInstance instance);
-// I tried to use (1), but when calling from JS, the pointer is not correctly
-// adjusted so the value we end up getting when calling GetInstanceId() is some
-// garbage.
+// WGPUInstance **must** list EventSource as it's first inherited class for (1)
+// to work.
 class EventSource {
  public:
   explicit EventSource(InstanceID instanceId) : mInstanceId(instanceId) {}
+  explicit EventSource(const EventSource* source)
+      : mInstanceId(source ? source->GetInstanceId() : kNullInstanceId) {}
   InstanceID GetInstanceId() const { return mInstanceId; }
 
  private:
@@ -519,6 +566,7 @@ class EventManager : NonMovable {
 
   template <typename Event, typename... ReadyArgs>
   void SetFutureReady(FutureID futureId, ReadyArgs&&... readyArgs) {
+    assert(futureId != kNullFutureId);
     std::unique_ptr<TrackedEvent> spontaneousEvent;
     {
       std::unique_lock<std::mutex> lock(mMutex);
@@ -544,6 +592,11 @@ class EventManager : NonMovable {
       spontaneousEvent->Complete(futureId, EventCompletionType::Ready);
     }
   }
+  template <typename Event, typename... ReadyArgs>
+  void SetFutureReady(double futureId, ReadyArgs&&... readyArgs) {
+    SetFutureReady<Event>(static_cast<uint64_t>(futureId),
+                          std::forward<ReadyArgs>(readyArgs)...);
+  }
 
  private:
   std::mutex mMutex;
@@ -565,12 +618,85 @@ static EventManager& GetEventManager() {
 // ----------------------------------------------------------------------------
 
 // Default struct declarations.
-#define DEFINE_WGPU_DEFAULT_STRUCT(Name) \
-  struct WGPU##Name##Impl final : public RefCounted {};
+#define DEFINE_WGPU_DEFAULT_STRUCT(Name)                     \
+  struct WGPU##Name##Impl final : public RefCounted {        \
+    WGPU##Name##Impl(const EventSource* source = nullptr) {} \
+  };
 WGPU_PASSTHROUGH_OBJECTS(DEFINE_WGPU_DEFAULT_STRUCT)
 
+struct WGPUAdapterImpl final : public EventSource, public RefCounted {
+ public:
+  WGPUAdapterImpl(const EventSource* source);
+};
+
+struct WGPUBufferImpl final : public EventSource,
+                              public RefCountedWithExternalCount {
+ public:
+  WGPUBufferImpl(const EventSource* source, bool mappedAtCreation);
+
+  void Destroy();
+  const void* GetConstMappedRange(size_t offset, size_t size);
+  WGPUBufferMapState GetMapState() const;
+  void* GetMappedRange(size_t offset, size_t size);
+  WGPUFuture MapAsync(WGPUMapMode mode,
+                      size_t offset,
+                      size_t size,
+                      WGPUBufferMapCallbackInfo2 callbackInfo);
+  void Unmap();
+
+ private:
+  friend class MapAsyncEvent;
+
+  void WillDropLastExternalRef() override;
+
+  bool IsPendingMapRequest(FutureID futureID) const;
+  void AbortPendingMap(const char* message);
+
+  // Encapsulates information about a map request. Note that when
+  // futureID == kNullFutureId, there are no pending map requests, however, it
+  // is still possible that we are still "mapped" because of mappedAtCreation
+  // which is not associated with a particular async map / future.
+  struct MapRequest {
+    FutureID futureID = kNullFutureId;
+    WGPUMapMode mode = WGPUMapMode_None;
+  };
+  MapRequest mPendingMapRequest;
+  WGPUBufferMapState mMapState;
+};
+
+struct WGPUQueueImpl final : public EventSource, public RefCounted {
+ public:
+  WGPUQueueImpl(const EventSource* source);
+};
+
+// Device is specially implemented in order to handle refcounting the Queue.
+struct WGPUDeviceImpl final : public EventSource,
+                              public RefCountedWithExternalCount {
+ public:
+  // Reservation constructor used when calling RequestDevice.
+  WGPUDeviceImpl(const EventSource* source,
+                 const WGPUDeviceDescriptor* descriptor,
+                 WGPUQueue queue);
+  // Injection constructor used when we already have a backing Device.
+  WGPUDeviceImpl(const EventSource* source, WGPUQueue queue);
+
+  void Destroy();
+  WGPUQueue GetQueue() const;
+  WGPUFuture GetLostFuture() const;
+
+  void OnUncapturedError(WGPUErrorType type, char const* message);
+
+ private:
+  void WillDropLastExternalRef() override;
+
+  Ref<WGPUQueue> mQueue;
+  WGPUUncapturedErrorCallbackInfo2 mUncapturedErrorCallbackInfo =
+      WGPU_UNCAPTURED_ERROR_CALLBACK_INFO_2_INIT;
+  FutureID mDeviceLostFutureId = kNullFutureId;
+};
+
 // Instance is specially implemented in order to handle Futures implementation.
-struct WGPUInstanceImpl final : public RefCounted, public EventSource {
+struct WGPUInstanceImpl final : public EventSource, public RefCounted {
  public:
   WGPUInstanceImpl();
   ~WGPUInstanceImpl();
@@ -584,39 +710,149 @@ struct WGPUInstanceImpl final : public RefCounted, public EventSource {
   static InstanceID GetNextInstanceId();
 };
 
-struct WGPUAdapterImpl final : public RefCounted, public EventSource {
+struct WGPUShaderModuleImpl final : public EventSource, public RefCounted {
  public:
-  WGPUAdapterImpl(const EventSource* source);
-};
+  WGPUShaderModuleImpl(const EventSource* source);
 
-// Device is specially implemented in order to handle refcounting the Queue.
-struct WGPUDeviceImpl final : public RefCountedWithExternalCount,
-                              public EventSource {
- public:
-  // Reservation constructor used when calling RequestDevice.
-  WGPUDeviceImpl(const EventSource* source,
-                 const WGPUDeviceDescriptor* descriptor,
-                 WGPUQueue queue);
-  // Injection constructor used when we already have a backing Device.
-  WGPUDeviceImpl(const EventSource* source, WGPUQueue queue);
-
-  WGPUQueue GetQueue() const;
-
-  void OnDeviceLost(WGPUDeviceLostReason reason, const char* message);
-  void OnUncapturedError(WGPUErrorType type, char const* message);
+  WGPUFuture GetCompilationInfo(WGPUCompilationInfoCallbackInfo2 callbackInfo);
 
  private:
-  void WillDropLastExternalRef() override;
+  friend class CompilationInfoEvent;
 
-  Ref<WGPUQueue> mQueue;
-  WGPUUncapturedErrorCallbackInfo2 mUncapturedErrorCallbackInfo =
-      WGPU_UNCAPTURED_ERROR_CALLBACK_INFO_2_INIT;
-  FutureID mDeviceLostFutureId = kNullFutureId;
+  struct WGPUCompilationInfoDeleter {
+    void operator()(WGPUCompilationInfo* compilationInfo) {
+      if (!compilationInfo) {
+        return;
+      }
+
+      if (compilationInfo->messageCount) {
+        // Since we allocate all the messages in a single block, we only need to
+        // free the first pointer.
+        free(const_cast<char*>(compilationInfo->messages[0].message.data));
+      }
+      if (compilationInfo->messages) {
+        free(const_cast<WGPUCompilationMessage*>(compilationInfo->messages));
+      }
+      delete compilationInfo;
+    }
+  };
+  using CompilationInfo =
+      std::unique_ptr<WGPUCompilationInfo, WGPUCompilationInfoDeleter>;
+  CompilationInfo mCompilationInfo = nullptr;
 };
 
 // ----------------------------------------------------------------------------
 // Future events.
 // ----------------------------------------------------------------------------
+
+class CompilationInfoEvent final : public TrackedEvent {
+ public:
+  static constexpr EventType kType = EventType::CompilationInfo;
+
+  CompilationInfoEvent(InstanceID instance,
+                       WGPUShaderModule shader,
+                       const WGPUCompilationInfoCallbackInfo2& callbackInfo)
+      : TrackedEvent(instance, callbackInfo.mode),
+        mCallback(callbackInfo.callback),
+        mUserdata1(callbackInfo.userdata1),
+        mUserdata2(callbackInfo.userdata2),
+        mShader(shader) {}
+
+  EventType GetType() override { return kType; }
+
+  void ReadyHook(WGPUCompilationInfoRequestStatus status,
+                 WGPUCompilationInfo* compilationInfo) {
+    WGPUShaderModuleImpl::CompilationInfo info(compilationInfo);
+    mStatus = status;
+    if (mStatus != WGPUCompilationInfoRequestStatus_Success) {
+      return;
+    }
+
+    if (!mShader->mCompilationInfo.get()) {
+      // If there wasn't already a cached version of the info, set it now.
+      mShader->mCompilationInfo = std::move(info);
+    }
+    assert(mShader->mCompilationInfo.get());
+  }
+
+  void Complete(FutureID, EventCompletionType type) override {
+    if (type == EventCompletionType::Shutdown) {
+      mStatus = WGPUCompilationInfoRequestStatus_InstanceDropped;
+    }
+    if (mCallback) {
+      mCallback(mStatus,
+                mStatus == WGPUCompilationInfoRequestStatus_Success
+                    ? mShader->mCompilationInfo.get()
+                    : nullptr,
+                mUserdata1, mUserdata2);
+    }
+  }
+
+ private:
+  WGPUCompilationInfoCallback2 mCallback = nullptr;
+  void* mUserdata1 = nullptr;
+  void* mUserdata2 = nullptr;
+
+  Ref<WGPUShaderModule> mShader;
+  WGPUCompilationInfoRequestStatus mStatus =
+      WGPUCompilationInfoRequestStatus_Success;
+};
+
+template <typename Pipeline, EventType Type, typename CallbackInfo>
+class CreatePipelineEventBase final : public TrackedEvent {
+ public:
+  static constexpr EventType kType = Type;
+
+  CreatePipelineEventBase(InstanceID instance, const CallbackInfo& callbackInfo)
+      : TrackedEvent(instance, callbackInfo.mode),
+        mCallback(callbackInfo.callback),
+        mUserdata1(callbackInfo.userdata1),
+        mUserdata2(callbackInfo.userdata2) {}
+
+  EventType GetType() override { return kType; }
+
+  void ReadyHook(WGPUCreatePipelineAsyncStatus status,
+                 Pipeline pipeline,
+                 const char* message) {
+    mStatus = status;
+    mPipeline.Acquire(pipeline);
+    if (message) {
+      mMessage = message;
+    }
+  }
+
+  void Complete(FutureID, EventCompletionType type) override {
+    if (type == EventCompletionType::Shutdown) {
+      mStatus = WGPUCreatePipelineAsyncStatus_InstanceDropped;
+      mMessage = "A valid external Instance reference no longer exists.";
+    }
+    if (mCallback) {
+      mCallback(mStatus,
+                mStatus == WGPUCreatePipelineAsyncStatus_Success
+                    ? ReturnToAPI(std::move(mPipeline))
+                    : nullptr,
+                ToOutputStringView(mMessage), mUserdata1, mUserdata2);
+    }
+  }
+
+ private:
+  using Callback = decltype(std::declval<CallbackInfo>().callback);
+  Callback mCallback = nullptr;
+  void* mUserdata1 = nullptr;
+  void* mUserdata2 = nullptr;
+
+  WGPUCreatePipelineAsyncStatus mStatus = WGPUCreatePipelineAsyncStatus_Success;
+  Ref<Pipeline> mPipeline;
+  std::string mMessage;
+};
+using CreateComputePipelineEvent =
+    CreatePipelineEventBase<WGPUComputePipeline,
+                            EventType::CreateComputePipeline,
+                            WGPUCreateComputePipelineAsyncCallbackInfo2>;
+using CreateRenderPipelineEvent =
+    CreatePipelineEventBase<WGPURenderPipeline,
+                            EventType::CreateRenderPipeline,
+                            WGPUCreateRenderPipelineAsyncCallbackInfo2>;
 
 class DeviceLostEvent final : public TrackedEvent {
  public:
@@ -651,8 +887,8 @@ class DeviceLostEvent final : public TrackedEvent {
       WGPUDevice device = mReason != WGPUDeviceLostReason_FailedCreation
                               ? mDevice.Get()
                               : nullptr;
-      mCallback(&device, mReason, mMessage ? mMessage->c_str() : nullptr,
-                mUserdata1, mUserdata2);
+      mCallback(&device, mReason, ToOutputStringView(mMessage), mUserdata1,
+                mUserdata2);
     }
   }
 
@@ -664,7 +900,114 @@ class DeviceLostEvent final : public TrackedEvent {
   Ref<WGPUDevice> mDevice;
 
   WGPUDeviceLostReason mReason;
-  std::optional<std::string> mMessage;
+  std::string mMessage;
+};
+
+class PopErrorScopeEvent final : public TrackedEvent {
+ public:
+  static constexpr EventType kType = EventType::PopErrorScope;
+
+  PopErrorScopeEvent(InstanceID instance,
+                     const WGPUPopErrorScopeCallbackInfo2& callbackInfo)
+      : TrackedEvent(instance, callbackInfo.mode),
+        mCallback(callbackInfo.callback),
+        mUserdata1(callbackInfo.userdata1),
+        mUserdata2(callbackInfo.userdata2) {}
+
+  EventType GetType() override { return kType; }
+
+  void ReadyHook(WGPUPopErrorScopeStatus status,
+                 WGPUErrorType errorType,
+                 const char* message) {
+    mStatus = status;
+    mErrorType = errorType;
+    if (message) {
+      mMessage = message;
+    }
+  }
+
+  void Complete(FutureID, EventCompletionType type) override {
+    if (type == EventCompletionType::Shutdown) {
+      mStatus = WGPUPopErrorScopeStatus_InstanceDropped;
+      mErrorType = WGPUErrorType_NoError;
+      mMessage = "A valid external Instance reference no longer exists.";
+    }
+    if (mCallback) {
+      mCallback(mStatus, mErrorType, ToOutputStringView(mMessage), mUserdata1,
+                mUserdata2);
+    }
+  }
+
+ private:
+  WGPUPopErrorScopeCallback2 mCallback = nullptr;
+  void* mUserdata1 = nullptr;
+  void* mUserdata2 = nullptr;
+
+  WGPUPopErrorScopeStatus mStatus = WGPUPopErrorScopeStatus_Success;
+  WGPUErrorType mErrorType = WGPUErrorType_Unknown;
+  std::string mMessage;
+};
+
+class MapAsyncEvent final : public TrackedEvent {
+ public:
+  static constexpr EventType kType = EventType::MapAsync;
+
+  MapAsyncEvent(InstanceID instance,
+                WGPUBuffer buffer,
+                const WGPUBufferMapCallbackInfo2& callbackInfo)
+      : TrackedEvent(instance, callbackInfo.mode),
+        mCallback(callbackInfo.callback),
+        mUserdata1(callbackInfo.userdata1),
+        mUserdata2(callbackInfo.userdata2),
+        mBuffer(buffer) {}
+
+  EventType GetType() override { return kType; }
+
+  void ReadyHook(WGPUMapAsyncStatus status, const char* message) {
+    // For mapping, this hook may be called more than once if we are not in
+    // Spontaneous mode. The precedence of which status should follow
+    // Success < Error < Aborted. Luckily, the enum is defined such that the
+    // precedence holds true already, so we can exploit that here.
+    static_assert(WGPUMapAsyncStatus_Success < WGPUMapAsyncStatus_Error);
+    static_assert(WGPUMapAsyncStatus_Error < WGPUMapAsyncStatus_Aborted);
+    if (status > mStatus) {
+      mStatus = status;
+      if (message) {
+        mMessage = message;
+      }
+    }
+  }
+
+  void Complete(FutureID futureID, EventCompletionType type) override {
+    if (type == EventCompletionType::Shutdown) {
+      mStatus = WGPUMapAsyncStatus_InstanceDropped;
+      mMessage = "A valid external Instance reference no longer exists.";
+    }
+
+    if (mBuffer->IsPendingMapRequest(futureID)) {
+      if (mStatus == WGPUMapAsyncStatus_Success) {
+        mBuffer->mMapState = WGPUBufferMapState_Mapped;
+      } else {
+        mBuffer->mMapState = WGPUBufferMapState_Unmapped;
+        mBuffer->mPendingMapRequest = {};
+      }
+    } else {
+      assert(mStatus != WGPUMapAsyncStatus_Success);
+    }
+
+    if (mCallback) {
+      mCallback(mStatus, ToOutputStringView(mMessage), mUserdata1, mUserdata2);
+    }
+  }
+
+ private:
+  WGPUBufferMapCallback2 mCallback = nullptr;
+  void* mUserdata1 = nullptr;
+  void* mUserdata2 = nullptr;
+
+  Ref<WGPUBuffer> mBuffer;
+  WGPUMapAsyncStatus mStatus = WGPUMapAsyncStatus_Success;
+  std::string mMessage;
 };
 
 class RequestAdapterEvent final : public TrackedEvent {
@@ -700,7 +1043,7 @@ class RequestAdapterEvent final : public TrackedEvent {
                 mStatus == WGPURequestAdapterStatus_Success
                     ? ReturnToAPI(std::move(mAdapter))
                     : nullptr,
-                mMessage ? mMessage->c_str() : nullptr, mUserdata1, mUserdata2);
+                ToOutputStringView(mMessage), mUserdata1, mUserdata2);
     }
   }
 
@@ -711,7 +1054,7 @@ class RequestAdapterEvent final : public TrackedEvent {
 
   WGPURequestAdapterStatus mStatus;
   Ref<WGPUAdapter> mAdapter;
-  std::optional<std::string> mMessage = std::nullopt;
+  std::string mMessage;
 };
 
 class RequestDeviceEvent final : public TrackedEvent {
@@ -747,7 +1090,7 @@ class RequestDeviceEvent final : public TrackedEvent {
                 mStatus == WGPURequestDeviceStatus_Success
                     ? ReturnToAPI(std::move(mDevice))
                     : nullptr,
-                mMessage ? mMessage->c_str() : nullptr, mUserdata1, mUserdata2);
+                ToOutputStringView(mMessage), mUserdata1, mUserdata2);
     }
   }
 
@@ -758,8 +1101,155 @@ class RequestDeviceEvent final : public TrackedEvent {
 
   WGPURequestDeviceStatus mStatus;
   Ref<WGPUDevice> mDevice;
-  std::optional<std::string> mMessage = std::nullopt;
+  std::string mMessage;
 };
+
+class WorkDoneEvent final : public TrackedEvent {
+ public:
+  static constexpr EventType kType = EventType::WorkDone;
+
+  WorkDoneEvent(InstanceID instance,
+                const WGPUQueueWorkDoneCallbackInfo2& callbackInfo)
+      : TrackedEvent(instance, callbackInfo.mode),
+        mCallback(callbackInfo.callback),
+        mUserdata1(callbackInfo.userdata1),
+        mUserdata2(callbackInfo.userdata2) {}
+
+  EventType GetType() override { return kType; }
+
+  void ReadyHook(WGPUQueueWorkDoneStatus status) { mStatus = status; }
+
+  void Complete(FutureID, EventCompletionType type) override {
+    if (type == EventCompletionType::Shutdown) {
+      mStatus = WGPUQueueWorkDoneStatus_InstanceDropped;
+    }
+    if (mCallback) {
+      mCallback(mStatus, mUserdata1, mUserdata2);
+    }
+  }
+
+ private:
+  WGPUQueueWorkDoneCallback2 mCallback = nullptr;
+  void* mUserdata1 = nullptr;
+  void* mUserdata2 = nullptr;
+
+  WGPUQueueWorkDoneStatus mStatus;
+};
+
+// ----------------------------------------------------------------------------
+// Definitions for C++ emwgpu functions (callable from library_webgpu.js)
+// ----------------------------------------------------------------------------
+extern "C" {
+
+// Object creation helpers that all return a pointer which is used as a key
+// in the JS object table in library_webgpu.js.
+#define DEFINE_EMWGPU_DEFAULT_CREATE(Name)                             \
+  WGPU##Name emwgpuCreate##Name(const EventSource* source = nullptr) { \
+    return new WGPU##Name##Impl(source);                               \
+  }
+WGPU_PASSTHROUGH_OBJECTS(DEFINE_EMWGPU_DEFAULT_CREATE)
+
+WGPUAdapter emwgpuCreateAdapter(const EventSource* source) {
+  return new WGPUAdapterImpl(source);
+}
+
+WGPUBuffer emwgpuCreateBuffer(const EventSource* source,
+                              bool mappedAtCreation = false) {
+  return new WGPUBufferImpl(source, mappedAtCreation);
+}
+
+WGPUDevice emwgpuCreateDevice(const EventSource* source, WGPUQueue queue) {
+  return new WGPUDeviceImpl(source, queue);
+}
+
+WGPUQueue emwgpuCreateQueue(const EventSource* source) {
+  return new WGPUQueueImpl(source);
+}
+
+WGPUShaderModule emwgpuCreateShaderModule(const EventSource* source) {
+  return new WGPUShaderModuleImpl(source);
+}
+
+// Future event callbacks.
+void emwgpuOnCompilationInfoCompleted(double futureId,
+                                      WGPUCompilationInfoRequestStatus status,
+                                      WGPUCompilationInfo* compilationInfo) {
+  GetEventManager().SetFutureReady<CompilationInfoEvent>(futureId, status,
+                                                         compilationInfo);
+}
+void emwgpuOnCreateComputePipelineCompleted(
+    double futureId,
+    WGPUCreatePipelineAsyncStatus status,
+    WGPUComputePipeline pipeline,
+    const char* message) {
+  GetEventManager().SetFutureReady<CreateComputePipelineEvent>(
+      futureId, status, pipeline, message);
+}
+void emwgpuOnCreateRenderPipelineCompleted(double futureId,
+                                           WGPUCreatePipelineAsyncStatus status,
+                                           WGPURenderPipeline pipeline,
+                                           const char* message) {
+  GetEventManager().SetFutureReady<CreateRenderPipelineEvent>(
+      futureId, status, pipeline, message);
+}
+void emwgpuOnDeviceLostCompleted(double futureId,
+                                 WGPUDeviceLostReason reason,
+                                 const char* message) {
+  GetEventManager().SetFutureReady<DeviceLostEvent>(futureId, reason, message);
+}
+void emwgpuOnMapAsyncCompleted(double futureId,
+                               WGPUMapAsyncStatus status,
+                               const char* message) {
+  GetEventManager().SetFutureReady<MapAsyncEvent>(futureId, status, message);
+}
+void emwgpuOnPopErrorScopeCompleted(double futureId,
+                                    WGPUPopErrorScopeStatus status,
+                                    WGPUErrorType errorType,
+                                    const char* message) {
+  GetEventManager().SetFutureReady<PopErrorScopeEvent>(futureId, status,
+                                                       errorType, message);
+}
+void emwgpuOnRequestAdapterCompleted(double futureId,
+                                     WGPURequestAdapterStatus status,
+                                     WGPUAdapter adapter,
+                                     const char* message) {
+  GetEventManager().SetFutureReady<RequestAdapterEvent>(futureId, status,
+                                                        adapter, message);
+}
+void emwgpuOnRequestDeviceCompleted(double futureId,
+                                    WGPURequestDeviceStatus status,
+                                    WGPUDevice device,
+                                    const char* message) {
+  // This handler should always have a device since we pre-allocate it before
+  // calling out to JS.
+  assert(device);
+  if (status == WGPURequestDeviceStatus_Success) {
+    GetEventManager().SetFutureReady<RequestDeviceEvent>(futureId, status,
+                                                         device, message);
+  } else {
+    // If the request failed, we need to resolve the DeviceLostEvent.
+    GetEventManager().SetFutureReady<RequestDeviceEvent>(futureId, status,
+                                                         nullptr, message);
+    GetEventManager().SetFutureReady<DeviceLostEvent>(
+        device->GetLostFuture().id, WGPUDeviceLostReason_FailedCreation,
+        "Device failed at creation.");
+  }
+}
+void emwgpuOnWorkDoneCompleted(double futureId,
+                               WGPUQueueWorkDoneStatus status) {
+  GetEventManager().SetFutureReady<WorkDoneEvent>(futureId, status);
+}
+
+// Uncaptured error handler is similar to the Future event callbacks, but it
+// doesn't go through the EventManager and just calls the callback on the Device
+// immediately.
+void emwgpuOnUncapturedError(WGPUDevice device,
+                             WGPUErrorType type,
+                             char const* message) {
+  device->OnUncapturedError(type, message);
+}
+
+}  // extern "C"
 
 // ----------------------------------------------------------------------------
 // WGPU struct implementations.
@@ -770,7 +1260,155 @@ class RequestDeviceEvent final : public TrackedEvent {
 // ----------------------------------------------------------------------------
 
 WGPUAdapterImpl::WGPUAdapterImpl(const EventSource* source)
-    : EventSource(source->GetInstanceId()) {}
+    : EventSource(source) {}
+
+// ----------------------------------------------------------------------------
+// WGPUBuffer implementations.
+// ----------------------------------------------------------------------------
+
+WGPUBufferImpl::WGPUBufferImpl(const EventSource* source, bool mappedAtCreation)
+    : EventSource(source),
+      mMapState(mappedAtCreation ? WGPUBufferMapState_Mapped
+                                 : WGPUBufferMapState_Unmapped) {
+  if (mappedAtCreation) {
+    mPendingMapRequest = {kNullFutureId, WGPUMapMode_Write};
+  }
+}
+
+void WGPUBufferImpl::Destroy() {
+  emwgpuBufferDestroy(this);
+  AbortPendingMap("Buffer was destroyed before mapping was resolved.");
+}
+
+const void* WGPUBufferImpl::GetConstMappedRange(size_t offset, size_t size) {
+  if (mMapState != WGPUBufferMapState_Mapped) {
+    return nullptr;
+  }
+  return emwgpuBufferGetConstMappedRange(this, offset, size);
+}
+
+WGPUBufferMapState WGPUBufferImpl::GetMapState() const {
+  return mMapState;
+}
+
+void* WGPUBufferImpl::GetMappedRange(size_t offset, size_t size) {
+  if (mMapState != WGPUBufferMapState_Mapped) {
+    return nullptr;
+  }
+  if (mPendingMapRequest.mode != WGPUMapMode_Write) {
+    assert(false);
+    return nullptr;
+  }
+
+  return emwgpuBufferGetMappedRange(this, offset, size);
+}
+
+WGPUFuture WGPUBufferImpl::MapAsync(WGPUMapMode mode,
+                                    size_t offset,
+                                    size_t size,
+                                    WGPUBufferMapCallbackInfo2 callbackInfo) {
+  auto [futureId, tracked] = GetEventManager().TrackEvent(
+      std::make_unique<MapAsyncEvent>(GetInstanceId(), this, callbackInfo));
+  if (!tracked) {
+    return WGPUFuture{kNullFutureId};
+  }
+
+  if (mMapState == WGPUBufferMapState_Pending) {
+    GetEventManager().SetFutureReady<MapAsyncEvent>(
+        futureId, WGPUMapAsyncStatus_Error,
+        "Buffer already has an outstanding map pending.");
+    return WGPUFuture{futureId};
+  }
+
+  assert(mPendingMapRequest.mode == WGPUMapMode_None);
+  mMapState = WGPUBufferMapState_Pending;
+  mPendingMapRequest = {futureId, mode};
+
+  emwgpuBufferMapAsync(this, futureId, mode, offset, size);
+  return WGPUFuture{futureId};
+}
+
+void WGPUBufferImpl::Unmap() {
+  emwgpuBufferUnmap(this);
+  AbortPendingMap("Buffer was unmapped before mapping was resolved.");
+}
+
+bool WGPUBufferImpl::IsPendingMapRequest(FutureID futureID) const {
+  assert(futureID != kNullFutureId);
+  return mPendingMapRequest.futureID == futureID;
+}
+
+void WGPUBufferImpl::AbortPendingMap(const char* message) {
+  if (mMapState == WGPUBufferMapState_Unmapped) {
+    return;
+  }
+
+  mMapState = WGPUBufferMapState_Unmapped;
+
+  FutureID futureId = mPendingMapRequest.futureID;
+  if (futureId == kNullFutureId) {
+    // If we were mappedAtCreation, then there is no pending map request so we
+    // don't need to resolve any futures.
+    return;
+  }
+  mPendingMapRequest = {};
+  GetEventManager().SetFutureReady<MapAsyncEvent>(
+      futureId, WGPUMapAsyncStatus_Aborted, message);
+}
+
+void WGPUBufferImpl::WillDropLastExternalRef() {
+  AbortPendingMap("Buffer was destroyed before mapping was resolved.");
+}
+
+// ----------------------------------------------------------------------------
+// WGPUDeviceImpl implementations.
+// ----------------------------------------------------------------------------
+
+WGPUDeviceImpl::WGPUDeviceImpl(const EventSource* source,
+                               const WGPUDeviceDescriptor* descriptor,
+                               WGPUQueue queue)
+    : EventSource(source),
+      mUncapturedErrorCallbackInfo(descriptor->uncapturedErrorCallbackInfo2) {
+  // Create the DeviceLostEvent now.
+  std::tie(mDeviceLostFutureId, std::ignore) =
+      GetEventManager().TrackEvent(std::make_unique<DeviceLostEvent>(
+          source->GetInstanceId(), this, descriptor->deviceLostCallbackInfo2));
+  mQueue.Acquire(queue);
+}
+
+WGPUDeviceImpl::WGPUDeviceImpl(const EventSource* source, WGPUQueue queue)
+    : EventSource(source) {
+  mQueue.Acquire(queue);
+}
+
+void WGPUDeviceImpl::Destroy() {
+  emwgpuDeviceDestroy(this);
+}
+
+WGPUQueue WGPUDeviceImpl::GetQueue() const {
+  auto queue = mQueue;
+  return ReturnToAPI(std::move(queue));
+}
+
+WGPUFuture WGPUDeviceImpl::GetLostFuture() const {
+  return WGPUFuture{mDeviceLostFutureId};
+}
+
+void WGPUDeviceImpl::OnUncapturedError(WGPUErrorType type,
+                                       char const* message) {
+  if (mUncapturedErrorCallbackInfo.callback) {
+    WGPUDeviceImpl* device = this;
+    mUncapturedErrorCallbackInfo.callback(
+        &device, type,
+        WGPUStringView{.data = message, .length = std::strlen(message)},
+        mUncapturedErrorCallbackInfo.userdata1,
+        mUncapturedErrorCallbackInfo.userdata2);
+  }
+}
+
+void WGPUDeviceImpl::WillDropLastExternalRef() {
+  Destroy();
+}
 
 // ----------------------------------------------------------------------------
 // WGPUInstanceImpl implementations.
@@ -799,117 +1437,40 @@ InstanceID WGPUInstanceImpl::GetNextInstanceId() {
 }
 
 // ----------------------------------------------------------------------------
-// WGPUDeviceImpl implementations.
+// WGPUQueueImpl implementations.
 // ----------------------------------------------------------------------------
 
-WGPUDeviceImpl::WGPUDeviceImpl(const EventSource* source,
-                               const WGPUDeviceDescriptor* descriptor,
-                               WGPUQueue queue)
-    : EventSource(source->GetInstanceId()),
-      mUncapturedErrorCallbackInfo(descriptor->uncapturedErrorCallbackInfo2) {
-  // Create the DeviceLostEvent now.
-  std::tie(mDeviceLostFutureId, std::ignore) =
-      GetEventManager().TrackEvent(std::make_unique<DeviceLostEvent>(
-          source->GetInstanceId(), this, descriptor->deviceLostCallbackInfo2));
-  mQueue.Acquire(queue);
-}
-
-WGPUDeviceImpl::WGPUDeviceImpl(const EventSource* source, WGPUQueue queue)
-    : EventSource(source->GetInstanceId()) {
-  mQueue.Acquire(queue);
-}
-
-WGPUQueue WGPUDeviceImpl::GetQueue() const {
-  auto queue = mQueue;
-  return ReturnToAPI(std::move(queue));
-}
-
-void WGPUDeviceImpl::OnDeviceLost(WGPUDeviceLostReason reason,
-                                  const char* message) {
-  if (mDeviceLostFutureId != kNullFutureId) {
-    GetEventManager().SetFutureReady<DeviceLostEvent>(mDeviceLostFutureId,
-                                                      reason, message);
-  }
-  mDeviceLostFutureId = kNullFutureId;
-}
-
-void WGPUDeviceImpl::OnUncapturedError(WGPUErrorType type,
-                                       char const* message) {
-  if (mUncapturedErrorCallbackInfo.callback) {
-    WGPUDeviceImpl* device = this;
-    mUncapturedErrorCallbackInfo.callback(
-        &device, type, message, mUncapturedErrorCallbackInfo.userdata1,
-        mUncapturedErrorCallbackInfo.userdata2);
-  }
-}
-
-void WGPUDeviceImpl::WillDropLastExternalRef() {
-  OnDeviceLost(WGPUDeviceLostReason_Destroyed, "Device was destroyed.");
-}
+WGPUQueueImpl::WGPUQueueImpl(const EventSource* source) : EventSource(source) {}
 
 // ----------------------------------------------------------------------------
-// Definitions for C++ emwgpu functions (callable from library_webgpu.js)
+// WGPUShaderModuleImpl implementations.
 // ----------------------------------------------------------------------------
-extern "C" {
 
-// Object creation helpers that all return a pointer which is used as a key
-// in the JS object table in library_webgpu.js.
-#define DEFINE_EMWGPU_DEFAULT_CREATE(Name) \
-  WGPU##Name emwgpuCreate##Name() {        \
-    return new WGPU##Name##Impl();         \
+WGPUShaderModuleImpl::WGPUShaderModuleImpl(const EventSource* source)
+    : EventSource(source) {}
+
+WGPUFuture WGPUShaderModuleImpl::GetCompilationInfo(
+    WGPUCompilationInfoCallbackInfo2 callbackInfo) {
+  auto [futureId, tracked] =
+      GetEventManager().TrackEvent(std::make_unique<CompilationInfoEvent>(
+          GetInstanceId(), this, callbackInfo));
+  if (!tracked) {
+    return WGPUFuture{kNullFutureId};
   }
-WGPU_PASSTHROUGH_OBJECTS(DEFINE_EMWGPU_DEFAULT_CREATE)
 
-WGPUAdapter emwgpuCreateAdapter(WGPUInstance instance) {
-  return new WGPUAdapterImpl(instance);
-}
-
-WGPUDevice emwgpuCreateDevice(WGPUInstance instance, WGPUQueue queue) {
-  return new WGPUDeviceImpl(instance, queue);
-}
-
-// Future event callbacks.
-void emwgpuOnDeviceLostCompleted(FutureID futureId,
-                                 WGPUDeviceLostReason reason,
-                                 const char* message) {
-  GetEventManager().SetFutureReady<DeviceLostEvent>(futureId, reason, message);
-}
-void emwgpuOnRequestAdapterCompleted(FutureID futureId,
-                                     WGPURequestAdapterStatus status,
-                                     WGPUAdapter adapter,
-                                     const char* message) {
-  GetEventManager().SetFutureReady<RequestAdapterEvent>(futureId, status,
-                                                        adapter, message);
-}
-void emwgpuOnRequestDeviceCompleted(FutureID futureId,
-                                    WGPURequestDeviceStatus status,
-                                    WGPUDevice device,
-                                    const char* message) {
-  // This handler should always have a device since we pre-allocate it before
-  // calling out to JS.
-  assert(device);
-  if (status == WGPURequestDeviceStatus_Success) {
-    GetEventManager().SetFutureReady<RequestDeviceEvent>(futureId, status,
-                                                         device, message);
+  // If we already have the compilation info cached, we don't need to call into
+  // JS.
+  if (mCompilationInfo) {
+    emwgpuOnCompilationInfoCompleted(futureId,
+                                     WGPUCompilationInfoRequestStatus_Success,
+                                     mCompilationInfo.get());
   } else {
-    // If the request failed, we need to resolve the DeviceLostEvent.
-    device->OnDeviceLost(WGPUDeviceLostReason_FailedCreation,
-                         "Device failed at creation.");
-    GetEventManager().SetFutureReady<RequestDeviceEvent>(futureId, status,
-                                                         nullptr, message);
+    WGPUCompilationInfo* compilationInfo = new WGPUCompilationInfo{
+        .nextInChain = nullptr, .messageCount = 0, .messages = nullptr};
+    emwgpuShaderModuleGetCompilationInfo(this, futureId, compilationInfo);
   }
+  return WGPUFuture{futureId};
 }
-
-// Uncaptured error handler is similar to the Future event callbacks, but it
-// doesn't go through the EventManager and just calls the callback on the Device
-// immediately.
-void emwgpuOnUncapturedError(WGPUDevice device,
-                             WGPUErrorType type,
-                             char const* message) {
-  device->OnUncapturedError(type, message);
-}
-
-}  // extern "C"
 
 // ----------------------------------------------------------------------------
 // WebGPU function definitions, with methods organized by "class". Note these
@@ -921,7 +1482,10 @@ void emwgpuOnUncapturedError(WGPUDevice device,
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
-// Common AddRef/Release APIs are batch generated via X macros for all objects.
+// Common APIs are batch generated via X macros for all objects, including:
+//   - AddRef
+//   - Release
+//   - SetLabel
 // ----------------------------------------------------------------------------
 
 #define DEFINE_WGPU_DEFAULT_ADDREF_RELEASE(Name) \
@@ -929,28 +1493,44 @@ void emwgpuOnUncapturedError(WGPUDevice device,
     o->AddRef();                                 \
   }                                              \
   void wgpu##Name##Release(WGPU##Name o) {       \
-    o->Release();                                \
+    if (o->Release()) {                          \
+      delete o;                                  \
+    }                                            \
   }
-WGPU_REFCOUNTED_OBJECTS(DEFINE_WGPU_DEFAULT_ADDREF_RELEASE)
+WGPU_OBJECTS(DEFINE_WGPU_DEFAULT_ADDREF_RELEASE)
+
+#define DEFINE_WGPU_DEFAULT_SETLABEL(Name)                        \
+  void wgpu##Name##SetLabel(WGPU##Name o, WGPUStringView label) { \
+    emwgpuSetLabel(o, label.data, label.length);                  \
+  }
+WGPU_OBJECTS(DEFINE_WGPU_DEFAULT_SETLABEL)
+
+// ----------------------------------------------------------------------------
+// FreeMember functions
+// ----------------------------------------------------------------------------
+
+void wgpuAdapterInfoFreeMembers(WGPUAdapterInfo value) {
+  // The strings are allocated via a single malloc, so freeing the first pointer
+  // frees all of the strings in the struct.
+  free(const_cast<char*>(value.vendor.data));
+}
+
+void wgpuSupportedFeaturesFreeMembers(WGPUSupportedFeatures value) {
+  free(const_cast<WGPUFeatureName*>(value.features));
+}
+
+void wgpuSurfaceCapabilitiesFreeMembers(WGPUSurfaceCapabilities) {
+  // wgpuSurfaceCapabilities doesn't currently allocate anything.
+}
 
 // ----------------------------------------------------------------------------
 // Standalone (non-method) functions
 // ----------------------------------------------------------------------------
 
-void wgpuAdapterInfoFreeMembers(WGPUAdapterInfo value) {
-  free(const_cast<char*>(value.vendor));
-  free(const_cast<char*>(value.architecture));
-  free(const_cast<char*>(value.device));
-  free(const_cast<char*>(value.description));
-}
-
-WGPUInstance wgpuCreateInstance([[maybe_unused]] const WGPUInstanceDescriptor* descriptor) {
+WGPUInstance wgpuCreateInstance(
+    [[maybe_unused]] const WGPUInstanceDescriptor* descriptor) {
   assert(descriptor == nullptr);  // descriptor not implemented yet
   return new WGPUInstanceImpl();
-}
-
-void wgpuSurfaceCapabilitiesFreeMembers(WGPUSurfaceCapabilities) {
-  // wgpuSurfaceCapabilities doesn't currently allocate anything.
 }
 
 // ----------------------------------------------------------------------------
@@ -964,7 +1544,7 @@ void wgpuAdapterRequestDevice(WGPUAdapter adapter,
   WGPURequestDeviceCallbackInfo2 callbackInfo = {};
   callbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
   callbackInfo.callback = [](WGPURequestDeviceStatus status, WGPUDevice device,
-                             char const* message, void* callback,
+                             WGPUStringView message, void* callback,
                              void* userdata) {
     auto cb = reinterpret_cast<WGPURequestDeviceCallback>(callback);
     cb(status, device, message, userdata);
@@ -993,12 +1573,9 @@ WGPUFuture wgpuAdapterRequestDevice2(
 
   // For RequestDevice, we always create a Device and Queue up front. The
   // Device is also immediately associated with the DeviceLostEvent.
-  WGPUQueue queue = new WGPUQueueImpl();
+  WGPUQueue queue = new WGPUQueueImpl(adapter);
   WGPUDevice device = new WGPUDeviceImpl(adapter, descriptor, queue);
-
-  auto [deviceLostFutureId, _] = GetEventManager().TrackEvent(
-      std::make_unique<DeviceLostEvent>(adapter->GetInstanceId(), device,
-                                        descriptor->deviceLostCallbackInfo2));
+  auto deviceLostFutureId = device->GetLostFuture().id;
 
   emwgpuAdapterRequestDevice(adapter, futureId, deviceLostFutureId, device,
                              queue, descriptor);
@@ -1016,6 +1593,36 @@ WGPUFuture wgpuAdapterRequestDevice2(
 // ----------------------------------------------------------------------------
 // Methods of Buffer
 // ----------------------------------------------------------------------------
+
+void wgpuBufferDestroy(WGPUBuffer buffer) {
+  buffer->Destroy();
+}
+
+const void* wgpuBufferGetConstMappedRange(WGPUBuffer buffer,
+                                          size_t offset,
+                                          size_t size) {
+  return buffer->GetConstMappedRange(offset, size);
+}
+
+WGPUBufferMapState wgpuBufferGetMapState(WGPUBuffer buffer) {
+  return buffer->GetMapState();
+}
+
+void* wgpuBufferGetMappedRange(WGPUBuffer buffer, size_t offset, size_t size) {
+  return buffer->GetMappedRange(offset, size);
+}
+
+WGPUFuture wgpuBufferMapAsync2(WGPUBuffer buffer,
+                               WGPUMapMode mode,
+                               size_t offset,
+                               size_t size,
+                               WGPUBufferMapCallbackInfo2 callbackInfo) {
+  return buffer->MapAsync(mode, offset, size, callbackInfo);
+}
+
+void wgpuBufferUnmap(WGPUBuffer buffer) {
+  buffer->Unmap();
+}
 
 // ----------------------------------------------------------------------------
 // Methods of CommandBuffer
@@ -1037,8 +1644,114 @@ WGPUFuture wgpuAdapterRequestDevice2(
 // Methods of Device
 // ----------------------------------------------------------------------------
 
+WGPUBuffer wgpuDeviceCreateBuffer(WGPUDevice device,
+                                  const WGPUBufferDescriptor* descriptor) {
+  WGPUBuffer buffer = new WGPUBufferImpl(device, descriptor->mappedAtCreation);
+  emwgpuDeviceCreateBuffer(device, descriptor, buffer);
+  return buffer;
+}
+
+void wgpuDeviceCreateComputePipelineAsync(
+    WGPUDevice device,
+    const WGPUComputePipelineDescriptor* descriptor,
+    WGPUCreateComputePipelineAsyncCallback callback,
+    void* userdata) {
+  WGPUCreateComputePipelineAsyncCallbackInfo2 callbackInfo = {};
+  callbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
+  callbackInfo.callback = [](WGPUCreatePipelineAsyncStatus status,
+                             WGPUComputePipeline pipeline,
+                             WGPUStringView message, void* callback,
+                             void* userdata) {
+    auto cb =
+        reinterpret_cast<WGPUCreateComputePipelineAsyncCallback>(callback);
+    cb(status, pipeline, message, userdata);
+  };
+  callbackInfo.userdata1 = reinterpret_cast<void*>(callback);
+  callbackInfo.userdata2 = userdata;
+  wgpuDeviceCreateComputePipelineAsync2(device, descriptor, callbackInfo);
+}
+
+WGPUFuture wgpuDeviceCreateComputePipelineAsync2(
+    WGPUDevice device,
+    const WGPUComputePipelineDescriptor* descriptor,
+    WGPUCreateComputePipelineAsyncCallbackInfo2 callbackInfo) {
+  auto [futureId, tracked] =
+      GetEventManager().TrackEvent(std::make_unique<CreateComputePipelineEvent>(
+          device->GetInstanceId(), callbackInfo));
+  if (!tracked) {
+    return WGPUFuture{kNullFutureId};
+  }
+
+  emwgpuDeviceCreateComputePipelineAsync(device, futureId, descriptor);
+  return WGPUFuture{futureId};
+}
+
+void wgpuDeviceCreateRenderPipelineAsync(
+    WGPUDevice device,
+    const WGPURenderPipelineDescriptor* descriptor,
+    WGPUCreateRenderPipelineAsyncCallback callback,
+    void* userdata) {
+  WGPUCreateRenderPipelineAsyncCallbackInfo2 callbackInfo = {};
+  callbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
+  callbackInfo.callback = [](WGPUCreatePipelineAsyncStatus status,
+                             WGPURenderPipeline pipeline,
+                             WGPUStringView message, void* callback,
+                             void* userdata) {
+    auto cb = reinterpret_cast<WGPUCreateRenderPipelineAsyncCallback>(callback);
+    cb(status, pipeline, message, userdata);
+  };
+  callbackInfo.userdata1 = reinterpret_cast<void*>(callback);
+  callbackInfo.userdata2 = userdata;
+  wgpuDeviceCreateRenderPipelineAsync2(device, descriptor, callbackInfo);
+}
+
+WGPUFuture wgpuDeviceCreateRenderPipelineAsync2(
+    WGPUDevice device,
+    const WGPURenderPipelineDescriptor* descriptor,
+    WGPUCreateRenderPipelineAsyncCallbackInfo2 callbackInfo) {
+  auto [futureId, tracked] =
+      GetEventManager().TrackEvent(std::make_unique<CreateRenderPipelineEvent>(
+          device->GetInstanceId(), callbackInfo));
+  if (!tracked) {
+    return WGPUFuture{kNullFutureId};
+  }
+
+  emwgpuDeviceCreateRenderPipelineAsync(device, futureId, descriptor);
+  return WGPUFuture{futureId};
+}
+
+WGPUShaderModule wgpuDeviceCreateShaderModule(
+    WGPUDevice device,
+    const WGPUShaderModuleDescriptor* descriptor) {
+  WGPUShaderModule shader = new WGPUShaderModuleImpl(device);
+  emwgpuDeviceCreateShaderModule(device, descriptor, shader);
+  return shader;
+}
+
+void wgpuDeviceDestroy(WGPUDevice device) {
+  device->Destroy();
+}
+
+WGPUFuture wgpuDeviceGetLostFuture(WGPUDevice device) {
+  return device->GetLostFuture();
+}
+
 WGPUQueue wgpuDeviceGetQueue(WGPUDevice device) {
   return device->GetQueue();
+}
+
+WGPUFuture wgpuDevicePopErrorScope2(
+    WGPUDevice device,
+    WGPUPopErrorScopeCallbackInfo2 callbackInfo) {
+  auto [futureId, tracked] =
+      GetEventManager().TrackEvent(std::make_unique<PopErrorScopeEvent>(
+          device->GetInstanceId(), callbackInfo));
+  if (!tracked) {
+    return WGPUFuture{kNullFutureId};
+  }
+
+  emwgpuDevicePopErrorScope(device, futureId);
+  return WGPUFuture{futureId};
 }
 
 // ----------------------------------------------------------------------------
@@ -1056,7 +1769,7 @@ void wgpuInstanceRequestAdapter(WGPUInstance instance,
   WGPURequestAdapterCallbackInfo2 callbackInfo = {};
   callbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
   callbackInfo.callback = [](WGPURequestAdapterStatus status,
-                             WGPUAdapter adapter, char const* message,
+                             WGPUAdapter adapter, WGPUStringView message,
                              void* callback, void* userdata) {
     auto cb = reinterpret_cast<WGPURequestAdapterCallback>(callback);
     cb(status, adapter, message, userdata);
@@ -1100,6 +1813,19 @@ WGPUWaitStatus wgpuInstanceWaitAny(WGPUInstance instance,
 // Methods of Queue
 // ----------------------------------------------------------------------------
 
+WGPUFuture wgpuQueueOnSubmittedWorkDone2(
+    WGPUQueue queue,
+    WGPUQueueWorkDoneCallbackInfo2 callbackInfo) {
+  auto [futureId, tracked] = GetEventManager().TrackEvent(
+      std::make_unique<WorkDoneEvent>(queue->GetInstanceId(), callbackInfo));
+  if (!tracked) {
+    return WGPUFuture{kNullFutureId};
+  }
+
+  emwgpuQueueOnSubmittedWorkDone(queue, futureId);
+  return WGPUFuture{futureId};
+}
+
 // ----------------------------------------------------------------------------
 // Methods of RenderBundle
 // ----------------------------------------------------------------------------
@@ -1124,6 +1850,12 @@ WGPUWaitStatus wgpuInstanceWaitAny(WGPUInstance instance,
 // Methods of ShaderModule
 // ----------------------------------------------------------------------------
 
+WGPUFuture wgpuShaderModuleGetCompilationInfo2(
+    WGPUShaderModule shader,
+    WGPUCompilationInfoCallbackInfo2 callbackInfo) {
+  return shader->GetCompilationInfo(callbackInfo);
+}
+
 // ----------------------------------------------------------------------------
 // Methods of Surface
 // ----------------------------------------------------------------------------
@@ -1143,7 +1875,7 @@ WGPUStatus wgpuSurfaceGetCapabilities(WGPUSurface surface,
     WGPUTextureFormat_RGBA8Unorm,
     WGPUTextureFormat_RGBA16Float,
   };
-  WGPUTextureFormat preferredFormat = wgpuSurfaceGetPreferredFormat(surface, adapter);
+  WGPUTextureFormat preferredFormat = emwgpuGetPreferredFormat();
   switch (preferredFormat) {
     case WGPUTextureFormat_RGBA8Unorm:
       capabilities->formatCount = kSurfaceFormatsRGBAFirst.size();
@@ -1175,10 +1907,6 @@ WGPUStatus wgpuSurfaceGetCapabilities(WGPUSurface surface,
 
   return WGPUStatus_Success;
 }
-
-// ----------------------------------------------------------------------------
-// Methods of SwapChain
-// ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
 // Methods of Texture

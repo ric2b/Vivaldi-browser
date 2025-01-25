@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/cloud/cloud_policy_test_utils.h"
+#include "chrome/browser/policy/policy_util.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -107,12 +109,11 @@ struct FeaturesTestParam {
 
 std::variant<std::unique_ptr<invalidation::InvalidationService>,
              std::unique_ptr<invalidation::InvalidationListener>>
-CreateInvalidationServiceForSenderId(std::string fcm_sender_id,
-                                     std::string /*project_id*/,
+CreateInvalidationServiceForSenderId(std::string project_number,
                                      std::string /*log_prefix*/) {
-  if (base::FeatureList::IsEnabled(
-          invalidation::kInvalidationsWithDirectMessages)) {
-    return std::make_unique<invalidation::FakeInvalidationListener>();
+  if (invalidation::IsInvalidationListenerSupported(project_number)) {
+    return std::make_unique<invalidation::FakeInvalidationListener>(
+        std::move(project_number));
   }
   return std::make_unique<invalidation::FakeInvalidationService>();
 }
@@ -372,8 +373,8 @@ class CloudPolicyTest : public PlatformBrowserTest,
         invalidation::ProfileInvalidationProviderFactory::GetInstance()
             ->GetForProfile(profile())
             ->GetInvalidationServiceOrListener(
-                kPolicyFCMInvalidationSenderID,
-                invalidation::InvalidationListener::kProjectNumberEnterprise));
+                std::string(GetPolicyInvalidationProjectNumber(
+                    PolicyInvalidationScope::kUser))));
   }
 
   void SetServerPolicy(const em::CloudPolicySettings& settings,
@@ -596,13 +597,14 @@ IN_PROC_BROWSER_TEST_P(CloudPolicyTest, FetchPolicyWithRotatedKey) {
 INSTANTIATE_TEST_SUITE_P(
     /* no prefix */,
     CloudPolicyTest,
-    testing::Values(
-        FeaturesTestParam{},
-        FeaturesTestParam{.enabled_features =
-                              {invalidation::kInvalidationsWithDirectMessages}},
-        FeaturesTestParam{.enabled_features = {policy::kPolicyFetchWithSha256}},
-        FeaturesTestParam{
-            .disabled_features = {policy::kPolicyFetchWithSha256}}));
+    testing::Values(FeaturesTestParam{},
+                    FeaturesTestParam{
+                        .enabled_features =
+                            {kUserPolicyInvalidationWithDirectMessagesEnabled}},
+                    FeaturesTestParam{
+                        .enabled_features = {policy::kPolicyFetchWithSha256}},
+                    FeaturesTestParam{.disabled_features = {
+                                          policy::kPolicyFetchWithSha256}}));
 
 TEST(CloudPolicyProtoTest, VerifyProtobufEquivalence) {
   // There are 2 protobufs that can be used for user cloud policy:

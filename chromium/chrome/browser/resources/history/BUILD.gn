@@ -51,6 +51,7 @@ build_webui("build") {
   ]
 
   icons_html_files = [ "shared_icons.html" ]
+  html_to_wrapper_template = "detect"
 
   ts_composite = true
   ts_definitions = [
@@ -58,10 +59,13 @@ build_webui("build") {
     "//tools/typescript/definitions/metrics_private.d.ts",
   ]
 
-  mojo_files_deps = [
-    "//ui/webui/resources/cr_components/commerce:mojo_bindings_ts__generator",
+  mojo_files_deps =
+      [ "//components/commerce/core/mojom:mojo_bindings_ts__generator" ]
+  mojo_files = [
+    "$root_gen_dir/components/commerce/core/mojom/product_specifications.mojom-webui.ts",
+    "$root_gen_dir/components/commerce/core/mojom/shared.mojom-webui.ts",
+    "$root_gen_dir/components/commerce/core/mojom/shopping_service.mojom-webui.ts",
   ]
-  mojo_files = [ "$root_gen_dir/ui/webui/resources/cr_components/commerce/shopping_service.mojom-webui.ts" ]
 
   ts_deps = [
     "//third_party/polymer/v3_0:library",

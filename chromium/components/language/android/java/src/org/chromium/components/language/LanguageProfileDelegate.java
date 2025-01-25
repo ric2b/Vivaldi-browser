@@ -10,9 +10,6 @@ import java.util.concurrent.TimeoutException;
 
 /** Interface to get language profile data for device. */
 public interface LanguageProfileDelegate {
-    /** @return True if ULP is currently supported. */
-    public boolean isULPSupported();
-
     /**
      * @param accountName Account to get profile or null if the default profile should be returned.
      * @param timeoutInSeconds Seconds to wait before timing out on call to device.

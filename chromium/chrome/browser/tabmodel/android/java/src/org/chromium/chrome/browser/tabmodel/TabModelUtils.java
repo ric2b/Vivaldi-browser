@@ -9,19 +9,31 @@ import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.OneShotCallback;
+import org.chromium.base.supplier.OneshotSupplier;
+import org.chromium.base.supplier.OneshotSupplierImpl;
+import org.chromium.base.supplier.Supplier;
+import org.chromium.base.supplier.SupplierUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * A set of convenience methods used for interacting with {@link TabList}s and {@link TabModel}s.
  */
 public class TabModelUtils {
     private TabModelUtils() {}
+
+    /** Returns the non-incognito instance of the {@link EmptyTabModel}. */
+    public static @NonNull TabModel getEmptyTabModel() {
+        return EmptyTabModel.getInstance(/* isIncognito= */ false);
+    }
 
     /**
      * @param model The {@link TabModel} to act on.
@@ -110,8 +122,9 @@ public class TabModelUtils {
 
     /**
      * Get the currently selected {@link Tab}.
+     *
      * @param model The {@link TabModel} to act on.
-     * @returns     The current {@link Tab} or {@code null} if no {@link Tab} is selected
+     * @return The current {@link Tab} or {@code null} if no {@link Tab} is selected
      */
     public static Tab getCurrentTab(TabList model) {
         int index = model.index();
@@ -230,12 +243,58 @@ public class TabModelUtils {
     }
 
     /**
-     * @param tab The {@link Tab} to find the {@link TabModelFilter} for.
-     * @return the associated {@link TabModelFilter} if found.
+     * Similar to {@link #runOnTabStateInitialized(TabModelSelector, Callback)} but instead of
+     * taking a callback, it exposes a {@link OneshotSupplier}. This can be convenient for callers
+     * that want to combine multiple suppliers with something like {@link
+     * SupplierUtils#waitForAll(Runnable, Supplier[])}.
+     *
+     * <p>Note that, unlike {@link #runOnTabStateInitialized(TabModelSelector, Callback)}, this
+     * approach does not take care to ensure synchronous execution even when things are already
+     * satisfied. Depending on the input supplier type, this approach is likely to get stuck on the
+     * resulting post from adding the {@link OneShotCallback} observer.
+     *
+     * @param tabModelSelectorSupplier A supplier of a maybe initialized tab model selector.
+     * @return A oneshot supplier that will only be set when initialization is done.
      */
-    public static TabModelFilter getTabModelFilterByTab(@NonNull Tab tab) {
+    public static OneshotSupplier<TabModelSelector> onInitializedTabModelSelector(
+            ObservableSupplier<TabModelSelector> tabModelSelectorSupplier) {
+        OneshotSupplierImpl<TabModelSelector> delegate = new OneshotSupplierImpl<>();
+        new OneShotCallback<>(
+                tabModelSelectorSupplier,
+                (tabModelSelector) -> {
+                    if (tabModelSelector.isTabStateInitialized()) {
+                        delegate.set(tabModelSelector);
+                    } else {
+                        tabModelSelector.addObserver(
+                                new TabModelSelectorObserver() {
+                                    @Override
+                                    public void onTabStateInitialized() {
+                                        tabModelSelector.removeObserver(this);
+                                        delegate.set(tabModelSelector);
+                                    }
+                                });
+                    }
+                });
+        return delegate;
+    }
+
+    /**
+     * @param tab The {@link Tab} to find the {@link TabGroupModelFilter} for.
+     * @return the associated {@link TabGroupModelFilter} if found.
+     */
+    public static TabGroupModelFilter getTabGroupModelFilterByTab(@NonNull Tab tab) {
         final WindowAndroid windowAndroid = tab.getWindowAndroid();
         if (windowAndroid == null) return null;
+
+        // Support archived tab model querying
+        final TabModelSelector archivedTabModelSelector =
+                ArchivedTabModelSelectorHolder.getInstance(tab.getProfile());
+        if (archivedTabModelSelector != null
+                && archivedTabModelSelector.getTabById(tab.getId()) != null) {
+            return archivedTabModelSelector
+                    .getTabGroupModelFilterProvider()
+                    .getTabGroupModelFilter(/* isIncognito= */ false);
+        }
 
         final ObservableSupplier<TabModelSelector> supplier =
                 TabModelSelectorSupplier.from(windowAndroid);
@@ -244,11 +303,11 @@ public class TabModelUtils {
         final TabModelSelector selector = supplier.get();
         if (selector == null) return null;
 
-        return selector.getTabModelFilterProvider().getTabModelFilter(tab.isIncognito());
+        return selector.getTabGroupModelFilterProvider().getTabGroupModelFilter(tab.isIncognito());
     }
 
-    /** Converts a {@link TabList} to a {@link List<Tab>}. A null input returns an empty list. */
-    public static @Nullable List<Tab> convertTabListToListOfTabs(@Nullable TabList tabList) {
+    /** Converts a {@link TabList} to a {@link List<Tab>}. */
+    public static @NonNull List<Tab> convertTabListToListOfTabs(@Nullable TabList tabList) {
         ArrayList<Tab> list = new ArrayList<>();
         if (tabList == null) return list;
 
@@ -258,11 +317,8 @@ public class TabModelUtils {
         return list;
     }
 
-    /**
-     * Converts a {@link TabList} to a {@link List<Integer>} tab ids. A null input returns an empty
-     * list.
-     */
-    public static @Nullable List<Integer> convertTabListToListOfTabIds(@Nullable TabList tabList) {
+    /** Converts a {@link TabList} to a {@link List<Integer>} tab ids. */
+    public static @NonNull List<Integer> convertTabListToListOfTabIds(@Nullable TabList tabList) {
         ArrayList<Integer> list = new ArrayList<>();
         if (tabList == null) return list;
 
@@ -270,5 +326,36 @@ public class TabModelUtils {
             list.add(tabList.getTabAt(i).getId());
         }
         return list;
+    }
+
+    /** Returns the list of Tabs for the given Tab IDs. */
+    public static List<Tab> getTabsById(
+            Collection<Integer> tabIds, TabModel tabModel, boolean allowClosing) {
+        return getTabsById(tabIds, tabModel, allowClosing, null);
+    }
+
+    /**
+     * Returns the list of Tabs for the given Tab IDs. Invalid IDs are ignored.
+     *
+     * @param tabIds Tabs IDs to retrieve.
+     * @param tabModel Tab model to get them from.
+     * @param allowClosing Whether to include tabs when tab.isClosing() == true.
+     * @param predicate An additional condition to filter by.
+     */
+    public static List<Tab> getTabsById(
+            Collection<Integer> tabIds,
+            TabModel tabModel,
+            boolean allowClosing,
+            @Nullable Predicate<Tab> predicate) {
+        List<Tab> ret = new ArrayList<>(tabIds.size());
+        for (Integer tabId : tabIds) {
+            Tab tab = tabModel.getTabById(tabId);
+            if (tab != null
+                    && (allowClosing || !tab.isClosing())
+                    && (predicate == null || predicate.test(tab))) {
+                ret.add(tab);
+            }
+        }
+        return ret;
     }
 }

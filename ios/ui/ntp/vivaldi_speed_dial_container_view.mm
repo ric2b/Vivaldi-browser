@@ -5,6 +5,8 @@
 #import "UIKit/UIKit.h"
 
 #import "base/ios/ios_util.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/direct_match/direct_match_service.h"
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -13,6 +15,7 @@
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/direct_match/direct_match_service_bridge.h"
 #import "ios/ui/custom_views/custom_views_swift.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
@@ -25,13 +28,10 @@
 #import "ios/ui/ntp/vivaldi_speed_dial_add_group_view.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_container_view_flow_layout.h"
-#import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-using ui::GetDeviceFormFactor;
-using ui::DEVICE_FORM_FACTOR_TABLET;
 using l10n_util::GetNSString;
 
 // NAMESPACE
@@ -53,7 +53,13 @@ const CGFloat commonPadding = 20;
                                             UICollectionViewDragDelegate,
                                             UICollectionViewDropDelegate,
                                      VivaldiSpeedDialAddGroupViewDelegate,
-                                            UIGestureRecognizerDelegate>
+                                          DirectMatchServiceBridgeObserver,
+                                             UIGestureRecognizerDelegate> {
+  // Bridge to register for direct match service backend changes.
+  std::unique_ptr<direct_match_ios::DirectMatchServiceBridge> _bridge;
+
+  direct_match::DirectMatchService* _directMatchService;
+}
 // Action factory for speed dials
 @property (nonatomic,strong) BrowserActionFactory* actionFactory;
 // FaviconLoader is a keyed service that uses LargeIconService to retrieve
@@ -110,6 +116,7 @@ const CGFloat commonPadding = 20;
   VivaldiSpeedDialViewContainerViewFlowLayout *layout =
       [VivaldiSpeedDialViewContainerViewFlowLayout new];
   layout.layoutState = VivaldiStartPageLayoutStateNormal;
+  layout.shouldShowTabletLayout = [self showTabletLayout];
   self.layout = layout;
   UICollectionView* collectionView =
     [[UICollectionView alloc] initWithFrame:CGRectZero
@@ -181,6 +188,7 @@ const CGFloat commonPadding = 20;
 - (void)configureWith:(NSArray*)speedDials
                parent:(VivaldiSpeedDialItem*)parent
         faviconLoader:(FaviconLoader*)faviconLoader
+   directMatchService:(direct_match::DirectMatchService*)directMatchService
           layoutStyle:(VivaldiStartPageLayoutStyle)style
          layoutColumn:(VivaldiStartPageLayoutColumn)column
          showAddGroup:(BOOL)showAddGroup
@@ -192,9 +200,13 @@ const CGFloat commonPadding = 20;
   self.isTopSitesResultsAvailable = topSitesAvailable;
   self.showingFrequentlyVisited = frequentlyVisited;
   self.faviconLoader = faviconLoader;
+  _directMatchService = directMatchService;
+  _bridge.reset(new direct_match_ios::DirectMatchServiceBridge(
+      self, directMatchService));
   self.selectedLayout = style;
   self.selectedColumn = column;
   self.layout.layoutStyle = style;
+  self.layout.shouldShowTabletLayout = [self showTabletLayout];
   self.layout.numberOfColumns = column;
   self.layout.topToolbarHidden = topToolbarHidden;
   self.speedDialItems = [[NSMutableArray alloc] initWithArray:speedDials];
@@ -313,7 +325,7 @@ const CGFloat commonPadding = 20;
           [collectionView dequeueReusableCellWithReuseIdentifier:cellIdSmall
                                                     forIndexPath:indexPath];
         [smallCell configureCellWith:item
-                            isTablet:self.isCurrentDeviceTablet];
+                            isTablet:self.showTabletLayout];
         [self loadFaviconForItem:item
                          forCell:smallCell];
         return smallCell;
@@ -345,46 +357,74 @@ const CGFloat commonPadding = 20;
       desiredFaviconSizeInPoints = kDesiredSmallFaviconSizePt;
       break;
     case VivaldiStartPageLayoutStyleSmall:
-    case VivaldiStartPageLayoutStyleList: {
+    case VivaldiStartPageLayoutStyleList:
       desiredFaviconSizeInPoints = kDesiredMediumFaviconSizePt;
       break;
+  }
+
+  // Load direct match units and check if the URL matches any item.
+  std::vector<const direct_match::DirectMatchService::DirectMatchUnit*> units =
+      _directMatchService->GetPopularSites();
+
+  UIImage* directMatchImage = nil;
+
+  for (const auto* unit : units) {
+    if (unit) {
+      // Create GURL objects for comparison.
+      GURL unitURL(unit->redirect_url);
+      if (unitURL == item.url) {
+        // URLs match, load image from the local path.
+        NSString* imagePath =
+            base::SysUTF8ToNSString(unit->image_path.c_str());
+        UIImage* image = [UIImage imageWithContentsOfFile:imagePath];
+        if (image) {
+          directMatchImage = image;
+        }
+        break;  // Match found, no need to continue.
+      }
     }
   }
 
-  // Start loading a favicon.
   __weak VivaldiSpeedDialContainerView* weakSelf = self;
-  GURL blockURL(item.url);
   auto faviconLoadedBlock = ^(FaviconAttributes* attributes) {
     VivaldiSpeedDialContainerView* strongSelf = weakSelf;
     if (!strongSelf)
       return;
+
+    // Configure the cell based on the selected layout.
     switch (strongSelf.selectedLayout) {
       case VivaldiStartPageLayoutStyleLarge:
       case VivaldiStartPageLayoutStyleMedium: {
-        VivaldiSpeedDialRegularCell *largeCell =
-          (VivaldiSpeedDialRegularCell*)cell;
-        [largeCell configureCellWithAttributes:attributes
-                                          item:item];
-      }
+        VivaldiSpeedDialRegularCell* largeCell =
+            (VivaldiSpeedDialRegularCell*)cell;
+        [largeCell configureCellWithAttributes:attributes item:item];
         break;
+      }
       case VivaldiStartPageLayoutStyleSmall: {
-        VivaldiSpeedDialSmallCell *smallCell =
-          (VivaldiSpeedDialSmallCell*)cell;
-        [smallCell configureCellWithAttributes:attributes
-                                          item:item];
-      }
+        VivaldiSpeedDialSmallCell* smallCell =
+            (VivaldiSpeedDialSmallCell*)cell;
+        [smallCell configureCellWithAttributes:attributes item:item];
         break;
+      }
       case VivaldiStartPageLayoutStyleList: {
-        VivaldiSpeedDialListCell *listCell =
-          (VivaldiSpeedDialListCell*)cell;
-        [listCell configureCellWithAttributes:attributes
-                                         item:item];
+        VivaldiSpeedDialListCell* listCell =
+            (VivaldiSpeedDialListCell*)cell;
+        [listCell configureCellWithAttributes:attributes item:item];
+        break;
       }
     }
   };
 
-  self.faviconLoader->FaviconForPageUrlOrHost(
-      blockURL, desiredFaviconSizeInPoints, faviconLoadedBlock);
+  if (directMatchImage) {
+    // If a direct match image is found, create attributes and call the block.
+    FaviconAttributes* attributes =
+        [FaviconAttributes attributesWithImage:directMatchImage];
+    faviconLoadedBlock(attributes);
+  } else {
+    // No direct match found, use the favicon loader.
+    self.faviconLoader->FaviconForPageUrlOrHost(
+        item.url, desiredFaviconSizeInPoints, faviconLoadedBlock);
+  }
 }
 
 #pragma mark - COLLECTIONVIEW DELEGATE
@@ -505,6 +545,16 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
     [self.delegate didMoveItemByDragging:dragItem
                                   parent:self.parent
                               toPosition:newPosition];
+}
+
+#pragma mark - DirectMatchServiceBridgeObserver
+
+- (void)directMatchUnitsDownloaded {
+  // No op.
+}
+
+- (void)directMatchUnitsIconDownloaded {
+  [self.collectionView reloadData];
 }
 
 #pragma mark - CONTEXT MENU
@@ -784,10 +834,9 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
   return range.location != NSNotFound;
 }
 
-/// Returns whether current device is iPhone or iPad.
-- (BOOL)isCurrentDeviceTablet {
-  return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET &&
-      VivaldiGlobalHelpers.isHorizontalTraitRegular;
+/// Returns whether items should have tablet or phone layout.
+- (BOOL)showTabletLayout {
+  return [VivaldiGlobalHelpers canShowSidePanelForTrait:self.traitCollection];
 }
 
 @end

@@ -19,6 +19,7 @@
 <translation id="115443833402798225">хангул, ахматае</translation>
 <translation id="1155759005174418845">каталонска</translation>
 <translation id="1168100932582989117">Сервери за име на Google</translation>
+<translation id="1170788066030116158">Датум на фотографирање</translation>
 <translation id="1172970565351728681">Преостануваат околу <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">Преименувај</translation>
 <translation id="1173916544412572294">Мрежа <ph name="NETWORK_INDEX" /> од <ph name="NETWORK_COUNT" />, <ph name="PHONE_NAME" />, <ph name="CONNECTION_STATUS" />, јачина на сигналот: <ph name="SIGNAL_STRENGTH" /> %, батерија на телефонот: <ph name="BATTERY_STATUS" /> %, детали</translation>
@@ -249,7 +250,7 @@
 <translation id="3003189754374775221">Мрежа <ph name="NETWORK_INDEX" /> од <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, јачина на сигналот: <ph name="SIGNAL_STRENGTH" /> %, поврзи</translation>
 <translation id="3003633581067744647">Префрли се на режим за преглед со сликички</translation>
 <translation id="3016566519832145558">Внимание: датотекиве се привремени и може автоматски да се избришат за да се ослободи простор на дискот.</translation>
-<translation id="3029114385395636667">Овозможете офлајн „Документи на Google“ за да бидат документите табелите и слајдовите достапни офлајн.</translation>
+<translation id="3029114385395636667">Овозможете офлајн Google Docs за да бидат документите табелите и слајдовите достапни офлајн.</translation>
 <translation id="303198083543495566">Географија</translation>
 <translation id="3044404008258011032">За да ги вратите ставкиве, повлечете ги во нова папка надвор од корпата. Оригиналната папка „<ph name="PARENT_FOLDER_NAME" />“ за ставкава е избришана.</translation>
 <translation id="3047197340186497470">кинески даји</translation>
@@ -367,7 +368,7 @@
 <translation id="3906232975181435906">Се инсталира профилот на мобилниот уред, мрежа <ph name="NETWORK_INDEX" /> од <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" /></translation>
 <translation id="3924145049010392604">Meta</translation>
 <translation id="3943857333388298514">Залепи</translation>
-<translation id="3950820424414687140">Најави се</translation>
+<translation id="3950820424414687140">Најавете се</translation>
 <translation id="3952872973865944257">фонетски телугу</translation>
 <translation id="3958548648197196644">Киви</translation>
 <translation id="397105322502079400">Се пресметува…</translation>
@@ -421,6 +422,7 @@
 <translation id="4387004326333427325">Одбиена далечинска автентикација на сертификат</translation>
 <translation id="4394214039309501350">Надворешен линк</translation>
 <translation id="4394980935660306080">Претходно оваа седмица</translation>
+<translation id="4397435965699247285">OneDrive не е достапен додека сте офлајн</translation>
 <translation id="4398096759193130964">Вратете ги ставките или повлечете ги во нова папка надвор од корпата</translation>
 <translation id="4401287888955153199">Отпакувај сѐ</translation>
 <translation id="4410695710508688828">Не успеа отпакувањето. <ph name="ERROR_MESSAGE" /></translation>
@@ -1078,7 +1080,7 @@
 <translation id="9171921933192916600">Љубител на книги</translation>
 <translation id="9172592259078059678">транслитерација на гуџарати</translation>
 <translation id="9173120999827300720">англиски (САД) со меѓународна тастатура</translation>
-<translation id="9183302530794969518">Документи на Google</translation>
+<translation id="9183302530794969518">Google Docs</translation>
 <translation id="9189836632794948435">казашки</translation>
 <translation id="9200427192836333033">Отпакувани се <ph name="NUMBER_OF_ITEMS" /> ставки.</translation>
 <translation id="9213073329713032541">Инсталирањето успешно започна.</translation>

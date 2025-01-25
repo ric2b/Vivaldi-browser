@@ -64,10 +64,12 @@ ErrorOr<ServiceInfo> DnsSdInstanceEndpointToServiceInfo(
     if (!service_info.v4_endpoint && record.address.IsV4()) {
       service_info.v4_endpoint = record;
     }
+
     if (!service_info.v6_endpoint && record.address.IsV6()) {
       service_info.v6_endpoint = record;
     }
   }
+
   if (!service_info.v4_endpoint && !service_info.v6_endpoint) {
     return {Error::Code::kParameterInvalid,
             "No IPv4 nor IPv6 address in record."};
@@ -138,8 +140,7 @@ void DnsSdWatcherClient::StartWatcherInternal(
       });
 }
 
-std::unique_ptr<discovery::DnsSdService, TaskRunnerDeleter>
-DnsSdWatcherClient::CreateDnsSdServiceInternal(
+discovery::DnsSdServicePtr DnsSdWatcherClient::CreateDnsSdServiceInternal(
     const ServiceListener::Config& config) {
   // NOTE: With the current API, the client cannot customize the behavior of
   // DNS-SD beyond the interface list.

@@ -220,7 +220,18 @@ class SessionsPrivateEmptyTrashFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class SessionsPrivateRestoreLastClosedFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("sessionsPrivate.restoreLastClosed",
+                             SESSIONS_REOPEN_LAST)
+  SessionsPrivateRestoreLastClosedFunction() = default;
 
+ private:
+  ~SessionsPrivateRestoreLastClosedFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+};
 
 }  // namespace extensions
 

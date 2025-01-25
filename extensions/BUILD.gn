@@ -19,6 +19,8 @@ static_library("extensions") {
   sources = [
     "vivaldi_extensions_init.cpp",
     "vivaldi_extensions_init.h",
+    "vivaldi_associated_tabs.cc",
+    "vivaldi_associated_tabs.h",
     "vivaldi_standard_management_policy_provider.cc",
     "vivaldi_standard_management_policy_provider.h",
   ]

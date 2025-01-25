@@ -241,23 +241,23 @@ MenuLoadDetails::MenuLoadDetails(Menu_Node* mainmenu_node,
                                  Menu_Control* control,
                                  int64_t id,
                                  bool force_bundle,
-                                 bool is_reset)
+                                 Mode mode)
     : mainmenu_node_(mainmenu_node),
       control_(control),
       id_(id),
       force_bundle_(force_bundle),
-      is_reset_(is_reset) {}
+      mode_(mode) {}
 
 MenuLoadDetails::MenuLoadDetails(Menu_Node* mainmenu_node,
                                  Menu_Control* control,
                                  const std::string& menu,
                                  bool force_bundle,
-                                 bool is_reset)
+                                 Mode mode)
     : mainmenu_node_(mainmenu_node),
       control_(control),
       id_(-1),
       force_bundle_(force_bundle),
-      is_reset_(is_reset),
+      mode_(mode),
       menu_(menu) {}
 
 MenuLoadDetails::~MenuLoadDetails() {}

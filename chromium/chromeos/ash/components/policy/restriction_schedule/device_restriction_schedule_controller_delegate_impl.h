@@ -14,10 +14,16 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_POLICY)
     DeviceRestrictionScheduleControllerDelegateImpl
     : public DeviceRestrictionScheduleController::Delegate {
  public:
+  // Id of the upcoming logout notification.
+  static constexpr char kUpcomingLogoutNotificationId[] =
+      "policy.device_restriction_schedule.upcoming_logout";
+  // Id of the post-logout notification.
+  static constexpr char kPostLogoutNotificationId[] =
+      "policy.device_restriction_schedule.post_logout";
+
   DeviceRestrictionScheduleControllerDelegateImpl();
 
   // DeviceRestrictionScheduleController::Delegate:
-  void BlockLogin(bool enabled) override;
   bool IsUserLoggedIn() const override;
   void ShowUpcomingLogoutNotification(base::Time logout_time) override;
   void ShowPostLogoutNotification() override;

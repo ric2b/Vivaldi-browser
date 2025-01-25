@@ -19,6 +19,7 @@
 <translation id="115443833402798225">韩语（安马太）</translation>
 <translation id="1155759005174418845">加泰罗尼亚语</translation>
 <translation id="1168100932582989117">Google 域名服务器</translation>
+<translation id="1170788066030116158">拍摄日期</translation>
 <translation id="1172970565351728681">还需大约 <ph name="REMAINING_TIME" /></translation>
 <translation id="1173894706177603556">重命名</translation>
 <translation id="1173916544412572294">第 <ph name="NETWORK_INDEX" /> 个网络（共 <ph name="NETWORK_COUNT" /> 个），<ph name="PHONE_NAME" />，<ph name="CONNECTION_STATUS" />，信号强度为 <ph name="SIGNAL_STRENGTH" />%，剩余电量为 <ph name="BATTERY_STATUS" />%，详细信息</translation>
@@ -421,6 +422,7 @@
 <translation id="4387004326333427325">身份验证证书遭到远程拒绝</translation>
 <translation id="4394214039309501350">外部链接</translation>
 <translation id="4394980935660306080">本周早些时候</translation>
+<translation id="4397435965699247285">离线时无法使用 OneDrive</translation>
 <translation id="4398096759193130964">请恢复这些内容，或将它们拖至回收站之外的一个新文件夹中</translation>
 <translation id="4401287888955153199">提取全部</translation>
 <translation id="4410695710508688828">提取操作失败。<ph name="ERROR_MESSAGE" /></translation>
@@ -657,7 +659,7 @@
 <translation id="6096979789310008754">已清除搜索文本，目前显示的是所有文件和文件夹。</translation>
 <translation id="610101264611565198">正在将 <ph name="FILE_NAME" /> 移动到“<ph name="FOLDER_NAME" />”</translation>
 <translation id="61118516107968648">CSV 文本</translation>
-<translation id="6129953537138746214">空格</translation>
+<translation id="6129953537138746214">空格键</translation>
 <translation id="6133173853026656527">正在移动<ph name="FILE_NAME" />…</translation>
 <translation id="6133877453787250710">管理员会监控：</translation>
 <translation id="613750717151263950">日语美式键盘</translation>

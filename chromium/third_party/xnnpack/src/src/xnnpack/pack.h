@@ -13,9 +13,9 @@
 
 #include "xnnpack.h"
 #include "xnnpack/common.h"
+#include "xnnpack/math.h"
 #include "xnnpack/microfnptr.h"
-#include "xnnpack/operator.h"
-
+#include "xnnpack/microparams.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -102,7 +102,7 @@ XNN_INTERNAL void xnn_pack_f32_to_f16_gemm_goi_w(
   const float* kernel,
   const float* bias,
   const void* scale,
-  uint16_t* packed_weights,
+  xnn_float16* packed_weights,
   size_t extra_bytes,
   const void* params);
 
@@ -232,7 +232,7 @@ typedef void (*xnn_pack_qs8_qb4w_gemm_fn)(
   size_t block_size, // number of K elements in a block
   const uint8_t* kernel,
   const float* bias,
-  const uint16_t* scale,
+  const xnn_bfloat16* scale,
   void* packed_weights,
   size_t extra_bytes_per_block,
   size_t extra_bytes_per_n,
@@ -248,7 +248,7 @@ XNN_INTERNAL void xnn_pack_qs8_qb4w_gemm_goi_w(
   size_t bl,
   const uint8_t* kernel,
   const float* bias,
-  const uint16_t* scale,
+  const xnn_bfloat16* scale,
   void* packed_weights,
   size_t extra_bytes_bl,
   size_t extra_bytes_n,
@@ -351,7 +351,7 @@ XNN_INTERNAL void xnn_pack_f32_to_f16_gemm_gio_w(
   const float* kernel,
   const float* bias,
   const void* scale,
-  uint16_t* packed_weights,
+  xnn_float16* packed_weights,
   size_t extra_bytes,
   const void* params);
 
@@ -483,6 +483,44 @@ XNN_INTERNAL size_t xnn_packed_stride_kai_qs4_weights_and_biases(
     size_t k,                                   //
     size_t k_stride,                            //
     size_t extra_bytes);
+
+size_t xnn_packed_stride_kai_f32_weights_and_biases(
+    const struct xnn_gemm_config* gemm_config, size_t k, size_t unused_k_stride,
+    size_t extra_bytes);
+
+void xnn_pack_kai_f32_weights_and_biases(
+    uint32_t flags, const struct xnn_gemm_config* gemm_config,
+    size_t input_channels, size_t output_channels, size_t groups,
+    size_t k_stride, const void* accumulator_init, const void* weights,
+    xnn_init_scale_params_fn init_extra_data0_fn, const void* extra_data0,
+    size_t extra_data0_element_size,
+    xnn_init_scale_params_fn init_extra_data1_fn, const void* extra_data1,
+    size_t extra_data1_element_size, void* packed_weights_ptr,
+    const void* params);
+
+XNN_INTERNAL void xnn_pack_kai_qb4_weights_and_biases(
+    uint32_t flags,                                //
+    const struct xnn_gemm_config* gemm_config,     //
+    size_t input_channels,                         //
+    size_t output_channels,                        //
+    size_t groups,                                 //
+    size_t block_size,                             //
+    const void* accumulator_init,                  //
+    const void* weights,                           //
+    xnn_init_scale_params_fn init_extra_data0_fn,  //
+    const void* extra_data0,                       //
+    size_t extra_data0_element_size,               //
+    xnn_init_scale_params_fn init_extra_data1_fn,  //
+    const void* extra_data1,                       //
+    size_t extra_data1_element_size,               //
+    void* packed_weights_ptr,                      //
+    const void* params);
+
+XNN_INTERNAL size_t xnn_packed_stride_kai_qb4_weights_and_biases(
+    const struct xnn_gemm_config* gemm_config,  //
+    size_t k,                                   //
+    size_t block_size,                          //
+    size_t extra_bytes);
 #endif  // XNN_ENABLE_KLEIDIAI
 
 XNN_INTERNAL void xnn_pack_qs8_to_qu8_gemm_gio_w(
@@ -541,7 +579,7 @@ XNN_INTERNAL void xnn_pack_qs8_qb4w_gemm_gio_w(
   size_t bl,
   const uint8_t* kernel,
   const float* bias,
-  const uint16_t* scale,
+  const xnn_bfloat16* scale,
   void* packed_weights,
   size_t extra_bytes_bl,
   size_t extra_bytes_n,
@@ -633,7 +671,7 @@ XNN_INTERNAL void xnn_pack_f32_to_f16_conv_goki_w(
   const float* kernel,
   const float* bias,
   const void* scale,
-  uint16_t* packed_weights,
+  xnn_float16* packed_weights,
   size_t extra_bytes,
   const void* params);
 
@@ -750,7 +788,7 @@ XNN_INTERNAL void xnn_pack_f32_to_f16_conv_kgo_w(
   const float* kernel,
   const float* bias,
   const void* scale,
-  uint16_t* packed_weights,
+  xnn_float16* packed_weights,
   size_t extra_bytes,
   const void* params);
 
@@ -848,7 +886,7 @@ XNN_INTERNAL void xnn_pack_f32_to_f16_deconv_goki_w(
   const float* kernel,
   const float* bias,
   const void* scale,
-  uint16_t* packed_weights,
+  xnn_float16* packed_weights,
   size_t extra_bytes,
   struct subconvolution_params* subconv_params,
   const void* params);
@@ -1007,7 +1045,7 @@ XNN_INTERNAL void xnn_pack_f32_to_f16_dwconv_ghw_w(
   const float* kernel,
   const float* bias,
   const void* scale,
-  uint16_t* packed_weights,
+  xnn_float16* packed_weights,
   size_t per_tile_extra_bytes,
   size_t per_subtile_extra_bytes,
   const void* params);
@@ -1116,7 +1154,7 @@ XNN_INTERNAL void xnn_pack_f32_to_f16_dwconv_hwg_w(
   const float* kernel,
   const float* bias,
   const void* scale,
-  uint16_t* packed_weights,
+  xnn_float16* packed_weights,
   size_t per_tile_extra_bytes,
   size_t per_subtile_extra_bytes,
   const void* params);
@@ -1221,7 +1259,7 @@ XNN_INTERNAL void xnn_pack_f32_to_f16_dconv_oki_w(
   size_t kw,
   const float* kernel,
   const float* bias,
-  uint16_t* packed_weights,
+  xnn_float16* packed_weights,
   const void* params);
 
 XNN_INTERNAL void xnn_pack_f16_dconv_oki_w(
@@ -1257,7 +1295,7 @@ XNN_INTERNAL void xnn_pack_f32_to_f16_chw_dwconv_ghw_w(
   size_t groups,
   const float* kernel,
   const float* bias,
-  uint16_t* packed_weights,
+  xnn_float16* packed_weights,
   const void* params);
 
 XNN_INTERNAL void xnn_pack_f16_chw_dwconv_ghw_w(
@@ -1298,7 +1336,7 @@ XNN_INTERNAL void xnn_pack_f32_to_f16_chw_dwconv_hwg_w(
   size_t groups,
   const float* kernel,
   const float* bias,
-  uint16_t* packed_weights,
+  xnn_float16* packed_weights,
   const void* params);
 
 typedef void (*xnn_pack_vmulcaddc_w_fn)(
@@ -1330,34 +1368,9 @@ XNN_INTERNAL void xnn_pack_f32_to_f16_vmulcaddc_w(
   size_t cr,
   const float* s,
   const float* bias,
-  uint16_t* packed_weights,
+  xnn_float16* packed_weights,
   const void* params);
 
-
-// Pack functions for prelu weights.
-typedef void (*xnn_pack_prelu_w_fn)(
-  size_t input_channels,
-  size_t slope_channels,
-  const void* slope_data,
-  void* packed_weights);
-
-XNN_INTERNAL void xnn_pack_f32_prelu_w(
-  size_t input_channels,
-  size_t slope_channels,
-  const float* slope_data,
-  float* packed_weights);
-
-XNN_INTERNAL void xnn_pack_f16_prelu_w(
-  size_t input_channels,
-  size_t slope_channels,
-  const uint16_t* slope_data,
-  uint16_t* packed_weights);
-
-XNN_INTERNAL void xnn_pack_f32_to_f16_prelu_w(
-  size_t input_channels,
-  size_t slope_channels,
-  const float* slope_data,
-  uint16_t* packed_weights);
 
 // Sparse packing functions.
 
@@ -1384,7 +1397,7 @@ XNN_INTERNAL void xnn_analyze_f32_spmm_w(
 XNN_INTERNAL void xnn_analyze_f16_spmm_w(
   size_t group_output_channels,
   size_t group_input_channels,
-  const uint16_t* kernel,
+  const xnn_float16* kernel,
   struct xnn_spmm_packing_params* params);
 
 
@@ -1418,18 +1431,18 @@ XNN_INTERNAL enum xnn_status xnn_pack_f32_to_f16_spmm_w(
   const float* bias,
   int32_t* input_channel_diffs,
   uint32_t* output_channel_nonzeros,
-  uint16_t* nonzero_values,
+  xnn_float16* nonzero_values,
   size_t* first_input_channel);
 
 XNN_INTERNAL enum xnn_status xnn_pack_f16_spmm_w(
   size_t group_output_channels,
   size_t output_channels_block_size,
   size_t group_input_channels,
-  const uint16_t* kernel,
-  const uint16_t* bias,
+  const xnn_float16* kernel,
+  const xnn_float16* bias,
   int32_t* input_channel_diffs,
   uint32_t* output_channel_nonzeros,
-  uint16_t* nonzero_values,
+  xnn_float16* nonzero_values,
   size_t* first_input_channel);
 
 

@@ -77,7 +77,7 @@ TEST_F(AlarmTest, CancelsTaskWhenGoingOutOfScope) {
     const Clock::time_point alarm_time = FakeClock::now() + kDelay;
     scoped_alarm.Schedule([&]() { actual_run_time = FakeClock::now(); },
                           alarm_time);
-    // |scoped_alarm| is destroyed.
+    // `scoped_alarm` is destroyed.
   }
 
   // Confirm the lambda has never and will never run.
@@ -120,14 +120,14 @@ TEST_F(AlarmTest, CancelsAndRearms) {
     int count1 = 0;
     alarm()->Schedule([&]() { ++count1; }, FakeClock::now() + delay1);
 
-    // Advance the clock for half of |delay1|, and confirm the lambda that
+    // Advance the clock for half of `delay1`, and confirm the lambda that
     // increments the variable does not run.
     ASSERT_EQ(0, count1);
     clock()->Advance(delay1 / 2);
     ASSERT_EQ(0, count1);
 
     // Schedule a different lambda, that increments a different variable, to run
-    // after |delay2|.
+    // after `delay2`.
     int count2 = 0;
     alarm()->Schedule([&]() { ++count2; }, FakeClock::now() + delay2);
 

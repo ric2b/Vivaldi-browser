@@ -19,6 +19,9 @@
 // Updates the state with the enable address bar direct match preference
 // value.
 - (void)setPreferenceForEnableDirectMatch:(BOOL)enable;
+// Updates the state with the enable address bar direct match prioritization
+// preference value.
+- (void)setPreferenceForEnableDirectMatchPrioritization:(BOOL)enable;
 
 @end
 

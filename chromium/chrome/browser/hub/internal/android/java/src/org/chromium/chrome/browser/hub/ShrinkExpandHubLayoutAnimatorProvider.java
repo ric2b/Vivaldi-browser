@@ -24,6 +24,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.SyncOneshotSupplier;
 import org.chromium.base.supplier.SyncOneshotSupplierImpl;
+import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.ui.animation.AnimationPerformanceTracker;
 import org.chromium.ui.animation.AnimationPerformanceTracker.AnimationMetrics;
 import org.chromium.ui.interpolators.Interpolators;
@@ -250,13 +251,20 @@ public class ShrinkExpandHubLayoutAnimatorProvider implements HubLayoutAnimatorP
         ObjectAnimator fadeAnimator3 =
                 ObjectAnimator.ofFloat(mHubContainerView.findViewById(R.id.hub_pane_host),
                         View.ALPHA, initialAlpha, finalAlpha);
+        // End Vivaldi
 
+        int searchBoxHeight =
+                OmniboxFeatures.sAndroidHubSearch.isEnabled()
+                        ? HubUtils.getSearchBoxHeight(
+                                mHubContainerView, R.id.hub_toolbar, R.id.toolbar_action_container)
+                        : 0;
         ShrinkExpandAnimationData animationData = mAnimationDataSupplier.get();
         mShrinkExpandAnimator =
                 new ShrinkExpandAnimator(
                         mShrinkExpandImageView,
                         animationData.getInitialRect(),
-                        animationData.getFinalRect());
+                        animationData.getFinalRect(),
+                        searchBoxHeight);
         mShrinkExpandAnimator.setThumbnailSizeForOffset(animationData.getThumbnailSize());
         mShrinkExpandAnimator.setRect(animationData.getInitialRect());
 

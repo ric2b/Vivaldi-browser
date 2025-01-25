@@ -45,10 +45,22 @@ if (tint_build_unittests || tint_build_benchmarks) {
 if (tint_build_glsl_writer) {
   libtint_source_set("raise") {
     sources = [
+      "binary_polyfill.cc",
+      "binary_polyfill.h",
+      "bitcast_polyfill.cc",
+      "bitcast_polyfill.h",
+      "builtin_polyfill.cc",
+      "builtin_polyfill.h",
+      "offset_first_index.cc",
+      "offset_first_index.h",
       "raise.cc",
       "raise.h",
       "shader_io.cc",
       "shader_io.h",
+      "texture_builtins_from_uniform.cc",
+      "texture_builtins_from_uniform.h",
+      "texture_polyfill.cc",
+      "texture_polyfill.h",
     ]
     deps = [
       "${dawn_root}/src/utils:utils",
@@ -60,6 +72,9 @@ if (tint_build_glsl_writer) {
       "${tint_src_dir}/lang/core/ir",
       "${tint_src_dir}/lang/core/ir/transform",
       "${tint_src_dir}/lang/core/type",
+      "${tint_src_dir}/lang/glsl",
+      "${tint_src_dir}/lang/glsl/intrinsic",
+      "${tint_src_dir}/lang/glsl/ir",
       "${tint_src_dir}/lang/wgsl",
       "${tint_src_dir}/lang/wgsl/ast",
       "${tint_src_dir}/lang/wgsl/ast/transform",
@@ -88,7 +103,15 @@ if (tint_build_glsl_writer) {
 if (tint_build_unittests) {
   if (tint_build_glsl_writer) {
     tint_unittests_source_set("unittests") {
-      sources = [ "shader_io_test.cc" ]
+      sources = [
+        "binary_polyfill_test.cc",
+        "bitcast_polyfill_test.cc",
+        "builtin_polyfill_test.cc",
+        "offset_first_index_test.cc",
+        "shader_io_test.cc",
+        "texture_builtins_from_uniform_test.cc",
+        "texture_polyfill_test.cc",
+      ]
       deps = [
         "${dawn_root}/src/utils:utils",
         "${tint_src_dir}:gmock_and_gtest",
@@ -97,6 +120,7 @@ if (tint_build_unittests) {
         "${tint_src_dir}/lang/core/constant",
         "${tint_src_dir}/lang/core/intrinsic",
         "${tint_src_dir}/lang/core/ir",
+        "${tint_src_dir}/lang/core/ir/transform",
         "${tint_src_dir}/lang/core/ir/transform:unittests",
         "${tint_src_dir}/lang/core/type",
         "${tint_src_dir}/lang/wgsl",

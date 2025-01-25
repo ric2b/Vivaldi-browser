@@ -25,7 +25,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/motion_vector.h"
 #include "avfilter.h"
-#include "internal.h"
+#include "filters.h"
 #include "video.h"
 
 typedef struct MEContext {

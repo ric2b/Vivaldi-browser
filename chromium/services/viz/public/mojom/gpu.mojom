@@ -42,7 +42,4 @@ interface Gpu {
   CreateVideoEncodeAcceleratorProvider(
       pending_receiver<media.mojom.VideoEncodeAcceleratorProvider>
           vea_provider);
-
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  SetForceAllowAccessToGpu(bool enable);
 };

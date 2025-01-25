@@ -7,7 +7,7 @@
 //! The public API of this crate is the C++ API declared by the `#[cxx::bridge]`
 //! macro below and exposed through the auto-generated `FFI.rs.h` header.
 
-use std::io::Read;
+use std::io::{ErrorKind, Read};
 use std::pin::Pin;
 
 // No `use png::...` nor `use ffi::...` because we want the code to explicitly
@@ -31,10 +31,27 @@ mod ffi {
         FormatError,
         ParameterError,
         LimitsExceededError,
-        // `ReadTrait` is infallible and therefore we expect no `png::DecodingError::IoError`
-        // and provide no equivalent of this variant.
+        /// `IncompleteInput` is equivalent to `png::DecodingError::IoError(
+        /// std::io::ErrorKind::UnexpectedEof.into())`.  It is named after
+        /// `SkCodec::Result::kIncompleteInput`.
+        ///
+        /// `ReadTrait` is infallible and therefore we provide no generic
+        /// equivalent of the `png::DecodingError::IoError` variant
+        /// (other than the special case of `IncompleteInput`).
+        IncompleteInput,
+    }
 
-        // TODO(https://crbug.com/356923435): Add `IncompleteInput`.
+    /// FFI-friendly equivalent of `png::DisposeOp`.
+    enum DisposeOp {
+        None,
+        Background,
+        Previous,
+    }
+
+    /// FFI-friendly equivalent of `png::BlendOp`.
+    enum BlendOp {
+        Source,
+        Over,
     }
 
     unsafe extern "C++" {
@@ -72,13 +89,29 @@ mod ffi {
             by: &mut f32,
         ) -> bool;
         fn try_get_gama(self: &Reader, gamma: &mut f32) -> bool;
-        unsafe fn try_get_iccp<'a>(self: &'a Reader, iccp: &mut &'a [u8]) -> bool;
+        fn has_iccp_chunk(self: &Reader) -> bool;
+        fn get_iccp_chunk(self: &Reader) -> &[u8];
+        fn has_trns_chunk(self: &Reader) -> bool;
+        fn get_trns_chunk(self: &Reader) -> &[u8];
+        fn get_plte_chunk(self: &Reader) -> &[u8];
         fn has_actl_chunk(self: &Reader) -> bool;
         fn get_actl_num_frames(self: &Reader) -> u32;
         fn get_actl_num_plays(self: &Reader) -> u32;
+        fn has_fctl_chunk(self: &Reader) -> bool;
+        fn get_fctl_info(
+            self: &Reader,
+            width: &mut u32,
+            height: &mut u32,
+            x_offset: &mut u32,
+            y_offset: &mut u32,
+            dispose_op: &mut DisposeOp,
+            blend_op: &mut BlendOp,
+            duration_ms: &mut u32,
+        );
         fn output_buffer_size(self: &Reader) -> usize;
         fn output_color_type(self: &Reader) -> ColorType;
         fn output_bits_per_component(self: &Reader) -> u8;
+        fn next_frame_info(self: &mut Reader) -> DecodingResult;
         unsafe fn next_interlaced_row<'a>(
             self: &'a mut Reader,
             row: &mut &'a [u8],
@@ -105,14 +138,38 @@ impl From<png::ColorType> for ffi::ColorType {
     }
 }
 
+impl From<png::DisposeOp> for ffi::DisposeOp {
+    fn from(value: png::DisposeOp) -> Self {
+        match value {
+            png::DisposeOp::None => Self::None,
+            png::DisposeOp::Background => Self::Background,
+            png::DisposeOp::Previous => Self::Previous,
+        }
+    }
+}
+
+impl From<png::BlendOp> for ffi::BlendOp {
+    fn from(value: png::BlendOp) -> Self {
+        match value {
+            png::BlendOp::Source => Self::Source,
+            png::BlendOp::Over => Self::Over,
+        }
+    }
+}
+
 impl From<Option<&png::DecodingError>> for ffi::DecodingResult {
     fn from(option: Option<&png::DecodingError>) -> Self {
         match option {
             None => Self::Success,
             Some(decoding_error) => match decoding_error {
-                png::DecodingError::IoError(_) => {
-                    // `ReadTrait` is infallible => we expect no `png::DecodingError::IoError`.
-                    unreachable!()
+                png::DecodingError::IoError(e) => {
+                    if e.kind() == ErrorKind::UnexpectedEof {
+                        Self::IncompleteInput
+                    } else {
+                        // `ReadTrait` is infallible => we expect no other kind of
+                        // `png::DecodingError::IoError`.
+                        unreachable!()
+                    }
                 }
                 png::DecodingError::Format(_) => Self::FormatError,
                 png::DecodingError::Parameter(_) => Self::ParameterError,
@@ -147,6 +204,47 @@ impl ResultOfReader {
     }
 }
 
+fn compute_transformations(info: &png::Info) -> png::Transformations {
+    // There are 2 scenarios where `EXPAND` transformation may be needed:
+    //
+    // * `SkSwizzler` can handle low-bit-depth `ColorType::Indexed`, but it may not
+    //   support other inputs with low bit depth (e.g. `kGray_Color` with bpp=4). We
+    //   use `EXPAND` to ask the `png` crate to expand such low-bpp images to at
+    //   least 8 bits.
+    // * We may need to inject an alpha channel from the `tRNS` chunk if present.
+    //   Note that we can't check `info.trns.is_some()` because at this point we
+    //   have not yet read beyond the `IHDR` chunk.
+    //
+    // We avoid using `EXPAND` for `ColorType::Indexed` because this results in some
+    // performance gains - see https://crbug.com/356882657 for more details.
+    let mut result = match info.color_type {
+        // Work around bpp<8 limitations of `SkSwizzler`
+        png::ColorType::Rgba | png::ColorType::GrayscaleAlpha if (info.bit_depth as u8) < 8 => {
+            png::Transformations::EXPAND
+        }
+
+        // Handle `tRNS` expansion + work around bpp<8 limitations of `SkSwizzler`
+        png::ColorType::Rgb | png::ColorType::Grayscale => png::Transformations::EXPAND,
+
+        // Otherwise there is no need to `EXPAND`.
+        png::ColorType::Indexed | png::ColorType::Rgba | png::ColorType::GrayscaleAlpha => {
+            png::Transformations::IDENTITY
+        }
+    };
+
+    // We mimic how the `libpng`-based `SkPngCodec` handles G16 and GA16.
+    //
+    // TODO(https://crbug.com/359245096): Avoid stripping least signinficant 8 bits in G16 and
+    // GA16 images.
+    if info.bit_depth == png::BitDepth::Sixteen {
+        if matches!(info.color_type, png::ColorType::Grayscale | png::ColorType::GrayscaleAlpha) {
+            result = result | png::Transformations::STRIP_16;
+        }
+    }
+
+    result
+}
+
 /// FFI-friendly wrapper around `png::Reader<R>` (`cxx` can't handle arbitrary
 /// generics, so we manually monomorphize here, but still expose a minimal,
 /// somewhat tweaked API of the original type).
@@ -161,30 +259,10 @@ impl Reader {
         // that, we can use `png::Decoder::new_with_limits`.
         let mut decoder = png::Decoder::new(input);
 
-        // `EXPAND` will:
-        // * Expand bit depth to at least 8 bits
-        // * Translate palette indices into RGB or RGBA
-        //
-        // TODO(https://crbug.com/356882657): Consider handling palette expansion
-        // via `SkSwizzler` instead of relying on `EXPAND` for this use case.
-        let mut transformations = png::Transformations::EXPAND;
-
-        // TODO(https://crbug.com/359245096): Avoid stripping least signinficant 8 bits in G16 and
-        // GA16 images.
         let info = decoder.read_header_info()?;
-        if info.bit_depth == png::BitDepth::Sixteen {
-            match info.color_type {
-                png::ColorType::Grayscale | png::ColorType::GrayscaleAlpha => {
-                    transformations = transformations | png::Transformations::STRIP_16;
-                }
-                png::ColorType::Rgb | png::ColorType::Rgba => (),
-                // PNG says that the only allowed bit depths for color type 3 (indexed)
-                // are 1,2,4,8.
-                png::ColorType::Indexed => unreachable!(),
-            }
-        }
-
+        let transformations = compute_transformations(info);
         decoder.set_transformations(transformations);
+
         Ok(Self { reader: decoder.read_info()?, last_interlace_info: None })
     }
 
@@ -209,10 +287,6 @@ impl Reader {
     /// If the decoded PNG image contained a `cHRM` chunk then `try_get_chrm`
     /// returns `true` and populates the out parameters (`wx`, `wy`, `rx`,
     /// etc.).  Otherwise, returns `false`.
-    ///
-    /// C++/FFI safety: The caller has to guarantee that all the outputs /
-    /// `&mut` values have been initialized (unlike in C++, where such
-    /// guarantees are typically not needed for output parameters).
     fn try_get_chrm(
         &self,
         wx: &mut f32,
@@ -244,10 +318,6 @@ impl Reader {
     /// If the decoded PNG image contained a `gAMA` chunk then `try_get_gama`
     /// returns `true` and populates the `gamma` out parameter.  Otherwise,
     /// returns `false`.
-    ///
-    /// C++/FFI safety: The caller has to guarantee that all the outputs /
-    /// `&mut` values have been initialized (unlike in C++, where such
-    /// guarantees are typically not needed for output parameters).
     fn try_get_gama(&self, gamma: &mut f32) -> bool {
         match self.reader.info().gama_chunk.as_ref() {
             None => false,
@@ -258,29 +328,44 @@ impl Reader {
         }
     }
 
-    /// If the decoded PNG image contained an `iCCP` chunk then `try_get_iccp`
-    /// returns `true` and sets `iccp` to the `rust::Slice`.  Otherwise,
-    /// returns `false`.
-    fn try_get_iccp<'a>(&'a self, iccp: &mut &'a [u8]) -> bool {
-        match self.reader.info().icc_profile.as_ref().map(|cow| cow.as_ref()) {
-            None => false,
-            Some(value) => {
-                *iccp = value;
-                true
-            }
-        }
+    /// Returns whether the `iCCP` chunk exists.
+    fn has_iccp_chunk(&self) -> bool {
+        self.reader.info().icc_profile.is_some()
     }
 
-    /// Returns whether the `aCTL` chunk exists.
+    /// Returns contents of the `iCCP` chunk.  Panics if there is no `iCCP`
+    /// chunk.
+    fn get_iccp_chunk(&self) -> &[u8] {
+        self.reader.info().icc_profile.as_ref().unwrap().as_ref()
+    }
+
+    /// Returns whether the `tRNS` chunk exists.
+    fn has_trns_chunk(&self) -> bool {
+        self.reader.info().trns.is_some()
+    }
+
+    /// Returns contents of the `tRNS` chunk.  Panics if there is no `tRNS`
+    /// chunk.
+    fn get_trns_chunk(&self) -> &[u8] {
+        self.reader.info().trns.as_ref().unwrap().as_ref()
+    }
+
+    /// Returns contents of the `PLTE` chunk.  Panics if there is no `PLTE`
+    /// chunk.
+    fn get_plte_chunk(&self) -> &[u8] {
+        self.reader.info().palette.as_ref().unwrap().as_ref()
+    }
+
+    /// Returns whether the `acTL` chunk exists.
     fn has_actl_chunk(&self) -> bool {
         self.reader.info().animation_control.is_some()
     }
 
-    /// Returns `num_frames` from the `aCTL` chunk.  Panics if there is no
-    /// `aCTL` chunk.
+    /// Returns `num_frames` from the `acTL` chunk.  Panics if there is no
+    /// `acTL` chunk.
     ///
     /// The returned value is equal the number of `fcTL` chunks.  (Note that it
-    /// doesn't count `IDAT` nor `fDAT` chunks.  In particular, if an `fCTL`
+    /// doesn't count `IDAT` nor `fdAT` chunks.  In particular, if an `fcTL`
     /// chunk doesn't appear before an `IDAT` chunk then `IDAT` is not part
     /// of the animation.)
     ///
@@ -290,13 +375,54 @@ impl Reader {
         self.reader.info().animation_control.as_ref().unwrap().num_frames
     }
 
-    /// Returns `num_plays` from the `aCTL` chunk.  Panics if there is no `aCTL`
+    /// Returns `num_plays` from the `acTL` chunk.  Panics if there is no `acTL`
     /// chunk.
     ///
     /// `0` indicates that the animation should play indefinitely. See
     /// <https://wiki.mozilla.org/APNG_Specification#.60acTL.60:_The_Animation_Control_Chunk>.
     fn get_actl_num_plays(&self) -> u32 {
         self.reader.info().animation_control.as_ref().unwrap().num_plays
+    }
+
+    /// Returns whether a `fcTL` chunk has been parsed (and can be read using
+    /// `get_fctl_info`).
+    fn has_fctl_chunk(&self) -> bool {
+        self.reader.info().frame_control.is_some()
+    }
+
+    /// Returns `png::FrameControl` information.
+    ///
+    /// Panics if no `fcTL` chunk hasn't been parsed yet.
+    fn get_fctl_info(
+        self: &Reader,
+        width: &mut u32,
+        height: &mut u32,
+        x_offset: &mut u32,
+        y_offset: &mut u32,
+        dispose_op: &mut ffi::DisposeOp,
+        blend_op: &mut ffi::BlendOp,
+        duration_ms: &mut u32,
+    ) {
+        let frame_control = self.reader.info().frame_control.as_ref().unwrap();
+        *width = frame_control.width;
+        *height = frame_control.height;
+        *x_offset = frame_control.x_offset;
+        *y_offset = frame_control.y_offset;
+        *dispose_op = frame_control.dispose_op.into();
+        *blend_op = frame_control.blend_op.into();
+
+        // https://wiki.mozilla.org/APNG_Specification#.60fcTL.60:_The_Frame_Control_Chunk
+        // says:
+        //
+        // > "The `delay_num` and `delay_den` parameters together specify a fraction
+        // > indicating the time to display the current frame, in seconds. If the
+        // > denominator is 0, it is to be treated as if it were 100 (that is,
+        // > `delay_num` then specifies 1/100ths of a second).
+        *duration_ms = if frame_control.delay_den == 0 {
+            10 * frame_control.delay_num as u32
+        } else {
+            1000 * frame_control.delay_num as u32 / frame_control.delay_den as u32
+        };
     }
 
     fn output_buffer_size(&self) -> usize {
@@ -309,6 +435,10 @@ impl Reader {
 
     fn output_bits_per_component(&self) -> u8 {
         self.reader.output_color_type().1 as u8
+    }
+
+    fn next_frame_info(&mut self) -> ffi::DecodingResult {
+        self.reader.next_frame_info().as_ref().err().into()
     }
 
     /// Decodes the next row - see
@@ -327,10 +457,6 @@ impl Reader {
 
     /// Expands the last decoded interlaced row - see
     /// https://docs.rs/png/latest/png/fn.expand_interlaced_row
-    ///
-    /// C++/FFI safety: The caller has to guarantee that `img` doesn't
-    /// contain uninitialized memory (this is a bit different from C++,
-    /// where a write-only access may not need such guarantees).
     fn expand_last_interlaced_row(
         &self,
         img: &mut [u8],

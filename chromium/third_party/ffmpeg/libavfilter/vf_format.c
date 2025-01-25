@@ -33,8 +33,8 @@
 #include "libavutil/opt.h"
 
 #include "avfilter.h"
+#include "filters.h"
 #include "formats.h"
-#include "internal.h"
 #include "video.h"
 
 typedef struct FormatContext {
@@ -85,6 +85,21 @@ static av_cold int invert_formats(AVFilterFormats **fmts,
     return 0;
 }
 
+static int parse_pixel_format(enum AVPixelFormat *ret, const char *arg, void *log_ctx)
+{
+    char *tail;
+    int pix_fmt = av_get_pix_fmt(arg);
+    if (pix_fmt == AV_PIX_FMT_NONE) {
+        pix_fmt = strtol(arg, &tail, 0);
+        if (*tail || !av_pix_fmt_desc_get(pix_fmt)) {
+            av_log(log_ctx, AV_LOG_ERROR, "Invalid pixel format '%s'\n", arg);
+            return AVERROR(EINVAL);
+        }
+    }
+    *ret = pix_fmt;
+    return 0;
+}
+
 static av_cold int init(AVFilterContext *ctx)
 {
     FormatContext *s = ctx->priv;
@@ -95,7 +110,7 @@ static av_cold int init(AVFilterContext *ctx)
         sep = strchr(cur, '|');
         if (sep && *sep)
             *sep++ = 0;
-        if ((ret = ff_parse_pixel_format(&pix_fmt, cur, ctx)) < 0 ||
+        if ((ret = parse_pixel_format(&pix_fmt, cur, ctx)) < 0 ||
             (ret = ff_add_format(&s->formats, pix_fmt)) < 0)
             return ret;
     }
@@ -134,14 +149,16 @@ static av_cold int init(AVFilterContext *ctx)
     return 0;
 }
 
-static int query_formats(AVFilterContext *ctx)
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
     FormatContext *s = ctx->priv;
     int ret;
 
-    if (s->formats      && (ret = ff_set_common_formats(ctx,      s->formats)) < 0 ||
-        s->color_spaces && (ret = ff_set_common_color_spaces(ctx, s->color_spaces)) < 0 ||
-        s->color_ranges && (ret = ff_set_common_color_ranges(ctx, s->color_ranges)) < 0)
+    if (s->formats      && (ret = ff_set_common_formats2     (ctx, cfg_in, cfg_out, s->formats)) < 0 ||
+        s->color_spaces && (ret = ff_set_common_color_spaces2(ctx, cfg_in, cfg_out, s->color_spaces)) < 0 ||
+        s->color_ranges && (ret = ff_set_common_color_ranges2(ctx, cfg_in, cfg_out, s->color_ranges)) < 0)
         return ret;
 
     return 0;
@@ -182,7 +199,7 @@ const AVFilter ff_vf_format = {
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
 
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
 };
 #endif /* CONFIG_FORMAT_FILTER */
 
@@ -202,6 +219,6 @@ const AVFilter ff_vf_noformat = {
     FILTER_INPUTS(inputs),
     FILTER_OUTPUTS(ff_video_default_filterpad),
 
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
 };
 #endif /* CONFIG_NOFORMAT_FILTER */

@@ -103,9 +103,9 @@
 #include "ui/base/ime/mock_input_method.h"
 #include "ui/base/ime/mojom/text_input_state.mojom.h"
 #include "ui/base/ime/virtual_keyboard_controller.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
-#include "ui/base/ui_base_types.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/compositor/test/draw_waiter_for_test.h"
@@ -5856,7 +5856,7 @@ class MockWebContentsViewDelegate : public WebContentsViewDelegate {
     return context_menu_request_received_;
   }
 
-  ui::MenuSourceType context_menu_source_type() const {
+  ui::mojom::MenuSourceType context_menu_source_type() const {
     return context_menu_params_.source_type;
   }
 
@@ -5869,7 +5869,7 @@ class MockWebContentsViewDelegate : public WebContentsViewDelegate {
 
   void ClearState() {
     context_menu_request_received_ = false;
-    context_menu_params_.source_type = ui::MENU_SOURCE_NONE;
+    context_menu_params_.source_type = ui::mojom::MenuSourceType::kNone;
   }
 
  private:
@@ -5891,45 +5891,46 @@ TEST_F(RenderWidgetHostViewAuraWithViewHarnessTest,
 
   RenderViewHostFactory::set_is_real_render_view_host(true);
 
-  // A context menu request with the MENU_SOURCE_MOUSE source type should
+  // A context menu request with the `MenuSourceType::kMouse` source type should
   // result in the MockWebContentsViewDelegate::ShowContextMenu method
   // getting called. This means that the request worked correctly.
   ContextMenuParams context_menu_params;
-  context_menu_params.source_type = ui::MENU_SOURCE_MOUSE;
+  context_menu_params.source_type = ui::mojom::MenuSourceType::kMouse;
   contents()->ShowContextMenu(
       *contents()->GetRenderViewHost()->GetMainRenderFrameHost(),
       mojo::NullAssociatedRemote(), context_menu_params);
   EXPECT_TRUE(delegate_ptr->context_menu_request_received());
-  EXPECT_EQ(delegate_ptr->context_menu_source_type(), ui::MENU_SOURCE_MOUSE);
+  EXPECT_EQ(delegate_ptr->context_menu_source_type(),
+            ui::mojom::MenuSourceType::kMouse);
 
-  // A context menu request with the MENU_SOURCE_TOUCH source type should
+  // A context menu request with the `MenuSourceType::kTouch` source type should
   // result in the MockWebContentsViewDelegate::ShowContextMenu method
   // getting called on all platforms. This means that the request worked
   // correctly.
   delegate_ptr->ClearState();
-  context_menu_params.source_type = ui::MENU_SOURCE_TOUCH;
+  context_menu_params.source_type = ui::mojom::MenuSourceType::kTouch;
   contents()->ShowContextMenu(
       *contents()->GetRenderViewHost()->GetMainRenderFrameHost(),
       mojo::NullAssociatedRemote(), context_menu_params);
   EXPECT_TRUE(delegate_ptr->context_menu_request_received());
 
-  // A context menu request with the MENU_SOURCE_LONG_TAP source type should
-  // result in the MockWebContentsViewDelegate::ShowContextMenu method
+  // A context menu request with the `MenuSourceType::kLongTap` source type
+  // should result in the MockWebContentsViewDelegate::ShowContextMenu method
   // getting called on all platforms. This means that the request worked
   // correctly.
   delegate_ptr->ClearState();
-  context_menu_params.source_type = ui::MENU_SOURCE_LONG_TAP;
+  context_menu_params.source_type = ui::mojom::MenuSourceType::kLongTap;
   contents()->ShowContextMenu(
       *contents()->GetRenderViewHost()->GetMainRenderFrameHost(),
       mojo::NullAssociatedRemote(), context_menu_params);
   EXPECT_TRUE(delegate_ptr->context_menu_request_received());
 
-  // A context menu request with the MENU_SOURCE_LONG_PRESS source type should
-  // result in the MockWebContentsViewDelegate::ShowContextMenu method
+  // A context menu request with the `MenuSourceType::kLongPress` source type
+  // should result in the MockWebContentsViewDelegate::ShowContextMenu method
   // getting called on non Windows platforms. This means that the request
   //  worked correctly.
   delegate_ptr->ClearState();
-  context_menu_params.source_type = ui::MENU_SOURCE_LONG_PRESS;
+  context_menu_params.source_type = ui::mojom::MenuSourceType::kLongPress;
   contents()->ShowContextMenu(
       *contents()->GetRenderViewHost()->GetMainRenderFrameHost(),
       mojo::NullAssociatedRemote(), context_menu_params);

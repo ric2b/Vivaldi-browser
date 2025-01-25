@@ -9,10 +9,14 @@
 #import "base/functional/callback_helpers.h"
 #import "base/location.h"
 #import "base/metrics/histogram_functions.h"
+#import "base/strings/sys_string_conversions.h"
 #import "base/task/bind_post_task.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/push_notification/model/constants.h"
+#import "ios/chrome/browser/push_notification/model/push_notification_client.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_client_id.h"
+#import "ios/chrome/browser/push_notification/model/push_notification_service.h"
+#import "ios/chrome/browser/push_notification/model/push_notification_settings_util.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_util.h"
 #import "ios/chrome/browser/safety_check/model/ios_chrome_safety_check_manager.h"
 #import "ios/chrome/browser/safety_check/model/ios_chrome_safety_check_manager_factory.h"
@@ -26,6 +30,8 @@
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/signin/model/authentication_service.h"
+#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/ui/content_suggestions/safety_check/utils.h"
 
 namespace {
@@ -171,10 +177,10 @@ void SafetyCheckNotificationClient::OnSceneActiveForegroundBrowserReady(
       return;
     }
 
-    ChromeBrowserState* browser_state = browser->GetBrowserState();
+    ProfileIOS* profile = browser->GetProfile();
 
     IOSChromeSafetyCheckManager* safety_check_manager =
-        IOSChromeSafetyCheckManagerFactory::GetForBrowserState(browser_state);
+        IOSChromeSafetyCheckManagerFactory::GetForProfile(profile);
 
     safety_check_manager->AddObserver(this);
 
@@ -434,14 +440,14 @@ void SafetyCheckNotificationClient::ClearAndRescheduleSafetyCheckNotifications(
   if ([interacted_notification_metadata_ count]) {
     Browser* browser = GetSceneLevelForegroundActiveBrowser();
 
-    CHECK(browser);
-
-    [HandlerForProtocol(browser->GetCommandDispatcher(), ApplicationCommands)
-        prepareToPresentModal:
-            base::CallbackToBlock(base::BindOnce(
-                &SafetyCheckNotificationClient::ShowUIForNotificationMetadata,
-                weak_ptr_factory_.GetWeakPtr(),
-                interacted_notification_metadata_, browser))];
+    if (browser) {
+      [HandlerForProtocol(browser->GetCommandDispatcher(), ApplicationCommands)
+          prepareToPresentModal:
+              base::CallbackToBlock(base::BindOnce(
+                  &SafetyCheckNotificationClient::ShowUIForNotificationMetadata,
+                  weak_ptr_factory_.GetWeakPtr(),
+                  interacted_notification_metadata_, browser))];
+    }
   }
 
   ClearNotifications(
@@ -470,6 +476,23 @@ void SafetyCheckNotificationClient::ShowUIForNotificationMetadata(
     NOTREACHED();
   }
 
+  if (IsProvisionalNotificationAlertEnabled()) {
+    AuthenticationService* authService =
+        AuthenticationServiceFactory::GetForProfile(
+            GetSceneLevelForegroundActiveBrowser()->GetProfile());
+    id<SystemIdentity> identity =
+        authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
+    const std::string& gaiaID = base::SysNSStringToUTF8(identity.gaiaID);
+    if (!push_notification_settings::
+            GetMobileNotificationPermissionStatusForClient(
+                PushNotificationClientId::kSafetyCheck, gaiaID)) {
+      PushNotificationService* service =
+          GetApplicationContext()->GetPushNotificationService();
+      service->SetPreference(base::SysUTF8ToNSString(gaiaID),
+                             PushNotificationClientId::kSafetyCheck, true);
+    }
+  }
+
   id<ApplicationCommands> applicationHandler =
       HandlerForProtocol(browser->GetCommandDispatcher(), ApplicationCommands);
 
@@ -489,8 +512,7 @@ void SafetyCheckNotificationClient::ShowUIForNotificationMetadata(
   // page even if the original notification data is outdated (by at least
   // 'kSafetyCheckNotificationDefaultDelay').
   IOSChromeSafetyCheckManager* safety_check_manager =
-      IOSChromeSafetyCheckManagerFactory::GetForBrowserState(
-          browser->GetBrowserState());
+      IOSChromeSafetyCheckManagerFactory::GetForProfile(browser->GetProfile());
 
   // If Update Chrome notification, then show the Chrome App Upgrade page.
   if (notification_metadata[kSafetyCheckUpdateChromeNotificationID]) {

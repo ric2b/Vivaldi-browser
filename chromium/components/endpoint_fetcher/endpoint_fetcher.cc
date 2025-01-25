@@ -27,6 +27,11 @@ const int kNumRetries = 3;
 constexpr base::TimeDelta kDefaultTimeOut = base::Milliseconds(30000);
 }  // namespace
 
+EndpointFetcher::RequestParams::RequestParams() = default;
+EndpointFetcher::RequestParams::RequestParams(
+    const EndpointFetcher::RequestParams& other) = default;
+EndpointFetcher::RequestParams::~RequestParams() = default;
+
 EndpointFetcher::RequestParams::Builder::Builder()
     : request_params_(std::make_unique<RequestParams>()) {}
 
@@ -225,6 +230,9 @@ void EndpointFetcher::PerformRequest(
   resource_request->method = http_method_;
   resource_request->url = url_;
   resource_request->credentials_mode = GetCredentialsMode();
+  if (GetSetSiteForCookies()) {
+    resource_request->site_for_cookies = net::SiteForCookies::FromUrl(url_);
+  }
 
   if (base::EqualsCaseInsensitiveASCII(http_method_, "POST")) {
     resource_request->headers.SetHeader(kContentTypeKey, content_type_);
@@ -260,6 +268,10 @@ void EndpointFetcher::PerformRequest(
 
   if (base::EqualsCaseInsensitiveASCII(http_method_, "POST")) {
     simple_url_loader_->AttachStringForUpload(post_data_, content_type_);
+  }
+  if (!GetUploadProgressCallback().is_null()) {
+    simple_url_loader_->SetOnUploadProgressCallback(
+        GetUploadProgressCallback());
   }
   simple_url_loader_->SetRetryOptions(GetMaxRetries(),
                                       network::SimpleURLLoader::RETRY_ON_5XX);
@@ -375,6 +387,26 @@ int EndpointFetcher::GetMaxRetries() {
     return kNumRetries;
   }
   return request_params_.value().max_retries.value();
+}
+
+bool EndpointFetcher::GetSetSiteForCookies() {
+  if (!request_params_.has_value()) {
+    return false;
+  }
+  if (!request_params_.value().set_site_for_cookies.has_value()) {
+    return false;
+  }
+  return request_params_.value().set_site_for_cookies.value();
+}
+
+UploadProgressCallback EndpointFetcher::GetUploadProgressCallback() {
+  if (!request_params_.has_value()) {
+    return UploadProgressCallback();
+  }
+  if (!request_params_.value().upload_progress_callback.has_value()) {
+    return UploadProgressCallback();
+  }
+  return request_params_.value().upload_progress_callback.value();
 }
 
 std::string EndpointFetcher::GetUrlForTesting() {

@@ -173,12 +173,11 @@ NSString* GetSyncErrorDescriptionForSyncService(
   }
 }
 
-std::u16string GetSyncErrorInfoBarTitleForBrowserState(
-    ChromeBrowserState* browser_state) {
-  DCHECK(browser_state);
+std::u16string GetSyncErrorInfoBarTitleForProfile(ProfileIOS* profile) {
+  DCHECK(profile);
 
   syncer::SyncService* sync_service =
-      SyncServiceFactory::GetForBrowserState(browser_state);
+      SyncServiceFactory::GetForProfile(profile);
   DCHECK(sync_service);
 
   if (UseIdentityErrorInfobar(sync_service)) {
@@ -189,9 +188,8 @@ std::u16string GetSyncErrorInfoBarTitleForBrowserState(
   }
 }
 
-NSString* GetSyncErrorMessageForBrowserState(ChromeBrowserState* browserState) {
-  syncer::SyncService* syncService =
-      SyncServiceFactory::GetForBrowserState(browserState);
+NSString* GetSyncErrorMessageForProfile(ProfileIOS* profile) {
+  syncer::SyncService* syncService = SyncServiceFactory::GetForProfile(profile);
   DCHECK(syncService);
 
   const syncer::SyncService::UserActionableError error =
@@ -220,12 +218,10 @@ NSString* GetSyncErrorMessageForBrowserState(ChromeBrowserState* browserState) {
   }
 }
 
-NSString* GetSyncErrorButtonTitleForBrowserState(
-    ChromeBrowserState* browserState) {
-  DCHECK(browserState);
+NSString* GetSyncErrorButtonTitleForProfile(ProfileIOS* profile) {
+  DCHECK(profile);
 
-  syncer::SyncService* syncService =
-      SyncServiceFactory::GetForBrowserState(browserState);
+  syncer::SyncService* syncService = SyncServiceFactory::GetForProfile(profile);
   DCHECK(syncService);
 
   const syncer::SyncService::UserActionableError error =
@@ -272,16 +268,15 @@ bool ShouldShowSyncSettings(syncer::SyncService::UserActionableError error) {
   }
 }
 
-bool DisplaySyncErrors(ChromeBrowserState* browser_state,
+bool DisplaySyncErrors(ProfileIOS* profile,
                        web::WebState* web_state,
                        id<SyncPresenter> presenter) {
   // Avoid displaying sync errors on incognito tabs.
-  if (browser_state->IsOffTheRecord()) {
+  if (profile->IsOffTheRecord()) {
     return false;
   }
 
-  syncer::SyncService* syncService =
-      SyncServiceFactory::GetForBrowserState(browser_state);
+  syncer::SyncService* syncService = SyncServiceFactory::GetForProfile(profile);
   if (!syncService) {
     return false;
   }
@@ -299,7 +294,7 @@ bool DisplaySyncErrors(ChromeBrowserState* browser_state,
     }
 
     signin::IdentityManager* identityManager =
-        IdentityManagerFactory::GetForProfile(browser_state);
+        IdentityManagerFactory::GetForProfile(profile);
     if (!identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
       return false;
     }
@@ -336,6 +331,5 @@ bool DisplaySyncErrors(ChromeBrowserState* browser_state,
   infobars::InfoBarManager* infoBarManager =
       InfoBarManagerImpl::FromWebState(web_state);
   DCHECK(infoBarManager);
-  return SyncErrorInfoBarDelegate::Create(infoBarManager, browser_state,
-                                          presenter);
+  return SyncErrorInfoBarDelegate::Create(infoBarManager, profile, presenter);
 }

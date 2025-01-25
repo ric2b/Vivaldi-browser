@@ -24,7 +24,7 @@ const int kTestSizes[] = {0,  1,  2,  3,  5,  7,  11, 13, 17,  19,
                           23, 29, 31, 37, 41, 43, 47, 53, 59,  61,
                           64, 67, 71, 73, 79, 83, 89, 97, 127, 128};
 
-// Returns a subspan of |kTestSizes| that contains all values in the range
+// Returns a subspan of `kTestSizes` that contains all values in the range
 // [first,last].
 Span<const int> GetTestSizesInRange(int first, int last) {
   const auto begin =
@@ -34,15 +34,15 @@ Span<const int> GetTestSizesInRange(int first, int last) {
   return Span<const int>(&*begin, std::distance(begin, end));
 }
 
-// Returns true if an infinitely-repeating |pattern| has a bit set at the given
-// |position|.
+// Returns true if an infinitely-repeating `pattern` has a bit set at the given
+// `position`.
 constexpr bool IsSetInPattern(uint8_t pattern, int position) {
   constexpr int kRepeatPeriod = sizeof(pattern) * CHAR_BIT;
   return !!((pattern >> (position % kRepeatPeriod)) & 1);
 }
 
-// Fills an infinitely-repeating |pattern| in |v|, but only modifies the bits at
-// and after the given |from| position.
+// Fills an infinitely-repeating `pattern` in `v`, but only modifies the bits at
+// and after the given `from` position.
 void FillWithPattern(uint8_t pattern, int from, YetAnotherBitVector* v) {
   for (int i = from; i < v->size(); ++i) {
     if (IsSetInPattern(pattern, i)) {

@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="cs">
+<translation id="2947471979790858922">Vaše aktivita v těchto soukromých listech bude odstraněna z tohoto zařízení</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Zavřené listy najdete v části„nedávné listy“ v hlavním menu Vivaldi. Váš soukromý list tam nebude.}
+        other {Zavřené listy najdete v části„nedávné listy“ v hlavním menu Vivaldi. Vaše # soukromé listy tam nebudou.}}</translation>
+<translation id="4871187110787939393">Zavřít všechny soukromé listy?</translation>
 </translationbundle>

@@ -44,8 +44,9 @@ void ChromeCrashReporterClient::InitializeCrashReportingForProcess() {
   instance = new ChromeCrashReporterClient();
   ANNOTATE_LEAKING_OBJECT_PTR(instance);
 
-  std::wstring process_type = install_static::GetSwitchValueFromCommandLine(
+  std::wstring process_type = install_static::GetCommandLineSwitchValue(
       ::GetCommandLine(), install_static::kProcessType);
+
   // Don't set up Crashpad crash reporting in the Crashpad handler itself, nor
   // in the fallback crash handler for the Crashpad handler process.
   if (process_type != install_static::kCrashpadHandler &&
@@ -87,52 +88,10 @@ void ChromeCrashReporterClient::GetProductNameAndVersion(
                                               special_build, channel_name);
 }
 
-bool ChromeCrashReporterClient::ShouldShowRestartDialog(std::wstring* title,
-                                                        std::wstring* message,
-                                                        bool* is_rtl_locale) {
-  if (!install_static::HasEnvironmentVariable(install_static::kShowRestart) ||
-      !install_static::HasEnvironmentVariable(install_static::kRestartInfo)) {
-    return false;
-  }
-
-  std::wstring restart_info =
-      install_static::GetEnvironmentString(install_static::kRestartInfo);
-
-  // The CHROME_RESTART var contains the dialog strings separated by '|'.
-  // See ChromeBrowserMainPartsWin::PrepareRestartOnCrashEnviroment()
-  // for details.
-  std::vector<std::wstring> dlg_strings = install_static::TokenizeString(
-      restart_info, L'|', true);  // true = Trim whitespace.
-
-  if (dlg_strings.size() < 3)
-    return false;
-
-  *title = dlg_strings[0];
-  *message = dlg_strings[1];
-  *is_rtl_locale = dlg_strings[2] == install_static::kRtlLocale;
-  return true;
-}
-
-bool ChromeCrashReporterClient::AboutToRestart() {
-  if (!install_static::HasEnvironmentVariable(install_static::kRestartInfo))
-    return false;
-
-  install_static::SetEnvironmentString(install_static::kShowRestart, L"1");
-  return true;
-}
-
-bool ChromeCrashReporterClient::GetIsPerUserInstall() {
-  return !install_static::IsSystemInstall();
-}
-
 bool ChromeCrashReporterClient::GetShouldDumpLargerDumps() {
   // Capture larger dumps for Google Chrome beta, dev, and canary channels, and
   // Chromium builds. The Google Chrome stable channel uses smaller dumps.
   return install_static::GetChromeChannel() != version_info::Channel::STABLE;
-}
-
-int ChromeCrashReporterClient::GetResultCodeRespawnFailed() {
-  return chrome::RESULT_CODE_RESPAWN_FAILED;
 }
 
 bool ChromeCrashReporterClient::ReportingIsEnforcedByPolicy(
@@ -211,8 +170,7 @@ bool ChromeCrashReporterClient::ShouldMonitorCrashHandlerExpensively() {
 bool ChromeCrashReporterClient::EnableBreakpadForProcess(
     const std::string& process_type) {
   // This is not used by Crashpad (at least on Windows).
-  NOTREACHED_IN_MIGRATION();
-  return true;
+  NOTREACHED();
 }
 
 std::wstring ChromeCrashReporterClient::GetWerRuntimeExceptionModule() {
@@ -236,5 +194,5 @@ std::wstring ChromeCrashReporterClient::GetWerRuntimeExceptionModule() {
     return std::wstring();
 
   // file_start points to the start of the filename in the elf_dir buffer.
-  return std::wstring(elf_dir, file_start).append(chrome::kWerDll);
+  return std::wstring(elf_dir, file_start).append(kWerDll);
 }

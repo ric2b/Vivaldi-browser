@@ -1,26 +1,33 @@
 SKIP: INVALID
 
+#version 310 es
+precision highp float;
+precision highp int;
 
-enable chromium_experimental_framebuffer_fetch;
 
 struct In {
-  @location(0)
-  a : vec4f,
-  @interpolate(flat) @location(1)
-  b : vec4f,
-  @color(1)
-  fbf : vec4i,
+  vec4 a;
+  vec4 b;
+  ivec4 fbf;
+};
+
+layout(location = 0) in vec4 f_loc0_Input;
+layout(location = 1) flat in vec4 f_loc1_Input;
+in ivec4 f_Input;
+void g(float a, float b, int c) {
 }
-
-@fragment
-fn f(tint_symbol : In) {
-  g(tint_symbol.a.x, tint_symbol.b.y, tint_symbol.fbf.x);
+void f_inner(In tint_symbol) {
+  g(tint_symbol.a[0u], tint_symbol.b[1u], tint_symbol.fbf[0u]);
 }
-
-fn g(a : f32, b : f32, c : i32) {
+void main() {
+  f_inner(In(f_loc0_Input, f_loc1_Input, f_Input));
 }
+error: Error parsing GLSL shader:
+ERROR: 0:14: 'int' : must be qualified as flat in
+ERROR: 0:14: '' : compilation terminated 
+ERROR: 2 compilation errors.  No code generated.
 
-Failed to generate: <dawn>/test/tint/extensions/texel_fetch/additional_params/i.wgsl:1:8 error: GLSL backend does not support extension 'chromium_experimental_framebuffer_fetch'
-enable chromium_experimental_framebuffer_fetch;
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+
+
+tint executable returned error: exit status 1

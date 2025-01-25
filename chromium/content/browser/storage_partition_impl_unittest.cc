@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "base/containers/contains.h"
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -354,40 +355,34 @@ class RemoveLocalStorageTester {
     access_data.set_last_accessed(now.ToInternalValue());
     write_data.set_last_modified(now.ToInternalValue());
     write_data.set_size_bytes(16);
-    ASSERT_TRUE(
-        db.Put(CreateAccessMetaDataKey(origin1),
-               base::as_bytes(base::make_span(access_data.SerializeAsString())))
-            .ok());
-    ASSERT_TRUE(
-        db.Put(CreateWriteMetaDataKey(origin1),
-               base::as_bytes(base::make_span(write_data.SerializeAsString())))
-            .ok());
+    ASSERT_TRUE(db.Put(CreateAccessMetaDataKey(origin1),
+                       base::as_byte_span(access_data.SerializeAsString()))
+                    .ok());
+    ASSERT_TRUE(db.Put(CreateWriteMetaDataKey(origin1),
+                       base::as_byte_span(write_data.SerializeAsString()))
+                    .ok());
     ASSERT_TRUE(db.Put(CreateDataKey(origin1), {}).ok());
 
     base::Time one_day_ago = now - base::Days(1);
     access_data.set_last_accessed(one_day_ago.ToInternalValue());
     write_data.set_last_modified(one_day_ago.ToInternalValue());
-    ASSERT_TRUE(
-        db.Put(CreateAccessMetaDataKey(origin2),
-               base::as_bytes(base::make_span(access_data.SerializeAsString())))
-            .ok());
+    ASSERT_TRUE(db.Put(CreateAccessMetaDataKey(origin2),
+                       base::as_byte_span(access_data.SerializeAsString()))
+                    .ok());
     ASSERT_TRUE(db.Put(CreateWriteMetaDataKey(origin2),
-                       base::as_bytes(
-                           base::make_span((write_data.SerializeAsString()))))
+                       base::as_byte_span((write_data.SerializeAsString())))
                     .ok());
     ASSERT_TRUE(db.Put(CreateDataKey(origin2), {}).ok());
 
     base::Time sixty_days_ago = now - base::Days(60);
     access_data.set_last_accessed(sixty_days_ago.ToInternalValue());
     write_data.set_last_modified(sixty_days_ago.ToInternalValue());
-    ASSERT_TRUE(
-        db.Put(CreateAccessMetaDataKey(origin3),
-               base::as_bytes(base::make_span(access_data.SerializeAsString())))
-            .ok());
-    ASSERT_TRUE(
-        db.Put(CreateWriteMetaDataKey(origin3),
-               base::as_bytes(base::make_span(write_data.SerializeAsString())))
-            .ok());
+    ASSERT_TRUE(db.Put(CreateAccessMetaDataKey(origin3),
+                       base::as_byte_span(access_data.SerializeAsString()))
+                    .ok());
+    ASSERT_TRUE(db.Put(CreateWriteMetaDataKey(origin3),
+                       base::as_byte_span(write_data.SerializeAsString()))
+                    .ok());
     ASSERT_TRUE(db.Put(CreateDataKey(origin3), {}).ok());
   }
 
@@ -504,9 +499,8 @@ class RemoveCodeCacheTester {
                         const GURL& origin_lock,
                         const std::string& data,
                         base::OnceClosure quit) {
-    std::vector<uint8_t> data_vector(data.begin(), data.end());
     GetCache(cache)->WriteEntry(url, origin_lock, net::NetworkIsolationKey(),
-                                base::Time::Now(), data_vector);
+                                base::Time::Now(), base::as_byte_span(data));
     std::move(quit).Run();
   }
 
@@ -1326,8 +1320,9 @@ TEST_F(StoragePartitionImplTest, RemoveInterestGroupPermissionsCacheForever) {
       url::Origin::Create(GURL("https://host1.test:1/"));
   const url::Origin kInterestGroupOrigin =
       url::Origin::Create(GURL("https://host2.test:2/"));
-  const net::NetworkIsolationKey kNetworkIsolationKey(kFrameOrigin,
-                                                      kFrameOrigin);
+  const net::SchemefulSite kFrameSite =
+      net::SchemefulSite(GURL("https://host1.test:1/"));
+  const net::NetworkIsolationKey kNetworkIsolationKey(kFrameSite, kFrameSite);
 
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
       browser_context()->GetDefaultStoragePartition());

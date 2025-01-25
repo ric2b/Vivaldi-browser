@@ -18,7 +18,7 @@ class MenuModelObserver : public base::CheckedObserver {
   virtual void MenuModelLoaded(Menu_Model* model) {}
 
   // Invoked when the model has be resat.
-  virtual void MenuModelReset(Menu_Model* model) {}
+  virtual void MenuModelReset(Menu_Model* model, bool all) {}
 
   // Invoked when the model has been changed after initial loading. If select_id
   // is different from -1 it can be used by JS to set initial selection.

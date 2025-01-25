@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Puute peale otsimise funktsioon on saadaval vaid siis, kui Vivaldi vaikimisi otsingumootor on Google. Funktsioon saadab valitud sõna ja praeguse lehe kontekstina Google’i otsingule. <ph name="BEGIN_LINK" />Seadetes<ph name="END_LINK" /> saab selle välja lülitada.</translation>
 <translation id="1598449788754183301">Lülita tavaliste ja privaatsete kaartide vahel</translation>
 <translation id="1644574205037202324">Ajalugu</translation>
-<translation id="17513872634828108">Avatud kaardid</translation>
-<translation id="1829244130665387512">Otsi leheküljelt</translation>
+<translation id="1829244130665387512">Otsi lehelt</translation>
 <translation id="1910514478706885609">Ava uues kaardivirnas</translation>
 <translation id="1925021887439448749">Sisesta kohandatud veebiaadress</translation>
 <translation id="2038563949887743358">Lülita saitide arvutiversiooni taotlemine sisse</translation>
-<translation id="2139186145475833000">Avakuvale lisamine</translation>
 <translation id="2149973817440762519">Muuda järjehoidjat</translation>
 <translation id="2306442503286132111">Järjehoidja salvestatud kausta „<ph name="FOLDER_NAME" />”</translation>
 <translation id="2433507940547922241">Välimus</translation>
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">Seadme praegune keel</translation>
 <translation id="4167670741834902166">Uus privaatne kaart</translation>
 <translation id="4195643157523330669">Ava uuel kaardil</translation>
+<translation id="4225895483398857530">Tööriistariba otsetee</translation>
 <translation id="4243710787042215766">Ava privaatsel kaardil</translation>
 <translation id="4304713468139749426">Paroolihaldur</translation>
 <translation id="451872707440238414">Otsi järjehoidjatest</translation>
@@ -74,6 +73,7 @@ Otsimiseks puuduta pikalt mõnd sõna. Otsingu täpsustamiseks libista paneel t�
 <translation id="8560602726703398413">Lugemisnimekirja leiad järjehoidjate alt.</translation>
 <translation id="85991616550051997">Mine kodulehele</translation>
 <translation id="8820817407110198400">Järjehoidjad</translation>
+<translation id="9042893549633094279">Privaatsus ja turvalisus</translation>
 <translation id="9063523880881406963">Lülita saitide arvutiversiooni taotlemine välja</translation>
 <translation id="9080642952018487277">Sisene privaatsesse režiimi</translation>
 <translation id="96681097142096641">Kas näidata lehte lihtsustatud kujul?</translation>

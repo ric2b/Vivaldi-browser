@@ -41,18 +41,12 @@ extern UIColor* const vSliderColor;
 // Color for icons in unselected state
 extern NSString* const vNotSelectedColor;
 
-// Icon for recently closed tab selected state
-extern NSString* const kImagePageControlClosedSelected;
-// Icon for recently closed tab not selected state
-extern NSString* const kImagePageControlClosedNotSelected;
-
 // Image names for the different icon state.
-extern NSString* const kImagePageControlRegularSelected;
-extern NSString* const kImagePageControlRegularNotSelected;
-extern NSString* const kImagePageControlIncognitoSelected;
-extern NSString* const kImagePageControlIncognitoNotSelected;
-extern NSString* const kImagePageControlRemoteSelected;
-extern NSString* const kImagePageControlRemoteNotSelected;
+extern NSString* const kImagePageControlRegular;
+extern NSString* const kImagePageControlIncognito;
+extern NSString* const kImagePageControlRemote;
+extern NSString* const kImagePageControlRemoteSynced;
+extern NSString* const kImagePageControlClosed;
 
 // Color for the regular tab count label and icons.
 extern const CGFloat kLegacySelectedColor;

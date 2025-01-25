@@ -31,11 +31,13 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_installation_manager.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_manager.h"
 #include "chrome/browser/web_applications/manifest_update_manager.h"
+#include "chrome/browser/web_applications/navigation_capturing_log.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_protocol_handler_manager.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/preinstalled_web_app_manager.h"
+#include "chrome/browser/web_applications/visited_manifest_manager.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_audio_focus_id_map.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
@@ -50,19 +52,15 @@
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/browser/web_applications/web_app_translation_manager.h"
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
-#include "chrome/browser/web_applications/web_app_ui_state_manager.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/web_contents.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "base/feature_list.h"
+#include "chrome/browser/web_applications/ash/migrations/adobe_express_oem_to_default_migration.h"
 #include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_policy_manager.h"
-#include "chrome/browser/web_applications/migrations/adobe_express_oem_to_default_migration.h"
-#include "chrome/browser/web_applications/migrations/migrate_preinstalls_to_aps.h"
 #include "chrome/browser/web_applications/web_app_run_on_os_login_manager.h"
-#include "chromeos/constants/chromeos_features.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -296,6 +294,16 @@ AbstractWebAppDatabaseFactory& WebAppProvider::database_factory() {
   return *database_factory_;
 }
 
+VisitedManifestManager& WebAppProvider::visited_manifest_manager() {
+  CheckIsConnected();
+  return *visited_manifest_manager_;
+}
+
+NavigationCapturingLog& WebAppProvider::navigation_capturing_log() {
+  CheckIsConnected();
+  return *navigation_capturing_log_;
+}
+
 void WebAppProvider::Shutdown() {
   command_scheduler_->Shutdown();
   command_manager_->Shutdown();
@@ -373,7 +381,8 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
 #endif
 
   web_contents_manager_ = std::make_unique<WebContentsManager>();
-  ui_state_manager_ = std::make_unique<WebAppUiStateManager>();
+  visited_manifest_manager_ = std::make_unique<VisitedManifestManager>();
+  navigation_capturing_log_ = std::make_unique<NavigationCapturingLog>();
 }
 
 void WebAppProvider::ConnectSubsystems() {
@@ -422,10 +431,6 @@ void WebAppProvider::OnSyncBridgeReady() {
 #if BUILDFLAG(IS_CHROMEOS)
   web_app::migrations::MigrateAdobeExpressFromOemInstallToDefault(
       sync_bridge_.get());
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kPreinstalledWebAppsCoreOnly)) {
-    web_app::migrations::MigratePreinstallsToAps(sync_bridge_.get());
-  }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
   base::ConcurrentClosures concurrent;

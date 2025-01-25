@@ -43,6 +43,11 @@ bool RenderWidgetHostViewInput::ScreenRectIsUnstableForIOv2For(
   return false;
 }
 
+gfx::PointF RenderWidgetHostViewInput::TransformPointToRootCoordSpaceF(
+    const gfx::PointF& point) {
+  return point;
+}
+
 gfx::PointF RenderWidgetHostViewInput::TransformRootPointToViewCoordSpace(
     const gfx::PointF& point) {
   return point;
@@ -50,9 +55,8 @@ gfx::PointF RenderWidgetHostViewInput::TransformRootPointToViewCoordSpace(
 
 bool RenderWidgetHostViewInput::TransformPointToLocalCoordSpace(
     const gfx::PointF& point,
-    const viz::SurfaceId& original_surface,
+    const viz::FrameSinkId& original_frame_sink_id,
     gfx::PointF* transformed_point) {
-  viz::FrameSinkId original_frame_sink_id = original_surface.frame_sink_id();
   viz::FrameSinkId target_frame_sink_id = GetFrameSinkId();
   if (!original_frame_sink_id.is_valid() || !target_frame_sink_id.is_valid()) {
     return false;
@@ -86,8 +90,7 @@ bool RenderWidgetHostViewInput::TransformPointToCoordSpaceForView(
     const gfx::PointF& point,
     input::RenderWidgetHostViewInput* target_view,
     gfx::PointF* transformed_point) {
-  NOTREACHED_IN_MIGRATION();
-  return true;
+  NOTREACHED();
 }
 
 bool RenderWidgetHostViewInput::GetTransformToViewCoordSpace(
@@ -293,7 +296,7 @@ void RenderWidgetHostViewInput::ForwardTouchpadZoomEventIfNecessary(
       }
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 

@@ -35,6 +35,7 @@
 #include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/wgsl/builtin_fn.h"
 #include "src/tint/lang/wgsl/ir/builtin_call.h"
+#include "src/tint/utils/diagnostic/diagnostic.h"
 #include "src/tint/utils/ice/ice.h"
 
 namespace tint::wgsl::reader {
@@ -175,8 +176,10 @@ core::BuiltinFn Convert(wgsl::BuiltinFn fn) {
         CASE(kSubgroupShuffleDown)
         CASE(kInputAttachmentLoad)
         CASE(kSubgroupAdd)
+        CASE(kSubgroupInclusiveAdd)
         CASE(kSubgroupExclusiveAdd)
         CASE(kSubgroupMul)
+        CASE(kSubgroupInclusiveMul)
         CASE(kSubgroupExclusiveMul)
         CASE(kSubgroupAnd)
         CASE(kSubgroupOr)
@@ -202,7 +205,9 @@ core::BuiltinFn Convert(wgsl::BuiltinFn fn) {
 }  // namespace
 
 Result<SuccessType> Lower(core::ir::Module& mod) {
-    if (auto res = core::ir::ValidateAndDumpIfNeeded(mod, "lowering from WGSL"); res != Success) {
+    auto res = core::ir::ValidateAndDumpIfNeeded(
+        mod, "wgsl.Lower", core::ir::Capabilities{core::ir::Capability::kAllowOverrides});
+    if (res != Success) {
         return res.Failure();
     }
 

@@ -38,7 +38,7 @@ DirectMatchServiceFactory::~DirectMatchServiceFactory() {}
 
 content::BrowserContext* DirectMatchServiceFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
-  return chrome::GetBrowserContextRedirectedInIncognito(context);
+  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 KeyedService* DirectMatchServiceFactory::BuildServiceInstanceFor(

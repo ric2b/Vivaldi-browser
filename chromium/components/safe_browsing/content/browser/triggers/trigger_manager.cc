@@ -53,9 +53,8 @@ bool TriggerNeedsOptInForCollection(const TriggerType trigger_type) {
       return true;
     case TriggerType::DEPRECATED_AD_POPUP:
     case TriggerType::DEPRECATED_AD_REDIRECT:
-      NOTREACHED_IN_MIGRATION() << "These triggers have been handled in "
-                                   "CanStartDataCollectionWithReason()";
-      return true;
+      NOTREACHED() << "These triggers have been handled in "
+                      "CanStartDataCollectionWithReason()";
   }
   // By default, require opt-in for all triggers.
   return true;
@@ -80,8 +79,8 @@ bool CanSendReport(const SBErrorOptions& error_display_options,
 
 }  // namespace
 
-DataCollectorsContainer::DataCollectorsContainer() {}
-DataCollectorsContainer::~DataCollectorsContainer() {}
+DataCollectorsContainer::DataCollectorsContainer() = default;
+DataCollectorsContainer::~DataCollectorsContainer() = default;
 
 TriggerManager::FinishCollectingThreatDetailsResult::
     FinishCollectingThreatDetailsResult(bool should_send_report,
@@ -98,7 +97,7 @@ TriggerManager::TriggerManager(BaseUIManager* ui_manager,
     : ui_manager_(ui_manager),
       trigger_throttler_(new TriggerThrottler(local_state_prefs)) {}
 
-TriggerManager::~TriggerManager() {}
+TriggerManager::~TriggerManager() = default;
 
 void TriggerManager::set_trigger_throttler(TriggerThrottler* throttler) {
   trigger_throttler_.reset(throttler);
@@ -319,7 +318,7 @@ TriggerManagerWebContentsHelper::TriggerManagerWebContentsHelper(
           *web_contents),
       trigger_manager_(trigger_manager) {}
 
-TriggerManagerWebContentsHelper::~TriggerManagerWebContentsHelper() {}
+TriggerManagerWebContentsHelper::~TriggerManagerWebContentsHelper() = default;
 
 void TriggerManagerWebContentsHelper::WebContentsDestroyed() {
   trigger_manager_->WebContentsDestroyed(web_contents());

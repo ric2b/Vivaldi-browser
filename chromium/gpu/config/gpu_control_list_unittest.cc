@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include <stdint.h>
 
 #include <memory>
@@ -83,7 +78,7 @@ INSTANTIATE_TEST_SUITE_P(,
 
 TEST_P(GpuControlListTest, NeedsMoreInfo) {
   const Entry kEntries[1] = {
-      kGpuControlListTestingEntries[kGpuControlListTest_NeedsMoreInfo]};
+      GetGpuControlListTestingEntries()[kGpuControlListTest_NeedsMoreInfo]};
   std::unique_ptr<GpuControlList> control_list = Create(kEntries);
 
   GPUInfo gpu_info;
@@ -113,7 +108,7 @@ TEST_P(GpuControlListTest, NeedsMoreInfo) {
 
 TEST_P(GpuControlListTest, NeedsMoreInfoForExceptions) {
   const Entry kEntries[1] = {
-      kGpuControlListTestingEntries
+      GetGpuControlListTestingEntries()
           [kGpuControlListTest_NeedsMoreInfoForExceptions]};
   std::unique_ptr<GpuControlList> control_list = Create(kEntries);
 
@@ -154,8 +149,9 @@ TEST_P(GpuControlListTest, IgnorableEntries) {
   // If an entry will not change the control_list decisions, then it should not
   // trigger the needs_more_info flag.
   const Entry kEntries[2] = {
-      kGpuControlListTestingEntries[kGpuControlListTest_IgnorableEntries_0],
-      kGpuControlListTestingEntries[kGpuControlListTest_IgnorableEntries_1]};
+      GetGpuControlListTestingEntries()[kGpuControlListTest_IgnorableEntries_0],
+      GetGpuControlListTestingEntries()
+          [kGpuControlListTest_IgnorableEntries_1]};
   std::unique_ptr<GpuControlList> control_list = Create(kEntries);
 
   GPUInfo gpu_info;
@@ -169,9 +165,9 @@ TEST_P(GpuControlListTest, IgnorableEntries) {
 
 TEST_P(GpuControlListTest, DisabledExtensionTest) {
   // exact setting.
-  const Entry kEntries[2] = {kGpuControlListTestingEntries
+  const Entry kEntries[2] = {GetGpuControlListTestingEntries()
                                  [kGpuControlListTest_DisabledExtensionTest_0],
-                             kGpuControlListTestingEntries
+                             GetGpuControlListTestingEntries()
                                  [kGpuControlListTest_DisabledExtensionTest_1]};
   std::unique_ptr<GpuControlList> control_list = Create(kEntries);
 
@@ -188,8 +184,8 @@ TEST_P(GpuControlListTest, DisabledExtensionTest) {
 }
 
 TEST_P(GpuControlListTest, LinuxKernelVersion) {
-  const Entry kEntries[1] = {
-      kGpuControlListTestingEntries[kGpuControlListTest_LinuxKernelVersion]};
+  const Entry kEntries[1] = {GetGpuControlListTestingEntries()
+                                 [kGpuControlListTest_LinuxKernelVersion]};
   std::unique_ptr<GpuControlList> control_list = Create(kEntries);
 
   GPUInfo gpu_info;
@@ -206,9 +202,9 @@ TEST_P(GpuControlListTest, LinuxKernelVersion) {
 
 TEST_P(GpuControlListTest, TestGroup) {
   const Entry kEntries[3] = {
-      kGpuControlListTestingEntries[kGpuControlListTest_LinuxKernelVersion],
-      kGpuControlListTestingEntries[kGpuControlListTest_TestGroup_0],
-      kGpuControlListTestingEntries[kGpuControlListTest_TestGroup_1]};
+      GetGpuControlListTestingEntries()[kGpuControlListTest_LinuxKernelVersion],
+      GetGpuControlListTestingEntries()[kGpuControlListTest_TestGroup_0],
+      GetGpuControlListTestingEntries()[kGpuControlListTest_TestGroup_1]};
   std::unique_ptr<GpuControlList> control_list = Create(kEntries);
   GPUInfo gpu_info;
 

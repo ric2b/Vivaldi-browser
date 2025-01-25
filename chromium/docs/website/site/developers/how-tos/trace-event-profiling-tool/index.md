@@ -29,7 +29,7 @@ width=400>](/developers/how-tos/trace-event-profiling-tool/abouttracing2.png)
 
 1.  [Recording Tracing
             Runs](/developers/how-tos/trace-event-profiling-tool/recording-tracing-runs);
-            start with this, it's prerequisite for using about:tracing.
+            start with this, it's a prerequisite for using about:tracing.
 2.  [How to use the Frame Viewer to Bust
             Jank](/developers/how-tos/trace-event-profiling-tool/using-frameviewer);
             read this next, to understand how to diagnose rendering performance

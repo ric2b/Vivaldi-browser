@@ -9,10 +9,8 @@
 #include <memory>
 
 #include "base/debug/crash_logging.h"
-#include "base/feature_list.h"
 #include "base/functional/callback_helpers.h"
 #include "base/task/single_thread_task_runner.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/exported/web_dev_tools_agent_impl.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -136,7 +134,7 @@ class DevToolsAgent::IOAgent : public mojom::blink::DevToolsAgent {
 
   void InspectElement(const gfx::Point& point) override {
     // InspectElement on a worker doesn't make sense.
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
   void ReportChildTargets(bool report,
@@ -275,12 +273,9 @@ void DevToolsAgent::AttachDevToolsSessionImpl(
       // to reordering of detach and attach, there's a dependency between task
       // queues, which is not allowed. To get around this, use the same task
       // runner that mojo uses for incoming channel associated messages.
-      base::FeatureList::IsEnabled(
-          features::kBlinkSchedulerPrioritizeNavigationIPCs) &&
-              IsMainThread()
-          ? Thread::MainThread()->GetTaskRunner(
-                MainThreadTaskRunnerRestricted{})
-          : inspector_task_runner_->isolate_task_runner());
+      IsMainThread() ? Thread::MainThread()->GetTaskRunner(
+                           MainThreadTaskRunnerRestricted{})
+                     : inspector_task_runner_->isolate_task_runner());
   sessions_.insert(session);
   UpdateSessionCountCrashKey(1);
   client_->DebuggerTaskFinished();
@@ -328,7 +323,7 @@ void DevToolsAgent::InspectElement(const gfx::Point& point) {
     client_->InspectElement(point);
   } else {
     // InspectElement on a worker doesn't make sense.
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 }
 

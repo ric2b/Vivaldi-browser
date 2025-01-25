@@ -60,11 +60,18 @@ devtools_module("issues_manager") {
 
 devtools_issue_description_files = [
   "arInsecureContext.md",
+  "arInvalidInfoHeader.md",
   "arInvalidRegisterOsSourceHeader.md",
   "arInvalidRegisterOsTriggerHeader.md",
   "arInvalidRegisterSourceHeader.md",
   "arInvalidRegisterTriggerHeader.md",
   "arNavigationRegistrationWithoutTransientUserActivation.md",
+  "arNavigationRegistrationUniqueScopeAlreadySet.md",
+  "arNoRegisterOsSourceHeader.md",
+  "arNoRegisterOsTriggerHeader.md",
+  "arNoRegisterSourceHeader.md",
+  "arNoRegisterTriggerHeader.md",
+  "arNoWebOrOsSupport.md",
   "arOsSourceIgnored.md",
   "arOsTriggerIgnored.md",
   "arPermissionPolicyDisabled.md",
@@ -165,6 +172,8 @@ devtools_issue_description_files = [
   "cookieWarnThirdPartyPhaseoutRead.md",
   "cookieExcludeThirdPartyPhaseoutSet.md",
   "cookieExcludeThirdPartyPhaseoutRead.md",
+  "cookieExcludePortMismatch.md",
+  "cookieExcludeSchemeMismatch.md",
   "cookieWarnMetadataGrantRead.md",
   "cookieWarnMetadataGrantSet.md",
   "propertyRuleIssue.md",
@@ -196,6 +205,7 @@ devtools_issue_description_files = [
   "sharedDictionaryWriteErrorShuttingDown.md",
   "sharedDictionaryWriteErrorTooLongIdField.md",
   "sharedDictionaryWriteErrorUnsupportedType.md",
+  "placeholderDescriptionForInvisibleIssues.md",
 ]
 
 devtools_pre_built("descriptions") {

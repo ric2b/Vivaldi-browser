@@ -10,14 +10,25 @@
   background-color: var(--sys-color-surface3);
   height: 100%;
   box-sizing: border-box;
+
+  &:not(:hover) .title-help {
+    visibility: hidden;
+  }
 }
 
 .title {
+  display: flex;
+  justify-content: space-between;
   font-size: var(--sys-typescale-headline5-size);
   line-height: var(--sys-typescale-headline5-line-height);
   font-weight: var(--ref-typeface-weight-medium);
   margin: 0;
   margin-bottom: 6px;
+}
+
+.title-help {
+  height: var(--sys-typescale-headline5-line-height);
+  margin-left: 4px;
 }
 
 .metric-values-section {
@@ -61,7 +72,7 @@
   width: 100%;
   border: 0;
   border-bottom: 1px solid var(--sys-color-divider);
-  margin: 2px 0;
+  margin: 8px 0;
   box-sizing: border-box;
 }
 
@@ -139,4 +150,13 @@
   border-radius: var(--sys-shape-corner-small);
   background-color: var(--sys-color-cdt-base-container);
   box-shadow: var(--drop-shadow-depth-3);
+}
+
+.phase-table-row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.phase-table-header-row {
+  font-weight: var(--ref-typeface-weight-medium);
 }

@@ -17,10 +17,8 @@ limitations under the License.
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <string>
 #include <utility>
 
-#include "absl/status/statusor.h"
 #include "llvm/ADT/APFloat.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -33,7 +31,7 @@ limitations under the License.
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "xla/service/gpu/fusions/transforms/passes.h"
-#include "xla/stream_executor/cuda/cuda_asm_compiler.h"
+#include "xla/service/gpu/llvm_gpu_backend/gpu_backend_lib.h"
 #include "xla/stream_executor/device_description.h"
 #include "xla/stream_executor/semantic_version.h"
 
@@ -87,7 +85,8 @@ struct RewriteTruncFPattern : public mlir::OpRewritePattern<ma::TruncFOp> {
                                           b.create<ma::ConstantIntOp>(0, 8));
       auto cvtIntr = to_ty.isFloat8E4M3FN() ? "llvm.nvvm.f16x2.to.e4m3x2.rn"
                                             : "llvm.nvvm.f16x2.to.e5m2x2.rn";
-      cvtOp = b.create<ml::CallIntrinsicOp>(b.getIntegerType(16), cvtIntr,
+      cvtOp = b.create<ml::CallIntrinsicOp>(b.getIntegerType(16),
+                                            b.getStringAttr(cvtIntr),
                                             mlir::ValueRange{vec});
     } else {
       // Other FP types get converted to F32 first.
@@ -99,7 +98,8 @@ struct RewriteTruncFPattern : public mlir::OpRewritePattern<ma::TruncFOp> {
       }
       auto cvtIntr = to_ty.isFloat8E4M3FN() ? "llvm.nvvm.ff.to.e4m3x2.rn"
                                             : "llvm.nvvm.ff.to.e5m2x2.rn";
-      cvtOp = b.create<ml::CallIntrinsicOp>(b.getIntegerType(16), cvtIntr,
+      cvtOp = b.create<ml::CallIntrinsicOp>(b.getIntegerType(16),
+                                            b.getStringAttr(cvtIntr),
                                             mlir::ValueRange{value, value});
     }
     Value res = b.create<ml::TruncOp>(b.getIntegerType(8), cvtOp.getResults());
@@ -213,7 +213,8 @@ struct RewriteExtFPattern : public mlir::OpRewritePattern<ma::ExtFOp> {
                        : "llvm.nvvm.e5m2x2.to.f16x2.rn";
     mlir::FloatType f16_ty = b.getF16Type();
     auto cvtOp = b.create<ml::CallIntrinsicOp>(
-        ml::getFixedVectorType(f16_ty, 2), cvtIntr, mlir::ValueRange{input});
+        ml::getFixedVectorType(f16_ty, 2), b.getStringAttr(cvtIntr),
+        mlir::ValueRange{input});
     Value res = b.create<ml::ExtractElementOp>(
         cvtOp.getResults(), b.create<ma::ConstantIntOp>(0, 8));
     if (to_ty.getWidth() > f16_ty.getWidth()) {
@@ -250,14 +251,16 @@ std::unique_ptr<mlir::Pass> CreateConvertFloatNvidiaPass() {
 }
 
 std::optional<std::unique_ptr<mlir::Pass>> MaybeCreateConvertFloatNvidiaPass(
-    const se::CudaComputeCapability& cc, const std::string& cuda_data_dir) {
-  absl::StatusOr<se::SemanticVersion> ptx_version =
-      se::GetAsmCompilerVersion(cuda_data_dir);
-  if (ptx_version.ok() &&
-      // FP8 conversion intrinsics are available on sm89 since ptx 8.1
-      ((*ptx_version >= se::SemanticVersion(8, 1, 0) && cc.IsAtLeast(8, 9)) ||
-       // Older ptx versions only support FP8 conversion for sm90
-       (*ptx_version >= se::SemanticVersion(7, 8, 0) && cc.IsAtLeast(9, 0)))) {
+    const se::DeviceDescription& device_description) {
+  se::SemanticVersion ptx_version =
+      nvptx::DetermineHighestSupportedPtxVersionFromCudaVersion(
+          device_description.runtime_version());
+  se::CudaComputeCapability cc = device_description.cuda_compute_capability();
+
+  // FP8 conversion intrinsics are available on sm89 since ptx 8.1
+  // Older ptx versions only support FP8 conversion for sm90
+  if ((ptx_version >= se::SemanticVersion(8, 1, 0) && cc.IsAtLeast(8, 9)) ||
+      (ptx_version >= se::SemanticVersion(7, 8, 0) && cc.IsAtLeast(9, 0))) {
     return CreateConvertFloatNvidiaPass();
   }
   return std::nullopt;

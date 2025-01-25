@@ -32,7 +32,7 @@ class MdnsService {
   virtual ~MdnsService();
 
   // Creates a new MdnsService instance, to be owned by the caller. On failure,
-  // returns nullptr. |task_runner|, |reporting_client|, and |config| must exist
+  // returns nullptr. `task_runner`, `reporting_client`, and `config` must exist
   // for the duration of the resulting instance's life.
   static std::unique_ptr<MdnsService> Create(TaskRunner& task_runner,
                                              ReportingClient& reporting_client,
@@ -40,14 +40,14 @@ class MdnsService {
                                              const InterfaceInfo& network_info);
 
   // Starts an mDNS query with the given properties. Updated records are passed
-  // to |callback|.  The caller must ensure |callback| remains alive while it is
+  // to `callback`.  The caller must ensure `callback` remains alive while it is
   // registered with a query.
   virtual void StartQuery(const DomainName& name,
                           DnsType dns_type,
                           DnsClass dns_class,
                           MdnsRecordChangedCallback* callback) = 0;
 
-  // Stops an mDNS query with the given properties. |callback| must be the same
+  // Stops an mDNS query with the given properties. `callback` must be the same
   // callback pointer that was previously passed to StartQuery.
   virtual void StopQuery(const DomainName& name,
                          DnsType dns_type,
@@ -59,7 +59,7 @@ class MdnsService {
   // received query results are discarded.
   virtual void ReinitializeQueries(const DomainName& name) = 0;
 
-  // Starts probing for a valid domain name based on the given one. |callback|
+  // Starts probing for a valid domain name based on the given one. `callback`
   // will be called once a valid domain is found, and the instance must persist
   // until that call is received.
   virtual Error StartProbe(MdnsDomainConfirmedProvider* callback,

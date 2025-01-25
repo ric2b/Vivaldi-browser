@@ -23,6 +23,7 @@
 #include "third_party/blink/renderer/modules/credentialmanagement/scoped_promise_resolver.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
@@ -35,6 +36,13 @@ namespace {
 
 // https://www.w3.org/TR/webauthn/#dom-publickeycredential-type-slot:
 constexpr char kPublicKeyCredentialType[] = "public-key";
+
+// This is the subset of client capabilities computed by the renderer. See also
+// //content/browser/webauth/authenticator_common_impl.h
+constexpr char kConditionalCreateCapability[] = "conditionalCreate";
+constexpr char kSignalAllAcceptedCredentials[] = "signalAllAcceptedCredentials";
+constexpr char kSignalCurrentUserDetails[] = "signalCurrentUserDetails";
+constexpr char kSignalUnknownCredential[] = "signalUnknownCredential";
 
 void OnIsUserVerifyingComplete(ScriptPromiseResolver<IDLBoolean>* resolver,
                                bool available) {
@@ -60,6 +68,41 @@ void OnGetClientCapabilitiesComplete(
   for (const auto& capability : capabilities) {
     results.emplace_back(std::move(capability->name), capability->supported);
   }
+  // Add renderer computed capabilities.
+  // TODO(crbug.com/360327828): Update when supported.
+  results.emplace_back(kConditionalCreateCapability, false);
+
+  const bool report_enabled =
+      RuntimeEnabledFeatures::CredentialManagerReportEnabled();
+  results.emplace_back(kSignalAllAcceptedCredentials, report_enabled);
+  results.emplace_back(kSignalCurrentUserDetails, report_enabled);
+  results.emplace_back(kSignalUnknownCredential, report_enabled);
+
+  // Extensions are added from the AuthenticationExtensionsClientInputs
+  // dictionary defined in authentication_extensions_client_inputs.idl.
+  // According to the specification, we should include a key for each
+  // extension implemented by the client, formed by prefixing "extension:"
+  // to the extension identifier.
+  //
+  // Excluded extensions: cableAuthentication, uvm, remoteDesktopClientOverride,
+  // and supplementalPubKeys.
+  results.emplace_back("extension:appid", true);
+  results.emplace_back("extension:appidExclude", true);
+  results.emplace_back("extension:hmacCreateSecret", true);
+  results.emplace_back("extension:credentialProtectionPolicy", true);
+  results.emplace_back("extension:enforceCredentialProtectionPolicy", true);
+  results.emplace_back("extension:minPinLength", true);
+  results.emplace_back("extension:credProps", true);
+  results.emplace_back(
+      "extension:largeBlob",
+      RuntimeEnabledFeatures::WebAuthenticationLargeBlobExtensionEnabled());
+  results.emplace_back("extension:credBlob", true);
+  results.emplace_back("extension:getCredBlob", true);
+  results.emplace_back(
+      "extension:payment",
+      RuntimeEnabledFeatures::SecurePaymentConfirmationEnabled());
+  results.emplace_back("extension:prf",
+                       RuntimeEnabledFeatures::WebAuthenticationPRFEnabled());
 
   // Results should be sorted lexicographically based on the keys.
   std::sort(
@@ -67,7 +110,7 @@ void OnGetClientCapabilitiesComplete(
       [](const std::pair<String, bool>& a, const std::pair<String, bool>& b) {
         return CodeUnitCompare(a.first, b.first) < 0;
       });
-  resolver->Resolve(results);
+  resolver->Resolve(std::move(results));
 }
 
 void OnSignalReportComplete(
@@ -116,7 +159,9 @@ PublicKeyCredential::getClientCapabilities(ScriptState* script_state) {
       ScriptPromiseResolver<IDLRecord<IDLString, IDLBoolean>>>(script_state);
   ScriptPromise promise = resolver->Promise();
 
-  // TODO(crbug.com/360327828): Add "UseCounter".
+  UseCounter::Count(resolver->GetExecutionContext(),
+                    WebFeature::kWebAuthnGetClientCapabilities);
+
   auto* authenticator =
       CredentialManagerProxy::From(script_state)->Authenticator();
   authenticator->GetClientCapabilities(WTF::BindOnce(

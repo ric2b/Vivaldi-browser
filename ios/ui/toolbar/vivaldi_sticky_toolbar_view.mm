@@ -25,6 +25,10 @@ const CGFloat locationImageViewRightPadding = 2;
 @property(nonatomic,weak) UIImageView* locationIconImageView;
 @property(nonatomic,copy) NSString* securityLevelAccessibilityString;
 
+// Location text to be shown
+@property(nonatomic, strong) NSString* locationText;
+// Domain part of the location text
+@property(nonatomic, strong) NSString* domainText;
 // Boolean to determine if the full address should be shown.
 @property(nonatomic, assign) BOOL showFullAddress;
 
@@ -154,15 +158,17 @@ const CGFloat locationImageViewRightPadding = 2;
                   showFull:(BOOL)showFull {
   if (self.showFullAddress != showFull)
     self.showFullAddress = showFull;
+  self.locationText = text;
+  self.domainText = domain;
 
   self.locationLabel.lineBreakMode = NSLineBreakByTruncatingTail;
 
   if (showFull && ![text isEqualToString:domain] && [text length] > 0) {
     UIColor *fullTextColor =
-        [[UIColor labelColor]
+        [self.localLabelTintColor
             colorWithAlphaComponent:vLocationBarSteadyViewFullAddressOpacity];
     UIColor *domainColor =
-        [[UIColor labelColor]
+        [self.localLabelTintColor
              colorWithAlphaComponent:vLocationBarSteadyViewDomainOpacity];
     NSAttributedString *attributedString =
         [VivaldiGlobalHelpers attributedStringWithText:text
@@ -200,6 +206,11 @@ const CGFloat locationImageViewRightPadding = 2;
   self.localLabelTintColor = tintColor;
   self.locationLabel.textColor = tintColor;
   self.locationIconImageView.tintColor = tintColor;
+
+  // Update the label after setting tint color
+  [self updateLocationText:self.locationText
+                    domain:self.domainText
+                  showFull:self.showFullAddress];
 }
 
 - (void)setSecurityLevelAccessibilityString:(NSString*)string {

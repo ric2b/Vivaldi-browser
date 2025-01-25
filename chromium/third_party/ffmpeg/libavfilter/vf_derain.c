@@ -27,7 +27,7 @@
 #include "libavutil/opt.h"
 #include "avfilter.h"
 #include "dnn_filter_common.h"
-#include "internal.h"
+#include "filters.h"
 #include "video.h"
 
 typedef struct DRContext {
@@ -49,7 +49,7 @@ static const AVOption derain_options[] = {
     { NULL }
 };
 
-AVFILTER_DNN_DEFINE_CLASS(derain);
+AVFILTER_DNN_DEFINE_CLASS(derain, DNN_TF);
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {

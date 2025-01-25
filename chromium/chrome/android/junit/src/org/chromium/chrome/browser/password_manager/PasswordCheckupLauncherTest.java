@@ -14,7 +14,6 @@ import static org.mockito.Mockito.when;
 
 import static org.chromium.chrome.browser.password_manager.PasswordCheckReferrer.LEAK_DIALOG;
 
-import android.accounts.Account;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
@@ -26,8 +25,9 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
@@ -42,9 +42,9 @@ import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
-import org.chromium.components.signin.AccountUtils;
-import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.base.AccountInfo;
 import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
+import org.chromium.components.signin.test.util.TestAccounts;
 import org.chromium.components.sync.SyncService;
 import org.chromium.components.sync.UserSelectableType;
 import org.chromium.components.user_prefs.UserPrefs;
@@ -61,8 +61,10 @@ import java.lang.ref.WeakReference;
 @Config(manifest = Config.NONE)
 @Batch(Batch.PER_CLASS)
 public class PasswordCheckupLauncherTest {
-    private static final String TEST_EMAIL_ADDRESS = "test@email.com";
+    private static final AccountInfo TEST_ACCOUNT = TestAccounts.ACCOUNT1;
     private static final String TEST_NO_EMAIL_ADDRESS = null;
+
+    @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Rule public JniMocker mJniMocker = new JniMocker();
 
@@ -101,7 +103,6 @@ public class PasswordCheckupLauncherTest {
 
     @Before
     public void setUp() throws PasswordCheckBackendException {
-        MockitoAnnotations.initMocks(this);
         mJniMocker.mock(UserPrefsJni.TEST_HOOKS, mMockUserPrefsJni);
         mJniMocker.mock(PasswordManagerUtilBridgeJni.TEST_HOOKS, mMockPasswordManagerUtilBridgeJni);
         when(mMockPasswordManagerUtilBridgeJni.areMinUpmRequirementsMet()).thenReturn(true);
@@ -115,13 +116,8 @@ public class PasswordCheckupLauncherTest {
         when(mMockSyncService.hasSyncConsent()).thenReturn(true);
 
         AccountManagerFacadeProvider.setInstanceForTests(mFakeAccountManagerFacade);
-        Account newAccount = AccountUtils.createAccountFromName(TEST_EMAIL_ADDRESS);
-        mFakeAccountManagerFacade.addAccount(newAccount);
-        when(mMockSyncService.getAccountInfo())
-                .thenReturn(
-                        CoreAccountInfo.createFromEmailAndGaiaId(
-                                TEST_EMAIL_ADDRESS,
-                                mFakeAccountManagerFacade.getAccountGaiaId(TEST_EMAIL_ADDRESS)));
+        mFakeAccountManagerFacade.addAccount(TEST_ACCOUNT);
+        when(mMockSyncService.getAccountInfo()).thenReturn(TEST_ACCOUNT);
 
         PasswordManagerBackendSupportHelper.setInstanceForTesting(mFakeBackendSupportHelper);
         mFakeBackendSupportHelper.setBackendPresent(true);
@@ -153,7 +149,7 @@ public class PasswordCheckupLauncherTest {
                 .thenReturn(true);
 
         PasswordCheckupLauncher.launchCheckupOnDevice(
-                mProfile, mMockWindowAndroid, LEAK_DIALOG, TEST_EMAIL_ADDRESS);
+                mProfile, mMockWindowAndroid, LEAK_DIALOG, TestAccounts.ACCOUNT1.getEmail());
 
         verify(mMockPendingIntentForAccountCheckup).send();
     }

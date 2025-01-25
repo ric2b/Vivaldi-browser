@@ -6,6 +6,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/search_engines_manager.h"
+#include "components/search_engines/search_engines_managers_factory.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "search_engines_helper.h"
 
@@ -20,126 +21,56 @@ const std::vector<EngineAndTier> GetSearchEngineDetails(
   if (default_search_provider_index)
     *default_search_provider_index = 0;
 
-  DCHECK(SearchEnginesManager::GetInstance()->IsInitialized());
-  std::vector<EngineAndTier> t_url;
+  std::vector<EngineAndTier> result;
 
-  if (!SearchEnginesManager::GetInstance()->IsInitialized()) {
-    // This is bad, but try not to crash anyway.
-    return t_url;
-  }
-
-  std::vector<const PrepopulatedEngine*> populated_engines;
+  ParsedSearchEngines::EnginesListWithDefaults prepopulated_engines_list;
 
   std::string lang(
       application_locale.begin(),
       std::find(application_locale.begin(), application_locale.end(), '-'));
 
-  SearchEnginesManager::EnginesInfo engines_info;
+  prepopulated_engines_list = SearchEnginesManagersFactory::GetInstance()
+                                  ->GetSearchEnginesManager()
+                                  ->GetEnginesByCountryId(country_id, lang);
 
-  if (vivaldi::IsVivaldiRunning()) {
-    populated_engines =
-        SearchEnginesManager::GetInstance()->GetEnginesByCountryId(
-            country_id, lang, &engines_info);
-  } else {
-    populated_engines =
-        SearchEnginesManager::GetInstance()->GetEnginesByEngineKey(
-            "unittests", &engines_info);
-  }
-
-  if (populated_engines.empty()) {
-    // No engines, probably caused by an error.
-    LOG(WARNING) << "No search engines found.";
-    return t_url;
-  }
-
-  if (engines_info.default_engine_index < 0) {
-    LOG(WARNING) << "Unknown default search engine.";
-    engines_info.default_engine_index = 0;
-  }
-
-  if (engines_info.private_engine_index < 0) {
-    LOG(WARNING) << "Unknown default private search engine.";
-    // Use default.
-    engines_info.private_engine_index = engines_info.default_engine_index;
-  }
-
-  DCHECK(engines_info.default_engine_index < int(populated_engines.size()));
-  DCHECK(engines_info.private_engine_index < int(populated_engines.size()));
+  CHECK(!prepopulated_engines_list.list.empty());
+  CHECK(prepopulated_engines_list.default_index >= 0 &&
+        prepopulated_engines_list.default_index <
+            prepopulated_engines_list.list.size());
+  CHECK(prepopulated_engines_list.private_default_index >= 0 &&
+        prepopulated_engines_list.private_default_index <
+            prepopulated_engines_list.list.size());
 
   // Vivaldi
-  const PrepopulatedEngine* default_search = nullptr;
-#if defined(OEM_POLESTAR_BUILD)
-  default_search = SearchEnginesManager::GetInstance()->GetGoogleEngine();
-#elif defined(OEM_LYNKCO_BUILD)
-  // Does this make any sense?
-  default_search = SearchEnginesManager::GetInstance()->GetEngine("ecosia_us");
 
-  const std::u16string ecosia = base::UTF8ToUTF16(std::string("Ecosia"));
-  for (const PrepopulatedEngine* engine : populated_engines) {
-    if (ecosia == engine->name) {
-      default_search = engine;
-      break;
-    }
-  }
-
-#else
-  if (engines_info.default_engine_index >= 0) {
-    default_search = populated_engines[engines_info.default_engine_index];
-  } else {
-    // This should never happen, no default engine marked explicitly.
-    default_search = populated_engines[0];
-  }
-#endif
-
-  for (size_t i = 0; i < populated_engines.size(); ++i) {
-    const PrepopulatedEngine* pop_engine = populated_engines[i];
+  for (const auto* prepopulated_engine : prepopulated_engines_list.list) {
     EngineAndTier engine_and_tier;
     engine_and_tier.tier = SearchEngineTier::kTopEngines;
-    engine_and_tier.search_engine = pop_engine;
-
-    if (default_search == pop_engine) {
-      engines_info.default_engine_index = static_cast<int>(t_url.size());
-    }
-
-    t_url.push_back(engine_and_tier);
+    engine_and_tier.search_engine = prepopulated_engine;
+    result.push_back(engine_and_tier);
   }
 
-  DCHECK(t_url.size() == populated_engines.size());
+  CHECK(result.size() == prepopulated_engines_list.list.size());
 
   if (!default_search_provider_index)
-    return t_url;
+    return result;
 
-  if (search_type == SearchType::kPrivate) {
-    *default_search_provider_index = engines_info.private_engine_index;
-    return t_url;
+  switch (search_type) {
+    case SearchType::kMain:
+      *default_search_provider_index = prepopulated_engines_list.default_index;
+      return result;
+    case SearchType::kPrivate:
+
+      *default_search_provider_index =
+          prepopulated_engines_list.private_default_index;
+      return result;
+    case SearchType::kImage:
+      *default_search_provider_index =
+          prepopulated_engines_list.default_image_search_index.value_or(0);
+      return result;
   }
-
-  if (search_type == SearchType::kMain) {
-    *default_search_provider_index = engines_info.default_engine_index;
-    return t_url;
-  }
-
-  if (search_type == SearchType::kImage) {
-    // Find the engine capable to search images, prefer the default.
-    int candidate = -1;
-    for (size_t i = 0; i < populated_engines.size(); ++i) {
-      if (populated_engines[i]->image_url) {
-        if (static_cast<int>(i) == engines_info.default_engine_index) {
-          // ... prefer the default.
-          candidate = static_cast<int>(i);
-          break;
-        }
-
-        if (candidate == -1) {
-          candidate = int(i);
-        }
-      }
-    }
-    *default_search_provider_index = std::max(candidate, 0);
-  }
-
-  return t_url;
 }
+
 }  // namespace
 
 const std::vector<EngineAndTier> GetPrepopulationSetFromCountryID(
@@ -160,7 +91,7 @@ const PrepopulatedEngine* GetFallbackEngine(int country_id,
 }
 
 SearchEngineType StringToSearchEngine(const std::string& s) {
-  base::flat_map<std::string, SearchEngineType> engines = {
+  base::flat_map<std::string, SearchEngineType> search_engine_types_map = {
       {"SEARCH_ENGINE_OTHER", SEARCH_ENGINE_OTHER},
       {"SEARCH_ENGINE_AOL", SEARCH_ENGINE_AOL},
       {"SEARCH_ENGINE_ASK", SEARCH_ENGINE_ASK},
@@ -248,10 +179,25 @@ SearchEngineType StringToSearchEngine(const std::string& s) {
       {"VIVALDI_SEARCH_ENGINE_YOU", VIVALDI_SEARCH_ENGINE_YOU},
   };
 
-  auto it = engines.find(s);
-  if (it == engines.end())
+  auto it = search_engine_types_map.find(s);
+  if (it == search_engine_types_map.end())
     return SEARCH_ENGINE_UNKNOWN;
   return it->second;
 }
 
+std::optional<RegulatoryExtensionType> StringToRegulatoryExtensionType(
+    const std::string& s) {
+  base::flat_map<std::string, RegulatoryExtensionType>
+      regulatory_extension_types_map = {
+          {"RegulatoryExtensionType::kDefault",
+           RegulatoryExtensionType::kDefault},
+          {"RegulatoryExtensionType::kAndroidEEA",
+           RegulatoryExtensionType::kAndroidEEA},
+      };
+
+  auto it = regulatory_extension_types_map.find(s);
+  if (it == regulatory_extension_types_map.end())
+    return std::nullopt;
+  return it->second;
+}
 }  // namespace TemplateURLPrepopulateData

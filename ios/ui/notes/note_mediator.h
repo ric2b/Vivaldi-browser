@@ -5,7 +5,7 @@
 
 #import <UIKit/UIKit.h>
 
-class ChromeBrowserState;
+class ProfileIOS;
 
 namespace vivaldi {
 class NoteNode;
@@ -23,7 +23,7 @@ class GURL; // TODO
 @interface NoteMediator : NSObject
 
 - (instancetype)init NS_UNAVAILABLE;
-- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState
+- (instancetype)initWithProfile:(ProfileIOS*)profile
     NS_DESIGNATED_INITIALIZER;
 
 // Registers the feature preferences.
@@ -31,10 +31,9 @@ class GURL; // TODO
 
 // Accesses the default folder for notes. The default folder is Mobile
 // Notes.
-+ (const vivaldi::NoteNode*)folderForNewNotesInBrowserState:
-    (ChromeBrowserState*)browserState;
++ (const vivaldi::NoteNode*)folderForNewNotesInProfile:(ProfileIOS*)profile;
 + (void)setFolderForNewNotes:(const vivaldi::NoteNode*)folder
-                  inBrowserState:(ChromeBrowserState*)browserState;
+                   inProfile:(ProfileIOS*)profile;
 
 @end
 

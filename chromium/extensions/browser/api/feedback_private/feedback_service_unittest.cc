@@ -25,12 +25,12 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chromeos/ash/components/dbus/debug_daemon/debug_daemon_client.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_manager.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 namespace extensions {
 
@@ -44,7 +44,6 @@ namespace {
 const std::string kFakeKey = "fake key";
 const std::string kFakeValue = "fake value";
 const std::string kTabTitleValue = "some sensitive info";
-const std::string kLacrosMemUsageWithTitleKey = "Lacros mem_usage_with_title";
 
 class MockFeedbackUploader : public FeedbackUploader {
  public:
@@ -79,13 +78,13 @@ class MockFeedbackPrivateDelegate : public ShellFeedbackPrivateDelegate {
                             kTabTitleValue);
           std::move(callback).Run(std::move(sys_info));
         });
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     ON_CALL(*this, FetchExtraLogs)
         .WillByDefault([](scoped_refptr<FeedbackData> feedback_data,
                           FetchExtraLogsCallback callback) {
           std::move(callback).Run(feedback_data);
         });
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
   ~MockFeedbackPrivateDelegate() override = default;
@@ -94,18 +93,15 @@ class MockFeedbackPrivateDelegate : public ShellFeedbackPrivateDelegate {
               FetchSystemInformation,
               (content::BrowserContext*, system_logs::SysLogsFetcherCallback),
               (const, override));
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   MOCK_METHOD(void,
               FetchExtraLogs,
               (scoped_refptr<feedback::FeedbackData>, FetchExtraLogsCallback),
               (const, override));
-  void GetLacrosHistograms(GetHistogramsCallback callback) override {
-    std::move(callback).Run(std::string());
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 };
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 const FeedbackCommon::AttachedFile* FindAttachment(
     std::string_view name,
     const scoped_refptr<FeedbackData>& feedback_data) {
@@ -127,7 +123,7 @@ void VerifyAttachment(std::string_view name,
   EXPECT_EQ(name, attachment->name);
   EXPECT_EQ(data, attachment->data);
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace
 
@@ -143,11 +139,11 @@ class FeedbackServiceTest : public ApiUnitTest {
         test_shared_loader_factory_);
     feedback_data_ = base::MakeRefCounted<FeedbackData>(
         mock_uploader_->AsWeakPtr(), nullptr);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     auto fake_user_manager = std::make_unique<user_manager::FakeUserManager>();
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
         std::move(fake_user_manager));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
   ~FeedbackServiceTest() override = default;
@@ -156,7 +152,6 @@ class FeedbackServiceTest : public ApiUnitTest {
     feedback_data_->AddLog(kFakeKey, kFakeValue);
     feedback_data_->AddLog(feedback::FeedbackReport::kMemUsageWithTabTitlesKey,
                            kTabTitleValue);
-    feedback_data_->AddLog(kLacrosMemUsageWithTitleKey, kTabTitleValue);
     const FeedbackParams params{/*is_internal_email=*/false,
                                 /*load_system_info=*/false,
                                 /*send_tab_titles=*/send_tab_titles,
@@ -170,9 +165,9 @@ class FeedbackServiceTest : public ApiUnitTest {
     EXPECT_CALL(mock_callback, Run(true));
 
     auto mock_delegate = std::make_unique<MockFeedbackPrivateDelegate>();
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     EXPECT_CALL(*mock_delegate, FetchExtraLogs(_, _)).Times(1);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
     auto feedback_service = base::MakeRefCounted<FeedbackService>(
         browser_context(), mock_delegate.get());
@@ -180,7 +175,7 @@ class FeedbackServiceTest : public ApiUnitTest {
     EXPECT_EQ(1u, feedback_data_->sys_info()->count(kFakeKey));
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   void TestSendFeedbackConcerningWifiDebugLogs(bool send_wifi_debug_logs) {
     const FeedbackParams params{/*is_internal_email=*/false,
                                 /*load_system_info=*/true,
@@ -269,7 +264,7 @@ class FeedbackServiceTest : public ApiUnitTest {
       EXPECT_FALSE(FindAttachment(kBluetoothDumpName, feedback_data_));
     }
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   void RunUntilFeedbackIsSent(scoped_refptr<FeedbackService> feedback_service,
                               const FeedbackParams& params,
@@ -280,9 +275,9 @@ class FeedbackServiceTest : public ApiUnitTest {
     task_environment()->RunUntilIdle();
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   base::ScopedTempDir scoped_temp_dir_;
   network::TestURLLoaderFactory test_url_loader_factory_;
@@ -326,9 +321,9 @@ TEST_F(FeedbackServiceTest, SendFeedbackLoadSysInfo) {
 
   auto mock_delegate = std::make_unique<MockFeedbackPrivateDelegate>();
   EXPECT_CALL(*mock_delegate, FetchSystemInformation(_, _)).Times(1);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   EXPECT_CALL(*mock_delegate, FetchExtraLogs(_, _)).Times(1);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   auto feedback_service = base::MakeRefCounted<FeedbackService>(
       browser_context(), mock_delegate.get());
@@ -344,14 +339,12 @@ TEST_F(FeedbackServiceTest, DISABLED_SendFeedbackDoNotSendTabTitles) {
   TestSendFeedbackConcerningTabTitles(false);
   EXPECT_EQ(0u, feedback_data_->sys_info()->count(
                     feedback::FeedbackReport::kMemUsageWithTabTitlesKey));
-  EXPECT_EQ(0u, feedback_data_->sys_info()->count(kLacrosMemUsageWithTitleKey));
 }
 
 TEST_F(FeedbackServiceTest, SendFeedbackDoSendTabTitles) {
   TestSendFeedbackConcerningTabTitles(true);
   EXPECT_EQ(1u, feedback_data_->sys_info()->count(
                     feedback::FeedbackReport::kMemUsageWithTabTitlesKey));
-  EXPECT_EQ(1u, feedback_data_->sys_info()->count(kLacrosMemUsageWithTitleKey));
 }
 
 TEST_F(FeedbackServiceTest, SendFeedbackAutofillMetadata) {
@@ -373,7 +366,7 @@ TEST_F(FeedbackServiceTest, SendFeedbackAutofillMetadata) {
   RunUntilFeedbackIsSent(feedback_service, params, mock_callback.Get());
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 TEST_F(FeedbackServiceTest, SendFeedbackWithWifiDebugLogs) {
   TestSendFeedbackConcerningWifiDebugLogs(/*send_wifi_debug_logs=*/true);
 }
@@ -389,6 +382,6 @@ TEST_F(FeedbackServiceTest, SendFeedbackWithBluetoothDebugLogs) {
 TEST_F(FeedbackServiceTest, SendFeedbackWithoutBluetoothDebugLogs) {
   TestSendFeedbackConcerningBluetoothDebugLogs(/*send_bluetooth_logs=*/false);
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace extensions

@@ -50,6 +50,8 @@ message StartRuntimeRequest {
   cast.common.ServiceInfo runtime_service_info = 2;
   // Flag to indicate that the request is for prelaunch.
   bool prelaunch = 3;
+  // Home directory which must be used by CAST_WEB runtimes.
+  string runtime_home = 4;
 }
 
 message StartRuntimeResponse {}

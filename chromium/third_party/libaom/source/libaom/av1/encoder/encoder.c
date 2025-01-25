@@ -751,7 +751,9 @@ void av1_change_config_seq(struct AV1_PRIMARY *ppi,
         10;  // Default value (not signaled)
   }
 
+#if !CONFIG_REALTIME_ONLY
   av1_update_film_grain_parameters_seq(ppi, oxcf);
+#endif
 
   int sb_size = seq_params->sb_size;
   // Superblock size should not be updated after the first key frame.
@@ -807,7 +809,9 @@ void av1_change_config(struct AV1_COMP *cpi, const AV1EncoderConfig *oxcf,
 
   cpi->oxcf = *oxcf;
 
+#if !CONFIG_REALTIME_ONLY
   av1_update_film_grain_parameters(cpi, oxcf);
+#endif
 
   // When user provides superres_mode = AOM_SUPERRES_AUTO, we still initialize
   // superres mode for current encoding = AOM_SUPERRES_NONE. This is to ensure
@@ -1268,16 +1272,11 @@ AV1_PRIMARY *av1_create_primary_compressor(
 
   SDSFP(BLOCK_16X32, aom_sad_skip_16x32, aom_sad_skip_16x32x4d)
   SDSFP(BLOCK_16X16, aom_sad_skip_16x16, aom_sad_skip_16x16x4d)
-  SDSFP(BLOCK_16X8, aom_sad_skip_16x8, aom_sad_skip_16x8x4d)
   SDSFP(BLOCK_8X16, aom_sad_skip_8x16, aom_sad_skip_8x16x4d)
-  SDSFP(BLOCK_8X8, aom_sad_skip_8x8, aom_sad_skip_8x8x4d)
-
-  SDSFP(BLOCK_4X8, aom_sad_skip_4x8, aom_sad_skip_4x8x4d)
 
 #if !CONFIG_REALTIME_ONLY
   SDSFP(BLOCK_64X16, aom_sad_skip_64x16, aom_sad_skip_64x16x4d)
   SDSFP(BLOCK_16X64, aom_sad_skip_16x64, aom_sad_skip_16x64x4d)
-  SDSFP(BLOCK_32X8, aom_sad_skip_32x8, aom_sad_skip_32x8x4d)
   SDSFP(BLOCK_8X32, aom_sad_skip_8x32, aom_sad_skip_8x32x4d)
   SDSFP(BLOCK_4X16, aom_sad_skip_4x16, aom_sad_skip_4x16x4d)
 #endif
@@ -2647,7 +2646,8 @@ static int encode_without_recode(AV1_COMP *cpi) {
   }
 
   av1_set_quantizer(cm, q_cfg->qm_minlevel, q_cfg->qm_maxlevel, q,
-                    q_cfg->enable_chroma_deltaq, q_cfg->enable_hdr_deltaq);
+                    q_cfg->enable_chroma_deltaq, q_cfg->enable_hdr_deltaq,
+                    cpi->oxcf.mode == ALLINTRA);
   av1_set_speed_features_qindex_dependent(cpi, cpi->oxcf.speed);
   av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,
                      cm->seq_params->bit_depth);
@@ -2661,7 +2661,8 @@ static int encode_without_recode(AV1_COMP *cpi) {
       cpi->rc.high_source_sad) {
     if (av1_encodedframe_overshoot_cbr(cpi, &q)) {
       av1_set_quantizer(cm, q_cfg->qm_minlevel, q_cfg->qm_maxlevel, q,
-                        q_cfg->enable_chroma_deltaq, q_cfg->enable_hdr_deltaq);
+                        q_cfg->enable_chroma_deltaq, q_cfg->enable_hdr_deltaq,
+                        cpi->oxcf.mode == ALLINTRA);
       av1_set_speed_features_qindex_dependent(cpi, cpi->oxcf.speed);
       av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,
                          cm->seq_params->bit_depth);
@@ -2965,7 +2966,8 @@ static int encode_with_recode_loop(AV1_COMP *cpi, size_t *size, uint8_t *dest,
     }
 
     av1_set_quantizer(cm, q_cfg->qm_minlevel, q_cfg->qm_maxlevel, q,
-                      q_cfg->enable_chroma_deltaq, q_cfg->enable_hdr_deltaq);
+                      q_cfg->enable_chroma_deltaq, q_cfg->enable_hdr_deltaq,
+                      oxcf->mode == ALLINTRA);
     av1_set_speed_features_qindex_dependent(cpi, oxcf->speed);
     av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,
                        cm->seq_params->bit_depth);
@@ -3783,7 +3785,8 @@ static int encode_frame_to_data_rate(AV1_COMP *cpi, size_t *size, uint8_t *dest,
     }
   }
 
-  if (oxcf->tune_cfg.tuning == AOM_TUNE_SSIM) {
+  if (oxcf->tune_cfg.tuning == AOM_TUNE_SSIM ||
+      oxcf->tune_cfg.tuning == AOM_TUNE_SSIMULACRA2) {
     av1_set_mb_ssim_rdmult_scaling(cpi);
   }
 #if CONFIG_SALIENCY_MAP
@@ -4010,7 +4013,7 @@ static int encode_frame_to_data_rate(AV1_COMP *cpi, size_t *size, uint8_t *dest,
 int av1_encode(AV1_COMP *const cpi, uint8_t *const dest, size_t dest_size,
                const EncodeFrameInput *const frame_input,
                const EncodeFrameParams *const frame_params,
-               EncodeFrameResults *const frame_results) {
+               size_t *const frame_size) {
   AV1_COMMON *const cm = &cpi->common;
   CurrentFrame *const current_frame = &cm->current_frame;
 
@@ -4059,7 +4062,7 @@ int av1_encode(AV1_COMP *const cpi, uint8_t *const dest, size_t dest_size,
 #endif
   } else if (cpi->oxcf.pass == AOM_RC_ONE_PASS ||
              cpi->oxcf.pass >= AOM_RC_SECOND_PASS) {
-    if (encode_frame_to_data_rate(cpi, &frame_results->size, dest, dest_size) !=
+    if (encode_frame_to_data_rate(cpi, frame_size, dest, dest_size) !=
         AOM_CODEC_OK) {
       return AOM_CODEC_ERROR;
     }
@@ -4070,7 +4073,7 @@ int av1_encode(AV1_COMP *const cpi, uint8_t *const dest, size_t dest_size,
   return AOM_CODEC_OK;
 }
 
-#if CONFIG_DENOISE
+#if CONFIG_DENOISE && !CONFIG_REALTIME_ONLY
 static int apply_denoise_2d(AV1_COMP *cpi, const YV12_BUFFER_CONFIG *sd,
                             int block_size, float noise_level,
                             int64_t time_stamp, int64_t end_time) {
@@ -4159,11 +4162,11 @@ int av1_receive_raw_frame(AV1_COMP *cpi, aom_enc_frame_flags_t frame_flags,
       }
       cpi->oxcf.noise_level = (float)AOMMIN(5.0, cpi->oxcf.noise_level);
     }
-#endif
 
     if (apply_denoise_2d(cpi, sd, cpi->oxcf.noise_block_size,
                          cpi->oxcf.noise_level, time_stamp, end_time) < 0)
       res = -1;
+#endif  // !CONFIG_REALTIME_ONLY
   }
 #endif  //  CONFIG_DENOISE
 
@@ -4687,7 +4690,7 @@ void av1_post_encode_updates(AV1_COMP *const cpi,
   }
 #endif
 
-  if (ppi->rtc_ref.set_ref_frame_config) {
+  if (ppi->rtc_ref.set_ref_frame_config && !cpi->is_dropped_frame) {
     av1_svc_update_buffer_slot_refreshed(cpi);
     av1_svc_set_reference_was_previous(cpi);
   }
@@ -4972,7 +4975,10 @@ AV1_COMP *av1_get_parallel_frame_enc_data(AV1_PRIMARY *const ppi,
   {
     AV1_COMP_DATA *data = &ppi->parallel_frames_data[cpi_idx - 1];
     assert(data->frame_size > 0);
-    assert(first_cpi_data->cx_data_sz > data->frame_size);
+    if (data->frame_size > first_cpi_data->cx_data_sz) {
+      aom_internal_error(&ppi->error, AOM_CODEC_ERROR,
+                         "first_cpi_data->cx_data buffer full");
+    }
 
     first_cpi_data->lib_flags = data->lib_flags;
     first_cpi_data->ts_frame_start = data->ts_frame_start;
@@ -5224,56 +5230,61 @@ int av1_get_quantizer(AV1_COMP *cpi) {
   return cpi->common.quant_params.base_qindex;
 }
 
-int av1_convert_sect5obus_to_annexb(uint8_t *buffer, size_t *frame_size) {
+int av1_convert_sect5obus_to_annexb(uint8_t *buffer, size_t buffer_size,
+                                    size_t *frame_size) {
+  assert(*frame_size <= buffer_size);
   size_t output_size = 0;
-  size_t total_bytes_read = 0;
   size_t remaining_size = *frame_size;
   uint8_t *buff_ptr = buffer;
 
   // go through each OBUs
-  while (total_bytes_read < *frame_size) {
+  while (remaining_size > 0) {
     uint8_t saved_obu_header[2];
     uint64_t obu_payload_size;
     size_t length_of_payload_size;
     size_t length_of_obu_size;
-    uint32_t obu_header_size = (buff_ptr[0] >> 2) & 0x1 ? 2 : 1;
+    const uint32_t obu_header_size = (buff_ptr[0] >> 2) & 0x1 ? 2 : 1;
     size_t obu_bytes_read = obu_header_size;  // bytes read for current obu
 
     // save the obu header (1 or 2 bytes)
-    memmove(saved_obu_header, buff_ptr, obu_header_size);
+    memcpy(saved_obu_header, buff_ptr, obu_header_size);
     // clear the obu_has_size_field
-    saved_obu_header[0] = saved_obu_header[0] & (~0x2);
+    saved_obu_header[0] &= ~0x2;
 
     // get the payload_size and length of payload_size
-    if (aom_uleb_decode(buff_ptr + obu_header_size, remaining_size,
-                        &obu_payload_size, &length_of_payload_size) != 0) {
+    if (aom_uleb_decode(buff_ptr + obu_header_size,
+                        remaining_size - obu_header_size, &obu_payload_size,
+                        &length_of_payload_size) != 0) {
       return AOM_CODEC_ERROR;
     }
     obu_bytes_read += length_of_payload_size;
 
     // calculate the length of size of the obu header plus payload
-    length_of_obu_size =
-        aom_uleb_size_in_bytes((uint64_t)(obu_header_size + obu_payload_size));
+    const uint64_t obu_size = obu_header_size + obu_payload_size;
+    length_of_obu_size = aom_uleb_size_in_bytes(obu_size);
 
+    if (length_of_obu_size + obu_header_size >
+        buffer_size - output_size - (remaining_size - obu_bytes_read)) {
+      return AOM_CODEC_ERROR;
+    }
     // move the rest of data to new location
     memmove(buff_ptr + length_of_obu_size + obu_header_size,
             buff_ptr + obu_bytes_read, remaining_size - obu_bytes_read);
     obu_bytes_read += (size_t)obu_payload_size;
 
     // write the new obu size
-    const uint64_t obu_size = obu_header_size + obu_payload_size;
     size_t coded_obu_size;
-    if (aom_uleb_encode(obu_size, sizeof(obu_size), buff_ptr,
-                        &coded_obu_size) != 0) {
+    if (aom_uleb_encode(obu_size, length_of_obu_size, buff_ptr,
+                        &coded_obu_size) != 0 ||
+        coded_obu_size != length_of_obu_size) {
       return AOM_CODEC_ERROR;
     }
 
     // write the saved (modified) obu_header following obu size
-    memmove(buff_ptr + length_of_obu_size, saved_obu_header, obu_header_size);
+    memcpy(buff_ptr + length_of_obu_size, saved_obu_header, obu_header_size);
 
-    total_bytes_read += obu_bytes_read;
     remaining_size -= obu_bytes_read;
-    buff_ptr += length_of_obu_size + obu_size;
+    buff_ptr += length_of_obu_size + (size_t)obu_size;
     output_size += length_of_obu_size + (size_t)obu_size;
   }
 

@@ -15,6 +15,7 @@
 
 #include "platform/base/error.h"
 #include "platform/base/macros.h"
+#include "platform/base/span.h"
 
 namespace openscreen {
 
@@ -31,11 +32,10 @@ class RSAPrivateKey {
 
   // Create a new instance by importing an existing private key. The format is
   // an ASN.1-encoded PrivateKeyInfo block from PKCS #8.
-  static ErrorOr<RSAPrivateKey> CreateFromPrivateKeyInfo(
-      const std::vector<uint8_t>& input);
+  static ErrorOr<RSAPrivateKey> CreateFromPrivateKeyInfo(ByteView input);
 
   // Create a new instance from an existing EVP_PKEY, taking a
-  // reference to it. |key| must be an RSA key.
+  // reference to it. `key` must be an RSA key.
   static ErrorOr<RSAPrivateKey> CreateFromKey(EVP_PKEY* key);
 
   // Creates a copy of the object.

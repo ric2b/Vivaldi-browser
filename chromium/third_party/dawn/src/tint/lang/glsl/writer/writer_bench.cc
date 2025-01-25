@@ -28,30 +28,62 @@
 #include <string>
 
 #include "src/tint/cmd/bench/bench.h"
+#include "src/tint/lang/core/ir/transform/single_entry_point.h"
+#include "src/tint/lang/glsl/writer/helpers/generate_bindings.h"
 #include "src/tint/lang/glsl/writer/writer.h"
 #include "src/tint/lang/wgsl/ast/identifier.h"
 #include "src/tint/lang/wgsl/ast/module.h"
+#include "src/tint/lang/wgsl/ast/transform/manager.h"
+#include "src/tint/lang/wgsl/inspector/inspector.h"
+#include "src/tint/lang/wgsl/reader/reader.h"
 
 namespace tint::glsl::writer {
 namespace {
 
-void GenerateGLSL_AST(benchmark::State& state, std::string input_name) {
+void GenerateGLSL(benchmark::State& state, std::string input_name) {
     auto res = bench::GetWgslProgram(input_name);
     if (res != Success) {
         state.SkipWithError(res.Failure().reason.Str());
         return;
     }
-    auto& program = res->program;
-    std::vector<std::string> entry_points;
-    for (auto& fn : program.AST().Functions()) {
-        if (fn->IsEntryPoint()) {
-            entry_points.emplace_back(fn->name->symbol.Name());
+
+    std::vector<std::string> names;
+    tint::glsl::writer::Options gen_options = {};
+    {
+        // Convert the AST program to an IR module, so that we can generating bindings data.
+        auto ir = tint::wgsl::reader::ProgramToLoweredIR(res->program);
+        if (ir != Success) {
+            state.SkipWithError(ir.Failure().reason.Str());
+            return;
+        }
+        gen_options.bindings = tint::glsl::writer::GenerateBindings(ir.Get());
+
+        // Get the list of entry point names.
+        for (auto func : ir->functions) {
+            if (func->Stage() != core::ir::Function::PipelineStage::kUndefined) {
+                names.push_back(ir->NameOf(func).Name());
+            }
         }
     }
 
     for (auto _ : state) {
-        for (auto& ep : entry_points) {
-            auto gen_res = Generate(program, {}, ep);
+        for (uint32_t i = 0; i < names.size(); i++) {
+            // Convert the AST program to an IR module.
+            auto ir = tint::wgsl::reader::ProgramToLoweredIR(res->program);
+            if (ir != Success) {
+                state.SkipWithError(ir.Failure().reason.Str());
+                return;
+            }
+
+            // Run single entry point to strip the program down to a single entry point.
+            auto single_result = core::ir::transform::SingleEntryPoint(ir.Get(), names[i]);
+            if (single_result != Success) {
+                state.SkipWithError(ir.Failure().reason.Str());
+                return;
+            }
+
+            // Generate GLSL.
+            auto gen_res = Generate(ir.Get(), gen_options, names[i]);
             if (gen_res != Success) {
                 state.SkipWithError(gen_res.Failure().reason.Str());
             }
@@ -59,7 +91,7 @@ void GenerateGLSL_AST(benchmark::State& state, std::string input_name) {
     }
 }
 
-TINT_BENCHMARK_PROGRAMS(GenerateGLSL_AST);
+TINT_BENCHMARK_PROGRAMS(GenerateGLSL);
 
 }  // namespace
 }  // namespace tint::glsl::writer

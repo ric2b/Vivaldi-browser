@@ -33,7 +33,7 @@ import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.browser.notifications.NotificationChannelStatus;
 import org.chromium.chrome.browser.notifications.NotificationSettingsBridge;
-import org.chromium.chrome.browser.profiles.OTRProfileID;
+import org.chromium.chrome.browser.profiles.OtrProfileId;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
@@ -216,7 +216,7 @@ public class SiteChannelsManagerTest {
                 () -> {
                     info.setContentSetting(
                             ProfileManager.getLastUsedRegularProfile()
-                                    .getPrimaryOTRProfile(/* createIfNeeded= */ true),
+                                    .getPrimaryOtrProfile(/* createIfNeeded= */ true),
                             ContentSettingValues.BLOCK);
                 });
         assertThat(Arrays.asList(mSiteChannelsManager.getSiteChannels()), hasSize(0));
@@ -225,7 +225,7 @@ public class SiteChannelsManagerTest {
     @Test
     @MinAndroidSdkLevel(Build.VERSION_CODES.O)
     @SmallTest
-    public void testBlockingPermissionInIncognitoCCTCreatesNoChannels() {
+    public void testBlockingPermissionInIncognitoCctCreatesNoChannels() {
         PermissionInfo info =
                 new PermissionInfo(
                         ContentSettingsType.NOTIFICATIONS,
@@ -235,14 +235,14 @@ public class SiteChannelsManagerTest {
                         SessionModel.DURABLE);
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    OTRProfileID otrProfileID = OTRProfileID.createUnique("CCT:Incognito");
-                    Profile nonPrimaryOTRProfile =
+                    OtrProfileId otrProfileId = OtrProfileId.createUnique("CCT:Incognito");
+                    Profile nonPrimaryOtrProfile =
                             ProfileManager.getLastUsedRegularProfile()
                                     .getOffTheRecordProfile(
-                                            otrProfileID, /* createIfNeeded= */ true);
-                    assertNotNull(nonPrimaryOTRProfile);
-                    assertTrue(nonPrimaryOTRProfile.isOffTheRecord());
-                    info.setContentSetting(nonPrimaryOTRProfile, ContentSettingValues.BLOCK);
+                                            otrProfileId, /* createIfNeeded= */ true);
+                    assertNotNull(nonPrimaryOtrProfile);
+                    assertTrue(nonPrimaryOtrProfile.isOffTheRecord());
+                    info.setContentSetting(nonPrimaryOtrProfile, ContentSettingValues.BLOCK);
                 });
         assertThat(Arrays.asList(mSiteChannelsManager.getSiteChannels()), hasSize(0));
     }

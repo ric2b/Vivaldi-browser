@@ -65,9 +65,6 @@ class BrowserGpuChannelHostFactory : public gpu::GpuChannelEstablishFactory {
   scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
 
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  void SetForceAllowAccessToGpu(bool) override {}
-
  private:
   class EstablishRequest;
 

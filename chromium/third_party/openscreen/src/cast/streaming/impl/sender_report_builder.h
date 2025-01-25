@@ -23,16 +23,16 @@ class SenderReportBuilder {
   explicit SenderReportBuilder(RtcpSession& session);
   ~SenderReportBuilder();
 
-  // Serializes the given |sender_report| as a RTCP packet and writes it to
-  // |buffer| (which must be kRequiredBufferSize in size). Returns the subspan
-  // of |buffer| that contains the result and a StatusReportId the receiver
+  // Serializes the given `sender_report` as a RTCP packet and writes it to
+  // `buffer` (which must be kRequiredBufferSize in size). Returns the subspan
+  // of `buffer` that contains the result and a StatusReportId the receiver
   // might use in its own reports to reference this specific report.
   std::pair<ByteBuffer, StatusReportId> BuildPacket(
       const RtcpSenderReport& sender_report,
       ByteBuffer buffer) const;
 
   // Returns the approximate reference time from a recently-built Sender Report,
-  // based on the given |report_id| and maximum possible reference time.
+  // based on the given `report_id` and maximum possible reference time.
   Clock::time_point GetRecentReportTime(StatusReportId report_id,
                                         Clock::time_point on_or_before) const;
 

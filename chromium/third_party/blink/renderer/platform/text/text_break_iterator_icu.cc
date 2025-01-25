@@ -205,9 +205,7 @@ int32_t TextExtract(UText*,
                     UErrorCode* error_code) {
   // In the present context, this text provider is used only with ICU functions
   // that do not perform an extract operation.
-  NOTREACHED_IN_MIGRATION();
-  *error_code = U_UNSUPPORTED_ERROR;
-  return 0;
+  NOTREACHED();
 }
 
 void TextClose(UText* text) {
@@ -805,25 +803,23 @@ NonSharedCharacterBreakIterator::NonSharedCharacterBreakIterator(
     return;
   }
 
-  CreateIteratorForBuffer(string.Characters16(), string.length());
+  CreateIteratorForBuffer(string.Span16());
 }
 
 NonSharedCharacterBreakIterator::NonSharedCharacterBreakIterator(
-    const UChar* buffer,
-    unsigned length)
+    base::span<const UChar> buffer)
     : is_8bit_(false),
       charaters8_(nullptr),
       offset_(0),
       length_(0),
       iterator_(nullptr) {
-  CreateIteratorForBuffer(buffer, length);
+  CreateIteratorForBuffer(buffer);
 }
 
 void NonSharedCharacterBreakIterator::CreateIteratorForBuffer(
-    const UChar* buffer,
-    unsigned length) {
+    base::span<const UChar> buffer) {
   iterator_ = GetNonSharedCharacterBreakIterator();
-  SetText16(iterator_, {buffer, length});
+  SetText16(iterator_, buffer);
 }
 
 NonSharedCharacterBreakIterator::~NonSharedCharacterBreakIterator() {

@@ -178,8 +178,16 @@ TabGridPage ThirdTabGridPage() {
 @property(nonatomic, weak) UIView* regularSelectedIcon;
 @property(nonatomic, weak) UILabel* regularLabel;
 @property(nonatomic, weak) UILabel* regularSelectedLabel;
+
+#if defined(VIVALDI_BUILD)
+// Declare as UIImageView since we want to update the icon for this panel
+// after setting up based on sync state.
+@property(nonatomic, weak) UIImageView* thirdPanelNotSelectedIcon;
+@property(nonatomic, weak) UIImageView* thirdPanelSelectedIcon;
+#else
 @property(nonatomic, weak) UIView* thirdPanelNotSelectedIcon;
 @property(nonatomic, weak) UIView* thirdPanelSelectedIcon;
+#endif // End Vivaldi
 
 // Vivaldi
 @property(nonatomic, weak) UIView* closedNotSelectedIcon;
@@ -218,6 +226,12 @@ TabGridPage ThirdTabGridPage() {
 
 // Whether the content below is scrolled to the edge or displayed behind.
 @property(nonatomic, assign) BOOL scrolledToEdge;
+
+// Vivaldi
+// Whether sync is enabled currently which affects which icon we show for
+// Remote tabs.
+@property(nonatomic, assign) BOOL syncEnabled;
+// End Vivaldi
 
 @end
 
@@ -685,9 +699,9 @@ TabGridPage ThirdTabGridPage() {
     case TabGridPageRegularTabs: {
       if (IsVivaldiRunning()) {
         iconSelected =
-            ImageViewForSymbol(kImagePageControlRegularSelected, true);
+            ImageViewForSymbol(kImagePageControlRegular, true);
         iconNotSelected =
-            ImageViewForSymbol(kImagePageControlRegularNotSelected, false);
+            ImageViewForSymbol(kImagePageControlRegular, false);
       } else {
       iconSelected = ImageViewForSymbol(kSquareNumberSymbol, /*selected=*/true);
       iconNotSelected =
@@ -701,9 +715,9 @@ TabGridPage ThirdTabGridPage() {
     case TabGridPageIncognitoTabs: {
       if (IsVivaldiRunning()) {
         iconSelected =
-            ImageViewForSymbol(kImagePageControlIncognitoSelected, true);
+            ImageViewForSymbol(kImagePageControlIncognito, true);
         iconNotSelected =
-            ImageViewForSymbol(kImagePageControlIncognitoNotSelected, false);
+            ImageViewForSymbol(kImagePageControlIncognito, false);
       } else {
       iconSelected = ImageViewForSymbol(kIncognitoSymbol, /*selected=*/true);
       iconNotSelected =
@@ -717,10 +731,13 @@ TabGridPage ThirdTabGridPage() {
     case TabGridPageRemoteTabs: {
 
       if (IsVivaldiRunning()) {
+        NSString* imageSymbol =
+            self.syncEnabled ?
+                kImagePageControlRemoteSynced : kImagePageControlRemote;
         iconSelected =
-            ImageViewForSymbol(kImagePageControlRemoteSelected, true);
+            ImageViewForSymbol(imageSymbol, true);
         iconNotSelected =
-            ImageViewForSymbol(kImagePageControlRemoteNotSelected, false);
+            ImageViewForSymbol(imageSymbol, false);
       } else {
       iconSelected = ImageViewForSymbol(kRecentTabsSymbol, /*selected=*/true);
       iconNotSelected =
@@ -743,9 +760,9 @@ TabGridPage ThirdTabGridPage() {
     // Vivaldi
     case TabGridPageClosedTabs: {
       iconSelected =
-          ImageViewForSymbol(kImagePageControlClosedSelected, true);
+          ImageViewForSymbol(kImagePageControlClosed, true);
       iconNotSelected =
-          ImageViewForSymbol(kImagePageControlClosedNotSelected, false);
+          ImageViewForSymbol(kImagePageControlClosed, false);
       self.closedSelectedIcon = iconSelected;
       self.closedNotSelectedIcon = iconNotSelected;
       break;
@@ -1114,6 +1131,21 @@ TabGridPage ThirdTabGridPage() {
 
 #pragma mark - Vivaldi
 
+- (void)setIconForRemoteTabsWithSyncEnabled:(BOOL)syncEnabled {
+  if (self.syncEnabled == syncEnabled)
+    return;
+
+  self.syncEnabled = syncEnabled;
+  NSString* imageSymbol =
+      syncEnabled ? kImagePageControlRemoteSynced : kImagePageControlRemote;
+
+  self.thirdPanelSelectedIcon.image =
+      CustomSymbolTemplateWithPointSize(imageSymbol, kUnselectedSymbolSize);
+  self.thirdPanelNotSelectedIcon.image =
+      CustomSymbolTemplateWithPointSize(imageSymbol, kUnselectedSymbolSize);
+
+  [self setNeedsLayout];
+}
 
 - (void)setupRecentlyClosedTabAccessibilityElement {
   _closedAccessibilityElement =

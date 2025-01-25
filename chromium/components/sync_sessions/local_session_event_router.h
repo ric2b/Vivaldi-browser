@@ -21,7 +21,7 @@ class LocalSessionEventHandler {
   LocalSessionEventHandler(const LocalSessionEventHandler&) = delete;
   LocalSessionEventHandler& operator=(const LocalSessionEventHandler&) = delete;
 
-  virtual ~LocalSessionEventHandler() {}
+  virtual ~LocalSessionEventHandler() = default;
 
   // Called when asynchronous session restore has completed. On Android, this
   // can be called multiple times (e.g. transition from a CCT without tabbed
@@ -32,10 +32,16 @@ class LocalSessionEventHandler {
   // for this instance of Chrome.
   virtual void OnLocalTabModified(SyncedTabDelegate* modified_tab) = 0;
 
+  // A local tab was closed. It's the job of the LocalSessionEventHandler to
+  // figure out which tab this is and to react accordingly.
+  // TODO(https://crbug.com/373057420): Make iOS use this as well.
+  virtual void OnLocalTabClosed() = 0;
+
   virtual void OnVivDataModified(const VivaldiSpecific &) {}
+  virtual void OnDeviceNameModified(const std::string &) {}
 
  protected:
-  LocalSessionEventHandler() {}
+  LocalSessionEventHandler() = default;
 };
 
 // The LocalSessionEventRouter is responsible for hooking itself up to various
@@ -46,12 +52,12 @@ class LocalSessionEventRouter {
   LocalSessionEventRouter(const LocalSessionEventRouter&) = delete;
   LocalSessionEventRouter& operator=(const LocalSessionEventRouter&) = delete;
 
-  virtual ~LocalSessionEventRouter() {}
+  virtual ~LocalSessionEventRouter() = default;
   virtual void StartRoutingTo(LocalSessionEventHandler* handler) = 0;
   virtual void Stop() = 0;
 
  protected:
-  LocalSessionEventRouter() {}
+  LocalSessionEventRouter() = default;
 };
 
 }  // namespace sync_sessions

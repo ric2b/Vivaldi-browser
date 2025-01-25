@@ -12,7 +12,7 @@
 #include "chrome/browser/ui/certificate_dialogs.h"
 #include "chrome/browser/ui/webui/certificate_manager/certificate_manager_handler.h"
 #include "chrome/browser/ui/webui/certificate_manager/certificate_manager_utils.h"
-#include "chrome/browser/ui/webui/certificate_viewer_webui.h"
+#include "chrome/browser/ui/webui/certificate_viewer/certificate_viewer_webui.h"
 #include "chrome/common/net/x509_certificate_model.h"
 #include "content/public/browser/web_contents.h"
 #include "crypto/sha2.h"
@@ -28,7 +28,8 @@ void EnterpriseCertSource::GetCertificateInfos(
     x509_certificate_model::X509CertificateModel model(
         net::x509_util::CreateCryptoBuffer(cert), "");
     cert_infos.push_back(certificate_manager_v2::mojom::SummaryCertInfo::New(
-        model.HashCertSHA256(), model.GetTitle()));
+        model.HashCertSHA256(), model.GetTitle(),
+        /*is_deletable=*/false));
   }
   std::move(callback).Run(std::move(cert_infos));
 }

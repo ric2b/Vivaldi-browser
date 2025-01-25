@@ -48,9 +48,14 @@ class Token(collections.namedtuple('Token', [
 class LoginRequiredError(Exception):
     """Interaction with the user is required to authenticate."""
     def __init__(self, scopes=OAUTH_SCOPE_EMAIL):
+        self.scopes = scopes
         msg = ('You are not logged in. Please login first by running:\n'
-               '  luci-auth login -scopes "%s"' % scopes)
+               '  %s' % self.login_command)
         super(LoginRequiredError, self).__init__(msg)
+
+    @property
+    def login_command(self) -> str:
+        return 'luci-auth login -scopes "%s"' % self.scopes
 
 
 def has_luci_context_local_auth():

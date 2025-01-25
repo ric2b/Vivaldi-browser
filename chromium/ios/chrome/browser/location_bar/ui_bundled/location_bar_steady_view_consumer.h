@@ -29,6 +29,12 @@
 // steady view UI.
 - (void)updateAfterNavigatingToNTP;
 
+// Attempts to show the lens overlay IPH.
+- (void)attemptShowingLensOverlayIPH;
+
+// Notifies the consumer to record the lens overlay entrypoint availability.
+- (void)recordLensOverlayAvailability;
+
 // Vivaldi
 // Notifies the consumer to update the location text.
 // `text` provides full address.

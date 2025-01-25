@@ -27,7 +27,8 @@
 #include "libavutil/avassert.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
-#include "libavfilter/internal.h"
+
+#include "libavfilter/filters.h"
 
 extern const DNNModule ff_dnn_backend_openvino;
 extern const DNNModule ff_dnn_backend_tf;
@@ -81,25 +82,15 @@ static const DnnBackendInfo dnn_backend_info_list[] = {
 
 const DNNModule *ff_get_dnn_module(DNNBackendType backend_type, void *log_ctx)
 {
-    switch(backend_type){
-    #if (CONFIG_LIBTENSORFLOW == 1)
-    case DNN_TF:
-        return &ff_dnn_backend_tf;
-    #endif
-    #if (CONFIG_LIBOPENVINO == 1)
-    case DNN_OV:
-        return &ff_dnn_backend_openvino;
-    #endif
-    #if (CONFIG_LIBTORCH == 1)
-    case DNN_TH:
-        return &ff_dnn_backend_torch;
-    #endif
-    default:
-        av_log(log_ctx, AV_LOG_ERROR,
-                "Module backend_type %d is not supported or enabled.\n",
-                backend_type);
-        return NULL;
+    for (int i = 1; i < FF_ARRAY_ELEMS(dnn_backend_info_list); i++) {
+        if (dnn_backend_info_list[i].module->type == backend_type)
+            return dnn_backend_info_list[i].module;
     }
+
+    av_log(log_ctx, AV_LOG_ERROR,
+            "Module backend_type %d is not supported or enabled.\n",
+            backend_type);
+    return NULL;
 }
 
 void ff_dnn_init_child_class(DnnContext *ctx)
@@ -130,11 +121,16 @@ void *ff_dnn_child_next(DnnContext *obj, void *prev) {
     return NULL;
 }
 
-const AVClass *ff_dnn_child_class_iterate(void **iter)
+const AVClass *ff_dnn_child_class_iterate_with_mask(void **iter, uint32_t backend_mask)
 {
-    uintptr_t i = (uintptr_t) *iter;
+    for (uintptr_t i = (uintptr_t)*iter; i < FF_ARRAY_ELEMS(dnn_backend_info_list); i++) {
+        if (i > 0) {
+            const DNNModule *module = dnn_backend_info_list[i].module;
 
-    if (i < FF_ARRAY_ELEMS(dnn_backend_info_list)) {
+            if (!(module->type & backend_mask))
+                continue;
+        }
+
         *iter = (void *)(i + 1);
         return dnn_backend_info_list[i].class;
     }

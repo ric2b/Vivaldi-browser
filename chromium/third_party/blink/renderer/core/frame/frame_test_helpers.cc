@@ -811,9 +811,9 @@ void TestWebFrameClient::Bind(WebLocalFrame* frame,
   self_owned_ = std::move(self_owned);
 }
 
-void TestWebFrameClient::FrameDetached() {
+void TestWebFrameClient::FrameDetached(DetachReason detach_reason) {
   std::move(frame_detached_callback_).Run();
-  frame_->Close();
+  frame_->Close(detach_reason);
   self_owned_.reset();
 }
 
@@ -1009,7 +1009,12 @@ void TestWebFrameWidget::DispatchThroughCcInputHandler(
 }
 
 display::ScreenInfo TestWebFrameWidget::GetInitialScreenInfo() {
-  return display::ScreenInfo();
+  return initial_screen_info_;
+}
+
+void TestWebFrameWidget::SetInitialScreenInfo(
+    const display::ScreenInfo& screen_info) {
+  initial_screen_info_ = screen_info;
 }
 
 cc::FakeLayerTreeFrameSink* TestWebFrameWidget::LastCreatedFrameSink() {

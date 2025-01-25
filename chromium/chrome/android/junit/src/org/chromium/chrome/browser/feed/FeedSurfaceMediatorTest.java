@@ -84,10 +84,6 @@ import org.chromium.ui.modelutil.PropertyModel;
 /** Tests for {@link FeedSurfaceMediator}. */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
-// TODO(crbug.com/40858677): Disabling the feature explicitly, because native is not
-// available to provide a default value. This should be enabled if the feature is enabled by
-// default or removed if the flag is removed.
-@DisableFeatures(ChromeFeatureList.SYNC_ANDROID_LIMIT_NTP_PROMO_IMPRESSIONS)
 @EnableFeatures({
     ChromeFeatureList.INTEREST_FEED_V2_HEARTS,
     ChromeFeatureList.WEB_FEED_SORT,
@@ -345,7 +341,7 @@ public class FeedSurfaceMediatorTest {
                 model.get(SectionHeaderListProperties.SECTION_HEADERS_KEY)
                         .get(0)
                         .get(SectionHeaderProperties.HEADER_TEXT_KEY),
-                mContext.getResources().getString(R.string.supervised_user_ntp_discover_on));
+                mContext.getString(R.string.supervised_user_ntp_discover_on));
     }
 
     @Test
@@ -365,7 +361,7 @@ public class FeedSurfaceMediatorTest {
                 model.get(SectionHeaderListProperties.SECTION_HEADERS_KEY)
                         .get(0)
                         .get(SectionHeaderProperties.HEADER_TEXT_KEY),
-                mContext.getResources().getString(R.string.supervised_user_ntp_discover_off));
+                mContext.getString(R.string.supervised_user_ntp_discover_off));
     }
 
     @Test
@@ -385,8 +381,7 @@ public class FeedSurfaceMediatorTest {
                 model.get(SectionHeaderListProperties.SECTION_HEADERS_KEY)
                         .get(0)
                         .get(SectionHeaderProperties.HEADER_TEXT_KEY),
-                mContext.getResources()
-                        .getString(R.string.supervised_user_ntp_discover_on_branded));
+                mContext.getString(R.string.supervised_user_ntp_discover_on_branded));
     }
 
     @Test
@@ -406,8 +401,7 @@ public class FeedSurfaceMediatorTest {
                 model.get(SectionHeaderListProperties.SECTION_HEADERS_KEY)
                         .get(0)
                         .get(SectionHeaderProperties.HEADER_TEXT_KEY),
-                mContext.getResources()
-                        .getString(R.string.supervised_user_ntp_discover_off_branded));
+                mContext.getString(R.string.supervised_user_ntp_discover_off_branded));
     }
 
     @Test

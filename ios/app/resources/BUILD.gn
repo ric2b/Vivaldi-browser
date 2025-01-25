@@ -45,6 +45,8 @@ bundle_data_xcassets("vivaldi_appicons") {
     # vivaldi_icons_final
     "VivaldiAppIcons.xcassets/AppIcon-Final.appiconset/Contents.json",
     "VivaldiAppIcons.xcassets/AppIcon-Final.appiconset/AppIcon-1024.png",
+    "VivaldiAppIcons.xcassets/AppIcon-Final.appiconset/AppIcon-1024Dark.png",
+    "VivaldiAppIcons.xcassets/AppIcon-Final.appiconset/AppIcon-1024Tinted.png",
 
     # vivaldi_icons_aqua
     "VivaldiAppIcons.xcassets/AppIcon-Aqua.appiconset/Contents.json",

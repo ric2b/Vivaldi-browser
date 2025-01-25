@@ -24,11 +24,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/editing/ime/input_method_controller.h"
 
 #include <tuple>
@@ -167,7 +162,7 @@ int CalculateBeforeDeletionLengthsInCodePoints(
   DCHECK_GE(selection_start, 0);
   DCHECK_LE(selection_start, static_cast<int>(text.length()));
 
-  const UChar* u_text = text.Characters16();
+  base::span<const UChar> u_text = text.Span16();
   BackwardCodePointStateMachine backward_machine;
   int counter = before_length_in_code_points;
   int deletion_start = selection_start;
@@ -200,7 +195,7 @@ int CalculateAfterDeletionLengthsInCodePoints(
   const int length = text.length();
   DCHECK_LE(selection_end, length);
 
-  const UChar* u_text = text.Characters16();
+  base::span<const UChar> u_text = text.Span16();
   ForwardCodePointStateMachine forward_machine;
   int counter = after_length_in_code_points;
   int deletion_end = selection_end;
@@ -304,7 +299,7 @@ int ComputeAutocapitalizeFlags(const Element* element) {
       flags |= kWebTextInputFlagAutocapitalizeSentences;
     }
   } else {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
   return flags;
@@ -497,7 +492,7 @@ void InputMethodController::InsertTextDuringCompositionWithEvents(
                                                    kTextEventInputComposition);
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 
@@ -1475,6 +1470,9 @@ void InputMethodController::ExtendSelectionAndDelete(int before, int after) {
     if (before == 0)
       break;
     ++before;
+    // TODO(editing-dev): The use of UpdateStyleAndLayout
+    // needs to be audited.  see http://crbug.com/590369 for more details.
+    GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   } while (
       GetFrame().Selection().ComputeVisibleSelectionInDOMTree().Start() ==
           GetFrame().Selection().ComputeVisibleSelectionInDOMTree().End() &&
@@ -1679,8 +1677,9 @@ WebTextInputInfo InputMethodController::TextInputInfo() const {
       GetDocument().Lifecycle());
 
   if (const Node* start_node = first_range.StartPosition().AnchorNode()) {
-    if (start_node->GetComputedStyle() &&
-        !start_node->GetComputedStyle()->IsHorizontalWritingMode()) {
+    const ComputedStyle* style =
+        start_node->GetComputedStyleForElementOrLayoutObject();
+    if (style && !style->IsHorizontalWritingMode()) {
       info.flags |= kWebTextInputFlagVertical;
     }
   }
@@ -1722,17 +1721,19 @@ int InputMethodController::TextInputFlags() const {
 
   const AtomicString& autocomplete =
       element->FastGetAttribute(html_names::kAutocompleteAttr);
-  if (autocomplete == "on")
+  if (autocomplete == keywords::kOn) {
     flags |= kWebTextInputFlagAutocompleteOn;
-  else if (autocomplete == "off")
+  } else if (autocomplete == keywords::kOff) {
     flags |= kWebTextInputFlagAutocompleteOff;
+  }
 
   const AtomicString& autocorrect =
       element->FastGetAttribute(html_names::kAutocorrectAttr);
-  if (autocorrect == "on")
+  if (autocorrect == keywords::kOn) {
     flags |= kWebTextInputFlagAutocorrectOn;
-  else if (autocorrect == "off")
+  } else if (autocorrect == keywords::kOff) {
     flags |= kWebTextInputFlagAutocorrectOff;
+  }
 
   SpellcheckAttributeState spellcheck = element->GetSpellcheckAttributeState();
   if (spellcheck == kSpellcheckAttributeTrue)

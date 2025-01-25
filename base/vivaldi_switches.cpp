@@ -46,4 +46,8 @@ const char kVivaldiSilentUpdate[] = "vsu";
 // pseudonymous and hard to guess due to security reasons.
 const char kVivaldiUpdateURL[] = "vuu";
 
+#if BUILDFLAG(IS_WIN)
+const char kCleanShutdown[] = "do-clean-shutdown";
+#endif //IS_WIN
+
 }  // namespace switches

@@ -61,7 +61,7 @@ import themeColorsStyles from './themeColors.css.legacy.js';
 import tokens from './tokens.css.legacy.js';
 import {Toolbar, type ToolbarButton} from './Toolbar.js';
 import {Tooltip} from './Tooltip.js';
-import {type TreeOutline} from './Treeoutline.js';
+import type {TreeOutline} from './Treeoutline.js';
 import {Widget} from './Widget.js';
 
 const UIStrings = {
@@ -690,6 +690,7 @@ export function runCSSAnimationOnce(element: Element, className: string): void {
   function animationEndCallback(): void {
     element.classList.remove(className);
     element.removeEventListener('webkitAnimationEnd', animationEndCallback, false);
+    element.removeEventListener('animationcancel', animationEndCallback, false);
   }
 
   if (element.classList.contains(className)) {
@@ -697,6 +698,7 @@ export function runCSSAnimationOnce(element: Element, className: string): void {
   }
 
   element.addEventListener('webkitAnimationEnd', animationEndCallback, false);
+  element.addEventListener('animationcancel', animationEndCallback, false);
   element.classList.add(className);
 }
 
@@ -1838,7 +1840,6 @@ export function injectCoreStyles(root: Element|ShadowRoot): void {
   ThemeSupport.ThemeSupport.instance().appendStyle(root, tokens);
 
   ThemeSupport.ThemeSupport.instance().injectHighlightStyleSheets(root);
-  ThemeSupport.ThemeSupport.instance().injectCustomStyleSheets(root);
 }
 
 export function injectTextButtonStyles(root: Element|ShadowRoot): void {

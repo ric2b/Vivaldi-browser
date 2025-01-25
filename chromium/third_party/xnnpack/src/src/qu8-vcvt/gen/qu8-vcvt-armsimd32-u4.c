@@ -21,16 +21,16 @@ void xnn_qu8_vcvt_ukernel__armsimd32_u4(
     size_t batch,
     const uint8_t* input,
     uint8_t* output,
-    const union xnn_qu8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_qu8_cvt_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(uint8_t) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const uint16x2_t vminus_input_zero_point = (uint16x2_t) params->armsimd32.minus_input_zero_point;
-  const int32_t vbias = params->armsimd32.bias;
-  const int32_t vmultiplier = params->armsimd32.multiplier;
+  const uint16x2_t vminus_input_zero_point = (uint16x2_t) broadcast2x_uint16(-params->scalar.input_zero_point);
+  const int32_t vbias = (int32_t) ((uint32_t) (int32_t) params->scalar.output_zero_point << 1) + INT32_C(1);
+  const int32_t vmultiplier = (int32_t) params->scalar.multiplier << 9;
   for (; batch >= 4 * sizeof(uint8_t); batch -= 4 * sizeof(uint8_t)) {
     const uint8x4_t vx0123 = (uint8x4_t) unaligned_load_u32(input);
     input += 4;

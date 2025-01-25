@@ -59,15 +59,13 @@ bool IsWebIdentityDigitalCredentialsEnabled() {
   return base::FeatureList::IsEnabled(features::kWebIdentityDigitalCredentials);
 }
 
-bool IsFedCmUseOtherAccountEnabled(bool is_button_mode) {
-  // TODO(crbug.com/328470597): this feature is bundled with the button mode at
-  // the moment. We should decouple them when supporting the feature in the
-  // widget flow.
+bool IsFedCmUseOtherAccountEnabled() {
+  // The active mode origin trial can also enable this feature at this moment.
   return base::FeatureList::IsEnabled(features::kFedCmUseOtherAccount) ||
-         (IsFedCmButtonModeEnabled() && is_button_mode);
+         IsFedCmActiveModeEnabled();
 }
 
-bool IsFedCmButtonModeEnabled() {
+bool IsFedCmActiveModeEnabled() {
   return base::FeatureList::IsEnabled(features::kFedCmButtonMode);
 }
 
@@ -77,6 +75,10 @@ bool IsFedCmSameSiteLaxEnabled() {
 
 bool IsFedCmFlexibleFieldsEnabled() {
   return base::FeatureList::IsEnabled(features::kFedCmFlexibleFields);
+}
+
+bool IsFedCmShowFilteredAccountsEnabled() {
+  return base::FeatureList::IsEnabled(features::kFedCmShowFilteredAccounts);
 }
 
 }  // namespace content

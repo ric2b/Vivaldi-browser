@@ -11,8 +11,8 @@
 #include <sstream>
 #include <vector>
 
-#include "absl/strings/str_join.h"
 #include "discovery/mdns/public/mdns_writer.h"
+#include "util/string_util.h"
 
 namespace openscreen::discovery {
 
@@ -169,7 +169,8 @@ size_t DomainName::MaxWireSize() const {
 }
 
 std::ostream& operator<<(std::ostream& os, const DomainName& domain_name) {
-  return os << absl::StrJoin(domain_name.labels_, ".");
+  return os << string_util::Join(domain_name.labels_.cbegin(),
+                                 domain_name.labels_.cend(), ".");
 }
 
 // static
@@ -402,7 +403,7 @@ NsecRecordRdata::NsecRecordRdata(DomainName next_domain_name,
     const uint8_t byte_mask = 0x80 >> (block_position & 0x07);  // Last 3 bits.
 
     // If the block has changed, write the previous block's info and all of its
-    // contents to the |encoded_types_| vector.
+    // contents to the `encoded_types_` vector.
     if (block > current_block) {
       if (!block_contents.empty()) {
         encoded_types_.push_back(current_block);
@@ -414,7 +415,7 @@ NsecRecordRdata::NsecRecordRdata(DomainName next_domain_name,
       current_block = block;
     }
 
-    // Make sure |block_contents| is large enough to hold the bit representing
+    // Make sure `block_contents` is large enough to hold the bit representing
     // the new type , then set it.
     if (block_contents.size() <= byte_bit_is_at) {
       block_contents.insert(block_contents.end(),

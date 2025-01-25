@@ -11,6 +11,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
+#include "cc/paint/deferred_paint_record.h"
 #include "cc/paint/frame_metadata.h"
 #include "cc/paint/image_animation_count.h"
 #include "cc/paint/paint_export.h"
@@ -67,10 +68,8 @@ constexpr const char* AuxImageName(AuxImage aux_image) {
   switch (aux_image) {
     case AuxImage::kDefault:
       return "default";
-      break;
     case AuxImage::kGainmap:
       return "gainmap";
-      break;
   }
 }
 
@@ -298,12 +297,16 @@ class CC_PAINT_EXPORT PaintImage {
   DecodingMode decoding_mode() const { return decoding_mode_; }
 
   explicit operator bool() const {
-    return paint_worklet_input_ || cached_sk_image_ || texture_backing_;
+    return deferred_paint_record_ || cached_sk_image_ || texture_backing_;
   }
   bool IsLazyGenerated() const {
     return paint_record_ || paint_image_generator_;
   }
-  bool IsPaintWorklet() const { return !!paint_worklet_input_; }
+  bool IsDeferredPaintRecord() const { return !!deferred_paint_record_; }
+  bool IsPaintWorklet() const {
+    return deferred_paint_record_ &&
+           deferred_paint_record_->IsPaintWorkletInput();
+  }
   bool NeedsLayer() const;
   bool IsTextureBacked() const;
   // Skia internally buffers commands and flushes them as necessary but there
@@ -312,12 +315,13 @@ class CC_PAINT_EXPORT PaintImage {
   int width() const { return GetSkImageInfo().width(); }
   int height() const { return GetSkImageInfo().height(); }
   SkColorSpace* color_space() const {
-    return paint_worklet_input_ ? nullptr : GetSkImageInfo().colorSpace();
+    return IsPaintWorklet() ? nullptr : GetSkImageInfo().colorSpace();
   }
   gfx::Size GetSize(AuxImage aux_image) const;
   SkISize GetSkISize(AuxImage aux_image) const {
     return GetSkImageInfo(aux_image).dimensions();
   }
+  bool GetReinterpretAsSRGB() const { return reinterpret_as_srgb_; }
 
   gfx::ContentColorUsage GetContentColorUsage(bool* is_hlg = nullptr) const;
 
@@ -354,8 +358,10 @@ class CC_PAINT_EXPORT PaintImage {
   sk_sp<SkImage> GetSkImageForFrame(size_t index,
                                     GeneratorClientId client_id) const;
 
-  const scoped_refptr<PaintWorkletInput>& paint_worklet_input() const {
-    return paint_worklet_input_;
+  const scoped_refptr<PaintWorkletInput> GetPaintWorkletInput() const;
+
+  const scoped_refptr<DeferredPaintRecord>& deferred_paint_record() const {
+    return deferred_paint_record_;
   }
 
   bool IsOpaque() const;
@@ -391,8 +397,8 @@ class CC_PAINT_EXPORT PaintImage {
   friend class PlaybackImageProvider;
   friend class DrawImageRectOp;
   friend class DrawImageOp;
-  friend class DrawImageToneMapUtil;
   friend class DrawSkottieOp;
+  friend class ToneMapUtil;
 
   // TODO(crbug.com/40110279): Remove these once GetSkImage()
   // is fully removed.
@@ -420,6 +426,10 @@ class CC_PAINT_EXPORT PaintImage {
 
   sk_sp<PaintImageGenerator> paint_image_generator_;
 
+  // If true, then this images will be reinterpreted as being sRGB during paint.
+  // This is used by createImageBitmap's colorSpaceConversion:"none".
+  bool reinterpret_as_srgb_ = false;
+
   // The target HDR headroom for gainmap and global tone map application.
   float target_hdr_headroom_ = 1.f;
 
@@ -427,9 +437,6 @@ class CC_PAINT_EXPORT PaintImage {
   sk_sp<SkImage> gainmap_sk_image_;
   sk_sp<PaintImageGenerator> gainmap_paint_image_generator_;
   std::optional<SkGainmapInfo> gainmap_info_;
-
-  // If true, then use `hdr_metadata_` to tone map to `target_hdr_headroom_`.
-  bool use_global_tone_map_ = false;
 
   // HDR metadata used by global tone map application and (potentially but not
   // yet) gain map application.
@@ -476,7 +483,7 @@ class CC_PAINT_EXPORT PaintImage {
   sk_sp<SkImage> cached_sk_image_;
 
   // The input parameters that are needed to execute the JS paint callback.
-  scoped_refptr<PaintWorkletInput> paint_worklet_input_;
+  scoped_refptr<DeferredPaintRecord> deferred_paint_record_;
 };
 
 }  // namespace cc

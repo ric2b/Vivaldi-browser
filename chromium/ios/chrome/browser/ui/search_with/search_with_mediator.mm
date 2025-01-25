@@ -111,9 +111,6 @@ void LogTrigger(bool incognito, bool search_engine_google) {
 }
 
 - (BOOL)canPerformSearch {
-  if (!IsSearchWithEnabled()) {
-    return NO;
-  }
   WebSelectionTabHelper* tabHelper = [self webSelectionTabHelper];
   if (!tabHelper || !tabHelper->CanRetrieveSelectedText() ||
       !self.applicationCommandHandler || !_templateURLService ||
@@ -132,14 +129,6 @@ void LogTrigger(bool incognito, bool search_engine_google) {
     return l10n_util::GetNSString(IDS_IOS_SEARCH_WITH_VIVALDI);
   // End Vivaldi
 
-  std::string param = base::GetFieldTrialParamValueByFeature(
-      kIOSEditMenuSearchWith, kIOSEditMenuSearchWithTitleParamTitle);
-  if (param == kIOSEditMenuSearchWithTitleSearchParam) {
-    return l10n_util::GetNSString(IDS_IOS_SEARCH_WITH_TITLE_SEARCH);
-  }
-  if (param == kIOSEditMenuSearchWithTitleWebSearchParam) {
-    return l10n_util::GetNSString(IDS_IOS_SEARCH_WITH_TITLE_WEB_SEARCH);
-  }
   // Default value
   return l10n_util::GetNSStringF(
       IDS_IOS_SEARCH_WITH_TITLE_SEARCH_WITH,

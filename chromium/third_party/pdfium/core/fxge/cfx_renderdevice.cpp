@@ -220,9 +220,12 @@ void DrawNormalTextHelper(const RetainPtr<CFX_DIBitmap>& bitmap,
   const bool has_alpha = bitmap->IsAlphaFormat();
   const int bytes_per_pixel = has_alpha ? 4 : bitmap->GetBPP() / 8;
   for (int row = 0; row < nrows; ++row) {
-    int dest_row = row + top;
-    if (dest_row < 0 || dest_row >= bitmap->GetHeight())
+    FX_SAFE_INT32 safe_dest_row = row;
+    safe_dest_row += top;
+    const int dest_row = safe_dest_row.ValueOrDefault(-1);
+    if (dest_row < 0 || dest_row >= bitmap->GetHeight()) {
       continue;
+    }
 
     const uint8_t* src_scan =
         pGlyph->GetScanline(row).subspan((start_col - left) * 3).data();
@@ -753,8 +756,8 @@ bool CFX_RenderDevice::DrawFillStrokePath(
     return false;
   CFX_FloatRect bbox;
   if (pGraphState) {
-    bbox = path.GetBoundingBoxForStrokePath(pGraphState->m_LineWidth,
-                                            pGraphState->m_MiterLimit);
+    bbox = path.GetBoundingBoxForStrokePath(pGraphState->line_width(),
+                                            pGraphState->miter_limit());
   } else {
     bbox = path.GetBoundingBox();
   }
@@ -857,7 +860,7 @@ void CFX_RenderDevice::DrawZeroAreaPath(
     return;
 
   CFX_GraphStateData graph_state;
-  graph_state.m_LineWidth = 0.0f;
+  graph_state.set_line_width(0.0f);
 
   uint32_t stroke_color = fill_color;
   if (thin)
@@ -1321,7 +1324,7 @@ void CFX_RenderDevice::DrawStrokeRect(const CFX_Matrix& mtUser2Device,
                                       const FX_COLORREF& color,
                                       float fWidth) {
   CFX_GraphStateData gsd;
-  gsd.m_LineWidth = fWidth;
+  gsd.set_line_width(fWidth);
 
   CFX_Path path;
   path.AppendFloatRect(rect);
@@ -1339,7 +1342,7 @@ void CFX_RenderDevice::DrawStrokeLine(const CFX_Matrix* pUser2Device,
   path.AppendPoint(ptLineTo, CFX_Path::Point::Type::kLine);
 
   CFX_GraphStateData gsd;
-  gsd.m_LineWidth = fWidth;
+  gsd.set_line_width(fWidth);
 
   DrawPath(path, pUser2Device, &gsd, 0, color,
            CFX_FillRenderOptions::EvenOddOptions());
@@ -1404,9 +1407,8 @@ void CFX_RenderDevice::DrawBorder(const CFX_Matrix* pUser2Device,
     }
     case BorderStyle::kDash: {
       CFX_GraphStateData gsd;
-      gsd.m_DashArray = {3.0f, 3.0f};
-      gsd.m_DashPhase = 0;
-      gsd.m_LineWidth = fWidth;
+      gsd.set_dash_array({3.0f, 3.0f});
+      gsd.set_line_width(fWidth);
 
       CFX_Path path;
       path.AppendPoint(CFX_PointF(fLeft + fHalfWidth, fBottom + fHalfWidth),
@@ -1426,7 +1428,7 @@ void CFX_RenderDevice::DrawBorder(const CFX_Matrix* pUser2Device,
     case BorderStyle::kBeveled:
     case BorderStyle::kInset: {
       CFX_GraphStateData gsd;
-      gsd.m_LineWidth = fHalfWidth;
+      gsd.set_line_width(fHalfWidth);
 
       CFX_Path path_left_top;
       path_left_top.AppendPoint(
@@ -1486,7 +1488,7 @@ void CFX_RenderDevice::DrawBorder(const CFX_Matrix* pUser2Device,
     }
     case BorderStyle::kUnderline: {
       CFX_GraphStateData gsd;
-      gsd.m_LineWidth = fWidth;
+      gsd.set_line_width(fWidth);
 
       CFX_Path path;
       path.AppendPoint(CFX_PointF(fLeft, fBottom + fHalfWidth),

@@ -14,7 +14,6 @@
 #include "base/values.h"
 #include "components/signin/internal/identity_manager/account_tracker_service.h"
 #include "components/signin/public/base/signin_client.h"
-#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/ios/device_accounts_provider.h"
 #include "google_apis/gaia/oauth2_access_token_fetcher.h"
@@ -55,7 +54,7 @@ GoogleServiceAuthError GetGoogleServiceAuthErrorFromAuthenticationErrorCategory(
     case kAuthenticationErrorCategoryUnknownIdentityErrors:
       return GoogleServiceAuthError(GoogleServiceAuthError::USER_NOT_SIGNED_UP);
   }
-  NOTREACHED_IN_MIGRATION() << "unsupported error: " << static_cast<int>(error);
+  NOTREACHED() << "unsupported error: " << static_cast<int>(error);
 }
 
 // Converts a DeviceAccountsProvider::AccountInfo to an AccountInfo.
@@ -107,7 +106,7 @@ SSOAccessTokenFetcher::SSOAccessTokenFetcher(
   DCHECK(provider_);
 }
 
-SSOAccessTokenFetcher::~SSOAccessTokenFetcher() {}
+SSOAccessTokenFetcher::~SSOAccessTokenFetcher() = default;
 
 void SSOAccessTokenFetcher::Start(const std::string& client_id,
                                   const std::string& client_secret_unused,
@@ -176,16 +175,6 @@ void ProfileOAuth2TokenServiceIOSDelegate::LoadCredentialsInternal(
             load_credentials_state());
   set_load_credentials_state(
       signin::LoadCredentialsState::LOAD_CREDENTIALS_IN_PROGRESS);
-
-  if (!base::FeatureList::IsEnabled(switches::kAlwaysLoadDeviceAccounts) &&
-      primary_account_id.empty()) {
-    // On startup, always fire refresh token loaded even if there is nothing
-    // to load (not authenticated).
-    set_load_credentials_state(
-        signin::LoadCredentialsState::LOAD_CREDENTIALS_FINISHED_WITH_SUCCESS);
-    FireRefreshTokensLoaded();
-    return;
-  }
 
   ReloadCredentials(primary_account_id);
   if (primary_account_id.empty() ||
@@ -271,9 +260,8 @@ void ProfileOAuth2TokenServiceIOSDelegate::UpdateCredentialsInternal(
     const CoreAccountId& account_id,
     const std::string& refresh_token) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  NOTREACHED_IN_MIGRATION()
-      << "Unexpected call to UpdateCredentials when using shared "
-         "authentication.";
+  NOTREACHED() << "Unexpected call to UpdateCredentials when using shared "
+                  "authentication.";
 }
 
 void ProfileOAuth2TokenServiceIOSDelegate::RevokeAllCredentialsInternal(

@@ -10,6 +10,7 @@
 <translation id="132390688737681464">Bewaar en vul adresse in</translation>
 <translation id="1375198122581997741">Oor Weergawe</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> het geen data verstuur nie.</translation>
+<translation id="1555191101192706055">Aanvallers op die werf wat u probeer besoek het, kan u dalk mislei om skadelike programmatuur te installeer wat ’n invloed kan hê op hoe u blaai – byvoorbeeld deur u tuisblad te verander of vir u ekstra advertensies te wys op werwe wat u besoek.</translation>
 <translation id="1559528461873125649">So ’n lêer of gids bestaan nie</translation>
 <translation id="1640244768702815859">Probeer <ph name="BEGIN_LINK" />om die werf se tuisblad te besoek<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Onondersteunde protokol</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Gaan tans die instaanbediener en brandmuur na<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Uitgereik aan: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Hierdie werf kan nie ’n beveilgde verbinding bied nie</translation>
+<translation id="2178904466768126352">Aanvallers op die werf wat u probeer besoek het, kan skadelike sagteware installeer wat dinge soos u wagwoorde, foto’s, boodskappe of kredietkaartnommers steel of uitvee.</translation>
 <translation id="2187317261103489799">Bespeur (verstek)</translation>
 <translation id="2224337661447660594">Geen internet</translation>
 <translation id="2283340219607151381">Bewaar en vul adresse in</translation>
@@ -92,6 +94,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Gaan tans die brandmuur en antivirusopstelling na<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Probeer die netwerkdiagnose<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Geldig</translation>
+<translation id="4241830393007970744">Aanvallers op die webwerf wat u probeer besoek het, kan u dalk mislei om programmatuur te installeer of dinge soos u wagwoorde, foonnommer of kredietkaartnommers te openbaar.</translation>
 <translation id="4250431568374086873">U verbinding aan hierdie werf is nie heeltemal veilig nie</translation>
 <translation id="4265872034478892965">Deur u administrateur toegelaat</translation>
 <translation id="4305666528087210886">Kon nie toegang tot u lêer kry nie</translation>
@@ -169,7 +172,6 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> voldoen nie aan sekuriteitstandaarde nie.</translation>
 <translation id="7219179957768738017">Die verbinding gebruik <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Toon kennisgewings</translation>
-<translation id="7227747683324411744">Aanvallers op die werf wat u probeer besoek, kan u dalk mislei om skadelike programmatuur te installeer wat die manier waarop u blaai beïnvloed — byvoorbeeld deur u tuisblad te verander of vir u ekstra advertensies te wys op werwe wat u besoek.</translation>
 <translation id="7353601530677266744">Opdragreël</translation>
 <translation id="7364115444476960850">Die blad wat u probeer besoek is versper deur Vivaldi se <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profielpad</translation>
@@ -177,7 +179,6 @@
 <translation id="7518003948725431193">Geen webbled is gevind vir die webadres: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Hierdie webwerf kan slegs korrek vertoon word met data wat u vroeër ingevoer het. U kan hierdie data weer verstuur, maar daardeur sal enige aksie wat hierdie blad reeds uitgevoer het, weer plaasvind.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kan tans nie hierdie versoek verwerk nie.</translation>
-<translation id="7605377493722372900">Aanvallers op die werf wat u probeer besoek, kan skadelike programmatuur installeer wat dinge soos u wagwoord, foto’s, boodskappe of kredietkaartnommer steel of uitvee.</translation>
 <translation id="7662298039739062396">Instelling word deur uitbreiding beheer</translation>
 <translation id="7663736086183791259">Sertifikaat <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">Sertifikaat</translation>
@@ -203,7 +204,6 @@
 <translation id="8288807391153049143">Toon sertifikaat</translation>
 <translation id="8289355894181816810">Kontak u netwerkadministrateur indien u onsker is oor wat dit beteken.</translation>
 <translation id="8332188693563227489">Toegang tot <ph name="HOST_NAME" /> is geweier</translation>
-<translation id="8422228580902424274">Aanvallers op die werf wat u probeer besoek, kan u dalk mislei om programmatuur te installeer of dinge soos u wagwoord, telefoon- of kredietkaartnommer te openbaar.</translation>
 <translation id="8473863474539038330">Adresse en meer</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> het te lank geneem om te reageer.</translation>
 <translation id="8503813439785031346">Gebruikersnaam</translation>

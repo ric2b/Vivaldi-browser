@@ -99,6 +99,7 @@ using content::WebContents;
 
 #include "components/send_tab_to_self/send_tab_to_self_bridge.h"
 #include "components/send_tab_to_self/send_tab_to_self_entry.h"
+#include "components/send_tab_to_self/target_device_info.h"
 #include "components/send_tab_to_self/send_tab_to_self_sync_service.h"
 #include "chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #include "chrome/browser/send_tab_to_self/receiving_ui_handler.h"
@@ -548,7 +549,9 @@ void VivaldiPrivateTabObserver::OnTabResourceMetricsRefreshed() {
 
   bool was_discarded =
       web_contents()->WasDiscarded() ||
-      (tab_lifecycle_unit_external ? tab_lifecycle_unit_external->IsDiscarded()
+                       (tab_lifecycle_unit_external
+                            ? tab_lifecycle_unit_external->GetTabState() ==
+                                  ::mojom::LifecycleUnitState::DISCARDED
                                    : false) ||
       not_yet_loaded;
 
@@ -641,16 +644,21 @@ bool SetTabWorkspaceId(content::WebContents* contents, double workspace_id) {
   auto viv_ext_data = contents->GetVivExtData();
   std::optional<base::Value> json =
     GetDictValueFromVivExtData(viv_ext_data);
-  if (json) {
-    json->GetDict().Set("workspaceId", workspace_id);
-    json->GetDict().Remove("group");
-    std::string json_string;
-    if (ValueToJSONString(*json, json_string)) {
-      contents->SetVivExtData(json_string);
-      return true;
-    }
+  if (!json) {
+    return false;
   }
-  return false;
+  std::optional<double> value = json->GetDict().FindDouble(kVivaldiWorkspace);
+  if (value.has_value() && value.value() == workspace_id) {
+    return false;
+  }
+  json->GetDict().Set(kVivaldiWorkspace, workspace_id);
+  json->GetDict().Remove("group");
+  std::string json_string;
+  if (!ValueToJSONString(*json, json_string)) {
+    return false;
+  }
+  contents->SetVivExtData(json_string);
+  return true;
 }
 
 void VivaldiPrivateTabObserver::DidFinishLoad(
@@ -1418,7 +1426,8 @@ TabsPrivateGetTabPerformanceDataFunction::Run() {
                   ::vivaldi::kVivaldiStartupTabUserDataKey);
 
       pdata->discarded = tab_contents->WasDiscarded() ||
-                         tab_lifecycle_unit_external->IsDiscarded() ||
+                         tab_lifecycle_unit_external->GetTabState() ==
+                             ::mojom::LifecycleUnitState::DISCARDED ||
                          notYetLoaded;
 
       if (pdata->discarded) {
@@ -1688,6 +1697,10 @@ WEB_CONTENTS_USER_DATA_KEY_IMPL(VivaldiGuestViewContentObserver);
 
 ExtensionFunction::ResponseAction
 TabsPrivateGetSendTabToSelfEntriesFunction::Run() {
+  using tabs_private::GetSendTabToSelfEntries::Params;
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
   namespace Results = tabs_private::GetSendTabToSelfEntries::Results;
 
   std::vector<extensions::vivaldi::tabs_private::SendTabToSelfEntry> list;
@@ -1720,7 +1733,10 @@ TabsPrivateGetSendTabToSelfEntriesFunction::Run() {
         }
       }
     }
-  } else {
+  } else if (!params->silent) {
+    // For simplicity we allow to mute this warning. Will happen on startup if
+    // we call this function too early. Once the model loads an event is sent
+    // to JS and we load again (then without silent set).
     LOG(ERROR) << "SendTabToSelf. Model not ready";
   }
 
@@ -1778,6 +1794,61 @@ TabsPrivateExecSendTabToSelfActionFunction::Run() {
         break;
     }
   }
+  return RespondNow(ArgumentList(Results::Create()));
+}
+
+ExtensionFunction::ResponseAction
+TabsPrivateGetSendTabToSelfTargetsFunction::Run() {
+  namespace Results = tabs_private::GetSendTabToSelfTargets::Results;
+
+  Profile* profile =
+      Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
+
+  extensions::vivaldi::tabs_private::SendTabToSelfTargets result;
+
+  // Use the readyness of the model to dermine if system has been enbled or not.
+  send_tab_to_self::SendTabToSelfModel* model =
+    SendTabToSelfSyncServiceFactory::GetForProfile(profile)
+      ->GetSendTabToSelfModel();
+  if (!model || !model->IsReady()) {
+    result.valid = false;
+    return RespondNow(ArgumentList(Results::Create(result)));
+  }
+
+  for (auto device : model->GetTargetDeviceInfoSortedList()) {
+    extensions::vivaldi::tabs_private::SendTabToSelfTarget item;
+    item.guid = device.cache_guid;
+    item.name = device.full_name;
+    if (device.form_factor == syncer::DeviceInfo::FormFactor::kPhone) {
+      item.type = vivaldi::tabs_private::SendTabToSelfTargetType::kPhone;
+    } else if (device.form_factor == syncer::DeviceInfo::FormFactor::kTablet) {
+      item.type = vivaldi::tabs_private::SendTabToSelfTargetType::kTablet;
+    } else {
+      item.type = vivaldi::tabs_private::SendTabToSelfTargetType::kDesktop;
+    }
+    result.entries.push_back(std::move(item));
+  }
+
+  result.valid = true;
+  return RespondNow(ArgumentList(Results::Create(result)));
+}
+
+ExtensionFunction::ResponseAction
+TabsPrivateSendSendTabToSelfTargetFunction::Run() {
+  using tabs_private::SendSendTabToSelfTarget::Params;
+  namespace Results = tabs_private::SendSendTabToSelfTarget::Results;
+
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Profile* profile =
+      Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
+
+  send_tab_to_self::SendTabToSelfSyncService* service =
+      SendTabToSelfSyncServiceFactory::GetForProfile(profile);
+  service->GetSendTabToSelfModel()->AddEntry(
+      GURL(params->url), params->title, params->guid);
+
   return RespondNow(ArgumentList(Results::Create()));
 }
 

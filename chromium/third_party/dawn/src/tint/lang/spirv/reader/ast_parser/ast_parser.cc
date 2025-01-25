@@ -42,6 +42,7 @@
 #include "src/tint/lang/wgsl/ast/disable_validation_attribute.h"
 #include "src/tint/lang/wgsl/ast/id_attribute.h"
 #include "src/tint/lang/wgsl/ast/interpolate_attribute.h"
+#include "src/tint/lang/wgsl/ast/row_major_attribute.h"
 #include "src/tint/lang/wgsl/ast/unary_op_expression.h"
 #include "src/tint/lang/wgsl/resolver/resolve.h"
 #include "src/tint/utils/containers/unique_vector.h"
@@ -269,6 +270,7 @@ bool IsPipelineDecoration(const Decoration& deco) {
     }
     switch (static_cast<spv::Decoration>(deco[0])) {
         case spv::Decoration::Location:
+        case spv::Decoration::Index:
         case spv::Decoration::Flat:
         case spv::Decoration::NoPerspective:
         case spv::Decoration::Centroid:
@@ -505,19 +507,7 @@ Attributes ASTParser::ConvertMemberDecoration(uint32_t struct_type_id,
         case spv::Decoration::ColMajor:          // WGSL only supports column major matrices.
         case spv::Decoration::RelaxedPrecision:  // WGSL doesn't support relaxed precision.
             break;
-        case spv::Decoration::RowMajor:
-            Fail() << "WGSL does not support row-major matrices: can't "
-                      "translate member "
-                   << member_index << " of " << ShowType(struct_type_id);
-            break;
-        case spv::Decoration::MatrixStride: {
-            if (decoration.size() != 2) {
-                Fail() << "malformed MatrixStride decoration: expected 1 literal operand, has "
-                       << decoration.size() - 1 << ": member " << member_index << " of "
-                       << ShowType(struct_type_id);
-                break;
-            }
-            uint32_t stride = decoration[1];
+        case spv::Decoration::RowMajor: {
             auto* ty = member_ty->UnwrapAlias();
             while (auto* arr = ty->As<Array>()) {
                 ty = arr->type->UnwrapAlias();
@@ -527,14 +517,31 @@ Attributes ASTParser::ConvertMemberDecoration(uint32_t struct_type_id,
                 Fail() << "MatrixStride cannot be applied to type " << ty->String();
                 break;
             }
-            uint32_t natural_stride = (mat->rows == 2) ? 8 : 16;
-            if (stride == natural_stride) {
-                break;  // Decoration matches the natural stride for the matrix
-            }
-            if (!member_ty->Is<Matrix>()) {
-                Fail() << "custom matrix strides not currently supported on array of matrices";
+            out.Add(create<ast::RowMajorAttribute>(Source{}));
+            break;
+        }
+        case spv::Decoration::MatrixStride: {
+            if (decoration.size() != 2) {
+                Fail() << "malformed MatrixStride decoration: expected 1 literal operand, has "
+                       << decoration.size() - 1 << ": member " << member_index << " of "
+                       << ShowType(struct_type_id);
                 break;
             }
+            auto* ty = member_ty->UnwrapAlias();
+            while (auto* arr = ty->As<Array>()) {
+                ty = arr->type->UnwrapAlias();
+            }
+            auto* mat = ty->As<Matrix>();
+            if (!mat) {
+                Fail() << "MatrixStride cannot be applied to type " << ty->String();
+                break;
+            }
+
+            // Note: We do not know at this point whether the matrix is laid out as row-major or
+            // column-major, and therefore do not know the "natural" stride. So we add the stride
+            // attribute unconditionally, and let the DecomposeStridedMatrix transform determine if
+            // anything needs to be done.
+
             out.Add(create<ast::StrideAttribute>(Source{}, decoration[1]));
             out.Add(builder_.ASTNodes().Create<ast::DisableValidationAttribute>(
                 builder_.ID(), builder_.AllocateNodeID(),
@@ -583,6 +590,7 @@ void ASTParser::ResetInternalModule() {
     deco_mgr_ = nullptr;
 
     glsl_std_450_imports_.clear();
+    enabled_extensions_.Clear();
 }
 
 bool ASTParser::ParseInternalModule() {
@@ -1148,7 +1156,7 @@ const Type* ASTParser::ConvertStructType(uint32_t type_id) {
                         builtin_position_.pointsize_member_index = member_index;
                         create_ast_member = false;  // Not part of the WGSL structure.
                         break;
-                    case spv::BuiltIn::ClipDistance:  // not supported in WGSL
+                    case spv::BuiltIn::ClipDistance:
                     case spv::BuiltIn::CullDistance:  // not supported in WGSL
                         create_ast_member = false;    // Not part of the WGSL structure.
                         break;
@@ -1547,6 +1555,7 @@ bool ASTParser::EmitModuleScopeVariables() {
     }
 
     // Emit gl_Position instead of gl_PerVertex
+    // TODO(chromium:358408571): handle gl_ClipDistance[] in gl_PerVertex
     if (builtin_position_.per_vertex_var_id) {
         // Make sure the variable has a name.
         namer_.SuggestSanitizedName(builtin_position_.per_vertex_var_id, "gl_Position");
@@ -1729,6 +1738,9 @@ bool ASTParser::ConvertDecorationsForVariable(uint32_t id,
                     }
                     break;
                 }
+                case spv::BuiltIn::ClipDistance:
+                    Enable(wgsl::Extension::kClipDistances);
+                    break;
                 default:
                     break;
             }
@@ -1799,7 +1811,23 @@ void ASTParser::SetLocation(Attributes& attributes, const ast::Attribute* replac
     }
     // The list didn't have a location. Add it.
     attributes.Add(replacement);
-    return;
+}
+
+void ASTParser::SetBlendSrc(Attributes& attributes, const ast::Attribute* replacement) {
+    if (!replacement) {
+        return;
+    }
+    for (auto*& attribute : attributes.list) {
+        if (attribute->Is<ast::BlendSrcAttribute>()) {
+            // Replace this BlendSrc attribute with the replacement.
+            // The old one doesn't leak because it's kept in the builder's AST node
+            // list.
+            attribute = replacement;
+            return;  // Assume there is only one such decoration.
+        }
+    }
+    // The list didn't have a BlendSrc. Add it.
+    attributes.Add(replacement);
 }
 
 bool ASTParser::ConvertPipelineDecorations(const Type* store_type,
@@ -1846,6 +1874,14 @@ bool ASTParser::ConvertPipelineDecorations(const Type* store_type,
                     return Fail() << "Sample interpolation sampling is invalid on integral IO";
                 }
                 sampling = core::InterpolationSampling::kSample;
+                break;
+            case spv::Decoration::Index:
+                if (deco.size() != 2) {
+                    return Fail()
+                           << "malformed Index decoration on ID requires one literal operand";
+                }
+                Enable(wgsl::Extension::kDualSourceBlending);
+                SetBlendSrc(attributes, builder_.BlendSrc(AInt(deco[1])));
                 break;
             default:
                 break;

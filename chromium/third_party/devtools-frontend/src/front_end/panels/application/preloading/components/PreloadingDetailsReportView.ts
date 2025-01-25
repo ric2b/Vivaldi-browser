@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../../ui/components/report_view/report_view.js';
+import '../../../../ui/components/request_link_icon/request_link_icon.js';
+
 import * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import type * as Platform from '../../../../core/platform/platform.js';
@@ -12,8 +15,6 @@ import * as Logs from '../../../../models/logs/logs.js';
 import * as Buttons from '../../../../ui/components/buttons/buttons.js';
 import * as LegacyWrapper from '../../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as Coordinator from '../../../../ui/components/render_coordinator/render_coordinator.js';
-import * as ReportView from '../../../../ui/components/report_view/report_view.js';
-import * as RequestLinkIcon from '../../../../ui/components/request_link_icon/request_link_icon.js';
 import * as UI from '../../../../ui/legacy/legacy.js';
 import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js';
@@ -22,6 +23,8 @@ import * as PreloadingHelper from '../helper/helper.js';
 import preloadingDetailsReportViewStyles from './preloadingDetailsReportView.css.js';
 import * as PreloadingString from './PreloadingString.js';
 import {prefetchFailureReason, prerenderFailureReason, ruleSetLocationShort} from './PreloadingString.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -127,8 +130,6 @@ interface PreloadingDetailsReportViewDataInternal {
 }
 
 export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.WrappableComponent<UI.Widget.VBox> {
-  static readonly litTagName = LitHtml.literal`devtools-resources-preloading-details-report-view`;
-
   readonly #shadow = this.attachShadow({mode: 'open'});
   #data: PreloadingDetailsReportViewData = null;
 
@@ -146,7 +147,7 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
       if (this.#data === null) {
         // Disabled until https://crbug.com/1079231 is fixed.
         // clang-format off
-        LitHtml.render(LitHtml.html`
+        LitHtml.render(html`
           <div class="preloading-noselected">
             <div>
               <p>${i18nString(UIStrings.selectAnElementForMoreDetails)}</p>
@@ -162,26 +163,24 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
 
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
-      LitHtml.render(LitHtml.html`
-        <${ReportView.ReportView.Report.litTagName} .data=${{reportTitle: 'Speculative Loading Attempt'} as ReportView.ReportView.ReportData}
+      LitHtml.render(html`
+        <devtools-report .data=${{reportTitle: 'Speculative Loading Attempt'}}
         jslog=${VisualLogging.section('preloading-details')}>
-          <${ReportView.ReportView.ReportSectionHeader.litTagName}>${i18nString(UIStrings.detailsDetailedInformation)}</${
-            ReportView.ReportView.ReportSectionHeader.litTagName}>
+          <devtools-report-section-header>${i18nString(UIStrings.detailsDetailedInformation)}</devtools-report-section-header>
 
           ${this.#url()}
           ${this.#action()}
 
-          <${ReportView.ReportView.ReportKey.litTagName}>${i18nString(UIStrings.detailsStatus)}</${
-            ReportView.ReportView.ReportKey.litTagName}>
-          <${ReportView.ReportView.ReportValue.litTagName}>
+          <devtools-report-key>${i18nString(UIStrings.detailsStatus)}</devtools-report-key>
+          <devtools-report-value>
             ${detailedStatus}
-          </${ReportView.ReportView.ReportValue.litTagName}>
+          </devtools-report-value>
 
           ${this.#maybePrefetchFailureReason()}
           ${this.#maybePrerenderFailureReason()}
 
           ${this.#data.ruleSets.map(ruleSet => this.#renderRuleSet(ruleSet, pageURL))}
-        </${ReportView.ReportView.Report.litTagName}>
+        </devtools-report>
       `, this.#shadow, {host: this});
       // clang-format on
     });
@@ -195,8 +194,8 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
     if (attempt.action === Protocol.Preload.SpeculationAction.Prefetch && attempt.requestId !== undefined) {
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
-      value = LitHtml.html`
-          <${RequestLinkIcon.RequestLinkIcon.RequestLinkIcon.litTagName}
+      value = html`
+          <devtools-request-link-icon
             .data=${
               {
                 affectedRequest: {
@@ -206,15 +205,15 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
                 requestResolver: this.#data.requestResolver || new Logs.RequestResolver.RequestResolver(),
                 displayURL: true,
                 urlToDisplay: attempt.key.url,
-              } as RequestLinkIcon.RequestLinkIcon.RequestLinkIconData
+              }
             }
           >
-          </${RequestLinkIcon.RequestLinkIcon.RequestLinkIcon.litTagName}>
+          </devtools-request-link-icon>
       `;
     } else {
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
-      value = LitHtml.html`
+      value = html`
           <div class="text-ellipsis" title=${attempt.key.url}>${attempt.key.url}</div>
       `;
       // clang-format on
@@ -222,12 +221,11 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
-        <${ReportView.ReportView.ReportKey.litTagName}>${i18n.i18n.lockedString('URL')}</${
-          ReportView.ReportView.ReportKey.litTagName}>
-        <${ReportView.ReportView.ReportValue.litTagName}>
+    return html`
+        <devtools-report-key>${i18n.i18n.lockedString('URL')}</devtools-report-key>
+        <devtools-report-value>
           ${value}
-        </${ReportView.ReportView.ReportValue.litTagName}>
+        </devtools-report-value>
     `;
     // clang-format on
   }
@@ -261,8 +259,8 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
       };
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
-      maybeInspectButton = LitHtml.html`
-          <${Buttons.Button.Button.litTagName}
+      maybeInspectButton = html`
+          <devtools-button
             @click=${inspect}
             .title=${i18nString(UIStrings.buttonClickToInspect)}
             .size=${Buttons.Button.Size.SMALL}
@@ -271,22 +269,21 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
             jslog=${VisualLogging.action('inspect-prerendered-page').track({click: true})}
           >
             ${i18nString(UIStrings.buttonInspect)}
-          </${Buttons.Button.Button.litTagName}>
+          </devtools-button>
       `;
       // clang-format on
     })();
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
-        <${ReportView.ReportView.ReportKey.litTagName}>${i18nString(UIStrings.detailsAction)}</${
-          ReportView.ReportView.ReportKey.litTagName}>
-        <${ReportView.ReportView.ReportValue.litTagName}>
+    return html`
+        <devtools-report-key>${i18nString(UIStrings.detailsAction)}</devtools-report-key>
+        <devtools-report-value>
           <div class="text-ellipsis" title="">
             ${action}
             ${maybeInspectButton}
           </div>
-        </${ReportView.ReportView.ReportValue.litTagName}>
+        </devtools-report-value>
     `;
     // clang-format on
   }
@@ -304,12 +301,11 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
       return LitHtml.nothing;
     }
 
-    return LitHtml.html`
-        <${ReportView.ReportView.ReportKey.litTagName}>${i18nString(UIStrings.detailsFailureReason)}</${
-        ReportView.ReportView.ReportKey.litTagName}>
-        <${ReportView.ReportView.ReportValue.litTagName}>
+    return html`
+        <devtools-report-key>${i18nString(UIStrings.detailsFailureReason)}</devtools-report-key>
+        <devtools-report-value>
           ${failureDescription}
-        </${ReportView.ReportView.ReportValue.litTagName}>
+        </devtools-report-value>
     `;
   }
 
@@ -326,12 +322,11 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
       return LitHtml.nothing;
     }
 
-    return LitHtml.html`
-        <${ReportView.ReportView.ReportKey.litTagName}>${i18nString(UIStrings.detailsFailureReason)}</${
-        ReportView.ReportView.ReportKey.litTagName}>
-        <${ReportView.ReportView.ReportValue.litTagName}>
+    return html`
+        <devtools-report-key>${i18nString(UIStrings.detailsFailureReason)}</devtools-report-key>
+        <devtools-report-value>
           ${failureReason}
-        </${ReportView.ReportView.ReportValue.litTagName}>
+        </devtools-report-value>
     `;
   }
 
@@ -343,10 +338,9 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
-      <${ReportView.ReportView.ReportKey.litTagName}>${i18nString(UIStrings.detailsRuleSet)}</${
-        ReportView.ReportView.ReportKey.litTagName}>
-      <${ReportView.ReportView.ReportValue.litTagName}>
+    return html`
+      <devtools-report-key>${i18nString(UIStrings.detailsRuleSet)}</devtools-report-key>
+      <devtools-report-value>
         <div class="text-ellipsis" title="">
           <button class="link" role="link"
             @click=${revealRuleSetView}
@@ -360,7 +354,7 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
             ${location}
           </button>
         </div>
-      </${ReportView.ReportView.ReportValue.litTagName}>
+      </devtools-report-value>
     `;
     // clang-format on
   }

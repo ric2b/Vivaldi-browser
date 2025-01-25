@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '//components/autofill/ios/form_util/resources/create_fill_namespace.js';
+
 import {gCrWeb} from '//ios/web/public/js_messaging/resources/gcrweb.js';
 
 declare type FormControlElement =
@@ -49,17 +51,31 @@ const ROLE_ATTRIBUTE_PRESENTATION = 0;
 const RENDERER_ID_NOT_SET = '0';
 
 /**
+ Name of the html attribute used for storing stable unique form and field IDs.
+ */
+const UNIQUE_ID_ATTRIBUTE = '__gChrome_uniqueID';
+
+/**
  * The JS Symbol object used to set stable unique form and field IDs.
  */
-const ID_SYMBOL = window.Symbol.for('__gChrome~uniqueID');
+const ID_SYMBOL = window.Symbol.for(UNIQUE_ID_ATTRIBUTE);
+
+/**
+ Name of the html attribute used for storing the remote frame token assigned to
+ a child frame. Stored as an attribute of the iframe html element hosting the
+ child frame.
+ */
+const CHILD_FRAME_REMOTE_TOKEN_ATTRIBUTE = '__gChrome_childFrameRemoteToken';
 
 export {
+  CHILD_FRAME_REMOTE_TOKEN_ATTRIBUTE,
   FormControlElement,
   MAX_DATA_LENGTH,
   MAX_STRING_LENGTH,
   MAX_EXTRACTABLE_FIELDS,
   ROLE_ATTRIBUTE_PRESENTATION,
   RENDERER_ID_NOT_SET,
+  UNIQUE_ID_ATTRIBUTE,
 };
 
 gCrWeb.fill.ID_SYMBOL = ID_SYMBOL;

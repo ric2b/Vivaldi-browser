@@ -19,7 +19,7 @@ namespace {
 using ::testing::_;
 using ::testing::Invoke;
 
-ErrorOr<size_t> ConvertDecodeResult(ssize_t result) {
+ErrorOr<size_t> ConvertDecodeResult(int64_t result) {
   if (result < 0) {
     if (result == -CborErrorUnexpectedEOF)
       return Error::Code::kCborIncompleteMessage;
@@ -38,10 +38,10 @@ class MessageDemuxerTest : public ::testing::Test {
   }
 
   void ExpectDecodedRequest(
-      ssize_t decode_result,
+      msgs::CborResult decode_result,
       const msgs::PresentationConnectionOpenRequest& received_request) {
     ASSERT_GT(decode_result, 0);
-    EXPECT_EQ(decode_result, static_cast<ssize_t>(buffer_.size() - 2));
+    EXPECT_EQ(decode_result, static_cast<int64_t>(buffer_.size() - 2));
     EXPECT_EQ(request_.request_id, received_request.request_id);
     EXPECT_EQ(request_.presentation_id, received_request.presentation_id);
     EXPECT_EQ(request_.url, received_request.url);
@@ -71,7 +71,7 @@ TEST_F(MessageDemuxerTest, WatchStartStop) {
   demuxer_.OnStreamData(endpoint_id_ + 1, 14, buffer_.data(), buffer_.size());
 
   msgs::PresentationConnectionOpenRequest received_request;
-  ssize_t decode_result = 0;
+  msgs::CborResult decode_result = 0;
   EXPECT_CALL(
       mock_callback_,
       OnStreamMessage(endpoint_id_, connection_id_,
@@ -91,7 +91,7 @@ TEST_F(MessageDemuxerTest, WatchStartStop) {
   // Move a MessageWatch will not make it invalid.
   MessageDemuxer::MessageWatch new_watch = std::move(watch);
   msgs::PresentationConnectionOpenRequest new_received_request;
-  ssize_t new_decode_result = 0;
+  msgs::CborResult new_decode_result = 0;
   EXPECT_CALL(
       mock_callback_,
       OnStreamMessage(endpoint_id_, connection_id_,
@@ -125,7 +125,7 @@ TEST_F(MessageDemuxerTest, BufferPartialMessage) {
   ASSERT_TRUE(watch);
 
   msgs::PresentationConnectionOpenRequest received_request;
-  ssize_t decode_result = 0;
+  msgs::CborResult decode_result = 0;
   EXPECT_CALL(
       mock_callback_,
       OnStreamMessage(endpoint_id_, connection_id_,
@@ -155,7 +155,7 @@ TEST_F(MessageDemuxerTest, DefaultWatch) {
   ASSERT_TRUE(watch);
 
   msgs::PresentationConnectionOpenRequest received_request;
-  ssize_t decode_result = 0;
+  msgs::CborResult decode_result = 0;
   EXPECT_CALL(
       mock_callback_,
       OnStreamMessage(endpoint_id_, connection_id_,
@@ -189,7 +189,7 @@ TEST_F(MessageDemuxerTest, DefaultWatchOverridden) {
   ASSERT_TRUE(watch);
 
   msgs::PresentationConnectionOpenRequest received_request;
-  ssize_t decode_result = 0;
+  msgs::CborResult decode_result = 0;
   EXPECT_CALL(mock_callback_, OnStreamMessage(_, _, _, _, _, _)).Times(0);
   EXPECT_CALL(
       mock_callback_global,
@@ -226,7 +226,7 @@ TEST_F(MessageDemuxerTest, DefaultWatchOverridden) {
 
 TEST_F(MessageDemuxerTest, WatchAfterData) {
   msgs::PresentationConnectionOpenRequest received_request;
-  ssize_t decode_result = 0;
+  msgs::CborResult decode_result = 0;
   EXPECT_CALL(
       mock_callback_,
       OnStreamMessage(endpoint_id_, connection_id_,
@@ -253,8 +253,8 @@ TEST_F(MessageDemuxerTest, WatchAfterMultipleData) {
   MockMessageCallback mock_init_callback;
   msgs::PresentationConnectionOpenRequest received_request;
   msgs::PresentationStartRequest received_init_request;
-  ssize_t decode_result1 = 0;
-  ssize_t decode_result2 = 0;
+  msgs::CborResult decode_result1 = 0;
+  msgs::CborResult decode_result2 = 0;
   MessageDemuxer::MessageWatch init_watch = demuxer_.WatchMessageType(
       endpoint_id_, msgs::Type::kPresentationStartRequest, &mock_init_callback);
   EXPECT_CALL(
@@ -297,14 +297,14 @@ TEST_F(MessageDemuxerTest, WatchAfterMultipleData) {
 
   ExpectDecodedRequest(decode_result1, received_request);
   ASSERT_GT(decode_result2, 0);
-  EXPECT_EQ(decode_result2, static_cast<ssize_t>(buffer.size() - 2));
+  EXPECT_EQ(decode_result2, static_cast<int64_t>(buffer.size() - 2));
   EXPECT_EQ(request.request_id, received_init_request.request_id);
   EXPECT_EQ(request.url, received_init_request.url);
 }
 
 TEST_F(MessageDemuxerTest, GlobalWatchAfterData) {
   msgs::PresentationConnectionOpenRequest received_request;
-  ssize_t decode_result = 0;
+  msgs::CborResult decode_result = 0;
   EXPECT_CALL(
       mock_callback_,
       OnStreamMessage(endpoint_id_, connection_id_,
@@ -336,7 +336,7 @@ TEST_F(MessageDemuxerTest, BufferLimit) {
       &mock_callback_);
 
   msgs::PresentationConnectionOpenRequest received_request;
-  ssize_t decode_result = 0;
+  msgs::CborResult decode_result = 0;
   EXPECT_CALL(
       mock_callback_,
       OnStreamMessage(endpoint_id_, connection_id_,
@@ -380,7 +380,8 @@ TEST_F(MessageDemuxerTest, DeserializeMessages) {
   EXPECT_EQ(used_bytes, size_t{2});
   EXPECT_EQ(kAuthCapabilitiesInfo.value(), msgs::Type::kAuthCapabilities);
 
-  auto kUnknownInfo = MessageTypeDecoder::DecodeType({0xFF}, &used_bytes);
+  auto kUnknownInfo =
+      MessageTypeDecoder::DecodeType(std::vector<uint8_t>{0xFF}, &used_bytes);
   EXPECT_TRUE(kUnknownInfo.is_error());
 }
 

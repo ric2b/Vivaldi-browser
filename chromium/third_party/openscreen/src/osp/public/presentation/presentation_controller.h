@@ -76,10 +76,13 @@ class Controller final : public ServiceListener::Observer,
     ~ReceiverWatch();
 
     explicit operator bool() const { return observer_; }
-
-    friend void swap(ReceiverWatch& a, ReceiverWatch& b);
+    // Stop this ReceiverWatch by calling `StopWatching()` and reset its
+    // members.
+    void Reset();
 
    private:
+    void StopWatching();
+
     std::vector<std::string> urls_;
     ReceiverObserver* observer_ = nullptr;
     Controller* controller_ = nullptr;
@@ -91,21 +94,24 @@ class Controller final : public ServiceListener::Observer,
     ConnectRequest(Controller* controller,
                    const std::string& instance_name,
                    bool is_reconnect,
-                   std::optional<uint64_t> request_id);
+                   uint64_t request_id);
     ConnectRequest(const ConnectRequest&) = delete;
     ConnectRequest& operator=(const ConnectRequest&) = delete;
     ConnectRequest(ConnectRequest&&) noexcept;
     ConnectRequest& operator=(ConnectRequest&&) noexcept;
     ~ConnectRequest();
 
-    explicit operator bool() const { return request_id_.has_value(); }
-
-    friend void swap(ConnectRequest& a, ConnectRequest& b);
+    explicit operator bool() const { return request_id_ > 0; }
+    // Cancel this ConnectRequest by calling `CancelRequest()` and reset its
+    // members.
+    void Reset();
 
    private:
+    void CancelRequest();
+
     std::string instance_name_;
     bool is_reconnect_ = false;
-    std::optional<uint64_t> request_id_;
+    uint64_t request_id_ = 0;
     Controller* controller_ = nullptr;
   };
 
@@ -114,7 +120,7 @@ class Controller final : public ServiceListener::Observer,
   Controller& operator=(const Controller&) = delete;
   Controller(Controller&&) noexcept = delete;
   Controller& operator=(Controller&&) noexcept = delete;
-  ~Controller();
+  ~Controller() override;
 
   // Connection::Controller overrides.
   Error CloseConnection(Connection* connection,

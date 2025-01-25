@@ -693,4 +693,17 @@ absl::FormatConvertResult<absl::FormatConversionCharSet::kString> AbslFormatConv
     return {true};
 }
 
+absl::FormatConvertResult<absl::FormatConversionCharSet::kString>
+AbslFormatConvert(StringView value, const absl::FormatConversionSpec& spec, absl::FormatSink* s) {
+    if (value.IsUndefined()) {
+        s->Append("[undefined]");
+        return {true};
+    }
+
+    s->Append("\"");
+    s->Append(absl::string_view(value));
+    s->Append("\"");
+    return {true};
+}
+
 }  // namespace dawn::native

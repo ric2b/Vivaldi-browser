@@ -210,9 +210,7 @@ class ManualFillingMediator
         mActivity.findViewById(android.R.id.content).addOnLayoutChangeListener(this);
         mBackPressManager = backPressManager;
         mBackPressChangedSupplier.set(shouldHideOnBackPress());
-        if (BackPressManager.isEnabled()) {
-            mBackPressManager.addHandler(this, Type.MANUAL_FILLING);
-        }
+        mBackPressManager.addHandler(this, Type.MANUAL_FILLING);
         mEdgeToEdgeControllerSupplier = edgeToEdgeControllerSupplier;
 
         mTabModelObserver =
@@ -785,7 +783,6 @@ class ManualFillingMediator
     /**
      * Uses the keyboard (if available) to determine the height of the accessory sheet.
      *
-     * @param rootView Root view of the current content view.
      * @return The estimated keyboard height or enough space to display at least three suggestions.
      */
     private @Px int calculateAccessorySheetHeight() {

@@ -22,11 +22,6 @@ TextClassifierModelServiceFactory::GetInstance() {
 }
 
 // static
-TextClassifierModelService*
-TextClassifierModelServiceFactory::GetForBrowserState(ProfileIOS* profile) {
-  return GetForProfile(profile);
-}
-
 TextClassifierModelService* TextClassifierModelServiceFactory::GetForProfile(
     ProfileIOS* profile) {
   return static_cast<TextClassifierModelService*>(
@@ -50,12 +45,11 @@ TextClassifierModelServiceFactory::BuildServiceInstanceFor(
     return nullptr;
   }
 
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   // The optimization guide service must be available for the text classifier
   // model service to be created.
-  auto* opt_guide =
-      OptimizationGuideServiceFactory::GetForProfile(browser_state);
+  OptimizationGuideService* opt_guide =
+      OptimizationGuideServiceFactory::GetForProfile(profile);
   if (!opt_guide) {
     return nullptr;
   }

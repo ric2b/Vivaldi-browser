@@ -109,34 +109,31 @@ using vivaldi::IsVivaldiRunning;
       dismissButton;
 
   // Initialize and configure RecentTabsMediator. Make sure to use the
-  // OriginalChromeBrowserState since the mediator services need a SignIn
-  // manager which is not present in an OffTheRecord BrowserState.
+  // OriginalProfile since the mediator services need a SignIn
+  // manager which is not present in an OffTheRecord Profile.
   DCHECK(!self.mediator);
-  ChromeBrowserState* browserState = self.browser->GetBrowserState();
+  ProfileIOS* profile = self.browser->GetProfile();
 
   // Vivaldi
-  // Note: (prio@vivaldi.com) - Use original chrome browser state here otherwise
+  // Note: (prio@vivaldi.com) - Use original profile here otherwise
   // recent tabs presentation crashes due to not having SignIn manager in an
-  // OffTheRecord BrowserState. Important to note that Chromium doesn't show
+  // OffTheRecord Profile. Important to note that Chromium doesn't show
   // recent tabs button from private tabs, but we do.
   if (IsVivaldiRunning())
-    browserState = browserState->GetOriginalChromeBrowserState(); // End Vivaldi
+    profile = profile->GetOriginalProfile(); // End Vivaldi
 
   sync_sessions::SessionSyncService* syncService =
-      SessionSyncServiceFactory::GetForBrowserState(browserState);
+      SessionSyncServiceFactory::GetForProfile(profile);
   signin::IdentityManager* identityManager =
-      IdentityManagerFactory::GetForProfile(browserState);
+      IdentityManagerFactory::GetForProfile(profile);
   sessions::TabRestoreService* restoreService =
-      IOSChromeTabRestoreServiceFactory::GetForBrowserState(browserState);
+      IOSChromeTabRestoreServiceFactory::GetForProfile(profile);
   FaviconLoader* faviconLoader =
-      IOSChromeFaviconLoaderFactory::GetForBrowserState(browserState);
-  syncer::SyncService* service =
-      SyncServiceFactory::GetForBrowserState(browserState);
-  BrowserList* browserList =
-      BrowserListFactory::GetForBrowserState(browserState);
+      IOSChromeFaviconLoaderFactory::GetForProfile(profile);
+  syncer::SyncService* service = SyncServiceFactory::GetForProfile(profile);
+  BrowserList* browserList = BrowserListFactory::GetForProfile(profile);
   SceneState* currentSceneState = self.browser->GetSceneState();
-  BOOL isDisabled =
-      IsIncognitoModeForced(self.browser->GetBrowserState()->GetPrefs());
+  BOOL isDisabled = IsIncognitoModeForced(profile->GetPrefs());
   self.mediator = [[RecentTabsMediator alloc]
       initWithSessionSyncService:syncService
                  identityManager:identityManager
@@ -147,7 +144,7 @@ using vivaldi::IsVivaldiRunning;
                       sceneState:currentSceneState
                 disabledByPolicy:isDisabled
                engagementTracker:feature_engagement::TrackerFactory::
-                                     GetForBrowserState(browserState)
+                                     GetForProfile(profile)
                       modeHolder:nil];
 
   // Vivaldi
@@ -213,7 +210,7 @@ using vivaldi::IsVivaldiRunning;
       "Mobile.RecentTabsManager.TotalTabsFromOtherDevicesOpenAll",
       session->tabs.size());
 
-  BOOL inIncognito = self.browser->GetBrowserState()->IsOffTheRecord();
+  BOOL inIncognito = self.browser->GetProfile()->IsOffTheRecord();
   UrlLoadingBrowserAgent* URLLoader =
       UrlLoadingBrowserAgent::FromBrowser(self.browser);
   OpenDistantSessionInBackground(session, inIncognito,

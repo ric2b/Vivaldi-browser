@@ -13,6 +13,7 @@
 
 #include "aom_dsp/arm/aom_neon_sve_bridge.h"
 #include "aom_dsp/arm/mem_neon.h"
+#include "config/aom_config.h"
 #include "config/aom_dsp_rtcd.h"
 
 static inline uint64_t aom_sum_squares_2d_i16_4xh_sve(const int16_t *src,
@@ -237,6 +238,7 @@ uint64_t aom_sum_sse_2d_i16_sve(const int16_t *src, int stride, int width,
   return sse;
 }
 
+#if CONFIG_AV1_HIGHBITDEPTH
 static inline uint64_t aom_var_2d_u16_4xh_sve(uint8_t *src, int src_stride,
                                               int width, int height) {
   uint16_t *src_u16 = CONVERT_TO_SHORTPTR(src);
@@ -400,3 +402,4 @@ uint64_t aom_var_2d_u16_sve(uint8_t *src, int src_stride, int width,
   }
   return aom_var_2d_u16_neon(src, src_stride, width, height);
 }
+#endif  // CONFIG_AV1_HIGHBITDEPTH

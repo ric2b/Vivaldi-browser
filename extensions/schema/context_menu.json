@@ -161,6 +161,26 @@
         }
       },
       {
+        "id": "UpdateItem",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The unique id of item."
+          },
+          "name": {
+            "type": "string",
+            "optional": true,
+            "description": "Text in item."
+          },
+          "checked": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true if checkbox is checked, otherwise false. Only applies for type='checkbox'."
+          }
+        }
+      },
+      {
         "id": "DocumentType",
         "type": "string",
         "description": "The kind of document menu.",
@@ -337,6 +357,24 @@
           "description": "Notifies caller that menu has closed.",
           "parameters": []
           }
+      },
+      {
+        "name": "update",
+        "type": "function",
+        "description": "Updates as context menu entry.",
+        "parameters": [
+          {
+            "name": "properties",
+            "type": "array",
+            "description": "Updates for a persistent menu.",
+            "items": { "$ref": "UpdateItem" }
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "description": "Notifies caller that update has taken place.",
+          "parameters": []
+        }
       }
     ],
     "events": [

@@ -21,8 +21,6 @@ namespace avif {
 namespace testutil {
 namespace {
 
-::testing::Environment* const kStackLimitEnv = SetStackLimitTo512x1024Bytes();
-
 // Encodes an image into an AVIF grid then decodes it.
 void EncodeDecodeGridValid(ImagePtr image, EncoderPtr encoder,
                            DecoderPtr decoder, uint32_t grid_cols,
@@ -87,32 +85,14 @@ void EncodeDecodeGridValid(ImagePtr image, EncoderPtr encoder,
       avifEncoderFinish(encoder.get(), &encoded_data);
   ASSERT_EQ(finish_result, AVIF_RESULT_OK) << avifResultToString(finish_result);
 
-  const bool expect_whole_file_read = decoder->enableDecodingGainMap &&
-                                      decoder->enableParsingGainMapMetadata &&
-                                      !decoder->ignoreColorAndAlpha;
+  const bool expect_whole_file_read =
+      (decoder->imageContentToDecode == AVIF_IMAGE_CONTENT_ALL);
   const avifResult decode_result = DecodeNonIncrementallyAndIncrementally(
       encoded_data, decoder.get(), is_encoded_data_persistent,
       give_size_hint_to_decoder, /*use_nth_image_api=*/true, cell_height,
-      /*enable_fine_incremental_check=*/false, expect_whole_file_read);
+      /*enable_fine_incremental_check=*/false, expect_whole_file_read,
+      /*expect_parse_success_from_partial_file=*/false);
   ASSERT_EQ(decode_result, AVIF_RESULT_OK) << avifResultToString(decode_result);
-}
-
-// Note that avifGainMapMetadata is passed as a byte array
-// because the C array fields in the struct seem to prevent fuzztest from
-// handling it natively.
-ImagePtr AddGainMapToImage(
-    ImagePtr image, ImagePtr gain_map,
-    const std::array<uint8_t, sizeof(avifGainMapMetadata)>& metadata) {
-  image->gainMap = avifGainMapCreate();
-  image->gainMap->image = gain_map.release();
-  std::memcpy(&image->gainMap->metadata, metadata.data(), metadata.size());
-  return image;
-}
-
-inline auto ArbitraryAvifImageWithGainMap() {
-  return fuzztest::Map(
-      AddGainMapToImage, ArbitraryAvifImage(), ArbitraryAvifImage(),
-      fuzztest::Arbitrary<std::array<uint8_t, sizeof(avifGainMapMetadata)>>());
 }
 
 FUZZ_TEST(EncodeDecodeAvifFuzzTest, EncodeDecodeGridValid)

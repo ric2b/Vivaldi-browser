@@ -74,10 +74,10 @@ Misc
 - Have no more release blockers, yay! After battling trying to figure
 out root cause for no 1 crasher for days, finally found repro. Tracked
 down to "remove plugin size hack" change, reverting that fixed it.
-Still some issues with regard to life cycle state but it's within
+Still some issues with regard to lifecycle state but it's within
 tolerance. Frames and widgets are handled differently. Specifically
 from the parent frame (main frame) we have multiple loops where we go
-into our child frames and tell them to move their life cycle along,
+into our child frames and tell them to move their lifecycle along,
 but we don't do that for widgets. When a frame within a widget (web
 view plugin) we special case that causing all sorts of unpredictable
 behavior. Should be fixed at some point but not a priority at the

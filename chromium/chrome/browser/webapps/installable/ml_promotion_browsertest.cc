@@ -8,6 +8,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/task/current_thread.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
@@ -24,6 +25,7 @@
 #include "chrome/browser/user_education/user_education_service.h"
 #include "chrome/browser/user_education/user_education_service_factory.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
+#include "chrome/browser/web_applications/visited_manifest_manager.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/webapps/installable/ml_promotion_browsertest_base.h"
@@ -34,7 +36,7 @@
 #include "components/segmentation_platform/public/trigger.h"
 #include "components/segmentation_platform/public/types/processed_value.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "components/user_education/common/feature_promo_data.h"
+#include "components/user_education/common/user_education_data.h"
 #include "components/user_education/common/user_education_features.h"
 #include "components/webapps/browser/features.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
@@ -196,12 +198,12 @@ class MLPromotionBrowserTest : public MLPromotionBrowserTestBase {
   void SetUserEducationSessionStartTime(base::Time time) {
     UserEducationService* edu_service =
         UserEducationServiceFactory::GetForBrowserContext(profile());
-    user_education::FeaturePromoSessionData session_data;
+    user_education::UserEducationSessionData session_data;
     session_data.start_time = time;
     session_data.most_recent_active_time = base::Time::Now();
-    edu_service->feature_promo_storage_service()
+    edu_service->user_education_storage_service()
         .set_profile_creation_time_for_testing(time);
-    edu_service->feature_promo_storage_service().SaveSessionData(session_data);
+    edu_service->user_education_storage_service().SaveSessionData(session_data);
   }
 
   GURL GetUrlWithFaviconsNoManifest() {
@@ -237,6 +239,18 @@ class MLPromotionBrowserTest : public MLPromotionBrowserTestBase {
   GURL GetUrlWithSwNoFetchHandler() {
     return https_server()->GetURL(
         "/banners/no_sw_fetch_handler_test_page.html");
+  }
+
+  GURL GetUrlOuterApp() {
+    return https_server()->GetURL("/web_apps/nesting/index.html");
+  }
+
+  GURL GetUrlInnerCraftedApp() {
+    return https_server()->GetURL("/web_apps/nesting/nested/index.html");
+  }
+
+  GURL GetUrlInnerDiyApp() {
+    return https_server()->GetURL("/web_apps/nesting/nested/diy.html");
   }
 
   MLInstallabilityPromoter* ml_promoter() {
@@ -735,13 +749,18 @@ IN_PROC_BROWSER_TEST_F(MLPromotionBrowserTest,
       base::FeatureList::IsEnabled(::features::kWebAppUniversalInstall);
 
   if (universal_install_enabled) {
-    // The call to classify will happen twice, since a newly triggered
-    // navigation will close the dialog.
+    // Expect the pipeline to trigger both on the first and second url.
     ExpectClasificationCallReturnResult(
         /*site_url=*/GetInstallableAppURL(),
         /*manifest_id=*/GetInstallableAppURL(),
         MLInstallabilityPromoter::kShowInstallPromptLabel,
-        TrainingRequestId(1ll), web_contents(), /*times_called=*/2);
+        TrainingRequestId(1ll), web_contents());
+    ExpectClasificationCallReturnResult(
+        /*site_url=*/GetUrlOuterApp(),
+        /*manifest_id=*/GetUrlOuterApp(),
+        MLInstallabilityPromoter::kShowInstallPromptLabel,
+        TrainingRequestId(2ll), web_contents());
+
   } else {
     // This assertion is still needed on CI trybots that do not enable the field
     // trial configs.
@@ -750,6 +769,11 @@ IN_PROC_BROWSER_TEST_F(MLPromotionBrowserTest,
         /*manifest_id=*/GetInstallableAppURL(),
         MLInstallabilityPromoter::kShowInstallPromptLabel,
         TrainingRequestId(1ll), web_contents());
+    ExpectClasificationCallReturnResult(
+        /*site_url=*/GetUrlOuterApp(),
+        /*manifest_id=*/GetUrlOuterApp(),
+        MLInstallabilityPromoter::kShowInstallPromptLabel,
+        TrainingRequestId(2ll), web_contents());
   }
 
   views::NamedWidgetShownWaiter waiter(views::test::AnyWidgetTestPasskey{},
@@ -763,8 +787,89 @@ IN_PROC_BROWSER_TEST_F(MLPromotionBrowserTest,
   task_runner_->RunPendingTasks();
 
   // Refreshing the page should exit the pipeline early, and should not crash.
-  web_app::NavigateViaLinkClickToURLAndWait(browser(), GetInstallableAppURL());
+  web_app::NavigateViaLinkClickToURLAndWait(browser(), GetUrlOuterApp());
   task_runner_->RunPendingTasks();
+}
+
+class MLPromotionBrowserTestNestedPromptBlocking
+    : public MLPromotionBrowserTest {
+ public:
+  MLPromotionBrowserTestNestedPromptBlocking() = default;
+
+  base::test::ScopedFeatureList enable_feature_{
+      web_app::kBlockMlPromotionInNestedPagesNoManifest};
+};
+
+IN_PROC_BROWSER_TEST_F(MLPromotionBrowserTestNestedPromptBlocking,
+                       NoPromptForNestedDiy) {
+  NavigateAndAwaitMetricsCollectionPending(GetUrlOuterApp());
+
+  // Wait for the full ml pipeline to run. The reporting of the manifest from
+  // the AppBannerManager to the VisitedManifestManager should happen by the
+  // time this finishes.
+  ExpectClasificationCallReturnResult(
+      /*site_url=*/GetUrlOuterApp(),
+      /*manifest_id=*/GetUrlOuterApp(),
+      MLInstallabilityPromoter::kDontShowLabel, TrainingRequestId(1ll),
+      web_contents());
+  task_runner_->RunPendingTasks();
+  ExpectTrainingResult(TrainingRequestId(1ll),
+                       MlInstallResponse::kReporterDestroyed);
+
+  // Navigate now to the DIY app (no manifest) to ensure that it is blocked.
+  NavigateAndAwaitMetricsCollectionPending(GetUrlInnerDiyApp());
+
+  task_runner_->RunPendingTasks();
+  base::test::RunUntil(
+      [this]() { return ml_promoter()->IsCompleteForTesting(); });
+}
+
+IN_PROC_BROWSER_TEST_F(MLPromotionBrowserTestNestedPromptBlocking,
+                       PromptForNestedCraftedApp) {
+  NavigateAndAwaitMetricsCollectionPending(GetUrlOuterApp());
+
+  // Wait for the full ml pipeline to run. The reporting of the manifest from
+  // the AppBannerManager to the VisitedManifestManager should happen by the
+  // time this finishes.
+  ExpectClasificationCallReturnResult(
+      /*site_url=*/GetUrlOuterApp(),
+      /*manifest_id=*/GetUrlOuterApp(),
+      MLInstallabilityPromoter::kDontShowLabel, TrainingRequestId(1ll),
+      web_contents());
+  task_runner_->RunPendingTasks();
+  ExpectTrainingResult(TrainingRequestId(1ll),
+                       MlInstallResponse::kReporterDestroyed);
+
+  // Navigate now to the crafted app to ensure that it is not blocked, and test
+  // installation.
+  NavigateAndAwaitMetricsCollectionPending(GetUrlInnerCraftedApp());
+
+  ExpectClasificationCallReturnResult(
+      /*site_url=*/GetUrlInnerCraftedApp(),
+      /*manifest_id=*/GetUrlInnerCraftedApp(),
+      MLInstallabilityPromoter::kShowInstallPromptLabel, TrainingRequestId(2ll),
+      web_contents());
+
+  std::string bubble_name_to_use =
+      base::FeatureList::IsEnabled(::features::kWebAppUniversalInstall)
+          ? "WebAppSimpleInstallDialog"
+          : "PWAConfirmationBubbleView";
+  views::NamedWidgetShownWaiter waiter(views::test::AnyWidgetTestPasskey{},
+                                       bubble_name_to_use);
+  task_runner_->RunPendingTasks();
+  ExpectTrainingResult(TrainingRequestId(2ll), MlInstallResponse::kAccepted);
+
+  views::Widget* widget = waiter.WaitIfNeededAndGet();
+  views::test::WidgetDestroyedWaiter destroyed(widget);
+  views::test::AcceptDialog(widget);
+  destroyed.Wait();
+
+  provider().command_manager().AwaitAllCommandsCompleteForTesting();
+
+  ASSERT_FALSE(provider().registrar_unsafe().is_empty());
+  webapps::AppId app_id = provider().registrar_unsafe().GetAppIds()[0];
+  EXPECT_EQ(GetUrlInnerCraftedApp(),
+            provider().registrar_unsafe().GetAppStartUrl(app_id));
 }
 
 // TODO(b/285361272): Add tests for cache storage sizes.
@@ -808,8 +913,7 @@ class MLPromotionInstallDialogBrowserTest
       case InstallDialogState::kDetailedInstallDialog:
         return "PWA Bottom Sheet";
       case InstallDialogState::kCreateShortcutDialog:
-        NOTREACHED_IN_MIGRATION();
-        return std::string();
+        NOTREACHED();
     }
   }
 

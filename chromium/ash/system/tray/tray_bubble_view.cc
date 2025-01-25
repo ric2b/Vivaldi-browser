@@ -345,12 +345,14 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
     // TODO(crbug.com/40832096): In the dark light mode feature, remove layer
     // creation in children views of this view to improve performance.
     SetPaintToLayer(ui::LAYER_TEXTURED);
-    layer()->SetFillsBoundsOpaquely(false);
     layer()->SetRoundedCornerRadius(
         gfx::RoundedCornersF{static_cast<float>(params_.corner_radius)});
     layer()->SetIsFastRoundedCorner(true);
-    layer()->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);
-    layer()->SetBackdropFilterQuality(ColorProvider::kBackgroundBlurQuality);
+    if (chromeos::features::IsSystemBlurEnabled()) {
+      layer()->SetFillsBoundsOpaquely(false);
+      layer()->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);
+      layer()->SetBackdropFilterQuality(ColorProvider::kBackgroundBlurQuality);
+    }
   } else {
     // Create a layer so that the layer for FocusRing stays in this view's
     // layer. Without it, the layer for FocusRing goes above the
@@ -395,6 +397,7 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
   Shell::Get()->display_manager()->AddDisplayObserver(this);
 
   GetViewAccessibility().SetRole(ax::mojom::Role::kWindow);
+  UpdateAccessibleName();
   UpdateAccessibleIgnoredState();
 }
 
@@ -413,6 +416,7 @@ TrayBubbleView::~TrayBubbleView() {
 void TrayBubbleView::InitializeAndShowBubble() {
   GetWidget()->Show();
   UpdateBubble();
+  UpdateAccessibleName();
   UpdateAccessibleIgnoredState();
 
   // Manually sets the shadow position since `CreateShadowOnTextureLayer` only
@@ -475,6 +479,7 @@ void TrayBubbleView::ResetDelegate() {
 
   delegate_ = nullptr;
   UpdateAccessibleIgnoredState();
+  GetViewAccessibility().SetName(std::u16string());
 }
 
 void TrayBubbleView::ChangeAnchorView(views::View* anchor_view) {
@@ -630,12 +635,6 @@ void TrayBubbleView::OnMouseExited(const ui::MouseEvent& event) {
   }
 }
 
-void TrayBubbleView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  if (delegate_ && CanActivate()) {
-    node_data->SetNameChecked(delegate_->GetAccessibleNameForBubble());
-  }
-}
-
 void TrayBubbleView::OnThemeChanged() {
   views::BubbleDialogDelegateView::OnThemeChanged();
   if (params_.transparent) {
@@ -647,8 +646,12 @@ void TrayBubbleView::OnThemeChanged() {
       chromeos::features::IsJellyrollEnabled()
           ? views::HighlightBorder::Type::kHighlightBorderOnShadow
           : views::HighlightBorder::Type::kHighlightBorder1));
-  set_color(
-      GetColorProvider()->GetColor(cros_tokens::kCrosSysSystemBaseElevated));
+
+  const ui::ColorId background_color_id =
+      chromeos::features::IsSystemBlurEnabled()
+          ? cros_tokens::kCrosSysSystemBaseElevated
+          : cros_tokens::kCrosSysSystemBaseElevatedOpaque;
+  set_color(GetColorProvider()->GetColor(background_color_id));
 }
 
 void TrayBubbleView::MouseMovedOutOfHost() {
@@ -739,6 +742,16 @@ void TrayBubbleView::CloseBubbleView() {
   }
 
   delegate_->HideBubble(this);
+}
+
+void TrayBubbleView::UpdateAccessibleName() {
+  if (delegate_->GetAccessibleNameForBubble().empty()) {
+    GetViewAccessibility().SetName(
+        delegate_->GetAccessibleNameForBubble(),
+        ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
+  } else {
+    GetViewAccessibility().SetName(delegate_->GetAccessibleNameForBubble());
+  }
 }
 
 void TrayBubbleView::ChildPreferredSizeChanged(View* child) {

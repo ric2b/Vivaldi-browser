@@ -9,15 +9,15 @@
 
 #import "base/no_destructor.h"
 #import "components/keyed_service/ios/browser_state_keyed_service_factory.h"
-#import "ios/chrome/browser/shared/model/profile/profile_ios_forward.h"
 
+class ProfileIOS;
 class ShareExtensionService;
 
 // Singleton that creates the ShareExtensionService and associates that service
 // with ProfileIOS.
 class ShareExtensionServiceFactory : public BrowserStateKeyedServiceFactory {
  public:
-  static ShareExtensionService* GetForBrowserState(ProfileIOS* profile);
+  static ShareExtensionService* GetForProfile(ProfileIOS* profile);
   static ShareExtensionService* GetForProfileIfExists(ProfileIOS* profile);
   static ShareExtensionServiceFactory* GetInstance();
 

@@ -27,7 +27,7 @@ static inline void check_reset_rc_flag(AV1_COMP *cpi) {
     if (cpi->ppi->use_svc) {
       av1_svc_check_reset_layer_rc_flag(cpi);
     } else {
-      if (rc->avg_frame_bandwidth > (3 * rc->prev_avg_frame_bandwidth >> 1) ||
+      if (rc->avg_frame_bandwidth / 3 > (rc->prev_avg_frame_bandwidth >> 1) ||
           rc->avg_frame_bandwidth < (rc->prev_avg_frame_bandwidth >> 1)) {
         rc->rc_1_frame = 0;
         rc->rc_2_frame = 0;
@@ -144,7 +144,8 @@ static inline int recode_loop_test(AV1_COMP *cpi, int high_limit, int low_limit,
       // Deal with frame undershoot and whether or not we are
       // below the automatically set cq level.
       if (q > oxcf->rc_cfg.cq_level &&
-          rc->projected_frame_size < ((rc->this_frame_target * 7) >> 3)) {
+          rc->projected_frame_size <
+              (((int64_t)rc->this_frame_target * 7) >> 3)) {
         force_recode = 1;
       }
     }

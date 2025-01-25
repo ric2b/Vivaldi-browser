@@ -17,6 +17,7 @@
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
@@ -32,6 +33,7 @@
 #import "ios/ui/notes/note_home_view_controller.h"
 #import "ios/ui/notes/note_interaction_controller.h"
 #import "ios/ui/notes/note_navigation_controller.h"
+#import "ios/ui/translate/vivaldi_translate_coordinator.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
@@ -63,12 +65,14 @@ enum class PresentedState {
   NoteInteractionController* _noteInteractionController;
   BookmarksCoordinator* _bookmarksCoordinator;
   ReadingListCoordinator* _readinglistCoordinator;
+  VivaldiTranslateCoordinator* _translateCoordinator;
 
   /// Pref tracking if bottom omnibox is enabled.
   PrefBackedBoolean* _bottomOmniboxEnabled;
 }
 
 @property(nonatomic, strong) HistoryCoordinator* historyCoordinator;
+
 @property(nonatomic, strong) PanelTransitioningDelegate* tc;
 
 // The type of view controller that is being presented.
@@ -116,6 +120,8 @@ enum class PresentedState {
   _historyCoordinator = nil;
   _bookmarksCoordinator = nil;
   _readinglistCoordinator = nil;
+  [_translateCoordinator stop];
+  _translateCoordinator = nil;
 
   if (_bottomOmniboxEnabled) {
     [_bottomOmniboxEnabled stop];
@@ -161,6 +167,7 @@ enum class PresentedState {
   [self initializeNoteInteractionController:vc];
   [_noteInteractionController showNotes];
   [self initializeBookmarksCoordinator:vc];
+  [self initializeTranslateCoordinator:vc sourceText:searchString];
   [_bookmarksCoordinator presentBookmarks];
   [self showHistory:vc withSearchString:searchString];
   [self showReadinglist:vc];
@@ -168,12 +175,14 @@ enum class PresentedState {
   _bookmarksCoordinator.panelDelegate = self;
   _readinglistCoordinator.panelDelegate = self;
   _historyCoordinator.panelDelegate = self;
+  _translateCoordinator.panelDelegate = self;
   int index = 0;
   switch (page) {
     case PanelPage::BookmarksPage: index = 0; break;
     case PanelPage::ReadinglistPage: index = 1; break;
     case PanelPage::HistoryPage: index = 2; break;
     case PanelPage::NotesPage: index = 3; break;
+    case PanelPage::TranslatePage: index = 4; break;
   }
 
   if (self.showSidePanel) {
@@ -192,7 +201,8 @@ enum class PresentedState {
        _bookmarksCoordinator.bookmarkNavigationController
       andReadinglistController:
        _readinglistCoordinator.navigationController
-      andHistoryController:self.historyCoordinator.historyNavigationController];
+      andHistoryController:self.historyCoordinator.historyNavigationController
+      andTranslateController:_translateCoordinator.navigationController];
     self.sidebarPanelController.view.backgroundColor =
         [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
     [self.sidebarPanelController.segmentControl setSelectedSegmentIndex:index];
@@ -211,7 +221,9 @@ enum class PresentedState {
             andReadinglistController:
       _readinglistCoordinator.navigationController
                 andHistoryController:
-      _historyCoordinator.historyNavigationController];
+      _historyCoordinator.historyNavigationController
+              andTranslateController:
+      _translateCoordinator.navigationController];
 
   self.panelController.view.backgroundColor =
       [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
@@ -222,6 +234,15 @@ enum class PresentedState {
        _panelController.sheetPresentationController;
   sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
                        UISheetPresentationControllerDetent.largeDetent];
+
+  if (index == PanelPage::TranslatePage &&
+      _translateCoordinator && _translateCoordinator.shouldOpenFullSheet) {
+    sheetPc.detents = @[UISheetPresentationControllerDetent.largeDetent];
+  } else {
+    sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
+                         UISheetPresentationControllerDetent.largeDetent];
+  }
+
   sheetPc.preferredCornerRadius = panel_sheet_corner_radius;
   sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
   sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
@@ -283,6 +304,22 @@ enum class PresentedState {
   [_readinglistCoordinator start];
 }
 
+// Initializes the translate interaction controller if not already initialized.
+- (void)initializeTranslateCoordinator:(UIViewController*)vc
+                            sourceText:(NSString*)sourceText {
+  VivaldiTranslateEntryPoint entryPoint =
+      self.showSidePanel ?
+          VivaldiTranslateEntryPointSidePanel : VivaldiTranslateEntryPointPanel;
+  _translateCoordinator =
+      [[VivaldiTranslateCoordinator alloc]
+          initWithBaseViewController:vc
+            presentingViewController:_parentController
+                             browser:_browser
+                          entryPoint:entryPoint
+                        selectedText:sourceText];
+  [_translateCoordinator start];
+}
+
 - (void)dismissPanelModalControllerAnimated:(BOOL)animated {
   [self dismissPanelBrowserAnimated:animated
                            inIncognito:NO
@@ -310,10 +347,22 @@ enum class PresentedState {
 /// Returns true if device is iPad and multitasking UI has
 /// enough space to show iPad side panel.
 - (BOOL)showSidePanel {
-  return VivaldiGlobalHelpers.canShowSidePanel;
+  if (_parentController) {
+    return [VivaldiGlobalHelpers
+                canShowSidePanelForTrait:_parentController.traitCollection];
+  }
+  return NO;
 }
 
 #pragma mark - HistoryCoordinatorDelegate
+
+- (void)closeHistory {
+  __weak __typeof(self) weakSelf = self;
+  [self.historyCoordinator dismissWithCompletion:^{
+    [weakSelf.historyCoordinator stop];
+    weakSelf.historyCoordinator = nil;
+  }];
+}
 
 - (void)closeHistoryWithCompletion:(ProceduralBlock)completion {
   __weak __typeof(self) weakSelf = self;

@@ -19,8 +19,6 @@ import setup_color
 
 logging.getLogger().setLevel(logging.INFO)
 
-DEFAULT_IGNORE_FILE_NAME = '.git-blame-ignore-revs'
-
 
 class Commit(object):
     """Info about a commit."""
@@ -382,8 +380,9 @@ def main(args, outbuf):
     filename = os.path.normcase(filename)
 
     ignored_list = list(args.ignored)
-    if not args.no_default_ignores and os.path.exists(DEFAULT_IGNORE_FILE_NAME):
-        with open(DEFAULT_IGNORE_FILE_NAME) as ignore_file:
+    if not args.no_default_ignores and \
+        os.path.exists(git_common.GIT_BLAME_IGNORE_REV_FILE):
+        with open(git_common.GIT_BLAME_IGNORE_REV_FILE) as ignore_file:
             ignored_list.extend(parse_ignore_file(ignore_file))
 
     if args.ignore_file:

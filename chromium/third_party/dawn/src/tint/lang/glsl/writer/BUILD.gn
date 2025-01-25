@@ -59,12 +59,10 @@ if (tint_build_glsl_writer) {
       "${tint_src_dir}/lang/wgsl",
       "${tint_src_dir}/lang/wgsl/ast",
       "${tint_src_dir}/lang/wgsl/ast/transform",
-      "${tint_src_dir}/lang/wgsl/features",
       "${tint_src_dir}/lang/wgsl/program",
       "${tint_src_dir}/lang/wgsl/sem",
       "${tint_src_dir}/utils/containers",
       "${tint_src_dir}/utils/diagnostic",
-      "${tint_src_dir}/utils/generator",
       "${tint_src_dir}/utils/ice",
       "${tint_src_dir}/utils/id",
       "${tint_src_dir}/utils/macros",
@@ -80,7 +78,6 @@ if (tint_build_glsl_writer) {
 
     if (tint_build_glsl_writer) {
       deps += [
-        "${tint_src_dir}/lang/glsl/writer/ast_printer",
         "${tint_src_dir}/lang/glsl/writer/common",
         "${tint_src_dir}/lang/glsl/writer/printer",
         "${tint_src_dir}/lang/glsl/writer/raise",
@@ -160,11 +157,15 @@ if (tint_build_benchmarks) {
         "${tint_src_dir}/api/common",
         "${tint_src_dir}/lang/core",
         "${tint_src_dir}/lang/core/constant",
+        "${tint_src_dir}/lang/core/ir",
+        "${tint_src_dir}/lang/core/ir/transform",
         "${tint_src_dir}/lang/core/type",
         "${tint_src_dir}/lang/wgsl",
         "${tint_src_dir}/lang/wgsl/ast",
         "${tint_src_dir}/lang/wgsl/ast/transform",
+        "${tint_src_dir}/lang/wgsl/common",
         "${tint_src_dir}/lang/wgsl/features",
+        "${tint_src_dir}/lang/wgsl/inspector",
         "${tint_src_dir}/lang/wgsl/program",
         "${tint_src_dir}/lang/wgsl/sem",
         "${tint_src_dir}/utils/containers",
@@ -186,29 +187,35 @@ if (tint_build_benchmarks) {
         deps += [
           "${tint_src_dir}/lang/glsl/writer",
           "${tint_src_dir}/lang/glsl/writer/common",
+          "${tint_src_dir}/lang/glsl/writer/helpers",
         ]
       }
 
       if (tint_build_wgsl_reader) {
-        deps += [ "${tint_src_dir}/cmd/bench:bench" ]
+        deps += [
+          "${tint_src_dir}/cmd/bench:bench",
+          "${tint_src_dir}/lang/wgsl/reader",
+        ]
       }
     }
   }
 }
 if (tint_build_glsl_writer) {
   tint_fuzz_source_set("fuzz") {
-    sources = []
+    sources = [ "writer_fuzz.cc" ]
     deps = [
       "${dawn_root}/src/utils:utils",
       "${tint_src_dir}/api/common",
+      "${tint_src_dir}/cmd/fuzz/ir:fuzz",
       "${tint_src_dir}/lang/core",
       "${tint_src_dir}/lang/core/constant",
+      "${tint_src_dir}/lang/core/intrinsic",
+      "${tint_src_dir}/lang/core/ir",
+      "${tint_src_dir}/lang/core/ir/transform",
       "${tint_src_dir}/lang/core/type",
       "${tint_src_dir}/lang/wgsl",
       "${tint_src_dir}/lang/wgsl/ast",
       "${tint_src_dir}/lang/wgsl/ast/transform",
-      "${tint_src_dir}/lang/wgsl/features",
-      "${tint_src_dir}/lang/wgsl/inspector",
       "${tint_src_dir}/lang/wgsl/program",
       "${tint_src_dir}/lang/wgsl/sem",
       "${tint_src_dir}/utils/bytes",
@@ -231,12 +238,8 @@ if (tint_build_glsl_writer) {
       deps += [
         "${tint_src_dir}/lang/glsl/writer",
         "${tint_src_dir}/lang/glsl/writer/common",
+        "${tint_src_dir}/lang/glsl/writer/helpers",
       ]
-    }
-
-    if (tint_build_wgsl_reader) {
-      sources += [ "writer_ast_fuzz.cc" ]
-      deps += [ "${tint_src_dir}/cmd/fuzz/wgsl:fuzz" ]
     }
   }
 }

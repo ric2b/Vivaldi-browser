@@ -90,6 +90,8 @@ import org.chromium.chrome.browser.tasks.HomeSurfaceTracker;
 import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
 import org.chromium.chrome.browser.tasks.tab_management.TabGroupCreationDialogManager;
 import org.chromium.chrome.browser.toolbar.top.Toolbar;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.native_page.BasicSmoothTransitionDelegate;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
@@ -363,6 +365,7 @@ public class NewTabPage
      * @param tabContentManagerSupplier Used to create tab thumbnails.
      * @param tabStripHeightSupplier Supplier for the tab strip height.
      * @param moduleRegistrySupplier Supplier for the {@link ModuleRegistry}.
+     * @param edgeToEdgeControllerSupplier Supplier for the {@link EdgeToEdgeController}.
      */
     public NewTabPage(
             Activity activity,
@@ -386,7 +389,8 @@ public class NewTabPage
             HomeSurfaceTracker homeSurfaceTracker,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             ObservableSupplier<Integer> tabStripHeightSupplier,
-            OneshotSupplier<ModuleRegistry> moduleRegistrySupplier) {
+            OneshotSupplier<ModuleRegistry> moduleRegistrySupplier,
+            ObservableSupplier<EdgeToEdgeController> edgeToEdgeControllerSupplier) {
         mConstructedTimeNs = System.nanoTime();
         TraceEvent.begin(TAG);
 
@@ -492,7 +496,8 @@ public class NewTabPage
                 snackbarManager,
                 isInNightMode,
                 shareDelegateSupplier,
-                url);
+                url,
+                edgeToEdgeControllerSupplier);
 
         // It is possible that the NewTabPage is created when the Tab model hasn't been initialized.
         // For example, the user changes theme when a NTP is showing, which leads to the recreation
@@ -542,7 +547,6 @@ public class NewTabPage
                 mFeedSurfaceProvider.getTouchEnabledDelegate(),
                 mFeedSurfaceProvider.getUiConfig(),
                 lifecycleDispatcher,
-                uma,
                 mTab.getProfile(),
                 windowAndroid,
                 mIsTablet,
@@ -561,6 +565,8 @@ public class NewTabPage
      * @param snackbarManager {@link SnackbarManager} object.
      * @param isInNightMode {@code true} if the night mode setting is on.
      * @param shareDelegateSupplier Supplies a delegate used to open SharingHub.
+     * @param url The URL used to identify NTP's launch origin
+     * @param edgeToEdgeControllerSupplier The supplier to {@link EdgeToEdgeController}.
      */
     protected void initializeMainView(
             Activity activity,
@@ -568,7 +574,8 @@ public class NewTabPage
             SnackbarManager snackbarManager,
             boolean isInNightMode,
             Supplier<ShareDelegate> shareDelegateSupplier,
-            String url) {
+            String url,
+            ObservableSupplier<EdgeToEdgeController> edgeToEdgeControllerSupplier) {
         Profile profile = mTab.getProfile();
 
         LayoutInflater inflater = LayoutInflater.from(activity);
@@ -592,7 +599,7 @@ public class NewTabPage
                     }
                 };
 
-        FeedSurfaceCoordinator feedSurfaceCoordinator =
+        mFeedSurfaceProvider =
                 new FeedSurfaceCoordinator(
                         activity,
                         snackbarManager,
@@ -615,8 +622,8 @@ public class NewTabPage
                         /* overScrollDisabled= */ false,
                         /* viewportView= */ null,
                         actionDelegate,
-                        mTabStripHeightSupplier);
-        mFeedSurfaceProvider = feedSurfaceCoordinator;
+                        mTabStripHeightSupplier,
+                        edgeToEdgeControllerSupplier);
     }
 
     /** Initialize the single tab card on home surface NTP or magic stack. */
@@ -885,7 +892,7 @@ public class NewTabPage
     /** Records UMA for the NTP being hidden and the time spent on it. */
     private void recordNtpHidden() {
         mJankTracker.finishTrackingScenario(JankScenario.NEW_TAB_PAGE);
-        RecordHistogram.recordMediumTimesHistogram(
+        RecordHistogram.deprecatedRecordMediumTimesHistogram(
                 "NewTabPage.TimeSpent",
                 (System.nanoTime() - mLastShownTimeNs) / TimeUtils.NANOSECONDS_PER_MILLISECOND);
         SuggestionsMetrics.recordSurfaceHidden();
@@ -1002,6 +1009,11 @@ public class NewTabPage
     @Override
     public int getBackgroundColor() {
         return mBackgroundColor;
+    }
+
+    @Override
+    public boolean supportsEdgeToEdge() {
+        return !EdgeToEdgeUtils.DISABLE_NTP_E2E.getValue();
     }
 
     @Override
@@ -1148,7 +1160,7 @@ public class NewTabPage
         }
 
         if (mHomeModulesCoordinator == null) {
-            initializeMagicStack(mostRecentTab);
+            initializeMagicStack();
         }
         mHomeModulesCoordinator.show(this::onMagicStackShown);
     }
@@ -1186,7 +1198,7 @@ public class NewTabPage
      * Initializes the magic stack to show home modules on the current new tab page which is used as
      * the home surface.
      */
-    private void initializeMagicStack(Tab mostRecentTab) {
+    private void initializeMagicStack() {
         mHomeModulesContainer =
                 (ViewGroup)
                         ((ViewStub)

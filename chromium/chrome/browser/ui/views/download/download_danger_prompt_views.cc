@@ -77,10 +77,6 @@ class DownloadDangerPromptViews : public DownloadDangerPrompt,
   // download::DownloadItem::Observer:
   void OnDownloadUpdated(download::DownloadItem* download) override;
 
-  // Cancel is marked DEPRECATED, but will use them as a shortcut.
-  // Would need to write a new class otherwise.
-  virtual bool Cancel() override;
-
  private:
   std::u16string GetMessageBody() const;
 
@@ -88,6 +84,8 @@ class DownloadDangerPromptViews : public DownloadDangerPrompt,
 
   // Vivaldi addition to support password input for decrypt.
   raw_ptr<DownloadBubblePasswordPromptView> password_prompt_ = nullptr;
+  bool RunScanAndClose();
+  bool RunKeepAndClose();
 
   void RunDone(Action action);
 
@@ -156,6 +154,24 @@ DownloadDangerPromptViews::DownloadDangerPromptViews(
     if (show_password_input) {
       SetButtonLabel(ui::mojom::DialogButton::kCancel,
                      l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_SCAN));
+      SetButtonLabel(
+          ui::mojom::DialogButton::kOk,
+          l10n_util::GetStringUTF16(
+              IDS_DOWNLOAD_BUBBLE_SUBPAGE_IMMEDIATE_DEEP_SCAN_BYPASS));
+
+      base::RepeatingCallback<bool()> scanandclose(base::BindRepeating(
+          &DownloadDangerPromptViews::RunScanAndClose, base::Unretained(this)
+          ));
+
+      base::RepeatingCallback<bool()> keepandclose(base::BindRepeating(
+          &DownloadDangerPromptViews::RunKeepAndClose, base::Unretained(this)
+          ));
+
+      // "scan"
+      SetCancelCallbackWithClose(scanandclose);
+      // "cancel scanning and keep the download anyways"
+      // Note the reversed logic!
+      SetAcceptCallbackWithClose(keepandclose);
     }
   }
 }
@@ -206,18 +222,6 @@ void DownloadDangerPromptViews::OnDownloadUpdated(
     RunDone(DISMISS);
     Cancel();
   }
-}
-
-bool DownloadDangerPromptViews::Cancel() {
-  if (download_ &&
-      download_->GetDangerType() ==
-          download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_LOCAL_PASSWORD_SCANNING) {
-    safe_browsing::DownloadProtectionService::CheckDownloadWithLocalDecryption(
-        download_, base::UTF16ToUTF8(password_prompt_->GetText()));
-    return true;  // Do not run the done callback yet.
-  }
-
-  return DialogDelegate::Cancel();
 }
 
 // This must be in sync with the danger-type in |DownloadUIModel::GetWarningText|.
@@ -313,7 +317,6 @@ std::u16string DownloadDangerPromptViews::GetMessageBody() const {
   }
 }
 
-
 void DownloadDangerPromptViews::RunDone(Action action) {
   // Invoking the callback can cause the download item state to change or cause
   // the window to close, and |callback| refers to a member variable.
@@ -344,15 +347,11 @@ void DownloadDangerPromptViews::RunDone(Action action) {
         RecordDownloadDangerPromptHistogram("Proceed", *download_);
       }
       RecordDownloadWarningEvent(action, download_);
-      if (!download_->GetURL().is_empty() &&
-          !content::DownloadItemUtils::GetBrowserContext(download_)
-               ->IsOffTheRecord()) {
-        ClientSafeBrowsingReportRequest::ReportType report_type =
-            ClientSafeBrowsingReportRequest::DANGEROUS_DOWNLOAD_BY_API;
-        // Do not send cancel report since it's not a terminal action.
-        if (accept) {
-          SendSafeBrowsingDownloadReport(report_type, accept, download_);
-        }
+      // Do not send cancel report since it's not a terminal action.
+      if (accept) {
+        SendSafeBrowsingDownloadReport(
+            ClientSafeBrowsingReportRequest::DANGEROUS_DOWNLOAD_BY_API, accept,
+            download_);
       }
     }
     download_->RemoveObserver(this);
@@ -360,14 +359,6 @@ void DownloadDangerPromptViews::RunDone(Action action) {
   }
   if (done)
     std::move(done).Run(action);
-}
-
-void DownloadDangerPromptViews::UpdatePasswordPrompt() {
-  password_prompt_->SetState(
-      DownloadItemWarningData::HasIncorrectPassword(download_)
-          ? DownloadBubblePasswordPromptView::State::kInvalid
-          : DownloadBubblePasswordPromptView::State::kValid);
-
 }
 
 BEGIN_METADATA(DownloadDangerPromptViews)
@@ -390,3 +381,5 @@ DownloadDangerPrompt* DownloadDangerPrompt::Create(
                                               web_contents);
   return download_danger_prompt;
 }
+
+#include "browser/ui/vivaldi_download_danger_prompt_views.inc"

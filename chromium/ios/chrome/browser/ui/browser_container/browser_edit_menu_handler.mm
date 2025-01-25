@@ -15,8 +15,9 @@
 
 @implementation BrowserEditMenuHandler
 
-- (void)buildMenuWithBuilder:(id<UIMenuBuilder>)builder {
+- (void)buildEditMenuWithBuilder:(id<UIMenuBuilder>)builder {
 
+  // Vivaldi
 #if defined(__IPHONE_16_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_16_0
   if (@available(iOS 16, *)) {
     if (vivaldi::IsVivaldiRunning()) {

@@ -596,9 +596,14 @@ void DesksController::NewDesk(DesksCreationRemovalSource source,
   // should it trigger any UMA stats reports.
   const bool is_first_ever_desk = desks_.empty();
 
-  desks_.push_back(std::make_unique<Desk>(
-      available_container_ids_.front(),
-      source == DesksCreationRemovalSource::kDesksRestore));
+  Desk::Type type = Desk::Type::kNormal;
+  if (source == DesksCreationRemovalSource::kDesksRestore) {
+    type = Desk::Type::kRestored;
+  } else if (source == DesksCreationRemovalSource::kCoral) {
+    type = Desk::Type::kCoral;
+  }
+  desks_.push_back(
+      std::make_unique<Desk>(available_container_ids_.front(), type));
   available_container_ids_.pop();
   Desk* new_desk = desks_.back().get();
 
@@ -620,7 +625,7 @@ void DesksController::NewDesk(DesksCreationRemovalSource source,
                         /*set_by_user=*/false);
     }
   } else {
-    new_desk->SetName(std::move(name), /*set_by_user=*/false);
+    new_desk->SetName(std::move(name), /*set_by_user=*/true);
   }
 
   // Don't trigger an a11y alert when the source is `kLaunchTemplate` because
@@ -929,7 +934,11 @@ bool DesksController::MoveWindowFromActiveDeskTo(
       // moving them manually in overview.
       return false;
     } else if (source !=
-               DesksMoveWindowFromActiveDeskSource::kVisibleOnAllDesks) {
+                   DesksMoveWindowFromActiveDeskSource::kVisibleOnAllDesks &&
+               source != DesksMoveWindowFromActiveDeskSource::kCoral) {
+      // When moving windows, remove visible on all desks property unless it was
+      // already visible on all desks, and the desk was activated, or it was
+      // moved as a result of launching a coral group.
       window->SetProperty(aura::client::kWindowWorkspaceKey,
                           aura::client::kWindowWorkspaceUnassignedWorkspace);
     }
@@ -1278,6 +1287,10 @@ Desk* DesksController::CreateNewDeskForSavedDesk(
     case DeskTemplateType::kFloatingWorkspace:
       NewDesk(DesksCreationRemovalSource::kFloatingWorkspace);
       break;
+    case DeskTemplateType::kCoral:
+      // TODO(crbug.com/371447150): Create a new desk with a new creation
+      // source.
+      return nullptr;
     case DeskTemplateType::kUnknown:
       return nullptr;
   }
@@ -1654,7 +1667,7 @@ void DesksController::OnProfileRemoved(uint64_t profile_id) {
     // If this desk's profile has been removed, revert it to the primary user's
     // profile (which cannot be deleted).
     if (desk->lacros_profile_id() == profile_id) {
-      desk->SetLacrosProfileId(primary_profile_id, /*source=*/std::nullopt);
+      desk->SetLacrosProfileId(primary_profile_id);
     }
   }
 }

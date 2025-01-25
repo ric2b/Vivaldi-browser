@@ -26,18 +26,13 @@
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/url_database.h"
 #include "components/history/core/browser/url_row.h"
+#include "components/history_embeddings/core/search_strings_update_listener.h"
 #include "components/history_embeddings/history_embeddings_features.h"
-#include "components/history_embeddings/ml_answerer.h"
-#include "components/history_embeddings/ml_embedder.h"
-#include "components/history_embeddings/mock_answerer.h"
-#include "components/history_embeddings/mock_embedder.h"
 #include "components/history_embeddings/scheduling_embedder.h"
-#include "components/history_embeddings/search_strings_update_listener.h"
 #include "components/history_embeddings/sql_database.h"
 #include "components/history_embeddings/vector_database.h"
 #include "components/optimization_guide/core/model_quality/feature_type_map.h"
-#include "components/optimization_guide/core/model_quality/model_quality_log_entry.h"
-#include "components/optimization_guide/core/optimization_guide_model_executor.h"
+#include "components/optimization_guide/core/optimization_guide_decider.h"
 #include "components/os_crypt/async/browser/os_crypt_async.h"
 #include "components/page_content_annotations/core/page_content_annotations_service.h"
 #include "content/public/browser/render_frame_host.h"
@@ -225,6 +220,10 @@ SearchResult SearchResult::Clone() {
   return clone;
 }
 
+bool SearchResult::IsContinuationOf(const SearchResult& other) {
+  return session_id == other.session_id && query == other.query;
+}
+
 const std::string& SearchResult::AnswerText() const {
   return answerer_result.answer.text();
 }
@@ -243,20 +242,23 @@ size_t SearchResult::AnswerIndex() const {
 ////////////////////////////////////////////////////////////////////////////////
 
 HistoryEmbeddingsService::HistoryEmbeddingsService(
+    os_crypt_async::OSCryptAsync* os_crypt_async,
     history::HistoryService* history_service,
     page_content_annotations::PageContentAnnotationsService*
         page_content_annotations_service,
-    optimization_guide::OptimizationGuideModelProvider*
-        optimization_guide_model_provider,
     optimization_guide::OptimizationGuideDecider* optimization_guide_decider,
-    PassageEmbeddingsServiceController* service_controller,
-    os_crypt_async::OSCryptAsync* os_crypt_async,
-    optimization_guide::OptimizationGuideModelExecutor*
-        optimization_guide_model_executor)
+    std::unique_ptr<Embedder> embedder,
+    std::unique_ptr<Answerer> answerer,
+    std::unique_ptr<IntentClassifier> intent_classifier)
     : os_crypt_async_(os_crypt_async),
       history_service_(history_service),
       page_content_annotations_service_(page_content_annotations_service),
       optimization_guide_decider_(optimization_guide_decider),
+      embedder_(
+          std::make_unique<SchedulingEmbedder>(std::move(embedder),
+                                               kScheduledEmbeddingsMax.Get())),
+      answerer_(std::move(answerer)),
+      intent_classifier_(std::move(intent_classifier)),
       query_id_(0u),
       query_id_weak_ptr_factory_(&query_id_),
       weak_ptr_factory_(this) {
@@ -266,6 +268,7 @@ HistoryEmbeddingsService::HistoryEmbeddingsService(
     return;
   }
 
+  // The history service is never nullptr; even unit tests should provide it.
   CHECK(history_service_);
   storage_ = base::SequenceBound<Storage>(
       base::ThreadPool::CreateSequencedTaskRunner(
@@ -274,38 +277,12 @@ HistoryEmbeddingsService::HistoryEmbeddingsService(
       history_service_->history_dir());
   history_service_observation_.Observe(history_service_);
 
-  if (!kFilterHashes.Get().empty()) {
-    SearchStringsUpdateListener::GetInstance()->SetFilterWordsHashes(
-        kFilterHashes.Get());
-  }
-
   // Notify page content annotations service that we will need the content
   // visibility model during the session.
   if (page_content_annotations_service_) {
     page_content_annotations_service_->RequestAndNotifyWhenModelAvailable(
         page_content_annotations::AnnotationType::kContentVisibility,
         base::DoNothing());
-  }
-
-  if (kUseMlEmbedder.Get()) {
-    embedder_ = std::make_unique<MlEmbedder>(optimization_guide_model_provider,
-                                             service_controller);
-  } else {
-    embedder_ = std::make_unique<MockEmbedder>();
-  }
-
-  embedder_ = std::make_unique<SchedulingEmbedder>(
-      std::move(embedder_), kScheduledEmbeddingsMax.Get());
-
-  if (kEnableAnswers.Get()) {
-    if (kUseMlAnswerer.Get()) {
-      answerer_ =
-          optimization_guide_model_executor
-              ? std::make_unique<MlAnswerer>(optimization_guide_model_executor)
-              : nullptr;
-    } else {
-      answerer_ = std::make_unique<MockAnswerer>();
-    }
   }
 
   if (optimization_guide_decider_) {
@@ -389,34 +366,66 @@ void HistoryEmbeddingsService::RetrievePassages(
   }
 }
 
-void HistoryEmbeddingsService::Search(
+SearchResult HistoryEmbeddingsService::Search(
+    SearchResult* previous_search_result,
     std::string query,
     std::optional<base::Time> time_range_start,
     size_t count,
     SearchResultCallback callback) {
   SearchResult result;
-  result.session_id = base::Token::CreateRandom().ToString();
+
+  // Create and/or advance a 128-bit base::Token for session_id.
+  base::Token token = base::Token::CreateRandom();
+  // Start lowest 16-bits sequence number from zero.
+  token = base::Token(token.high(), token.low() & ~kSessionIdSequenceBitMask);
+  if (previous_search_result && !previous_search_result->session_id.empty()) {
+    std::optional<base::Token> parsed =
+        base::Token::FromString(previous_search_result->session_id);
+    if (parsed.has_value()) {
+      token = *parsed;
+      // Increment sequence number, allowing any overflow into next higher bits.
+      token = base::Token(token.high(), token.low() + 1);
+    }
+  }
+  result.session_id = token.ToString();
+
+  // Note, this is a copy of raw original query, which may or may not include
+  // non-ASCII characters. The `query` may later be modified, but not this one.
   result.query = query;
   result.time_range_start = time_range_start;
   result.count = count;
 
   SearchParams search_params;
+  search_params.erase_non_ascii = kEraseNonAsciiCharacters.Get();
+  if (search_params.erase_non_ascii) {
+    EraseNonAsciiCharacters(query);
+  }
   if (QueryIsFiltered(query, search_params)) {
     result.count = 0;
-    callback.Run(std::move(result));
-    return;
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](SearchResultCallback callback, SearchResult result) {
+                         callback.Run(std::move(result));
+                       },
+                       callback, result.Clone()));
+    return result;
   }
   search_params.word_match_minimum_embedding_score =
       kWordMatchMinEmbeddingScore.Get();
   search_params.word_match_score_boost_factor =
       kWordMatchScoreBoostFactor.Get();
   search_params.word_match_limit = kWordMatchLimit.Get();
+  search_params.word_match_smoothing_factor = kWordMatchSmoothingFactor.Get();
+  search_params.word_match_max_term_count = kWordMatchMaxTermCount.Get();
+  search_params.word_match_required_term_ratio =
+      kWordMatchRequiredTermRatio.Get();
 
   embedder_->ComputePassagesEmbeddings(
       PassageKind::QUERY, {std::move(query)},
       base::BindOnce(&HistoryEmbeddingsService::OnQueryEmbeddingComputed,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback),
-                     std::move(search_params), std::move(result)));
+                     std::move(search_params), result.Clone()));
+  return result;
 }
 
 void HistoryEmbeddingsService::OnQueryEmbeddingComputed(
@@ -458,10 +467,10 @@ base::WeakPtr<HistoryEmbeddingsService> HistoryEmbeddingsService::AsWeakPtr() {
 
 void HistoryEmbeddingsService::SendQualityLog(
     SearchResult& result,
-    optimization_guide::proto::UserFeedback user_feedback,
     std::set<size_t> selections,
     size_t num_entered_characters,
-    bool from_omnibox_history_scope) {
+    optimization_guide::proto::UserFeedback user_feedback,
+    optimization_guide::proto::UiSurface ui_surface) {
   // Exit early if logging is not enabled.
   if (!kSendQualityLog.Get() || !embedder_metadata_.has_value()) {
     return;
@@ -507,15 +516,9 @@ void HistoryEmbeddingsService::SendQualityLog(
     query_quality->set_query(result.query);
     query_quality->set_num_days(num_days);
     query_quality->set_num_entered_characters(num_entered_characters);
+    query_quality->set_ui_surface(ui_surface);
 
-    // For now, only two UI surfaces are planned, but if more are implemented
-    // then we can take the `UiSurface` directly as a parameter.
-    query_quality->set_ui_surface(
-        from_omnibox_history_scope
-            ? optimization_guide::proto::UiSurface::
-                  UI_SURFACE_OMNIBOX_HISTORY_SCOPE
-            : optimization_guide::proto::UiSurface::UI_SURFACE_HISTORY_PAGE);
-
+    bool any_document_clicked = false;
     for (size_t row_index = 0; row_index < result.scored_url_rows.size();
          ++row_index) {
       const ScoredUrlRow& scored_url_row = result.scored_url_rows[row_index];
@@ -523,6 +526,12 @@ void HistoryEmbeddingsService::SendQualityLog(
           query_quality->add_top_documents_shown();
       document_shown->set_url(scored_url_row.row.url().spec());
       document_shown->set_was_clicked(selections.contains(row_index));
+      any_document_clicked |= document_shown->was_clicked();
+      if (!scored_url_row.scores.empty()) {
+        document_shown->set_best_embedding_score(
+            std::ranges::max(scored_url_row.scores));
+      }
+      document_shown->set_total_document_score(scored_url_row.scored_url.score);
 
       // Log the top passages that may be used as context for the Answerer.
       for (size_t passage_index : scored_url_row.GetBestScoreIndices(
@@ -542,6 +551,13 @@ void HistoryEmbeddingsService::SendQualityLog(
             ->mutable_values()
             ->Add(embedding.begin(), embedding.end());
       }
+    }
+    if (result.scored_url_rows.size() > 0) {
+      query_quality->set_final_model_status(
+          any_document_clicked ? optimization_guide::proto::FinalModelStatus::
+                                     FINAL_MODEL_STATUS_SUCCESS
+                               : optimization_guide::proto::FinalModelStatus::
+                                     FINAL_MODEL_STATUS_FAILURE);
     }
 
     // The data is sent when `log_entry` destructs.
@@ -607,7 +623,7 @@ void HistoryEmbeddingsService::Storage::ProcessAndStorePassages(
   url_data.url_passages = std::move(url_passages);
 
   // Store all embeddings and passages.
-  vector_database.AddUrlData(url_data);
+  vector_database.AddUrlData(std::move(url_data));
   vector_database.SaveTo(&sql_database);
 }
 
@@ -639,6 +655,9 @@ std::vector<ScoredUrlRow> HistoryEmbeddingsService::Storage::Search(
   base::UmaHistogramCounts10M(
       "History.Embeddings.Search.SkippedNonAsciiPassageCount",
       search_info.skipped_nonascii_passage_count);
+  base::UmaHistogramCounts10M(
+      "History.Embeddings.Search.ModifiedNonAsciiPassageCount",
+      search_info.modified_nonascii_passage_count);
   base::UmaHistogramBoolean("History.Embeddings.Search.Completed",
                             search_info.completed);
   base::UmaHistogramTimes("History.Embeddings.Search.TotalSearchTime",
@@ -728,6 +747,39 @@ HistoryEmbeddingsService::Storage::GetUrlData(history::URLID url_id) {
   base::ScopedUmaHistogramTimer timer(
       "History.Embeddings.DatabaseAsCacheAccessTime.StorageRead");
   return sql_database.GetUrlData(url_id);
+}
+
+std::vector<UrlPassagesEmbeddings>
+HistoryEmbeddingsService::Storage::GetUrlDataInTimeRange(base::Time from_time,
+                                                         base::Time to_time,
+                                                         size_t limit,
+                                                         size_t offset) {
+  return sql_database.GetUrlDataInTimeRange(from_time, to_time, limit, offset);
+}
+
+bool HistoryEmbeddingsService::IsAnswererUseAllowed() const {
+  return true;
+}
+
+void HistoryEmbeddingsService::GetUrlData(
+    history::URLID url_id,
+    base::OnceCallback<void(std::optional<UrlPassagesEmbeddings>)> callback)
+    const {
+  storage_.AsyncCall(&Storage::GetUrlData)
+      .WithArgs(url_id)
+      .Then(std::move(callback));
+}
+
+void HistoryEmbeddingsService::GetUrlDataInTimeRange(
+    base::Time from_time,
+    base::Time to_time,
+    size_t limit,
+    size_t offset,
+    base::OnceCallback<void(std::vector<UrlPassagesEmbeddings>)> callback)
+    const {
+  storage_.AsyncCall(&Storage::GetUrlDataInTimeRange)
+      .WithArgs(from_time, to_time, limit, offset)
+      .Then(std::move(callback));
 }
 
 QualityLogEntry HistoryEmbeddingsService::PrepareQualityLogEntry() {
@@ -956,8 +1008,6 @@ void HistoryEmbeddingsService::OnPassageVisibilityCalculated(
     return;
   }
 
-  // Use the callback task mechanism for simplicity and easier control with
-  // other standard async machinery.
   history_service_->ScheduleDBTaskForUI(base::BindOnce(
       &FinishSearchResultWithHistory,
       base::SequencedTaskRunner::GetCurrentDefault(),
@@ -970,35 +1020,129 @@ void HistoryEmbeddingsService::OnPrimarySearchResultReady(
     SearchResultCallback callback,
     SearchResult result) {
   callback.Run(result.Clone());
-  if (answerer_) {
-    Answerer::Context context(result.session_id);
-    for (const ScoredUrlRow& scored_url_row : result.scored_url_rows) {
-      std::vector<size_t> best_indices = scored_url_row.GetBestScoreIndices(
-          0, kContextPassagesMinimumWordCount.Get());
-      std::vector<std::string>& best_passages =
-          context.url_passages_map[scored_url_row.row.url().spec()];
-      best_passages.reserve(best_indices.size());
-      for (size_t index : best_indices) {
-        best_passages.push_back(
-            scored_url_row.passages_embeddings.url_passages.passages.passages(
-                index));
-      }
-    }
-    answerer_->ComputeAnswer(
-        result.query, std::move(context),
-        base::BindOnce(&HistoryEmbeddingsService::OnAnswerComputed,
+
+  // TODO(b/369446266): Intent classification can execute in parallel with
+  //  initial query embedding computation and search. This doesn't make
+  //  much difference when the mock is used but could save time when the
+  //  real ML intent classifier is working.
+  if (answerer_ && intent_classifier_ && IsAnswererUseAllowed()) {
+    std::string query = result.query;
+    VLOG(3) << "ComputeQueryIntent for '" << query << "'";
+    intent_classifier_->ComputeQueryIntent(
+        std::move(query),
+        base::BindOnce(&HistoryEmbeddingsService::OnQueryIntentComputed,
                        weak_ptr_factory_.GetWeakPtr(), callback,
                        std::move(result)));
+  } else {
+    // Intent classification is explicitly disabled; bypass to answerer.
+    OnQueryIntentComputed(callback, std::move(result),
+                          ComputeIntentStatus::SUCCESS,
+                          /*query_is_answerable=*/true);
   }
 }
 
+void HistoryEmbeddingsService::OnQueryIntentComputed(
+    SearchResultCallback callback,
+    SearchResult result,
+    ComputeIntentStatus status,
+    bool query_is_answerable) {
+  const bool answerable = status == ComputeIntentStatus::SUCCESS &&
+                          query_is_answerable && answerer_ &&
+                          IsAnswererUseAllowed();
+  VLOG(3) << "OnQueryIntentComputed for '" << result.query << "' ("
+          << query_is_answerable << "," << answerable << ")";
+  VLOG(3) << "ComputeIntentStatus: " << static_cast<int>(status);
+  base::UmaHistogramBoolean("History.Embeddings.QueryAnswerable", answerable);
+  if (!answerable) {
+    return;
+  }
+
+  // Send a result indicating that an answer generation is being attempted so
+  // that the UI can show a loading state.
+  SearchResult loadingResult = result.Clone();
+  loadingResult.answerer_result =
+      AnswererResult(ComputeAnswerStatus::kLoading, result.query,
+                     optimization_guide::proto::Answer());
+  callback.Run(std::move(loadingResult));
+
+  Answerer::Context context(result.session_id);
+  for (size_t url_index = 0;
+       url_index <
+       std::min(result.scored_url_rows.size(),
+                static_cast<size_t>(kMaxAnswererContextUrlCount.Get()));
+       url_index++) {
+    const ScoredUrlRow& scored_url_row = result.scored_url_rows[url_index];
+    std::vector<size_t> best_indices = scored_url_row.GetBestScoreIndices(
+        0, kContextPassagesMinimumWordCount.Get());
+    std::vector<std::string>& best_passages =
+        context.url_passages_map[scored_url_row.row.url().spec()];
+    best_passages.reserve(best_indices.size());
+    for (size_t index : best_indices) {
+      best_passages.push_back(
+          scored_url_row.passages_embeddings.url_passages.passages.passages(
+              index));
+    }
+  }
+  std::string query = result.query;
+  VLOG(3) << "ComputeAnswer for '" << query << "'";
+  answerer_->ComputeAnswer(
+      std::move(query), std::move(context),
+      base::BindOnce(&HistoryEmbeddingsService::OnAnswerComputed,
+                     weak_ptr_factory_.GetWeakPtr(), base::Time::Now(),
+                     callback, std::move(result)));
+}
+
 void HistoryEmbeddingsService::OnAnswerComputed(
+    base::Time start_time,
     SearchResultCallback callback,
     SearchResult search_result,
     AnswererResult answerer_result) {
+  base::TimeDelta waited = base::Time::Now() - start_time;
   search_result.answerer_result = std::move(answerer_result);
   VLOG(3) << "Query '" << search_result.answerer_result.query
           << "' computed answer '" << search_result.AnswerText() << "'";
+  VLOG(3) << "ComputeAnswerStatus: "
+          << static_cast<int>(search_result.answerer_result.status) << " ("
+          << waited.InMilliseconds() << " ms)";
+
+  base::UmaHistogramEnumeration("History.Embeddings.ComputeAnswerStatus",
+                                answerer_result.status);
+  const std::string compute_answer_time_histogram_name =
+      "History.Embeddings.ComputeAnswerTime";
+  base::UmaHistogramTimes(compute_answer_time_histogram_name, waited);
+  switch (answerer_result.status) {
+    case ComputeAnswerStatus::kLoading:
+      base::UmaHistogramTimes(compute_answer_time_histogram_name + ".Loading",
+                              waited);
+      break;
+    case ComputeAnswerStatus::kSuccess:
+      base::UmaHistogramTimes(compute_answer_time_histogram_name + ".Success",
+                              waited);
+      break;
+    case ComputeAnswerStatus::kUnanswerable:
+      base::UmaHistogramTimes(
+          compute_answer_time_histogram_name + ".Unanswerable", waited);
+      break;
+    case ComputeAnswerStatus::kModelUnavailable:
+      base::UmaHistogramTimes(
+          compute_answer_time_histogram_name + ".ModelUnavailable", waited);
+      break;
+    case ComputeAnswerStatus::kExecutionFailure:
+      base::UmaHistogramTimes(
+          compute_answer_time_histogram_name + ".ExecutionFailure", waited);
+      break;
+    case ComputeAnswerStatus::kExecutionCancelled:
+      base::UmaHistogramTimes(
+          compute_answer_time_histogram_name + ".ExecutionCancelled", waited);
+      break;
+    case ComputeAnswerStatus::kFiltered:
+      base::UmaHistogramTimes(compute_answer_time_histogram_name + ".Filtered",
+                              waited);
+      break;
+    case ComputeAnswerStatus::kUnspecified:
+      break;
+  }
+
   callback.Run(std::move(search_result));
 }
 
@@ -1071,18 +1215,11 @@ bool HistoryEmbeddingsService::QueryIsFiltered(
     RecordQueryFiltered(QueryFiltered::FILTERED_NOT_ASCII);
     return true;
   }
-  std::string query = base::ToLowerASCII(raw_query);
-  std::vector<std::string_view> query_terms = base::SplitStringPiece(
-      query, " ", base::WhitespaceHandling::TRIM_WHITESPACE,
-      base::SplitResult::SPLIT_WANT_NONEMPTY);
-  for (std::string_view& query_term : query_terms) {
-    query_term = base::TrimString(
-        query_term,
-        ".?!,:;-()[]{}<>\"'/\\*&#~@^|%$`+=", base::TrimPositions::TRIM_ALL);
-  }
-  // Erase any query terms that were trimmed to empty so they don't disrupt
-  // the two term pairing logic below.
-  std::erase(query_terms, "");
+  const std::unordered_set<uint32_t>& stop_words_hashes =
+      SearchStringsUpdateListener::GetInstance()->stop_words_hashes();
+  size_t min_term_length = kWordMatchMinTermLength.Get();
+  std::vector<std::string> query_terms =
+      SplitQueryToTerms(stop_words_hashes, raw_query, min_term_length);
   const std::unordered_set<uint32_t>& filter_words_hashes =
       SearchStringsUpdateListener::GetInstance()->filter_words_hashes();
   if (std::ranges::any_of(query_terms, [&](std::string_view query_term) {
@@ -1102,15 +1239,7 @@ bool HistoryEmbeddingsService::QueryIsFiltered(
     }
   }
   RecordQueryFiltered(QueryFiltered::NOT_FILTERED);
-  size_t min_term_length = kWordMatchMinTermLength.Get();
-  const std::unordered_set<uint32_t>& stop_words_hashes =
-      SearchStringsUpdateListener::GetInstance()->stop_words_hashes();
-  for (std::string_view term : query_terms) {
-    if (query_terms.size() >= min_term_length &&
-        !stop_words_hashes.contains(HashString(term))) {
-      search_params.query_terms.emplace_back(term);
-    }
-  }
+  search_params.query_terms = std::move(query_terms);
   return false;
 }
 

@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/post_restore_signin/post_restore_signin_provider.h"
 
+#import "base/memory/raw_ptr.h"
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_feature_list.h"
 #import "components/signin/public/base/signin_switches.h"
@@ -15,10 +16,16 @@
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/promos_manager_commands.h"
+#import "ios/chrome/browser/signin/model/authentication_service.h"
+#import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/fake_authentication_service_delegate.h"
+#import "ios/chrome/browser/signin/model/fake_system_identity.h"
+#import "ios/chrome/browser/signin/model/fake_system_identity_manager.h"
 #import "ios/chrome/browser/signin/model/signin_util.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/browser/ui/post_restore_signin/metrics.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
+#import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/gmock/include/gmock/gmock.h"
 #import "testing/gtest_mac.h"
@@ -38,12 +45,17 @@ const char kFakePreRestoreAccountFullName[] = "Full Name";
 class PostRestoreSignInProviderTest : public PlatformTest {
  public:
   explicit PostRestoreSignInProviderTest() {
-    TestChromeBrowserState::Builder test_cbs_builder;
-    test_cbs_builder.AddTestingFactory(SyncServiceFactory::GetInstance(),
-                                       SyncServiceFactory::GetDefaultFactory());
-    browser_state_ = std::move(test_cbs_builder).Build();
-    browser_ = std::make_unique<TestBrowser>(browser_state_.get());
-    pref_service_ = browser_state_.get()->GetPrefs();
+    TestProfileIOS::Builder builder;
+    builder.AddTestingFactory(SyncServiceFactory::GetInstance(),
+                              SyncServiceFactory::GetDefaultFactory());
+    builder.AddTestingFactory(
+        AuthenticationServiceFactory::GetInstance(),
+        AuthenticationServiceFactory::GetFactoryWithDelegate(
+            std::make_unique<FakeAuthenticationServiceDelegate>()));
+    profile_ = std::move(builder).Build();
+    browser_ = std::make_unique<TestBrowser>(profile_.get());
+    pref_service_ = profile_.get()->GetPrefs();
+    auth_service_ = AuthenticationServiceFactory::GetForProfile(profile_.get());
 
     SetFakePreRestoreAccountInfo();
     provider_ =
@@ -74,10 +86,23 @@ class PostRestoreSignInProviderTest : public PlatformTest {
     provider_.handler = mock_handler_;
   }
 
+  // Signs in a fake identity.
+  void SignIn() {
+    FakeSystemIdentity* fake_identity = [FakeSystemIdentity fakeIdentity1];
+    FakeSystemIdentityManager* system_identity_manager =
+        FakeSystemIdentityManager::FromSystemIdentityManager(
+            GetApplicationContext()->GetSystemIdentityManager());
+    system_identity_manager->AddIdentity(fake_identity);
+    auth_service_->SignIn(fake_identity,
+                          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+  }
+
  protected:
+  IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   web::WebTaskEnvironment task_environment_;
-  PrefService* pref_service_;
-  std::unique_ptr<TestChromeBrowserState> browser_state_;
+  raw_ptr<PrefService> pref_service_;
+  std::unique_ptr<TestProfileIOS> profile_;
+  raw_ptr<AuthenticationService> auth_service_;
   base::test::ScopedFeatureList scoped_feature_list_;
   id mock_handler_;
   std::unique_ptr<Browser> browser_;
@@ -174,4 +199,19 @@ TEST_F(PostRestoreSignInProviderTest, clearsPreRestoreIdentity) {
   SetupMockHandler();
   [provider_ standardPromoAlertDefaultAction];
   EXPECT_FALSE(GetPreRestoreIdentity(pref_service_).has_value());
+}
+
+// Tests that when tapping "continue" when signed-in does not attempt to
+// re-signin.
+TEST_F(PostRestoreSignInProviderTest, AlreadySignedIn) {
+  __block bool didCallShowSignIn = false;
+  SetupMockHandler();
+  OCMStub([mock_handler_ showSignin:[OCMArg any]]).andDo(^(NSInvocation* inv) {
+    didCallShowSignIn = true;
+  });
+
+  SignIn();
+  [provider_ standardPromoAlertDefaultAction];
+
+  EXPECT_FALSE(didCallShowSignIn);
 }

@@ -19,7 +19,7 @@ vector<float16_t, 2> tint_bitcast_to_f16(int src) {
 }
 
 vector<float16_t, 2> bitcast_674557() {
-  int arg_0 = 1;
+  int arg_0 = int(1);
   vector<float16_t, 2> res = tint_bitcast_to_f16(arg_0);
   return res;
 }
@@ -43,9 +43,7 @@ VertexOutput vertex_main_inner() {
 
 vertex_main_outputs vertex_main() {
   VertexOutput v_3 = vertex_main_inner();
-  VertexOutput v_4 = v_3;
-  VertexOutput v_5 = v_3;
-  vertex_main_outputs v_6 = {v_5.prevent_dce, v_4.pos};
-  return v_6;
+  vertex_main_outputs v_4 = {v_3.prevent_dce, v_3.pos};
+  return v_4;
 }
 

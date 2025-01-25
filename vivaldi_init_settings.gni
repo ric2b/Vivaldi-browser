@@ -85,6 +85,10 @@ declare_overrides() {
       # library integration.
       treat_warnings_as_errors = false
     }
+    if (is_vivaldi_mercedes) {
+      # AUTO-208: Avoid using unrar because of its license.
+      safe_browsing_use_unrar = false
+    }
     use_login_database_as_backend = true
   }
 
@@ -133,14 +137,14 @@ declare_overrides() {
     is_component_build = false
     # Needed until we understand chromium partition allocator better.
     ios_partition_alloc_enabled = false
-    # We need to make sure the most visited sites work for us before making
-    # this widgets available for users.
-    ios_enable_shortcuts_widget = false
 
     ios_application_icons_target = "//vivaldi/ios/app/resources:vivaldi_appicons"
     ios_launchscreen_assets_target = "//vivaldi/ios/app/resources:launchscreen_assets"
 
     # Just making sure it stays off
     ios_enable_memory_debugging = false
+
+    # Make sure we do not build AI stuff
+    build_with_internal_optimization_guide = false
   }
 }

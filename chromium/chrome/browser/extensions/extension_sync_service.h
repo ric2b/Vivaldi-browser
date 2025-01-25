@@ -36,10 +36,10 @@ class ExtensionSyncData;
 
 // SyncableService implementation responsible for the APPS and EXTENSIONS data
 // types, i.e. "proper" apps/extensions (not themes).
-class ExtensionSyncService final : public syncer::SyncableService,
-                                   public KeyedService,
-                                   public extensions::ExtensionRegistryObserver,
-                                   public extensions::ExtensionPrefsObserver {
+class ExtensionSyncService : public syncer::SyncableService,
+                             public KeyedService,
+                             public extensions::ExtensionRegistryObserver,
+                             public extensions::ExtensionPrefsObserver {
  public:
   explicit ExtensionSyncService(Profile* profile);
 
@@ -50,6 +50,12 @@ class ExtensionSyncService final : public syncer::SyncableService,
 
   // Convenience function to get the ExtensionSyncService for a BrowserContext.
   static ExtensionSyncService* Get(content::BrowserContext* context);
+
+  // Returns whether the given extension is eligible to be synced by this class.
+  // Filters out unsyncable extensions as well as themes (which are handled by
+  // ThemeSyncableService instead).
+  static bool IsSyncableExtension(content::BrowserContext* context,
+                                  const extensions::Extension& extension);
 
   // Notifies Sync (if needed) of a newly-installed extension or a change to
   // an existing extension. Call this when you change an extension setting that
@@ -100,6 +106,8 @@ class ExtensionSyncService final : public syncer::SyncableService,
                                bool state) override;
   void OnExtensionDisableReasonsChanged(const std::string& extension_id,
                                         int disabled_reasons) override;
+  void OnExtensionPrefsWillBeDestroyed(
+      extensions::ExtensionPrefs* prefs) override;
 
   // Gets the SyncBundle for the given |type|.
   extensions::SyncBundle* GetSyncBundle(syncer::DataType type);
@@ -122,9 +130,9 @@ class ExtensionSyncService final : public syncer::SyncableService,
       syncer::DataType type,
       std::vector<extensions::ExtensionSyncData>* sync_data_list) const;
 
-  // Returns whether the given extension should be synced by this class.
-  // Filters out unsyncable extensions as well as themes (which are handled by
-  // ThemeSyncableService instead).
+  // Returns if the given `extension` should be synced. This differs from
+  // `IsSyncableExtension` which checks if an extension is eligible to be synced
+  // by this class.
   bool ShouldSync(const extensions::Extension& extension) const;
 
   // The normal profile associated with this ExtensionSyncService.

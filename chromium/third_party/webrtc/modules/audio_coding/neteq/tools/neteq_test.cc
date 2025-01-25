@@ -16,8 +16,8 @@
 #include "api/environment/environment.h"
 #include "api/environment/environment_factory.h"
 #include "api/field_trials.h"
+#include "api/neteq/default_neteq_factory.h"
 #include "api/units/timestamp.h"
-#include "modules/audio_coding/neteq/default_neteq_factory.h"
 #include "modules/rtp_rtcp/source/byte_io.h"
 #include "system_wrappers/include/clock.h"
 
@@ -312,9 +312,6 @@ NetEqLifetimeStatistics NetEqTest::LifetimeStats() const {
 NetEqTest::DecoderMap NetEqTest::StandardDecoderMap() {
   DecoderMap codecs = {{0, SdpAudioFormat("pcmu", 8000, 1)},
                        {8, SdpAudioFormat("pcma", 8000, 1)},
-#ifdef WEBRTC_CODEC_ILBC
-                       {102, SdpAudioFormat("ilbc", 8000, 1)},
-#endif
 #ifdef WEBRTC_CODEC_OPUS
                        {111, SdpAudioFormat("opus", 48000, 2)},
                        {63, SdpAudioFormat("red", 48000, 2)},

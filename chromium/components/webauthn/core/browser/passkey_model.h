@@ -14,6 +14,7 @@
 #include "base/containers/span.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list_types.h"
+#include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/webauthn/core/browser/passkey_model_change.h"
 
@@ -54,6 +55,9 @@ class PasskeyModel : public KeyedService {
 
     // Notifies the observer that the passkey model is shutting down.
     virtual void OnPasskeyModelShuttingDown() = 0;
+
+    // Notifies the observer when the passkey model becomes ready.
+    virtual void OnPasskeyModelIsReady(bool is_ready) = 0;
   };
 
   // Represents the WebAuthn PublicKeyCredentialUserEntity passed by the Relying
@@ -121,8 +125,19 @@ class PasskeyModel : public KeyedService {
 
   // Updates attributes of the passkey with the given `credential_id`. Returns
   // true if the credential was found and updated, false otherwise.
+  // |updated_by_user| should be true if the user explicitly requested this
+  // update, e.g. through the password manager. Passkeys updated by the user
+  // will be permantently marked as such. Any further attempts to update the
+  // passkey with |updated_by_user| set to |false| will be dropped.
   virtual bool UpdatePasskey(const std::string& credential_id,
-                             PasskeyUpdate change) = 0;
+                             PasskeyUpdate change,
+                             bool updated_by_user) = 0;
+
+  // Updates the `last_used_time_windows_epoch_micros` attribute of the
+  // passkey with the given `credential_id`. Returns true if the credential was
+  // found and updated, false otherwise.
+  virtual bool UpdatePasskeyTimestamp(const std::string& credential_id,
+                                      base::Time last_used_time) = 0;
 
   // Creates a passkey for the given RP and user and returns the new entity
   // specifics.

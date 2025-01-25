@@ -157,19 +157,12 @@ namespace {{native_namespace}} {
 
     }  // anonymous namespace
 
-    //* TODO(crbug.com/42241188): Remove "2" suffix when WGPUStringView changes complete.
-    WGPUProc NativeGetProcAddress2(WGPUDevice, WGPUStringView procName);
-
-    WGPUProc NativeGetProcAddress(WGPUDevice device, const char* procName) {
-        return NativeGetProcAddress2(device, WGPUStringView{procName, SIZE_MAX});
-    }
-
-    WGPUProc NativeGetProcAddress2(WGPUDevice, WGPUStringView cProcName) {
+    WGPUProc NativeGetProcAddress(WGPUStringView cProcName) {
         if (cProcName.data == nullptr) {
             return nullptr;
         }
 
-        std::string_view procName(cProcName.data, cProcName.length != SIZE_MAX ? cProcName.length : strlen(cProcName.data));
+        std::string_view procName(cProcName.data, cProcName.length != WGPU_STRLEN ? cProcName.length : strlen(cProcName.data));
 
         const ProcEntry* entry = std::lower_bound(&sProcMap[0], &sProcMap[sProcMapSize], procName,
             [](const ProcEntry &a, const std::string_view& b) -> bool {

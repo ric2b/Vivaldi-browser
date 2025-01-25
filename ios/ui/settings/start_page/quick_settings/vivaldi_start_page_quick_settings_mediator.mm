@@ -130,6 +130,11 @@
   [VivaldiStartPagePrefsHelper setStartPageSpeedDialMaximumColumns:column];
 }
 
+- (void)setPreferenceStartPageReopenWithItem:
+    (VivaldiStartPageStartItemType)item {
+  // No op.
+}
+
 #pragma mark - BooleanObserver
 
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {

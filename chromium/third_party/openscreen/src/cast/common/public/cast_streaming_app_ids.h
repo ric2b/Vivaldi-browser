@@ -10,7 +10,7 @@
 
 namespace openscreen::cast {
 
-// Returns true only if |app_id| matches the Cast application ID for the
+// Returns true only if `app_id` matches the Cast application ID for the
 // corresponding Chromium Cast Streaming receiver application.
 //
 // TODO(b/204583004): Use std::string_view instead of std::string following the
@@ -19,7 +19,7 @@ bool IsCastStreamingAppId(const std::string& app_id);
 bool IsCastStreamingAudioVideoAppId(const std::string& app_id);
 bool IsCastStreamingAudioOnlyAppId(const std::string& app_id);
 
-// Returns true only if |app_id| matches any Cast Streaming app ID.
+// Returns true only if `app_id` matches any Cast Streaming app ID.
 bool IsCastStreamingReceiverAppId(const std::string& app_id);
 
 // Returns all app IDs for Cast Streaming receivers.

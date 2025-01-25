@@ -135,6 +135,7 @@ static DECLARE_ALIGNED(32, uint16_t, HighbdBaseMask[17][16]) = {
     0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff }
 };
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 static inline void highbd_transpose16x4_8x8_sse2(__m128i *x, __m128i *d) {
   __m128i r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15;
 
@@ -199,6 +200,7 @@ static inline void highbd_transpose4x16_avx2(__m256i *x, __m256i *d) {
   d[2] = _mm256_unpacklo_epi64(ww0, ww1);  // 02 12 22 32 42 52 62 72
   d[3] = _mm256_unpackhi_epi64(ww0, ww1);  // 03 13 23 33 43 53 63 73
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 static inline void highbd_transpose8x16_16x8_avx2(__m256i *x, __m256i *d) {
   __m256i w0, w1, w2, w3, ww0, ww1;
@@ -471,6 +473,7 @@ void aom_dc_predictor_64x32_avx2(uint8_t *dst, ptrdiff_t stride,
   row_store_64xh(&row, 32, dst, stride);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_dc_predictor_64x16_avx2(uint8_t *dst, ptrdiff_t stride,
                                  const uint8_t *above, const uint8_t *left) {
   const __m256i sum_above = dc_sum_64(above);
@@ -482,6 +485,7 @@ void aom_dc_predictor_64x16_avx2(uint8_t *dst, ptrdiff_t stride,
   const __m256i row = _mm256_set1_epi8((int8_t)sum);
   row_store_64xh(&row, 16, dst, stride);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_dc_top_predictor_32x16_avx2(uint8_t *dst, ptrdiff_t stride,
                                      const uint8_t *above,
@@ -539,6 +543,7 @@ void aom_dc_top_predictor_64x32_avx2(uint8_t *dst, ptrdiff_t stride,
   row_store_64xh(&row, 32, dst, stride);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_dc_top_predictor_64x16_avx2(uint8_t *dst, ptrdiff_t stride,
                                      const uint8_t *above,
                                      const uint8_t *left) {
@@ -552,6 +557,7 @@ void aom_dc_top_predictor_64x16_avx2(uint8_t *dst, ptrdiff_t stride,
   __m256i row = _mm256_shuffle_epi8(sum, zero);
   row_store_64xh(&row, 16, dst, stride);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_dc_left_predictor_32x16_avx2(uint8_t *dst, ptrdiff_t stride,
                                       const uint8_t *above,
@@ -610,6 +616,7 @@ void aom_dc_left_predictor_64x32_avx2(uint8_t *dst, ptrdiff_t stride,
   row_store_64xh(&row, 32, dst, stride);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_dc_left_predictor_64x16_avx2(uint8_t *dst, ptrdiff_t stride,
                                       const uint8_t *above,
                                       const uint8_t *left) {
@@ -624,6 +631,7 @@ void aom_dc_left_predictor_64x16_avx2(uint8_t *dst, ptrdiff_t stride,
   const __m256i row = _mm256_inserti128_si256(_mm256_castsi128_si256(r), r, 1);
   row_store_64xh(&row, 16, dst, stride);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_dc_128_predictor_32x16_avx2(uint8_t *dst, ptrdiff_t stride,
                                      const uint8_t *above,
@@ -661,6 +669,7 @@ void aom_dc_128_predictor_64x32_avx2(uint8_t *dst, ptrdiff_t stride,
   row_store_64xh(&row, 32, dst, stride);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_dc_128_predictor_64x16_avx2(uint8_t *dst, ptrdiff_t stride,
                                      const uint8_t *above,
                                      const uint8_t *left) {
@@ -669,6 +678,7 @@ void aom_dc_128_predictor_64x16_avx2(uint8_t *dst, ptrdiff_t stride,
   const __m256i row = _mm256_set1_epi8((int8_t)0x80);
   row_store_64xh(&row, 16, dst, stride);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void aom_v_predictor_32x16_avx2(uint8_t *dst, ptrdiff_t stride,
                                 const uint8_t *above, const uint8_t *left) {
@@ -700,6 +710,7 @@ void aom_v_predictor_64x32_avx2(uint8_t *dst, ptrdiff_t stride,
   row_store_32x2xh(&row0, &row1, 32, dst, stride);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_v_predictor_64x16_avx2(uint8_t *dst, ptrdiff_t stride,
                                 const uint8_t *above, const uint8_t *left) {
   const __m256i row0 = _mm256_loadu_si256((const __m256i *)above);
@@ -707,6 +718,7 @@ void aom_v_predictor_64x16_avx2(uint8_t *dst, ptrdiff_t stride,
   (void)left;
   row_store_32x2xh(&row0, &row1, 16, dst, stride);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 // -----------------------------------------------------------------------------
 // PAETH_PRED
@@ -826,6 +838,7 @@ void aom_paeth_predictor_16x32_avx2(uint8_t *dst, ptrdiff_t stride,
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_paeth_predictor_16x64_avx2(uint8_t *dst, ptrdiff_t stride,
                                     const uint8_t *above, const uint8_t *left) {
   const __m256i tl16 = _mm256_set1_epi16((int16_t)above[-1]);
@@ -845,6 +858,7 @@ void aom_paeth_predictor_16x64_avx2(uint8_t *dst, ptrdiff_t stride,
     }
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 // Return 32 8-bit pixels in one row (__m256i)
 static inline __m256i paeth_32x1_pred(const __m256i *left, const __m256i *top0,
@@ -1012,6 +1026,7 @@ void aom_paeth_predictor_64x64_avx2(uint8_t *dst, ptrdiff_t stride,
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 void aom_paeth_predictor_64x16_avx2(uint8_t *dst, ptrdiff_t stride,
                                     const uint8_t *above, const uint8_t *left) {
   const __m256i t0 = get_top_vector(above);
@@ -1041,6 +1056,7 @@ void aom_paeth_predictor_64x16_avx2(uint8_t *dst, ptrdiff_t stride,
     rep = _mm256_add_epi16(rep, one);
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 #if CONFIG_AV1_HIGHBITDEPTH
 
@@ -3027,6 +3043,7 @@ static void highbd_dr_prediction_z3_16x8_avx2(uint16_t *dst, ptrdiff_t stride,
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 static void highbd_dr_prediction_z3_4x16_avx2(uint16_t *dst, ptrdiff_t stride,
                                               const uint16_t *left,
                                               int upsample_left, int dy,
@@ -3139,6 +3156,7 @@ static void highbd_dr_prediction_z3_32x8_avx2(uint16_t *dst, ptrdiff_t stride,
     _mm_storeu_si128((__m128i *)(dst + i * stride + 24), d[i + 24]);
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 static void highbd_dr_prediction_z3_16x16_avx2(uint16_t *dst, ptrdiff_t stride,
                                                const uint16_t *left,
@@ -3282,6 +3300,7 @@ static void highbd_dr_prediction_z3_64x32_avx2(uint16_t *dst, ptrdiff_t stride,
   return;
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 static void highbd_dr_prediction_z3_16x64_avx2(uint16_t *dst, ptrdiff_t stride,
                                                const uint16_t *left,
                                                int upsample_left, int dy,
@@ -3315,6 +3334,7 @@ static void highbd_dr_prediction_z3_64x16_avx2(uint16_t *dst, ptrdiff_t stride,
     }
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void av1_highbd_dr_prediction_z3_avx2(uint16_t *dst, ptrdiff_t stride, int bw,
                                       int bh, const uint16_t *above,
@@ -3371,6 +3391,7 @@ void av1_highbd_dr_prediction_z3_avx2(uint16_t *dst, ptrdiff_t stride, int bw,
         }
       } else {
         switch (bw) {
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
           case 4:
             highbd_dr_prediction_z3_4x16_avx2(dst, stride, left, upsample_left,
                                               dy, bd);
@@ -3383,6 +3404,7 @@ void av1_highbd_dr_prediction_z3_avx2(uint16_t *dst, ptrdiff_t stride, int bw,
             highbd_dr_prediction_z3_16x64_avx2(dst, stride, left, upsample_left,
                                                dy, bd);
             break;
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
         }
       }
     } else {
@@ -3407,6 +3429,7 @@ void av1_highbd_dr_prediction_z3_avx2(uint16_t *dst, ptrdiff_t stride, int bw,
         }
       } else {
         switch (bh) {
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
           case 4:
             highbd_dr_prediction_z3_16x4_avx2(dst, stride, left, upsample_left,
                                               dy, bd);
@@ -3419,6 +3442,7 @@ void av1_highbd_dr_prediction_z3_avx2(uint16_t *dst, ptrdiff_t stride, int bw,
             highbd_dr_prediction_z3_64x16_avx2(dst, stride, left, upsample_left,
                                                dy, bd);
             break;
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
         }
       }
     }
@@ -4428,6 +4452,7 @@ static void dr_prediction_z3_16x8_avx2(uint8_t *dst, ptrdiff_t stride,
   }
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 static void dr_prediction_z3_4x16_avx2(uint8_t *dst, ptrdiff_t stride,
                                        const uint8_t *left, int upsample_left,
                                        int dy) {
@@ -4506,6 +4531,7 @@ static void dr_prediction_z3_32x8_avx2(uint8_t *dst, ptrdiff_t stride,
     _mm_storeu_si128((__m128i *)(dst + i * stride + 16), d[i + 8]);
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 static void dr_prediction_z3_16x16_avx2(uint8_t *dst, ptrdiff_t stride,
                                         const uint8_t *left, int upsample_left,
@@ -4597,6 +4623,7 @@ static void dr_prediction_z3_64x32_avx2(uint8_t *dst, ptrdiff_t stride,
   return;
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 static void dr_prediction_z3_16x64_avx2(uint8_t *dst, ptrdiff_t stride,
                                         const uint8_t *left, int upsample_left,
                                         int dy) {
@@ -4618,6 +4645,7 @@ static void dr_prediction_z3_64x16_avx2(uint8_t *dst, ptrdiff_t stride,
     }
   }
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void av1_dr_prediction_z3_avx2(uint8_t *dst, ptrdiff_t stride, int bw, int bh,
                                const uint8_t *above, const uint8_t *left,
@@ -4664,6 +4692,7 @@ void av1_dr_prediction_z3_avx2(uint8_t *dst, ptrdiff_t stride, int bw, int bh,
         }
       } else {
         switch (bw) {
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
           case 4:
             dr_prediction_z3_4x16_avx2(dst, stride, left, upsample_left, dy);
             break;
@@ -4673,6 +4702,7 @@ void av1_dr_prediction_z3_avx2(uint8_t *dst, ptrdiff_t stride, int bw, int bh,
           case 16:
             dr_prediction_z3_16x64_avx2(dst, stride, left, upsample_left, dy);
             break;
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
         }
       }
     } else {
@@ -4693,6 +4723,7 @@ void av1_dr_prediction_z3_avx2(uint8_t *dst, ptrdiff_t stride, int bw, int bh,
         }
       } else {
         switch (bh) {
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
           case 4:
             dr_prediction_z3_16x4_avx2(dst, stride, left, upsample_left, dy);
             break;
@@ -4702,6 +4733,7 @@ void av1_dr_prediction_z3_avx2(uint8_t *dst, ptrdiff_t stride, int bw, int bh,
           case 16:
             dr_prediction_z3_64x16_avx2(dst, stride, left, upsample_left, dy);
             break;
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
         }
       }
     }

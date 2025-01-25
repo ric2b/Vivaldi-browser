@@ -19,30 +19,36 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.isNotNull;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_LOW_END_DEVICE;
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE;
-import static org.chromium.chrome.browser.flags.ChromeFeatureList.TAB_GROUP_PARITY_ANDROID;
 import static org.chromium.ui.test.util.MockitoHelper.doCallback;
 
 import android.content.Intent;
+import android.graphics.Rect;
+import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.IdRes;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.test.espresso.Espresso;
 import androidx.test.espresso.intent.Intents;
 import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
 import androidx.test.platform.app.InstrumentationRegistry;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -56,6 +62,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.GarbageCollectionTestUtils;
 import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
@@ -63,27 +70,30 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkEditActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab_ui.RecyclerViewPosition;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
-import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.ConfirmationResult;
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorAction.ButtonType;
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorAction.IconPosition;
 import org.chromium.chrome.browser.tasks.tab_management.TabListEditorAction.ShowMode;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.TabActionState;
+import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderCoordinator;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -93,10 +103,12 @@ import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
 import org.chromium.chrome.test.util.BookmarkTestUtil;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
+import org.chromium.components.browser_ui.desktop_windowing.AppHeaderState;
+import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
+import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modaldialog.ModalDialogManager;
-import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
@@ -108,16 +120,9 @@ import java.util.Map;
 
 /** End-to-end test for the selectable TabListEditor. */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({
-    ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-    "force-fieldtrials=Study/Group",
-    "force-fieldtrial-params=Study.Group:enable_launch_polish/true"
-})
-@DisableFeatures({TAB_GROUP_PARITY_ANDROID})
+@CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
 @Batch(Batch.PER_CLASS)
 public class SelectableTabListEditorTest {
-    private static final String TAB_GROUP_LAUNCH_POLISH_PARAMS =
-            "force-fieldtrial-params=Study.Group:enable_launch_polish/true";
     private static final String PAGE_WITH_HTTPS_CANONICAL_URL =
             "/chrome/test/data/android/share/link_share_https_canonical.html";
     private static final String PAGE_WITH_HTTP_CANONICAL_URL =
@@ -144,6 +149,7 @@ public class SelectableTabListEditorTest {
     @Mock private Callback<RecyclerViewPosition> mSetRecyclerViewPosition;
     @Mock private ModalDialogManager mModalDialogManager;
     @Mock private ActionConfirmationManager mActionConfirmationManager;
+    @Mock private EdgeToEdgeController mEdgeToEdgeController;
 
     private TabListEditorTestingRobot mRobot = new TabListEditorTestingRobot();
 
@@ -156,6 +162,8 @@ public class SelectableTabListEditorTest {
     private SnackbarManager mSnackbarManager;
     private BookmarkModel mBookmarkModel;
     private TabGroupCreationDialogManager mCreationDialogManager;
+    private AppHeaderCoordinator mAppHeaderStateProvider;
+    private ObservableSupplierImpl<EdgeToEdgeController> mEdgeToEdgeSupplier;
 
     @Before
     public void setUp() throws Exception {
@@ -188,17 +196,24 @@ public class SelectableTabListEditorTest {
                                     ? (ViewGroup) cta.findViewById(R.id.tab_switcher_view_holder)
                                     : compositorViewHolder;
                     mSnackbarManager = new SnackbarManager(cta, rootView, null);
-                    var currentTabModelFilterSupplier =
+                    var currentTabGroupModelFilterSupplier =
                             mTabModelSelector
-                                    .getTabModelFilterProvider()
-                                    .getCurrentTabModelFilterSupplier();
+                                    .getTabGroupModelFilterProvider()
+                                    .getCurrentTabGroupModelFilterSupplier();
+                    mAppHeaderStateProvider =
+                            (AppHeaderCoordinator)
+                                    sActivityTestRule
+                                            .getActivity()
+                                            .getRootUiCoordinatorForTesting()
+                                            .getDesktopWindowStateManager();
+                    mEdgeToEdgeSupplier = new ObservableSupplierImpl<>();
                     mTabListEditorCoordinator =
                             new TabListEditorCoordinator(
                                     cta,
                                     mParentView,
                                     mParentView,
                                     cta.getBrowserControlsManager(),
-                                    currentTabModelFilterSupplier,
+                                    currentTabGroupModelFilterSupplier,
                                     cta.getTabContentManager(),
                                     mSetRecyclerViewPosition,
                                     getMode(),
@@ -207,7 +222,9 @@ public class SelectableTabListEditorTest {
                                     /* bottomSheetController= */ null,
                                     TabProperties.TabActionState.SELECTABLE,
                                     /* gridCardOnClickListenerProvider= */ null,
-                                    mModalDialogManager);
+                                    mModalDialogManager,
+                                    mAppHeaderStateProvider,
+                                    mEdgeToEdgeSupplier);
 
                     mTabListEditorController = mTabListEditorCoordinator.getController();
                     mTabListEditorLayout =
@@ -220,7 +237,9 @@ public class SelectableTabListEditorTest {
         Callback<Callback<Integer>> immediateContinue =
                 (Callback<Integer> callback) ->
                         ThreadUtils.runOnUiThreadBlocking(
-                                () -> callback.onResult(ConfirmationResult.IMMEDIATE_CONTINUE));
+                                () ->
+                                        callback.onResult(
+                                                ActionConfirmationResult.IMMEDIATE_CONTINUE));
         doCallback(1, immediateContinue)
                 .when(mActionConfirmationManager)
                 .processCloseTabAttempt(any(), any());
@@ -313,10 +332,9 @@ public class SelectableTabListEditorTest {
                     ArrayList<Tab> tabs = new ArrayList<>();
                     TabModel model = mTabModelSelector.getCurrentModel();
                     TabGroupModelFilter filter =
-                            (TabGroupModelFilter)
-                                    mTabModelSelector
-                                            .getTabModelFilterProvider()
-                                            .getCurrentTabModelFilter();
+                            mTabModelSelector
+                                    .getTabGroupModelFilterProvider()
+                                    .getCurrentTabGroupModelFilter();
                     for (int i = model.getCount() - urls.size(); i < model.getCount(); i++) {
                         tabs.add(model.getTabAt(i));
                     }
@@ -363,6 +381,47 @@ public class SelectableTabListEditorTest {
         mRobot.actionRobot.clickToolbarMenuButton();
         mRobot.resultRobot.verifyToolbarMenuItemState("Close tabs", /* enabled= */ false);
         Espresso.pressBack();
+    }
+
+    @Test
+    @RequiresApi(Build.VERSION_CODES.R)
+    @EnableFeatures(ChromeFeatureList.TAB_STRIP_LAYOUT_OPTIMIZATION)
+    @Restriction(DeviceFormFactor.TABLET)
+    @Feature("DesktopWindow")
+    @SmallTest
+    public void testMarginWithAppHeaders() {
+        // Height to apply as top margin.
+        int appHeaderHeight =
+                sActivityTestRule
+                        .getActivity()
+                        .getResources()
+                        .getDimensionPixelSize(R.dimen.tab_strip_height);
+        Rect windowRect = new Rect();
+        sActivityTestRule.getActivity().getWindow().getDecorView().getGlobalVisibleRect(windowRect);
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    // Trigger desktop window - set app headers
+                    Rect widestUnoccludedRect =
+                            new Rect(windowRect.left, 0, windowRect.right, appHeaderHeight);
+                    var state = new AppHeaderState(windowRect, widestUnoccludedRect, true);
+                    mAppHeaderStateProvider.setStateForTesting(true, state);
+                });
+
+        prepareBlankTab(2, false);
+        List<Tab> tabs = getTabsInCurrentTabModel();
+        showSelectionEditor(tabs, null);
+
+        mRobot.resultRobot.verifyTabListEditorHasTopMargin(appHeaderHeight);
+
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    // Exit desktop window.
+                    var state = new AppHeaderState(windowRect, new Rect(), false);
+                    mAppHeaderStateProvider.setStateForTesting(false, state);
+                });
+
+        // Verify margin is reset.
+        mRobot.resultRobot.verifyTabListEditorHasTopMargin(0);
     }
 
     @Test
@@ -525,7 +584,7 @@ public class SelectableTabListEditorTest {
 
     @Test
     @MediumTest
-    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    @Restriction({DeviceFormFactor.PHONE})
     public void testConfigureToolbarMenuItems() {
         prepareBlankTab(2, false);
         List<Tab> tabs = getTabsInCurrentTabModel();
@@ -617,7 +676,7 @@ public class SelectableTabListEditorTest {
         prepareBlankTabGroup(3, false);
         prepareBlankTabGroup(1, false);
         prepareBlankTabGroup(2, false);
-        List<Tab> tabs = getTabsInCurrentTabModelFilter();
+        List<Tab> tabs = getTabsInCurrentTabGroupModelFilter();
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -661,7 +720,7 @@ public class SelectableTabListEditorTest {
         prepareBlankTabGroup(3, false); // Index: 2
         prepareBlankTabGroup(1, false); // Index: 3
         prepareBlankTabGroup(2, false); // Index: 4
-        List<Tab> tabs = getTabsInCurrentTabModelFilter();
+        List<Tab> tabs = getTabsInCurrentTabGroupModelFilter();
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -695,7 +754,7 @@ public class SelectableTabListEditorTest {
 
         mRobot.actionRobot.clickToolbarActionView(groupId);
 
-        assertEquals(2, getTabsInCurrentTabModelFilter().size());
+        assertEquals(2, getTabsInCurrentTabGroupModelFilter().size());
     }
 
     @Test
@@ -708,7 +767,7 @@ public class SelectableTabListEditorTest {
         prepareBlankTabGroup(1, false);
         prepareBlankTabGroup(2, false);
         TabUiTestHelper.createTabsWithThumbnail(sActivityTestRule, 1, "about:blank", false);
-        List<Tab> tabs = getTabsInCurrentTabModelFilter();
+        List<Tab> tabs = getTabsInCurrentTabGroupModelFilter();
         List<Tab> beforeTabOrder = getTabsInCurrentTabModel();
 
         Tab selectedTab = beforeTabOrder.get(4);
@@ -780,7 +839,7 @@ public class SelectableTabListEditorTest {
         List<Tab> finalTabs = getTabsInCurrentTabModel();
         assertEquals(beforeTabOrder.size(), finalTabs.size());
         assertEquals(beforeTabOrder, finalTabs);
-        List<Tab> finalRootTabs = getTabsInCurrentTabModelFilter();
+        List<Tab> finalRootTabs = getTabsInCurrentTabGroupModelFilter();
         assertEquals(tabs.size(), finalRootTabs.size());
         assertEquals(tabs, finalRootTabs);
     }
@@ -907,12 +966,12 @@ public class SelectableTabListEditorTest {
         mRobot.actionRobot.clickItemAtAdapterPosition(0).clickItemAtAdapterPosition(2);
 
         TabListEditorShareAction.setIntentCallbackForTesting(
-                (result -> {
+                result -> {
                     assertEquals(Intent.ACTION_SEND, result.getAction());
                     assertEquals(httpsCanonicalUrl, result.getStringExtra(Intent.EXTRA_TEXT));
                     assertEquals("text/plain", result.getType());
                     assertEquals("1 link from Chrome", result.getStringExtra(Intent.EXTRA_TITLE));
-                }));
+                });
 
         final int shareId = R.id.tab_list_editor_share_menu_item;
         mRobot.actionRobot.clickToolbarActionView(shareId);
@@ -931,7 +990,7 @@ public class SelectableTabListEditorTest {
         prepareTabGroupWithUrls(urls, false);
         prepareBlankTabGroup(2, false);
 
-        List<Tab> tabs = getTabsInCurrentTabModelFilter();
+        List<Tab> tabs = getTabsInCurrentTabGroupModelFilter();
 
         // Url string formatting
         for (int i = 0; i < urls.size(); i++) {
@@ -955,12 +1014,12 @@ public class SelectableTabListEditorTest {
         mRobot.actionRobot.clickItemAtAdapterPosition(1).clickItemAtAdapterPosition(2);
 
         TabListEditorShareAction.setIntentCallbackForTesting(
-                (result -> {
+                result -> {
                     assertEquals(Intent.ACTION_SEND, result.getAction());
                     assertEquals(String.join("\n", urls), result.getStringExtra(Intent.EXTRA_TEXT));
                     assertEquals("text/plain", result.getType());
                     assertEquals("4 links from Chrome", result.getStringExtra(Intent.EXTRA_TITLE));
-                }));
+                });
 
         final int shareId = R.id.tab_list_editor_share_menu_item;
         mRobot.actionRobot.clickToolbarActionView(shareId);
@@ -983,7 +1042,7 @@ public class SelectableTabListEditorTest {
         urls.add(sActivityTestRule.getTestServer().getURL(PAGE_WITH_NO_CANONICAL_URL));
         prepareTabGroupWithUrls(urls, false);
 
-        List<Tab> tabs = getTabsInCurrentTabModelFilter();
+        List<Tab> tabs = getTabsInCurrentTabGroupModelFilter();
 
         // Url string formatting
         urls.add(0, httpsCanonicalUrl);
@@ -1012,12 +1071,12 @@ public class SelectableTabListEditorTest {
                 .clickItemAtAdapterPosition(3);
 
         TabListEditorShareAction.setIntentCallbackForTesting(
-                (result -> {
+                result -> {
                     assertEquals(Intent.ACTION_SEND, result.getAction());
                     assertEquals(String.join("\n", urls), result.getStringExtra(Intent.EXTRA_TEXT));
                     assertEquals("text/plain", result.getType());
                     assertEquals("3 links from Chrome", result.getStringExtra(Intent.EXTRA_TITLE));
-                }));
+                });
 
         final int shareId = R.id.tab_list_editor_share_menu_item;
         mRobot.actionRobot.clickToolbarActionView(shareId);
@@ -1102,7 +1161,7 @@ public class SelectableTabListEditorTest {
     @MediumTest
     public void testToolbarMenuItem_BookmarkActionGroupsOnly() {
         prepareBlankTabGroup(2, false);
-        List<Tab> tabs = getTabsInCurrentTabModelFilter();
+        List<Tab> tabs = getTabsInCurrentTabGroupModelFilter();
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -1158,7 +1217,7 @@ public class SelectableTabListEditorTest {
         urls.add(sActivityTestRule.getTestServer().getURL(PAGE_WITH_NO_CANONICAL_URL));
 
         prepareTabGroupWithUrls(urls, false);
-        List<Tab> tabs = getTabsInCurrentTabModelFilter();
+        List<Tab> tabs = getTabsInCurrentTabGroupModelFilter();
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -1206,7 +1265,7 @@ public class SelectableTabListEditorTest {
 
     @Test
     @MediumTest
-    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    @Restriction({DeviceFormFactor.PHONE})
     public void testSelectionAction_IndividualTabSelection() {
         prepareBlankTab(2, false);
         List<Tab> tabs = getTabsInCurrentTabModel();
@@ -1251,7 +1310,7 @@ public class SelectableTabListEditorTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @Restriction({DeviceFormFactor.PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     public void testGridViewAppearance() throws IOException {
         prepareBlankTabWithThumbnail(3, false);
         List<Tab> tabs = getTabsInCurrentTabModel();
@@ -1290,7 +1349,7 @@ public class SelectableTabListEditorTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @Restriction({DeviceFormFactor.PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     public void testGridViewAppearance_oneSelectedTab() throws IOException {
         prepareBlankTabWithThumbnail(3, false);
         List<Tab> tabs = getTabsInCurrentTabModel();
@@ -1331,7 +1390,7 @@ public class SelectableTabListEditorTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @Restriction({DeviceFormFactor.PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     public void testSelectionAction_Toggle() throws IOException {
         prepareBlankTabWithThumbnail(3, false);
         List<Tab> tabs = getTabsInCurrentTabModel();
@@ -1393,7 +1452,7 @@ public class SelectableTabListEditorTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_LOW_END_DEVICE})
+    @Restriction({DeviceFormFactor.PHONE, RESTRICTION_TYPE_LOW_END_DEVICE})
     public void testListViewAppearance() throws IOException {
         prepareBlankTab(2, false);
         List<Tab> tabs = getTabsInCurrentTabModel();
@@ -1421,7 +1480,7 @@ public class SelectableTabListEditorTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_LOW_END_DEVICE})
+    @Restriction({DeviceFormFactor.PHONE, RESTRICTION_TYPE_LOW_END_DEVICE})
     public void testListViewV2Shows() {
         prepareBlankTab(2, false);
         List<Tab> tabs = getTabsInCurrentTabModel();
@@ -1434,7 +1493,7 @@ public class SelectableTabListEditorTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_LOW_END_DEVICE})
+    @Restriction({DeviceFormFactor.PHONE, RESTRICTION_TYPE_LOW_END_DEVICE})
     public void testListViewAppearance_oneSelectedTab() throws IOException {
         prepareBlankTab(2, false);
         List<Tab> tabs = getTabsInCurrentTabModel();
@@ -1463,7 +1522,7 @@ public class SelectableTabListEditorTest {
 
     @Test
     @MediumTest
-    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_LOW_END_DEVICE})
+    @Restriction({DeviceFormFactor.PHONE, RESTRICTION_TYPE_LOW_END_DEVICE})
     public void testListView_select() {
         prepareBlankTab(2, false);
         List<Tab> tabs = getTabsInCurrentTabModel();
@@ -1529,7 +1588,57 @@ public class SelectableTabListEditorTest {
 
     @Test
     @MediumTest
-    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    @Features.EnableFeatures({
+        ChromeFeatureList.EDGE_TO_EDGE_BOTTOM_CHIN,
+        ChromeFeatureList.DRAW_KEY_NATIVE_EDGE_TO_EDGE
+    })
+    public void testEdgeToEdgePadAdjuster() {
+        prepareBlankTab(2, false);
+        List<Tab> tabs = getTabsInCurrentTabModel();
+        showSelectionEditor(tabs, null);
+
+        TabListRecyclerView tabListRecyclerView =
+                mTabListEditorCoordinator.getTabListRecyclerViewForTesting();
+        int originalPaddingBottom = tabListRecyclerView.getPaddingBottom();
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mEdgeToEdgeSupplier.set(mEdgeToEdgeController);
+                });
+
+        EdgeToEdgePadAdjuster padAdjuster =
+                mTabListEditorCoordinator.getEdgeToEdgePadAdjusterForTesting();
+        assertNotNull("Pad adjuster should be created when feature enabled.", padAdjuster);
+        verify(mEdgeToEdgeController).registerAdjuster(eq(padAdjuster));
+
+        int bottomEdgeToEdgePadding = 60;
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    padAdjuster.overrideBottomInset(bottomEdgeToEdgePadding);
+                });
+        CriteriaHelper.pollUiThread(
+                () ->
+                        Criteria.checkThat(
+                                "The tab list recycler view was not padded to account for"
+                                        + " edge-to-edge.",
+                                tabListRecyclerView.getPaddingBottom(),
+                                Matchers.equalTo(originalPaddingBottom + bottomEdgeToEdgePadding)));
+
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    padAdjuster.overrideBottomInset(0);
+                });
+        CriteriaHelper.pollUiThread(
+                () ->
+                        Criteria.checkThat(
+                                "The additional edge-to-edge padding to the tab list recycler view"
+                                        + " was not properly cleared.",
+                                tabListRecyclerView.getPaddingBottom(),
+                                Matchers.equalTo(originalPaddingBottom)));
+    }
+
+    @Test
+    @MediumTest
+    @Restriction({DeviceFormFactor.PHONE})
     public void testToolbarMenuItem_SelectAllMenu() {
         prepareBlankTab(2, false);
         List<Tab> tabs = getTabsInCurrentTabModel();
@@ -1570,7 +1679,7 @@ public class SelectableTabListEditorTest {
 
     @Test
     @MediumTest
-    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    @Restriction({DeviceFormFactor.PHONE})
     public void testToolbarActionViewAndMenuItemContentDescription() {
         prepareBlankTab(2, false);
         List<Tab> tabs = getTabsInCurrentTabModel();
@@ -1773,12 +1882,11 @@ public class SelectableTabListEditorTest {
      * Retrieves all non-grouped tabs and the last focused tab in each tab group from the current
      * tab model
      */
-    private List<Tab> getTabsInCurrentTabModelFilter() {
+    private List<Tab> getTabsInCurrentTabGroupModelFilter() {
         List<Tab> tabs = new ArrayList<>();
 
         TabGroupModelFilter filter =
-                (TabGroupModelFilter)
-                        mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter();
+                mTabModelSelector.getTabGroupModelFilterProvider().getCurrentTabGroupModelFilter();
         for (int i = 0; i < filter.getCount(); i++) {
             tabs.add(filter.getTabAt(i));
         }

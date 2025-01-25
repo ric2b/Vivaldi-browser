@@ -5,3 +5,6 @@
   [[nodiscard]] std::vector<TitledUrlMatch> GetNicknameMatching(
       const std::u16string& query,
       size_t max_count_hint) const;
+
+  void RemoveNodeFromSearchIndexRecursive(BookmarkNode* node);
+  void AddNodeToSearchIndexRecursive(const BookmarkNode* node);

@@ -294,6 +294,7 @@ void av1_alloc_cdef_buffers(AV1_COMMON *const cm,
                       cdef_info->allocated_mi_rows);
 }
 
+#if !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 // Allocate buffers which are independent of restoration_unit_size
 void av1_alloc_restoration_buffers(AV1_COMMON *cm, bool is_sgr_enabled) {
   const int num_planes = av1_num_planes(cm);
@@ -364,6 +365,7 @@ void av1_free_restoration_buffers(AV1_COMMON *cm) {
 
   aom_free_frame_buffer(&cm->rst_frame);
 }
+#endif  // !CONFIG_REALTIME_ONLY || CONFIG_AV1_DECODER
 
 void av1_free_above_context_buffers(CommonContexts *above_contexts) {
   int i;

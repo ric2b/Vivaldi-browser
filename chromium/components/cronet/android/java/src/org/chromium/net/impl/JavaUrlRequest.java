@@ -566,12 +566,12 @@ final class JavaUrlRequest extends ExperimentalUrlRequest {
                                         inputStream == null
                                                 ? null
                                                 : InputStreamChannel.wrap(inputStream);
-                                mCallbackAsync.onResponseStarted(mUrlResponseInfo);
+                                mCallbackAsync.onResponseStarted();
                             } else {
                                 mResponseChannel =
                                         InputStreamChannel.wrap(
                                                 mCurrentUrlConnection.getInputStream());
-                                mCallbackAsync.onResponseStarted(mUrlResponseInfo);
+                                mCallbackAsync.onResponseStarted();
                             }
                         }));
     }
@@ -621,8 +621,7 @@ final class JavaUrlRequest extends ExperimentalUrlRequest {
                                 mCurrentUrlConnection = null;
                             }
 
-                            if (mNetworkHandle == CronetEngineBase.DEFAULT_NETWORK_HANDLE
-                                    || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+                            if (mNetworkHandle == CronetEngineBase.DEFAULT_NETWORK_HANDLE) {
                                 mCurrentUrlConnection = (HttpURLConnection) url.openConnection();
                             } else {
                                 Network network = getNetworkFromHandle(mNetworkHandle);
@@ -896,7 +895,7 @@ final class JavaUrlRequest extends ExperimentalUrlRequest {
                     });
         }
 
-        void onResponseStarted(UrlResponseInfo info) {
+        void onResponseStarted() {
             execute(
                     () -> {
                         if (mState.compareAndSet(

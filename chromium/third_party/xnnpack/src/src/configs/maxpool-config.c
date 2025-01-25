@@ -6,14 +6,9 @@
 #include <assert.h>
 #include <stddef.h>
 
-#ifdef _WIN32
-  #include <windows.h>
-#else
-  #include <pthread.h>
-#endif
-
 #include "xnnpack/common.h"
 #include "xnnpack/config.h"
+#include "xnnpack/init-once.h"
 #include "xnnpack/maxpool.h"
 #include "xnnpack/microfnptr.h"
 #include "xnnpack/microparams-init.h"
@@ -23,17 +18,10 @@ static struct xnn_maxpool_config f32_maxpool_config = {0};
 static struct xnn_maxpool_config s8_maxpool_config = {0};
 static struct xnn_maxpool_config u8_maxpool_config = {0};
 
-#if XNN_PLATFORM_WINDOWS
-  static INIT_ONCE init_guard_f16_maxpool = INIT_ONCE_STATIC_INIT;
-  static INIT_ONCE init_guard_f32_maxpool = INIT_ONCE_STATIC_INIT;
-  static INIT_ONCE init_guard_s8_maxpool = INIT_ONCE_STATIC_INIT;
-  static INIT_ONCE init_guard_u8_maxpool = INIT_ONCE_STATIC_INIT;
-#else
-  static pthread_once_t init_guard_f16_maxpool = PTHREAD_ONCE_INIT;
-  static pthread_once_t init_guard_f32_maxpool = PTHREAD_ONCE_INIT;
-  static pthread_once_t init_guard_s8_maxpool = PTHREAD_ONCE_INIT;
-  static pthread_once_t init_guard_u8_maxpool = PTHREAD_ONCE_INIT;
-#endif
+XNN_INIT_ONCE_GUARD(f16_maxpool);
+XNN_INIT_ONCE_GUARD(f32_maxpool);
+XNN_INIT_ONCE_GUARD(s8_maxpool);
+XNN_INIT_ONCE_GUARD(u8_maxpool);
 
 static void init_f16_maxpool_config(void) {
   #if XNN_ARCH_ARM && XNN_ENABLE_ARM_FP16_VECTOR && XNN_ENABLE_ARM_FP16_SCALAR
@@ -41,7 +29,7 @@ static void init_f16_maxpool_config(void) {
     assert(hardware_config != NULL);
     if (hardware_config->use_arm_neon_fp16_arith) {
       f16_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_f16_maxpool_minmax_ukernel_9p8x__neonfp16arith_c8;
-      f16_maxpool_config.init.f16 = xnn_init_f16_minmax_fp16arith_params;
+      f16_maxpool_config.init.f16 = xnn_init_f16_minmax_scalar_params;
       f16_maxpool_config.first_pass_tile_size = 9;
       f16_maxpool_config.remainder_pass_tile_size = 8;
     }
@@ -50,7 +38,7 @@ static void init_f16_maxpool_config(void) {
     assert(hardware_config != NULL);
     if (hardware_config->use_arm_neon_fp16_arith) {
       f16_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_f16_maxpool_minmax_ukernel_9p8x__neonfp16arith_c8;
-      f16_maxpool_config.init.f16 = xnn_init_f16_minmax_fp16arith_params;
+      f16_maxpool_config.init.f16 = xnn_init_f16_minmax_scalar_params;
       f16_maxpool_config.first_pass_tile_size = 9;
       f16_maxpool_config.remainder_pass_tile_size = 8;
     }
@@ -59,7 +47,7 @@ static void init_f16_maxpool_config(void) {
     assert(hardware_config != NULL);
     if (hardware_config->use_x86_f16c) {
       f16_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_f16_maxpool_minmax_ukernel_9p8x__f16c_c8;
-      f16_maxpool_config.init.f16 = xnn_init_f16_minmax_avx_params;
+      f16_maxpool_config.init.f16 = xnn_init_f16_minmax_scalar_params;
       f16_maxpool_config.first_pass_tile_size = 9;
       f16_maxpool_config.remainder_pass_tile_size = 8;
     }
@@ -88,7 +76,7 @@ static void init_f32_maxpool_config(void) {
     f32_maxpool_config.remainder_pass_tile_size = 8;
   #elif XNN_ARCH_X86 || XNN_ARCH_X86_64
     f32_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_f32_maxpool_minmax_ukernel_9p8x__sse_c4;
-    f32_maxpool_config.init.f32 = xnn_init_f32_minmax_sse_params;
+    f32_maxpool_config.init.f32 = xnn_init_f32_minmax_scalar_params;
     f32_maxpool_config.first_pass_tile_size = 9;
     f32_maxpool_config.remainder_pass_tile_size = 8;
   #elif XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
@@ -96,12 +84,12 @@ static void init_f32_maxpool_config(void) {
     assert(hardware_config != NULL);
     if (hardware_config->is_x86) {
       f32_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_f32_maxpool_minmax_ukernel_9p8x__wasmsimd_x86_c4;
-      f32_maxpool_config.init.f32 = xnn_init_f32_minmax_wasmsimd_params;
+      f32_maxpool_config.init.f32 = xnn_init_f32_minmax_scalar_params;
       f32_maxpool_config.first_pass_tile_size = 9;
       f32_maxpool_config.remainder_pass_tile_size = 8;
     } else {
       f32_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_f32_maxpool_minmax_ukernel_9p8x__wasmsimd_arm_c4;
-      f32_maxpool_config.init.f32 = xnn_init_f32_minmax_wasmsimd_params;
+      f32_maxpool_config.init.f32 = xnn_init_f32_minmax_scalar_params;
       f32_maxpool_config.first_pass_tile_size = 9;
       f32_maxpool_config.remainder_pass_tile_size = 8;
     }
@@ -129,7 +117,7 @@ static void init_s8_maxpool_config(void) {
     assert(hardware_config != NULL);
     if (hardware_config->use_arm_neon) {
       s8_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_s8_maxpool_minmax_ukernel_9p8x__neon_c16;
-      s8_maxpool_config.init.s8 = xnn_init_s8_minmax_neon_params;
+      s8_maxpool_config.init.s8 = xnn_init_s8_minmax_scalar_params;
       s8_maxpool_config.first_pass_tile_size = 9;
       s8_maxpool_config.remainder_pass_tile_size = 8;
     } else if (!XNN_PLATFORM_MOBILE) {
@@ -140,7 +128,7 @@ static void init_s8_maxpool_config(void) {
     }
   #elif XNN_ARCH_ARM64
     s8_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_s8_maxpool_minmax_ukernel_9p8x__neon_c16;
-    s8_maxpool_config.init.s8 = xnn_init_s8_minmax_neon_params;
+    s8_maxpool_config.init.s8 = xnn_init_s8_minmax_scalar_params;
     s8_maxpool_config.first_pass_tile_size = 9;
     s8_maxpool_config.remainder_pass_tile_size = 8;
   #elif XNN_ARCH_X86 || XNN_ARCH_X86_64
@@ -148,18 +136,18 @@ static void init_s8_maxpool_config(void) {
     assert(hardware_config != NULL);
     if (hardware_config->use_x86_sse4_1) {
       s8_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_s8_maxpool_minmax_ukernel_9p8x__sse41_c16;
-      s8_maxpool_config.init.s8 = xnn_init_s8_minmax_sse4_params;
+      s8_maxpool_config.init.s8 = xnn_init_s8_minmax_scalar_params;
       s8_maxpool_config.first_pass_tile_size = 9;
       s8_maxpool_config.remainder_pass_tile_size = 8;
     } else {
       s8_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_s8_maxpool_minmax_ukernel_9p8x__sse2_c16;
-      s8_maxpool_config.init.s8 = xnn_init_s8_minmax_sse2_params;
+      s8_maxpool_config.init.s8 = xnn_init_s8_minmax_scalar_params;
       s8_maxpool_config.first_pass_tile_size = 9;
       s8_maxpool_config.remainder_pass_tile_size = 8;
     }
   #elif XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
     s8_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_s8_maxpool_minmax_ukernel_9p8x__wasmsimd_c16;
-    s8_maxpool_config.init.s8 = xnn_init_s8_minmax_wasmsimd_params;
+    s8_maxpool_config.init.s8 = xnn_init_s8_minmax_scalar_params;
     s8_maxpool_config.first_pass_tile_size = 9;
     s8_maxpool_config.remainder_pass_tile_size = 8;
   #else
@@ -176,7 +164,7 @@ static void init_u8_maxpool_config(void) {
     assert(hardware_config != NULL);
     if (hardware_config->use_arm_neon) {
       u8_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_u8_maxpool_minmax_ukernel_9p8x__neon_c16;
-      u8_maxpool_config.init.u8 = xnn_init_u8_minmax_neon_params;
+      u8_maxpool_config.init.u8 = xnn_init_u8_minmax_scalar_params;
       u8_maxpool_config.first_pass_tile_size = 9;
       u8_maxpool_config.remainder_pass_tile_size = 8;
     } else if (!XNN_PLATFORM_MOBILE) {
@@ -187,17 +175,17 @@ static void init_u8_maxpool_config(void) {
     }
   #elif XNN_ARCH_ARM64
     u8_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_u8_maxpool_minmax_ukernel_9p8x__neon_c16;
-    u8_maxpool_config.init.u8 = xnn_init_u8_minmax_neon_params;
+    u8_maxpool_config.init.u8 = xnn_init_u8_minmax_scalar_params;
     u8_maxpool_config.first_pass_tile_size = 9;
     u8_maxpool_config.remainder_pass_tile_size = 8;
   #elif XNN_ARCH_X86 || XNN_ARCH_X86_64
     u8_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_u8_maxpool_minmax_ukernel_9p8x__sse2_c16;
-    u8_maxpool_config.init.u8 = xnn_init_u8_minmax_sse2_params;
+    u8_maxpool_config.init.u8 = xnn_init_u8_minmax_scalar_params;
     u8_maxpool_config.first_pass_tile_size = 9;
     u8_maxpool_config.remainder_pass_tile_size = 8;
   #elif XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
     u8_maxpool_config.ukernel = (xnn_maxpool_ukernel_fn) xnn_u8_maxpool_minmax_ukernel_9p8x__wasmsimd_c16;
-    u8_maxpool_config.init.u8 = xnn_init_u8_minmax_wasmsimd_params;
+    u8_maxpool_config.init.u8 = xnn_init_u8_minmax_scalar_params;
     u8_maxpool_config.first_pass_tile_size = 9;
     u8_maxpool_config.remainder_pass_tile_size = 8;
   #else
@@ -208,38 +196,12 @@ static void init_u8_maxpool_config(void) {
   #endif
 }
 
-#if XNN_PLATFORM_WINDOWS
-  static BOOL CALLBACK init_f16_maxpool_config_windows(PINIT_ONCE init_once, PVOID parameter, PVOID* context) {
-    init_f16_maxpool_config();
-    return TRUE;
-  }
-
-  static BOOL CALLBACK init_f32_maxpool_config_windows(PINIT_ONCE init_once, PVOID parameter, PVOID* context) {
-    init_f32_maxpool_config();
-    return TRUE;
-  }
-
-  static BOOL CALLBACK init_s8_maxpool_config_windows(PINIT_ONCE init_once, PVOID parameter, PVOID* context) {
-    init_s8_maxpool_config();
-    return TRUE;
-  }
-
-  static BOOL CALLBACK init_u8_maxpool_config_windows(PINIT_ONCE init_once, PVOID parameter, PVOID* context) {
-    init_u8_maxpool_config();
-    return TRUE;
-  }
-#endif
-
 const struct xnn_maxpool_config* xnn_init_f16_maxpool_config() {
   const struct xnn_hardware_config* hardware_config = xnn_init_hardware_config();
   if (hardware_config == NULL || !xnn_is_f16_compatible_config(hardware_config)) {
     return NULL;
   }
-  #if XNN_PLATFORM_WINDOWS
-    InitOnceExecuteOnce(&init_guard_f16_maxpool, &init_f16_maxpool_config_windows, NULL, NULL);
-  #else
-    pthread_once(&init_guard_f16_maxpool, &init_f16_maxpool_config);
-  #endif
+  XNN_INIT_ONCE(f16_maxpool);
   return &f16_maxpool_config;
 }
 
@@ -248,11 +210,7 @@ const struct xnn_maxpool_config* xnn_init_f32_maxpool_config() {
   if (hardware_config == NULL) {
     return NULL;
   }
-  #if XNN_PLATFORM_WINDOWS
-    InitOnceExecuteOnce(&init_guard_f32_maxpool, &init_f32_maxpool_config_windows, NULL, NULL);
-  #else
-    pthread_once(&init_guard_f32_maxpool, &init_f32_maxpool_config);
-  #endif
+  XNN_INIT_ONCE(f32_maxpool);
   return &f32_maxpool_config;
 }
 
@@ -261,11 +219,7 @@ const struct xnn_maxpool_config* xnn_init_s8_maxpool_config() {
   if (hardware_config == NULL) {
     return NULL;
   }
-  #if XNN_PLATFORM_WINDOWS
-    InitOnceExecuteOnce(&init_guard_s8_maxpool, &init_s8_maxpool_config_windows, NULL, NULL);
-  #else
-    pthread_once(&init_guard_s8_maxpool, &init_s8_maxpool_config);
-  #endif
+  XNN_INIT_ONCE(s8_maxpool);
   return &s8_maxpool_config;
 }
 
@@ -274,10 +228,6 @@ const struct xnn_maxpool_config* xnn_init_u8_maxpool_config() {
   if (hardware_config == NULL) {
     return NULL;
   }
-  #if XNN_PLATFORM_WINDOWS
-    InitOnceExecuteOnce(&init_guard_u8_maxpool, &init_u8_maxpool_config_windows, NULL, NULL);
-  #else
-    pthread_once(&init_guard_u8_maxpool, &init_u8_maxpool_config);
-  #endif
+  XNN_INIT_ONCE(u8_maxpool);
   return &u8_maxpool_config;
 }

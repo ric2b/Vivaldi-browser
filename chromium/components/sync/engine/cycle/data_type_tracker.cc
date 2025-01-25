@@ -110,8 +110,7 @@ base::TimeDelta GetDefaultLocalChangeNudgeDelay(DataType data_type) {
     case PLUS_ADDRESS_SETTING:
       return kMediumLocalChangeNudgeDelay;
     case UNSPECIFIED:
-      NOTREACHED_IN_MIGRATION();
-      return base::TimeDelta();
+      NOTREACHED();
   }
 }
 
@@ -180,8 +179,7 @@ bool CanGetCommitsFromExtensions(DataType data_type) {
     case NOTES: // Vivaldi
       return false;
     case UNSPECIFIED:
-      NOTREACHED_IN_MIGRATION();
-      return false;
+      NOTREACHED();
   }
 }
 
@@ -229,10 +227,6 @@ void DataTypeTracker::RecordSuccessfulCommitMessage() {
     if (!quota_->HasTokensAvailable()) {
       base::UmaHistogramEnumeration(
           "Sync.DataTypeCommitMessageHasDepletedQuota",
-          DataTypeHistogramValue(type_));
-      // Legacy equivalent, before the metric was renamed.
-      base::UmaHistogramEnumeration(
-          "Sync.ModelTypeCommitMessageHasDepletedQuota",
           DataTypeHistogramValue(type_));
     }
   }
@@ -334,8 +328,7 @@ base::TimeDelta DataTypeTracker::GetTimeUntilUnblock() const {
 base::TimeDelta DataTypeTracker::GetLastBackoffInterval() const {
   if (GetBlockingMode() !=
       WaitInterval::BlockingMode::kExponentialBackoffRetrying) {
-    NOTREACHED_IN_MIGRATION();
-    return base::Seconds(0);
+    NOTREACHED();
   }
   return wait_interval_->length;
 }
@@ -386,9 +379,6 @@ base::TimeDelta DataTypeTracker::GetLocalChangeNudgeDelay(
     bool is_single_client) const {
   if (quota_ && !quota_->HasTokensAvailable()) {
     base::UmaHistogramEnumeration("Sync.DataTypeCommitWithDepletedQuota",
-                                  DataTypeHistogramValue(type_));
-    // Legacy equivalent, before the metric was renamed.
-    base::UmaHistogramEnumeration("Sync.ModelTypeCommitWithDepletedQuota",
                                   DataTypeHistogramValue(type_));
     return depleted_quota_nudge_delay_;
   }

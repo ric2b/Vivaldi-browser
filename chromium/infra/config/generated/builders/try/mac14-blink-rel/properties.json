@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "try",
               "builder": "mac14-blink-rel",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "builder_group": "tryserver.blink",
@@ -35,10 +35,11 @@
         {
           "bucket": "try",
           "builder": "mac14-blink-rel",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
       ],
-      "retry_failed_shards": false
+      "retry_failed_shards": false,
+      "targets_spec_directory": "src/infra/config/generated/builders/try/mac14-blink-rel/targets"
     }
   },
   "$build/reclient": {

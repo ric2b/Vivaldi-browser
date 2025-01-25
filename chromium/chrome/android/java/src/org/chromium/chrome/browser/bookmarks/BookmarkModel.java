@@ -237,7 +237,6 @@ public class BookmarkModel extends BookmarkBridge {
     /**
      * Vivaldi specific delete to handle moving items to trash instead of deleting immediately
      * NOTE: This version does not handle undo
-     * @param bookmarks
      */
     public void deleteBookmarksPublic(BookmarkId... bookmarks) {
         assert bookmarks != null && bookmarks.length > 0;

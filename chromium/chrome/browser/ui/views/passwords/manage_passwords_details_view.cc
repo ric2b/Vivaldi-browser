@@ -99,12 +99,11 @@ std::unique_ptr<views::Label> CreateErrorLabel(std::u16string error_msg) {
       3 * ChromeLayoutProvider::Get()->GetDistanceMetric(
               views::DISTANCE_RELATED_CONTROL_HORIZONTAL) -
       kIconSize;
-  // Use CONTEXT_OMNIBOX_DEEMPHASIZED to make the error message slightly
-  // smaller.
+  // Use `CONTEXT_DEEMPHASIZED` to make the error message slightly smaller.
   return views::Builder<views::Label>()
       .SetText(std::move(error_msg))
       .SetTextStyle(views::style::STYLE_HINT)
-      .SetTextContext(CONTEXT_OMNIBOX_DEEMPHASIZED)
+      .SetTextContext(CONTEXT_DEEMPHASIZED)
       .SetEnabledColorId(ui::kColorAlertHighSeverity)
       .SetHorizontalAlignment(gfx::ALIGN_LEFT)
       .SetVisible(false)
@@ -190,9 +189,12 @@ std::unique_ptr<views::FlexLayoutView> CreateDetailsRow(
 
   detail_view->SetProperty(
       views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+      views::FlexSpecification(views::LayoutOrientation::kHorizontal,
+                               views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kUnbounded)
           .WithWeight(1));
+  detail_view->SetProperty(views::kCrossAxisAlignmentKey,
+                           views::LayoutAlignment::kStretch);
   row->AddChildView(std::move(detail_view));
   return row;
 }
@@ -396,7 +398,8 @@ std::unique_ptr<views::View> CreateEditUsernameRow(
           DISTANCE_CONTENT_LIST_VERTICAL_SINGLE));
   username_with_error_label_view->SetProperty(
       views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+      views::FlexSpecification(views::LayoutOrientation::kHorizontal,
+                               views::MinimumFlexSizeRule::kPreferred,
                                views::MaximumFlexSizeRule::kUnbounded));
   *textfield = username_with_error_label_view->AddChildView(
       std::make_unique<views::Textfield>());
@@ -440,7 +443,8 @@ std::unique_ptr<views::View> CreateEditNoteRow(
           DISTANCE_CONTENT_LIST_VERTICAL_SINGLE));
   note_with_error_label_view->SetProperty(
       views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+      views::FlexSpecification(views::LayoutOrientation::kHorizontal,
+                               views::MinimumFlexSizeRule::kPreferred,
                                views::MaximumFlexSizeRule::kUnbounded));
 
   *textarea = note_with_error_label_view->AddChildView(
@@ -649,6 +653,7 @@ ManagePasswordsDetailsView::ManagePasswordsDetailsView(
   }
 
   SetProperty(views::kElementIdentifierKey, kTopView);
+  RequestFocus();
 }
 
 ManagePasswordsDetailsView::~ManagePasswordsDetailsView() = default;

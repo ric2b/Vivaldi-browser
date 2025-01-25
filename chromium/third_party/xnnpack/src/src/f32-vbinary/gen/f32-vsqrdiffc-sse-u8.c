@@ -21,7 +21,7 @@ void xnn_f32_vsqrdiffc_ukernel__sse_u8(
     const float* input_a,
     const float* input_b,
     float* output,
-    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -41,7 +41,6 @@ void xnn_f32_vsqrdiffc_ukernel__sse_u8(
 
     vacc0 = _mm_mul_ps(vacc0, vacc0);
     vacc1 = _mm_mul_ps(vacc1, vacc1);
-
 
     _mm_storeu_ps(output, vacc0);
     _mm_storeu_ps(output + 4, vacc1);

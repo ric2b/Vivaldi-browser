@@ -22,11 +22,11 @@ namespace openscreen::cast {
 // audio data or video data or other.
 struct EncodedFrame {
   enum class Dependency : int8_t {
-    // "null" value, used to indicate whether |dependency| has been set.
+    // "null" value, used to indicate whether `dependency` has been set.
     kUnknown,
 
     // Not decodable without the reference frame indicated by
-    // |referenced_frame_id|.
+    // `referenced_frame_id`.
     kDependent,
 
     // Independently decodable.
@@ -63,7 +63,7 @@ struct EncodedFrame {
   EncodedFrame(EncodedFrame&&) noexcept;
   EncodedFrame& operator=(EncodedFrame&&);
 
-  // Copies all members except |data| to |dest|. Does not modify |dest->data|.
+  // Copies all members except `data` to `dest`. Does not modify |dest->data|.
   void CopyMetadataTo(EncodedFrame* dest) const;
 
   // This frame's dependency relationship with respect to other frames.
@@ -75,7 +75,7 @@ struct EncodedFrame {
 
   // The label associated with the frame upon which this frame depends.  If
   // this frame does not require any other frame in order to become decodable
-  // (e.g., key frames), |referenced_frame_id| must equal |frame_id|.
+  // (e.g., key frames), `referenced_frame_id` must equal `frame_id`.
   FrameId referenced_frame_id;
 
   // The stream timestamp, on the timeline of the signal data. For example, RTP
@@ -83,7 +83,7 @@ struct EncodedFrame {
   // samples encoded in all prior frames. A playback system uses this value to
   // detect gaps in the stream, and otherwise stretch the signal to gradually
   // re-align towards playout targets when too much drift has occurred (see
-  // |reference_time|, below).
+  // `reference_time`, below).
   RtpTimeTicks rtp_timestamp;
 
   // The common reference clock timestamp for this frame. Over a sequence of
@@ -94,7 +94,7 @@ struct EncodedFrame {
   // This value originates from a sender, and is the time at which the frame was
   // captured/recorded. In the receiver context, this value is the computed
   // target playout time, which is used for guiding the timing of presentation
-  // (see |rtp_timestamp|, above). It is also meant to be used to synchronize
+  // (see `rtp_timestamp`, above). It is also meant to be used to synchronize
   // the presentation of multiple streams (e.g., audio and video), commonly
   // known as "lip-sync." It is NOT meant to be a mandatory/exact playout time.
   Clock::time_point reference_time;

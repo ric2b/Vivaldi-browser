@@ -107,7 +107,7 @@ enum class RtpPayloadType : uint8_t {
 // Returns the stream type associated with the RTP payload type.
 StreamType ToStreamType(RtpPayloadType type, bool use_android_rtp_hack);
 
-// Setting |use_android_rtp_hack| to true means that we match the legacy Chrome
+// Setting `use_android_rtp_hack` to true means that we match the legacy Chrome
 // sender's behavior of always sending the audio and video hacks for AndroidTV,
 // as some legacy android receivers require these.
 // TODO(issuetracker.google.com/184438154): we need to figure out what receivers
@@ -115,7 +115,7 @@ StreamType ToStreamType(RtpPayloadType type, bool use_android_rtp_hack);
 RtpPayloadType GetPayloadType(AudioCodec codec, bool use_android_rtp_hack);
 RtpPayloadType GetPayloadType(VideoCodec codec, bool use_android_rtp_hack);
 
-// Returns true if the |raw_byte| can be type-casted to a RtpPayloadType, and is
+// Returns true if the `raw_byte` can be type-casted to a RtpPayloadType, and is
 // also not RtpPayloadType::kNull. The caller should mask the byte, to select
 // the lower 7 bits, if applicable.
 bool IsRtpPayloadType(uint8_t raw_byte);
@@ -163,7 +163,7 @@ enum class RtcpPacketType : uint8_t {
   kExtendedReports = 207,
 };
 
-// Returns true if the |raw_byte| can be type-casted to a RtcpPacketType, and is
+// Returns true if the `raw_byte` can be type-casted to a RtcpPacketType, and is
 // also not RtcpPacketType::kNull.
 bool IsRtcpPacketType(uint8_t raw_byte);
 

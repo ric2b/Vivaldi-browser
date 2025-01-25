@@ -35,6 +35,7 @@
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_types.h"
@@ -112,9 +113,7 @@ void SaveCardOfferBubbleViews::Init() {
 
   if (controller() &&
       (controller()->GetBubbleType() == BubbleType::UPLOAD_SAVE ||
-       controller()->GetBubbleType() == BubbleType::UPLOAD_IN_PROGRESS) &&
-      base::FeatureList::IsEnabled(
-          features::kAutofillEnableSaveCardLoadingAndConfirmation)) {
+       controller()->GetBubbleType() == BubbleType::UPLOAD_IN_PROGRESS)) {
     loading_row_ = AddChildView(CreateLoadingRow());
     if (controller()->GetBubbleType() == BubbleType::UPLOAD_IN_PROGRESS) {
       ShowThrobber();
@@ -126,10 +125,7 @@ void SaveCardOfferBubbleViews::Init() {
 
 bool SaveCardOfferBubbleViews::Accept() {
   bool show_throbber =
-      controller() &&
-      controller()->GetBubbleType() == BubbleType::UPLOAD_SAVE &&
-      base::FeatureList::IsEnabled(
-          features::kAutofillEnableSaveCardLoadingAndConfirmation);
+      controller() && controller()->GetBubbleType() == BubbleType::UPLOAD_SAVE;
 
   if (show_throbber) {
     ShowThrobber();
@@ -415,7 +411,7 @@ SaveCardOfferBubbleViews::CreateUploadExplanationView() {
   return upload_explanation_tooltip;
 }
 
-std::unique_ptr<LegalMessageView>
+std::unique_ptr<views::View>
 SaveCardOfferBubbleViews::CreateLegalMessageView() {
   const LegalMessageLines message_lines = controller()->GetLegalMessageLines();
 
@@ -423,13 +419,11 @@ SaveCardOfferBubbleViews::CreateLegalMessageView() {
     return nullptr;
   }
 
-  LegalMessageView::LinkClickedCallback LegalMessageCallBack =
-      base::BindRepeating(&SaveCardOfferBubbleViews::LinkClicked,
-                          base::Unretained(this));
-
-  return std::make_unique<LegalMessageView>(
+  return ::autofill::CreateLegalMessageView(
       message_lines, base::UTF8ToUTF16(controller()->GetAccountInfo().email),
-      GetProfileAvatar(controller()->GetAccountInfo()), LegalMessageCallBack);
+      GetProfileAvatar(controller()->GetAccountInfo()),
+      base::BindRepeating(&SaveCardOfferBubbleViews::LinkClicked,
+                          base::Unretained(this)));
 }
 
 std::unique_ptr<views::View> SaveCardOfferBubbleViews::CreateLoadingRow() {
@@ -472,5 +466,8 @@ void SaveCardOfferBubbleViews::ShowThrobber() {
 
   DialogModelChanged();
 }
+
+BEGIN_METADATA(SaveCardOfferBubbleViews)
+END_METADATA
 
 }  // namespace autofill

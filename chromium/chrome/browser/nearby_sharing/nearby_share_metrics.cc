@@ -130,7 +130,8 @@ enum class UpgradedMedium {
   kNoUpgrade = 10,
   kBleL2Cap = 11,
   kUsb = 12,
-  kMaxValue = kUsb
+  kWebRtcNonCellular = 13,
+  kMaxValue = kWebRtcNonCellular
 };
 
 AttachmentType FileMetadataTypeToAttachmentType(
@@ -217,8 +218,7 @@ TransferFinalStatus TransferMetadataStatusToTransferFinalStatus(
     case TransferMetadata::Status::kInProgress:
     case TransferMetadata::Status::kMediaDownloading:
     case TransferMetadata::Status::kExternalProviderLaunched:
-      NOTREACHED_IN_MIGRATION();
-      return TransferFinalStatus::kUnknown;
+      NOTREACHED();
   }
 }
 
@@ -241,8 +241,7 @@ NearbyConnectionsStatusToStartAdvertisingFailureReason(
     case nearby::connections::mojom::Status::kWifiLanError:
       return StartAdvertisingFailureReason::kWifiLanError;
     case nearby::connections::mojom::Status::kSuccess:
-      NOTREACHED_IN_MIGRATION();
-      [[fallthrough]];
+      NOTREACHED();
     case nearby::connections::mojom::Status::kAlreadyDiscovering:
     case nearby::connections::mojom::Status::kEndpointIOError:
     case nearby::connections::mojom::Status::kEndpointUnknown:
@@ -269,8 +268,7 @@ FinalStatus PayloadStatusToFinalStatus(
     case nearby::connections::mojom::PayloadStatus::kCanceled:
       return FinalStatus::kCanceled;
     case nearby::connections::mojom::PayloadStatus::kInProgress:
-      NOTREACHED_IN_MIGRATION();
-      return FinalStatus::kFailure;
+      NOTREACHED();
   }
 }
 
@@ -308,8 +306,7 @@ std::string GetPayloadStatusSubcategoryName(
     case nearby::connections::mojom::PayloadStatus::kCanceled:
       return ".Cancelled";
     case nearby::connections::mojom::PayloadStatus::kInProgress:
-      NOTREACHED_IN_MIGRATION();
-      return ".Failed";
+      NOTREACHED();
   }
 }
 
@@ -324,6 +321,8 @@ std::string GetUpgradedMediumSubcategoryName(
       return ".WebRtcUpgrade";
     case nearby::connections::mojom::Medium::kWifiLan:
       return ".WifiLanUpgrade";
+    case nearby::connections::mojom::Medium::kWifiDirect:
+      return ".WifiDirectUpgrade";
     case nearby::connections::mojom::Medium::kUnknown:
     case nearby::connections::mojom::Medium::kMdns:
     case nearby::connections::mojom::Medium::kBluetooth:
@@ -331,9 +330,9 @@ std::string GetUpgradedMediumSubcategoryName(
     case nearby::connections::mojom::Medium::kBle:
     case nearby::connections::mojom::Medium::kWifiAware:
     case nearby::connections::mojom::Medium::kNfc:
-    case nearby::connections::mojom::Medium::kWifiDirect:
     case nearby::connections::mojom::Medium::kBleL2Cap:
     case nearby::connections::mojom::Medium::kUsb:
+    case nearby::connections::mojom::Medium::kWebRtcNonCellular:
       return ".UnknownMediumUpgrade";
   }
 }
@@ -369,6 +368,8 @@ UpgradedMedium GetUpgradedMediumForMetrics(
       return UpgradedMedium::kBleL2Cap;
     case nearby::connections::mojom::Medium::kUsb:
       return UpgradedMedium::kUsb;
+    case nearby::connections::mojom::Medium::kWebRtcNonCellular:
+      return UpgradedMedium::kWebRtcNonCellular;
   }
 }
 
@@ -449,6 +450,7 @@ bool IsTransferMedium(nearby::connections::mojom::Medium medium) {
     case nearby::connections::mojom::Medium::kNfc:
     case nearby::connections::mojom::Medium::kBleL2Cap:
     case nearby::connections::mojom::Medium::kUsb:
+    case nearby::connections::mojom::Medium::kWebRtcNonCellular:
       return false;
   }
 }
@@ -481,6 +483,8 @@ std::string GetMediumName(nearby::connections::mojom::Medium medium) {
       return "BleL2Cap";
     case nearby::connections::mojom::Medium::kUsb:
       return "Usb";
+    case nearby::connections::mojom::Medium::kWebRtcNonCellular:
+      return "WebRtcNonCellular";
   }
 }
 

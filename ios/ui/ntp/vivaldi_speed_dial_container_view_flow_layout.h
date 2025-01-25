@@ -15,6 +15,11 @@
 @property (assign, nonatomic) VivaldiStartPageLayoutStyle layoutStyle;
 @property (assign, nonatomic) VivaldiStartPageLayoutColumn numberOfColumns;
 @property (assign, nonatomic) VivaldiStartPageLayoutState layoutState;
+
+// Boolean to keep track when to show tablet layout for the items. Item size
+// for tablet layout differs from the one from Phone layout.
+// Tablet layout is visible when iPad is on full screen or 2/3 on SplitView.
+@property (assign, nonatomic) BOOL shouldShowTabletLayout;
 // When only one group is visible on start page, either top sites or a single
 // SD folder/group. We remove top inset for the collection view in that case.
 @property (assign, nonatomic) BOOL topToolbarHidden;

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '../strings.m.js';
+import '/strings.m.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_tooltip/cr_tooltip.js';
 
@@ -52,6 +52,7 @@ export class DescriptionCitationElement extends CrLitElement {
   protected openCitation_() {
     this.$.tooltip.hide();
     OpenWindowProxyImpl.getInstance().openUrl(this.url);
+    chrome.metricsPrivate.recordUserAction('Commerce.Compare.CitationClicked');
   }
 
   protected getAriaLabel_(): string {

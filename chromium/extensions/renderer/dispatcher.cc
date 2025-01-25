@@ -928,6 +928,7 @@ void Dispatcher::OnEventDispatcherRequest(
     mojo::PendingAssociatedReceiver<mojom::EventDispatcher> dispatcher) {
   CHECK(!dispatcher_.is_bound());
   dispatcher_.Bind(std::move(dispatcher));
+  dispatcher_.reset_on_disconnect();
 }
 
 void Dispatcher::ActivateExtension(const ExtensionId& extension_id) {
@@ -980,11 +981,9 @@ void Dispatcher::LoadExtensions(
     scoped_refptr<const Extension> extension =
         ConvertToExtension(std::move(param), kRendererProfileId, &error);
     if (!extension.get()) {
-      NOTREACHED_IN_MIGRATION() << error;
       // Note: in tests |param.id| has been observed to be empty (see comment
       // just below) so this isn't all that reliable.
-      extension_load_errors_[id] = error;
-      continue;
+      NOTREACHED() << error;
     }
 
     RendererExtensionRegistry* extension_registry =
@@ -1473,7 +1472,9 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
     module_system->Require("webViewDeny");
   }
 
-  if (requires_guest_view_module) {
+  // NOTE(andre@vivaldi.com) : |web_frame| check added for VB-107612.
+  if (requires_guest_view_module && context->web_frame() &&
+      context->web_frame()->View()) {
     // If a frame has guest view custom elements defined, we need to make sure
     // the custom elements are also defined in subframes. The subframes will
     // need a scripting context which we will need to forcefully create if

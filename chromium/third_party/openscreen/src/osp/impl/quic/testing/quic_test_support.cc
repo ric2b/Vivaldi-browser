@@ -16,6 +16,9 @@
 
 namespace openscreen::osp {
 
+MockServiceObserver::MockServiceObserver() = default;
+MockServiceObserver::~MockServiceObserver() = default;
+
 FakeQuicBridge::FakeQuicBridge(FakeTaskRunner& task_runner,
                                ClockNowFunctionPtr now_function)
     : task_runner_(task_runner) {

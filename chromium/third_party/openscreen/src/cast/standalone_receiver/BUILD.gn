@@ -3,8 +3,8 @@
 # found in the LICENSE file.
 
 import("//build_overrides/build.gni")
-import("//cast/streaming/external_libraries.gni")
 import("../../gni/openscreen.gni")
+import("../streaming/external_libraries.gni")
 
 visibility = [ "./*" ]
 
@@ -13,10 +13,12 @@ visibility = [ "./*" ]
 # application.
 #
 # See [external_libraries.md](../../build/config/external_libraries.md) for more information.
-if (!build_with_chromium) {
-  shared_public = [ "cast_service.h" ]
 
-  shared_sources = [
+openscreen_source_set("cast_receiver_lib") {
+  testonly = true
+  public = [ "cast_service.h" ]
+
+  sources = [
     "cast_service.cc",
     "mirroring_application.cc",
     "mirroring_application.h",
@@ -26,7 +28,7 @@ if (!build_with_chromium) {
     "streaming_playback_controller.h",
   ]
 
-  shared_deps = [
+  deps = [
     "../../discovery:dnssd",
     "../../discovery:public",
     "../../platform:api",
@@ -36,62 +38,44 @@ if (!build_with_chromium) {
     "../streaming:receiver",
   ]
 
-  have_external_libs = have_ffmpeg && have_libsdl2
-
-  if (have_external_libs) {
-    openscreen_source_set("standalone_receiver_sdl") {
-      testonly = true
-      public = shared_public
-      sources = shared_sources
-      deps = shared_deps
-
-      defines = [ "CAST_STANDALONE_RECEIVER_HAVE_EXTERNAL_LIBS" ]
-      sources += [
-        "avcodec_glue.h",
-        "decoder.cc",
-        "decoder.h",
-        "sdl_audio_player.cc",
-        "sdl_audio_player.h",
-        "sdl_glue.cc",
-        "sdl_glue.h",
-        "sdl_player_base.cc",
-        "sdl_player_base.h",
-        "sdl_video_player.cc",
-        "sdl_video_player.h",
-      ]
-      include_dirs = ffmpeg_include_dirs + libsdl2_include_dirs
-      lib_dirs = ffmpeg_lib_dirs + libsdl2_lib_dirs
-      libs = ffmpeg_libs + libsdl2_libs
-    }
-  }
-
-  openscreen_source_set("standalone_receiver_dummy") {
-    testonly = true
-    public = shared_public
-    sources = shared_sources
-    deps = shared_deps
-
+  if (have_ffmpeg && have_libsdl2) {
+    defines = [ "CAST_STANDALONE_RECEIVER_HAVE_EXTERNAL_LIBS" ]
+    sources += [
+      "avcodec_glue.h",
+      "decoder.cc",
+      "decoder.h",
+      "sdl_audio_player.cc",
+      "sdl_audio_player.h",
+      "sdl_glue.cc",
+      "sdl_glue.h",
+      "sdl_player_base.cc",
+      "sdl_player_base.h",
+      "sdl_video_player.cc",
+      "sdl_video_player.h",
+    ]
+    include_dirs = ffmpeg_include_dirs + libsdl2_include_dirs
+    lib_dirs = ffmpeg_lib_dirs + libsdl2_lib_dirs
+    libs = ffmpeg_libs + libsdl2_libs
+  } else {
     sources += [
       "dummy_player.cc",
       "dummy_player.h",
     ]
   }
+}
 
-  openscreen_executable("cast_receiver") {
-    testonly = true
-    visibility += [ "../..:gn_all" ]
-    sources = [ "main.cc" ]
+openscreen_executable("cast_receiver") {
+  testonly = true
+  visibility += [ "../..:gn_all" ]
+  sources = [ "main.cc" ]
 
-    deps = shared_deps + [
-             "../../platform:standalone_impl",
-             "../common:certificate_boringssl",
-           ]
-    configs = [ "../common:certificate_config" ]
-
-    if (have_external_libs) {
-      deps += [ ":standalone_receiver_sdl" ]
-    } else {
-      deps += [ ":standalone_receiver_dummy" ]
-    }
-  }
+  deps = [
+    ":cast_receiver_lib",
+    "../../platform:standalone_impl",
+    "../../third_party/getopt",
+    "../common:certificate_boringssl",
+    "../common/certificate/proto:certificate_proto",
+    "../receiver:channel",
+  ]
+  configs = [ "../common:certificate_config" ]
 }

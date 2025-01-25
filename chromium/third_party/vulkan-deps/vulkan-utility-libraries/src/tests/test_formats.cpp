@@ -259,22 +259,22 @@ TEST(format_utils, vkuFormatIsStencilOnly) {
 TEST(format_utils, vkuFormatDepthSize) {
     for (auto [format, format_str] : magic_enum::enum_entries<VkFormat>()) {
         if (std::string::npos != format_str.find("_D16")) {
-            EXPECT_EQ(vkuFormatDepthSize(format), 16);
+            EXPECT_EQ(vkuFormatDepthSize(format), 16u);
         } else if (std::string::npos != format_str.find("_D24")) {
-            EXPECT_EQ(vkuFormatDepthSize(format), 24);
+            EXPECT_EQ(vkuFormatDepthSize(format), 24u);
         } else if (std::string::npos != format_str.find("_D32")) {
-            EXPECT_EQ(vkuFormatDepthSize(format), 32);
+            EXPECT_EQ(vkuFormatDepthSize(format), 32u);
         } else {
-            EXPECT_EQ(vkuFormatDepthSize(format), 0);
+            EXPECT_EQ(vkuFormatDepthSize(format), 0u);
         }
     }
 }
 TEST(format_utils, vkuFormatStencilSize) {
     for (auto [format, format_str] : magic_enum::enum_entries<VkFormat>()) {
         if (std::string::npos != format_str.find("_S8")) {
-            EXPECT_EQ(vkuFormatStencilSize(format), 8);
+            EXPECT_EQ(vkuFormatStencilSize(format), 8u);
         } else {
-            EXPECT_EQ(vkuFormatStencilSize(format), 0);
+            EXPECT_EQ(vkuFormatStencilSize(format), 0u);
         }
     }
 }
@@ -350,11 +350,11 @@ TEST(format_utils, vkuFormatIsSinglePlane_422) {
 TEST(format_utils, vkuFormatPlaneCount) {
     for (auto [format, format_str] : magic_enum::enum_entries<VkFormat>()) {
         if (std::string::npos != format_str.find("2PLANE")) {
-            EXPECT_EQ(vkuFormatPlaneCount(format), 2);
+            EXPECT_EQ(vkuFormatPlaneCount(format), 2u);
         } else if (std::string::npos != format_str.find("3PLANE")) {
-            EXPECT_EQ(vkuFormatPlaneCount(format), 3);
+            EXPECT_EQ(vkuFormatPlaneCount(format), 3u);
         } else {
-            EXPECT_EQ(vkuFormatPlaneCount(format), 1);
+            EXPECT_EQ(vkuFormatPlaneCount(format), 1u);
         }
     }
 }
@@ -385,31 +385,31 @@ TEST(format_utils, vkuFindMultiplaneCompatibleFormat) {
 TEST(format_utils, vkuFindMultiplaneExtentDivisors) {
     EXPECT_EQ(
         vkuFindMultiplaneExtentDivisors(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16, VK_IMAGE_ASPECT_PLANE_0_BIT).width,
-        1);
+        1u);
     EXPECT_EQ(
         vkuFindMultiplaneExtentDivisors(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16, VK_IMAGE_ASPECT_PLANE_1_BIT).width,
-        2);
+        2u);
     EXPECT_EQ(
         vkuFindMultiplaneExtentDivisors(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16, VK_IMAGE_ASPECT_PLANE_2_BIT).width,
-        2);
+        2u);
 
     EXPECT_EQ(
         vkuFindMultiplaneExtentDivisors(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16, VK_IMAGE_ASPECT_PLANE_0_BIT).height,
-        1);
+        1u);
     EXPECT_EQ(
         vkuFindMultiplaneExtentDivisors(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16, VK_IMAGE_ASPECT_PLANE_1_BIT).height,
-        2);
+        2u);
     EXPECT_EQ(
         vkuFindMultiplaneExtentDivisors(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16, VK_IMAGE_ASPECT_PLANE_2_BIT).height,
-        2);
+        2u);
 
-    EXPECT_EQ(vkuFindMultiplaneExtentDivisors(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, VK_IMAGE_ASPECT_PLANE_0_BIT).width, 1);
-    EXPECT_EQ(vkuFindMultiplaneExtentDivisors(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, VK_IMAGE_ASPECT_PLANE_1_BIT).width, 2);
-    EXPECT_EQ(vkuFindMultiplaneExtentDivisors(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, VK_IMAGE_ASPECT_PLANE_2_BIT).width, 1);
+    EXPECT_EQ(vkuFindMultiplaneExtentDivisors(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, VK_IMAGE_ASPECT_PLANE_0_BIT).width, 1u);
+    EXPECT_EQ(vkuFindMultiplaneExtentDivisors(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, VK_IMAGE_ASPECT_PLANE_1_BIT).width, 2u);
+    EXPECT_EQ(vkuFindMultiplaneExtentDivisors(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, VK_IMAGE_ASPECT_PLANE_2_BIT).width, 1u);
 
-    EXPECT_EQ(vkuFindMultiplaneExtentDivisors(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, VK_IMAGE_ASPECT_PLANE_0_BIT).height, 1);
-    EXPECT_EQ(vkuFindMultiplaneExtentDivisors(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, VK_IMAGE_ASPECT_PLANE_1_BIT).height, 1);
-    EXPECT_EQ(vkuFindMultiplaneExtentDivisors(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, VK_IMAGE_ASPECT_PLANE_2_BIT).height, 1);
+    EXPECT_EQ(vkuFindMultiplaneExtentDivisors(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, VK_IMAGE_ASPECT_PLANE_0_BIT).height, 1u);
+    EXPECT_EQ(vkuFindMultiplaneExtentDivisors(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, VK_IMAGE_ASPECT_PLANE_1_BIT).height, 1u);
+    EXPECT_EQ(vkuFindMultiplaneExtentDivisors(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, VK_IMAGE_ASPECT_PLANE_2_BIT).height, 1u);
 }
 
 TEST(format_utils, vkuFormatComponentCount) {
@@ -430,24 +430,24 @@ TEST(format_utils, vkuFormatTexelBlockExtent) {
     for (auto format : formats) {
         auto extent = vkuFormatTexelBlockExtent(format);
         if (vkuFormatIsCompressed(format)) {
-            EXPECT_GT(extent.width, 1);
-            EXPECT_GT(extent.height, 1);
-            EXPECT_EQ(extent.depth, 1);
+            EXPECT_GT(extent.width, 1u);
+            EXPECT_GT(extent.height, 1u);
+            EXPECT_EQ(extent.depth, 1u);
         } else if (format == VK_FORMAT_UNDEFINED) {
-            EXPECT_EQ(extent.width, 0);
-            EXPECT_EQ(extent.height, 0);
-            EXPECT_EQ(extent.depth, 0);
+            EXPECT_EQ(extent.width, 0u);
+            EXPECT_EQ(extent.height, 0u);
+            EXPECT_EQ(extent.depth, 0u);
             continue;
         } else {
-            EXPECT_EQ(extent.width, 1);
-            EXPECT_EQ(extent.height, 1);
-            EXPECT_EQ(extent.depth, 1);
+            EXPECT_EQ(extent.width, 1u);
+            EXPECT_EQ(extent.height, 1u);
+            EXPECT_EQ(extent.depth, 1u);
         }
     }
     auto extent = vkuFormatTexelBlockExtent(static_cast<VkFormat>(10001));
-    EXPECT_EQ(extent.width, 0);
-    EXPECT_EQ(extent.height, 0);
-    EXPECT_EQ(extent.depth, 0);
+    EXPECT_EQ(extent.width, 0u);
+    EXPECT_EQ(extent.height, 0u);
+    EXPECT_EQ(extent.depth, 0u);
 }
 TEST(format_utils, vkuFormatCompatibilityClass) {
     for (auto [format, format_str] : magic_enum::enum_entries<VkFormat>()) {
@@ -515,30 +515,30 @@ TEST(format_utils, vkuFormatElementIsTexel) {
     }
 }
 TEST(format_utils, vkuFormatElementSizeWithAspect) {
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_R64G64_SFLOAT, VK_IMAGE_ASPECT_NONE), 16);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_R64G64_SFLOAT, VK_IMAGE_ASPECT_STENCIL_BIT), 0);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_R64G64_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT), 0);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_NONE), 16);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_PLANE_0_BIT), 16);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_PLANE_1_BIT), 16);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_PLANE_2_BIT), 16);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_STENCIL_BIT), 0);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_DEPTH_BIT), 0);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_NONE), 0);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_PLANE_0_BIT), 2);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_PLANE_1_BIT), 2);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_PLANE_2_BIT), 2);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_STENCIL_BIT), 0);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_DEPTH_BIT), 0);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_NONE), 4);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_STENCIL_BIT), 0);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT), 4);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT_S8_UINT, VK_IMAGE_ASPECT_NONE), 5);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT_S8_UINT, VK_IMAGE_ASPECT_STENCIL_BIT), 1);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT), 4);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_S8_UINT, VK_IMAGE_ASPECT_NONE), 1);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_S8_UINT, VK_IMAGE_ASPECT_STENCIL_BIT), 1);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT), 0);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_R64G64_SFLOAT, VK_IMAGE_ASPECT_NONE), 16u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_R64G64_SFLOAT, VK_IMAGE_ASPECT_STENCIL_BIT), 0u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_R64G64_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT), 0u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_NONE), 16u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_PLANE_0_BIT), 16u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_PLANE_1_BIT), 16u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_PLANE_2_BIT), 16u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_STENCIL_BIT), 0u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_DEPTH_BIT), 0u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_NONE), 0u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_PLANE_0_BIT), 2u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_PLANE_1_BIT), 2u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_PLANE_2_BIT), 2u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_STENCIL_BIT), 0u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_DEPTH_BIT), 0u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_NONE), 4u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_STENCIL_BIT), 0u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT), 4u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT_S8_UINT, VK_IMAGE_ASPECT_NONE), 5u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT_S8_UINT, VK_IMAGE_ASPECT_STENCIL_BIT), 1u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT), 4u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_S8_UINT, VK_IMAGE_ASPECT_NONE), 1u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_S8_UINT, VK_IMAGE_ASPECT_STENCIL_BIT), 1u);
+    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT), 0u);
 }
 TEST(format_utils, vkuFormatTexelSizeWithAspect) {
     EXPECT_EQ(vkuFormatTexelSizeWithAspect(VK_FORMAT_R64G64_SFLOAT, VK_IMAGE_ASPECT_NONE), 16);
@@ -649,12 +649,12 @@ struct magic_enum::customize::enum_range<VkImageAspectFlagBits> {
 TEST(format_utils, vkuGetPlaneIndex) {
     for (auto [aspect_flag, aspect_flag_str] : magic_enum::enum_entries<VkImageAspectFlagBits>()) {
         if (std::string::npos != aspect_flag_str.find("_ASPECT_PLANE_0")) {
-            EXPECT_EQ(vkuGetPlaneIndex(aspect_flag), 0);
+            EXPECT_EQ(vkuGetPlaneIndex(aspect_flag), 0u);
         } else if (std::string::npos != aspect_flag_str.find("_ASPECT_PLANE_1")) {
-            EXPECT_EQ(vkuGetPlaneIndex(aspect_flag), 1);
+            EXPECT_EQ(vkuGetPlaneIndex(aspect_flag), 1u);
 
         } else if (std::string::npos != aspect_flag_str.find("_ASPECT_PLANE_2")) {
-            EXPECT_EQ(vkuGetPlaneIndex(aspect_flag), 2);
+            EXPECT_EQ(vkuGetPlaneIndex(aspect_flag), 2u);
         } else {
             EXPECT_EQ(vkuGetPlaneIndex(aspect_flag), VKU_FORMAT_INVALID_INDEX);
         }

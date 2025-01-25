@@ -4,7 +4,6 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
-#include "ash/constants/ash_switches.h"
 #include "ash/public/mojom/input_device_settings.mojom-shared.h"
 #include "ash/public/mojom/input_device_settings.mojom.h"
 #include "ash/shell.h"
@@ -1299,9 +1298,6 @@ TEST_F(KeyboardPrefHandlerTest,
        InitializeSplitModifierKeyboardPreFeatureEnable) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndDisableFeature(features::kModifierSplit);
-  Shell::Get()
-      ->keyboard_capability()
-      ->ResetModifierSplitDogfoodControllerForTesting();
 
   ui::DeviceDataManagerTestApi().SetKeyboardDevices(
       {kSampleSplitModifierKeyboard});
@@ -1325,10 +1321,6 @@ TEST_F(KeyboardPrefHandlerTest,
        InitializeSplitModifierKeyboardPostFeatureEnable) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(features::kModifierSplit);
-  auto reset = switches::SetIgnoreModifierSplitSecretKeyForTest();
-  Shell::Get()
-      ->keyboard_capability()
-      ->ResetModifierSplitDogfoodControllerForTesting();
 
   ui::DeviceDataManagerTestApi().SetKeyboardDevices(
       {kSampleSplitModifierKeyboard});

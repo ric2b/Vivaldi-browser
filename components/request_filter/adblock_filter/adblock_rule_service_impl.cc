@@ -16,6 +16,7 @@
 #include "components/request_filter/adblock_filter/adblock_request_filter.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_manager.h"
+#include "components/request_filter/adblock_filter/adblock_tab_state_and_logs.h"
 #include "components/request_filter/request_filter_manager.h"
 #include "components/request_filter/request_filter_manager_factory.h"
 #include "content/public/browser/browser_context.h"
@@ -67,7 +68,7 @@ void RuleServiceImpl::Shutdown() {
 void RuleServiceImpl::AddRequestFilter(RuleGroup group) {
   auto request_filter = std::make_unique<AdBlockRequestFilter>(
       index_managers_[static_cast<size_t>(group)]->AsWeakPtr(),
-      tab_handler_->AsWeakPtr(), resources_->AsWeakPtr());
+      state_and_logs_->AsWeakPtr(), resources_->AsWeakPtr());
   request_filters_[static_cast<size_t>(group)] = request_filter.get();
   vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
       ->AddFilter(std::move(request_filter));
@@ -111,7 +112,7 @@ void RuleServiceImpl::OnStateLoaded(
   // All cases of base::Unretained here are safe. We are generally passing
   // callbacks to objects that we own, calling to either this or other objects
   // that we own.
-  tab_handler_.emplace(
+  state_and_logs_.emplace(
       load_result.blocked_reporting_start,
       std::move(load_result.blocked_domains_counters),
       std::move(load_result.blocked_for_origin_counters),
@@ -128,8 +129,8 @@ void RuleServiceImpl::OnStateLoaded(
       base::BindRepeating(&RuleServiceStorage::ScheduleSave,
                           base::Unretained(&state_store_.value())),
       rules_compiler_,
-      base::BindRepeating(&TabHandler::OnTrackerInfosUpdated,
-                          base::Unretained(&tab_handler_.value())));
+      base::BindRepeating(&StateAndLogsImpl::OnTrackerInfosUpdated,
+                          base::Unretained(&state_and_logs_.value())));
   rule_manager_->AddObserver(this);
 
   for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
@@ -175,11 +176,11 @@ bool RuleServiceImpl::IsDocumentBlocked(RuleGroup group,
   if (!url.SchemeIs(url::kFtpScheme) && !url.SchemeIsHTTPOrHTTPS())
     return false;
 
-  if (!tab_handler_) {
+  if (!state_and_logs_) {
     return false;
   }
 
-  return tab_handler_->WasFrameBlocked(group, frame);
+  return state_and_logs_->WasFrameBlocked(group, frame);
 }
 
 RuleManager* RuleServiceImpl::GetRuleManager() {
@@ -192,9 +193,9 @@ KnownRuleSourcesHandler* RuleServiceImpl::GetKnownSourcesHandler() {
   return &known_sources_handler_.value();
 }
 
-TabHandler* RuleServiceImpl::GetTabHandler() {
-  DCHECK(tab_handler_);
-  return &tab_handler_.value();
+StateAndLogs* RuleServiceImpl::GetStateAndLogs() {
+  DCHECK(state_and_logs_);
+  return &state_and_logs_.value();
 }
 
 void RuleServiceImpl::OnExceptionListChanged(RuleGroup group,
@@ -234,6 +235,29 @@ void RuleServiceImpl::InitializeCosmeticFilter(CosmeticFilter* filter) {
 
 bool RuleServiceImpl::IsApplyingIosRules(RuleGroup group) {
   // Only meaningful on iOS/WebKit
+  return false;
+}
+
+bool RuleServiceImpl::HasDocumentActivationForRuleSource(
+    adblock_filter::RuleGroup group,
+    content::WebContents* web_contents,
+    uint32_t rule_source_id) {
+  auto *tab_helper = GetStateAndLogs()->GetTabHelper(web_contents);
+
+  // Tab helper can be null when page is still loading.
+  if (!tab_helper)
+    return false;
+
+  auto& activations = tab_helper->GetTabActivations(group);
+  auto rule_activation = activations.find(adblock_filter::RequestFilterRule::kWholeDocument);
+  if (rule_activation != activations.end()) {
+    auto& rule_data = rule_activation->second.rule_data;
+    if (rule_data) {
+      if (rule_data->rule_source_id == rule_source_id)
+        return true;
+    }
+  }
+
   return false;
 }
 

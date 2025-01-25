@@ -1,42 +1,29 @@
 #version 310 es
 
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-void unused_entry_point() {
-  return;
-}
 shared int a;
-int tint_workgroupUniformLoad_a() {
-  barrier();
-  int result = a;
-  barrier();
-  return result;
-}
-
 shared int b;
-int tint_workgroupUniformLoad_b() {
-  barrier();
-  int result = b;
-  barrier();
-  return result;
-}
-
 void foo() {
   {
     int i = 0;
-    while (true) {
-      int tint_symbol = i;
-      int tint_symbol_1 = tint_workgroupUniformLoad_a();
-      if (!((tint_symbol < tint_symbol_1))) {
+    while(true) {
+      int v = i;
+      barrier();
+      int v_1 = a;
+      barrier();
+      if ((v < v_1)) {
+      } else {
         break;
       }
       {
+        barrier();
+        int v_2 = b;
+        barrier();
+        i = (i + v_2);
       }
-      {
-        int tint_symbol_2 = i;
-        int tint_symbol_3 = tint_workgroupUniformLoad_b();
-        i = (tint_symbol_2 + tint_symbol_3);
-      }
+      continue;
     }
   }
 }
-
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+void main() {
+}

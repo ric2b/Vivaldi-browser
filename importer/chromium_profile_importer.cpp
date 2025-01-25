@@ -153,7 +153,8 @@ void ChromiumProfileImporter::DetectChromiumProfiles(
       chrome.user_profile_names = prof;
 
       chrome.services_supported = importer::FAVORITES | importer::PASSWORDS |
-                                  importer::HISTORY | importer::EXTENSIONS;
+                                  importer::HISTORY | importer::EXTENSIONS |
+                                  importer::TABS;
 
       profiles->push_back(chrome);
     }

@@ -28,6 +28,10 @@
 #ifndef SRC_TINT_LANG_HLSL_WRITER_RAISE_SHADER_IO_H_
 #define SRC_TINT_LANG_HLSL_WRITER_RAISE_SHADER_IO_H_
 
+#include <bitset>
+#include <optional>
+
+#include "src/tint/api/common/binding_point.h"
 #include "src/tint/utils/result/result.h"
 
 // Forward declarations.
@@ -37,10 +41,30 @@ class Module;
 
 namespace tint::hlsl::writer::raise {
 
+struct ShaderIOConfig {
+    /// The binding point to use for the num_workgroups generated uniform buffer. If it contains
+    /// no value, a free binding point will be used. Specifically, binding 0 of the largest used
+    /// group plus 1 is used if at least one resource is bound, otherwise group 0 binding 0 is used.
+    std::optional<BindingPoint> num_workgroups_binding;
+
+    /// If one doesn't exist, adds a @position member to the input struct as the last member.
+    /// This is used for PixelLocal, for which Dawn requires such a member in the final HLSL shader.
+    bool add_input_position_member = false;
+
+    /// Set to `true` to truncate location variables not found in `interstage_locations`
+    bool truncate_interstage_variables = false;
+
+    /// Indicate which interstage io locations are actually used by the later stage.
+    /// There can be at most 30 user defined interstage variables with locations.
+    std::bitset<30> interstage_locations;
+};
+
 /// ShaderIO is a transform that prepares entry point inputs and outputs for HLSL codegen.
+/// For HLSL, all entry point input parameters are moved to a struct and passed in as a single
+/// entry point parameter, and all outputs are wrapped in a struct and returned by the entry point.
 /// @param module the module to transform
 /// @returns success or failure
-Result<SuccessType> ShaderIO(core::ir::Module& module);
+Result<SuccessType> ShaderIO(core::ir::Module& module, const ShaderIOConfig& config);
 
 }  // namespace tint::hlsl::writer::raise
 

@@ -27,6 +27,7 @@
 namespace perfetto::trace_processor::perf_importer {
 // static
 base::Status AuxRecord::Parse(const Record& record) {
+  attr = record.attr;
   Reader reader(record.payload.copy());
   if (!reader.Read(offset) || !reader.Read(size) || !reader.Read(flags)) {
     return base::ErrStatus("Failed to parse AUX record");
@@ -38,14 +39,12 @@ base::Status AuxRecord::Parse(const Record& record) {
   }
 
   if (!record.has_trailing_sample_id()) {
+    sample_id.reset();
     return base::OkStatus();
   }
 
   sample_id.emplace();
-  if (!sample_id->ReadFrom(*record.attr, reader) || reader.size_left() != 0) {
-    return base::ErrStatus("Failed to parse AUX record");
-  }
-  return base::OkStatus();
+  return sample_id->ParseFromRecord(record);
 }
 
 }  // namespace perfetto::trace_processor::perf_importer

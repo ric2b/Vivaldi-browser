@@ -14,7 +14,11 @@
 
 namespace ukm {
 
+#if defined(VIVALDI_BUILD)
 BASE_FEATURE(kUkmFeature, "Ukm", base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi - disable UKM
+#else
+BASE_FEATURE(kUkmFeature, "Ukm", base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
 
 BASE_FEATURE(kUkmReduceAddEntryIPC,
              "UkmReduceAddEntryIPC",

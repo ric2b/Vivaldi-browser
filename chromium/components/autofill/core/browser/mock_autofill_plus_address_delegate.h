@@ -19,23 +19,28 @@ class MockAutofillPlusAddressDelegate : public AutofillPlusAddressDelegate {
   ~MockAutofillPlusAddressDelegate() override;
 
   MOCK_METHOD(bool, IsPlusAddress, (const std::string&), (const override));
-  MOCK_METHOD(void,
-              GetSuggestions,
-              (const url::Origin&,
-               bool,
-               const PasswordFormClassification&,
-               const FormFieldData&,
-               AutofillSuggestionTriggerSource,
-               GetSuggestionsCallback),
-              (override));
-  MOCK_METHOD(autofill::Suggestion,
-              GetManagePlusAddressSuggestion,
-              (),
-              (const override));
   MOCK_METHOD(bool,
-              ShouldMixWithSingleFieldFormFillSuggestions,
-              (),
+              IsPlusAddressFillingEnabled,
+              (const url::Origin& origin),
               (const override));
+  MOCK_METHOD(bool, IsPlusAddressFullFormFillingEnabled, (), (const override));
+  MOCK_METHOD(void,
+              GetAffiliatedPlusAddresses,
+              (const url::Origin& origin,
+               base::OnceCallback<void(std::vector<std::string>)> callback),
+              (override));
+  MOCK_METHOD(std::vector<Suggestion>,
+              GetSuggestionsFromPlusAddresses,
+              (const std::vector<std::string>&,
+               const url::Origin&,
+               bool,
+               const FormData&,
+               (const base::flat_map<FieldGlobalId, FieldTypeGroup>&),
+               const PasswordFormClassification&,
+               const FieldGlobalId&,
+               AutofillSuggestionTriggerSource),
+              (override));
+  MOCK_METHOD(Suggestion, GetManagePlusAddressSuggestion, (), (const override));
   MOCK_METHOD(void,
               RecordAutofillSuggestionEvent,
               (SuggestionEvent),
@@ -49,6 +54,7 @@ class MockAutofillPlusAddressDelegate : public AutofillPlusAddressDelegate {
                PasswordFormClassification::Type,
                SuggestionType),
               (override));
+  MOCK_METHOD(void, DidFillPlusAddress, (), (override));
   MOCK_METHOD(void,
               OnClickedRefreshInlineSuggestion,
               (const url::Origin&,

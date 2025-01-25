@@ -25,7 +25,13 @@ def RunGenerators(api: str, registry: str, targetFilter: str) -> None:
     scripts_directory_path = os.path.dirname(os.path.abspath(__file__))
     registry_headers_path = os.path.join(scripts_directory_path, scripts)
     sys.path.insert(0, registry_headers_path)
-    from reg import Registry
+    try:
+        from reg import Registry
+    except:
+        print("ModuleNotFoundError: No module named 'reg'") # normal python error message
+        print(f'{registry_headers_path} is not pointing to the Vulkan-Headers registry directory.')
+        print("Inside Vulkan-Headers there is a registry/reg.py file that is used.")
+        sys.exit(1) # Return without call stack so easy to spot error
 
     from generators.base_generator import BaseGeneratorOptions
     from generators.dispatch_table_generator import DispatchTableOutputGenerator
@@ -157,6 +163,12 @@ def main(argv):
     args = parser.parse_args(argv)
 
     registry = os.path.abspath(os.path.join(args.registry,  'vk.xml'))
+    if not os.path.isfile(registry):
+        registry = os.path.abspath(os.path.join(args.registry, 'Vulkan-Headers/registry/vk.xml'))
+        if not os.path.isfile(registry):
+            print(f'cannot find vk.xml in {args.registry}')
+            return -1
+
     RunGenerators(args.api, registry, args.target)
 
     return 0

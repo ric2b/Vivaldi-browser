@@ -170,12 +170,19 @@ export class LinearGradientMatcher extends matcherBase(LinearGradientMatch) {
 }
 
 export class ColorMatch implements Match {
-  constructor(readonly text: string, readonly node: CodeMirror.SyntaxNode) {
+  computedText: (() => string | null)|undefined;
+  constructor(
+      readonly text: string, readonly node: CodeMirror.SyntaxNode,
+      private readonly currentColorCallback?: () => string | null) {
+    this.computedText = currentColorCallback;
   }
 }
 
 // clang-format off
 export class ColorMatcher extends matcherBase(ColorMatch) {
+  constructor(private readonly currentColorCallback?: () => string|null) {
+      super();
+  }
   // clang-format on
   override accepts(propertyName: string): boolean {
     return SDK.CSSMetadata.cssMetadata().isColorAwareProperty(propertyName);
@@ -186,8 +193,14 @@ export class ColorMatcher extends matcherBase(ColorMatch) {
     if (node.name === 'ColorLiteral') {
       return new ColorMatch(text, node);
     }
-    if (node.name === 'ValueName' && Common.Color.Nicknames.has(text)) {
-      return new ColorMatch(text, node);
+    if (node.name === 'ValueName') {
+      if (Common.Color.Nicknames.has(text)) {
+        return new ColorMatch(text, node);
+      }
+      if (text.toLowerCase() === 'currentcolor' && this.currentColorCallback) {
+        const callback = this.currentColorCallback;
+        return new ColorMatch(text, node, () => callback() ?? text);
+      }
     }
     if (node.name === 'CallExpression') {
       const callee = node.getChild('Callee');
@@ -243,7 +256,7 @@ const enum AnimationLonghandPart {
 
 export class LinkableNameMatch implements Match {
   constructor(
-      readonly text: string, readonly node: CodeMirror.SyntaxNode, readonly properyName: LinkableNameProperties) {
+      readonly text: string, readonly node: CodeMirror.SyntaxNode, readonly propertyName: LinkableNameProperties) {
   }
 }
 
@@ -279,6 +292,9 @@ export class LinkableNameMatcher extends matcherBase(LinkableNameMatch) {
         'ease-in': AnimationLonghandPart.EASING_FUNCTION,
         'ease-out': AnimationLonghandPart.EASING_FUNCTION,
         'ease-in-out': AnimationLonghandPart.EASING_FUNCTION,
+        steps: AnimationLonghandPart.EASING_FUNCTION,
+        'step-start': AnimationLonghandPart.EASING_FUNCTION,
+        'step-end': AnimationLonghandPart.EASING_FUNCTION,
       }),
   );
 
@@ -426,6 +442,9 @@ export class ShadowMatcher extends matcherBase(ShadowMatch) {
       return null;
     }
     const valueNodes = ASTUtils.siblings(ASTUtils.declValue(node));
+    if (valueNodes.length === 0) {
+      return null;
+    }
     const valueText = matching.ast.textRange(valueNodes[0], valueNodes[valueNodes.length - 1]);
     return new ShadowMatch(
         valueText, node, matching.ast.propertyName === 'text-shadow' ? ShadowType.TEXT_SHADOW : ShadowType.BOX_SHADOW);
@@ -470,6 +489,42 @@ export class LengthMatcher extends matcherBase(LengthMatch) {
       return null;
     }
     return new LengthMatch(match[0], node);
+  }
+}
+
+export class FlexGridMatch implements Match {
+  constructor(readonly text: string, readonly node: CodeMirror.SyntaxNode, readonly isFlex: boolean) {
+  }
+}
+
+// clang-format off
+export class FlexGridMatcher extends matcherBase(FlexGridMatch) {
+  // clang-format on
+  static readonly FLEX = ['flex', 'inline-flex', 'block flex', 'inline flex'];
+  static readonly GRID = ['grid', 'inline-grid', 'block grid', 'inline grid'];
+  override accepts(propertyName: string): boolean {
+    return propertyName === 'display';
+  }
+
+  override matches(node: CodeMirror.SyntaxNode, matching: BottomUpTreeMatching): Match|null {
+    if (node.name !== 'Declaration') {
+      return null;
+    }
+    const valueNodes = ASTUtils.siblings(ASTUtils.declValue(node));
+    if (valueNodes.length < 1) {
+      return null;
+    }
+    const values = valueNodes.filter(node => node.name !== 'Important')
+                       .map(node => matching.getComputedText(node).trim())
+                       .filter(value => value);
+    const text = values.join(' ');
+    if (FlexGridMatcher.FLEX.includes(text)) {
+      return new FlexGridMatch(matching.ast.text(node), node, true);
+    }
+    if (FlexGridMatcher.GRID.includes(text)) {
+      return new FlexGridMatch(matching.ast.text(node), node, false);
+    }
+    return null;
   }
 }
 
@@ -571,6 +626,7 @@ export class AnchorFunctionMatch implements Match {
 
 // clang-format off
 export class AnchorFunctionMatcher extends matcherBase(AnchorFunctionMatch) {
+  // clang-format on
   anchorFunction(node: CodeMirror.SyntaxNode, matching: BottomUpTreeMatching): string|null {
     if (node.name !== 'CallExpression') {
       return null;
@@ -611,7 +667,6 @@ export class AnchorFunctionMatcher extends matcherBase(AnchorFunctionMatch) {
     return new AnchorFunctionMatch(matching.ast.text(node), node, calleeText);
   }
 }
-// clang-format on
 
 // For linking `position-anchor: --anchor-name`.
 export class PositionAnchorMatch implements Match {
@@ -621,6 +676,7 @@ export class PositionAnchorMatch implements Match {
 
 // clang-format off
 export class PositionAnchorMatcher extends matcherBase(PositionAnchorMatch) {
+  // clang-format on
   override accepts(propertyName: string): boolean {
     return propertyName === 'position-anchor';
   }
@@ -634,4 +690,85 @@ export class PositionAnchorMatcher extends matcherBase(PositionAnchorMatch) {
     return new PositionAnchorMatch(dashedIdentifier, matching, node);
   }
 }
-// clang-format on
+
+export class CSSWideKeywordMatch implements Match {
+  constructor(
+      readonly text: SDK.CSSMetadata.CSSWideKeyword, readonly node: CodeMirror.SyntaxNode,
+      readonly property: SDK.CSSProperty.CSSProperty, readonly matchedStyles: SDK.CSSMatchedStyles.CSSMatchedStyles) {
+  }
+  resolveProperty(): SDK.CSSMatchedStyles.CSSValueSource|null {
+    return this.matchedStyles.resolveGlobalKeyword(this.property, this.text);
+  }
+  computedText?(): string|null {
+    return this.resolveProperty()?.value ?? null;
+  }
+}
+
+// clang-format off
+export class CSSWideKeywordMatcher extends matcherBase(CSSWideKeywordMatch) {
+  // clang-format on
+  constructor(
+      readonly property: SDK.CSSProperty.CSSProperty, readonly matchedStyles: SDK.CSSMatchedStyles.CSSMatchedStyles) {
+    super();
+  }
+
+  override matches(node: CodeMirror.SyntaxNode, matching: BottomUpTreeMatching): Match|null {
+    const parentNode = node.parent;
+    if (node.name !== 'ValueName' || parentNode?.name !== 'Declaration') {
+      return null;
+    }
+
+    if (Array.from(ASTUtils.stripComments(ASTUtils.siblings(ASTUtils.declValue(parentNode))))
+            .some(child => !ASTUtils.equals(child, node))) {
+      return null;
+    }
+
+    const text = matching.ast.text(node);
+    if (!SDK.CSSMetadata.CSSMetadata.isCSSWideKeyword(text)) {
+      return null;
+    }
+
+    return new CSSWideKeywordMatch(text, node, this.property, this.matchedStyles);
+  }
+}
+
+export class PositionTryMatch implements Match {
+  constructor(
+      readonly text: string, readonly node: CodeMirror.SyntaxNode, readonly preamble: CodeMirror.SyntaxNode[],
+      readonly fallbacks: CodeMirror.SyntaxNode[][]) {
+  }
+}
+
+// clang-format off
+export class PositionTryMatcher extends matcherBase(PositionTryMatch) {
+  // clang-format on
+  override accepts(propertyName: string): boolean {
+    return propertyName === LinkableNameProperties.POSITION_TRY ||
+        propertyName === LinkableNameProperties.POSITION_TRY_FALLBACKS;
+  }
+
+  override matches(node: CodeMirror.SyntaxNode, matching: BottomUpTreeMatching): Match|null {
+    if (node.name !== 'Declaration') {
+      return null;
+    }
+
+    let preamble: CodeMirror.SyntaxNode[] = [];
+    const valueNodes = ASTUtils.siblings(ASTUtils.declValue(node));
+    const fallbacks = ASTUtils.split(valueNodes);
+    if (matching.ast.propertyName === LinkableNameProperties.POSITION_TRY) {
+      for (const [i, n] of fallbacks[0].entries()) {
+        const computedText = matching.getComputedText(n);
+        if (SDK.CSSMetadata.CSSMetadata.isCSSWideKeyword(computedText)) {
+          return null;
+        }
+        if (SDK.CSSMetadata.CSSMetadata.isPositionTryOrderKeyword(computedText)) {
+          preamble = fallbacks[0].splice(0, i + 1);
+          break;
+        }
+      }
+    }
+
+    const valueText = matching.ast.textRange(valueNodes[0], valueNodes[valueNodes.length - 1]);
+    return new PositionTryMatch(valueText, node, preamble, fallbacks);
+  }
+}

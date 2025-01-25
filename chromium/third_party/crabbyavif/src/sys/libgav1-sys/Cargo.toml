@@ -5,3 +5,6 @@ edition = "2021"
 
 [build-dependencies]
 bindgen = "0.69.2"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(google3)'] }

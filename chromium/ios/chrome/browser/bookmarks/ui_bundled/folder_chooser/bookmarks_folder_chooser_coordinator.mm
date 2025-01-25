@@ -74,8 +74,8 @@ using vivaldi::IsVivaldiRunning;
   raw_ptr<const bookmarks::BookmarkNode> _selectedFolder;
 
   // Vivaldi
-  // The user's browser state model used.
-  ChromeBrowserState* currentBrowserState;
+  // The user's profile model used.
+  ProfileIOS* _profile;
   // The view controller to present when pushing to adding folder
   VivaldiBookmarksEditorCoordinator* _vivaldiBookmarksEditorCoordinator;
   // End Vivaldi
@@ -139,20 +139,18 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)start {
   [super start];
-  ChromeBrowserState* browserState =
-      self.browser->GetBrowserState()->GetOriginalChromeBrowserState();
+  ProfileIOS* profile = self.browser->GetProfile()->GetOriginalProfile();
 
   // Vivaldi
-  currentBrowserState = browserState;
-  [VivaldiBookmarkPrefs setPrefService:browserState->GetPrefs()];
+  _profile = profile;
+  [VivaldiBookmarkPrefs setPrefService:profile->GetPrefs()];
   // End Vivaldi
 
   bookmarks::BookmarkModel* model =
-      ios::BookmarkModelFactory::GetForBrowserState(browserState);
+      ios::BookmarkModelFactory::GetForProfile(profile);
   AuthenticationService* authenticationService =
-      AuthenticationServiceFactory::GetForBrowserState(browserState);
-  syncer::SyncService* syncService =
-      SyncServiceFactory::GetForBrowserState(browserState);
+      AuthenticationServiceFactory::GetForProfile(profile);
+  syncer::SyncService* syncService = SyncServiceFactory::GetForProfile(profile);
   _mediator = [[BookmarksFolderChooserMediator alloc]
       initWithBookmarkModel:model
                 editedNodes:std::move(_hiddenNodes)
@@ -338,7 +336,7 @@ using vivaldi::IsVivaldiRunning;
 }
 /// Returns the setting from prefs to show only speed dial folders or all folders
 - (BOOL)showOnlySpeedDialFolders {
-  if (!currentBrowserState)
+  if (!_profile)
     return NO;
 
   return [VivaldiBookmarkPrefs getFolderViewMode];

@@ -146,7 +146,7 @@ enum class CastMessageType {
   kPresentation,
   kGetCapabilities,
 
-  kOther,  // Add new types above |kOther|.
+  kOther,  // Add new types above `kOther`.
   kMaxValue = kOther,
 };
 
@@ -179,10 +179,10 @@ proto::CastMessage MakeCloseMessage(const std::string& source_id,
 
 // Returns a session/transport ID string that is unique within this application
 // instance, having the format "prefix-12345". For example, calling this with a
-// |prefix| of "sender" will result in a string like "sender-12345".
+// `prefix` of "sender" will result in a string like "sender-12345".
 std::string MakeUniqueSessionId(const char* prefix);
 
-// Returns true if the type field in |object| is set to the given |type|.
+// Returns true if the type field in `object` is set to the given `type`.
 bool HasType(const Json::Value& object, CastMessageType type);
 
 // Serializes a given cast message to a string.

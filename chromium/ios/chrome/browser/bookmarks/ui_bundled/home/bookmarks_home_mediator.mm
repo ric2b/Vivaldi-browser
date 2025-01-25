@@ -176,13 +176,13 @@ bool IsABookmarkNodeSectionForIdentifier(
   DCHECK(self.consumer);
 
   // Set up observers.
-  ChromeBrowserState* browserState = [self originalBrowserState];
+  ProfileIOS* profile = [self originalProfile];
   _bookmarkModelBridge =
       std::make_unique<BookmarkModelBridge>(self, _bookmarkModel.get());
   _syncedBookmarksObserver =
-      std::make_unique<sync_bookmarks::SyncedBookmarksObserverBridge>(
-          self, browserState);
-  _syncService = SyncServiceFactory::GetForBrowserState(browserState);
+      std::make_unique<sync_bookmarks::SyncedBookmarksObserverBridge>(self,
+                                                                      profile);
+  _syncService = SyncServiceFactory::GetForProfile(profile);
   _bookmarkPromoController =
       [[BookmarkPromoController alloc] initWithBrowser:_browser.get()
                                            syncService:_syncService
@@ -191,7 +191,7 @@ bool IsABookmarkNodeSectionForIdentifier(
                               accountSettingsPresenter:self];
 
   _prefChangeRegistrar = std::make_unique<PrefChangeRegistrar>();
-  _prefChangeRegistrar->Init(browserState->GetPrefs());
+  _prefChangeRegistrar->Init(profile->GetPrefs());
   _prefObserverBridge = std::make_unique<PrefObserverBridge>(self);
 
   _prefObserverBridge->ObserveChangesForPreference(
@@ -266,9 +266,9 @@ bool IsABookmarkNodeSectionForIdentifier(
 // Generate the table view data when the current currently displayed node is the
 // outermost root.
 - (void)generateTableViewDataForRootNode {
-  ChromeBrowserState* browserState = [self originalBrowserState];
+  ProfileIOS* profile = [self originalProfile];
   bookmarks::ManagedBookmarkService* managedBookmarkService =
-      ManagedBookmarkServiceFactory::GetForBrowserState(browserState);
+      ManagedBookmarkServiceFactory::GetForProfile(profile);
   const BookmarkNode* managedNode = managedBookmarkService->managed_node();
 
   std::vector<const bookmarks::BookmarkNode*> localPermanentNodes =
@@ -481,8 +481,8 @@ bool IsABookmarkNodeSectionForIdentifier(
   self.syncService->TriggerLocalDataMigration(
       syncer::DataTypeSet({syncer::BOOKMARKS}));
 
-  ChromeBrowserState* browserState = [self originalBrowserState];
-  PrefService* prefService = browserState->GetPrefs();
+  ProfileIOS* profile = [self originalProfile];
+  PrefService* prefService = profile->GetPrefs();
   prefService->SetBoolean(prefs::kIosBookmarkUploadSyncLeftBehindCompleted,
                           true);
 }
@@ -551,7 +551,7 @@ bool IsABookmarkNodeSectionForIdentifier(
 // Instances of this class automatically observe the bookmark model.
 // The bookmark model has loaded.
 - (void)bookmarkModelLoaded {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 // The node has changed, but not its children.
@@ -802,10 +802,10 @@ bool IsABookmarkNodeSectionForIdentifier(
   // covered here, so check the "migrated syncing user" pref too.
   // This implicitly covers the case when SyncDisabled policy is enabled, as
   // kGoogleServicesLastSyncingGaiaId will be empty.
-  ChromeBrowserState* browserState = [self originalBrowserState];
-  const std::string lastSyncingGaiaId = browserState->GetPrefs()->GetString(
-      prefs::kGoogleServicesLastSyncingGaiaId);
-  const std::string migratedGaiaId = browserState->GetPrefs()->GetString(
+  ProfileIOS* profile = [self originalProfile];
+  const std::string lastSyncingGaiaId =
+      profile->GetPrefs()->GetString(prefs::kGoogleServicesLastSyncingGaiaId);
+  const std::string migratedGaiaId = profile->GetPrefs()->GetString(
       prefs::kGoogleServicesSyncingGaiaIdMigratedToSignedIn);
   if (self.syncService->GetAccountInfo().gaia != lastSyncingGaiaId &&
       self.syncService->GetAccountInfo().gaia != migratedGaiaId) {
@@ -818,7 +818,7 @@ bool IsABookmarkNodeSectionForIdentifier(
     return NO;
   }
   // Do not show if the user has already uploaded the left-behind bookmarks.
-  if (browserState->GetPrefs()->GetBoolean(
+  if (profile->GetPrefs()->GetBoolean(
           prefs::kIosBookmarkUploadSyncLeftBehindCompleted)) {
     return NO;
   }
@@ -904,10 +904,10 @@ bool IsABookmarkNodeSectionForIdentifier(
                                     BookmarksBatchUploadSectionIdentifier];
 }
 
-// The original chrome browser state used for services that don't exist in
+// The original chrome profile used for services that don't exist in
 // incognito mode. E.g., `_syncService` and `ManagedBookmarkService`.
-- (ChromeBrowserState*)originalBrowserState {
-  return _browser->GetBrowserState()->GetOriginalChromeBrowserState();
+- (ProfileIOS*)originalProfile {
+  return _browser->GetProfile()->GetOriginalProfile();
 }
 
 - (BOOL)hasBookmarksOrFolders {

@@ -301,6 +301,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   // Hide the toolbars and the floating button, so they can fade in the first
   // time there's a transition into this view controller.
   [self hideToolbars];
+
+  if (@available(iOS 17, *)) {
+    NSArray<UITrait>* traits = TraitCollectionSetForTraits(nil);
+    [self registerForTraitChanges:traits
+                       withAction:@selector(updateConstraitsOnTraitChange)];
+  }
 }
 
 - (void)viewDidLayoutSubviews {
@@ -343,23 +349,16 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   return UIStatusBarStyleLightContent;
 }
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
-  if (IsPinnedTabsEnabled()) {
-    [self updatePinnedTabsViewControllerConstraints];
+  if (@available(iOS 17, *)) {
+    return;
   }
-  if ([self.swipeToIncognitoIPH superview] == self.view) {
-    self.swipeToIncognitoIPHBottomConstraint.active = NO;
-    self.swipeToIncognitoIPHBottomConstraint =
-        [self.swipeToIncognitoIPH.bottomAnchor
-            constraintEqualToAnchor:[self shouldUseCompactLayout]
-                                        ? self.bottomToolbar.topAnchor
-                                        : self.regularTabsViewController.view
-                                              .bottomAnchor];
 
-    self.swipeToIncognitoIPHBottomConstraint.active = YES;
-  }
+  [self updateConstraitsOnTraitChange];
 }
+#endif
 
 #pragma mark - UIScrollViewDelegate
 
@@ -1290,13 +1289,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       [self.regularGridHandler addNewItem];
       break;
     case TabGridPageRemoteTabs:
-      NOTREACHED_IN_MIGRATION()
-          << "It is invalid to open a new tab in Recent Tabs.";
-      break;
+      NOTREACHED() << "It is invalid to open a new tab in Recent Tabs.";
     case TabGridPageTabGroups:
-      NOTREACHED_IN_MIGRATION()
-          << "It is invalid to open a new tab in Tab Groups.";
-      break;
+      NOTREACHED() << "It is invalid to open a new tab in Tab Groups.";
 
     // Vivaldi
     case TabGridPageClosedTabs:
@@ -1337,13 +1332,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       [self openNewRegularTabForKeyboardCommand];
       break;
     case TabGridPageRemoteTabs:
-      NOTREACHED_IN_MIGRATION()
-          << "It is invalid to open a new tab from Recent Tabs.";
-      break;
+      NOTREACHED() << "It is invalid to open a new tab from Recent Tabs.";
     case TabGridPageTabGroups:
-      NOTREACHED_IN_MIGRATION()
-          << "It is invalid to open a new tab from Tab Groups.";
-      break;
+      NOTREACHED() << "It is invalid to open a new tab from Tab Groups.";
 
     // Vivaldi
     case TabGridPageClosedTabs:
@@ -1638,6 +1629,23 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   self.topToolbar.pageControl.userInteractionEnabled = NO;
 }
 
+- (void)updateConstraitsOnTraitChange {
+  if (IsPinnedTabsEnabled()) {
+    [self updatePinnedTabsViewControllerConstraints];
+  }
+  if ([self.swipeToIncognitoIPH superview] == self.view) {
+    self.swipeToIncognitoIPHBottomConstraint.active = NO;
+    self.swipeToIncognitoIPHBottomConstraint =
+        [self.swipeToIncognitoIPH.bottomAnchor
+            constraintEqualToAnchor:[self shouldUseCompactLayout]
+                                        ? self.bottomToolbar.topAnchor
+                                        : self.regularTabsViewController.view
+                                              .bottomAnchor];
+
+    self.swipeToIncognitoIPHBottomConstraint.active = YES;
+  }
+}
+
 #pragma mark - UIGestureRecognizerDelegate
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer*)gestureRecognizer
@@ -1692,9 +1700,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       self.remoteTabsViewController.searchTerms = searchText;
       break;
     case TabGridPage::TabGridPageTabGroups:
-      NOTREACHED_IN_MIGRATION() << "Tab Groups doesn't support searching";
-      break;
-
+      NOTREACHED() << "Tab Groups doesn't support searching";
 
     // Vivaldi
     case TabGridPageClosedTabs:
@@ -2040,7 +2046,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (void)didTapInactiveTabsSettingsLinkInGridViewController:
     (BaseGridViewController*)gridViewController {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 - (void)gridViewControllerDidRequestContextMenu:
@@ -2156,6 +2162,11 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     self.remoteTabsViewController.searchTerms = nil;
     self.regularTabsViewController.searchText = nil;
     self.incognitoTabsViewController.searchText = nil;
+
+    // Vivaldi
+    self.closedTabsViewController.searchTerms = nil;
+    // End Vivaldi
+
     [self.regularGridHandler resetToAllItems];
     [self.incognitoGridHandler resetToAllItems];
     [self hideScrim];
@@ -2384,11 +2395,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 #pragma mark - Vivaldi
-// Vivaldi
+
 - (id<RecentTabsConsumer>)closedTabsConsumer {
   return self.closedTabsViewController;
 }
-// End Vivaldi
 
 // Update pages with correct search terms
 - (void)vivaldiUpdatePageWithCurrentSearchTerms:(TabGridPage)page {
@@ -2527,6 +2537,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   self.closedTabsDisabledViewController.view.accessibilityElementsHidden =
       _currentPage != TabGridPageClosedTabs;
 }
+
+#pragma mark - RecentTabsTableViewControllerUIDelegate (Vivaldi)
+
+- (void)recentTabsSyncStateDidEnable:(BOOL)syncEnabled {
+  [self.topToolbar.pageControl setIconForRemoteTabsWithSyncEnabled:syncEnabled];
+}
+
 // End Vivaldi
 
 @end

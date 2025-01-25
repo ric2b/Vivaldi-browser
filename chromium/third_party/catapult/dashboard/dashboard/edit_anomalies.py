@@ -6,7 +6,9 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+from httplib2 import http
 import json
+import logging
 
 from google.appengine.api import users
 from google.appengine.ext import ndb
@@ -67,6 +69,68 @@ def EditAnomaliesPost():
   else:
     result = {'error': 'No bug ID or new revision specified.'}
   return make_response(json.dumps(result))
+
+
+def SkiaEditAnomaliesPost():
+  if not utils.IsValidSheriffUser():
+    logging.debug('[SkiaTriage] GetEmail: %s. TryJobUser: %s', utils.GetEmail(),
+                  utils.IsTryjobUser())
+    return make_response(
+        json.dumps({'error': 'You must be logged in to edit anomalies.'}),
+        http.HTTPStatus.UNAUTHORIZED.value)
+
+  try:
+    data = json.loads(request.data)
+  except json.JSONDecodeError as e:
+    return make_response(
+        json.dumps({'error': str(e)}), http.HTTPStatus.BAD_REQUEST.value)
+
+  logging.debug('[SkiaTriage] Received edit anomalies request from Skia: %s',
+                data)
+
+  # list of anomaly keys in int
+  keys = data.get('keys', [])
+  if not keys:
+    return make_response(
+        json.dumps({'error': 'No skia anomaly keys specified to edit.'}),
+        http.HTTPStatus.BAD_REQUEST.value)
+
+  keys = [ndb.Key('Anomaly', k) for k in keys]
+  alert_entities = ndb.get_multi(keys)
+
+  if len(alert_entities) == 0:
+    logging.warning('Cannot load alert entities with keys: %s', keys)
+    return make_response(
+        json.dumps({'error': 'No entity loaded for editing. Keys: %s' % keys}),
+        http.HTTPStatus.BAD_REQUEST.value)
+
+  action = data.get('action', None)
+  if not action:
+    return make_response(
+        json.dumps({'error': 'No action specified for editing.'}),
+        http.HTTPStatus.BAD_REQUEST.value)
+
+  result = None
+  if action == 'IGNORE':
+    result = ChangeBugId(alert_entities, -2)
+  elif action == 'RESET':
+    result = ChangeBugId(alert_entities, 0)
+  elif action == 'NUDGE':
+    start_revision = data.get('start_revision', None)
+    end_revision = data.get('end_revision', None)
+    if start_revision and end_revision:
+      result = NudgeAnomalies(alert_entities, start_revision, end_revision)
+    else:
+      result = {
+          'error':
+              'No valid revisions specified. %s:%s' %
+              (start_revision, end_revision)
+      }
+  else:
+    result = {'error': 'No valid action specified: %s' % (action)}
+  if 'error' in result:
+    return make_response(json.dumps(result), http.HTTPStatus.BAD_REQUEST.value)
+  return make_response('{}')
 
 
 def ChangeBugId(alert_entities, bug_id):

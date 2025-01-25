@@ -66,6 +66,11 @@ bundle_data_xcassets("main_setting_assets") {
     "MainSettingAssets.xcassets/vivaldi_setting_contents.imageset/Contents.json",
     "MainSettingAssets.xcassets/vivaldi_setting_contents.imageset/vivaldi_setting_contents.pdf",
 
+    # vivaldi_setting_share_feedback
+    "MainSettingAssets.xcassets/vivaldi_setting_share_feedback.imageset/Contents.json",
+    "MainSettingAssets.xcassets/vivaldi_setting_share_feedback.imageset/vivaldi_setting_share_feedback.pdf",
+    "MainSettingAssets.xcassets/vivaldi_setting_share_feedback.imageset/vivaldi_setting_share_feedback_dark.pdf",
+
     # vivaldi_setting_version
     "MainSettingAssets.xcassets/vivaldi_setting_version.imageset/Contents.json",
     "MainSettingAssets.xcassets/vivaldi_setting_version.imageset/vivaldi_setting_version.pdf",

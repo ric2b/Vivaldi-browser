@@ -536,6 +536,7 @@ class BirchKeyedServiceTest : public BrowserWithTestWindowTest {
       case SecondaryIconType::kTabFromTablet:
       case SecondaryIconType::kTabFromPhone:
       case SecondaryIconType::kTabFromUnknown:
+      case SecondaryIconType::kSelfShareIcon:
       case SecondaryIconType::kNoIcon:
         state = media_session::mojom::MediaAudioVideoState::kDeprecatedUnknown;
         break;
@@ -755,6 +756,7 @@ TEST_F(BirchKeyedServiceTest, BirchFileSuggestProvider_NoFilesAvailable) {
   model->SetWeatherItems({});
   model->SetReleaseNotesItems({});
   model->SetAttachmentItems({});
+  model->SetCoralItems({});
 
   // Trigger a file update, with no available files.
   birch_keyed_service()

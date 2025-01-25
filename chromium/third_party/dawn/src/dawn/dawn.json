@@ -42,7 +42,10 @@
     "INTERNAL__HAVE_EMDAWNWEBGPU_HEADER": {
         "category": "structure",
         "tags": ["emscripten"],
-        "members": []
+        "_comment": "TODO(issues.chromium.org/issues/366932309): The struct must have at least one field.",
+        "members": [
+            {"name": "unused", "type": "bool", "default": "false"}
+        ]
     },
 
     "create instance": {
@@ -62,15 +65,6 @@
         "category": "function",
         "returns": "proc",
         "args": [
-            {"name": "device", "type": "device", "optional": true},
-            {"name": "proc name", "type": "char", "annotation": "const*"}
-        ]
-    },
-    "get proc address 2": {
-        "category": "function",
-        "returns": "proc",
-        "args": [
-            {"name": "device", "type": "device", "optional": true},
             {"name": "proc name", "type": "string view"}
         ]
     },
@@ -91,7 +85,7 @@
         "args": [
             {"name": "status", "type": "request adapter status"},
             {"name": "adapter", "type": "adapter", "optional": true},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "message", "type": "string view"},
             {"name": "userdata", "type": "void *"}
         ]
     },
@@ -100,7 +94,7 @@
         "args": [
             {"name": "status", "type": "request adapter status"},
             {"name": "adapter", "type": "adapter", "optional": true},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
+            {"name": "message", "type": "string view"}
         ]
     },
     "request adapter callback info": {
@@ -162,9 +156,17 @@
             },
             {
                 "name": "enumerate features",
+                "tags": ["deprecated"],
                 "returns": "size_t",
                 "args": [
                     {"name": "features", "type": "feature name", "annotation": "*"}
+                ]
+            },
+            {
+                "name": "get features",
+                "returns": "void",
+                "args": [
+                    {"name": "features", "type": "supported features", "annotation": "*"}
                 ]
             },
             {
@@ -218,10 +220,10 @@
         "category": "structure",
         "extensible": "out",
         "members": [
-            {"name": "vendor", "type": "char", "annotation": "const*", "length": "strlen", "default": "nullptr"},
-            {"name": "architecture", "type": "char", "annotation": "const*", "length": "strlen", "default": "nullptr"},
-            {"name": "device", "type": "char", "annotation": "const*", "length": "strlen", "default": "nullptr"},
-            {"name": "description", "type": "char", "annotation": "const*", "length": "strlen", "default": "nullptr"},
+            {"name": "vendor", "type": "string view"},
+            {"name": "architecture", "type": "string view"},
+            {"name": "device", "type": "string view"},
+            {"name": "description", "type": "string view"},
             {"name": "backend type", "type": "backend type"},
             {"name": "adapter type", "type": "adapter type"},
             {"name": "vendor ID", "type": "uint32_t"},
@@ -243,7 +245,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "required feature count", "type": "size_t", "default": 0},
             {"name": "required features", "type": "feature name", "annotation": "const*", "length": "required feature count", "default": "nullptr"},
             {"name": "required limits", "type": "required limits", "annotation": "const*", "optional": true},
@@ -297,7 +299,7 @@
         "chained": "in",
         "chain roots": ["device descriptor"],
         "members": [
-            {"name": "isolation key", "type": "char", "annotation": "const*", "length": "strlen", "default": "\"\""},
+            {"name": "isolation key", "type": "string view"},
             {"name": "load data function", "type": "dawn load cache data function", "default": "nullptr"},
             {"name": "store data function", "type": "dawn store cache data function", "default": "nullptr"},
             {"name": "function userdata", "type": "void *", "default": "nullptr"}
@@ -344,14 +346,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -372,7 +367,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "layout", "type": "bind group layout"},
             {"name": "entry count", "type": "size_t"},
             {"name": "entries", "type": "bind group entry", "annotation": "const*", "length": "entry count"}
@@ -385,14 +380,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -491,7 +479,7 @@
             {"name": "format", "type": "texture format"},
             {"name": "usage", "type": "texture usage", "default": "render attachment"},
             {"name": "view format count", "type": "size_t", "default": 0},
-            {"name": "view formats", "type": "texture format", "annotation": "const*", "length": "view format count"},
+            {"name": "view formats", "type": "texture format", "annotation": "const*", "length": "view format count", "default": "nullptr"},
             {"name": "alpha mode", "type": "composite alpha mode", "default": "auto"},
             {"name": "width", "type": "uint32_t"},
             {"name": "height", "type": "uint32_t"},
@@ -551,7 +539,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "entry count", "type": "size_t"},
             {"name": "entries", "type": "bind group layout entry", "annotation": "const*", "length": "entry count"}
         ]
@@ -615,14 +603,7 @@
         "category": "structure",
         "members": [
             {"name": "data", "type": "char", "annotation": "const*", "optional": true},
-            {"name": "length", "type": "size_t", "default": "SIZE_MAX"}
-        ]
-    },
-    "nullable string view": {
-        "category": "structure",
-        "members": [
-            {"name": "data", "type": "char", "annotation": "const*", "optional": true},
-            {"name": "length", "type": "size_t", "default": "SIZE_MAX"}
+            {"name": "length", "type": "size_t", "default": "WGPU_STRLEN"}
         ]
     },
     "buffer": {
@@ -682,14 +663,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             },
             {
@@ -718,7 +692,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "usage", "type": "buffer usage"},
             {"name": "size", "type": "uint64_t"},
             {"name": "mapped at creation", "type": "bool", "default": "false"}
@@ -753,7 +727,7 @@
         "category": "callback function",
         "args": [
             {"name": "status", "type": "map async status"},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"}
+            {"name": "message", "type": "string view"}
         ]
     },
     "buffer map callback info": {
@@ -851,7 +825,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "key", "type": "char", "annotation": "const*", "length": "strlen"},
+            {"name": "key", "type": "string view"},
             {"name": "value", "type": "double"}
         ]
     },
@@ -862,14 +836,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -878,7 +845,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
+            {"name": "label", "type": "string view", "optional": true}
         ]
     },
     "command encoder": {
@@ -952,24 +919,11 @@
                 "name": "inject validation error",
                 "tags": ["dawn"],
                 "args": [
-                    {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "inject validation error 2",
-                "tags": ["dawn"],
-                "args": [
                     {"name": "message", "type": "string view"}
                 ]
             },
             {
                 "name": "insert debug marker",
-                "args": [
-                    {"name": "marker label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "insert debug marker 2",
                 "args": [
                     {"name": "marker label", "type": "string view"}
                 ]
@@ -980,12 +934,6 @@
             },
             {
                 "name": "push debug group",
-                "args": [
-                    {"name": "group label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "push debug group 2",
                 "args": [
                     {"name": "group label", "type": "string view"}
                 ]
@@ -1021,14 +969,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -1037,7 +978,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
+            {"name": "label", "type": "string view", "optional": true}
         ]
     },
     "compare function": {
@@ -1107,7 +1048,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "message", "type": "string view"},
             {"name": "type", "type": "compilation message type"},
             {"name": "line num", "type": "uint64_t"},
             {"name": "line pos", "type": "uint64_t"},
@@ -1132,7 +1073,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "timestamp writes", "type": "compute pass timestamp writes", "annotation": "const*", "optional": true}
         ]
     },
@@ -1143,12 +1084,6 @@
             {
                 "name": "insert debug marker",
                 "args": [
-                    {"name": "marker label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "insert debug marker 2",
-                "args": [
                     {"name": "marker label", "type": "string view"}
                 ]
             },
@@ -1158,12 +1093,6 @@
             },
             {
                 "name": "push debug group",
-                "args": [
-                    {"name": "group label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "push debug group 2",
                 "args": [
                     {"name": "group label", "type": "string view"}
                 ]
@@ -1213,14 +1142,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -1257,14 +1179,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -1273,7 +1188,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "layout", "type": "pipeline layout", "optional": true},
             {"name": "compute", "type": "programmable stage descriptor"}
         ]
@@ -1319,7 +1234,7 @@
         "args": [
             {"name": "status", "type": "create pipeline async status"},
             {"name": "pipeline", "type": "compute pipeline", "optional": true},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "message", "type": "string view"},
             {"name": "userdata", "type": "void *"}
         ]
     },
@@ -1328,7 +1243,7 @@
         "args": [
             {"name": "status", "type": "create pipeline async status"},
             {"name": "pipeline", "type": "compute pipeline", "optional": true},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
+            {"name": "message", "type": "string view"}
         ]
     },
     "create compute pipeline async callback info": {
@@ -1365,7 +1280,7 @@
         "args": [
             {"name": "status", "type": "create pipeline async status"},
             {"name": "pipeline", "type": "render pipeline", "optional": true},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "message", "type": "string view"},
             {"name": "userdata", "type": "void *"}
         ]
     },
@@ -1374,7 +1289,7 @@
         "args": [
             {"name": "status", "type": "create pipeline async status"},
             {"name": "pipeline", "type": "render pipeline", "optional": true},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
+            {"name": "message", "type": "string view"}
         ]
     },
     "create render pipeline async callback info": {
@@ -1578,25 +1493,7 @@
                 "tags": ["dawn"],
                 "args": [
                     {"name": "descriptor", "type": "shader module descriptor", "annotation": "const*"},
-                    {"name": "error message", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "create error shader module 2",
-                "returns": "shader module",
-                "tags": ["dawn"],
-                "args": [
-                    {"name": "descriptor", "type": "shader module descriptor", "annotation": "const*"},
                     {"name": "error message", "type": "string view"}
-                ]
-            },
-            {
-                "name": "create swap chain",
-                "tags": ["art", "dawn", "emscripten"],
-                "returns": "swap chain",
-                "args": [
-                    {"name": "surface", "type": "surface"},
-                    {"name": "descriptor", "type": "swap chain descriptor", "annotation": "const*"}
                 ]
             },
             {
@@ -1658,6 +1555,11 @@
                 ]
             },
             {
+                "name": "get lost future",
+                "returns": "future",
+                "tags": ["emscripten"]
+            },
+            {
                 "name": "has feature",
                 "returns": "bool",
                 "args": [
@@ -1666,9 +1568,17 @@
             },
             {
                 "name": "enumerate features",
+                "tags": ["deprecated"],
                 "returns": "size_t",
                 "args": [
                     {"name": "features", "type": "feature name", "annotation": "*"}
+                ]
+            },
+            {
+                "name": "get features",
+                "returns": "void",
+                "args": [
+                    {"name": "features", "type": "supported features", "annotation": "*"}
                 ]
             },
             {
@@ -1684,28 +1594,12 @@
                 "name": "inject error",
                 "args": [
                     {"name": "type", "type": "error type"},
-                    {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"}
-                ],
-                "tags": ["dawn"]
-            },
-            {
-                "name": "inject error 2",
-                "args": [
-                    {"name": "type", "type": "error type"},
                     {"name": "message", "type": "string view"}
                 ],
                 "tags": ["dawn"]
             },
             {
                 "name": "force loss",
-                "args": [
-                    {"name": "type", "type": "device lost reason"},
-                    {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"}
-                ],
-                "tags": ["dawn"]
-            },
-            {
-                "name": "force loss 2",
                 "args": [
                     {"name": "type", "type": "device lost reason"},
                     {"name": "message", "type": "string view"}
@@ -1779,14 +1673,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             },
             {
@@ -1795,14 +1682,6 @@
                 "args": [
                     {"name": "descriptor", "type": "texture descriptor", "annotation": "const*"}
                 ]
-            },
-            {
-                "name": "get supported surface usage",
-                "tags": ["dawn", "native"],
-                "returns": "texture usage",
-                "args": [
-                    {"name": "surface", "type": "surface"}
-                ]
             }
         ]
     },
@@ -1810,7 +1689,7 @@
         "category": "function pointer",
         "args": [
             {"name": "reason", "type": "device lost reason"},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"},
+            {"name": "message", "type": "string view"},
             {"name": "userdata", "type": "void *"}
         ]
     },
@@ -1819,7 +1698,7 @@
         "args": [
             {"name": "device", "type": "device", "annotation": "const*", "length": 1},
             {"name": "reason", "type": "device lost reason"},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"},
+            {"name": "message", "type": "string view"},
             {"name": "userdata", "type": "void *"}
         ]
     },
@@ -1828,7 +1707,7 @@
         "args": [
             {"name": "device", "type": "device", "annotation": "const*", "length": 1},
             {"name": "reason", "type": "device lost reason"},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"}
+            {"name": "message", "type": "string view"}
         ]
     },
     "device lost callback info": {
@@ -1866,7 +1745,7 @@
         "category": "function pointer",
         "args": [
             {"name": "type", "type": "error type"},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"},
+            {"name": "message", "type": "string view"},
             {"name": "userdata", "type": "void *"}
         ]
     },
@@ -1875,7 +1754,7 @@
         "args": [
             {"name": "device", "type": "device", "annotation": "const*", "length": 1},
             {"name": "type", "type": "error type"},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"}
+            {"name": "message", "type": "string view"}
         ]
     },
     "uncaptured error callback info": {
@@ -1905,7 +1784,7 @@
         "args": [
             {"name": "status", "type": "pop error scope status"},
             {"name": "type", "type": "error type"},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"},
+            {"name": "message", "type": "string view"},
             {"name": "userdata", "type": "void *"}
         ]
     },
@@ -1914,7 +1793,7 @@
         "args": [
             {"name": "status", "type": "pop error scope status"},
             {"name": "type", "type": "error type"},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"}
+            {"name": "message", "type": "string view"}
         ]
     },
     "pop error scope callback info": {
@@ -1981,6 +1860,15 @@
             {"name": "max subgroup size", "type": "uint32_t", "default": "WGPU_LIMIT_U32_UNDEFINED"}
         ]
     },
+    "dawn experimental immediate data limits": {
+        "category": "structure",
+        "chained": "out",
+        "chain roots": ["supported limits"],
+        "tags": ["dawn"],
+        "members": [
+            {"name": "max immediate data range byte size", "type": "uint32_t", "default": "WGPU_LIMIT_U32_UNDEFINED"}
+        ]
+    },
     "required limits": {
         "category": "structure",
         "extensible": "in",
@@ -1995,12 +1883,20 @@
             {"name": "limits", "type": "limits"}
         ]
     },
+    "supported features": {
+        "category": "structure",
+        "out": true,
+        "members": [
+            {"name": "feature count", "type": "size_t"},
+            {"name": "features", "type": "feature name", "annotation": "const*", "length": "feature count"}
+        ]
+    },
     "logging callback": {
         "category": "function pointer",
         "tags": ["dawn"],
         "args": [
             {"name": "type", "type": "logging type"},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen"},
+            {"name": "message", "type": "string view"},
             {"name": "userdata", "type": "void *"}
         ]
     },
@@ -2058,14 +1954,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             },
             {
@@ -2099,11 +1988,14 @@
         "tags": ["dawn"],
         "_comment": "TODO(crbug.com/1514732): deprecate flipY",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "plane 0", "type": "texture view"},
             {"name": "plane 1", "type": "texture view", "optional": true},
             {"name": "visible origin", "type": "origin 2D"},
             {"name": "visible size", "type": "extent 2D"},
+            {"name": "crop origin", "type": "origin 2D"},
+            {"name": "crop size", "type": "extent 2D"},
+            {"name": "apparent size", "type": "extent 2D"},
             {"name": "do yuv to rgb conversion only", "type": "bool", "default": "false"},
             {"name": "yuv to rgb conversion matrix", "type": "float", "annotation": "const*",
                 "length": 12, "optional": true},
@@ -2132,14 +2024,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             },
             {
@@ -2193,7 +2078,7 @@
         "extensible": "in",
         "tags": ["dawn", "native"],
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
+            {"name": "label", "type": "string view", "optional": true}
         ]
     },
     "shared texture memory": {
@@ -2204,14 +2089,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             },
             {
@@ -2275,7 +2153,7 @@
         "extensible": "in",
         "tags": ["dawn", "native"],
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
+            {"name": "label", "type": "string view", "optional": true}
         ]
     },
     "shared buffer memory begin access descriptor": {
@@ -2467,7 +2345,7 @@
         "extensible": "in",
         "tags": ["dawn", "native"],
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
+            {"name": "label", "type": "string view", "optional": true}
         ]
     },
     "shared fence vk semaphore opaque FD descriptor": {
@@ -2479,7 +2357,7 @@
             {"name": "handle", "type": "int"}
         ]
     },
-    "shared fence vk semaphore sync FD descriptor": {
+    "shared fence sync FD descriptor": {
         "category": "structure",
         "chained": "in",
         "chain roots": ["shared fence descriptor"],
@@ -2487,6 +2365,11 @@
         "members": [
             {"name": "handle", "type": "int"}
         ]
+    },
+    "shared fence vk semaphore sync FD descriptor": {
+        "category": "typedef",
+        "tags": ["dawn", "native"],
+        "type": "shared fence sync FD descriptor"
     },
     "shared fence vk semaphore zircon handle descriptor": {
         "category": "structure",
@@ -2521,7 +2404,7 @@
         "tags": ["dawn", "native"],
         "values": [
             {"value": 1, "name": "vk semaphore opaque FD"},
-            {"value": 2, "name": "vk semaphore sync FD"},
+            {"value": 2, "name": "sync FD"},
             {"value": 3, "name": "vk semaphore zircon handle"},
             {"value": 4, "name": "DXGI shared handle"},
             {"value": 5, "name": "MTL shared event"}
@@ -2544,7 +2427,7 @@
             {"name": "handle", "type": "int"}
         ]
     },
-    "shared fence vk semaphore sync FD export info": {
+    "shared fence sync FD export info": {
         "category": "structure",
         "chained": "out",
         "chain roots": ["shared fence export info"],
@@ -2552,6 +2435,11 @@
         "members": [
             {"name": "handle", "type": "int"}
         ]
+    },
+    "shared fence vk semaphore sync FD export info": {
+        "category": "typedef",
+        "tags": ["dawn", "native"],
+        "type": "shared fence sync FD export info"
     },
     "shared fence vk semaphore zircon handle export info": {
         "category": "structure",
@@ -2595,15 +2483,16 @@
             {"value": 9, "name": "RG11B10 ufloat renderable"},
             {"value": 10, "name": "BGRA8 unorm storage"},
             {"value": 11, "name": "float32 filterable", "jsrepr": "'float32-filterable'"},
-            {"value": 12, "name": "subgroups"},
-            {"value": 13, "name": "subgroups f16"},
+            {"value": 12, "name": "float32 blendable", "jsrepr": "'float32-blendable'"},
+            {"value": 13, "name": "subgroups"},
+            {"value": 14, "name": "subgroups f16"},
 
             {"value": 0, "name": "dawn internal usages", "tags": ["dawn"]},
             {"value": 1, "name": "dawn multi planar formats", "tags": ["dawn"]},
             {"value": 2, "name": "dawn native", "tags": ["dawn", "native"]},
             {"value": 3, "name": "chromium experimental timestamp query inside passes", "tags": ["dawn"]},
             {"value": 4, "name": "implicit device synchronization", "tags": ["dawn", "native"]},
-            {"value": 5, "name": "surface capabilities", "tags": ["dawn", "native"]},
+            {"value": 5, "name": "chromium experimental immediate data", "tags": ["dawn"]},
             {"value": 6, "name": "transient attachments", "tags": ["dawn"]},
             {"value": 7, "name": "MSAA render to single sampled", "tags": ["dawn"]},
             {"value": 8, "name": "dual source blending", "tags": ["dawn"]},
@@ -2644,7 +2533,7 @@
             {"value": 42, "name": "shared texture memory IO surface", "tags": ["dawn", "native"]},
             {"value": 43, "name": "shared texture memory EGL image", "tags": ["dawn", "native"]},
             {"value": 44, "name": "shared fence vk semaphore opaque FD", "tags": ["dawn", "native"]},
-            {"value": 45, "name": "shared fence vk semaphore sync FD", "tags": ["dawn", "native"]},
+            {"value": 45, "name": "shared fence sync FD", "tags": ["dawn", "native"]},
             {"value": 46, "name": "shared fence vk semaphore zircon handle", "tags": ["dawn", "native"]},
             {"value": 47, "name": "shared fence DXGI shared handle", "tags": ["dawn", "native"]},
             {"value": 48, "name": "shared fence MTL shared event", "tags": ["dawn", "native"]},
@@ -2656,7 +2545,8 @@
             {"value": 53, "name": "dawn load resolve texture", "tags": ["dawn"]},
             {"value": 54, "name": "dawn partial load resolve texture", "tags": ["dawn"]},
             {"value": 55, "name": "multi draw indirect", "tags": ["dawn"]},
-            {"value": 56, "name": "clip distances", "tags": ["dawn"]}
+            {"value": 56, "name": "clip distances", "tags": ["dawn"]},
+            {"value": 57, "name": "shared fence vk semaphore sync FD", "tags": ["dawn", "native"]}
         ]
     },
     "filter mode": {
@@ -2956,14 +2846,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -2972,9 +2855,10 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "bind group layout count", "type": "size_t"},
-            {"name": "bind group layouts", "type": "bind group layout", "annotation": "const*", "length": "bind group layout count"}
+            {"name": "bind group layouts", "type": "bind group layout", "annotation": "const*", "length": "bind group layout count"},
+            {"name": "immediate data range byte size", "type": "uint32_t", "default": 0}
         ]
     },
     "pipeline layout pixel local storage": {
@@ -3020,7 +2904,7 @@
         "extensible": "in",
         "members": [
             {"name": "module", "type": "shader module"},
-            {"name": "entry point", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "entry point", "type": "string view", "optional": true},
             {"name": "constant count", "type": "size_t", "default": 0},
             {"name": "constants", "type": "constant entry", "annotation": "const*", "length": "constant count"}
         ]
@@ -3043,14 +2927,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             },
             {
@@ -3070,7 +2947,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "type", "type": "query type"},
             {"name": "count", "type": "uint32_t"}
         ]
@@ -3163,14 +3040,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -3179,7 +3049,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
+            {"name": "label", "type": "string view", "optional": true}
         ]
     },
     "queue work done callback": {
@@ -3230,14 +3100,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -3298,12 +3161,6 @@
             {
                 "name": "insert debug marker",
                 "args": [
-                    {"name": "marker label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "insert debug marker 2",
-                "args": [
                     {"name": "marker label", "type": "string view"}
                 ]
             },
@@ -3313,12 +3170,6 @@
             },
             {
                 "name": "push debug group",
-                "args": [
-                    {"name": "group label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "push debug group 2",
                 "args": [
                     {"name": "group label", "type": "string view"}
                 ]
@@ -3352,14 +3203,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -3369,7 +3213,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
+            {"name": "label", "type": "string view", "optional": true}
         ]
     },
 
@@ -3377,7 +3221,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "color format count", "type": "size_t"},
             {"name": "color formats", "type": "texture format", "annotation": "const*", "length": "color format count"},
             {"name": "depth stencil format", "type": "texture format", "default": "undefined"},
@@ -3427,7 +3271,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "color attachment count", "type": "size_t"},
             {"name": "color attachments", "type": "render pass color attachment", "annotation": "const*", "length": "color attachment count"},
             {"name": "depth stencil attachment", "type": "render pass depth stencil attachment", "annotation": "const*", "optional": true},
@@ -3565,12 +3409,6 @@
             {
                 "name": "insert debug marker",
                 "args": [
-                    {"name": "marker label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "insert debug marker 2",
-                "args": [
                     {"name": "marker label", "type": "string view"}
                 ]
             },
@@ -3580,12 +3418,6 @@
             },
             {
                 "name": "push debug group",
-                "args": [
-                    {"name": "group label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "push debug group 2",
                 "args": [
                     {"name": "group label", "type": "string view"}
                 ]
@@ -3668,14 +3500,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -3702,14 +3527,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -3721,7 +3539,7 @@
         "args": [
             {"name": "status", "type": "request device status"},
             {"name": "device", "type": "device", "optional": true},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "message", "type": "string view"},
             {"name": "userdata", "type": "void *"}
         ]
     },
@@ -3731,7 +3549,7 @@
         "args": [
             {"name": "status", "type": "request device status"},
             {"name": "device", "type": "device", "optional": true},
-            {"name": "message", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
+            {"name": "message", "type": "string view"}
         ]
     },
     "request device callback info": {
@@ -3767,7 +3585,7 @@
         "extensible": "in",
         "members": [
             {"name": "module", "type": "shader module"},
-            {"name": "entry point", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "entry point", "type": "string view", "optional": true},
             {"name": "constant count", "type": "size_t", "default": 0},
             {"name": "constants", "type": "constant entry", "annotation": "const*", "length": "constant count"},
             {"name": "buffer count", "type": "size_t", "default": 0},
@@ -3819,7 +3637,7 @@
         "extensible": "in",
         "members": [
             {"name": "module", "type": "shader module"},
-            {"name": "entry point", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "entry point", "type": "string view", "optional": true},
             {"name": "constant count", "type": "size_t", "default": 0},
             {"name": "constants", "type": "constant entry", "annotation": "const*", "length": "constant count"},
             {"name": "target count", "type": "size_t"},
@@ -3857,7 +3675,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "layout", "type": "pipeline layout", "optional": true},
             {"name": "vertex", "type": "vertex state"},
             {"name": "primitive", "type": "primitive state"},
@@ -3874,14 +3692,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -3890,7 +3701,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "address mode u", "type": "address mode", "default": "clamp to edge"},
             {"name": "address mode v", "type": "address mode", "default": "clamp to edge"},
             {"name": "address mode w", "type": "address mode", "default": "clamp to edge"},
@@ -3935,14 +3746,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -3951,18 +3755,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
-            {"name": "hint count", "type": "size_t", "default": 0, "tags": ["upstream"]},
-            {"name": "hints", "type": "shader module compilation hint", "annotation": "const*", "length": "hint count", "tags": ["upstream"]}
-        ]
-    },
-    "shader module compilation hint": {
-        "category": "structure",
-        "extensible": "in",
-        "tags": ["upstream"],
-        "members": [
-            {"name": "entry point", "type": "char", "annotation": "const*", "length": "strlen"},
-            {"name": "layout", "type": "pipeline layout"}
+            {"name": "label", "type": "string view", "optional": true}
         ]
     },
     "shader module SPIRV descriptor": {
@@ -3987,7 +3780,7 @@
         "chained": "in",
         "chain roots": ["shader module descriptor"],
         "members": [
-            {"name": "code", "type": "char", "annotation": "const*", "length": "strlen"}
+            {"name": "code", "type": "string view"}
         ]
     },
     "dawn shader module SPIRV options descriptor": {
@@ -4068,13 +3861,6 @@
                 ]
             },
             {
-                "name": "get preferred format",
-                "returns": "texture format",
-                "args": [
-                    {"name": "adapter", "type": "adapter"}
-                ]
-            },
-            {
                 "name": "present",
                 "returns": "void",
                 "args": []
@@ -4088,14 +3874,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -4104,7 +3883,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true}
+            {"name": "label", "type": "string view", "optional": true}
         ]
     },
     "surface descriptor from android native window": {
@@ -4132,7 +3911,7 @@
         "chain roots": ["surface descriptor"],
         "tags": ["emscripten"],
         "members": [
-            {"name": "selector", "type": "char", "annotation": "const*", "length": "strlen"}
+            {"name": "selector", "type": "string view"}
         ]
     },
     "surface descriptor from metal layer": {
@@ -4227,28 +4006,6 @@
             {"name": "swap chain panel", "type": "void", "annotation": "*"}
         ]
     },
-    "swap chain": {
-        "category": "object",
-        "tags": ["art", "dawn", "emscripten"],
-        "methods": [
-            {"name": "get current texture view", "returns": "texture view"},
-            {"name": "get current texture", "returns": "texture", "tags": ["dawn"]},
-            {"name": "present"}
-        ]
-    },
-    "swap chain descriptor": {
-        "category": "structure",
-        "tags": ["art", "dawn", "emscripten"],
-        "extensible": "in",
-        "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
-            {"name": "usage", "type": "texture usage"},
-            {"name": "format", "type": "texture format"},
-            {"name": "width", "type": "uint32_t"},
-            {"name": "height", "type": "uint32_t"},
-            {"name": "present mode", "type": "present mode"}
-        ]
-    },
     "surface texture": {
         "category": "structure",
         "members": [
@@ -4322,8 +4079,8 @@
             {"value": 43, "name": "shared texture memory D3D swapchain begin state", "tags": ["dawn", "native"]},
             {"value": 44, "name": "shared fence vk semaphore opaque FD descriptor", "tags": ["dawn", "native"]},
             {"value": 45, "name": "shared fence vk semaphore opaque FD export info", "tags": ["dawn", "native"]},
-            {"value": 46, "name": "shared fence vk semaphore sync FD descriptor", "tags": ["dawn", "native"]},
-            {"value": 47, "name": "shared fence vk semaphore sync FD export info", "tags": ["dawn", "native"]},
+            {"value": 46, "name": "shared fence sync FD descriptor", "tags": ["dawn", "native"]},
+            {"value": 47, "name": "shared fence sync FD export info", "tags": ["dawn", "native"]},
             {"value": 48, "name": "shared fence vk semaphore zircon handle descriptor", "tags": ["dawn", "native"]},
             {"value": 49, "name": "shared fence vk semaphore zircon handle export info", "tags": ["dawn", "native"]},
             {"value": 50, "name": "shared fence DXGI shared handle descriptor", "tags": ["dawn", "native"]},
@@ -4334,7 +4091,8 @@
             {"value": 55, "name": "static sampler binding layout", "tags": ["dawn"]},
             {"value": 56, "name": "y cb cr vk descriptor", "tags": ["dawn"]},
             {"value": 57, "name": "shared texture memory a hardware buffer properties", "tags": ["dawn", "native"]},
-            {"value": 58, "name": "a hardware buffer properties", "tags": ["dawn", "native"]}
+            {"value": 58, "name": "a hardware buffer properties", "tags": ["dawn", "native"]},
+            {"value": 59, "name": "dawn experimental immediate data limits", "tags": ["dawn"]}
 
         ]
     },
@@ -4360,14 +4118,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             },
             {
@@ -4444,7 +4195,7 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "usage", "type": "texture usage"},
             {"name": "dimension", "type": "texture dimension", "default": "2D"},
             {"name": "size", "type": "extent 3D"},
@@ -4452,7 +4203,7 @@
             {"name": "mip level count", "type": "uint32_t", "default": 1},
             {"name": "sample count", "type": "uint32_t", "default": 1},
             {"name": "view format count", "type": "size_t", "default": 0},
-            {"name": "view formats", "type": "texture format", "annotation": "const*", "length": "view format count"}
+            {"name": "view formats", "type": "texture format", "annotation": "const*", "length": "view format count", "default": "nullptr"}
         ]
     },
     "texture binding view dimension descriptor": {
@@ -4615,14 +4366,15 @@
         "category": "structure",
         "extensible": "in",
         "members": [
-            {"name": "label", "type": "char", "annotation": "const*", "length": "strlen", "optional": true},
+            {"name": "label", "type": "string view", "optional": true},
             {"name": "format", "type": "texture format", "default": "undefined"},
             {"name": "dimension", "type": "texture view dimension", "default": "undefined"},
             {"name": "base mip level", "type": "uint32_t", "default": "0"},
             {"name": "mip level count", "type": "uint32_t", "default": "WGPU_MIP_LEVEL_COUNT_UNDEFINED"},
             {"name": "base array layer", "type": "uint32_t", "default": "0"},
             {"name": "array layer count", "type": "uint32_t", "default": "WGPU_ARRAY_LAYER_COUNT_UNDEFINED"},
-            {"name": "aspect", "type": "texture aspect", "default": "all"}
+            {"name": "aspect", "type": "texture aspect", "default": "all"},
+            {"name": "usage", "type": "texture usage", "default": "none"}
         ]
     },
     "texture view": {
@@ -4632,14 +4384,7 @@
                 "name": "set label",
                 "returns": "void",
                 "args": [
-                    {"name": "label", "type": "char", "annotation": "const*", "length": "strlen"}
-                ]
-            },
-            {
-                "name": "set label 2",
-                "returns": "void",
-                "args": [
-                    {"name": "label", "type": "nullable string view"}
+                    {"name": "label", "type": "string view"}
                 ]
             }
         ]
@@ -4679,37 +4424,47 @@
     "vertex format": {
         "category": "enum",
         "values": [
-            {"value": 1,  "name": "uint8x2"},
-            {"value": 2,  "name": "uint8x4"},
-            {"value": 3,  "name": "sint8x2"},
-            {"value": 4,  "name": "sint8x4"},
-            {"value": 5,  "name": "unorm8x2"},
-            {"value": 6,  "name": "unorm8x4"},
-            {"value": 7,  "name": "snorm8x2"},
-            {"value": 8,  "name": "snorm8x4"},
-            {"value": 9,  "name": "uint16x2"},
-            {"value": 10, "name": "uint16x4"},
-            {"value": 11, "name": "sint16x2"},
-            {"value": 12, "name": "sint16x4"},
-            {"value": 13, "name": "unorm16x2"},
-            {"value": 14, "name": "unorm16x4"},
-            {"value": 15, "name": "snorm16x2"},
-            {"value": 16, "name": "snorm16x4"},
-            {"value": 17, "name": "float16x2"},
-            {"value": 18, "name": "float16x4"},
-            {"value": 19, "name": "float32"},
-            {"value": 20, "name": "float32x2"},
-            {"value": 21, "name": "float32x3"},
-            {"value": 22, "name": "float32x4"},
-            {"value": 23, "name": "uint32"},
-            {"value": 24, "name": "uint32x2"},
-            {"value": 25, "name": "uint32x3"},
-            {"value": 26, "name": "uint32x4"},
-            {"value": 27, "name": "sint32"},
-            {"value": 28, "name": "sint32x2"},
-            {"value": 29, "name": "sint32x3"},
-            {"value": 30, "name": "sint32x4"},
-            {"value": 31, "name": "unorm 10_10_10_2", "jsrepr": "'unorm10-10-10-2'"}
+            {"value": 1,  "name": "uint8"},
+            {"value": 2,  "name": "uint8x2"},
+            {"value": 3,  "name": "uint8x4"},
+            {"value": 4,  "name": "sint8"},
+            {"value": 5,  "name": "sint8x2"},
+            {"value": 6,  "name": "sint8x4"},
+            {"value": 7,  "name": "unorm8"},
+            {"value": 8,  "name": "unorm8x2"},
+            {"value": 9,  "name": "unorm8x4"},
+            {"value": 10, "name": "snorm8"},
+            {"value": 11, "name": "snorm8x2"},
+            {"value": 12, "name": "snorm8x4"},
+            {"value": 13, "name": "uint16"},
+            {"value": 14, "name": "uint16x2"},
+            {"value": 15, "name": "uint16x4"},
+            {"value": 16, "name": "sint16"},
+            {"value": 17, "name": "sint16x2"},
+            {"value": 18, "name": "sint16x4"},
+            {"value": 19, "name": "unorm16"},
+            {"value": 20, "name": "unorm16x2"},
+            {"value": 21, "name": "unorm16x4"},
+            {"value": 22, "name": "snorm16"},
+            {"value": 23, "name": "snorm16x2"},
+            {"value": 24, "name": "snorm16x4"},
+            {"value": 25, "name": "float16"},
+            {"value": 26, "name": "float16x2"},
+            {"value": 27, "name": "float16x4"},
+            {"value": 28, "name": "float32"},
+            {"value": 29, "name": "float32x2"},
+            {"value": 30, "name": "float32x3"},
+            {"value": 31, "name": "float32x4"},
+            {"value": 32, "name": "uint32"},
+            {"value": 33, "name": "uint32x2"},
+            {"value": 34, "name": "uint32x3"},
+            {"value": 35, "name": "uint32x4"},
+            {"value": 36, "name": "sint32"},
+            {"value": 37, "name": "sint32x2"},
+            {"value": 38, "name": "sint32x3"},
+            {"value": 39, "name": "sint32x4"},
+            {"value": 40, "name": "unorm 10_10_10_2", "jsrepr": "'unorm10-10-10-2'"},
+            {"value": 41, "name": "unorm8x4 BGRA", "jsrepr": "'unorm8x4-bgra'"}
         ]
     },
     "WGSL feature name": {
@@ -4771,6 +4526,11 @@
         "category": "constant",
         "type": "uint32_t",
         "value":  "UINT32_MAX"
+    },
+    "strlen" : {
+        "category": "constant",
+        "type": "size_t",
+        "value":  "SIZE_MAX"
     },
     "ObjectType": {
       "_comment": "Only used for the wire",

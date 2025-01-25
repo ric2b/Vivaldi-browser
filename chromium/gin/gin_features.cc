@@ -100,6 +100,11 @@ BASE_FEATURE(kV8ExternalMemoryAccountedInGlobalLimit,
              "V8ExternalMemoryAccountedInGlobalLimit",
              kFeatureDefaultStateControlledByV8);
 
+// Enables using gc tracer counters to directly compute old gen GC speed.
+BASE_FEATURE(kV8GCSpeedUsesCounters,
+             "V8GCSpeedUsesCounters",
+             kFeatureDefaultStateControlledByV8);
+
 // Enables the Turbofan compiler.
 BASE_FEATURE(kV8Turbofan, ("V8Turbofan"), kFeatureDefaultStateControlledByV8);
 
@@ -277,11 +282,6 @@ BASE_FEATURE(kV8IntelJCCErratumMitigation,
 
 // JavaScript language features.
 
-// Enables the experiment with compile hints as magic comments.
-BASE_FEATURE(kJavaScriptCompileHintsMagic,
-             ("JavaScriptCompileHintsMagic"),
-             kFeatureDefaultStateControlledByV8);
-
 // Enables the iterator helpers proposal.
 BASE_FEATURE(kJavaScriptIteratorHelpers,
              ("kJavaScriptIteratorHelpers"),
@@ -325,11 +325,6 @@ BASE_FEATURE(kWebAssemblyDeopt,
              "WebAssemblyDeopt",
              kFeatureDefaultStateControlledByV8);
 
-// Enable WebAssembly inlining (not user visible).
-BASE_FEATURE(kWebAssemblyInlining,
-             ("WebAssemblyInlining"),
-             kFeatureDefaultStateControlledByV8);
-
 // Feature for WebAssembly speculative inlining of indirect calls (see
 // https://crbug.com/335082212; and https://crbug.com/40898108 for direct call
 // and call_ref inlining, which has already launched above). Not user visible.
@@ -340,11 +335,6 @@ BASE_FEATURE(kWebAssemblyInliningCallIndirect,
 // Enable WebAssembly code flushing.
 BASE_FEATURE(kWebAssemblyLiftoffCodeFlushing,
              ("WebAssemblyLiftoffCodeFlushing"),
-             kFeatureDefaultStateControlledByV8);
-
-// Enable the generic wasm-to-js wrapper.
-BASE_FEATURE(kWebAssemblyGenericWrapper,
-             ("WebAssemblyGenericWrapper"),
              kFeatureDefaultStateControlledByV8);
 
 // Enable support for multiple memories according to the multi-memory proposal:
@@ -361,21 +351,5 @@ BASE_FEATURE(kWebAssemblyTurboshaft,
 BASE_FEATURE(kWebAssemblyTurboshaftInstructionSelection,
              ("WebAssemblyTurboshaftInstructionSelection"),
              kFeatureDefaultStateControlledByV8);
-
-// Feature for more aggressive code caching (https://crbug.com/v8/14411,
-// https://crbug.com/40945417) and three parameters to control caching behavior.
-BASE_FEATURE(kWebAssemblyMoreAggressiveCodeCaching,
-             "WebAssemblyMoreAggressiveCodeCaching",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<int> kWebAssemblyMoreAggressiveCodeCachingThreshold{
-    &kWebAssemblyMoreAggressiveCodeCaching, "WebAssemblyCodeCachingThreshold",
-    1'000};
-const base::FeatureParam<int> kWebAssemblyMoreAggressiveCodeCachingTimeoutMs{
-    &kWebAssemblyMoreAggressiveCodeCaching, "WebAssemblyCodeCachingTimeoutMs",
-    2000};
-const base::FeatureParam<int>
-    kWebAssemblyMoreAggressiveCodeCachingHardThreshold{
-        &kWebAssemblyMoreAggressiveCodeCaching,
-        "WebAssemblyCodeCachingHardThreshold", 1'000'000};
 
 }  // namespace features

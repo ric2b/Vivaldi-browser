@@ -27,7 +27,6 @@ import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
  */
 public class TabListGroupMenuCoordinator extends TabGroupOverflowMenuCoordinator {
     /**
-     * @param onItemClickedCallback A callback for listening to clicks.
      * @param tabModelSupplier The supplier of the tab model.
      * @param isTabGroupSyncEnabled Whether to show the delete group option.
      * @param identityManager Used for checking the current account.
@@ -70,7 +69,7 @@ public class TabListGroupMenuCoordinator extends TabGroupOverflowMenuCoordinator
         itemList.add(
                 BrowserUiListMenuUtils.buildMenuListItemWithIncognitoBranding(
                         R.string.close_tab_group_menu_item,
-                        R.id.close_tab,
+                        R.id.close_tab_group,
                         /* startIconId= */ Resources.ID_NULL,
                         /* iconTintColorStateList= */ Resources.ID_NULL,
                         R.style.TextAppearance_TextLarge_Primary_Baseline_Light,
@@ -101,7 +100,7 @@ public class TabListGroupMenuCoordinator extends TabGroupOverflowMenuCoordinator
             itemList.add(
                     BrowserUiListMenuUtils.buildMenuListItemWithIncognitoBranding(
                             R.string.delete_tab_group_menu_item,
-                            R.id.delete_tab,
+                            R.id.delete_tab_group,
                             /* startIconId= */ Resources.ID_NULL,
                             /* iconTintColorStateList= */ Resources.ID_NULL,
                             R.style.TextAppearance_TextLarge_Primary_Baseline_Light,

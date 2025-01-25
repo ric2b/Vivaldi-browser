@@ -16,7 +16,6 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/path_service.h"
-#import "base/profiler/process_type.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/task/sequenced_task_runner.h"
 #import "base/task/single_thread_task_runner.h"
@@ -43,6 +42,7 @@
 #import "components/prefs/json_pref_store.h"
 #import "components/prefs/pref_service.h"
 #import "components/previous_session_info/previous_session_info.h"
+#import "components/sampling_profiler/process_type.h"
 #import "components/signin/public/identity_manager/tribool.h"
 #import "components/translate/core/browser/translate_download_manager.h"
 #import "components/translate/core/browser/translate_metrics_logger_impl.h"
@@ -264,8 +264,8 @@ void IOSChromeMainParts::PreCreateThreads() {
   // consistency with other main delegates where the browser process is denoted
   // this way.
   memory_system::Initializer()
-      .SetProfilingClientParameters(channel,
-                                    base::ProfilerProcessType::kBrowser)
+      .SetProfilingClientParameters(
+          channel, sampling_profiler::ProfilerProcessType::kBrowser)
       .SetDispatcherParameters(memory_system::DispatcherParameters::
                                    PoissonAllocationSamplerInclusion::kDynamic,
                                memory_system::DispatcherParameters::
@@ -319,6 +319,15 @@ void IOSChromeMainParts::PreMainMessageLoopRun() {
       .PreProfileInit(
           /*in_memory_database=*/false);
 
+  // This must occur at PreMainMessageLoopRun because `SetupMetrics()` uses the
+  // blocking pool, which is disabled until the CreateThreads phase of startup.
+  // TODO(crbug.com/41356264): Investigate whether metrics recording can be
+  // initialized consistently across iOS and non-iOS platforms
+  SetupMetrics();
+
+  // Now that the file thread has been started, start recording.
+  StartMetricsRecording();
+
   // Ensure that the KeyedService factories are registered.
   EnsureProfileKeyedServiceFactoriesBuilt();
   BrowserStateDependencyManager::GetInstance()
@@ -334,17 +343,8 @@ void IOSChromeMainParts::PreMainMessageLoopRun() {
 
   // TODO(crbug.com/325257407): Factor all of the code that uses this to instead
   // initialize for every profile.
-  ProfileIOS* last_used_profile =
-      profile_manager->GetLastUsedProfileDeprecatedDoNotUse();
-
-  // This must occur at PreMainMessageLoopRun because `SetupMetrics()` uses the
-  // blocking pool, which is disabled until the CreateThreads phase of startup.
-  // TODO(crbug.com/41356264): Investigate whether metrics recording can be
-  // initialized consistently across iOS and non-iOS platforms
-  SetupMetrics();
-
-  // Now that the file thread has been started, start recording.
-  StartMetricsRecording();
+  std::vector<ProfileIOS*> profiles = profile_manager->GetLoadedProfiles();
+  ProfileIOS* last_used_profile = profiles.at(0);
 
   // Because the CleanExitBeacon flag takes 2 restarts to take effect, register
   // a synthetic field trial when the user defaults beacon is set. Called
@@ -412,13 +412,12 @@ void IOSChromeMainParts::PreMainMessageLoopRun() {
   // Ensure that Safe Browsing is initialized.
   SafeBrowsingService* safe_browsing_service =
       application_context_->GetSafeBrowsingService();
-  base::FilePath user_data_path;
-  CHECK(base::PathService::Get(ios::DIR_USER_DATA, &user_data_path));
   safe_browsing::SafeBrowsingMetricsCollector* safe_browsing_metrics_collector =
       SafeBrowsingMetricsCollectorFactory::GetForProfile(last_used_profile);
-  safe_browsing_service->Initialize(last_used_profile->GetPrefs(),
-                                    user_data_path,
-                                    safe_browsing_metrics_collector);
+  safe_browsing_service->Initialize(
+      last_used_profile->GetPrefs(),
+      base::PathService::CheckedGet(ios::DIR_USER_DATA),
+      safe_browsing_metrics_collector);
 
 // Vivaldi
   stats_reporter_ = vivaldi::StatsReporter::CreateInstance();

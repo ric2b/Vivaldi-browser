@@ -8,6 +8,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
@@ -33,7 +34,8 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.chrome.browser.commerce.ShoppingFeatures;
+import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
+import org.chromium.chrome.browser.commerce.ShoppingServiceFactoryJni;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
@@ -47,6 +49,8 @@ import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.components.browser_ui.notifications.MockNotificationManagerProxy;
+import org.chromium.components.commerce.core.CommerceFeatureUtils;
+import org.chromium.components.commerce.core.CommerceFeatureUtilsJni;
 import org.chromium.components.commerce.core.ShoppingService;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
@@ -64,11 +68,12 @@ public class CommerceSubscriptionsServiceUnitTest {
     @Mock private ShoppingService mShoppingService;
     @Mock TabModelSelector mTabModelSelector;
     @Mock private ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
-    @Mock private ImplicitPriceDropSubscriptionsManager mImplicitSubscriptionsManager;
     @Mock private Profile mProfile;
     @Mock private PrefService mPrefService;
     @Mock private IdentityServicesProvider mIdentityServicesProvider;
     @Mock private UserPrefs.Natives mUserPrefsJni;
+    @Mock private CommerceFeatureUtils.Natives mCommerceFeatureUtilsJniMock;
+    @Mock private ShoppingServiceFactory.Natives mShoppingServiceFactoryJniMock;
 
     @Captor
     private ArgumentCaptor<PauseResumeWithNativeObserver> mPauseResumeWithNativeObserverCaptor;
@@ -83,6 +88,12 @@ public class CommerceSubscriptionsServiceUnitTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
 
+        mJniMocker.mock(CommerceFeatureUtilsJni.TEST_HOOKS, mCommerceFeatureUtilsJniMock);
+        doReturn(true).when(mCommerceFeatureUtilsJniMock).isShoppingListEligible(anyLong());
+
+        mJniMocker.mock(ShoppingServiceFactoryJni.TEST_HOOKS, mShoppingServiceFactoryJniMock);
+        doReturn(mShoppingService).when(mShoppingServiceFactoryJniMock).getForProfile(any());
+
         doNothing().when(mActivityLifecycleDispatcher).register(any());
         mSharedPreferencesManager = ChromeSharedPreferences.getInstance();
         mSharedPreferencesManager.writeLong(
@@ -96,9 +107,6 @@ public class CommerceSubscriptionsServiceUnitTest {
         mTestValues.addFeatureFlagOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING, true);
         FeatureList.setTestValues(mTestValues);
 
-        ShoppingFeatures.setShoppingListEligibleForTesting(true);
-        doReturn(true).when(mShoppingService).isShoppingListEligible();
-
         mMockNotificationManager = new MockNotificationManagerProxy();
         mMockNotificationManager.setNotificationsEnabled(false);
         PriceDropNotificationManagerImpl.setNotificationManagerForTesting(mMockNotificationManager);
@@ -110,20 +118,11 @@ public class CommerceSubscriptionsServiceUnitTest {
         mPriceDropNotificationManager = PriceDropNotificationManagerFactory.create(mProfile);
         mService =
                 new CommerceSubscriptionsService(mShoppingService, mPriceDropNotificationManager);
-        mService.setImplicitSubscriptionsManagerForTesting(mImplicitSubscriptionsManager);
     }
 
     @After
     public void tearDown() {
         PriceDropNotificationManagerImpl.setNotificationManagerForTesting(null);
-        ShoppingFeatures.setShoppingListEligibleForTesting(null);
-    }
-
-    @Test
-    @SmallTest
-    public void testDestroy() {
-        mService.setImplicitSubscriptionsManagerForTesting(null);
-        mService.destroy();
     }
 
     @Test
@@ -136,7 +135,6 @@ public class CommerceSubscriptionsServiceUnitTest {
         mService.destroy();
         verify(mActivityLifecycleDispatcher, times(1))
                 .unregister(eq(mPauseResumeWithNativeObserverCaptor.getValue()));
-        verify(mImplicitSubscriptionsManager, times(1)).destroy();
     }
 
     @Test
@@ -156,20 +154,18 @@ public class CommerceSubscriptionsServiceUnitTest {
                 RecordHistogram.getHistogramTotalCountForTesting(
                         PriceDropNotificationManagerImpl.NOTIFICATION_USER_MANAGED_COUNT_HISTOGRAM),
                 equalTo(1));
-        verify(mImplicitSubscriptionsManager, times(1)).initializeSubscriptions();
     }
 
     @Test
     @SmallTest
     public void testOnResume_FeatureDisabled() {
-        doReturn(false).when(mShoppingService).isShoppingListEligible();
+        doReturn(false).when(mCommerceFeatureUtilsJniMock).isShoppingListEligible(anyLong());
 
         setupTestOnResume();
         assertThat(
                 RecordHistogram.getHistogramTotalCountForTesting(
                         PriceDropNotificationManagerImpl.NOTIFICATION_ENABLED_HISTOGRAM),
                 equalTo(0));
-        verify(mImplicitSubscriptionsManager, times(0)).initializeSubscriptions();
     }
 
     @Test
@@ -184,7 +180,6 @@ public class CommerceSubscriptionsServiceUnitTest {
                 RecordHistogram.getHistogramTotalCountForTesting(
                         PriceDropNotificationManagerImpl.NOTIFICATION_ENABLED_HISTOGRAM),
                 equalTo(0));
-        verify(mImplicitSubscriptionsManager, times(0)).initializeSubscriptions();
     }
 
     private void setupTestOnResume() {

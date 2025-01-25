@@ -70,8 +70,8 @@ struct GroupAlias {
 // Opens a session.
 int Open(Browser* browser, Index_Node* node,
          const ::vivaldi::SessionOptions& opts);
-// Opens a session with persistent tabs.
-int OpenPersistentTabs(Browser* browser);
+// Opens a session with persistent tabs or just removes them if discard is true.
+int OpenPersistentTabs(Browser* browser, bool discard);
 // Returns the full path to the session file.
 base::FilePath GetPathFromNode(content::BrowserContext* browser_context,
                                Index_Node* node);
@@ -129,8 +129,14 @@ int MoveTabs(content::BrowserContext* browser_context,
              std::optional<double> workspace);
 // Turn tabs specified in 'ids' into tabstack tabs or removes the tabs if
 // group is empty.
-int SetTabStack(content::BrowserContext* browser_context, base::FilePath path,
-                 std::vector<int32_t> ids, std::string group);
+int SetTabStack(content::BrowserContext* browser_context,
+                base::FilePath path,
+                std::vector<int32_t> ids,
+                std::string group);
+
+/// For an imported tab with NO viv_ext_data set, we set a tab stack id.
+void SetTabStackForImportedTab(const base::Uuid id, sessions::SessionTab *tab);
+
 // Moves specified tabs into a new window. Pinned state and tab stacks are kept
 // (the latter if at least two tabs from a stack is affected). Workspace
 // information is removed.
@@ -178,4 +184,7 @@ bool AddCommandLineTab(Browser* browser);
 
 // Returns true if the entry is a web-widget or a panel.
 bool IsVivaldiPanel(const sessions::tab_restore::Entry& entry);
+
+// Returns true if we can restore the tab.
+bool IsRestorableInVivaldi(const sessions::tab_restore::Entry& entry);
 }  // namespace sessions

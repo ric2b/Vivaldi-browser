@@ -5,8 +5,13 @@
 
 #include <assert.h>
 
+#include <stddef.h>
+#include <stdint.h>
 #include <xmmintrin.h>
 
+
+#include "xnnpack/common.h"
+#include "xnnpack/microparams.h"
 #include "xnnpack/pavgpool.h"
 
 
@@ -28,8 +33,10 @@ void xnn_f32_pavgpool_minmax_ukernel_9p8x__sse_c4(
   assert(kernel_elements > 9);
   assert(channels != 0);
 
-  const __m128 voutput_min = _mm_load_ps(params->sse.min);
-  const __m128 voutput_max = _mm_load_ps(params->sse.max);
+  const __m128 voutput_min = _mm_set1_ps(params->scalar.min);
+  const __m128 voutput_max = _mm_set1_ps(params->scalar.max);
+  XNN_FORCE_REALIZATION(voutput_max);
+  XNN_FORCE_REALIZATION(voutput_min);
 
   do {
     {

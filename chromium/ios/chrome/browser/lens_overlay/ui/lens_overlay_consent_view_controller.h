@@ -7,22 +7,24 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/common/ui/promo_style/promo_style_view_controller.h"
+
 @class LensOverlayConsentViewController;
 
 // Delegate for LensOverlayConsentViewController.
-@protocol LensOverlayConsentViewControllerDelegate <NSObject>
+@protocol
+    LensOverlayConsentViewControllerDelegate <PromoStyleViewControllerDelegate>
 
-/// Called when the user interacts with the consent dialog in a definitive way,
-/// accepting or rejecting the ToS.
-- (void)consentViewController:(LensOverlayConsentViewController*)viewController
-    didFinishWithTermsAccepted:(BOOL)accepted;
+/// Called when the user asks to learn more about lens.
+- (void)didPressLearnMore;
 
 @end
 
 /// View controller that contains the ToS and prompts the user for acceptance.
 /// Relies on the `delegate` to actually set the pref.
-@interface LensOverlayConsentViewController : UIViewController
+@interface LensOverlayConsentViewController : PromoStyleViewController
 
+// The delegate to invoke when buttons are tapped.
 @property(nonatomic, weak) id<LensOverlayConsentViewControllerDelegate>
     delegate;
 

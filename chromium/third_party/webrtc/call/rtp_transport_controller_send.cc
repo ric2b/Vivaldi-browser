@@ -48,7 +48,9 @@
 #include "modules/pacing/packet_router.h"
 #include "modules/rtp_rtcp/include/report_block_data.h"
 #include "modules/rtp_rtcp/include/rtp_rtcp_defines.h"
+#include "modules/rtp_rtcp/source/rtcp_packet/congestion_control_feedback.h"
 #include "modules/rtp_rtcp/source/rtcp_packet/transport_feedback.h"
+#include "modules/rtp_rtcp/source/rtp_header_extensions.h"
 #include "modules/rtp_rtcp/source/rtp_rtcp_interface.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/experiments/field_trial_parser.h"
@@ -167,8 +169,8 @@ RtpVideoSenderInterface* RtpTransportControllerSend::CreateRtpVideoSender(
     rtc::scoped_refptr<FrameTransformerInterface> frame_transformer) {
   RTC_DCHECK_RUN_ON(&sequence_checker_);
   video_rtp_senders_.push_back(std::make_unique<RtpVideoSender>(
-      env_, suspended_ssrcs, states, rtp_config, rtcp_report_interval_ms,
-      send_transport, observers,
+      env_, task_queue_, suspended_ssrcs, states, rtp_config,
+      rtcp_report_interval_ms, send_transport, observers,
       // TODO(holmer): Remove this circular dependency by injecting
       // the parts of RtpTransportControllerSendInterface that are really used.
       this, &retransmission_rate_limiter_, std::move(fec_controller),
@@ -618,13 +620,19 @@ void RtpTransportControllerSend::NotifyBweOfPacedSentPacket(
     RTC_DCHECK_NOTREACHED() << "Unknown packet type";
     return;
   }
-
-  RtpPacketSendInfo packet_info = RtpPacketSendInfo::From(packet, pacing_info);
+  if (packet.HasExtension<TransportSequenceNumber>()) {
+    // TODO: bugs.webrtc.org/42225697 - Refactor TransportFeedbackDemuxer to use
+    // TransportPacketsFeedback instead of directly using
+    // rtcp::TransportFeedback. For now, only use it if TransportSeqeunce number
+    // header extension is used.
+    RtpPacketSendInfo packet_info =
+        RtpPacketSendInfo::From(packet, pacing_info);
+    feedback_demuxer_.AddPacket(packet_info);
+  }
   Timestamp creation_time =
       Timestamp::Millis(env_.clock().TimeInMilliseconds());
-  feedback_demuxer_.AddPacket(packet_info);
   transport_feedback_adapter_.AddPacket(
-      packet_info, transport_overhead_bytes_per_packet_, creation_time);
+      packet, pacing_info, transport_overhead_bytes_per_packet_, creation_time);
 }
 
 void RtpTransportControllerSend::OnTransportFeedback(
@@ -635,6 +643,25 @@ void RtpTransportControllerSend::OnTransportFeedback(
   std::optional<TransportPacketsFeedback> feedback_msg =
       transport_feedback_adapter_.ProcessTransportFeedback(feedback,
                                                            receive_time);
+  if (feedback_msg) {
+    if (controller_)
+      PostUpdates(controller_->OnTransportPacketsFeedback(*feedback_msg));
+
+    // Only update outstanding data if any packet is first time acked.
+    UpdateCongestedState();
+  }
+}
+
+void RtpTransportControllerSend::OnCongestionControlFeedback(
+    Timestamp receive_time,
+    const rtcp::CongestionControlFeedback& feedback) {
+  RTC_DCHECK_RUN_ON(&sequence_checker_);
+  // TODO: bugs.webrtc.org/42225697 - update feedback demuxer for RFC 8888.
+  // Suggest feedback_demuxer_.OnTransportFeedback use TransportPacketFeedback
+  // instead. See usage in OnTransportFeedback.
+  std::optional<TransportPacketsFeedback> feedback_msg =
+      transport_feedback_adapter_.ProcessCongestionControlFeedback(
+          feedback, receive_time);
   if (feedback_msg) {
     if (controller_)
       PostUpdates(controller_->OnTransportPacketsFeedback(*feedback_msg));

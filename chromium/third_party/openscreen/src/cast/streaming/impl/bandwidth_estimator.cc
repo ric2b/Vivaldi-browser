@@ -15,12 +15,12 @@ using clock_operators::operator<<;
 
 namespace {
 
-// Converts units from |bytes| per |time_window| number of Clock ticks into
+// Converts units from `bytes` per `time_window` number of Clock ticks into
 // bits-per-second.
 int ToClampedBitsPerSecond(int32_t bytes, Clock::duration time_window) {
   OSP_CHECK_GT(time_window, Clock::duration::zero());
 
-  // Divide |bytes| by |time_window| and scale the units to bits per second.
+  // Divide `bytes` by `time_window` and scale the units to bits per second.
   constexpr int64_t kBitsPerByte = 8;
   constexpr int64_t kClockTicksPerSecond =
       Clock::to_duration(std::chrono::seconds(1)).count();
@@ -75,8 +75,8 @@ void BandwidthEstimator::OnPayloadReceived(
 }
 
 int BandwidthEstimator::ComputeNetworkBandwidth() const {
-  // Determine whether the |burst_history_| time window overlaps with the
-  // |feedback_history_| time window by at least half. The time windows don't
+  // Determine whether the `burst_history_` time window overlaps with the
+  // `feedback_history_` time window by at least half. The time windows don't
   // have to overlap entirely because the calculations are averaging all the
   // measurements (i.e., recent typical behavior). Though, they should overlap
   // by "enough" so that the measurements correlate "enough."
@@ -137,7 +137,7 @@ void BandwidthEstimator::FlowTracker::Accumulate(int32_t amount,
 
   // Because of the AdvanceToIncludeTime() call just made, the offset/index
   // calculations here are guaranteed to point to a valid element in the
-  // |history_ring_|.
+  // `history_ring_`.
   const int64_t offset_from_first = (when - begin_time_) / timeslice_duration_;
   const index_mod_256_t ring_index = tail_ + offset_from_first;
   int32_t& timeslice = history_ring_[ring_index];

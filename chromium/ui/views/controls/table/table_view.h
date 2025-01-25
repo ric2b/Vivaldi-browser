@@ -21,7 +21,6 @@
 namespace ui {
 
 struct AXActionData;
-struct AXNodeData;
 
 }  // namespace ui
 
@@ -49,6 +48,14 @@ class TableGrouper;
 class TableHeader;
 class TableViewObserver;
 class TableViewTestHelper;
+
+struct TableHeaderStyle {
+  std::optional<int> cell_vertical_padding;
+  std::optional<int> cell_horizontal_padding;
+  std::optional<int> resize_bar_vertical_padding;
+  std::optional<int> separator_horizontal_padding;
+  std::optional<gfx::Font::Weight> font_weight;
+};
 
 // The cell's in the first column of a table can contain:
 // - only text
@@ -114,7 +121,8 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
 
   // Returns a new ScrollView that contains the given |table|.
   static std::unique_ptr<ScrollView> CreateScrollViewWithTable(
-      std::unique_ptr<TableView> table);
+      std::unique_ptr<TableView> table,
+      bool has_border = true);
 
   // Returns a new Builder<ScrollView> that contains the |table| constructed
   // from the given Builder<TableView>.
@@ -248,6 +256,9 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
 
   bool header_row_is_active() const { return header_row_is_active_; }
 
+  void SetHeaderStyle(const TableHeaderStyle& style);
+  const TableHeaderStyle& header_style() const { return header_style_; }
+
   // View overrides:
   void Layout(PassKey) override;
   gfx::Size CalculatePreferredSize(
@@ -258,7 +269,6 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   std::u16string GetTooltipText(const gfx::Point& p) const override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool HandleAccessibleAction(const ui::AXActionData& action_data) override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
@@ -564,6 +574,9 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   // Keeps track whether a call to UpdateAccessibilityFocus is already
   // pending or not.
   bool update_accessibility_focus_pending_ = false;
+
+  // Customization for the header. Includes options such as padding.
+  TableHeaderStyle header_style_;
 
   // Weak pointer factory, enables using PostTask safely.
   base::WeakPtrFactory<TableView> weak_factory_;

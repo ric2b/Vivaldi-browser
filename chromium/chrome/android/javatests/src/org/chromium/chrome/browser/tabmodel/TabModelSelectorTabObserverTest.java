@@ -29,7 +29,6 @@ import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabTestUtils;
-import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.content_public.browser.LoadUrlParams;
 
 import java.util.HashSet;
@@ -132,7 +131,7 @@ public class TabModelSelectorTabObserverTest {
         TabModelSelectorBase selector =
                 ThreadUtils.runOnUiThreadBlocking(
                         () -> {
-                            return new TabModelSelectorBase(null, TabGroupModelFilter::new, false) {
+                            return new TabModelSelectorBase(null, false) {
                                 @Override
                                 public void requestToShowTab(Tab tab, int type) {}
 
@@ -154,8 +153,13 @@ public class TabModelSelectorTabObserverTest {
         TestTabModelSelectorTabObserver observer = createTabModelSelectorTabObserver();
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
+                    TabUngrouperFactory factory =
+                            (isIncognitoBranded, tabGroupModelFilterSupplier) ->
+                                    new PassthroughTabUngrouper(tabGroupModelFilterSupplier);
                     selector.initialize(
-                            sTestRule.getNormalTabModel(), sTestRule.getIncognitoTabModel());
+                            sTestRule.getNormalTabModel(),
+                            sTestRule.getIncognitoTabModel(),
+                            factory);
                 });
 
         Tab normalTab1 = createTestTab(false);

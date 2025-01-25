@@ -387,7 +387,7 @@ class CopyTests_T2B : public CopyTests, public DawnTestWithParams<CopyTextureFor
             bool done = false;
             buffer.MapAsync(wgpu::MapMode::Read, 0, buffer.GetSize(),
                             wgpu::CallbackMode::AllowProcessEvents,
-                            [&](wgpu::MapAsyncStatus status, const char*) {
+                            [&](wgpu::MapAsyncStatus status, wgpu::StringView) {
                                 ASSERT_EQ(wgpu::MapAsyncStatus::Success, status);
                                 done = true;
                             });
@@ -1198,7 +1198,7 @@ TEST_P(CopyTests_T2B, MappableBufferBeforeAndAfterBytesNotOverwritten) {
         bool done = false;
         buffer.MapAsync(wgpu::MapMode::Read, 0, buffer.GetSize(),
                         wgpu::CallbackMode::AllowProcessEvents,
-                        [&](wgpu::MapAsyncStatus status, const char*) {
+                        [&](wgpu::MapAsyncStatus status, wgpu::StringView) {
                             ASSERT_EQ(wgpu::MapAsyncStatus::Success, status);
                             done = true;
                         });
@@ -2822,6 +2822,18 @@ TEST_P(CopyTests_T2T, Texture2DArraySameTextureDifferentMipLevels) {
     }
 }
 
+// Test that copying whole 1D texture in one texture-to-texture-copy works.
+TEST_P(CopyTests_T2T, Texture1DFull) {
+    constexpr uint32_t kWidth = 256;
+    constexpr uint32_t kHeight = 1;
+    constexpr uint32_t kDepth = 1;
+
+    TextureSpec textureSpec;
+    textureSpec.textureSize = {kWidth, kHeight, kDepth};
+
+    DoTest(textureSpec, textureSpec, {kWidth, kHeight, kDepth}, false, wgpu::TextureDimension::e1D);
+}
+
 // Test that copying whole 3D texture in one texture-to-texture-copy works.
 TEST_P(CopyTests_T2T, Texture3DFull) {
     // TODO(crbug.com/dawn/2294): diagnose T2B failures on Pixel 4 OpenGLES
@@ -3220,7 +3232,7 @@ TEST_P(CopyToDepthStencilTextureAfterDestroyingBigBufferTests, DoTest) {
         bool done = false;
         uploadBuffer.MapAsync(wgpu::MapMode::Write, 0, static_cast<uint32_t>(expectedData.size()),
                               wgpu::CallbackMode::AllowProcessEvents,
-                              [&done](wgpu::MapAsyncStatus status, const char*) {
+                              [&done](wgpu::MapAsyncStatus status, wgpu::StringView) {
                                   ASSERT_EQ(wgpu::MapAsyncStatus::Success, status);
                                   done = true;
                               });
@@ -3425,7 +3437,7 @@ class T2TCopyFromDirtyHeapTests : public DawnTest {
         bool done = false;
         readbackBuffer.MapAsync(wgpu::MapMode::Read, 0, kBufferSize,
                                 wgpu::CallbackMode::AllowProcessEvents,
-                                [&done](wgpu::MapAsyncStatus status, const char*) {
+                                [&done](wgpu::MapAsyncStatus status, wgpu::StringView) {
                                     ASSERT_EQ(wgpu::MapAsyncStatus::Success, status);
                                     done = true;
                                 });

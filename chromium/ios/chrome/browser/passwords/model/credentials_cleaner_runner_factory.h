@@ -8,6 +8,8 @@
 #include "base/no_destructor.h"
 #include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
 
+class ProfileIOS;
+
 namespace password_manager {
 class CredentialsCleanerRunner;
 }  // namespace password_manager
@@ -16,8 +18,8 @@ class CredentialsCleanerRunner;
 class CredentialsCleanerRunnerFactory : public BrowserStateKeyedServiceFactory {
  public:
   static CredentialsCleanerRunnerFactory* GetInstance();
-  static password_manager::CredentialsCleanerRunner* GetForBrowserState(
-      web::BrowserState* browser_state);
+  static password_manager::CredentialsCleanerRunner* GetForProfile(
+      ProfileIOS* profile);
 
  private:
   friend class base::NoDestructor<CredentialsCleanerRunnerFactory>;

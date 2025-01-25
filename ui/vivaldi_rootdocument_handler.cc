@@ -24,6 +24,10 @@ GatherProfileSet& ProfilesWithNoVivaldi() {
 VivaldiRootDocumentHandler*
 VivaldiRootDocumentHandlerFactory::GetForBrowserContext(
     content::BrowserContext* browser_context) {
+  if (ProfileShouldNotUseVivaldiClient(
+          Profile::FromBrowserContext(browser_context)->GetPath())) {
+    return nullptr;
+  }
   return static_cast<VivaldiRootDocumentHandler*>(
       GetInstance()->GetServiceForBrowserContext(browser_context, true));
 }
@@ -39,6 +43,7 @@ VivaldiRootDocumentHandlerFactory::VivaldiRootDocumentHandlerFactory()
     : BrowserContextKeyedServiceFactory(
           "VivaldiRootDocumentHandler",
           BrowserContextDependencyManager::GetInstance()) {
+
   DependsOn(extensions::ExtensionRegistryFactory::GetInstance());
 }
 
@@ -46,11 +51,6 @@ VivaldiRootDocumentHandlerFactory::~VivaldiRootDocumentHandlerFactory() {}
 
 KeyedService* VivaldiRootDocumentHandlerFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  Profile* profile = Profile::FromBrowserContext(context);
-  base::FilePath profile_dir = profile->GetPath();
-  if (ShouldProfileCreateVivaldiClient(profile_dir)) {
-    return nullptr;
-  }
   return new VivaldiRootDocumentHandler(context);
 }
 
@@ -68,13 +68,17 @@ VivaldiRootDocumentHandlerFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
   // Redirected in incognito.
   return ExtensionsBrowserClient::Get()->GetContextRedirectedToOriginal(
-      context, /*force_guest_profile=*/true);
+      context);
 
 }
 
 VivaldiRootDocumentHandler::VivaldiRootDocumentHandler(
     content::BrowserContext* context)
     : profile_(Profile::FromBrowserContext(context)) {
+
+  infobar_container_ = std::make_unique<::vivaldi::InfoBarContainerWebProxy>(
+      this);
+
   observed_profiles_.AddObservation(profile_);
   if (profile_->HasPrimaryOTRProfile())
     observed_profiles_.AddObservation(
@@ -211,13 +215,18 @@ void VivaldiRootDocumentHandler::RemoveObserver(
   observers_.RemoveObserver(observer);
 }
 
-void MarkProfileForNoVivaldiClient(const base::FilePath& path) {
+void MarkProfilePathForNoVivaldiClient(const base::FilePath& path) {
   // No need to mark the path more than once.
   DCHECK(!base::Contains(ProfilesWithNoVivaldi(), path));
   ProfilesWithNoVivaldi().insert(path);
 }
 
-bool ShouldProfileCreateVivaldiClient(const base::FilePath& path) {
+void ClearProfilePathForNoVivaldiClient(const base::FilePath& path) {
+  // This might need syncronization.
+  ProfilesWithNoVivaldi().erase(path);
+}
+
+bool ProfileShouldNotUseVivaldiClient(const base::FilePath& path) {
   return base::Contains(ProfilesWithNoVivaldi(), path);
 }
 

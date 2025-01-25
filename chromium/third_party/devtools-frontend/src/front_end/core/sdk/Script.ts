@@ -40,12 +40,12 @@ import {
   Location,
   LOGPOINT_SOURCE_URL,
 } from './DebuggerModel.js';
-import {type FrameAssociated} from './FrameAssociated.js';
-import {type PageResourceLoadInitiator} from './PageResourceLoader.js';
+import type {FrameAssociated} from './FrameAssociated.js';
+import type {PageResourceLoadInitiator} from './PageResourceLoader.js';
 import {ResourceTreeModel} from './ResourceTreeModel.js';
-import {type ExecutionContext} from './RuntimeModel.js';
-import {type SourceMap} from './SourceMap.js';
-import {type Target} from './Target.js';
+import type {ExecutionContext} from './RuntimeModel.js';
+import type {SourceMap} from './SourceMap.js';
+import type {Target} from './Target.js';
 
 const UIStrings = {
   /**
@@ -498,7 +498,7 @@ function frameIdForScript(script: Script): Protocol.Page.FrameId|null {
 
 export const sourceURLRegex = /^[\x20\t]*\/\/[@#] sourceURL=\s*(\S*?)\s*$/;
 
-async function disassembleWasm(content: string): Promise<TextUtils.WasmDisassembly.WasmDisassembly> {
+export async function disassembleWasm(content: string): Promise<TextUtils.WasmDisassembly.WasmDisassembly> {
   const worker = Common.Worker.WorkerWrapper.fromURL(
       new URL('../../entrypoints/wasmparser_worker/wasmparser_worker-entrypoint.js', import.meta.url));
   const promise = new Promise<TextUtils.WasmDisassembly.WasmDisassembly>((resolve, reject) => {

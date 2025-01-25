@@ -12,14 +12,6 @@
 #import "ios/web/web_state/crw_web_view.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
 
-// Allow usage of iOS 16.4's `inspectable` property on WKWebView in pre-16.4
-// SDK builds.
-#if !defined(__IPHONE_16_4) || __IPHONE_OS_VERSION_MAX_ALLOWED < __IPHONE_16_4
-@interface WKWebView (Additions)
-@property BOOL inspectable API_AVAILABLE(ios(16.4));
-@end
-#endif
-
 namespace web {
 
 namespace {
@@ -51,7 +43,8 @@ WKWebView* BuildWKWebView(CGRect frame,
                           WKWebViewConfiguration* configuration,
                           BrowserState* browser_state,
                           UserAgentType user_agent_type,
-                          id<CRWInputViewProvider> input_view_provider) {
+                          id<CRWInputViewProvider> input_view_provider,
+                          id<CRWEditMenuBuilder> edit_menu_builder) {
   VerifyWKWebViewCreationPreConditions(browser_state, configuration);
 
   GetWebClient()->PreWebViewCreation();
@@ -59,6 +52,7 @@ WKWebView* BuildWKWebView(CGRect frame,
   CRWWebView* web_view = [[CRWWebView alloc] initWithFrame:frame
                                              configuration:configuration];
   web_view.inputViewProvider = input_view_provider;
+  web_view.editMenuBuilder = edit_menu_builder;
 
   // Set the user agent type.
   if (user_agent_type != web::UserAgentType::NONE) {
@@ -82,7 +76,7 @@ WKWebView* BuildWKWebView(CGRect frame,
                           WKWebViewConfiguration* configuration,
                           BrowserState* browser_state) {
   return BuildWKWebView(frame, configuration, browser_state,
-                        UserAgentType::MOBILE, nil);
+                        UserAgentType::MOBILE, nil, nil);
 }
 
 }  // namespace web

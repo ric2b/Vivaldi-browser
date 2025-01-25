@@ -34,8 +34,10 @@ const CGFloat kCancelButtonHorizontalInset = 8;
 /// Font size for the cancel button.
 const CGFloat kCancelButtonFontSize = 15;
 
+/// Minimum leading and trailing padding for the focused omnibox container.
+const CGFloat kFocusedOmniboxContainerHorizontalPadding = 10;
 /// Minimum leading and trailing padding for the omnibox container.
-const CGFloat kOmniboxContainerHorizontalPadding = 10;
+const CGFloat kOmniboxContainerHorizontalPadding = 16;
 
 /// Minimum height of the omnibox container.
 const CGFloat kOmniboxContainerMinimumHeight = 52;
@@ -48,6 +50,9 @@ const CGFloat kWebContainerTopPadding = 16;
 const CGFloat kProgressBarHeight = 2.0f;
 /// Value of a full progress bar.
 const CGFloat kProgressBarFull = 1.0f;
+
+/// The duration for buttons appear & disappear animations.
+const CGFloat kButtonAnimationDuration = 0.2f;
 
 }  // namespace
 
@@ -83,6 +88,12 @@ const CGFloat kProgressBarFull = 1.0f;
   UIButton* _omniboxTapTarget;
   /// Loading progress bar.
   LensOverlayProgressBar* _progressBar;
+  /// Whether the web view should be hidden.
+  BOOL _webViewHidden;
+  NSLayoutConstraint* _omniboxLeadingConstraint;
+  /// When set, the omnibox tap target continues to "eat" the touches, but they
+  /// are ignored, effectively preventing omnibox interaction.
+  BOOL _ignoreOmniboxTaps;
 }
 
 - (instancetype)init {
@@ -109,6 +120,7 @@ const CGFloat kProgressBarFull = 1.0f;
   CHECK(self.webViewContainer, kLensOverlayNotFatalUntil);
   // Webview container.
   self.webViewContainer.translatesAutoresizingMaskIntoConstraints = NO;
+  self.webViewContainer.clipsToBounds = YES;
   [self.view addSubview:self.webViewContainer];
 
   // Omnibox popup container.
@@ -178,7 +190,7 @@ const CGFloat kProgressBarFull = 1.0f;
               attributes:attributes];
   buttonConfiguration.attributedTitle = attributedString;
   _cancelButton.configuration = buttonConfiguration;
-  _cancelButton.hidden = YES;
+  [self setCancelButtonHidden:YES animated:NO];
   [_cancelButton addTarget:self
                     action:@selector(didTapCancelButton:)
           forControlEvents:UIControlEventTouchUpInside];
@@ -194,14 +206,13 @@ const CGFloat kProgressBarFull = 1.0f;
 
   // Progress bar.
   _progressBar.translatesAutoresizingMaskIntoConstraints = NO;
-  _progressBar.hidden = YES;
+  [_progressBar setHidden:YES animated:NO completion:nil];
   [_omniboxContainer addSubview:_progressBar];
 
-  NSLayoutConstraint* omniboxLeadingConstraint =
-      [_omniboxContainer.leadingAnchor
-          constraintEqualToAnchor:self.view.leadingAnchor
-                         constant:kOmniboxContainerHorizontalPadding];
-  omniboxLeadingConstraint.priority = UILayoutPriorityDefaultHigh;
+  _omniboxLeadingConstraint = [_omniboxContainer.leadingAnchor
+      constraintEqualToAnchor:self.view.leadingAnchor
+                     constant:kOmniboxContainerHorizontalPadding];
+  _omniboxLeadingConstraint.priority = UILayoutPriorityDefaultHigh;
 
   [NSLayoutConstraint activateConstraints:@[
     [_horizontalStackView.topAnchor
@@ -211,7 +222,7 @@ const CGFloat kProgressBarFull = 1.0f;
     [_horizontalStackView.heightAnchor
         constraintGreaterThanOrEqualToConstant:kOmniboxContainerMinimumHeight],
     [_backButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-    omniboxLeadingConstraint,
+    _omniboxLeadingConstraint,
     [self.view.trailingAnchor
         constraintEqualToAnchor:_horizontalStackView.trailingAnchor
                        constant:kOmniboxContainerHorizontalPadding],
@@ -236,7 +247,7 @@ const CGFloat kProgressBarFull = 1.0f;
       LayoutSides::kLeading | LayoutSides::kBottom | LayoutSides::kTrailing);
 
   if (@available(iOS 17, *)) {
-    [self registerForTraitChanges:@[ UITraitUserInterfaceStyle.self ]
+    [self registerForTraitChanges:@[ UITraitUserInterfaceStyle.class ]
                        withAction:@selector(updateMutatorDarkMode)];
   }
 }
@@ -255,6 +266,15 @@ const CGFloat kProgressBarFull = 1.0f;
 }
 #endif
 
+- (void)setWebViewHidden:(BOOL)hidden {
+  if (_webViewHidden == hidden) {
+    return;
+  }
+
+  _webViewHidden = hidden;
+  _webView.hidden = hidden;
+}
+
 - (void)setEditView:(UIView<TextFieldViewContaining>*)editView {
   CHECK(!_editView, kLensOverlayNotFatalUntil);
   CHECK(editView, kLensOverlayNotFatalUntil);
@@ -268,6 +288,32 @@ const CGFloat kProgressBarFull = 1.0f;
 - (void)setMutator:(id<LensResultPageMutator>)mutator {
   _mutator = mutator;
   [self updateMutatorDarkMode];
+}
+
+- (void)setCancelButtonHidden:(BOOL)hidden animated:(BOOL)animated {
+  if (_cancelButton.hidden == hidden) {
+    return;
+  }
+
+  if (!animated) {
+    _cancelButton.hidden = hidden;
+    return;
+  }
+
+  __weak __typeof(self) weakSelf = self;
+  [UIView animateWithDuration:kButtonAnimationDuration
+                        delay:0
+                      options:UIViewAnimationOptionCurveEaseInOut
+                   animations:^{
+                     __typeof(self) strongSelf = weakSelf;
+                     if (!strongSelf) {
+                       return;
+                     }
+
+                     strongSelf->_cancelButton.hidden = hidden;
+                     [strongSelf->_horizontalStackView layoutIfNeeded];
+                   }
+                   completion:nil];
 }
 
 #pragma mark - UIResponder
@@ -297,6 +343,7 @@ const CGFloat kProgressBarFull = 1.0f;
     [_webView removeFromSuperview];
   }
   _webView = webView;
+  _webView.hidden = _webViewHidden;
 
   _webView.translatesAutoresizingMaskIntoConstraints = NO;
   if (!_webView || !self.webViewContainer) {
@@ -313,7 +360,7 @@ const CGFloat kProgressBarFull = 1.0f;
 }
 
 - (void)updateProgressBarVisibilityForProgress:(float)progress {
-  BOOL isLoading = progress != kProgressBarFull;
+  BOOL isLoading = (progress != kProgressBarFull);
   BOOL shouldShowProgressBar = isLoading && _progressBar.hidden;
   BOOL shouldHideProgressBar = !isLoading && !_progressBar.hidden;
 
@@ -352,10 +399,14 @@ const CGFloat kProgressBarFull = 1.0f;
 
 - (void)setOmniboxFocused:(BOOL)isFocused {
   _omniboxFocused = isFocused;
-  [self updateBackButtonVisibility];
+  _omniboxLeadingConstraint.constant =
+      isFocused ? kFocusedOmniboxContainerHorizontalPadding
+                : kOmniboxContainerHorizontalPadding;
+  [self updateBackButtonVisibilityAnimated:YES];
 
   // Visible when omnibox is focused.
-  _cancelButton.hidden = !isFocused;
+  [self setCancelButtonHidden:!isFocused animated:YES];
+
   _omniboxPopupContainer.hidden = !isFocused;
 
   // Hidden when omnibox is focused.
@@ -364,13 +415,20 @@ const CGFloat kProgressBarFull = 1.0f;
 
 - (void)setCanGoBack:(BOOL)canGoBack {
   _canGoBack = canGoBack;
-  [self updateBackButtonVisibility];
+  [self updateBackButtonVisibilityAnimated:YES];
+}
+
+- (void)setOmniboxEnabled:(BOOL)enabled {
+  _ignoreOmniboxTaps = !enabled;
 }
 
 #pragma mark - Private
 
 /// Handles omnibox tap target taps.
 - (void)didTapOmniboxTapTarget:(UIView*)view {
+  if (_ignoreOmniboxTaps) {
+    return;
+  }
   [self.toolbarMutator focusOmnibox];
 }
 
@@ -384,8 +442,32 @@ const CGFloat kProgressBarFull = 1.0f;
   [self.toolbarMutator defocusOmnibox];
 }
 
-- (void)updateBackButtonVisibility {
-  _backButton.hidden = self.omniboxFocused || !self.canGoBack;
+- (void)updateBackButtonVisibilityAnimated:(BOOL)animated {
+  BOOL hidden = self.omniboxFocused || !self.canGoBack;
+
+  if (_backButton.hidden == hidden) {
+    return;
+  }
+
+  if (!animated) {
+    _backButton.hidden = hidden;
+    return;
+  }
+
+  __weak __typeof(self) weakSelf = self;
+  [UIView animateWithDuration:kButtonAnimationDuration
+                        delay:0
+                      options:UIViewAnimationOptionCurveEaseInOut
+                   animations:^{
+                     __typeof(self) strongSelf = weakSelf;
+                     if (!strongSelf) {
+                       return;
+                     }
+
+                     strongSelf->_backButton.hidden = hidden;
+                     [strongSelf->_horizontalStackView layoutIfNeeded];
+                   }
+                   completion:nil];
 }
 
 /// Updates the user interface style in the mutator.

@@ -18,13 +18,12 @@ import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.Log;
 import org.chromium.base.Promise;
 import org.chromium.base.ThreadUtils;
-import org.chromium.components.signin.AccessTokenData;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountsChangeObserver;
-import org.chromium.components.signin.AuthException;
 import org.chromium.components.signin.base.AccountCapabilities;
 import org.chromium.components.signin.base.AccountInfo;
 import org.chromium.components.signin.base.CoreAccountId;
@@ -52,6 +51,8 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
             unblockGetCoreAccountInfos();
         }
     }
+
+    private static final String TAG = "FakeAccountManager";
 
     /**
      * All the account names starting with this prefix will be considered as a child account in
@@ -130,6 +131,8 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
     /** Whether the minor mode is enabled for the account added by AddAccountActivityStub. */
     private boolean mIsMinorModeEnabledForAccountToAdd;
 
+    private boolean mDidAccountFetchingSucceed = true;
+
     /** Creates an object of FakeAccountManagerFacade. */
     public FakeAccountManagerFacade() {}
 
@@ -156,26 +159,23 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
         return Promise.fulfilled(getCoreAccountInfosInternal());
     }
 
+    @MainThread
     @Override
-    public AccessTokenData getAccessToken(CoreAccountInfo coreAccountInfo, String scope)
-            throws AuthException {
+    public void getAccessToken(
+            CoreAccountInfo coreAccountInfo, String scope, GetAccessTokenCallback callback) {
         @Nullable AccountHolder accountHolder = getAccountHolder(coreAccountInfo.getId());
         if (accountHolder == null) {
-            // Since token requests are asynchronous, sometimes they arrive after the account has
-            // been removed. Thus, throwing an unchecked exception here would cause test failures
-            // (see https://crbug.com/1205346 for details). On the other hand, AuthException thrown
-            // here will be caught by ProfileOAuth2TokenServiceDelegate and reported as a token
-            // request failure (which matches the behavior of the production code in the situation
-            // when a token is requested for an account that doesn't exist or has been removed).
-            throw new AuthException(
-                    /* isTransientError= */ false,
-                    "Cannot find account:" + coreAccountInfo.toString());
+            Log.w(TAG, "Cannot find account:" + coreAccountInfo.toString());
+            ThreadUtils.runOnUiThread(
+                    () -> callback.onGetTokenFailure(/* isTransientError= */ false));
+            return;
         }
-        return accountHolder.getAccessTokenOrGenerateNew(scope);
+        ThreadUtils.runOnUiThread(
+                () -> callback.onGetTokenSuccess(accountHolder.getAccessTokenOrGenerateNew(scope)));
     }
 
     @Override
-    public void invalidateAccessToken(String accessToken) {
+    public void invalidateAccessToken(String accessToken, @Nullable Runnable completedRunnable) {
         ThreadUtils.checkUiThread();
         synchronized (mAccountHolders) {
             for (AccountHolder accountHolder : mAccountHolders) {
@@ -184,6 +184,14 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
                 }
             }
         }
+        if (completedRunnable != null) {
+            completedRunnable.run();
+        }
+    }
+
+    @Override
+    public void waitForPendingTokenRequestsToComplete(Runnable requestsCompletedCallback) {
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     @Override
@@ -197,7 +205,6 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
     }
 
     @Override
-
     public Promise<AccountCapabilities> getAccountCapabilities(CoreAccountInfo coreAccountInfo) {
         AccountHolder accountHolder = getAccountHolder(coreAccountInfo.getId());
         return Promise.fulfilled(accountHolder.getAccountCapabilities());
@@ -213,18 +220,22 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
             Account account, Activity activity, @Nullable Callback<Boolean> callback) {}
 
     @Override
-    public String getAccountGaiaId(String accountEmail) {
-        return toGaiaId(accountEmail);
-    }
-
-    @Override
     public void confirmCredentials(Account account, Activity activity, Callback<Bundle> callback) {
         callback.onResult(new Bundle());
     }
 
     @Override
     public boolean didAccountFetchSucceed() {
-        return true;
+        return mDidAccountFetchingSucceed;
+    }
+
+    public void setAccountFetchFailed() {
+        mDidAccountFetchingSucceed = false;
+    }
+
+    @Override
+    public void disallowTokenRequestsForTesting() {
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     /**
@@ -359,7 +370,7 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
      * @param newAccountName The account name to return when the add account flow finishes.
      * @param isMinorModeEnabled The account is subjected to minor mode restrictions
      */
-    public void setUpNextAddAccountFlow(
+    public void setAddAccountFlowResult(
             @Nullable String newAccountName, boolean isMinorModeEnabled) {
         // TODO(crbug.com/343872217) Update method to use AccountInfo
         mNameOfAccountToAdd = newAccountName;

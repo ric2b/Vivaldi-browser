@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
+#include "third_party/blink/renderer/core/editing/finder/chunk_graph_utils.h"
 #include "third_party/blink/renderer/core/editing/finder/find_results.h"
 #include "third_party/blink/renderer/core/editing/iterators/text_searcher_icu.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
@@ -41,11 +42,10 @@
 #include "third_party/blink/renderer/platform/wtf/text/unicode.h"
 
 namespace blink {
-namespace {
 
 // Returns true if the search should ignore the given |node|'s contents. In
 // other words, we don't need to recurse into the node's children.
-bool ShouldIgnoreContents(const Node& node) {
+bool FindBuffer::ShouldIgnoreContents(const Node& node) {
   if (node.getNodeType() == Node::kCommentNode) {
     return true;
   }
@@ -95,6 +95,25 @@ bool ShouldIgnoreContents(const Node& node) {
               DisplayLockActivationReason::kFindInPage));
 }
 
+std::optional<UChar> FindBuffer::CharConstantForNode(const Node& node) {
+  if (!IsA<HTMLElement>(node)) {
+    return std::nullopt;
+  }
+  if (IsA<HTMLWBRElement>(To<HTMLElement>(node))) {
+    return std::nullopt;
+  }
+  if (IsA<HTMLBRElement>(To<HTMLElement>(node))) {
+    return kNewlineCharacter;
+  }
+  return kNonCharacter;
+}
+
+namespace {
+
+// Characters in a buffer for a different annotation level are replaced with
+// kSkippedChar.
+constexpr UChar kSkippedChar = 0;
+
 // Returns the first ancestor element that isn't searchable. In other words,
 // either ShouldIgnoreContents() returns true for it or it has a display: none
 // style.  Returns nullptr if no such ancestor exists.
@@ -109,8 +128,9 @@ Node* GetOutermostNonSearchableAncestor(const Node& node) {
       display_none = element_ancestor;
       continue;
     }
-    if (ShouldIgnoreContents(*element_ancestor))
+    if (FindBuffer::ShouldIgnoreContents(*element_ancestor)) {
       return element_ancestor;
+    }
     if (display_none)
       return display_none;
   }
@@ -144,14 +164,16 @@ Node* GetVisibleTextNode(Node& start_node) {
   // Move to first text node that's visible.
   while (node) {
     const ComputedStyle* style = EnsureComputedStyleForFind(*node);
-    if (ShouldIgnoreContents(*node) ||
+    if (FindBuffer::ShouldIgnoreContents(*node) ||
         (style && style->Display() == EDisplay::kNone)) {
       // This element and its descendants are not visible, skip it.
       node = Direction::NextSkippingSubtree(*node);
       continue;
     }
-    if (style && style->UsedVisibility() == EVisibility::kVisible &&
-        node->IsTextNode()) {
+    if (style && style->Visibility() == EVisibility::kVisible &&
+        node->IsTextNode() &&
+        (!RuntimeEnabledFeatures::FindTextSkipCollapsedTextEnabled() ||
+         node->GetLayoutObject())) {
       return node;
     }
     // This element is hidden, but node might be visible,
@@ -178,6 +200,16 @@ bool AreInOrder(const Node& start, const Node& end) {
   return node->isSameNode(&end);
 }
 
+bool IsIfcWithRuby(const Node& block_ancestor) {
+  if (const auto* block_flow =
+          DynamicTo<LayoutBlockFlow>(block_ancestor.GetLayoutObject())) {
+    if (const auto* node_data = block_flow->GetInlineNodeData()) {
+      return node_data->HasRuby();
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
 // FindBuffer implementation.
@@ -189,7 +221,7 @@ FindBuffer::FindBuffer(const EphemeralRangeInFlatTree& range,
 
 bool FindBuffer::IsInvalidMatch(MatchResultICU match) const {
   // Invalid matches are a result of accidentally matching elements that are
-  // replaced with the max code point, and may lead to crashes. To avoid
+  // replaced with the kNonCharacter, and may lead to crashes. To avoid
   // crashing, we should skip the matches that are invalid - they would have
   // either an empty position or a non-offset-in-anchor position.
   const unsigned start_index = match.start;
@@ -251,15 +283,16 @@ EphemeralRangeInFlatTree FindBuffer::FindMatchInRange(
 
     FindBuffer buffer(
         EphemeralRangeInFlatTree(start_position, range.EndPosition()),
-        RubySupport(options.IsRubySupported()));
+        options.IsRubySupported() ? RubySupport::kEnabledIfNecessary
+                                  : RubySupport::kDisabled);
     FindResults match_results = buffer.FindMatches(search_text, options);
     if (!match_results.IsEmpty()) {
       if (!options.IsBackwards()) {
-        FindResults::BufferMatchResult match = match_results.front();
+        MatchResultICU match = match_results.front();
         return buffer.RangeFromBufferIndex(match.start,
                                            match.start + match.length);
       }
-      FindResults::BufferMatchResult match = match_results.back();
+      MatchResultICU match = match_results.back();
       last_match_range =
           buffer.RangeFromBufferIndex(match.start, match.start + match.length);
     }
@@ -310,10 +343,11 @@ bool FindBuffer::IsInSameUninterruptedBlock(const Node& start_node,
   // in between that has a separate block flow. An example is an input field.
   for (const Node* node = &start_node; !node->isSameNode(&end_node);
        node = FlatTreeTraversal::Next(*node)) {
-    const ComputedStyle* style = node->GetComputedStyle();
+    const ComputedStyle* style =
+        node->GetComputedStyleForElementOrLayoutObject();
     if (ShouldIgnoreContents(*node) || !style ||
         style->Display() == EDisplay::kNone ||
-        style->UsedVisibility() != EVisibility::kVisible) {
+        style->Visibility() != EVisibility::kVisible) {
       continue;
     }
 
@@ -353,20 +387,23 @@ Node* FindBuffer::BackwardVisibleTextNode(Node& start_node) {
   return GetVisibleTextNode<BackwardDirection>(start_node);
 }
 
-FindResults FindBuffer::FindMatches(const WebString& search_text,
+FindResults FindBuffer::FindMatches(const String& search_text,
                                     const blink::FindOptions options) {
   // We should return empty result if it's impossible to get a match (buffer is
-  // empty or too short), or when something went wrong in layout, in which case
+  // empty), or when something went wrong in layout, in which case
   // |offset_mapping_| is null.
-  if (buffer_.empty() || search_text.length() > buffer_.size() ||
-      !offset_mapping_)
+  if (buffer_.empty() || !offset_mapping_) {
     return FindResults();
+  }
+  if (!RuntimeEnabledFeatures::FindDecomposedInShortTextEnabled() &&
+      search_text.length() > buffer_.size()) {
+    return FindResults();
+  }
   String search_text_16_bit = search_text;
   search_text_16_bit.Ensure16Bit();
   FoldQuoteMarksAndSoftHyphens(search_text_16_bit);
-  // TODO(crbug.com/40755728): Provide additional text buffers.
-  return FindResults(*this, &text_searcher_, buffer_,
-                     /* extra_buffers */ nullptr, search_text_16_bit, options);
+  return FindResults(this, &text_searcher_, buffer_, &buffer_list_,
+                     search_text_16_bit, options);
 }
 
 void FindBuffer::CollectTextUntilBlockBoundary(
@@ -403,6 +440,29 @@ void FindBuffer::CollectTextUntilBlockBoundary(
   // We will also stop if we encountered/passed |end_node|.
   Node* end_node = range.EndPosition().NodeAsRangeLastNode();
 
+  bool use_chunk_graph = false;
+  if (RuntimeEnabledFeatures::FindRubyInPageEnabled()) {
+    use_chunk_graph = ruby_support == RubySupport::kEnabledForcefully ||
+                      (ruby_support == RubySupport::kEnabledIfNecessary &&
+                       IsIfcWithRuby(block_ancestor));
+  }
+  if (use_chunk_graph) {
+    auto [corpus_chunk_list, level_list, next_node] =
+        BuildChunkGraph(*node, end_node, block_ancestor, just_after_block);
+    node_after_block_ = next_node;
+
+    buffer_ = SerializeLevelInGraph(corpus_chunk_list, String(), range);
+    FoldQuoteMarksAndSoftHyphens(base::span(buffer_));
+    buffer_list_.resize(0);
+    buffer_list_.reserve(level_list.size());
+    for (const auto& level : level_list) {
+      buffer_list_.push_back(
+          SerializeLevelInGraph(corpus_chunk_list, level, range));
+      FoldQuoteMarksAndSoftHyphens(base::span(buffer_list_.back()));
+    }
+    return;
+  }
+
   while (node && node != just_after_block) {
     if (ShouldIgnoreContents(*node)) {
       if (end_node && (end_node == node ||
@@ -413,7 +473,7 @@ void FindBuffer::CollectTextUntilBlockBoundary(
       }
       // Replace the node with char constants so we wouldn't encounter this node
       // or its descendants later.
-      ReplaceNodeWithCharConstants(*node);
+      ReplaceNodeWithCharConstants(*node, buffer_);
       node = FlatTreeTraversal::NextSkippingChildren(*node);
       continue;
     }
@@ -434,7 +494,7 @@ void FindBuffer::CollectTextUntilBlockBoundary(
       continue;
     }
 
-    if (style->UsedVisibility() == EVisibility::kVisible &&
+    if (style->Visibility() == EVisibility::kVisible &&
         node->GetLayoutObject()) {
       // This node is in its own sub-block separate from our starting position.
       if (last_added_text_node && last_added_text_node->GetLayoutObject() &&
@@ -444,10 +504,7 @@ void FindBuffer::CollectTextUntilBlockBoundary(
       const auto* text_node = DynamicTo<Text>(node);
       if (text_node) {
         last_added_text_node = node;
-        LayoutBlockFlow& block_flow =
-            *OffsetMapping::GetInlineFormattingContextOf(
-                *text_node->GetLayoutObject());
-        AddTextToBuffer(*text_node, block_flow, range);
+        AddTextToBuffer(*text_node, range, buffer_, &buffer_node_mappings_);
       }
     }
     if (node == end_node) {
@@ -460,19 +517,11 @@ void FindBuffer::CollectTextUntilBlockBoundary(
   FoldQuoteMarksAndSoftHyphens(base::span(buffer_));
 }
 
-void FindBuffer::ReplaceNodeWithCharConstants(const Node& node) {
-  if (!IsA<HTMLElement>(node))
-    return;
-
-  if (IsA<HTMLWBRElement>(To<HTMLElement>(node)))
-    return;
-
-  if (IsA<HTMLBRElement>(To<HTMLElement>(node))) {
-    buffer_.push_back(kNewlineCharacter);
-    return;
+void FindBuffer::ReplaceNodeWithCharConstants(const Node& node,
+                                              Vector<UChar>& buffer) {
+  if (std::optional<UChar> ch = CharConstantForNode(node)) {
+    buffer.push_back(*ch);
   }
-
-  buffer_.push_back(kMaxCodepoint);
 }
 
 EphemeralRangeInFlatTree FindBuffer::RangeFromBufferIndex(
@@ -523,9 +572,47 @@ PositionInFlatTree FindBuffer::PositionAtEndOfCharacterAtIndex(
       index - entry->offset_in_buffer + entry->offset_in_mapping + 1));
 }
 
+Vector<UChar> FindBuffer::SerializeLevelInGraph(
+    const HeapVector<Member<CorpusChunk>>& chunk_list,
+    const String& level,
+    const EphemeralRangeInFlatTree& range) {
+  Vector<BufferNodeMapping>* mappings =
+      level.empty() ? &buffer_node_mappings_ : nullptr;
+  Vector<UChar> buffer;
+  const CorpusChunk* chunk = chunk_list[0];
+  for (wtf_size_t index = 0; chunk; ++index) {
+    if (chunk != chunk_list[index]) {
+      for (const auto& text_or_char : chunk_list[index]->TextList()) {
+        if (text_or_char.text) {
+          wtf_size_t start = buffer.size();
+          AddTextToBuffer(*text_or_char.text, range, buffer, mappings);
+          for (wtf_size_t i = start; i < buffer.size(); ++i) {
+            buffer[i] = kSkippedChar;
+          }
+        } else {
+          buffer.push_back(kSkippedChar);
+        }
+      }
+      continue;
+    }
+    for (const auto& text_or_char : chunk->TextList()) {
+      if (text_or_char.text) {
+        AddTextToBuffer(*text_or_char.text, range, buffer, mappings);
+      } else {
+        buffer.push_back(text_or_char.code_point);
+      }
+    }
+    chunk = chunk->FindNext(level);
+  }
+  return buffer;
+}
+
 void FindBuffer::AddTextToBuffer(const Text& text_node,
-                                 LayoutBlockFlow& block_flow,
-                                 const EphemeralRangeInFlatTree& range) {
+                                 const EphemeralRangeInFlatTree& range,
+                                 Vector<UChar>& buffer,
+                                 Vector<BufferNodeMapping>* mappings) {
+  LayoutBlockFlow& block_flow = *OffsetMapping::GetInlineFormattingContextOf(
+      *text_node.GetLayoutObject());
   if (!offset_mapping_) {
     offset_mapping_ = InlineNode::GetOffsetMapping(&block_flow);
 
@@ -552,19 +639,31 @@ void FindBuffer::AddTextToBuffer(const Text& text_node,
        offset_mapping_->GetMappingUnitsForDOMRange(
            EphemeralRange(node_start, node_end))) {
     if (first_unit || last_unit_end != unit.TextContentStart()) {
-      // This is the first unit, or the units are not consecutive, so we need to
-      // insert a new BufferNodeMapping.
-      buffer_node_mappings_.push_back(
-          BufferNodeMapping({buffer_.size(), unit.TextContentStart()}));
+      if (mappings) {
+        // This is the first unit, or the units are not consecutive, so we need
+        // to insert a new BufferNodeMapping.
+        mappings->push_back(
+            BufferNodeMapping({buffer.size(), unit.TextContentStart()}));
+      }
       first_unit = false;
     }
     String text_for_unit =
         mapped_text.Substring(unit.TextContentStart(),
                               unit.TextContentEnd() - unit.TextContentStart());
     text_for_unit.Ensure16Bit();
-    buffer_.AppendSpan(text_for_unit.Span16());
+    buffer.AppendSpan(text_for_unit.Span16());
     last_unit_end = unit.TextContentEnd();
   }
+}
+
+Vector<String> FindBuffer::BuffersForTesting() const {
+  Vector<String> result;
+  result.reserve(1 + buffer_list_.size());
+  result.push_back(String(buffer_));
+  for (const auto& buffer : buffer_list_) {
+    result.push_back(String(buffer));
+  }
+  return result;
 }
 
 }  // namespace blink

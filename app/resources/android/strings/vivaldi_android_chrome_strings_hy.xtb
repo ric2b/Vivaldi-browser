@@ -5,12 +5,10 @@
 <translation id="1456207338570705181">Հպումով որոնումը ֆունկցիա է, որը հասանելի է միայն երբ Google-ը սահմանված է որպես հիմնական որոնիչ Vivaldi-ում։ Այն ընտրված բառն ու տվյալ էջը որպես համատեքստ ուղարկում է Google որոնմանը։ Դուք կարող եք անջատել այն <ph name="BEGIN_LINK" />Կարգավորումներում<ph name="END_LINK" />։</translation>
 <translation id="1598449788754183301">Սովորական/գաղտնի ներդիրներ</translation>
 <translation id="1644574205037202324">Պատմություն</translation>
-<translation id="17513872634828108">Բաց ներդիրներ</translation>
 <translation id="1829244130665387512">Գտնել էջում</translation>
 <translation id="1910514478706885609">Բացել ներդիրների նոր խմբում</translation>
 <translation id="1925021887439448749">Մուտքագրեք այլ հասցե</translation>
 <translation id="2038563949887743358">Միացնել համակարգչային տարբերակի հայցումը</translation>
-<translation id="2139186145475833000">Հավելել սկզբնական էկրանին</translation>
 <translation id="2149973817440762519">Խմբագրել էջանիշը</translation>
 <translation id="2306442503286132111">Էջանիշը պահպանված է <ph name="FOLDER_NAME" /> պանակում</translation>
 <translation id="2433507940547922241">Արտաքին տեսք</translation>
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">Սարքի ընթացիկ լեզուն</translation>
 <translation id="4167670741834902166">Նոր գաղտնի ներդիր</translation>
 <translation id="4195643157523330669">Բացել նոր ներդիրում</translation>
+<translation id="4225895483398857530">Գործիքների երիզի դյուրանցում</translation>
 <translation id="4243710787042215766">Բացել գաղտնի ներդիրում</translation>
 <translation id="4304713468139749426">Գաղտնաբառերի կառավարիչ</translation>
 <translation id="451872707440238414">Որոնել էջանիշներում</translation>
@@ -74,6 +73,7 @@
 <translation id="8560602726703398413">Գտեք Ձեր ընթերցման ցանկն էջանիշերում</translation>
 <translation id="85991616550051997">Գնալ գլխավոր էջ</translation>
 <translation id="8820817407110198400">Էջանիշեր</translation>
+<translation id="9042893549633094279">Գաղտնիություն և անվտանգություն</translation>
 <translation id="9063523880881406963">Անջատել համակարգչային տարբերակի հայցումը</translation>
 <translation id="9080642952018487277">Անցնել գաղտնի ռեժիմին</translation>
 <translation id="96681097142096641">Դիտե՞լ էջը պարզեցված։</translation>

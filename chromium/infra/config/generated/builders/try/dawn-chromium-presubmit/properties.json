@@ -13,7 +13,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Dawn Chromium Presubmit",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "builder_group": "chromium.dawn",
@@ -41,11 +41,12 @@
         {
           "bucket": "ci",
           "builder": "Dawn Chromium Presubmit",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
       ],
       "retry_failed_shards": false,
-      "retry_without_patch": false
+      "retry_without_patch": false,
+      "targets_spec_directory": "src/infra/config/generated/builders/try/dawn-chromium-presubmit/targets"
     }
   },
   "$build/reclient": {

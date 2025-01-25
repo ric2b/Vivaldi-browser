@@ -22,6 +22,7 @@
 
 #include "chrome/browser/browser_process.h"
 #include "components/search_engines/search_engines_manager.h"
+#include "components/search_engines/search_engines_managers_factory.h"
 
 using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
@@ -198,7 +199,10 @@ LocaleTemplateUrlLoader::GetLocalPrepopulatedEngines() {
 }
 
 int LocaleTemplateUrlLoader::GetDesignatedSearchEngineForChina() {
-  return SearchEnginesManager::GetInstance()->GetBingEngine()->id;
+  return SearchEnginesManagersFactory::GetInstance()
+      ->GetSearchEnginesManager()
+      ->GetMainDefaultEngine()
+      ->id;
 }
 
 LocaleTemplateUrlLoader::~LocaleTemplateUrlLoader() {}

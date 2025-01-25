@@ -20,6 +20,11 @@ BASE_FEATURE(kOrcaUseProdServer,
              "OrcaUseProdServer",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enables Scanner Prod Server
+BASE_FEATURE(kScannerUseProdServer,
+             "ScannerUseProdServer",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Enables SeaPen Prod Server
 BASE_FEATURE(kSeaPenUseProdServer,
              "SeaPenUseProdServer",
@@ -28,6 +33,11 @@ BASE_FEATURE(kSeaPenUseProdServer,
 // Enables Mahi Prod Server
 BASE_FEATURE(kMahiUseProdServer,
              "MahiUseProdServer",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables Walrus Prod Server
+BASE_FEATURE(kWalrusUseProdServer,
+             "WalrusUseProdServer",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsMantaServiceEnabled() {
@@ -42,12 +52,20 @@ bool IsOrcaUseProdServerEnabled() {
   return base::FeatureList::IsEnabled(kOrcaUseProdServer);
 }
 
+bool IsScannerUseProdServerEnabled() {
+  return base::FeatureList::IsEnabled(kScannerUseProdServer);
+}
+
 bool IsSeaPenUseProdServerEnabled() {
   return base::FeatureList::IsEnabled(kSeaPenUseProdServer);
 }
 
 bool IsMahiUseProdServerEnabled() {
   return base::FeatureList::IsEnabled(kMahiUseProdServer);
+}
+
+bool IsWalrusUseProdServerEnabled() {
+  return base::FeatureList::IsEnabled(kWalrusUseProdServer);
 }
 
 }  // namespace manta::features

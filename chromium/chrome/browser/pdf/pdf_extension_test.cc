@@ -1380,6 +1380,73 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionScrollTest, WithArrowLeftRight) {
   EXPECT_EQ(kScrollIncrement, GetViewportScrollPositionX(extension_host));
 }
 
+// TODO(crbug.com/369947144): Fix flakiness and reenable the test.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_WithArrowLeftRightScrollToPage \
+  DISABLED_WithArrowLeftRightScrollToPage
+#else
+#define MAYBE_WithArrowLeftRightScrollToPage WithArrowLeftRightScrollToPage
+#endif  // BUILDFLAG(IS_MAC)
+IN_PROC_BROWSER_TEST_P(PDFExtensionScrollTest,
+                       MAYBE_WithArrowLeftRightScrollToPage) {
+  content::RenderFrameHost* extension_host = LoadPdfGetExtensionHost(
+      embedded_test_server()->GetURL("/pdf/test-bookmarks.pdf"));
+  ASSERT_TRUE(extension_host);
+
+  SetInputFocusOnPlugin(extension_host, GetEmbedderWebContents());
+  ASSERT_EQ(0, GetViewportScrollPositionY(extension_host));
+
+  // Press ArrowRight to scroll to next page.
+  ScrollEventWaiter scroll_waiter(extension_host);
+  content::SimulateKeyPressWithoutChar(GetActiveWebContents(),
+                                       ui::DomKey::ARROW_RIGHT,
+                                       ui::DomCode::ARROW_RIGHT, ui::VKEY_RIGHT,
+                                       /*control=*/false, /*shift=*/false,
+                                       /*alt=*/false,
+                                       /*command=*/false);
+  ASSERT_NO_FATAL_FAILURE(scroll_waiter.Wait());
+#if BUILDFLAG(IS_WIN)
+  constexpr int kFirstPosition = 915;
+#elif BUILDFLAG(IS_CHROMEOS)
+  constexpr int kFirstPosition = 937;
+#else
+  constexpr int kFirstPosition = 918;
+#endif
+  EXPECT_NEAR(kFirstPosition, GetViewportScrollPositionY(extension_host),
+              kScrollPositionEpsilon);
+
+  // Press ArrowRight to scroll to next page again.
+  scroll_waiter.Reset();
+  content::SimulateKeyPressWithoutChar(GetActiveWebContents(),
+                                       ui::DomKey::ARROW_RIGHT,
+                                       ui::DomCode::ARROW_RIGHT, ui::VKEY_RIGHT,
+                                       /*control=*/false, /*shift=*/false,
+                                       /*alt=*/false,
+                                       /*command=*/false);
+  ASSERT_NO_FATAL_FAILURE(scroll_waiter.Wait());
+#if BUILDFLAG(IS_WIN)
+  constexpr int kSecondPosition = 1831;
+#elif BUILDFLAG(IS_CHROMEOS)
+  constexpr int kSecondPosition = 1875;
+#else
+  constexpr int kSecondPosition = 1836;
+#endif
+  EXPECT_NEAR(kSecondPosition, GetViewportScrollPositionY(extension_host),
+              kScrollPositionEpsilon);
+
+  // Press ArrowLeft to scroll to previous page.
+  scroll_waiter.Reset();
+  content::SimulateKeyPressWithoutChar(GetActiveWebContents(),
+                                       ui::DomKey::ARROW_LEFT,
+                                       ui::DomCode::ARROW_LEFT, ui::VKEY_LEFT,
+                                       /*control=*/false, /*shift=*/false,
+                                       /*alt=*/false,
+                                       /*command=*/false);
+  ASSERT_NO_FATAL_FAILURE(scroll_waiter.Wait());
+  EXPECT_NEAR(kFirstPosition, GetViewportScrollPositionY(extension_host),
+              kScrollPositionEpsilon);
+}
+
 IN_PROC_BROWSER_TEST_P(PDFExtensionScrollTest, WithArrowDownUp) {
   content::RenderFrameHost* extension_host = LoadPdfGetExtensionHost(
       embedded_test_server()->GetURL("/pdf/test-bookmarks.pdf"));
@@ -3404,8 +3471,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTestWithoutOopifOverride,
 
   // Look up the PDF stream URL to which the navigation will take place.
   extensions::MimeHandlerViewGuest* guest =
-      extensions::MimeHandlerViewGuest::FromWebContents(
-          guest_view->web_contents());
+      extensions::MimeHandlerViewGuest::FromGuestViewBase(guest_view);
   ASSERT_TRUE(guest);
   base::WeakPtr<extensions::StreamContainer> stream = guest->GetStreamWeakPtr();
   EXPECT_TRUE(stream);

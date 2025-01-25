@@ -38,6 +38,7 @@ import androidx.test.ext.junit.rules.ActivityScenarioRule;
 
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -65,6 +66,7 @@ import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.PayloadCallbackHelper;
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -96,6 +98,7 @@ import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefsJni;
+import org.chromium.ui.InsetObserver;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.base.IntentRequestTracker;
@@ -136,6 +139,7 @@ public class AndroidShareSheetControllerUnitTest {
     @Mock DeviceLockActivityLauncher mDeviceLockActivityLauncher;
     @Mock Profile mProfile;
     @Mock Tracker mTracker;
+    @Mock InsetObserver mInsetObserver;
 
     private TestActivity mActivity;
     private WindowAndroid mWindow;
@@ -182,7 +186,10 @@ public class AndroidShareSheetControllerUnitTest {
         mActivityScenario.getScenario().moveToState(State.RESUMED);
         mWindow =
                 new ActivityWindowAndroid(
-                        mActivity, false, IntentRequestTracker.createFromActivity(mActivity));
+                        mActivity,
+                        false,
+                        IntentRequestTracker.createFromActivity(mActivity),
+                        mInsetObserver);
         mPrintCallback = new PayloadCallbackHelper<>();
         // Set up mock tab
         doReturn(mWindow).when(mTab).getWindowAndroid();
@@ -225,12 +232,20 @@ public class AndroidShareSheetControllerUnitTest {
                 "Custom action is empty.",
                 intent.getParcelableArrayExtra(Intent.EXTRA_CHOOSER_CUSTOM_ACTIONS));
 
-        assertCustomActions(
-                intent,
-                R.string.sharing_long_screenshot,
-                R.string.print_share_activity_title,
-                R.string.sharing_send_tab_to_self,
-                R.string.qr_code_share_icon_label);
+        if (BuildConfig.IS_DESKTOP_ANDROID) {
+            assertCustomActions(
+                    intent,
+                    R.string.sharing_long_screenshot,
+                    R.string.sharing_send_tab_to_self,
+                    R.string.qr_code_share_icon_label);
+        } else {
+            assertCustomActions(
+                    intent,
+                    R.string.sharing_long_screenshot,
+                    R.string.print_share_activity_title,
+                    R.string.sharing_send_tab_to_self,
+                    R.string.qr_code_share_icon_label);
+        }
     }
 
     @Test
@@ -255,6 +270,11 @@ public class AndroidShareSheetControllerUnitTest {
             sdk = 34,
             shadows = {ShadowChooserActionHelper.class})
     public void choosePrintAction() throws CanceledException {
+        Assume.assumeFalse(
+                "Test ignored in the desktop mode because the Print action is not showed in the"
+                    + " Share UI.",
+                BuildConfig.IS_DESKTOP_ANDROID);
+
         CallbackHelper callbackHelper = new CallbackHelper();
         TargetChosenCallback callback =
                 new TargetChosenCallback() {
@@ -765,12 +785,20 @@ public class AndroidShareSheetControllerUnitTest {
         mController.showShareSheet(params, chromeShareExtras, 1L);
 
         Intent intent = Shadows.shadowOf((Activity) mActivity).peekNextStartedActivity();
-        assertCustomActions(
-                intent,
-                R.string.sharing_long_screenshot,
-                R.string.print_share_activity_title,
-                R.string.sharing_send_tab_to_self,
-                R.string.qr_code_share_icon_label);
+        if (BuildConfig.IS_DESKTOP_ANDROID) {
+            assertCustomActions(
+                    intent,
+                    R.string.sharing_long_screenshot,
+                    R.string.sharing_send_tab_to_self,
+                    R.string.qr_code_share_icon_label);
+        } else {
+            assertCustomActions(
+                    intent,
+                    R.string.sharing_long_screenshot,
+                    R.string.print_share_activity_title,
+                    R.string.sharing_send_tab_to_self,
+                    R.string.qr_code_share_icon_label);
+        }
         chooseCustomAction(
                 intent, R.string.sharing_long_screenshot, ShareCustomAction.LONG_SCREENSHOT);
 
@@ -862,7 +890,7 @@ public class AndroidShareSheetControllerUnitTest {
         for (Parcelable parcelable : actions) {
             Bundle bundle = (Bundle) parcelable;
             if (TextUtils.equals(
-                    ContextUtils.getApplicationContext().getResources().getString(iconLabel),
+                    ContextUtils.getApplicationContext().getString(iconLabel),
                     bundle.getString(KEY_CHOOSER_ACTION_NAME))) {
                 expectAction = bundle;
                 break;

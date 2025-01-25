@@ -82,8 +82,8 @@
 #define YUV2RGB_RES                                                        \
     m_y1 = __lasx_xvldrepl_d(py_1, 0);                       \
     m_y2 = __lasx_xvldrepl_d(py_2, 0);                       \
-    m_u  = __lasx_xvldrepl_d(pu, 0);                         \
-    m_v  = __lasx_xvldrepl_d(pv, 0);                         \
+    m_u  = __lasx_xvldrepl_w(pu, 0);                         \
+    m_v  = __lasx_xvldrepl_w(pv, 0);                         \
     m_y1 = __lasx_xvilvl_d(m_y2, m_y1);                      \
     m_u  = __lasx_xvilvl_b(m_u, m_u);                        \
     m_v  = __lasx_xvilvl_b(m_v, m_v);                        \
@@ -160,9 +160,9 @@
 }
 
 #define YUV2RGBFUNC(func_name, dst_type, alpha)                                     \
-           int func_name(SwsContext *c, const uint8_t *src[],                       \
-                         int srcStride[], int srcSliceY, int srcSliceH,             \
-                         uint8_t *dst[], int dstStride[])                           \
+           int func_name(SwsContext *c, const uint8_t *const src[],                 \
+                         const int srcStride[], int srcSliceY, int srcSliceH,       \
+                         uint8_t *const dst[], const int dstStride[])               \
 {                                                                                   \
     int x, y, h_size, vshift, res;                                                  \
     __m256i m_y1, m_y2, m_u, m_v;                                                   \
@@ -188,9 +188,9 @@
         for(x = 0; x < h_size; x++) {                                               \
 
 #define YUV2RGBFUNC32(func_name, dst_type, alpha)                                   \
-           int func_name(SwsContext *c, const uint8_t *src[],                       \
-                         int srcStride[], int srcSliceY, int srcSliceH,             \
-                         uint8_t *dst[], int dstStride[])                           \
+           int func_name(SwsContext *c, const uint8_t *const src[],                 \
+                         const int srcStride[], int srcSliceY, int srcSliceH,       \
+                         uint8_t *const dst[], const int dstStride[])               \
 {                                                                                   \
     int x, y, h_size, vshift, res;                                                  \
     __m256i m_y1, m_y2, m_u, m_v;                                                   \

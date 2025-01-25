@@ -7,16 +7,18 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
-#include <tuple>
 #include <utility>
 #include <vector>
 
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "quiche/quic/moqt/moqt_cached_object.h"
+#include "quiche/quic/moqt/moqt_failed_fetch.h"
 #include "quiche/quic/moqt/moqt_messages.h"
 #include "quiche/quic/moqt/moqt_priority.h"
 #include "quiche/quic/moqt/moqt_publisher.h"
@@ -38,7 +40,8 @@ class MoqtLiveRelayQueue : public MoqtTrackPublisher {
   explicit MoqtLiveRelayQueue(FullTrackName track,
                               MoqtForwardingPreference forwarding_preference)
       : track_(std::move(track)),
-        forwarding_preference_(forwarding_preference) {}
+        forwarding_preference_(forwarding_preference),
+        next_sequence_(0, 0) {}
 
   MoqtLiveRelayQueue(const MoqtLiveRelayQueue&) = delete;
   MoqtLiveRelayQueue(MoqtLiveRelayQueue&&) = default;
@@ -50,8 +53,13 @@ class MoqtLiveRelayQueue : public MoqtTrackPublisher {
   // occur. A false return value might result in a session error on the
   // inbound session, but this queue is the only place that retains enough state
   // to check.
-  bool AddObject(uint64_t group_id, uint64_t object_id, MoqtObjectStatus status,
-                 absl::string_view object);
+  bool AddObject(FullSequence sequence, MoqtObjectStatus status) {
+    return AddRawObject(sequence, status, publisher_priority_, "");
+  }
+  bool AddObject(FullSequence sequence, absl::string_view object) {
+    return AddRawObject(sequence, MoqtObjectStatus::kNormal,
+                        publisher_priority_, object);
+  }
 
   // MoqtTrackPublisher implementation.
   const FullTrackName& GetTrackName() const override { return track_; }
@@ -76,22 +84,40 @@ class MoqtLiveRelayQueue : public MoqtTrackPublisher {
   MoqtDeliveryOrder GetDeliveryOrder() const override {
     return delivery_order_;
   }
+  std::unique_ptr<MoqtFetchTask> Fetch(FullSequence /*start*/,
+                                       uint64_t /*end_group*/,
+                                       std::optional<uint64_t> /*end_object*/,
+                                       MoqtDeliveryOrder /*order*/) override {
+    return std::make_unique<MoqtFailedFetch>(
+        absl::UnimplementedError("Fetch not implemented"));
+  }
 
   bool HasSubscribers() const { return !listeners_.empty(); }
+
+  // Since MoqtTrackPublisher is generally held in a shared_ptr, an explicit
+  // call allows all the listeners to delete their reference and actually
+  // destroy the object.
+  void RemoveAllSubscriptions() {
+    for (MoqtObjectListener* listener : listeners_) {
+      listener->OnTrackPublisherGone();
+    }
+  }
 
  private:
   // The number of recent groups to keep around for newly joined subscribers.
   static constexpr size_t kMaxQueuedGroups = 3;
 
   // Ordered by object id.
-  using Group = absl::btree_map<uint64_t, CachedObject>;
+  using Subgroup = absl::btree_map<uint64_t, CachedObject>;
 
-  // Returns the next expected object ID in |group|, and also |true| if the last
-  // object ends the group.
-  std::tuple<uint64_t, bool> NextObject(Group& group) const;
+  struct Group {
+    uint64_t next_object = 0;
+    bool complete = false;
+    absl::btree_map<SubgroupPriority, Subgroup> subgroups;
+  };
 
   bool AddRawObject(FullSequence sequence, MoqtObjectStatus status,
-                    absl::string_view payload);
+                    MoqtPriority priority, absl::string_view payload);
 
   FullTrackName track_;
   MoqtForwardingPreference forwarding_preference_;

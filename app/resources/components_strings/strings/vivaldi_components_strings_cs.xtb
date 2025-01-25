@@ -10,6 +10,7 @@
 <translation id="132390688737681464">Ukládat a vyplňovat adresy</translation>
 <translation id="1375198122581997741">O verzi aplikace</translation>
 <translation id="139305205187523129">Web <ph name="HOST_NAME" /> neodeslal žádná data.</translation>
+<translation id="1555191101192706055">Útočníci na webu, který jste se pokusili navštívit, by vás mohli přimět k instalaci škodlivého softwaru, který ovlivňuje prostředí při procházení – například mění domovskou stránku nebo na navštívených webech zobrazuje další reklamy.</translation>
 <translation id="1559528461873125649">Daný soubor nebo adresář neexistuje</translation>
 <translation id="1640244768702815859">Zkuste <ph name="BEGIN_LINK" />navštívit domovskou stránku webu<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Nepodporovaný protokol</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />zkontrolovat proxy server a firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Vydáno organizaci <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Tento web nemůže poskytnout zabezpečené připojení</translation>
+<translation id="2178904466768126352">Útočníci na webu, který jste se pokusili navštívit, by mohli nainstalovat škodlivý software k odcizení nebo vymazání věcí, jako jsou vaše hesla, fotky, zprávy nebo čísla kreditních karet.</translation>
 <translation id="2187317261103489799">Rozpoznat (výchozí)</translation>
 <translation id="2224337661447660594">Nejste připojeni k internetu</translation>
 <translation id="2283340219607151381">Ukládat a vyplňovat adresy</translation>
@@ -88,6 +90,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />zkontrolovat konfiguraci firewallu a antivirového softwaru<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Zkusit spustit diagnostiku sítě<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">platný</translation>
+<translation id="4241830393007970744">Útočníci na webu, který jste se pokusili navštívit, by vás mohli přimět k instalaci softwaru nebo prozrazení věcí, jako jsou vaše hesla, telefon nebo čísla kreditních karet.</translation>
 <translation id="4250431568374086873">Spojení s tímto webem není plně zabezpečené</translation>
 <translation id="4265872034478892965">Povoleno správcem</translation>
 <translation id="4305666528087210886">K souboru nelze získat přístup</translation>
@@ -164,7 +167,6 @@ Kontaktujte administrátora systému.</translation>
 <translation id="7210863904660874423">Web <ph name="HOST_NAME" /> nevyhovuje bezpečnostním standardům.</translation>
 <translation id="7219179957768738017">Připojení používá protokol <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Zobrazovat oznámení</translation>
-<translation id="7227747683324411744">Útočníci na webu, který se pokoušíte navštívit, vás mohou přimět k instalaci škodlivého softwaru, který ovlivní vaše prostředí při procházení – například vám změní domovskou stránku nebo vám na navštívených webech bude zobrazovat další reklamy.</translation>
 <translation id="7353601530677266744">Parametry spuštění</translation>
 <translation id="7364115444476960850">Stránka, kterou se pokoušíte navštívit, byla zablokována <ph name="BLOCKER_NAME" /> prohlížečem Vivaldi</translation>
 <translation id="7419106976560586862">Cesta k profilu</translation>
@@ -172,7 +174,6 @@ Kontaktujte administrátora systému.</translation>
 <translation id="7518003948725431193">Na webové adrese <ph name="URL" /> se nepodařilo nalézt žádnou webovou stránku.</translation>
 <translation id="7549584377607005141">Tato stránka potřebuje ke správnému zobrazení data, která jste zadali dříve. Tyto údaje můžete odeslat znovu, ale zopakujete tím všechny akce, které tato stránka již předtím provedla.</translation>
 <translation id="759889825892636187">Web <ph name="HOST_NAME" /> momentálně tento požadavek nemůže zpracovat.</translation>
-<translation id="7605377493722372900">Útočníci na webu, který se pokoušíte navštívit, mohou nainstalovat škodlivý software, který vám odcizí nebo vymaže věci, jako jsou vaše heslo, fotografie, zprávy nebo číslo kreditní karty.</translation>
 <translation id="7662298039739062396">Nastavení je spravováno rozšířením</translation>
 <translation id="7663736086183791259">Certifikát <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">Certifikát</translation>
@@ -198,7 +199,6 @@ Kontaktujte administrátora systému.</translation>
 <translation id="8288807391153049143">Zobrazit certifikát</translation>
 <translation id="8289355894181816810">Pokud nevíte, co dělat, obraťte se na svého správce sítě.</translation>
 <translation id="8332188693563227489">Přístup k webu <ph name="HOST_NAME" /> byl odepřen</translation>
-<translation id="8422228580902424274">Útočníci na webu, který se pokoušíte navštívit, vás mohou přimět k instalaci softwaru nebo prozrazení věcí, jako je heslo, telefon nebo číslo kreditní karty.</translation>
 <translation id="8473863474539038330">Adresy a další</translation>
 <translation id="8498891568109133222">Odpověď webu <ph name="HOST_NAME" /> trvala příliš dlouho.</translation>
 <translation id="8503813439785031346">Uživatelské jméno</translation>

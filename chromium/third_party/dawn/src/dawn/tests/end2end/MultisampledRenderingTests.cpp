@@ -50,9 +50,6 @@ class MultisampledRenderingTest : public DawnTest {
     void SetUp() override {
         DawnTest::SetUp();
 
-        // TODO(crbug.com/dawn/738): Test output is wrong with D3D12 + WARP.
-        DAWN_SUPPRESS_TEST_IF(IsD3D12() && IsWARP());
-
         InitTexturesForTest();
     }
 
@@ -484,9 +481,6 @@ TEST_P(MultisampledRenderingTest, ResolveInAnotherRenderPass) {
 
 // Test doing MSAA resolve into multiple resolve targets works correctly.
 TEST_P(MultisampledRenderingTest, ResolveIntoMultipleResolveTargets) {
-    // TODO(dawn:462): Issue in the D3D12 validation layers.
-    DAWN_SUPPRESS_TEST_IF(IsD3D12() && IsNvidia() && IsBackendValidationEnabled());
-
     // TODO(dawn:1550) Workaround introduces a bug on Qualcomm GPUs, but is necessary for ARM GPUs.
     DAWN_TEST_UNSUPPORTED_IF(IsAndroid() && IsQualcomm() &&
                              HasToggleEnabled("resolve_multiple_attachments_in_separate_passes"));
@@ -656,9 +650,6 @@ TEST_P(MultisampledRenderingTest, ResolveOneMultisampledTextureTwice) {
 
 // Test using a layer of a 2D texture as resolve target works correctly.
 TEST_P(MultisampledRenderingTest, ResolveIntoOneMipmapLevelOf2DTexture) {
-    // TODO(dawn:462): Issue in the D3D12 validation layers.
-    DAWN_SUPPRESS_TEST_IF(IsD3D12() && IsBackendValidationEnabled());
-
     constexpr uint32_t kBaseMipLevel = 2;
 
     wgpu::TextureViewDescriptor textureViewDescriptor;
@@ -694,9 +685,6 @@ TEST_P(MultisampledRenderingTest, ResolveIntoOneMipmapLevelOf2DTexture) {
 
 // Test using a level or a layer of a 2D array texture as resolve target works correctly.
 TEST_P(MultisampledRenderingTest, ResolveInto2DArrayTexture) {
-    // TODO(dawn:462): Issue in the D3D12 validation layers.
-    DAWN_SUPPRESS_TEST_IF(IsD3D12() && IsBackendValidationEnabled());
-
     // TODO(dawn:1550) Workaround introduces a bug on Qualcomm GPUs, but is necessary for ARM GPUs.
     DAWN_TEST_UNSUPPORTED_IF(IsAndroid() && IsQualcomm() &&
                              HasToggleEnabled("resolve_multiple_attachments_in_separate_passes"));
@@ -1314,6 +1302,61 @@ TEST_P(MultisampledRenderingTest, ResolveInto2DTextureWithAlphaToCoverageAndRast
 
         VerifyResolveTarget(kGreen, mResolveTexture, 0, 0, kMSAACoverage * alpha);
     }
+}
+
+// Test that setting a scissor rect does not affect multisample resolve.
+TEST_P(MultisampledRenderingTest, ResolveInto2DTextureWithScissor) {
+    constexpr bool kTestDepth = false;
+    wgpu::CommandEncoder commandEncoder = device.CreateCommandEncoder();
+    wgpu::RenderPipeline pipeline = CreateRenderPipelineWithOneOutputForTest(kTestDepth);
+
+    constexpr wgpu::Color kRed = {1.0f, 0.0f, 0.0f, 1.0f};
+    constexpr wgpu::Color kGreen = {0.0f, 1.0f, 0.0f, 1.0f};
+
+    // Draw a green triangle, set a scissor for the bottom row of pixels, then draw a red triangle.
+    {
+        utils::ComboRenderPassDescriptor renderPass = CreateComboRenderPassDescriptorForTest(
+            {mMultisampledColorView}, {mResolveView}, wgpu::LoadOp::Clear, wgpu::LoadOp::Clear,
+            kTestDepth);
+
+        const float redUniformData[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+        const float greenUniformData[4] = {0.0f, 1.0f, 0.0f, 1.0f};
+        const size_t uniformSize = sizeof(float) * 4;
+
+        wgpu::Buffer redUniformBuffer = utils::CreateBufferFromData(
+            device, redUniformData, uniformSize, wgpu::BufferUsage::Uniform);
+        wgpu::Buffer greenUniformBuffer = utils::CreateBufferFromData(
+            device, greenUniformData, uniformSize, wgpu::BufferUsage::Uniform);
+
+        wgpu::BindGroup redBindGroup = utils::MakeBindGroup(
+            device, pipeline.GetBindGroupLayout(0), {{0, redUniformBuffer, 0, uniformSize}});
+        wgpu::BindGroup greenBindGroup = utils::MakeBindGroup(
+            device, pipeline.GetBindGroupLayout(0), {{0, greenUniformBuffer, 0, uniformSize}});
+
+        wgpu::RenderPassEncoder renderPassEncoder = commandEncoder.BeginRenderPass(&renderPass);
+        renderPassEncoder.SetPipeline(pipeline);
+
+        renderPassEncoder.SetBindGroup(0, greenBindGroup);
+        renderPassEncoder.Draw(3);
+
+        renderPassEncoder.SetScissorRect(0, 0, 3, 1);
+        renderPassEncoder.SetBindGroup(0, redBindGroup);
+        renderPassEncoder.Draw(3);
+
+        renderPassEncoder.End();
+    }
+
+    wgpu::CommandBuffer commandBuffer = commandEncoder.Finish();
+    queue.Submit(1, &commandBuffer);
+
+    // The bottom-right pixel should be red, but the pixel just above it should be green.
+    constexpr float kMSAACoverage = 1.0f;
+    constexpr uint32_t kRedX = 2;
+    constexpr uint32_t kRedY = 0;
+    constexpr uint32_t kGreenX = 2;
+    constexpr uint32_t kGreenY = 1;
+    VerifyResolveTarget(kRed, mResolveTexture, 0, 0, kMSAACoverage, kRedX, kRedY);
+    VerifyResolveTarget(kGreen, mResolveTexture, 0, 0, kMSAACoverage, kGreenX, kGreenY);
 }
 
 class MultisampledRenderingWithTransientAttachmentTest : public MultisampledRenderingTest {

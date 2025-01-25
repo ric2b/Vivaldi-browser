@@ -283,7 +283,8 @@ enum APIPermissionID {
   kOdfsConfigPrivate = 256,
   kChromeOSManagementAudio = 257,
   kChromeOSDiagnosticsNetworkInfoForMlab = 258,
-  kAIAssistantOriginTrial = 259,
+  kAILanguageModelOriginTrial = 259,
+  kExperimentalAiData = 260,
 
   // Add new entries at the end of the enum and be sure to update the
   // "ExtensionPermission3" enum in
@@ -332,4 +333,5 @@ enum APIPermissionID {
   kWebViewPrivate,
   kWindowPrivate,
   kZoom,
+  kOmniboxPrivate,
 };

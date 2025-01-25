@@ -25,7 +25,7 @@
 
 #if defined(WAYLAND_GBM)
 #include "ui/gfx/linux/gbm_wrapper.h"  // nogncheck
-#include "ui/ozone/platform/wayland/gpu/drm_render_node_handle.h"
+#include "ui/ozone/platform/wayland/common/drm_render_node_handle.h"
 #endif
 
 namespace ui {
@@ -119,6 +119,12 @@ void WaylandBufferManagerGpu::Initialize(
                             server_version >= base::Version("121.0.6113.0");
 
   supports_single_pixel_buffer_ = supports_single_pixel_buffer;
+
+  // Allow to rebind the interface if it hasn't been destroyed yet. Used, for
+  // example, by tests which use buffer manager to emulate frames presentation.
+  if (remote_host_.is_bound() || associated_receiver_.is_bound()) {
+    OnHostDisconnected();
+  }
   BindHostInterface(std::move(remote_host));
 
   ProcessPendingTasks();

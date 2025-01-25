@@ -7,6 +7,34 @@ static bool FilterSynthesizedMoveEvent = false;
 
 namespace views {
 
+// static
+bool MenuController::vivaldi_compact_layout_ = false;
+// static
+bool MenuController::vivaldi_context_menu_ = false;
+
+// static
+void MenuController::VivaldiSetCompactLayout(bool compact_layout) {
+  vivaldi_compact_layout_ = compact_layout;
+}
+
+// static
+bool MenuController::VivaldiGetCompactLayout() {
+  return vivaldi_compact_layout_;
+}
+
+// The MenuController has a context menu flag, but it is only set when the menu
+// is about to open. We need this information a bit earlier so we have a
+// separate flag.
+// static
+void MenuController::VivaldiSetContextMenu(bool context_menu) {
+  vivaldi_context_menu_ = context_menu;
+}
+
+// static
+bool MenuController::VivaldiGetContextMenu() {
+  return vivaldi_context_menu_;
+}
+
 void MenuController::VivaldiAdjustMenubarMenuGeometry(
     gfx::Rect* menu_bounds,
     const gfx::Rect& monitor_bounds,
@@ -52,7 +80,7 @@ bool MenuController::VivaldiHandleKeyPressed(ui::KeyboardCode key_code) {
     // Menubar navigation
     if (!item->GetParentMenuItem() ||
         item->GetParentMenuItem() == item->GetRootMenuItem()) {
-      StepSiblingMenu(false);
+      VivaldiStepSiblingMenu(false);
       return true;
     }
   } else if ((key_code == ui::VKEY_RIGHT && !base::i18n::IsRTL()) ||
@@ -61,7 +89,7 @@ bool MenuController::VivaldiHandleKeyPressed(ui::KeyboardCode key_code) {
     if ((!item->HasSubmenu() || item == item->GetRootMenuItem()) &&
         (!item->GetParentMenuItem() ||
          item->GetParentMenuItem() == item->GetRootMenuItem())) {
-      StepSiblingMenu(true);
+      VivaldiStepSiblingMenu(true);
       return true;
     }
   }
@@ -69,7 +97,7 @@ bool MenuController::VivaldiHandleKeyPressed(ui::KeyboardCode key_code) {
 }
 
 // To be used for navigating a menu bar using the keyboard
-bool MenuController::StepSiblingMenu(bool next) {
+bool MenuController::VivaldiStepSiblingMenu(bool next) {
   if (!menu_stack_.empty()) {
     return false;
   }
@@ -112,7 +140,7 @@ bool MenuController::StepSiblingMenu(bool next) {
 }
 
 // Returns true if further event handling should be blocked.
-bool MenuController::HandleSynthesizedEvent(const ui::MouseEvent& event) {
+bool MenuController::VivaldiHandleSynthesizedEvent(const ui::MouseEvent& event) {
   if (FilterSynthesizedMoveEvent) {
     if (event.IsSynthesized()) {
       return true;

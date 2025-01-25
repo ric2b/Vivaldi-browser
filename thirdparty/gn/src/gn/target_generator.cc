@@ -94,7 +94,7 @@ void TargetGenerator::GenerateTarget(Scope* scope,
     g_scheduler->Log("Defining target", label.GetUserVisibleName(true));
 
   std::unique_ptr<Target> target = std::make_unique<Target>(
-      scope->settings(), label, scope->build_dependency_files());
+      scope->settings(), label, scope->CollectBuildDependencyFiles());
   target->set_defined_from(function_call);
 
   // Create and call out to the proper generator.

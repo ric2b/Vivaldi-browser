@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.view.ActionMode;
 import android.view.View;
+import android.view.View.OnLongClickListener;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
@@ -42,7 +43,6 @@ import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdow
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsVisualState;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.BasicSuggestionProcessor.BookmarkState;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
-import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.share.ShareDelegate;
@@ -58,8 +58,8 @@ import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
-import org.chromium.ui.base.WindowDelegate;
 import org.chromium.ui.modaldialog.ModalDialogManager;
+import org.chromium.ui.widget.ViewRectProvider;
 
 import java.util.List;
 import java.util.Optional;
@@ -92,7 +92,6 @@ public class LocationBarCoordinator
     private UrlBarCoordinator mUrlCoordinator;
     private AutocompleteCoordinator mAutocompleteCoordinator;
     private StatusCoordinator mStatusCoordinator;
-    private WindowDelegate mWindowDelegate;
     private WindowAndroid mWindowAndroid;
     private LocationBarMediator mLocationBarMediator;
     private View mUrlBar;
@@ -121,11 +120,9 @@ public class LocationBarCoordinator
      * @param locationBarLayout Inflated {@link LocationBarLayout}. {@code LocationBarCoordinator}
      *     takes ownership and will destroy this object.
      * @param profileObservableSupplier The supplier of the active profile.
-     * @param privacyPreferencesManager Privacy preference settings manager.
      * @param locationBarDataProvider {@link LocationBarDataProvider} to be used for accessing
      *     Toolbar state.
      * @param actionModeCallback The default callback for text editing action bar to use.
-     * @param windowDelegate {@link WindowDelegate} that will provide {@link Window} related info.
      * @param windowAndroid {@link WindowAndroid} that is used by the owning {@link Activity}.
      * @param activityTabSupplier A Supplier to access the activity's current tab.
      * @param modalDialogManagerSupplier A supplier for {@link ModalDialogManager} object.
@@ -151,15 +148,21 @@ public class LocationBarCoordinator
      * @param baseChromeLayout The base view hosting Chrome that certain views (e.g. the omnibox
      *     suggestion list) will position themselves relative to. If null, the content view will be
      *     used.
+     * @param bottomWindowPaddingSupplier Supplier of the height of the bottom-most region of the
+     *     window that should be considered part of the window's height. This region is suitable for
+     *     rendering content, particularly to achieve a full-bleed visual effect, though it should
+     *     also be incorporated as bottom padding to ensure that such content can be fully scrolled
+     *     out of this region to be fully visible and interactable. This is used to ensure the
+     *     suggestions list draws edge to edge when appropriate. This should only be used when the
+     *     soft keyboard is not visible.
+     * @param onLongClickListener for the url bar.
      */
     public LocationBarCoordinator(
             View locationBarLayout,
             View autocompleteAnchorView,
             ObservableSupplier<Profile> profileObservableSupplier,
-            PrivacyPreferencesManager privacyPreferencesManager,
             LocationBarDataProvider locationBarDataProvider,
             ActionMode.Callback actionModeCallback,
-            WindowDelegate windowDelegate,
             WindowAndroid windowAndroid,
             @NonNull Supplier<Tab> activityTabSupplier,
             Supplier<ModalDialogManager> modalDialogManagerSupplier,
@@ -186,9 +189,10 @@ public class LocationBarCoordinator
                             omniboxSuggestionsDropdownScrollListener,
             @Nullable ObservableSupplier<TabModelSelector> tabModelSelectorSupplier,
             LocationBarEmbedderUiOverrides uiOverrides,
-            @Nullable View baseChromeLayout) {
+            @Nullable View baseChromeLayout,
+            Supplier<Integer> bottomWindowPaddingSupplier,
+            @Nullable OnLongClickListener onLongClickListener) {
         mLocationBarLayout = (LocationBarLayout) locationBarLayout;
-        mWindowDelegate = windowDelegate;
         mWindowAndroid = windowAndroid;
         mActivityLifecycleDispatcher = activityLifecycleDispatcher;
         mActivityLifecycleDispatcher.register(this);
@@ -205,7 +209,8 @@ public class LocationBarCoordinator
                         mLocationBarLayout,
                         uiOverrides.isForcedPhoneStyleOmnibox(),
                         baseChromeLayout,
-                        deferredIMEWindowInsetApplicationCallback::getCurrentKeyboardHeight);
+                        deferredIMEWindowInsetApplicationCallback::getCurrentKeyboardHeight,
+                        bottomWindowPaddingSupplier);
 
         mUrlBar = mLocationBarLayout.findViewById(R.id.url_bar);
         // TODO(crbug.com/40733049): Inject LocaleManager instance to LocationBarCoordinator instead
@@ -217,7 +222,6 @@ public class LocationBarCoordinator
                         locationBarDataProvider,
                         uiOverrides,
                         profileObservableSupplier,
-                        privacyPreferencesManager,
                         overrideUrlLoadingDelegate,
                         LocaleManager.getInstance(),
                         templateUrlServiceSupplier,
@@ -240,12 +244,12 @@ public class LocationBarCoordinator
                 new UrlBarCoordinator(
                         context,
                         (UrlBar) mUrlBar,
-                        windowDelegate,
                         actionModeCallback,
                         mCallbackController.makeCancelable(mLocationBarMediator::onUrlFocusChange),
                         mLocationBarMediator,
                         windowAndroid.getKeyboardDelegate(),
-                        isIncognito);
+                        isIncognito,
+                        onLongClickListener);
         mAutocompleteCoordinator =
                 new AutocompleteCoordinator(
                         mLocationBarLayout,
@@ -549,6 +553,11 @@ public class LocationBarCoordinator
     }
 
     @Override
+    public void maybeShowDefaultBrowserPromo() {
+        mLocationBarMediator.maybeShowDefaultBrowserPromo();
+    }
+
+    @Override
     public void clearOmniboxFocus() {
         mLocationBarMediator.clearOmniboxFocus();
     }
@@ -574,6 +583,13 @@ public class LocationBarCoordinator
      */
     public String getUrlBarTextWithoutAutocomplete() {
         return mUrlCoordinator.getTextWithoutAutocomplete();
+    }
+
+    /**
+     * @see UrlBarCoordinator#getViewRectProvider()
+     */
+    public ViewRectProvider getUrlBarViewRectProvider() {
+        return mUrlCoordinator.getViewRectProvider();
     }
 
     /**
@@ -641,6 +657,11 @@ public class LocationBarCoordinator
     /** Returns the {@link StatusCoordinator} for the LocationBar. */
     public StatusCoordinator getStatusCoordinator() {
         return mStatusCoordinator;
+    }
+
+    /** Returns the {@link UrlBarCoordinator} for the LocationBar. */
+    public UrlBarCoordinator getUrlBarCoordinator() {
+        return mUrlCoordinator;
     }
 
     /**

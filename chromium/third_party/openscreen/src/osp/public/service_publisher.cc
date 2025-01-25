@@ -6,18 +6,20 @@
 
 namespace openscreen::osp {
 
+ServicePublisher::Observer::Observer() = default;
+ServicePublisher::Observer::~Observer() = default;
+
 bool ServicePublisher::Config::IsValid() const {
   return !friendly_name.empty() && !instance_name.empty() &&
          !fingerprint.empty() && !auth_token.empty() &&
          connection_server_port > 0 && !network_interfaces.empty();
 }
 
+ServicePublisher::ServicePublisher() : state_(State::kStopped) {}
 ServicePublisher::~ServicePublisher() = default;
 
 void ServicePublisher::SetConfig(const Config& config) {
   config_ = config;
 }
-
-ServicePublisher::ServicePublisher() : state_(State::kStopped) {}
 
 }  // namespace openscreen::osp

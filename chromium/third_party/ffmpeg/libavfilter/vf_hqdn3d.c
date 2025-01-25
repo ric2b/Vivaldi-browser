@@ -38,7 +38,7 @@
 #include "libavutil/opt.h"
 
 #include "avfilter.h"
-#include "internal.h"
+#include "filters.h"
 #include "video.h"
 #include "vf_hqdn3d.h"
 

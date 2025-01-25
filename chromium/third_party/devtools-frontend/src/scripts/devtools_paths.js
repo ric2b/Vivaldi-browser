@@ -101,7 +101,9 @@ function devToolsThirdPartyPath() {
 
 function nodePath() {
   const paths = {
-    darwin: path.join('mac', process.arch === 'arm64' ? 'node-darwin-arm64' : 'node-darwin-x64', 'bin', 'node'),
+    darwin: path.join(
+        process.arch === 'arm64' ? 'mac_arm64' : 'mac',
+        process.arch === 'arm64' ? 'node-darwin-arm64' : 'node-darwin-x64', 'bin', 'node'),
     linux: path.join('linux', 'node-linux-x64', 'bin', 'node'),
     win32: path.join('win', 'node.exe'),
   };
@@ -123,6 +125,19 @@ function mochaExecutablePath() {
   return path.join(nodeModulesPath(), 'mocha', 'bin', 'mocha');
 }
 
+function litAnalyzerExecutablePath() {
+  return path.join(nodeModulesPath(), 'lit-analyzer', 'cli.js');
+}
+
+/**
+ * Computes the path to the toplevel `tsconfig.json`.
+ *
+ * @returns the path to the toplevel `tsconfig.json`.
+ */
+function tsconfigJsonPath() {
+  return path.join(devtoolsRootPath(), 'tsconfig.json');
+}
+
 function downloadedChromeBinaryPath() {
   const paths = {
     linux: path.join('chrome-linux', 'chrome'),
@@ -139,5 +154,7 @@ module.exports = {
   nodeModulesPath,
   mochaExecutablePath,
   stylelintExecutablePath,
-  downloadedChromeBinaryPath
+  downloadedChromeBinaryPath,
+  litAnalyzerExecutablePath,
+  tsconfigJsonPath,
 };

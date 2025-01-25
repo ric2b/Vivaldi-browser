@@ -9,10 +9,13 @@
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/on_device_model/fake/fake_chrome_ml_api.h"
 #include "services/on_device_model/fake/on_device_model_fake.h"
 #include "services/on_device_model/ml/chrome_ml_types.h"
 #include "services/on_device_model/public/cpp/model_assets.h"
 #include "services/on_device_model/public/cpp/test_support/test_response_holder.h"
+#include "services/on_device_model/public/cpp/text_safety_assets.h"
+#include "services/on_device_model/public/mojom/on_device_model.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -54,7 +57,7 @@ class FakeFile {
     CHECK(file.IsValid());
     file.WriteAtCurrentPos(base::as_byte_span(content));
   }
-  ~FakeFile() { CHECK(temp_file_.Delete()); }
+  ~FakeFile() = default;
 
   base::File Open() {
     base::ScopedAllowBlockingForTesting allow_blocking;
@@ -78,13 +81,11 @@ class OnDeviceModelServiceTest : public testing::Test {
   mojo::Remote<mojom::OnDeviceModelService>& service() { return service_; }
 
   mojo::Remote<mojom::OnDeviceModel> LoadModel(
-      bool support_multiple_sessions = false,
       mojom::ModelBackendType backend_type = mojom::ModelBackendType::kGpu) {
     base::RunLoop run_loop;
     mojo::Remote<mojom::OnDeviceModel> remote;
     auto params = mojom::LoadModelParams::New();
     params->backend_type = backend_type;
-    params->support_multiple_sessions = support_multiple_sessions;
     params->max_tokens = 8000;
     service()->LoadModel(
         std::move(params), remote.BindNewPipeAndPassReceiver(),
@@ -153,8 +154,10 @@ class OnDeviceModelServiceTest : public testing::Test {
 
   void FlushService() { service_.FlushForTesting(); }
 
- private:
+ protected:
   base::test::TaskEnvironment task_environment_;
+
+ private:
   mojo::Remote<mojom::OnDeviceModelService> service_;
   OnDeviceModelService service_impl_;
 };
@@ -182,27 +185,8 @@ TEST_F(OnDeviceModelServiceTest, AddContext) {
       ElementsAre("Context: cheese\n", "Context: more\n", "Input: cheddar\n"));
 }
 
-TEST_F(OnDeviceModelServiceTest, CloneContext) {
+TEST_F(OnDeviceModelServiceTest, CloneContextAndContinue) {
   auto model = LoadModel();
-
-  TestResponseHolder response;
-  mojo::Remote<mojom::Session> session;
-  model->StartSession(session.BindNewPipeAndPassReceiver());
-  session->AddContext(MakeInput("cheese"), {});
-  session->AddContext(MakeInput("more"), {});
-
-  mojo::Remote<mojom::Session> cloned;
-  session->Clone(cloned.BindNewPipeAndPassReceiver());
-  cloned->Execute(MakeInput("cheddar"), response.BindRemote());
-  response.WaitForCompletion();
-
-  EXPECT_THAT(
-      response.responses(),
-      ElementsAre("Context: cheese\n", "Context: more\n", "Input: cheddar\n"));
-}
-
-TEST_F(OnDeviceModelServiceTest, MultipleSessionsCloneContextAndContinue) {
-  auto model = LoadModel(/*support_multiple_sessions=*/true);
 
   mojo::Remote<mojom::Session> session;
   model->StartSession(session.BindNewPipeAndPassReceiver());
@@ -250,7 +234,7 @@ TEST_F(OnDeviceModelServiceTest, MultipleSessionsCloneContextAndContinue) {
 }
 
 TEST_F(OnDeviceModelServiceTest, MultipleSessionsAddContext) {
-  auto model = LoadModel(/*support_multiple_sessions=*/true);
+  auto model = LoadModel();
 
   TestResponseHolder response1, response2, response3, response4, response5;
   mojo::Remote<mojom::Session> session1, session2;
@@ -312,7 +296,7 @@ TEST_F(OnDeviceModelServiceTest, IgnoresContext) {
 }
 
 TEST_F(OnDeviceModelServiceTest, MultipleSessionsIgnoreContext) {
-  auto model = LoadModel(/*support_multiple_sessions=*/true);
+  auto model = LoadModel();
 
   TestResponseHolder response1, response2, response3, response4, response5;
   mojo::Remote<mojom::Session> session1, session2;
@@ -359,6 +343,24 @@ TEST_F(OnDeviceModelServiceTest, MultipleSessionsIgnoreContext) {
       ElementsAre("Context: apple\n", "Context: banana\n", "Input: orange\n"));
 }
 
+TEST_F(OnDeviceModelServiceTest, CountTokens) {
+  auto model = LoadModel();
+
+  TestResponseHolder response;
+  mojo::Remote<mojom::Session> session;
+  model->StartSession(session.BindNewPipeAndPassReceiver());
+  session->AddContext(MakeInput("cheese"), {});
+  session->AddContext(MakeInput("more"), {});
+
+  std::string input = "cheddar";
+  session->Execute(MakeInput(input), response.BindRemote());
+  response.WaitForCompletion();
+
+  EXPECT_THAT(response.input_token_count(), input.size());
+  // 2 context + 1 input.
+  EXPECT_THAT(response.output_token_count(), 3);
+}
+
 TEST_F(OnDeviceModelServiceTest, AddContextWithTokenLimits) {
   auto model = LoadModel();
 
@@ -391,36 +393,8 @@ TEST_F(OnDeviceModelServiceTest, AddContextWithTokenLimits) {
       ElementsAre("Context: big \n", "Context: cheese\n", "Input: cheddar\n"));
 }
 
-TEST_F(OnDeviceModelServiceTest, CancelsPreviousSession) {
-  auto model = LoadModel();
-
-  TestResponseHolder response1;
-  mojo::Remote<mojom::Session> session1;
-  model->StartSession(session1.BindNewPipeAndPassReceiver());
-  session1->Execute(MakeInput("1"), response1.BindRemote());
-
-  mojo::Remote<mojom::Session> session2;
-  model->StartSession(session2.BindNewPipeAndPassReceiver());
-
-  // First session should get canceled.
-  base::RunLoop run_loop;
-  session1.set_disconnect_handler(run_loop.QuitClosure());
-  run_loop.Run();
-
-  // Response from first session may or may not have completed before being
-  // cancelled, but should be terminated.
-  response1.WaitForCompletion();
-  EXPECT_TRUE(response1.terminated());
-
-  // Second session still works.
-  TestResponseHolder response2;
-  session2->Execute(MakeInput("2"), response2.BindRemote());
-  response2.WaitForCompletion();
-  EXPECT_THAT(response2.responses(), ElementsAre("Input: 2\n"));
-}
-
 TEST_F(OnDeviceModelServiceTest, MultipleSessionsWaitPreviousSession) {
-  auto model = LoadModel(/*support_multiple_sessions=*/true);
+  auto model = LoadModel();
 
   TestResponseHolder response1;
   mojo::Remote<mojom::Session> session1;
@@ -463,11 +437,34 @@ TEST_F(OnDeviceModelServiceTest, LoadsAdaptation) {
               ElementsAre("Adaptation: Adapt2\n", "Input: foo\n"));
 }
 
+TEST_F(OnDeviceModelServiceTest, DestroysAdaptationSession) {
+  FakeFile weights1("Adapt1");
+  FakeFile weights2("Adapt2");
+  auto model = LoadModel();
+  task_environment_.RunUntilIdle();
+  EXPECT_EQ(fake_ml::GetActiveNonCloneSessions(), 1);
+
+  auto adaptation1 = LoadAdaptation(*model, weights1.Open());
+  task_environment_.RunUntilIdle();
+  EXPECT_EQ(fake_ml::GetActiveNonCloneSessions(), 2);
+
+  auto adaptation2 = LoadAdaptation(*model, weights2.Open());
+  task_environment_.RunUntilIdle();
+  EXPECT_EQ(fake_ml::GetActiveNonCloneSessions(), 3);
+
+  adaptation1.reset();
+  task_environment_.RunUntilIdle();
+  EXPECT_EQ(fake_ml::GetActiveNonCloneSessions(), 2);
+
+  adaptation2.reset();
+  task_environment_.RunUntilIdle();
+  EXPECT_EQ(fake_ml::GetActiveNonCloneSessions(), 1);
+}
+
 TEST_F(OnDeviceModelServiceTest, LoadsAdaptationWithPath) {
   FakeFile weights1("Adapt1");
   FakeFile weights2("Adapt2");
-  auto model = LoadModel(/*support_multiple_sessions=*/false,
-                         mojom::ModelBackendType::kApu);
+  auto model = LoadModel(mojom::ModelBackendType::kApu);
   auto adaptation1 = LoadAdaptation(*model, weights1.Path());
   EXPECT_THAT(GetResponses(*model, "foo"), ElementsAre("Input: foo\n"));
   EXPECT_THAT(GetResponses(*adaptation1, "foo"),
@@ -481,23 +478,9 @@ TEST_F(OnDeviceModelServiceTest, LoadsAdaptationWithPath) {
               ElementsAre("Adaptation: Adapt2\n", "Input: foo\n"));
 }
 
-TEST_F(OnDeviceModelServiceTest, LoadingAdaptationCancelsSession) {
+TEST_F(OnDeviceModelServiceTest, LoadingAdaptationDoesNotCancelSession) {
   FakeFile weights1("Adapt1");
   auto model = LoadModel();
-
-  mojo::Remote<mojom::Session> session;
-  model->StartSession(session.BindNewPipeAndPassReceiver());
-  session.reset_on_disconnect();
-
-  LoadAdaptation(*model, weights1.Open());
-  FlushService();
-  EXPECT_FALSE(session);
-}
-
-TEST_F(OnDeviceModelServiceTest,
-       MultipleSessionsLoadingAdaptationNotCancelsSession) {
-  FakeFile weights1("Adapt1");
-  auto model = LoadModel(/*support_multiple_sessions=*/true);
 
   mojo::Remote<mojom::Session> session;
   model->StartSession(session.BindNewPipeAndPassReceiver());
@@ -589,6 +572,29 @@ TEST_F(OnDeviceModelServiceTest, AddContextWithTokens) {
   EXPECT_THAT(response.responses(), ElementsAre("Context: System: hi End.\n",
                                                 "Context: Model: hello End.\n",
                                                 "Input: User: bye\n"));
+}
+
+TEST_F(OnDeviceModelServiceTest, ClassifyTextSafety) {
+  FakeFile ts_data("fake_ts_data");
+  FakeFile ts_sp_model("fake_ts_sp_model");
+  TextSafetyLoaderParams params;
+  params.ts_paths.emplace();
+  params.ts_paths->data = ts_data.Path();
+  params.ts_paths->sp_model = ts_sp_model.Path();
+  mojo::Remote<mojom::TextSafetyModel> model;
+  service()->LoadTextSafetyModel(LoadTextSafetyParams(params),
+                                 model.BindNewPipeAndPassReceiver());
+  base::test::TestFuture<mojom::SafetyInfoPtr> future1;
+  base::test::TestFuture<mojom::SafetyInfoPtr> future2;
+  model->ClassifyTextSafety("unsafe text", future1.GetCallback());
+  model->ClassifyTextSafety("reasonable text", future2.GetCallback());
+  auto resp1 = future1.Take();
+  auto resp2 = future2.Take();
+
+  ASSERT_TRUE(resp1);
+  EXPECT_THAT(resp1->class_scores, ElementsAre(0.8, 0.8));
+  ASSERT_TRUE(resp2);
+  EXPECT_THAT(resp2->class_scores, ElementsAre(0.2, 0.2));
 }
 
 }  // namespace

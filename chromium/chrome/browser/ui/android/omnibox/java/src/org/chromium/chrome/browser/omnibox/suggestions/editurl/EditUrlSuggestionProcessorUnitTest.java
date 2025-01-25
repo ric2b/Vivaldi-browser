@@ -8,6 +8,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.times;
@@ -46,8 +47,10 @@ import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegate.ShareOrigin;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.components.omnibox.AutocompleteInput;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteMatchBuilder;
+import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.components.omnibox.OmniboxSuggestionType;
 import org.chromium.components.omnibox.suggestions.OmniboxSuggestionUiType;
 import org.chromium.components.ukm.UkmRecorder;
@@ -102,6 +105,7 @@ public final class EditUrlSuggestionProcessorUnitTest {
     private @Mock Supplier<Tab> mTabSupplier;
     private @Mock Supplier<ShareDelegate> mShareDelegateSupplier;
     private @Mock UkmRecorder.Natives mUkmRecorderJniMock;
+    private @Mock AutocompleteInput mInput;
 
     // The original (real) ClipboardManager to be restored after a test run.
     private Context mContext;
@@ -172,6 +176,14 @@ public final class EditUrlSuggestionProcessorUnitTest {
     }
 
     @Test
+    public void
+            doesProcessSuggestion_acceptMatchingUrlWhatYouTypedWhenRetainOmniboxOnFocusDisabled() {
+        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(Boolean.FALSE);
+        assertTrue(mProcessor.doesProcessSuggestion(mMatch, 0));
+        verifyNoMoreInteractions(mSuggestionHost, mShareDelegate, mClipboardManager);
+    }
+
+    @Test
     public void doesProcessSuggestion_rejectMatchWhenTabIsMissing() {
         doReturn(null).when(mTabSupplier).get();
         assertFalse(mProcessor.doesProcessSuggestion(mMatch, 0));
@@ -218,8 +230,15 @@ public final class EditUrlSuggestionProcessorUnitTest {
     }
 
     @Test
+    public void doesProcessSuggestion_rejectMatchWhenRetainOmniboxOnFocusEnabled() {
+        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(Boolean.TRUE);
+        assertFalse(mProcessor.doesProcessSuggestion(mMatch, 0));
+        verifyNoMoreInteractions(mSuggestionHost, mShareDelegate, mClipboardManager);
+    }
+
+    @Test
     public void populateModel_showInformationFromLoadedTab() {
-        mProcessor.populateModel(mMatch, mModel, 0);
+        mProcessor.populateModel(mInput, mMatch, mModel, 0);
 
         assertEquals(3, mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS).size());
         assertEquals(TAB_TITLE, mModel.get(SuggestionViewProperties.TEXT_LINE_1_TEXT).toString());
@@ -231,7 +250,7 @@ public final class EditUrlSuggestionProcessorUnitTest {
     @Test
     public void populateModel_substituteMatchInformationForLoadingTab() {
         doReturn(true).when(mTab).isLoading();
-        mProcessor.populateModel(mMatch, mModel, 0);
+        mProcessor.populateModel(mInput, mMatch, mModel, 0);
         assertEquals(MATCH_TITLE, mModel.get(SuggestionViewProperties.TEXT_LINE_1_TEXT).toString());
     }
 
@@ -244,7 +263,7 @@ public final class EditUrlSuggestionProcessorUnitTest {
                         .setUrl(SEARCH_URL_1)
                         .build();
         doReturn(true).when(mTab).isLoading();
-        mProcessor.populateModel(mMatch, mModel, 0);
+        mProcessor.populateModel(mInput, mMatch, mModel, 0);
         assertEquals(
                 mContext.getResources().getText(R.string.tab_loading_default_title),
                 mModel.get(SuggestionViewProperties.TEXT_LINE_1_TEXT).toString());
@@ -252,7 +271,7 @@ public final class EditUrlSuggestionProcessorUnitTest {
 
     @Test
     public void shareButton_click() {
-        mProcessor.populateModel(mMatch, mModel, 0);
+        mProcessor.populateModel(mInput, mMatch, mModel, 0);
 
         var monitor = new UserActionTester();
         mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS).get(ACTION_SHARE).callback.run();
@@ -272,19 +291,25 @@ public final class EditUrlSuggestionProcessorUnitTest {
     public void shareButton_click_reportsUkmEvent() {
         doReturn(mWebContents).when(mTab).getWebContents();
 
-        mProcessor.populateModel(mMatch, mModel, 0);
+        mProcessor.populateModel(mInput, mMatch, mModel, 0);
         mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS).get(ACTION_SHARE).callback.run();
         verify(mSuggestionHost).finishInteraction();
 
         verify(mShareDelegate).share(mTab, /* shareDirectly= */ false, ShareOrigin.EDIT_URL);
         verify(mUkmRecorderJniMock)
-                .recordEventWithBooleanMetric(
-                        any(), eq("Omnibox.EditUrlSuggestion.Share"), eq("HasOccurred"));
+                .recordEventWithMultipleMetrics(
+                        any(),
+                        eq("Omnibox.EditUrlSuggestion.Share"),
+                        argThat(
+                                metricsList ->
+                                        metricsList.length == 1
+                                                && metricsList[0].mName.equals("HasOccurred")
+                                                && metricsList[0].mValue == 1));
     }
 
     @Test
     public void suggestionView_clickReloadsPage() {
-        mProcessor.populateModel(mMatch, mModel, 0);
+        mProcessor.populateModel(mInput, mMatch, mModel, 0);
 
         var monitor = new UserActionTester();
         mModel.get(BaseSuggestionViewProperties.ON_CLICK).run();
@@ -298,7 +323,7 @@ public final class EditUrlSuggestionProcessorUnitTest {
 
     @Test
     public void copyButton_click() {
-        mProcessor.populateModel(mMatch, mModel, 0);
+        mProcessor.populateModel(mInput, mMatch, mModel, 0);
         var monitor = new UserActionTester();
         mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS).get(ACTION_COPY).callback.run();
 

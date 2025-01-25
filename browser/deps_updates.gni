@@ -94,6 +94,9 @@ update_target("//content/browser:browser") {
   public_deps += [ "//vivaldi/browser:clipboard" ]
 }
 
+update_target("//components/input:input") {
+  public_deps += [ "//vivaldi/browser:clipboard" ]
+}
 
 if (!is_android) {
   update_target("//chrome/browser/safe_browsing:safe_browsing") {

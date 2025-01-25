@@ -17,8 +17,8 @@ ENDIF()
 
 INCLUDE(ExternalProject)
 ExternalProject_Add(kleidiai
-  URL https://gitlab.arm.com/kleidi/kleidiai/-/archive/8fda0bd9224cad4360c011a09bbb582c5ab7496a/kleidiai-8fda0bd9224cad4360c011a09bbb582c5ab7496a.zip
-  URL_HASH SHA256=e1a3a6a27dcae459e61c33f5eb235a7c809c3208b3b8a649f361a641269ebdc8
+  URL https://gitlab.arm.com/kleidi/kleidiai/-/archive/382b07835c43fcb0401cb4dab3c8fb85eaf187b6/kleidiai-382b07835c43fcb0401cb4dab3c8fb85eaf187b6.zip
+  URL_HASH SHA256=6682b7a2795c711c1dd23ada552675b6514523e991043753648f2cad826f588f
   SOURCE_DIR "${CMAKE_BINARY_DIR}/kleidiai-source"
   BINARY_DIR "${CMAKE_BINARY_DIR}/kleidiai"
   CONFIGURE_COMMAND ""

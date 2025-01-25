@@ -63,8 +63,8 @@ TEST_F(NinjaGeneratedFileTargetWriterTest, Run) {
   writer.Run();
 
   const char expected[] =
-      "build obj/foo/bar.stamp: stamp foo.json obj/foo/dep.stamp "
-      "obj/foo/dep2.stamp || "
-      "obj/foo/bundle_data_dep.stamp obj/foo/datadep.stamp\n";
+      "build phony/foo/bar: phony foo.json phony/foo/dep "
+      "phony/foo/dep2 || "
+      "phony/foo/bundle_data_dep phony/foo/datadep\n";
   EXPECT_EQ(expected, out.str());
 }

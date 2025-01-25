@@ -8,8 +8,8 @@ import android.app.Activity;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewGroup.LayoutParams;
 import android.widget.LinearLayout;
-import android.widget.LinearLayout.LayoutParams;
 
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.test.filters.SmallTest;
@@ -51,7 +51,7 @@ public class PromoCardViewRenderTest extends BlankUiTestActivityTestCase {
     public RenderTestRule mRenderTestRule =
             RenderTestRule.Builder.withPublicCorpus()
                     .setBugComponent(RenderTestRule.Component.UI_BROWSER_MOBILE)
-                    .setRevision(1)
+                    .setRevision(2)
                     .build();
 
     public PromoCardViewRenderTest(boolean nightModeEnabled) {
@@ -83,7 +83,8 @@ public class PromoCardViewRenderTest extends BlankUiTestActivityTestCase {
     private void setPromoCard(@LayoutStyle int variance) {
         Activity activity = getActivity();
 
-        mPromoCardCoordinator = new PromoCardCoordinator(activity, mModel, "render-test", variance);
+        mPromoCardCoordinator =
+                PromoCardCoordinator.create(activity, mModel, "render-test", variance);
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -112,6 +113,29 @@ public class PromoCardViewRenderTest extends BlankUiTestActivityTestCase {
     @Test
     @SmallTest
     @Feature({"RenderTest"})
+    public void testLarge_ButtonsWidth() throws Exception {
+        Drawable illustration =
+                AppCompatResources.getDrawable(getActivity(), R.drawable.test_illustration);
+        mModel.set(PromoCardProperties.IMAGE, illustration);
+        mModel.set(PromoCardProperties.BUTTONS_WIDTH, LayoutParams.WRAP_CONTENT);
+        setPromoCard(LayoutStyle.LARGE);
+
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    LayoutParams layoutParams =
+                            mPromoCardCoordinator
+                                    .getView()
+                                    .findViewById(R.id.promo_primary_button)
+                                    .getLayoutParams();
+                    Criteria.checkThat(layoutParams.width, Matchers.is(LayoutParams.WRAP_CONTENT));
+                });
+
+        mRenderTestRule.render(mPromoCardCoordinator.getView(), "promo_card_buttons_width");
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"RenderTest"})
     public void testLarge_HideSecondaryButton() throws Exception {
         Drawable illustration =
                 AppCompatResources.getDrawable(getActivity(), R.drawable.test_illustration);
@@ -130,6 +154,29 @@ public class PromoCardViewRenderTest extends BlankUiTestActivityTestCase {
                 });
 
         mRenderTestRule.render(mPromoCardCoordinator.getView(), "promo_card_secondary_hidden");
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"RenderTest"})
+    public void testLarge_ShowCloseButton() throws Exception {
+        Drawable illustration =
+                AppCompatResources.getDrawable(getActivity(), R.drawable.test_illustration);
+        mModel.set(PromoCardProperties.IMAGE, illustration);
+        mModel.set(PromoCardProperties.HAS_CLOSE_BUTTON, true);
+        setPromoCard(LayoutStyle.LARGE);
+
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    int visibility =
+                            mPromoCardCoordinator
+                                    .getView()
+                                    .findViewById(R.id.promo_close_button)
+                                    .getVisibility();
+                    Criteria.checkThat(visibility, Matchers.is(View.VISIBLE));
+                });
+
+        mRenderTestRule.render(mPromoCardCoordinator.getView(), "promo_card_close_shown");
     }
 
     @Test

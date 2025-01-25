@@ -20,6 +20,9 @@ import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 import java.util.LinkedHashSet;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** Helper methods for supporting night mode. */
 public class NightModeUtils {
     private static Boolean sNightModeSupportedForTest;
@@ -120,6 +123,12 @@ public class NightModeUtils {
     public static @ThemeType int getThemeSetting() {
         int userSetting = ChromeSharedPreferences.getInstance().readInt(UI_THEME_SETTING, -1);
         if (userSetting == -1) {
+            // Vivaldi
+            if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD &&
+                    !(BuildConfig.IS_OEM_LYNKCO_BUILD || BuildConfig.IS_OEM_GAS_BUILD)) {
+                return ThemeType.DARK;
+            }
+
             return isNightModeDefaultToLight() ? ThemeType.LIGHT : ThemeType.SYSTEM_DEFAULT;
         } else {
             return userSetting;

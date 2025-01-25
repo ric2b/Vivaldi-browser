@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
+import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
@@ -59,6 +60,12 @@ describeWithMockConnection('NetworkLogView', () => {
     const tabTarget = createTarget({type: SDK.Target.Type.TAB});
     createTarget({parentTarget: tabTarget, subtype: 'prerender'});
     target = createTarget({parentTarget: tabTarget});
+  });
+
+  afterEach(() => {
+    if (networkLogView) {
+      networkLogView.detach();
+    }
   });
 
   let nextId = 0;
@@ -265,8 +272,6 @@ describeWithMockConnection('NetworkLogView', () => {
       networkLogView.setTextFilterValue('favicon');
       assert.deepEqual(
           rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url()), [URL_2]);
-
-      networkLogView.detach();
     });
 
     it('shows summary toolbar with content', () => {
@@ -301,7 +306,6 @@ describeWithMockConnection('NetworkLogView', () => {
       } else {
         assert.strictEqual(textElements.length, 0);
       }
-      networkLogView.detach();
     });
   };
   describe('in scope', tests(true));
@@ -330,8 +334,6 @@ describeWithMockConnection('NetworkLogView', () => {
     assert.deepEqual(
         rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()),
         preserveLog ? [request1, request2, request3] : [request3]);
-
-    networkLogView.detach();
   };
 
   it('replaces requests when switching scope with preserve log off', handlesSwitchingScope(false));
@@ -360,7 +362,6 @@ describeWithMockConnection('NetworkLogView', () => {
     assert.deepEqual(
         rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()),
         [request1, request2, request3]);
-    networkLogView.detach();
   });
 
   it('hide Chrome extension requests from checkbox', async () => {
@@ -379,8 +380,6 @@ describeWithMockConnection('NetworkLogView', () => {
     assert.deepEqual(
         rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url()),
         ['url2' as Platform.DevToolsPath.UrlString]);
-
-    networkLogView.detach();
   });
 
   it('can hide Chrome extension requests from dropdown', async () => {
@@ -411,7 +410,6 @@ describeWithMockConnection('NetworkLogView', () => {
         ['url2' as Platform.DevToolsPath.UrlString]);
 
     dropdown.discard();
-    networkLogView.detach();
   });
 
   it('displays correct count for more filters', async () => {
@@ -433,7 +431,6 @@ describeWithMockConnection('NetworkLogView', () => {
     assert.isFalse(getCountAdorner(filterBar)?.classList.contains('hidden'));
 
     dropdown.discard();
-    networkLogView.detach();
   });
 
   it('can filter requests with blocked response cookies from checkbox', async () => {
@@ -452,14 +449,10 @@ describeWithMockConnection('NetworkLogView', () => {
     assert.deepEqual(rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url()), [
       'url1' as Platform.DevToolsPath.UrlString,
     ]);
-
-    networkLogView.detach();
   });
 
   it('can filter requests with blocked response cookies from dropdown', async () => {
     Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN);
-    const umaCountSpy = sinon.spy(Host.userMetrics, 'networkPanelMoreFiltersNumberOfSelectedChanged');
-    const umaItemSpy = sinon.spy(Host.userMetrics, 'networkPanelMoreFiltersItemSelected');
 
     const request1 = createNetworkRequest('url1', {target});
     request1.blockedResponseCookies = () => [{
@@ -492,15 +485,10 @@ describeWithMockConnection('NetworkLogView', () => {
     ]);
 
     dropdown.discard();
-    assert.isTrue(umaCountSpy.calledOnceWith(1));
-    assert.isTrue(umaItemSpy.calledOnceWith('Blocked response cookies'));
-    networkLogView.detach();
   });
 
   it('lists selected options in more filters tooltip', async () => {
     Root.Runtime.experiments.enableForTest(Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN);
-    const umaCountSpy = sinon.spy(Host.userMetrics, 'networkPanelMoreFiltersNumberOfSelectedChanged');
-    const umaItemSpy = sinon.spy(Host.userMetrics, 'networkPanelMoreFiltersItemSelected');
     let filterBar;
     ({filterBar, networkLogView} = createEnvironment());
 
@@ -518,11 +506,6 @@ describeWithMockConnection('NetworkLogView', () => {
     assert.strictEqual(button.title, 'Hide extension URLs, Blocked response cookies');
 
     dropdown.discard();
-    assert.isTrue(umaCountSpy.calledOnceWith(2));
-    assert.isTrue(umaItemSpy.calledTwice);
-    assert.isTrue(umaItemSpy.calledWith('Hide extension URLs'));
-    assert.isTrue(umaItemSpy.calledWith('Blocked response cookies'));
-    networkLogView.detach();
   });
 
   it('updates tooltip to default when more filters option deselected', async () => {
@@ -547,7 +530,6 @@ describeWithMockConnection('NetworkLogView', () => {
     assert.strictEqual(button.title, 'Show only/hide requests');
 
     dropdown.discard();
-    networkLogView.detach();
   });
 
   it('can remove requests', async () => {
@@ -561,8 +543,35 @@ describeWithMockConnection('NetworkLogView', () => {
 
     networkLog.dispatchEventToListeners(Logs.NetworkLog.Events.RequestRemoved, {request});
     assert.strictEqual(rootNode.children.length, 0);
+  });
 
-    networkLogView.detach();
+  it('correctly shows/hides "Copy all as HAR (with sensitive data)" menu item', async () => {
+    const networkShowOptionsToGenerateHarWithSensitiveDataSetting = Common.Settings.Settings.instance().createSetting(
+        'network.show-options-to-generate-har-with-sensitive-data', false);
+    createNetworkRequest('url1', {target});
+    networkLogView = createNetworkLogView(new UI.FilterBar.FilterBar('network-panel', true));
+    networkLogView.markAsRoot();
+    networkLogView.show(document.body);
+    networkLogView.columns().dataGrid().rootNode().children[0].select();
+    const {element} = networkLogView.columns().dataGrid();
+
+    {
+      // Setting is disabled (default), menu item must be hidden.
+      networkShowOptionsToGenerateHarWithSensitiveDataSetting.set(false);
+      const contextMenu = getContextMenuForElement(element);
+      const clipboardSection = contextMenu.clipboardSection();
+      const copyMenu = findMenuItemWithLabel(clipboardSection, 'Copy') as UI.ContextMenu.SubMenu;
+      assert.isUndefined(findMenuItemWithLabel(copyMenu.footerSection(), 'Copy all as HAR (with sensitive data)'));
+    }
+
+    {
+      // Setting is enabled, menu item must be shown.
+      networkShowOptionsToGenerateHarWithSensitiveDataSetting.set(true);
+      const contextMenu = getContextMenuForElement(element);
+      const clipboardSection = contextMenu.clipboardSection();
+      const copyMenu = findMenuItemWithLabel(clipboardSection, 'Copy') as UI.ContextMenu.SubMenu;
+      assert.isDefined(findMenuItemWithLabel(copyMenu.footerSection(), 'Copy all as HAR (with sensitive data)'));
+    }
   });
 
   it('correctly shows and hides waterfall column', async () => {
@@ -626,8 +635,6 @@ describeWithMockConnection('NetworkLogView', () => {
       urlContentOverridden,
       urlHeaderAndContentOverridden,
     ]);
-
-    networkLogView.detach();
   });
 
   it('can apply filter - has-overrides:no', async () => {
@@ -644,8 +651,6 @@ describeWithMockConnection('NetworkLogView', () => {
     assert.deepEqual(rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url()), [
       urlNotOverridden,
     ]);
-
-    networkLogView.detach();
   });
 
   it('can apply filter - has-overrides:headers', async () => {
@@ -663,8 +668,6 @@ describeWithMockConnection('NetworkLogView', () => {
       urlHeaderOverridden,
       urlHeaderAndContentOverridden,
     ]);
-
-    networkLogView.detach();
   });
 
   it('can apply filter - has-overrides:content', async () => {
@@ -682,8 +685,6 @@ describeWithMockConnection('NetworkLogView', () => {
       urlContentOverridden,
       urlHeaderAndContentOverridden,
     ]);
-
-    networkLogView.detach();
   });
 
   it('can apply filter - has-overrides:tent', async () => {
@@ -701,8 +702,37 @@ describeWithMockConnection('NetworkLogView', () => {
       urlContentOverridden,
       urlHeaderAndContentOverridden,
     ]);
+  });
 
-    networkLogView.detach();
+  it('filters localized resource categories', async () => {
+    // "simulate" other locale by stubbing out resource categories with a different text
+    sinon.stub(Common.ResourceType.resourceCategories.Document, 'title')
+        .returns(i18n.i18n.lockedString('<localized document>'));
+    sinon.stub(Common.ResourceType.resourceCategories.XHR, 'title').returns(i18n.i18n.lockedString('<localized xhr>'));
+
+    const documentRequest = createNetworkRequest('urlDocument', {finished: true});
+    documentRequest.setResourceType(Common.ResourceType.resourceTypes.Document);
+    const fetchRequest = createNetworkRequest('urlFetch', {finished: true});
+    fetchRequest.setResourceType(Common.ResourceType.resourceTypes.Fetch);
+
+    const filterBar = new UI.FilterBar.FilterBar('network-panel', true);
+    networkLogView = createNetworkLogView(filterBar);
+
+    networkLogView.markAsRoot();
+    networkLogView.show(document.body);
+    const rootNode = networkLogView.columns().dataGrid().rootNode();
+    const shownRequestUrls = () => rootNode.children.map(
+        n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url() as string | undefined);
+
+    const setting = Common.Settings.Settings.instance().createSetting('network-resource-type-filters', {});
+    setting.set({all: true});
+    assert.deepEqual(shownRequestUrls(), ['urlDocument', 'urlFetch']);
+
+    setting.set({[Common.ResourceType.resourceCategories.Document.name]: true});
+    assert.deepEqual(shownRequestUrls(), ['urlDocument']);
+
+    setting.set({[Common.ResourceType.resourceCategories.XHR.name]: true});
+    assert.deepEqual(shownRequestUrls(), ['urlFetch']);
   });
 
   it('"Copy all" commands respects filters', async () => {
@@ -835,8 +865,6 @@ Invoke-WebRequest -UseBasicParsing -Uri "url-header-overridden";\r
 Invoke-WebRequest -UseBasicParsing -Uri "url-content-overridden";\r
 Invoke-WebRequest -UseBasicParsing -Uri "url-header-und-content-overridden"`]);
     copyText.resetHistory();
-
-    networkLogView.detach();
   });
 
   it('skips unknown columns without title in persistence setting', async () => {

@@ -28,12 +28,12 @@
 #include "src/core/SkDescriptor.h"
 #include "src/core/SkFDot6.h"
 #include "src/core/SkFontDescriptor.h"
-#include "src/core/SkFontScanner.h"
 #include "src/core/SkGlyph.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskGamma.h"
 #include "src/core/SkScalerContext.h"
 #include "src/ports/SkFontHost_FreeType_common.h"
+#include "src/ports/SkFontScanner_FreeType_priv.h"
 #include "src/ports/SkTypeface_FreeType.h"
 #include "src/sfnt/SkOTUtils.h"
 #include "src/sfnt/SkSFNTHeader.h"
@@ -120,6 +120,30 @@ static bool isLCD(const SkScalerContextRec& rec) {
 
 static SkScalar SkFT_FixedToScalar(FT_Fixed x) {
   return SkFixedToScalar(x);
+}
+
+static bool GetAxes(FT_Face face, SkFontScanner::AxisDefinitions* axes) {
+    SkASSERT(face && axes);
+    if (face->face_flags & FT_FACE_FLAG_MULTIPLE_MASTERS) {
+        FT_MM_Var* variations = nullptr;
+        FT_Error err = FT_Get_MM_Var(face, &variations);
+        if (err) {
+            LOG_INFO("INFO: font %s claims to have variations, but none found.\n",
+                     face->family_name);
+            return false;
+        }
+        UniqueVoidPtr autoFreeVariations(variations);
+
+        axes->reset(variations->num_axis);
+        for (FT_UInt i = 0; i < variations->num_axis; ++i) {
+            const FT_Var_Axis& ftAxis = variations->axis[i];
+            (*axes)[i].fTag = ftAxis.tag;
+            (*axes)[i].fMinimum = SkFT_FixedToScalar(ftAxis.minimum);
+            (*axes)[i].fDefault = SkFT_FixedToScalar(ftAxis.def);
+            (*axes)[i].fMaximum = SkFT_FixedToScalar(ftAxis.maximum);
+        }
+    }
+    return true;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -441,7 +465,8 @@ class SkScalerContext_FreeType : public SkScalerContext {
 public:
     SkScalerContext_FreeType(sk_sp<SkTypeface_FreeType>,
                              const SkScalerContextEffects&,
-                             const SkDescriptor* desc);
+                             const SkDescriptor* desc,
+                             sk_sp<SkTypeface>);
     ~SkScalerContext_FreeType() override;
 
     bool success() const {
@@ -690,10 +715,19 @@ static bool isAxisAligned(const SkScalerContextRec& rec) {
 }
 
 std::unique_ptr<SkScalerContext> SkTypeface_FreeType::onCreateScalerContext(
-    const SkScalerContextEffects& effects, const SkDescriptor* desc) const
-{
+    const SkScalerContextEffects& effects, const SkDescriptor* desc) const {
+    return this->onCreateScalerContextAsProxyTypeface(effects, desc, nullptr);
+}
+
+std::unique_ptr<SkScalerContext> SkTypeface_FreeType::onCreateScalerContextAsProxyTypeface(
+        const SkScalerContextEffects& effects,
+        const SkDescriptor* desc,
+        sk_sp<SkTypeface> realTypeface) const {
     auto c = std::make_unique<SkScalerContext_FreeType>(
-            sk_ref_sp(const_cast<SkTypeface_FreeType*>(this)), effects, desc);
+            sk_ref_sp(const_cast<SkTypeface_FreeType*>(this)),
+            effects,
+            desc,
+            realTypeface ? realTypeface : sk_ref_sp(const_cast<SkTypeface_FreeType*>(this)));
     if (c->success()) {
         return c;
     }
@@ -755,7 +789,7 @@ std::unique_ptr<SkFontData> SkTypeface_FreeType::cloneFontData(const SkFontArgum
     }
 
     SkFontScanner::AxisDefinitions axisDefinitions;
-    if (!SkFontScanner_FreeType::GetAxes(face, &axisDefinitions)) {
+    if (!GetAxes(face, &axisDefinitions)) {
         return nullptr;
     }
     int axisCount = axisDefinitions.size();
@@ -892,16 +926,17 @@ static FT_Int chooseBitmapStrike(FT_Face face, FT_F26Dot6 scaleY) {
     return chosenStrikeIndex;
 }
 
-SkScalerContext_FreeType::SkScalerContext_FreeType(sk_sp<SkTypeface_FreeType> typeface,
+SkScalerContext_FreeType::SkScalerContext_FreeType(sk_sp<SkTypeface_FreeType> proxyTypeface,
                                                    const SkScalerContextEffects& effects,
-                                                   const SkDescriptor* desc)
-    : SkScalerContext(std::move(typeface), effects, desc)
+                                                   const SkDescriptor* desc,
+                                                   sk_sp<SkTypeface> realTypeface)
+    : SkScalerContext(realTypeface, effects, desc)
     , fFace(nullptr)
     , fFTSize(nullptr)
     , fStrikeIndex(-1)
 {
     SkAutoMutexExclusive  ac(f_t_mutex());
-    fFaceRec = static_cast<SkTypeface_FreeType*>(this->getTypeface())->getFaceRec();
+    fFaceRec = proxyTypeface->getFaceRec();
 
     // load the font file
     if (nullptr == fFaceRec) {
@@ -2249,28 +2284,13 @@ bool SkFontScanner_FreeType::scanInstance(SkStreamAsset* stream,
     return true;
 }
 
-bool SkFontScanner_FreeType::GetAxes(FT_Face face, AxisDefinitions* axes) {
-    SkASSERT(face && axes);
-    if (face->face_flags & FT_FACE_FLAG_MULTIPLE_MASTERS) {
-        FT_MM_Var* variations = nullptr;
-        FT_Error err = FT_Get_MM_Var(face, &variations);
-        if (err) {
-            LOG_INFO("INFO: font %s claims to have variations, but none found.\n",
-                     face->family_name);
-            return false;
-        }
-        UniqueVoidPtr autoFreeVariations(variations);
+sk_sp<SkTypeface> SkFontScanner_FreeType::MakeFromStream(std::unique_ptr<SkStreamAsset> stream,
+                                                         const SkFontArguments& args) const {
+    return SkTypeface_FreeType::MakeFromStream(std::move(stream), args);
+}
 
-        axes->reset(variations->num_axis);
-        for (FT_UInt i = 0; i < variations->num_axis; ++i) {
-            const FT_Var_Axis& ftAxis = variations->axis[i];
-            (*axes)[i].fTag = ftAxis.tag;
-            (*axes)[i].fMinimum = SkFT_FixedToScalar(ftAxis.minimum);
-            (*axes)[i].fDefault = SkFT_FixedToScalar(ftAxis.def);
-            (*axes)[i].fMaximum = SkFT_FixedToScalar(ftAxis.maximum);
-        }
-    }
-    return true;
+SkTypeface::FactoryId SkFontScanner_FreeType::getFactoryId() const {
+    return SkTypeface_FreeType::FactoryId;
 }
 
 /*static*/ void SkFontScanner_FreeType::computeAxisValues(
@@ -2384,12 +2404,16 @@ bool SkFontScanner_FreeType::GetAxes(FT_Face face, AxisDefinitions* axes) {
             }
             if (!found) {
                 LOG_INFO("Requested font axis not found: %s '%c%c%c%c'\n",
-                            name.c_str(),
-                            (skTag >> 24) & 0xFF,
-                            (skTag >> 16) & 0xFF,
-                            (skTag >>  8) & 0xFF,
-                            (skTag)       & 0xFF);
+                         name.c_str(),
+                         (skTag >> 24) & 0xFF,
+                         (skTag >> 16) & 0xFF,
+                         (skTag >>  8) & 0xFF,
+                         (skTag)       & 0xFF);
             }
         }
     )
+}
+
+std::unique_ptr<SkFontScanner> SkFontScanner_Make_FreeType() {
+    return std::make_unique<SkFontScanner_FreeType>();
 }

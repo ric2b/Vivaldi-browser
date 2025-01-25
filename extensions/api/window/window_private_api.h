@@ -5,6 +5,7 @@
 
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/window_private.h"
+#include "ui/base/mojom/window_show_state.mojom-forward.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -16,7 +17,7 @@ class VivaldiBrowserWindow;
 namespace extensions {
 
 using vivaldi::window_private::WindowState;
-WindowState ConvertToJSWindowState(ui::WindowShowState state);
+WindowState ConvertToJSWindowState(ui::mojom::WindowShowState state);
 
 class VivaldiWindowsAPI {
  public:

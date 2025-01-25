@@ -13,17 +13,17 @@
 
 #include "cast/streaming/impl/compound_rtcp_parser.h"
 #include "cast/streaming/impl/frame_crypto.h"
-#include "cast/streaming/public/constants.h"
-#include "cast/streaming/public/encoded_frame.h"
-#include "cast/streaming/public/environment.h"
 #include "cast/streaming/impl/receiver_packet_router.h"
 #include "cast/streaming/impl/rtcp_common.h"
 #include "cast/streaming/impl/rtcp_session.h"
 #include "cast/streaming/impl/rtp_defines.h"
 #include "cast/streaming/impl/rtp_packetizer.h"
-#include "cast/streaming/rtp_time.h"
 #include "cast/streaming/impl/sender_report_builder.h"
 #include "cast/streaming/impl/session_config.h"
+#include "cast/streaming/public/constants.h"
+#include "cast/streaming/public/encoded_frame.h"
+#include "cast/streaming/public/environment.h"
+#include "cast/streaming/rtp_time.h"
 #include "cast/streaming/ssrc.h"
 #include "cast/streaming/testing/mock_environment.h"
 #include "cast/streaming/testing/simple_socket_subscriber.h"
@@ -188,7 +188,7 @@ class MockSender : public CompoundRtcpParser::Client {
   }
 
   // Returns a vector containing each packet ID once (of the current frame being
-  // sent). |permutation| controls the sort order of the vector: zero will
+  // sent). `permutation` controls the sort order of the vector: zero will
   // provide all the packet IDs in order, and greater values will provide them
   // in a different, predictable order.
   std::vector<FramePacketId> GetAllPacketIds(int permutation) {
@@ -318,7 +318,7 @@ class ReceiverTest : public testing::Test {
   }
 
   // Consume one frame from the Receiver, and verify that it is the same as the
-  // |sent_frame|. Exception: The |reference_time| is the playout time on the
+  // `sent_frame`. Exception: The `reference_time` is the playout time on the
   // Receiver's end, while it refers to the capture time on the Sender's end.
   void ConsumeAndVerifyFrame(const SimulatedFrame& sent_frame) {
     SCOPED_TRACE(testing::Message() << "for frame " << sent_frame.frame_id);

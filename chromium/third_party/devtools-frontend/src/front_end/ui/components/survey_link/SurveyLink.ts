@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../icon_button/icon_button.js';
+
 import * as Common from '../../../core/common/common.js';
 import type * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as LitHtml from '../../lit-html/lit-html.js';
-import * as IconButton from '../icon_button/icon_button.js';
 
 import surveyLinkStyles from './surveyLink.css.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -49,7 +52,6 @@ const enum State {
 // A link to a survey. The link is rendered aysnchronously because we need to first check if
 // canShowSurvey succeeds.
 export class SurveyLink extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-survey-link`;
 
   readonly #shadow = this.attachShadow({mode: 'open'});
   #trigger = '';
@@ -122,9 +124,9 @@ export class SurveyLink extends HTMLElement {
 
     // clang-format off
     // eslint-disable-next-line rulesdir/ban_style_tags_in_lit_html
-    const output = LitHtml.html`
+    const output = html`
       <button class="link ${linkState}" tabindex=${ariaDisabled ? '-1' : '0'} .disabled=${ariaDisabled} aria-disabled=${ariaDisabled} @click=${this.#sendSurvey}>
-        <${IconButton.Icon.Icon.litTagName} class="link-icon" .data=${{iconName: 'review', color: 'var(--sys-color-primary)', width: 'var(--issue-link-icon-size, 16px)', height: 'var(--issue-link-icon-size, 16px)'} as IconButton.Icon.IconData}></${IconButton.Icon.Icon.litTagName}><!--
+        <devtools-icon class="link-icon" .data=${{iconName: 'review', color: 'var(--sys-color-primary)', width: 'var(--issue-link-icon-size, 16px)', height: 'var(--issue-link-icon-size, 16px)'}}></devtools-icon><!--
       -->${linkText}
       </button>
     `;

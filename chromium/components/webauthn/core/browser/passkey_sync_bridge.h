@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/containers/flat_set.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/sync/model/data_type_store.h"
@@ -71,7 +72,10 @@ class PasskeySyncBridge : public syncer::DataTypeSyncBridge,
                      const base::Location& location) override;
   void DeleteAllPasskeys() override;
   bool UpdatePasskey(const std::string& credential_id,
-                     PasskeyUpdate change) override;
+                     PasskeyUpdate change,
+                     bool updated_by_user) override;
+  bool UpdatePasskeyTimestamp(const std::string& credential_id,
+                              base::Time last_used_time) override;
   sync_pb::WebauthnCredentialSpecifics CreatePasskey(
       std::string_view rp_id,
       const UserEntity& user_entity,
@@ -90,10 +94,19 @@ class PasskeySyncBridge : public syncer::DataTypeSyncBridge,
       std::unique_ptr<syncer::DataTypeStore::RecordList> entries,
       std::unique_ptr<syncer::MetadataBatch> metadata_batch);
   void OnStoreCommitWriteBatch(const std::optional<syncer::ModelError>& error);
+  void NotifyPasskeyModelIsReady(bool is_ready);
   void NotifyPasskeysChanged(const std::vector<PasskeyModelChange>& changes);
   void AddPasskeyInternal(sync_pb::WebauthnCredentialSpecifics specifics);
   void AddShadowedCredentialIdsToNewPasskey(
       sync_pb::WebauthnCredentialSpecifics& passkey);
+  // Updates the credential specified by `credential_id` by synchronously
+  // calling `mutate_callback` to update it. If `mutate_callback` returns false
+  // then no update occurs. Returns false if the credential could not be found,
+  // or if the callback returned false.
+  bool UpdateSinglePasskey(
+      const std::string& credential_id,
+      base::OnceCallback<bool(sync_pb::WebauthnCredentialSpecifics*)>
+          mutate_callback);
 
   // Local view of the stored data. Indexes specifics protos by storage key.
   std::map<std::string, sync_pb::WebauthnCredentialSpecifics> data_;

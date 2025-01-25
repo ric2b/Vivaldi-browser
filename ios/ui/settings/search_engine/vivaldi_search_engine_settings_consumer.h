@@ -12,6 +12,8 @@
 - (void)setSearchEngineForRegularTabs:(NSString*)searchEngine;
 // Updates the search engine for private tabs
 - (void)setSearchEngineForPrivateTabs:(NSString*)searchEngine;
+// Updates the state with the enable search suggestion preference value.
+- (void)setPreferenceForEnableSearchSuggestions:(BOOL)enable;
 // Updates the state with the enable search engine nickname preference value.
 - (void)setPreferenceForEnableSearchEngineNickname:(BOOL)enable;
 @end

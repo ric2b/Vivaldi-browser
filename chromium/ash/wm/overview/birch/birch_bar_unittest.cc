@@ -5,6 +5,7 @@
 #include "ash/birch/birch_item.h"
 #include "ash/birch/birch_item_remover.h"
 #include "ash/birch/birch_model.h"
+#include "ash/birch/coral_constants.h"
 #include "ash/birch/test_birch_client.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
@@ -21,6 +22,7 @@
 #include "ash/system/time/calendar_unittest_utils.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wallpaper/views/wallpaper_widget_controller.h"
+#include "ash/wm/coral/coral_test_util.h"
 #include "ash/wm/overview/birch/birch_bar_context_menu_model.h"
 #include "ash/wm/overview/birch/birch_bar_controller.h"
 #include "ash/wm/overview/birch/birch_bar_menu_model_adapter.h"
@@ -97,8 +99,8 @@ class TestBirchItem : public BirchItem {
   void PerformAction() override {}
   void LoadIcon(LoadIconCallback callback) const override {
     std::move(callback).Run(
-        ui::ImageModel::FromVectorIcon(kSettingsIcon, SK_ColorBLACK, 20),
-        SecondaryIconType::kNoIcon);
+        PrimaryIconType::kIcon, SecondaryIconType::kNoIcon,
+        ui::ImageModel::FromVectorIcon(kSettingsIcon, SK_ColorBLACK, 20));
   }
 };
 
@@ -107,18 +109,18 @@ class TestBirchItem : public BirchItem {
 ////////////////////////////////////////////////////////////////////////////////
 // BirchBarTest:
 // The test class of birch bar with Forest feature enabled by default.
-class BirchBarTest : public AshTestBase {
+class BirchBarTestBase : public AshTestBase {
  public:
-  BirchBarTest() {
+  BirchBarTestBase() {
     feature_list_.InitWithFeatures(
         {features::kForestFeature, features::kBirchWeather,
-         features::kBirchCoral},
+         features::kCoralFeature},
         {});
   }
 
-  BirchBarTest(const BirchBarTest&) = delete;
-  BirchBarTest& operator=(const BirchBarTest&) = delete;
-  ~BirchBarTest() override = default;
+  BirchBarTestBase(const BirchBarTestBase&) = delete;
+  BirchBarTestBase& operator=(const BirchBarTestBase&) = delete;
+  ~BirchBarTestBase() override = default;
 
   void SetUp() override {
     AshTestBase::SetUp();
@@ -146,15 +148,6 @@ class BirchBarTest : public AshTestBase {
     weather_provider_ = weather_provider.get();
     birch_model->OverrideWeatherProviderForTest(std::move(weather_provider));
 
-    // TODO(make coral provider)
-    auto coral_provider =
-        std::make_unique<TestBirchDataProvider<BirchCoralItem>>(
-            base::BindRepeating(&BirchModel::SetCoralItems,
-                                base::Unretained(birch_model)),
-            prefs::kBirchUseCoral);
-    coral_provider_ = coral_provider.get();
-    birch_model->OverrideCoralProviderForTest(std::move(coral_provider));
-
     base::RunLoop run_loop;
     Shell::Get()
         ->birch_model()
@@ -169,7 +162,6 @@ class BirchBarTest : public AshTestBase {
   void TearDown() override {
     Shell::Get()->birch_model()->SetClientAndInit(nullptr);
     weather_provider_ = nullptr;
-    coral_provider_ = nullptr;
     birch_client_.reset();
     image_downloader_.reset();
     AshTestBase::TearDown();
@@ -304,26 +296,51 @@ class BirchBarTest : public AshTestBase {
   }
 
   // Adds `num` coral items to data source.
-  void SetCoralItems(size_t num) {
-    std::vector<BirchCoralItem> item_list;
-    std::vector<GURL> page_urls;
-    page_urls.emplace_back(("https://www.reddit.com/"));
-    page_urls.emplace_back(("https://www.figma.com/"));
-    page_urls.emplace_back(("https://www.notion.so/"));
-    for (size_t i = 0; i < num; i++) {
-      item_list.emplace_back(
-          /*coral_title=*/u"coral_title",
-          /*coral_text=*/u"coral_text", page_urls);
-      item_list.back().set_ranking(1.0f);
+  void SetCoralItems(size_t num, CoralSource source = CoralSource::kUnknown) {
+    // The number of coral items cannot exceed 2.
+    ASSERT_GE(2u, num);
+
+    std::vector<coral::mojom::GroupPtr> test_groups;
+    if (num >= 1u) {
+      auto test_group =
+          CreateTestGroup({{"Reddit", GURL("https://www.reddit.com/")},
+                           {"Figma", GURL("https://www.figma.com/")},
+                           {"Notion", GURL("https://www.notion.so/")},
+                           {"Settings", "odknhmnlageboeamepcngndbggdpaobj"}},
+                          "Coral Group 1", base::Token(1, 2));
+      test_groups.push_back(std::move(test_group));
     }
-    coral_provider_->set_items(item_list);
+
+    if (num == 2u) {
+      auto test_group =
+          CreateTestGroup({{"IKEA", GURL("https://www.ikea.com/")},
+                           {"NHL", GURL("https://www.nhl.com/")},
+                           {"Google", GURL("https://www.google.com/")},
+                           {"Files", "fkiggjmkendpmbegkagpmagjepfkpmeb"}},
+                          "Coral Group 2", base::Token(2, 3));
+      test_groups.push_back(std::move(test_group));
+    }
+
+    OverrideTestResponse(std::move(test_groups), source);
   }
+
   std::unique_ptr<TestBirchClient> birch_client_;
   raw_ptr<TestBirchDataProvider<BirchWeatherItem>> weather_provider_;
-  raw_ptr<TestBirchDataProvider<BirchCoralItem>> coral_provider_;
 
  private:
   base::test::ScopedFeatureList feature_list_;
+};
+
+// Adds a mock clock override to the test since the time may impact the ranking
+// of the chips.
+class BirchBarTest : public BirchBarTestBase {
+ public:
+  BirchBarTest() = default;
+  BirchBarTest(const BirchBarTest&) = delete;
+  BirchBarTest& operator=(const BirchBarTest&) = delete;
+  ~BirchBarTest() override = default;
+
+ private:
   // Ensure base::Time::Now() is a fixed value.
   base::ScopedMockClockOverride mock_clock_override_;
 };
@@ -367,7 +384,7 @@ TEST_F(BirchBarTest, RecordsHistogramWhenChipsShown) {
   // One impression was recorded for the birch bar.
   histograms.ExpectBucketCount("Ash.Birch.Bar.Impression", true, 1);
 
-  // Two chips were shown.
+  // Four chips were shown.
   histograms.ExpectBucketCount("Ash.Birch.ChipCount", 2, 1);
 
   // One impression was recorded for each chip type.
@@ -383,6 +400,72 @@ TEST_F(BirchBarTest, RecordsHistogramWhenChipsShown) {
   // The same ranking were recorded for the all-day total histogram.
   histograms.ExpectBucketCount("Ash.Birch.Ranking.Total", 1, 1);
   histograms.ExpectBucketCount("Ash.Birch.Ranking.Total", 12, 1);
+}
+
+// Tests that we get expected records when showing/hiding/activating the coral
+// chips.
+TEST_F(BirchBarTest, RecordsHistogramForCoralChips) {
+  birch_client_->Reset();
+
+  base::HistogramTester histograms;
+
+  // Add one restore chip.
+  SetCoralItems(1, CoralSource::kPostLogin);
+
+  // Entering overview shows the birch bar.
+  EnterOverview();
+
+  const auto& restore_chips =
+      OverviewGridTestApi(Shell::GetPrimaryRootWindow()).GetBirchChips();
+  ASSERT_EQ(restore_chips.size(), 1u);
+
+  // One cluster count was recorded for the coral chip.
+  histograms.ExpectBucketCount("Ash.Birch.Coral.ClusterCount", 1, 1);
+
+  // Clicking on the restore chip to restore the group and exit Overview.
+  LeftClickOn(restore_chips[0]);
+
+  // One restore action was recorded.
+  histograms.ExpectBucketCount("Ash.Birch.Coral.Action",
+                               BirchCoralItem::ActionType::kRestore, 1);
+
+  // One chip activation was recorded.
+  histograms.ExpectBucketCount("Ash.Birch.Chip.Activate", BirchItemType::kCoral,
+                               1);
+
+  ASSERT_FALSE(IsInOverviewSession());
+
+  // Add two in-session chips.
+  SetCoralItems(2, CoralSource::kInSession);
+
+  // Entering overview shows the birch bar.
+  EnterOverview();
+
+  const auto& in_session_chips =
+      OverviewGridTestApi(Shell::GetPrimaryRootWindow()).GetBirchChips();
+  ASSERT_EQ(in_session_chips.size(), 2u);
+
+  // Two cluster count was recorded for the coral chip.
+  histograms.ExpectBucketCount("Ash.Birch.Coral.ClusterCount", 2, 1);
+
+  // Hide the one chip.
+  BirchBarController::Get()->OnItemHiddenByUser(in_session_chips[0]->GetItem());
+  ASSERT_EQ(in_session_chips.size(), 1u);
+
+  // One cluster hidden was recorded.
+  histograms.ExpectBucketCount("Ash.Birch.Chip.Hidden", BirchItemType::kCoral,
+                               1);
+
+  // Clicking on the in-session chip to launch the group.
+  LeftClickOn(in_session_chips[0]);
+
+  // One restore action was recorded.
+  histograms.ExpectBucketCount("Ash.Birch.Coral.Action",
+                               BirchCoralItem::ActionType::kLaunchToNewDesk, 1);
+
+  // Another chip activation was recorded.
+  histograms.ExpectBucketCount("Ash.Birch.Chip.Activate", BirchItemType::kCoral,
+                               2);
 }
 
 // Tests that the birch bar will be hidden in the partial Overview with a split
@@ -457,9 +540,9 @@ TEST_F(BirchBarTest, NoCrashOnSettingIconAfterShutdown) {
 
   // Create a set icon callback to simulate the case of setting icon after
   // shutting down the chip.
-  auto set_icon = base::BindOnce(&BirchChipButton::SetIconImage,
-                                 chip->weak_factory_.GetWeakPtr(),
-                                 ui::ImageModel(), SecondaryIconType::kNoIcon);
+  auto set_icon = base::BindOnce(
+      &BirchChipButton::SetIconImage, chip->weak_factory_.GetWeakPtr(),
+      PrimaryIconType::kIcon, SecondaryIconType::kNoIcon, ui::ImageModel());
 
   ExitOverview();
 
@@ -623,53 +706,6 @@ TEST_F(BirchBarMenuTest, RemoveChip) {
   LeftClickOn(hide_suggestion_item);
   // Check if the item is removed and the chips on both bars get updated.
   chips_match_items(3);
-}
-
-// Tests that there is no crash when removing a chip.
-TEST_F(BirchBarMenuTest, NoCrashOnRemovingChip) {
-  // Create 4 suggestions with different item types.
-  SetWeatherItems(/*num=*/1);
-  SetCalendarItems(/*num=*/1);
-  SetFileItems(/*num=*/1);
-  SetTabItems(/*num=*/1);
-
-  // Enter Overview and check the two bar views are created.
-  EnterOverview();
-
-  aura::Window* root_window = Shell::Get()->GetPrimaryRootWindow();
-  OverviewGridTestApi grid_test_api(root_window);
-
-  ASSERT_TRUE(grid_test_api.birch_bar_view());
-
-  // Cache the chips on the bar.
-  const auto& chips = grid_test_api.GetBirchChips();
-
-  // There should be 4 chips on the bar.
-  EXPECT_EQ(4u, chips.size());
-
-  // Remove the third chip on the first bar view.
-  // Right clicking on the second chip of first bar view to show the context
-  // menu.
-  RightClickOn(chips[2]);
-
-  auto* model_adapter = GetBirchBarChipMenuModelAdaper();
-  EXPECT_TRUE(model_adapter->IsShowingMenu());
-
-  // Hiding the third suggestion by selecting the corresponding menu item.
-  const auto* hide_suggestion_item =
-      model_adapter->root_for_testing()->GetSubmenu()->GetMenuItemAt(0);
-  EXPECT_EQ(hide_suggestion_item->GetCommand(),
-            base::to_underlying(
-                BirchChipContextMenuModel::CommandId::kHideSuggestion));
-
-  ui::LayerAnimationStoppedWaiter animation_waiter;
-  ui::ScopedAnimationDurationScaleMode non_zero_duration(
-      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
-  LeftClickOn(hide_suggestion_item);
-  animation_waiter.Wait(chips[2]->layer());
-
-  // There should be 3 chips on the bar after animation without crash.
-  EXPECT_EQ(3u, chips.size());
 }
 
 // Regression test to confirm there is no crash when removing a chip from a two
@@ -851,25 +887,25 @@ TEST_F(BirchBarMenuTest, CustomizeSuggestions) {
 
   base::flat_map<BirchItemType, views::MenuItemView*> type_to_item;
   auto* sub_menu = model_adapter->root_for_testing()->GetSubmenu();
-  auto* weather_item = sub_menu->GetMenuItemAt(1);
+  auto* weather_item = sub_menu->GetMenuItemAt(2);
   EXPECT_EQ(weather_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kWeatherSuggestions));
   type_to_item[BirchItemType::kWeather] = weather_item;
 
-  auto* calendar_item = sub_menu->GetMenuItemAt(2);
+  auto* calendar_item = sub_menu->GetMenuItemAt(3);
   EXPECT_EQ(calendar_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kCalendarSuggestions));
   type_to_item[BirchItemType::kCalendar] = calendar_item;
 
-  auto* file_item = sub_menu->GetMenuItemAt(3);
+  auto* file_item = sub_menu->GetMenuItemAt(4);
   EXPECT_EQ(file_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kDriveSuggestions));
   type_to_item[BirchItemType::kFile] = file_item;
 
-  auto* tab_item = sub_menu->GetMenuItemAt(4);
+  auto* tab_item = sub_menu->GetMenuItemAt(5);
   EXPECT_EQ(tab_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kChromeTabSuggestions));
@@ -929,7 +965,7 @@ TEST_F(BirchBarMenuTest, CustomizeSuggestionsExtended) {
   EXPECT_TRUE(model_adapter->IsShowingMenu());
 
   auto* sub_menu = model_adapter->root_for_testing()->GetSubmenu();
-  auto* tab_item = sub_menu->GetMenuItemAt(4);
+  auto* tab_item = sub_menu->GetMenuItemAt(5);
   EXPECT_EQ(tab_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kChromeTabSuggestions));
@@ -945,7 +981,7 @@ TEST_F(BirchBarMenuTest, CustomizeSuggestionsExtended) {
       bar_chips));
 
   // Find the media suggestions menu item.
-  auto* media_item = sub_menu->GetMenuItemAt(5);
+  auto* media_item = sub_menu->GetMenuItemAt(6);
   EXPECT_EQ(media_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kMediaSuggestions));
@@ -997,7 +1033,7 @@ TEST_F(BirchBarMenuTest, CustomizeSuggestionsExtended2) {
   EXPECT_TRUE(model_adapter->IsShowingMenu());
 
   auto* sub_menu = model_adapter->root_for_testing()->GetSubmenu();
-  auto* coral_item = sub_menu->GetMenuItemAt(6);
+  auto* coral_item = sub_menu->GetMenuItemAt(1);
   EXPECT_EQ(coral_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kCoralSuggestions));
@@ -1245,7 +1281,7 @@ TEST_F(BirchBarMenuTest, NoCrashCustomizeSuggestionsByChipSubmenu) {
   LeftClickOn(customize_suggestions_item);
 
   auto* sub_menu = customize_suggestions_item->GetSubmenu();
-  auto* calendar_item = sub_menu->GetMenuItemAt(2);
+  auto* calendar_item = sub_menu->GetMenuItemAt(3);
   EXPECT_EQ(calendar_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kCalendarSuggestions));
@@ -1269,7 +1305,7 @@ TEST_F(BirchBarMenuTest, NoCrashCustomizeSuggestionsByChipSubmenu) {
       model_adapter->root_for_testing()->GetSubmenu()->GetMenuItemAt(2);
   LeftClickOn(customize_suggestions_item);
 
-  calendar_item = customize_suggestions_item->GetSubmenu()->GetMenuItemAt(2);
+  calendar_item = customize_suggestions_item->GetSubmenu()->GetMenuItemAt(3);
   calendar_checkbox =
       views::AsViewClass<Checkbox>(calendar_item->children()[0]);
 
@@ -1390,7 +1426,7 @@ TEST_F(BirchBarMenuTest, CheckboxAccessibleName) {
 
   // Ensure that the second item is a checkbox.
   views::MenuItemView* item_view =
-      model_adapter->root_for_testing()->GetSubmenu()->GetMenuItemAt(1);
+      model_adapter->root_for_testing()->GetSubmenu()->GetMenuItemAt(2);
   ASSERT_TRUE(views::IsViewClass<Checkbox>(item_view->children()[0]));
 
   // `views::MenuItemView` calculates its accessible name by calling
@@ -1469,7 +1505,7 @@ TEST_F(BirchBarMenuTest, CustomizeSuggestionsByTappingChipMenu) {
   GestureTapOn(customize_suggestions_item);
 
   auto* sub_menu = customize_suggestions_item->GetSubmenu();
-  auto* calendar_item = sub_menu->GetMenuItemAt(2);
+  auto* calendar_item = sub_menu->GetMenuItemAt(3);
   EXPECT_EQ(calendar_item->GetCommand(),
             base::to_underlying(
                 BirchBarContextMenuModel::CommandId::kCalendarSuggestions));
@@ -1493,13 +1529,131 @@ TEST_F(BirchBarMenuTest, CustomizeSuggestionsByTappingChipMenu) {
       model_adapter->root_for_testing()->GetSubmenu()->GetMenuItemAt(2);
   GestureTapOn(customize_suggestions_item);
 
-  calendar_item = customize_suggestions_item->GetSubmenu()->GetMenuItemAt(2);
+  calendar_item = customize_suggestions_item->GetSubmenu()->GetMenuItemAt(3);
   calendar_checkbox =
       views::AsViewClass<Checkbox>(calendar_item->children()[0]);
 
   // Select the calendar.
   GestureTapOn(calendar_checkbox);
   EXPECT_TRUE(GetPrefService()->GetBoolean(prefs::kBirchUseCalendar));
+}
+
+// The tests run with animations. Since the mock clock will be blocked by the
+// animation waiter, we don't use it in the tests.
+class BirchBarAnimationTest : public BirchBarTestBase {
+ public:
+  BirchBarAnimationTest() = default;
+  BirchBarAnimationTest(const BirchBarAnimationTest&) = delete;
+  BirchBarAnimationTest& operator=(const BirchBarAnimationTest&) = delete;
+  ~BirchBarAnimationTest() override = default;
+
+ protected:
+  const std::vector<std::unique_ptr<BirchItem>>& GetItems() const {
+    return BirchBarController::Get()->items_;
+  }
+
+  // Remove the item and its related chips from current birch bars at given
+  // `pos`.
+  void RemoveItem(size_t pos) {
+    auto* birch_bar_controller = BirchBarController::Get();
+    ASSERT_LT(pos, birch_bar_controller->items_.size());
+    auto iter = birch_bar_controller->items_.begin() + pos;
+    birch_bar_controller->RemoveItemChips(iter->get());
+    birch_bar_controller->items_.erase(iter);
+  }
+
+  void WaitLayerAnimationEnd(ui::Layer* layer) {
+    ASSERT_TRUE(layer->GetAnimator()->is_animating());
+    ui::LayerAnimationStoppedWaiter().Wait(layer);
+  }
+};
+
+// Tests that there is no crash when removing a chip.
+TEST_F(BirchBarAnimationTest, NoCrashOnRemovingChip) {
+  // Create 4 suggestions with different item types.
+  SetWeatherItems(/*num=*/1);
+  SetCalendarItems(/*num=*/1);
+  SetFileItems(/*num=*/1);
+  SetTabItems(/*num=*/1);
+
+  // Enter Overview and check the two bar views are created.
+  EnterOverview();
+
+  aura::Window* root_window = Shell::Get()->GetPrimaryRootWindow();
+  OverviewGridTestApi grid_test_api(root_window);
+
+  ASSERT_TRUE(grid_test_api.birch_bar_view());
+
+  // Cache the chips on the bar.
+  const auto& chips = grid_test_api.GetBirchChips();
+
+  // There should be 4 chips on the bar.
+  EXPECT_EQ(4u, chips.size());
+
+  // Cache the third chip before removing.
+  auto* chip_3 = chips[2].get();
+
+  ui::ScopedAnimationDurationScaleMode non_zero_duration(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  RemoveItem(2);
+  WaitLayerAnimationEnd(chip_3->layer());
+
+  // There should be 3 chips on the bar after animation without crash.
+  EXPECT_EQ(3u, chips.size());
+}
+
+// Tests that consecutively removing chips works correctly.
+TEST_F(BirchBarAnimationTest, RemoveMultipleChips) {
+  // Create 6 suggestions with different item types.
+  SetWeatherItems(/*num=*/1);
+  SetCalendarItems(/*num=*/3);
+  SetFileItems(/*num=*/1);
+  SetTabItems(/*num=*/1);
+
+  // Enter Overview and check the bar view is created.
+  EnterOverview();
+
+  aura::Window* root_window = Shell::Get()->GetPrimaryRootWindow();
+  OverviewGridTestApi grid_test_api(root_window);
+
+  ASSERT_TRUE(grid_test_api.birch_bar_view());
+
+  // There should be 6 items in the controller.
+  EXPECT_EQ(6u, GetItems().size());
+
+  // There should be 4 chips on the bar corresponding to the first 4 items.
+  EXPECT_EQ(4u, grid_test_api.GetBirchChips().size());
+
+  // The 5th and 6th items should not be on the bar.
+  const auto* item_5 = GetItems()[4].get();
+  EXPECT_TRUE(std::ranges::none_of(
+      grid_test_api.GetBirchChips(),
+      [&item_5](const auto& chip) { return chip->GetItem() == item_5; }));
+  const auto* item_6 = GetItems()[5].get();
+  EXPECT_TRUE(std::ranges::none_of(
+      grid_test_api.GetBirchChips(),
+      [&item_6](const auto& chip) { return chip->GetItem() == item_6; }));
+
+  ui::ScopedAnimationDurationScaleMode non_zero_duration(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  // Cache the third chip view before removing.
+  auto* chip_4 = grid_test_api.GetBirchChips()[3].get();
+
+  // Remove the chip corresponding to original second item.
+  RemoveItem(1);
+  // Remove the chip corresponding to original fourth item.
+  RemoveItem(2);
+
+  // Wait until the third chip fades out.
+  WaitLayerAnimationEnd(chip_4->layer());
+
+  // There should still be 4 chips on the bar.
+  EXPECT_EQ(4u, grid_test_api.GetBirchChips().size());
+
+  // The last two chips on the bar correspond to the original 5th and 6th items.
+  EXPECT_EQ(grid_test_api.GetBirchChips()[2]->GetItem(), item_5);
+  EXPECT_EQ(grid_test_api.GetBirchChips()[3]->GetItem(), item_6);
 }
 
 // The parameter structure for birch bar responsive layout tests.

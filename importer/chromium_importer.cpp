@@ -2,7 +2,7 @@
 
 #include "importer/chromium_importer.h"
 
-#include <stack>
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -27,16 +27,18 @@
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/ini_parser.h"
 #include "chrome/grit/branded_strings.h"
+#include "chromium/components/sessions/core/session_types.h"
 #include "components/os_crypt/sync/key_storage_config_linux.h"
 #include "components/os_crypt/sync/os_crypt.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_switches.h"
 #include "importer/chrome_importer_utils.h"
+#include "importer/imported_tab_entry.h"
 #include "sql/statement.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #include "importer/chromium_extension_importer.h"
+#include "importer/chromium_session_importer.h"
 
 ChromiumImporter::ChromiumImporter() {}
 
@@ -79,6 +81,13 @@ void ChromiumImporter::StartImport(
     ImportPasswords(source_profile.importer_type);
     bridge_->NotifyItemEnded(importer::PASSWORDS);
   }
+
+  if ((items & importer::TABS) && !cancelled()) {
+    bridge_->NotifyItemStarted(importer::TABS);
+    ImportTabs(source_profile.importer_type);
+    bridge_->NotifyItemEnded(importer::TABS);
+  }
+
   if ((items & importer::EXTENSIONS) && !cancelled()) {
     ImportExtensions();
   } else {
@@ -322,4 +331,19 @@ void ChromiumImporter::ImportExtensions() {
     bridge_->NotifyItemEnded(importer::EXTENSIONS);
     bridge_->NotifyEnded();
   }
+}
+
+void ChromiumImporter::ImportTabs(importer::ImporterType importer_type) {
+  const auto tabs =
+      session_importer::ChromiumSessionImporter::GetOpenTabs(
+          profile_dir_, importer_type);
+
+  std::vector<ImportedTabEntry> imported_tabs;
+
+  std::transform(tabs.begin(), tabs.end(), std::back_inserter(imported_tabs),
+                 [](const auto& it) {
+                   return ImportedTabEntry::FromSessionTab(*it.second);
+                 });
+
+  bridge_->AddOpenTabs(std::move(imported_tabs));
 }

@@ -340,7 +340,7 @@ void RecordPreferredDisplaySurfaceConstraintUma(
       RecordUma(GetDisplayMediaConstraintsDisplaySurface::kTab);
       return;
   }
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void RecordSuppressLocalAudioPlaybackConstraintUma(
@@ -378,8 +378,7 @@ MediaConstraints ParseOptions(
       }
       return constraints;
   }
-  NOTREACHED_IN_MIGRATION();
-  return MediaConstraints();
+  NOTREACHED();
 }
 
 }  // namespace
@@ -520,8 +519,7 @@ UserMediaRequest* UserMediaRequest::Create(
 
   UserMediaRequest* const result = MakeGarbageCollected<UserMediaRequest>(
       context, client, media_type, audio, video, options->preferCurrentTab(),
-      options->autoSelectAllScreens(), options->getControllerOr(nullptr),
-      callbacks, surface);
+      options->getControllerOr(nullptr), callbacks, surface);
 
   // The default is to include.
   // Note that this option is no-op if audio is not requested.
@@ -626,7 +624,7 @@ UserMediaRequest* UserMediaRequest::CreateForTesting(
     const MediaConstraints& video) {
   return MakeGarbageCollected<UserMediaRequest>(
       nullptr, nullptr, UserMediaRequestType::kUserMedia, audio, video,
-      /*should_prefer_current_tab=*/false, /*auto_select_all_screens=*/false,
+      /*should_prefer_current_tab=*/false,
       /*capture_controller=*/nullptr, /*callbacks=*/nullptr,
       IdentifiableSurface());
 }
@@ -637,7 +635,6 @@ UserMediaRequest::UserMediaRequest(ExecutionContext* context,
                                    MediaConstraints audio,
                                    MediaConstraints video,
                                    bool should_prefer_current_tab,
-                                   bool auto_select_all_screens,
                                    CaptureController* capture_controller,
                                    Callbacks* callbacks,
                                    IdentifiableSurface surface)
@@ -647,7 +644,6 @@ UserMediaRequest::UserMediaRequest(ExecutionContext* context,
       video_(video),
       capture_controller_(capture_controller),
       should_prefer_current_tab_(should_prefer_current_tab),
-      auto_select_all_screens_(auto_select_all_screens),
       should_disable_hardware_noise_suppression_(
           RuntimeEnabledFeatures::DisableHardwareNoiseSuppressionEnabled(
               context)),
@@ -842,7 +838,7 @@ void UserMediaRequest::OnMediaStreamsInitialized(MediaStreamVector streams) {
         PeerConnectionTracker::From(*window).TrackGetDisplayMediaSuccess(
             this, stream);
       } else {
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
       }
     }
   }
@@ -868,7 +864,7 @@ void UserMediaRequest::FailConstraint(const String& constraint_name,
       PeerConnectionTracker::From(*window).TrackGetDisplayMediaFailure(
           this, "OverConstrainedError", message);
     } else {
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
     }
   }
   // After this call, the execution context may be invalid.
@@ -904,6 +900,7 @@ void UserMediaRequest::Fail(Result error, const String& message) {
     case Result::TAB_CAPTURE_FAILURE:
     case Result::SCREEN_CAPTURE_FAILURE:
     case Result::CAPTURE_FAILURE:
+    case Result::START_TIMEOUT:
       exception_code = DOMExceptionCode::kAbortError;
       result_enum = UserMediaRequestResult::kAbortError;
       break;
@@ -922,7 +919,7 @@ void UserMediaRequest::Fail(Result error, const String& message) {
       result_enum = UserMediaRequestResult::kSecurityError;
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
   RecordIdentifiabilityMetric(surface_, GetExecutionContext(),
                               IdentifiabilityBenignStringToken(message));
@@ -936,7 +933,7 @@ void UserMediaRequest::Fail(Result error, const String& message) {
       PeerConnectionTracker::From(*window).TrackGetDisplayMediaFailure(
           this, DOMException::GetErrorName(exception_code), message);
     } else {
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
     }
   }
 

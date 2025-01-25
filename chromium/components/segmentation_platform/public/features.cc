@@ -4,13 +4,20 @@
 
 #include "components/segmentation_platform/public/features.h"
 
+#include "base/feature_list.h"
+#include "base/strings/strcat.h"
 #include "build/build_config.h"
+#include "components/segmentation_platform/embedder/home_modules/constants.h"
 
 namespace segmentation_platform::features {
 
 BASE_FEATURE(kSegmentationPlatformFeature,
              "SegmentationPlatform",
+#if defined(VIVALDI_BUILD)
              base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi - disable UKM
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
 
 BASE_FEATURE(kSegmentationPlatformUkmEngine,
              "SegmentationPlatformUkmEngine",
@@ -18,7 +25,11 @@ BASE_FEATURE(kSegmentationPlatformUkmEngine,
 #if BUILDFLAG(IS_CHROMEOS)
              base::FEATURE_DISABLED_BY_DEFAULT);
 #else
+#if defined(VIVALDI_BUILD)
              base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi - disable UKM
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
 #endif
 
 BASE_FEATURE(kSegmentationPlatformUserVisibleTaskRunner,
@@ -148,7 +159,11 @@ BASE_FEATURE(kSegmentationPlatformComposePromotion,
 
 BASE_FEATURE(kSegmentationPlatformUmaFromSqlDb,
              "SegmentationPlatformUmaFromSqlDb",
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_CHROMEOS)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 BASE_FEATURE(kSegmentationPlatformIosModuleRankerSplitBySurface,
              "SegmentationPlatformIosModuleRankerSplitBySurface",
@@ -166,7 +181,6 @@ const char kEphemeralCardRankerForceShowCardParam[] =
     "EphemeralCardRankerForceShowCardParam";
 const char kEphemeralCardRankerForceHideCardParam[] =
     "EphemeralCardRankerForceHideCardParam";
-const char kPriceTrackingPromoForceOverride[] = "price-tracking-promo";
 
 // Feature flag for enabling the Emphemeral Card ranker.
 BASE_FEATURE(kSegmentationPlatformEphemeralCardRanker,
@@ -177,11 +191,54 @@ BASE_FEATURE(kSegmentationPlatformEphemeralCardRanker,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
+// Feature flag for enabling the Tips Emphemeral Card.
+BASE_FEATURE(kSegmentationPlatformTipsEphemeralCard,
+             "SegmentationPlatformTipsEphemeralCard",
+#if BUILDFLAG(IS_IOS)
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
+const char kTipsEphemeralCardExperimentTrainParam[] =
+    "TipsEphemeralCardExperimentTrainParam";
+
+std::string TipsExperimentTrainEnabled() {
+  return base::GetFieldTrialParamByFeatureAsString(
+      segmentation_platform::features::kSegmentationPlatformTipsEphemeralCard,
+      kTipsEphemeralCardExperimentTrainParam,
+      /*default_value=*/
+      base::StrCat({kLensEphemeralModuleSearchVariation, ",",
+                    kSavePasswordsEphemeralModule, ",",
+                    kEnhancedSafeBrowsingEphemeralModule, ",",
+                    kAddressBarPositionEphemeralModule}));
+}
+
+const char kTipsEphemeralCardModuleMaxImpressionCount[] =
+    "TipsEphemeralCardModuleMaxImpressionCount";
+
+int GetTipsEphemeralCardModuleMaxImpressionCount() {
+  return base::GetFieldTrialParamByFeatureAsInt(
+      segmentation_platform::features::kSegmentationPlatformTipsEphemeralCard,
+      kTipsEphemeralCardModuleMaxImpressionCount, /*default_value=*/3);
+}
+
 BASE_FEATURE(kSegmentationSurveyPage,
              "SegmentationSurveyPage",
+#if BUILDFLAG(IS_ANDROID)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 constexpr base::FeatureParam<bool> kSegmentationSurveyInternalsPage{
     &kSegmentationSurveyPage, "survey_internals_page", /*default_value=*/true};
+
+BASE_FEATURE(kEducationalTipModule,
+             "EducationalTipModule",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+constexpr base::FeatureParam<int> kMaxDefaultBrowserCardImpressions{
+    &kEducationalTipModule, "max_default_browser_card_impressions",
+    /*default_value=*/4};
 
 }  // namespace segmentation_platform::features

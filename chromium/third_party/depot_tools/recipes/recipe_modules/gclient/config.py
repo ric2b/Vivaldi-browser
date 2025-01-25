@@ -543,3 +543,11 @@ def crossbench(c):
   soln.name = 'crossbench'
   soln.url = 'https://chromium.googlesource.com/crossbench'
   c.got_revision_mapping['crossbench'] = 'got_revision'
+
+
+@config_ctx()
+def ytdevinfra(c):
+  soln = c.solutions.add()
+  soln.name = 'ytdevinfra'
+  soln.url = 'https://lbshell-internal.googlesource.com/cobalt_src.git'
+  c.got_revision_mapping['ytdevinfra'] = 'got_revision'

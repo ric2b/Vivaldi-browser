@@ -78,8 +78,8 @@ TEST_F(DeviceAuthNamespaceHandlerTest, AuthResponse) {
       &creds_, nullptr, nullptr, data_path_ + "device_key.pem",
       data_path_ + "device_chain.pem", data_path_ + "device_tls.pem");
 
-  // Send an auth challenge.  |auth_handler_| will automatically respond via
-  // |router_| and we will catch the result in |challenge_reply|.
+  // Send an auth challenge.  `auth_handler_` will automatically respond via
+  // `router_` and we will catch the result in `challenge_reply`.
   CastMessage auth_challenge;
   const std::string auth_challenge_string =
       ReadEntireFileToString(data_path_ + "auth_challenge.pb");
@@ -128,8 +128,8 @@ TEST_F(DeviceAuthNamespaceHandlerTest, BadNonce) {
       &creds_, nullptr, nullptr, data_path_ + "device_key.pem",
       data_path_ + "device_chain.pem", data_path_ + "device_tls.pem");
 
-  // Send an auth challenge.  |auth_handler_| will automatically respond via
-  // |router_| and we will catch the result in |challenge_reply|.
+  // Send an auth challenge.  `auth_handler_` will automatically respond via
+  // `router_` and we will catch the result in `challenge_reply`.
   CastMessage auth_challenge;
   const std::string auth_challenge_string =
       ReadEntireFileToString(data_path_ + "auth_challenge.pb");
@@ -180,8 +180,8 @@ TEST_F(DeviceAuthNamespaceHandlerTest, UnsupportedSignatureAlgorithm) {
       &creds_, nullptr, nullptr, data_path_ + "device_key.pem",
       data_path_ + "device_chain.pem", data_path_ + "device_tls.pem");
 
-  // Send an auth challenge.  |auth_handler_| will automatically respond via
-  // |router_| and we will catch the result in |challenge_reply|.
+  // Send an auth challenge.  `auth_handler_` will automatically respond via
+  // `router_` and we will catch the result in `challenge_reply`.
   CastMessage auth_challenge;
   const std::string auth_challenge_string =
       ReadEntireFileToString(data_path_ + "auth_challenge.pb");

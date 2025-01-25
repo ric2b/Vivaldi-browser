@@ -203,7 +203,7 @@ class SurfaceTests : public DawnTest {
     wgpu::SurfaceConfiguration baseConfig;
 };
 
-// Basic test for creating a swapchain and presenting one frame.
+// Basic test for creating a surface and presenting one frame.
 TEST_P(SurfaceTests, Basic) {
     wgpu::Surface surface = CreateTestSurface();
 
@@ -231,7 +231,7 @@ TEST_P(SurfaceTests, ReconfigureBasic) {
     surface.Configure(&config);
 }
 
-// Test replacing the swapchain after GetCurrentTexture
+// Test reconfiguring the surface after GetCurrentTexture
 TEST_P(SurfaceTests, ReconfigureAfterGetCurrentTexture) {
     wgpu::Surface surface = CreateTestSurface();
     wgpu::SurfaceConfiguration config = GetPreferredConfiguration(surface);
@@ -417,8 +417,8 @@ TEST_P(SurfaceTests, SwitchingDevice) {
     // TODO(https://crbug.com/dawn/2116): VVLs crash because oldSwapchain is from a different
     // device. The spec says it is ok if it is only the same instance but clarifications yet to be
     // published by Khronos are that the spec is wrong and should require the swapchain to be from
-    // the same device.
-    DAWN_SUPPRESS_TEST_IF(IsVulkan() && IsBackendValidationEnabled());
+    // the same device. Suppress on all Vulkan devices while a proper fix is done.
+    DAWN_SUPPRESS_TEST_IF(IsVulkan());
 
     // TODO(dawn:269): This isn't implemented yet but could be supported in the future.
     DAWN_SUPPRESS_TEST_IF(IsD3D11() || IsD3D12());

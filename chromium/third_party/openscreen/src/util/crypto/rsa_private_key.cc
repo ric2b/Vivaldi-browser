@@ -43,8 +43,7 @@ ErrorOr<RSAPrivateKey> RSAPrivateKey::Create(uint16_t num_bits) {
 }
 
 // static
-ErrorOr<RSAPrivateKey> RSAPrivateKey::CreateFromPrivateKeyInfo(
-    const std::vector<uint8_t>& input) {
+ErrorOr<RSAPrivateKey> RSAPrivateKey::CreateFromPrivateKeyInfo(ByteView input) {
   OpenSSLErrStackTracer err_tracer(CURRENT_LOCATION);
 
   CBS private_key_cbs;

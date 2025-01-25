@@ -84,7 +84,8 @@ fn main() {
 
     // Generate bindings.
     let header_file = PathBuf::from(&project_root).join("wrapper.h");
-    let outfile = PathBuf::from(&project_root).join(path_buf(&["src", "libyuv.rs"]));
+    let outdir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
+    let outfile = PathBuf::from(&outdir).join("libyuv_bindgen.rs");
     let mut bindings = bindgen::Builder::default()
         .header(header_file.into_os_string().into_string().unwrap())
         .clang_arg(extra_includes_str)
@@ -95,6 +96,7 @@ fn main() {
         "YuvConstants",
         "FilterMode",
         "ARGBAttenuate",
+        "ARGBToABGR",
         "ARGBUnattenuate",
         "Convert16To8Plane",
         "HalfFloatPlane",
@@ -133,7 +135,10 @@ fn main() {
         "I444AlphaToARGBMatrix",
         "I444ToARGBMatrix",
         "I444ToRGB24Matrix",
+        "NV12ToARGBMatrix",
+        "NV21ToARGBMatrix",
         "P010ToAR30Matrix",
+        "P010ToARGBMatrix",
         "AR30ToAB30",
         "kYuv2020Constants",
         "kYuvF709Constants",
@@ -157,8 +162,4 @@ fn main() {
     bindings
         .write_to_file(outfile.as_path())
         .unwrap_or_else(|_| panic!("Couldn't write bindings for libyuv"));
-    println!(
-        "cargo:rustc-env=CRABBYAVIF_LIBYUV_BINDINGS_RS={}",
-        outfile.display()
-    );
 }

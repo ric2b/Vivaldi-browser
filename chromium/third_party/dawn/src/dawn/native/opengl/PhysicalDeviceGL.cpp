@@ -95,6 +95,10 @@ bool IsANGLEDesktopGL(std::string renderer) {
            renderer.find("OpenGL ES") == std::string::npos;
 }
 
+bool IsSwiftShader(std::string renderer) {
+    return renderer.find("SwiftShader") != std::string::npos;
+}
+
 }  // anonymous namespace
 
 // static
@@ -248,6 +252,11 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
         EnableFeature(dawn::native::Feature::ANGLETextureSharing);
     }
 
+    if (mDisplay->egl.HasExt(EGLExt::ImageNativeBuffer) &&
+        mDisplay->egl.HasExt(EGLExt::GetNativeClientBuffer)) {
+        EnableFeature(dawn::native::Feature::SharedTextureMemoryAHardwareBuffer);
+    }
+
     // Non-zero baseInstance requires at least desktop OpenGL 4.2, and it is not supported in
     // OpenGL ES OpenGL:
     // https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glDrawElementsIndirect.xhtml
@@ -273,6 +282,11 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
         EnableFeature(Feature::Unorm16TextureFormats);
         EnableFeature(Feature::Snorm16TextureFormats);
         EnableFeature(Feature::Norm16TextureFormats);
+    }
+
+    // Float32Blendable
+    if (mFunctions.IsGLExtensionSupported("GL_EXT_float_blend")) {
+        EnableFeature(Feature::Float32Blendable);
     }
 }
 
@@ -415,6 +429,11 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
 
     // Use T2B and B2T copies to emulate a T2T copy between sRGB and non-sRGB textures.
     deviceToggles->Default(Toggle::UseT2B2TForSRGBTextureCopy, true);
+
+    // Scale depth bias value by * 0.5 on certain GL drivers.
+    deviceToggles->Default(Toggle::GLDepthBiasModifier, gl.GetVersion().IsDesktop() ||
+                                                            IsANGLEDesktopGL(mName) ||
+                                                            IsSwiftShader(mName));
 }
 
 ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(

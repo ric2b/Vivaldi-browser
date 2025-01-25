@@ -45,26 +45,12 @@ UIColor* const vSliderColor = UIColor.whiteColor;
 // Color for icons in unselected state
 NSString* const vNotSelectedColor = @"page_control_icon_not_selected_color";
 
-// Image names for the different icon state.
-NSString* const kImagePageControlRegularSelected =
-    @"page_control_regular_tabs_selected";
-NSString* const kImagePageControlRegularNotSelected =
-    @"page_control_regular_tabs";
-NSString* const kImagePageControlIncognitoSelected =
-    @"page_control_incognito_tabs_selected";
-NSString* const kImagePageControlIncognitoNotSelected =
-    @"page_control_incognito_tabs";
-NSString* const kImagePageControlRemoteSelected =
-    @"page_control_remote_tabs_selected";
-NSString* const kImagePageControlRemoteNotSelected =
-    @"page_control_remote_tabs";
-// Icon for recently closed tab selected state
-NSString* const kImagePageControlClosedSelected =
-    @"page_control_closed_tabs_selected";
-// Icon for recently closed tab not selected state
-NSString* const kImagePageControlClosedNotSelected =
-    @"page_control_closed_tabs";
-
+NSString* const kImagePageControlRegular = @"page_control_regular_tabs";
+NSString* const kImagePageControlIncognito = @"page_control_incognito_tabs";
+NSString* const kImagePageControlRemote = @"page_control_remote_tabs";
+NSString* const kImagePageControlRemoteSynced =
+    @"page_control_remote_tabs_synced";
+NSString* const kImagePageControlClosed = @"page_control_closed_tabs";
 
 // Color for the regular tab count label and icons.
 const CGFloat kLegacySelectedColor = 0x3C4043;

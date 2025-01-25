@@ -34,6 +34,7 @@
 #include "ui/lights/razer_chroma_handler.h"
 
 class Browser;
+class Profile;
 
 namespace extensions {
 
@@ -124,6 +125,11 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
       history::TopSites* top_sites,
       history::TopSitesObserver::ChangeReason change_reason) override;
 
+  // Call OnSessionRecoveryStart callback and subscribe to
+  // on_session_restore_done_subscription_
+  void OnSessionRecoveryStart();
+  void OnSessionRecoveryDone(Profile* profile, int tabs);
+
   class DialogPosition {
    public:
     DialogPosition(int window_id,
@@ -181,6 +187,9 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
 
   // Razer Chroma integration, if available.
   std::unique_ptr<RazerChromaHandler> razer_chroma_handler_;
+
+  // For calling the OnSessionRecoveryDone.
+  base::CallbackListSubscription on_session_recovery_done_subscription_;
 };
 
 class UtilitiesPrintFunction : public ExtensionFunction {
@@ -798,16 +807,6 @@ class UtilitiesStartChromecastFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
-class UtilitiesIsFirstRunFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.isFirstRun", UTILITIES_IS_FIRST_RUN)
-  UtilitiesIsFirstRunFunction() = default;
-
- private:
-  ~UtilitiesIsFirstRunFunction() override = default;
-  ResponseAction Run() override;
-};
-
 class UtilitiesGenerateQRCodeFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.generateQRCode",
@@ -944,6 +943,28 @@ class UtilitiesGetAOLOAuthClientSecretFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class UtilitiesGetOSGeolocationStateFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getOSGeolocationState",
+                             UTILITIES_GET_OS_GEOLOCATION_STATE)
+  UtilitiesGetOSGeolocationStateFunction() = default;
+
+ private:
+  ~UtilitiesGetOSGeolocationStateFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesOpenOSGeolocationSettingsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.openOSGeolocationSettings",
+                             UTILITIES_OPEN_OS_GEOLOCATION_SETTINGS)
+  UtilitiesOpenOSGeolocationSettingsFunction() = default;
+
+ private:
+  ~UtilitiesOpenOSGeolocationSettingsFunction() override = default;
+  ResponseAction Run() override;
+};
+
 class UtilitiesGetCommandLineValueFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.getCommandLineValue",
@@ -1047,20 +1068,6 @@ class UtilitiesReadImageFunction : public ExtensionFunction {
                            std::string* mimeType);
 };
 
-class UtilitiesDetectNewCrashesFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.detectNewCrashes",
-                             UTILITIES_DETECT_NEW_CRASHES)
-  UtilitiesDetectNewCrashesFunction() = default;
-
- private:
-  ~UtilitiesDetectNewCrashesFunction() override = default;
-  ResponseAction Run() override;
-
-  std::string CheckForNewCrashes(const std::string& lastSeenUUID);
-  void SendResult(const std::string& lastCrashUUID);
-};
-
 class UtilitiesIsRTLFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("utilities.isRTL",
@@ -1080,6 +1087,28 @@ class UtilitiesGetDirectMatchFunction : public ExtensionFunction {
 
  private:
   ~UtilitiesGetDirectMatchFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesGetDirectMatchPopularSitesFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.GetDirectMatchPopularSites",
+                             UTILITIES_GET_DIRECT_MATCH_POPULAR_SITES)
+  UtilitiesGetDirectMatchPopularSitesFunction() = default;
+
+ private:
+  ~UtilitiesGetDirectMatchPopularSitesFunction() override = default;
+  ResponseAction Run() override;
+};
+
+class UtilitiesGetDirectMatchesForCategoryFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.GetDirectMatchesForCategory",
+                             UTILITIES_GET_DIRECT_MATCH_FOR_CATEGORY)
+  UtilitiesGetDirectMatchesForCategoryFunction() = default;
+
+ private:
+  ~UtilitiesGetDirectMatchesForCategoryFunction() override = default;
   ResponseAction Run() override;
 };
 
@@ -1142,6 +1171,16 @@ class UtilitiesHasCommandLineSwitchFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class UtilitiesAcknowledgeCrashedSessionFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.acknowledgeCrashedSession",
+                             UTILITIES_ACKNOWLEDGE_CRASHED_SESSION)
+  UtilitiesAcknowledgeCrashedSessionFunction() = default;
+
+ private:
+  ~UtilitiesAcknowledgeCrashedSessionFunction() override = default;
+  ResponseAction Run() override;
+};
 
 }  // namespace extensions
 

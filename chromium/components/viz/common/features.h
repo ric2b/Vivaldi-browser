@@ -19,7 +19,7 @@
 namespace features {
 
 #if BUILDFLAG(IS_ANDROID)
-VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kAndroidBcivPhoneOnly);
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kAndroidBcivWithSimpleScheduler);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kAndroidBcivWithSuppression);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kAndroidBcivZeroBrowserFrames);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kAndroidBrowserControlsInViz);
@@ -29,8 +29,9 @@ VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kDelegatedCompositing);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 VIZ_COMMON_EXPORT extern const char kDrawQuadSplit[];
-VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kDrawQuadSplitLimit);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kDrawQuadSplitLimit);
 
 enum class DelegatedCompositingMode {
   // Enable delegated compositing.
@@ -53,6 +54,8 @@ VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kRenderPassDrawnRect);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kRecordSkPicture);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kUseDrmBlackFullscreenOptimization);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kUseFrameIntervalDecider);
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(
+    kTemporalSkipOverlaysWithRootCopyOutputRequests);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kUseMultipleOverlays);
 VIZ_COMMON_EXPORT extern const char kMaxOverlaysParam[];
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kVideoDetectorIgnoreNonVideos);
@@ -79,10 +82,6 @@ VIZ_COMMON_EXPORT extern const base::FeatureParam<int>
     kCALayerNewLimitManyVideos;
 #endif
 
-#if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_OZONE) || BUILDFLAG(IS_WIN)
-VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kCanSkipRenderPassOverlay);
-#endif
-
 #if BUILDFLAG(IS_MAC)
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kCVDisplayLinkBeginFrameSource);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kVSyncAlignedPresent);
@@ -94,17 +93,24 @@ VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(
     kAllowForceMergeRenderPassWithRequireOverlayQuads);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kOnBeginFrameAcks);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kOnBeginFrameThrottleVideo);
-VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kSharedBitmapToSharedImage);
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kAdpf);
+VIZ_COMMON_EXPORT extern const base::FeatureParam<std::string>
+    kADPFSocManufacturerAllowlist;
+VIZ_COMMON_EXPORT extern const base::FeatureParam<std::string>
+    kADPFSocManufacturerBlocklist;
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableADPFScrollBoost);
 VIZ_COMMON_EXPORT extern const base::FeatureParam<base::TimeDelta>
     kADPFBoostTimeout;
 VIZ_COMMON_EXPORT extern const base::FeatureParam<double>
     kADPFMidFrameBoostDurationMultiplier;
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableADPFRendererMain);
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableMainFrameOnlyADPFRendererMain);
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableInteractiveOnlyADPFRenderer);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableADPFGpuCompositorThread);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableADPFAsyncThreadsVerification);
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableADPFSeparateRendererMainSession);
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableADPFSetThreads);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kUseDisplaySDRMaxLuminanceNits);
-VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kInvalidateLocalSurfaceIdPreCommit);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kHideDelegatedFrameHostMac);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEvictionUnlocksResources);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kSingleVideoFrameRateThrottling);
@@ -140,9 +146,7 @@ VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kBatchResourceRelease);
 #if BUILDFLAG(IS_ANDROID)
 VIZ_COMMON_EXPORT bool IsDynamicColorGamutEnabled();
 #endif
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 VIZ_COMMON_EXPORT int DrawQuadSplitLimit();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 VIZ_COMMON_EXPORT bool IsDelegatedCompositingEnabled();
 #if BUILDFLAG(IS_WIN)
 VIZ_COMMON_EXPORT bool ShouldUseDCompSurfacesForDelegatedInk();

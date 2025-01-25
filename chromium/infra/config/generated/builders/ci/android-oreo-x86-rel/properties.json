@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-oreo-x86-rel",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -41,7 +41,7 @@
         {
           "bucket": "ci",
           "builder": "android-oreo-x86-rel",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -49,7 +49,8 @@
           "builder": "android-x86-rel",
           "group": "tryserver.chromium.android"
         }
-      ]
+      ],
+      "targets_spec_directory": "src/infra/config/generated/builders/ci/android-oreo-x86-rel/targets"
     }
   },
   "$build/reclient": {

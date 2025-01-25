@@ -28,7 +28,7 @@ void TrustedTypesCheckForHTMLThrows(const String& string) {
   V8TestingScope scope;
   DummyExceptionStateForTesting exception_state;
   ASSERT_FALSE(exception_state.HadException());
-  String s = TrustedTypesCheckForHTML(string, window, exception_state);
+  String s = TrustedTypesCheckForHTML(string, window, "", "", exception_state);
   EXPECT_FALSE(exception_state.HadException());
 
   window->GetContentSecurityPolicy()->AddPolicies(ParseContentSecurityPolicies(
@@ -37,9 +37,8 @@ void TrustedTypesCheckForHTMLThrows(const String& string) {
       network::mojom::ContentSecurityPolicySource::kMeta,
       *(window->GetSecurityOrigin())));
   ASSERT_FALSE(exception_state.HadException());
-  String s1 = TrustedTypesCheckForHTML(string, window, exception_state);
+  String s1 = TrustedTypesCheckForHTML(string, window, "", "", exception_state);
   EXPECT_TRUE(exception_state.HadException());
-  EXPECT_EQ(ESErrorType::kTypeError, exception_state.CodeAs<ESErrorType>());
 }
 
 void TrustedTypesCheckForScriptThrows(const String& string) {
@@ -49,7 +48,8 @@ void TrustedTypesCheckForScriptThrows(const String& string) {
   V8TestingScope scope;
   DummyExceptionStateForTesting exception_state;
   ASSERT_FALSE(exception_state.HadException());
-  String s = TrustedTypesCheckForScript(string, window, exception_state);
+  String s =
+      TrustedTypesCheckForScript(string, window, "", "", exception_state);
   EXPECT_FALSE(exception_state.HadException());
 
   window->GetContentSecurityPolicy()->AddPolicies(ParseContentSecurityPolicies(
@@ -58,9 +58,9 @@ void TrustedTypesCheckForScriptThrows(const String& string) {
       network::mojom::ContentSecurityPolicySource::kMeta,
       *(window->GetSecurityOrigin())));
   ASSERT_FALSE(exception_state.HadException());
-  String s1 = TrustedTypesCheckForScript(string, window, exception_state);
+  String s1 =
+      TrustedTypesCheckForScript(string, window, "", "", exception_state);
   EXPECT_TRUE(exception_state.HadException());
-  EXPECT_EQ(ESErrorType::kTypeError, exception_state.CodeAs<ESErrorType>());
 }
 
 void TrustedTypesCheckForScriptURLThrows(const String& string) {
@@ -70,7 +70,8 @@ void TrustedTypesCheckForScriptURLThrows(const String& string) {
   V8TestingScope scope;
   DummyExceptionStateForTesting exception_state;
   ASSERT_FALSE(exception_state.HadException());
-  String s = TrustedTypesCheckForScriptURL(string, window, exception_state);
+  String s =
+      TrustedTypesCheckForScriptURL(string, window, "", "", exception_state);
   EXPECT_FALSE(exception_state.HadException());
 
   window->GetContentSecurityPolicy()->AddPolicies(ParseContentSecurityPolicies(
@@ -79,9 +80,9 @@ void TrustedTypesCheckForScriptURLThrows(const String& string) {
       network::mojom::ContentSecurityPolicySource::kMeta,
       *(window->GetSecurityOrigin())));
   ASSERT_FALSE(exception_state.HadException());
-  String s1 = TrustedTypesCheckForScriptURL(string, window, exception_state);
+  String s1 =
+      TrustedTypesCheckForScriptURL(string, window, "", "", exception_state);
   EXPECT_TRUE(exception_state.HadException());
-  EXPECT_EQ(ESErrorType::kTypeError, exception_state.CodeAs<ESErrorType>());
 }
 
 void TrustedTypesCheckForScriptWorks(
@@ -92,8 +93,8 @@ void TrustedTypesCheckForScriptWorks(
   LocalDOMWindow* window = dummy_page_holder->GetFrame().DomWindow();
   V8TestingScope scope;
   DummyExceptionStateForTesting exception_state;
-  String s = TrustedTypesCheckForScript(string_or_trusted_script, window,
-                                        exception_state);
+  String s = TrustedTypesCheckForScript(string_or_trusted_script, window, "",
+                                        "", exception_state);
   ASSERT_EQ(s, expected);
 }
 

@@ -29,6 +29,8 @@
 #include "ash/wm/desks/templates/saved_desk_util.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/birch/birch_bar_controller.h"
+#include "ash/wm/overview/birch/birch_bar_util.h"
+#include "ash/wm/overview/birch/tab_app_selection_host.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_delegate.h"
 #include "ash/wm/overview/overview_grid.h"
@@ -213,6 +215,19 @@ void OverviewSession::Init(
     birch_bar_controller_ = std::make_unique<BirchBarController>(
         /*is_informed_restore=*/enter_exit_overview_type_ ==
         OverviewEnterExitType::kInformedRestore);
+    if (enter_exit_overview_type_ == OverviewEnterExitType::kInformedRestore) {
+      PostLoginMetricsRecorder* post_login_metrics_recorder =
+          Shell::Get()
+              ->login_unlock_throughput_recorder()
+              ->post_login_metrics_recorder();
+      if (birch_bar_controller_->GetShowBirchSuggestions()) {
+        post_login_metrics_recorder->set_post_login_ui_status(
+            PostLoginMetricsRecorder::PostLoginUIStatus::kShownWithBirchBar);
+      } else {
+        post_login_metrics_recorder->set_post_login_ui_status(
+            PostLoginMetricsRecorder::PostLoginUIStatus::kShownWithoutBirchBar);
+      }
+    }
   }
 
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
@@ -367,8 +382,6 @@ void OverviewSession::Shutdown() {
   // Stop observing screen metrics changes first to avoid auto-positioning
   // windows in response to work area changes from window activation.
   display_observer_.reset();
-
-  tab_app_selection_widget_.reset();
 
   weak_ptr_factory_.InvalidateWeakPtrs();
 
@@ -1288,15 +1301,6 @@ void OverviewSession::UpdateFrameThrottling() {
       windows_to_throttle);
 }
 
-void OverviewSession::ToggleTabAppSelectionMenu() {
-  if (tab_app_selection_widget_) {
-    tab_app_selection_widget_.reset();
-    return;
-  }
-
-  tab_app_selection_widget_ = TabAppSelectionHost::Create();
-}
-
 base::WeakPtr<OverviewSession> OverviewSession::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
@@ -1409,6 +1413,12 @@ void OverviewSession::OnKeyEvent(ui::KeyEvent* event) {
   // If a desk templates dialog is visible it should receive the key events.
   if (saved_desk_dialog_controller_ &&
       saved_desk_dialog_controller_->dialog_widget()) {
+    return;
+  }
+
+  if (TabAppSelectionHost* coral_selector =
+          birch_bar_util::GetVisibleTabAppSelectionHost()) {
+    coral_selector->ProcessKeyEvent(event);
     return;
   }
 

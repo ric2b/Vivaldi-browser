@@ -24,7 +24,7 @@
 
 using l10n_util::GetNSString;
 
-UIEdgeInsets buttonViewPadding = UIEdgeInsetsMake(2, -7, 0, 0);
+UIEdgeInsets buttonViewPadding = UIEdgeInsetsMake(2, 0, 0, -16);
 
 @interface SidebarPanelViewController ()
         <PanelButtonViewDelegate> {
@@ -32,6 +32,7 @@ UIEdgeInsets buttonViewPadding = UIEdgeInsetsMake(2, -7, 0, 0);
     UINavigationController* readinglistController;
     NoteNavigationController* noteNavigationController;
     UINavigationController* historyController;
+    UINavigationController* translateController;
 }
 
 @property(nonatomic, strong) UIPageViewController* pageController;
@@ -68,8 +69,7 @@ UIEdgeInsets buttonViewPadding = UIEdgeInsetsMake(2, -7, 0, 0);
   self.panelButtonView = [PanelButtonView new];
   self.panelButtonView.delegate = self;
   [self.view addSubview:self.panelButtonView];
-  CGSize buttonViewSize =
-      CGSizeMake(panel_icon_size + kAdaptiveToolbarMargin, 0);
+  CGSize buttonViewSize = CGSizeMake(panel_icon_size, 0);
   [self.panelButtonView anchorTop:self.view.topAnchor
                           leading:self.view.leadingAnchor
                            bottom:self.view.bottomAnchor
@@ -84,66 +84,73 @@ UIEdgeInsets buttonViewPadding = UIEdgeInsetsMake(2, -7, 0, 0);
 - (void)setupControllers:(NoteNavigationController*)nvc
   withBookmarkController:(UINavigationController*)bvc
   andReadinglistController:(UINavigationController*)rvc
-    andHistoryController:(UINavigationController*)hc {
-    noteNavigationController = nvc;
-    bookmarkController = bvc;
-    readinglistController = rvc;
-    historyController = hc;
-    nvc.navigationBar.prefersLargeTitles = NO;
-    bvc.navigationBar.prefersLargeTitles = NO;
-    hc.navigationBar.prefersLargeTitles = NO;
+    andHistoryController:(UINavigationController*)hc
+      andTranslateController:(UINavigationController*)tc {
+  noteNavigationController = nvc;
+  bookmarkController = bvc;
+  readinglistController = rvc;
+  historyController = hc;
+  translateController = tc;
+  nvc.navigationBar.prefersLargeTitles = NO;
+  bvc.navigationBar.prefersLargeTitles = NO;
+  hc.navigationBar.prefersLargeTitles = NO;
+  tc.navigationBar.prefersLargeTitles = NO;
 }
 
 - (void)setIndexForControl:(int)index {
-    [self.panelButtonView selectItemWithIndex:index];
-    UIViewController* uv = nil;
-    switch (index) {
-      case PanelPage::BookmarksPage:
-          uv = bookmarkController;
-            break;
-      case PanelPage::ReadinglistPage:
-          uv = readinglistController;
-            break;
-      case PanelPage::NotesPage:
-          uv = noteNavigationController;
-            break;
-      case PanelPage::HistoryPage:
-          uv = historyController;
-            break;
-    }
-    [self.pageController setViewControllers:@[uv]
-                direction:UIPageViewControllerNavigationDirectionForward
-                         animated:NO
-                        completion:nil];
+  [self.panelButtonView selectItemWithIndex:index];
+  UIViewController* uv = nil;
+  switch (index) {
+    case PanelPage::BookmarksPage:
+        uv = bookmarkController;
+          break;
+    case PanelPage::ReadinglistPage:
+        uv = readinglistController;
+          break;
+    case PanelPage::NotesPage:
+        uv = noteNavigationController;
+          break;
+    case PanelPage::HistoryPage:
+        uv = historyController;
+          break;
+    case PanelPage::TranslatePage:
+        uv = translateController;
+          break;
+  }
+  [self.pageController setViewControllers:@[uv]
+              direction:UIPageViewControllerNavigationDirectionForward
+                       animated:NO
+                      completion:nil];
 }
 
 
 - (void)panelButtonClicked:(NSInteger)index {
-    if (index < 0 || index > 3)
-        return;
-    UINavigationController* navController = nil;
-    navController = self.pageController.viewControllers.firstObject;
-    if (navController) {
-      UIViewController* vc = [navController visibleViewController];
-        if ([vc isKindOfClass:[UISearchController class]]) {
-            [navController dismissViewControllerAnimated:YES completion:^{
-                ((UISearchController*)vc).active = NO;
-                [self setIndexForControl:index];
-            }];
-            return;
-        }
-    }
-    [self setIndexForControl:index];
+  if (index < 0 || index > 4)
+      return;
+  UINavigationController* navController = nil;
+  navController = self.pageController.viewControllers.firstObject;
+  if (navController) {
+    UIViewController* vc = [navController visibleViewController];
+      if ([vc isKindOfClass:[UISearchController class]]) {
+          [navController dismissViewControllerAnimated:YES completion:^{
+              ((UISearchController*)vc).active = NO;
+              [self setIndexForControl:index];
+          }];
+          return;
+      }
+  }
+  [self setIndexForControl:index];
 }
 
 - (void)panelDismissed {
-    [self.pageController.view removeFromSuperview];
-    [self.pageController removeFromParentViewController];
-    self.pageController = nil;
-    bookmarkController = nil;
-    readinglistController = nil;
-    noteNavigationController = nil;
-    historyController = nil;
+  [self.pageController.view removeFromSuperview];
+  [self.pageController removeFromParentViewController];
+  self.pageController = nil;
+  bookmarkController = nil;
+  readinglistController = nil;
+  noteNavigationController = nil;
+  historyController = nil;
+  translateController = nil;
 }
 
 #pragma mark - PANEL BUTTON DELEGATE

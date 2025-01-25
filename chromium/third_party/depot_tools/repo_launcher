@@ -124,7 +124,7 @@ if not REPO_REV:
 BUG_URL = "https://issues.gerritcodereview.com/issues/new?component=1370071"
 
 # increment this whenever we make important changes to this script
-VERSION = (2, 45)
+VERSION = (2, 48)
 
 # increment this if the MAINTAINER_KEYS block is modified
 KEYRING_VERSION = (2, 3)
@@ -210,7 +210,6 @@ GIT = "git"  # our git command
 # NB: The version of git that the repo launcher requires may be much older than
 # the version of git that the main repo source tree requires.  Keeping this at
 # an older version also makes it easier for users to upgrade/rollback as needed.
-# See requirements.json for versions.
 MIN_GIT_VERSION = (1, 7, 9)  # minimum supported git version
 repodir = ".repo"  # name of repo's private directory
 S_repo = "repo"  # special repo repository
@@ -282,6 +281,12 @@ def InitParser(parser):
         "--manifest-branch",
         metavar="REVISION",
         help="manifest branch or revision (use HEAD for default)",
+    )
+    group.add_option(
+        "--manifest-upstream-branch",
+        help="when a commit is provided to --manifest-branch, this "
+        "is the name of the git ref in which the commit can be found",
+        metavar="BRANCH",
     )
     group.add_option(
         "-m",
@@ -1237,13 +1242,13 @@ class Requirements:
 
         return cls(json_data)
 
-    def _get_soft_ver(self, pkg):
+    def get_soft_ver(self, pkg):
         """Return the soft version for |pkg| if it exists."""
-        return self.requirements.get(pkg, {}).get("soft", ())
+        return tuple(self.requirements.get(pkg, {}).get("soft", ()))
 
-    def _get_hard_ver(self, pkg):
+    def get_hard_ver(self, pkg):
         """Return the hard version for |pkg| if it exists."""
-        return self.requirements.get(pkg, {}).get("hard", ())
+        return tuple(self.requirements.get(pkg, {}).get("hard", ()))
 
     @staticmethod
     def _format_ver(ver):
@@ -1253,8 +1258,8 @@ class Requirements:
     def assert_ver(self, pkg, curr_ver):
         """Verify |pkg|'s |curr_ver| is new enough."""
         curr_ver = tuple(curr_ver)
-        soft_ver = tuple(self._get_soft_ver(pkg))
-        hard_ver = tuple(self._get_hard_ver(pkg))
+        soft_ver = tuple(self.get_soft_ver(pkg))
+        hard_ver = tuple(self.get_hard_ver(pkg))
         if curr_ver < hard_ver:
             print(
                 f'repo: error: Your version of "{pkg}" '

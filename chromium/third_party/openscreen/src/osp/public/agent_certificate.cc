@@ -7,7 +7,6 @@
 namespace openscreen::osp {
 
 AgentCertificate::AgentCertificate() = default;
-
 AgentCertificate::~AgentCertificate() = default;
 
 }  // namespace openscreen::osp

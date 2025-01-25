@@ -2,36 +2,33 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import * as i18n from '../../../../core/i18n/i18n.js';
-import * as TraceEngine from '../../../../models/trace/trace.js';
-import * as ComponentHelpers from '../../../../ui/components/helpers/helpers.js';
+import type * as Trace from '../../../../models/trace/trace.js';
 import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
 
 import styles from './timespanBreakdownOverlay.css.js';
+
+const {html} = LitHtml;
 
 /**
  * An EntryBreakdown, or section, that makes up a TimespanBreakdown.
  */
 export type EntryBreakdown = {
-  bounds: TraceEngine.Types.Timing.TraceWindowMicroSeconds,
+  bounds: Trace.Types.Timing.TraceWindowMicroSeconds,
   label: string|LitHtml.LitTemplate,
   showDuration: boolean,
 };
 
 export class TimespanBreakdownOverlay extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-timespan-breakdown-overlay`;
-  /**
-   * Size to stagger sections of a TimespanBreakdownOverlay.
-   */
-  static readonly TIMESPAN_BREAKDOWN_OVERLAY_STAGGER_PX = 5;
-
   readonly #shadow = this.attachShadow({mode: 'open'});
-  readonly #boundRender = this.#render.bind(this);
   #canvasRect: DOMRect|null = null;
   #sections: Array<EntryBreakdown>|null = null;
 
   connectedCallback(): void {
     this.#shadow.adoptedStyleSheets = [styles];
-    this.#render();
+  }
+
+  set isBelowEntry(isBelow: boolean) {
+    this.classList.toggle('is-below', isBelow);
   }
 
   set canvasRect(rect: DOMRect|null) {
@@ -39,7 +36,7 @@ export class TimespanBreakdownOverlay extends HTMLElement {
       return;
     }
     this.#canvasRect = rect;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+    this.#render();
   }
 
   set sections(sections: Array<EntryBreakdown>|null) {
@@ -47,7 +44,7 @@ export class TimespanBreakdownOverlay extends HTMLElement {
       return;
     }
     this.#sections = sections;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+    this.#render();
   }
 
   /**
@@ -153,24 +150,33 @@ export class TimespanBreakdownOverlay extends HTMLElement {
     }
   }
 
-  renderSection(section: EntryBreakdown): LitHtml.TemplateResult {
-    const sectionRange = TraceEngine.Helpers.Timing.microSecondsToMilliseconds(section.bounds.range);
+  renderedSections(): HTMLElement[] {
+    return Array.from(this.#shadow.querySelectorAll('.timespan-breakdown-overlay-section'));
+  }
+
+  #renderSection(section: EntryBreakdown): LitHtml.TemplateResult {
     // clang-format off
-    return LitHtml.html`
+    return html`
       <div class="timespan-breakdown-overlay-section">
         <div class="timespan-breakdown-overlay-label">
         ${section.showDuration ?
-          LitHtml.html`
-            <span class="duration-text">${i18n.TimeUtilities.preciseMillisToString(sectionRange, 2)}</span>
+          html`
+            <span class="duration-text">${i18n.TimeUtilities.formatMicroSecondsAsMillisFixed(section.bounds.range)}</span>
           ` : LitHtml.nothing}
-          ${section.label}
+          <span class="section-label-text">
+            ${section.label}
+          </span>
         </div>
       </div>`;
     // clang-format on
   }
 
   #render(): void {
-    LitHtml.render(LitHtml.html`${this.#sections?.map(this.renderSection)}`, this.#shadow, {host: this});
+    if (this.#sections) {
+      this.classList.toggle('odd-number-of-sections', this.#sections.length % 2 === 1);
+      this.classList.toggle('even-number-of-sections', this.#sections.length % 2 === 0);
+    }
+    LitHtml.render(html`${this.#sections?.map(this.#renderSection)}`, this.#shadow, {host: this});
     this.checkSectionLabelPositioning();
   }
 }

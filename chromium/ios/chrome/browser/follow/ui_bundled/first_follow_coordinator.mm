@@ -55,9 +55,9 @@ constexpr CGFloat kHalfSheetCornerRadius = 20;
 }
 
 - (void)start {
-  self.feedMetricsRecorder = DiscoverFeedServiceFactory::GetForBrowserState(
-                                 self.browser->GetBrowserState())
-                                 ->GetFeedMetricsRecorder();
+  self.feedMetricsRecorder =
+      DiscoverFeedServiceFactory::GetForProfile(self.browser->GetProfile())
+          ->GetFeedMetricsRecorder();
 
   __weak __typeof(self) weakSelf = self;
   // Most of time the page url of a followed site is a valid url, but sometimes
@@ -82,8 +82,8 @@ constexpr CGFloat kHalfSheetCornerRadius = 20;
 
   firstFollowViewController.actionHandler = self;
 
-  self.faviconLoader = IOSChromeFaviconLoaderFactory::GetForBrowserState(
-      self.browser->GetBrowserState());
+  self.faviconLoader =
+      IOSChromeFaviconLoaderFactory::GetForProfile(self.browser->GetProfile());
 
   firstFollowViewController.modalPresentationStyle =
       UIModalPresentationPageSheet;

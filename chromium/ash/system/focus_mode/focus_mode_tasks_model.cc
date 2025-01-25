@@ -184,6 +184,17 @@ void FocusModeTasksModel::ClearSelectedTask() {
     selected_task_ = nullptr;
     NotifySelectedTask(observers_, nullptr);
   }
+
+  // If there is still a pending task, we clear it and also remove it from
+  // `tasks_` in order to prevent potentially having multiple pending tasks.
+  if (pending_task_) {
+    auto iter = base::ranges::find(tasks_, pending_task_->task_id,
+                                   &FocusModeTask::task_id);
+    CHECK(iter != tasks_.end());
+    pending_task_ = nullptr;
+    tasks_.erase(iter);
+    NotifyTaskListChanged(observers_, tasks_);
+  }
 }
 
 void FocusModeTasksModel::Reset() {
@@ -331,6 +342,10 @@ const FocusModeTask* FocusModeTasksModel::selected_task() const {
   return selected_task_;
 }
 
+const FocusModeTask* FocusModeTasksModel::PendingTaskForTesting() const {
+  return pending_task_;
+}
+
 const TaskId& FocusModeTasksModel::PrefTaskIdForTesting() const {
   return *pref_task_id_;
 }
@@ -358,8 +373,12 @@ void FocusModeTasksModel::OnTaskAdded(
     NotifySelectedTask(observers_, selected_task_);
   }
 
-  // Clear the pending task.
+  // The pending task has now been successfully added, so we can clear
+  // `pending_task_` since it's updated in `tasks_`.
   pending_task_ = nullptr;
+
+  // Update the UI with the newly added task data.
+  NotifyTaskListChanged(observers_, tasks_);
 }
 
 void FocusModeTasksModel::OnPrefTaskFetched(

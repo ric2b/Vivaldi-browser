@@ -42,9 +42,9 @@ namespace dawn::native {
 
 MaybeError ValidateExternalTexturePlane(const TextureViewBase* textureView) {
     DAWN_INVALID_IF(
-        (textureView->GetTexture()->GetUsage() & wgpu::TextureUsage::TextureBinding) == 0,
+        (textureView->GetUsage() & wgpu::TextureUsage::TextureBinding) == 0,
         "The external texture plane (%s) usage (%s) doesn't include the required usage (%s)",
-        textureView, textureView->GetTexture()->GetUsage(), wgpu::TextureUsage::TextureBinding);
+        textureView, textureView->GetUsage(), wgpu::TextureUsage::TextureBinding);
 
     DAWN_INVALID_IF(textureView->GetDimension() != wgpu::TextureViewDimension::e2D,
                     "The external texture plane (%s) dimension (%s) is not 2D.", textureView,
@@ -152,7 +152,7 @@ ExternalTextureBase::ExternalTextureBase(DeviceBase* device,
 // Error external texture cannot be used in bind group.
 ExternalTextureBase::ExternalTextureBase(DeviceBase* device,
                                          ObjectBase::ErrorTag tag,
-                                         const char* label)
+                                         StringView label)
     : ApiObjectBase(device, tag, label), mState(ExternalTextureState::Destroyed) {}
 
 ExternalTextureBase::~ExternalTextureBase() = default;
@@ -425,7 +425,7 @@ void ExternalTextureBase::DestroyImpl() {
 }
 
 // static
-Ref<ExternalTextureBase> ExternalTextureBase::MakeError(DeviceBase* device, const char* label) {
+Ref<ExternalTextureBase> ExternalTextureBase::MakeError(DeviceBase* device, StringView label) {
     return AcquireRef(new ExternalTextureBase(device, ObjectBase::kError, label));
 }
 

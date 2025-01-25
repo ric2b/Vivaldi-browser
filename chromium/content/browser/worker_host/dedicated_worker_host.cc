@@ -305,9 +305,14 @@ void DedicatedWorkerHost::StartScriptLoad(
     parent_service_worker_client =
         creator_worker->service_worker_handle()->service_worker_client();
   }
+  std::string fetch_event_client_id;
+  if (parent_service_worker_client) {
+    fetch_event_client_id = parent_service_worker_client->client_uuid();
+  }
 
   service_worker_handle_ = std::make_unique<ServiceWorkerMainResourceHandle>(
       storage_partition_impl->GetServiceWorkerContext(), base::DoNothing(),
+      std::move(fetch_event_client_id),
       std::move(parent_service_worker_client));
 
   network::mojom::ClientSecurityStatePtr client_security_state;
@@ -793,6 +798,20 @@ void DedicatedWorkerHost::BindSerialService(
 
   ancestor_render_frame_host->BindSerialService(std::move(receiver));
 }
+
+void DedicatedWorkerHost::BindHidService(
+    mojo::PendingReceiver<blink::mojom::HidService> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  RenderFrameHostImpl* ancestor_render_frame_host =
+      RenderFrameHostImpl::FromID(ancestor_render_frame_host_id_);
+  // The ancestor frame may have already been closed. In that case, the worker
+  // will soon be terminated too, so abort the connection.
+  if (!ancestor_render_frame_host) {
+    return;
+  }
+
+  ancestor_render_frame_host->GetHidService(std::move(receiver));
+}
 #endif
 
 void DedicatedWorkerHost::CreateBucketManagerHost(
@@ -847,7 +866,7 @@ void DedicatedWorkerHost::BindPressureService(
 
   if (!pressure_service_) {
     pressure_service_ =
-        std::make_unique<PressureServiceForWorker<DedicatedWorkerHost>>(this);
+        std::make_unique<PressureServiceForDedicatedWorker>(this);
   }
 
   pressure_service_->BindReceiver(std::move(receiver));

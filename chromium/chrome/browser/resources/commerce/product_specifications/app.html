@@ -15,10 +15,6 @@
     width: fit-content;
   }
 
-  #appContainer {
-    padding: 24px;
-  }
-
   product-specifications-header {
     height: var(--header-height);
     margin-bottom: var(--header-margin-bottom);
@@ -32,8 +28,8 @@
     display: flex;
     max-width: 100%;
     min-height: 50px;
-    min-width: 726px;
-    padding: 16px;
+    min-width: var(--table-min-width);
+    padding: var(--summary-container-padding);
     width: fit-content;
   }
 
@@ -106,7 +102,7 @@
     justify-content: flex-start;
     line-height: 16px;
     margin-top: 20px;
-    max-width: 566px;
+    max-width: var(--table-min-width);
   }
 
   #footer a {
@@ -132,6 +128,12 @@
 
   horizontal-carousel[show-forward-button] #selectorGradient {
     opacity: 1;
+  }
+
+  #disclosure,
+  .table-data-unavailable-description,
+  .table-data-unavailable-message {
+    color: var(--cr-secondary-text-color);
   }
 </style>
 <div id="appContainer">

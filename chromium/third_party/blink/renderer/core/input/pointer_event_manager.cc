@@ -21,6 +21,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
+#include "third_party/blink/renderer/core/html/html_dialog_element.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/input/event_handling_util.h"
 #include "third_party/blink/renderer/core/input/mouse_event_manager.h"
@@ -74,8 +75,7 @@ const AtomicString& MouseEventNameForPointerEventInputType(
     case WebInputEvent::Type::kPointerMove:
       return event_type_names::kMousemove;
     default:
-      NOTREACHED_IN_MIGRATION();
-      return g_empty_atom;
+      NOTREACHED();
   }
 }
 
@@ -190,6 +190,7 @@ WebInputEventResult PointerEventManager::DispatchPointerEvent(
   if (Node* target_node = target->ToNode()) {
     if (event_type == event_type_names::kPointerdown ||
         event_type == event_type_names::kPointerup) {
+      HTMLDialogElement::HandleDialogLightDismiss(*pointer_event, *target_node);
       HTMLElement::HandlePopoverLightDismiss(*pointer_event, *target_node);
     }
   }
@@ -1083,29 +1084,44 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
         mouse_event.pointer_type)] = true;
   }
 
-  // Only calculate mouse target if either mouse compatibility event or click
-  // should be sent.
-  if (pointer_event->isPrimary() &&
-      (!prevent_mouse_event_for_pointer_type_[ToPointerTypeIndex(
-           mouse_event.pointer_type)] ||
-       (!skip_click_dispatch &&
-        event_type == WebInputEvent::Type::kPointerUp))) {
-    Element* mouse_target =
+  bool send_compat_mouse =
+      pointer_event->isPrimary() &&
+      !prevent_mouse_event_for_pointer_type_[ToPointerTypeIndex(
+          mouse_event.pointer_type)];
+  bool consider_click_dispatch = !skip_click_dispatch &&
+                                 pointer_event->isPrimary() &&
+                                 event_type == WebInputEvent::Type::kPointerUp;
+
+  // Calculate mouse target if either compatibility mouse event or click event
+  // or both should be sent.
+  Element* mouse_target = nullptr;
+  if (send_compat_mouse || consider_click_dispatch) {
+    mouse_target =
         RuntimeEnabledFeatures::BoundaryEventDispatchTracksNodeRemovalEnabled()
             ? mouse_event_manager_->GetElementUnderMouse()
             : NonDeletedElementTarget(effective_target, pointer_event);
-    if (!prevent_mouse_event_for_pointer_type_[ToPointerTypeIndex(
-            mouse_event.pointer_type)]) {
-      result = event_handling_util::MergeEventResult(
-          result,
-          mouse_event_manager_->DispatchMouseEvent(
-              mouse_target, MouseEventNameForPointerEventInputType(event_type),
-              mouse_event, &last_mouse_position, nullptr));
-    }
-    if (!skip_click_dispatch && mouse_target &&
-        event_type == WebInputEvent::Type::kPointerUp) {
-      Element* captured_click_target = GetEffectiveTargetForPointerEvent(
-          nullptr, pointer_event->pointerId());
+  }
+
+  // Dispatch compat mouse events.
+  if (send_compat_mouse) {
+    result = event_handling_util::MergeEventResult(
+        result,
+        mouse_event_manager_->DispatchMouseEvent(
+            mouse_target, MouseEventNameForPointerEventInputType(event_type),
+            mouse_event, &last_mouse_position, nullptr));
+  }
+
+  if (!mouse_target) {
+    consider_click_dispatch = false;
+  }
+
+  Element* captured_click_target = nullptr;
+  if (consider_click_dispatch) {
+    // Remember the capture target for the click dispatch later, if applicable.
+    captured_click_target =
+        GetEffectiveTargetForPointerEvent(nullptr, pointer_event->pointerId());
+    // Dispatch the click event only when the flag is disabled.
+    if (!RuntimeEnabledFeatures::ClickToCapturedPointerEnabled()) {
       mouse_event_manager_->DispatchMouseClickIfNeeded(
           mouse_target, captured_click_target, mouse_event,
           pointer_event->pointerId(), pointer_event->pointerType());
@@ -1134,6 +1150,19 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
                      BoundaryEventDispatchTracksNodeRemovalEnabled()) {
         target = NonDeletedElementTarget(target, pointer_event);
       }
+
+      // Dispatch the click event if applicable, when the flag is enabled.
+      if (consider_click_dispatch &&
+          RuntimeEnabledFeatures::ClickToCapturedPointerEnabled()) {
+        ProcessPendingPointerCapture(pointer_event);
+        mouse_event_manager_->DispatchMouseClickIfNeeded(
+            mouse_target, captured_click_target, mouse_event,
+            pointer_event->pointerId(), pointer_event->pointerType());
+        // TODO(https://crbug.com/40851596): The following call to
+        // `ProcessCaptureAndPositionOfPointerEvent()` does not see any pending
+        // capture.  Clean this up after the flag is enabled.
+      }
+
       ProcessCaptureAndPositionOfPointerEvent(pointer_event, target,
                                               &mouse_event);
     } else {
@@ -1222,17 +1251,13 @@ void PointerEventManager::ProcessPendingPointerCapture(
   }
 
   if (pending_pointer_capture_target &&
-      (!RuntimeEnabledFeatures::
-           PointerCaptureLostOnRemovalDuringCaptureEnabled() ||
-       pending_pointer_capture_target->isConnected())) {
+      pending_pointer_capture_target->isConnected()) {
     SetElementUnderPointer(pointer_event, pending_pointer_capture_target);
     DispatchPointerEvent(
         pending_pointer_capture_target,
         pointer_event_factory_.CreatePointerCaptureEvent(
             pointer_event, event_type_names::kGotpointercapture));
-    if (!RuntimeEnabledFeatures::
-            PointerCaptureLostOnRemovalDuringCaptureEnabled() ||
-        pending_pointer_capture_target->isConnected()) {
+    if (pending_pointer_capture_target->isConnected()) {
       pointer_capture_target_.Set(pointer_id, pending_pointer_capture_target);
     } else {
       // As a result of dispatching gotpointercapture the capture node was

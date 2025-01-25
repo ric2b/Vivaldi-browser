@@ -479,7 +479,6 @@ public class Fido2ApiTestHelper {
      * Construct default options for a makeCredential request.
      *
      * @return Options for the Fido2 API.
-     * @throws Exception
      */
     public static PublicKeyCredentialCreationOptions createDefaultMakeCredentialOptions()
             throws Exception {
@@ -537,7 +536,6 @@ public class Fido2ApiTestHelper {
      * Constructs default options for a getAssertion request.
      *
      * @return Options for the Fido2 API
-     * @throws Exception
      */
     public static PublicKeyCredentialRequestOptions createDefaultGetAssertionOptions()
             throws Exception {
@@ -808,6 +806,7 @@ public class Fido2ApiTestHelper {
     /** Callback class to pass to Fido2CredentialRequest WebAuthn operations. */
     public static class AuthenticatorCallback {
         private Integer mStatus;
+        private Integer mOutcome;
         private MakeCredentialAuthenticatorResponse mMakeCredentialResponse;
         private GetAssertionAuthenticatorResponse mGetAssertionAuthenticatorResponse;
         private List<byte[]> mGetMatchingCredentialIdsResponse;
@@ -842,8 +841,17 @@ public class Fido2ApiTestHelper {
             unblock();
         }
 
+        public void onRequestOutcome(int outcome) {
+            assert mOutcome == null;
+            mOutcome = outcome;
+        }
+
         public Integer getStatus() {
             return mStatus;
+        }
+
+        public Integer getOutcome() {
+            return mOutcome;
         }
 
         public MakeCredentialAuthenticatorResponse getMakeCredentialResponse() {

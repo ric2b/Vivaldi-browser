@@ -237,7 +237,7 @@ void TestResponseProvider::GetResponseHeadersAndBody(
     *response_body = kTranslateScript;
     return;
   }
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void TestResponseProvider::GetLanguageResponse(
@@ -286,9 +286,9 @@ void TestResponseProvider::GetLanguageResponse(
   [TranslateAppInterface setUpWithScriptServer:translateScriptSwitchValue];
 }
 
-- (void)tearDown {
+- (void)tearDownHelper {
   [TranslateAppInterface tearDown];
-  [super tearDown];
+  [super tearDownHelper];
 }
 
 #pragma mark - Test Cases

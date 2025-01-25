@@ -10,17 +10,19 @@
 #include "discovery/dnssd/public/dns_sd_service.h"
 #include "discovery/public/dns_sd_service_publisher.h"
 #include "osp/impl/service_publisher_impl.h"
-#include "platform/api/task_runner_deleter.h"
+#include "platform/api/task_runner.h"
 
 namespace openscreen {
-
-class TaskRunner;
 
 namespace osp {
 
 class DnsSdPublisherClient final : public ServicePublisherImpl::Delegate {
  public:
   explicit DnsSdPublisherClient(TaskRunner& task_runner);
+  DnsSdPublisherClient(const DnsSdPublisherClient&) = delete;
+  DnsSdPublisherClient& operator=(const DnsSdPublisherClient&) = delete;
+  DnsSdPublisherClient(DnsSdPublisherClient&&) noexcept = delete;
+  DnsSdPublisherClient& operator=(DnsSdPublisherClient&&) noexcept = delete;
   ~DnsSdPublisherClient() override;
 
   // ServicePublisherImpl::Delegate overrides.
@@ -32,15 +34,12 @@ class DnsSdPublisherClient final : public ServicePublisherImpl::Delegate {
   void ResumePublisher(const ServicePublisher::Config& config) override;
 
  private:
-  DnsSdPublisherClient(const DnsSdPublisherClient&) = delete;
-  DnsSdPublisherClient(DnsSdPublisherClient&&) noexcept = delete;
-
   void StartPublisherInternal(const ServicePublisher::Config& config);
-  std::unique_ptr<discovery::DnsSdService, TaskRunnerDeleter>
-  CreateDnsSdServiceInternal(const ServicePublisher::Config& config);
+  discovery::DnsSdServicePtr CreateDnsSdServiceInternal(
+      const ServicePublisher::Config& config);
 
   TaskRunner& task_runner_;
-  std::unique_ptr<discovery::DnsSdService, TaskRunnerDeleter> dns_sd_service_;
+  discovery::DnsSdServicePtr dns_sd_service_;
 
   using OspDnsSdPublisher =
       discovery::DnsSdServicePublisher<ServicePublisher::Config>;

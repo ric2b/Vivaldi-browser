@@ -23,6 +23,8 @@ is16BPS:
   rgba64le
   rgbaf16be
   rgbaf16le
+  rgbf16be
+  rgbf16le
   ya16be
   ya16le
   yuv420p16be
@@ -75,6 +77,8 @@ isNBPS:
   p410le
   p412be
   p412le
+  v30xbe
+  v30xle
   x2bgr10be
   x2bgr10le
   x2rgb10be
@@ -176,10 +180,14 @@ isBE:
   rgb48be
   rgb555be
   rgb565be
+  rgb96be
+  rgba128be
   rgba64be
   rgbaf16be
   rgbaf32be
+  rgbf16be
   rgbf32be
+  v30xbe
   x2bgr10be
   x2rgb10be
   xv30be
@@ -218,6 +226,7 @@ isBE:
   yuva444p9be
 
 isYUV:
+  ayuv
   ayuv64be
   ayuv64le
   nv12
@@ -245,10 +254,14 @@ isYUV:
   p412le
   p416be
   p416le
+  uyva
   uyvy422
   uyyvyy411
+  v30xbe
+  v30xle
   vuya
   vuyx
+  vyu444
   xv30be
   xv30le
   xv36be
@@ -530,12 +543,18 @@ isRGB:
   rgb565be
   rgb565le
   rgb8
+  rgb96be
+  rgb96le
+  rgba128be
+  rgba128le
   rgba64be
   rgba64le
   rgbaf16be
   rgbaf16le
   rgbaf32be
   rgbaf32le
+  rgbf16be
+  rgbf16le
   rgbf32be
   rgbf32le
   x2bgr10be
@@ -688,12 +707,18 @@ AnyRGB:
   rgb565be
   rgb565le
   rgb8
+  rgb96be
+  rgb96le
+  rgba128be
+  rgba128le
   rgba64be
   rgba64le
   rgbaf16be
   rgbaf16le
   rgbaf32be
   rgbaf32le
+  rgbf16be
+  rgbf16le
   rgbf32be
   rgbf32le
   x2bgr10be
@@ -702,6 +727,7 @@ AnyRGB:
   x2rgb10le
 
 ALPHA:
+  ayuv
   ayuv64be
   ayuv64le
   bgr32
@@ -722,12 +748,15 @@ ALPHA:
   pal8
   rgb32
   rgb32_1
+  rgba128be
+  rgba128le
   rgba64be
   rgba64le
   rgbaf16be
   rgbaf16le
   rgbaf32be
   rgbaf32le
+  uyva
   vuya
   ya16be
   ya16le
@@ -761,6 +790,7 @@ ALPHA:
 Packed:
   0bgr
   0rgb
+  ayuv
   ayuv64be
   ayuv64le
   bayer_bggr16be
@@ -810,18 +840,28 @@ Packed:
   rgb565be
   rgb565le
   rgb8
+  rgb96be
+  rgb96le
+  rgba128be
+  rgba128le
   rgba64be
   rgba64le
   rgbaf16be
   rgbaf16le
   rgbaf32be
   rgbaf32le
+  rgbf16be
+  rgbf16le
   rgbf32be
   rgbf32le
+  uyva
   uyvy422
   uyyvyy411
+  v30xbe
+  v30xle
   vuya
   vuyx
+  vyu444
   x2bgr10be
   x2bgr10le
   x2rgb10be
@@ -1010,12 +1050,18 @@ PackedRGB:
   rgb565be
   rgb565le
   rgb8
+  rgb96be
+  rgb96le
+  rgba128be
+  rgba128le
   rgba64be
   rgba64le
   rgbaf16be
   rgbaf16le
   rgbaf32be
   rgbaf32le
+  rgbf16be
+  rgbf16le
   rgbf32be
   rgbf32le
   x2bgr10be
@@ -1084,5 +1130,6 @@ SwappedChroma:
   nv42
   vuya
   vuyx
+  vyu444
   yvyu422
 

@@ -1,13 +1,16 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+import '../../../ui/components/icon_button/icon_button.js';
+import '../../../ui/components/menus/menus.js';
+import './Toolbar.js';
+
 import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as SDK from '../../../core/sdk/sdk.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as Dialogs from '../../../ui/components/dialogs/dialogs.js';
-import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
-import * as Menus from '../../../ui/components/menus/menus.js';
+import type * as Menus from '../../../ui/components/menus/menus.js';
 import * as SuggestionInput from '../../../ui/components/suggestion_input/suggestion_input.js';
 import * as UI from '../../../ui/legacy/legacy.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
@@ -140,10 +143,10 @@ export function suggestionFilter(option: string, query: string): boolean {
 @customElement('devtools-json-editor')
 export class JSONEditor extends LitElement {
   static override styles = [editorWidgetStyles];
-  @property()
+  @property({attribute: false})
   declare metadataByCommand: Map<string, {parameters: Parameter[], description: string, replyArgs: string[]}>;
-  @property() declare typesByName: Map<string, Parameter[]>;
-  @property() declare enumsByName: Map<string, Record<string, string>>;
+  @property({attribute: false}) declare typesByName: Map<string, Parameter[]>;
+  @property({attribute: false}) declare enumsByName: Map<string, Record<string, string>>;
   @state() declare parameters: Parameter[];
   @state() declare targets: SDK.Target.Target[];
   @state() command: string = '';
@@ -624,9 +627,9 @@ export class JSONEditor extends LitElement {
     this.populateParametersForCommandWithDefaultValues();
   };
 
-  #computeTargetLabel(target: SDK.Target.Target): string|void {
+  #computeTargetLabel(target: SDK.Target.Target): string|undefined {
     if (!target) {
-      return;
+      return undefined;
     }
     return `${target.name()} (${target.inspectedURL()})`;
   }
@@ -817,7 +820,7 @@ export class JSONEditor extends LitElement {
     return html`
     <div class="row attribute padded">
       <div>target<span class="separator">:</span></div>
-      <${Menus.SelectMenu.SelectMenu.litTagName}
+      <devtools-select-menu
             class="target-select-menu"
             @selectmenuselected=${this.#onTargetSelected}
             .showDivider=${true}
@@ -826,19 +829,19 @@ export class JSONEditor extends LitElement {
             .showSelectedItem=${true}
             .showConnector=${false}
             .position=${Dialogs.Dialog.DialogVerticalPosition.BOTTOM}
-            .buttonTitle=${targetLabel}
+            .buttonTitle=${targetLabel || ''}
             jslog=${VisualLogging.dropDown('targets').track({click: true})}
           >
           ${repeat(this.targets, target => {
-          return LitHtml.html`
-                <${Menus.Menu.MenuItem.litTagName}
+          return html`
+                <devtools-menu-item
                   .value=${target.id()}>
                     ${this.#computeTargetLabel(target)}
-                </${Menus.Menu.MenuItem.litTagName}>
+                </devtools-menu-item>
               `;
         },
     )}
-          </${Menus.SelectMenu.SelectMenu.litTagName}>
+          </devtools-select-menu>
     </div>
   `;
     // clang-format on
@@ -882,18 +885,19 @@ export class JSONEditor extends LitElement {
   }
 
   #renderWarningIcon(): LitHtml.TemplateResult|undefined {
-    return LitHtml.html`<${IconButton.Icon.Icon.litTagName}
+    return html`<devtools-icon
     .data=${{
       iconName: 'warning-filled',
       color: 'var(--icon-warning)',
       width: '14px',
       height: '14px',
-    } as IconButton.Icon.IconData}
+      }
+      }
     class=${classMap({
-      'warning-icon': true,
-    })}
+        'warning-icon': true,
+      })}
   >
-  </${IconButton.Icon.Icon.litTagName}>`;
+  </devtools-icon>`;
   }
 
   /**
@@ -1012,6 +1016,7 @@ export class JSONEditor extends LitElement {
                   <div class="row-icons">
                       <!-- If an object has no predefined keys, show an input to enter the value, and a delete icon to delete the whole key/value pair -->
                       ${hasNoKeys && isParentObject ?  html`
+                      <!-- @ts-ignore -->
                       <devtools-suggestion-input
                           data-paramId=${parameterId}
                           .isCorrectInput=${live(parameter.isCorrectType)}
@@ -1036,6 +1041,7 @@ export class JSONEditor extends LitElement {
                     <!-- In case  the parameter is not optional or its value is not undefined render the input -->
                     ${isPrimitive && !hasNoKeys && (!isParamValueUndefined || !isParamOptional) && (!isParentArray) ?
                       html`
+                        <!-- @ts-ignore -->
                         <devtools-suggestion-input
                           data-paramId=${parameterId}
                           .strikethrough=${live(parameter.isCorrectType)}
@@ -1074,6 +1080,7 @@ export class JSONEditor extends LitElement {
                     ${isParentArray ? html`
                     <!-- If the parameter is an object we don't want to display the input field we just want the delete button-->
                     ${!isObject ? html`
+                    <!-- @ts-ignore -->
                     <devtools-suggestion-input
                       data-paramId=${parameterId}
                       .options=${hasOptions ? this.#computeDropdownValues(parameter) : []}

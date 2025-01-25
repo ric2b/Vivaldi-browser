@@ -101,7 +101,7 @@ class ScopedLogIn {
         LogInAsPublicAccount();
         break;
       default:
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
     }
   }
 
@@ -264,6 +264,42 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_GuestAccount) {
   base::CommandLine::ForCurrentProcess()->InitFromArgv(
       {"", "--arc-availability=officially-supported"});
   ScopedLogIn login(GetFakeUserManager(), user_manager::GuestAccountId());
+  EXPECT_TRUE(IsArcAllowedForProfileOnFirstCall(profile()));
+}
+
+// Unmanaged account on managed device is not allowed to
+// use arc on reven board.
+TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_UnmanagedAccount_Reven) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported", "--reven-branding"});
+  cros_settings_test_helper_.InstallAttributes()->SetCloudManaged(
+      "example.com", "fake-device-id");
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
+}
+
+// Managed account on unmanaged device is not allowed to
+// use arc on reven board.
+TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_UnmanagedDevice_Reven) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported", "--reven-branding"});
+  ScopedLogIn login(GetFakeUserManager(),
+                    AccountId::FromUserEmailGaiaId(
+                        profile()->GetProfileUserName(), kTestGaiaId));
+  SetProfileIsManagedForTesting(profile());
+  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
+}
+
+// Managed account on managed device is allowed to use arc
+// on reven board.
+TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_ManagedDeviceAccount_Reven) {
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--arc-availability=officially-supported", "--reven-branding"});
+  ScopedLogIn login(GetFakeUserManager(),
+                    AccountId::FromUserEmailGaiaId(
+                        profile()->GetProfileUserName(), kTestGaiaId));
+  SetProfileIsManagedForTesting(profile());
+  cros_settings_test_helper_.InstallAttributes()->SetCloudManaged(
+      "example.com", "fake-device-id");
   EXPECT_TRUE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 

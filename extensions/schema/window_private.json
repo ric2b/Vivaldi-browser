@@ -166,6 +166,26 @@
             "name": "heavyPadding"
           }
         ]
+      },
+      {
+        "id": "ToastParameters",
+        "type": "object",
+        "description": "Parameters used to create a toast notification, typically showed as an overlay above the browser window.",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "Message to present."
+          },
+          "action": {
+            "type": "string",
+            "optional": true,
+            "description": "If an action button is needed, this is the buttone text."
+          },
+          "image": {
+            "type": "string",
+            "description": "Image to show as base64 encoded."
+          }
+        }
       }
     ],
     "functions": [
@@ -448,6 +468,21 @@
           {
             "type": "integer",
             "name": "windowId"
+          }
+        ]
+      },
+      {
+        "name": "onToastMessage",
+        "type": "function",
+        "description": "Fire .",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          },
+          {
+            "name": "params",
+            "$ref": "ToastParameters"
           }
         ]
       }

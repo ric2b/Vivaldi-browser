@@ -6,22 +6,16 @@
 
 #import "base/ios/ios_util.h"
 #import "base/metrics/field_trial_params.h"
+#import "components/prefs/pref_service.h"
 #import "components/variations/service/variations_service.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
 
 #pragma mark - Constants
 
-// The default number of impressions for the top-of-feed sync promo before it
-// should be auto-dismissed.
-const int kFeedSyncPromoDefaultAutodismissImpressions = 6;
-
 #pragma mark - Feature declarations
-
-BASE_FEATURE(kEnableDiscoverFeedPreview,
-             "EnableDiscoverFeedPreview",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableDiscoverFeedStaticResourceServing,
              "EnableDiscoverFeedStaticResourceServing",
@@ -31,17 +25,9 @@ BASE_FEATURE(kEnableDiscoverFeedDiscoFeedEndpoint,
              "EnableDiscoFeedEndpoint",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kEnableDiscoverFeedTopSyncPromo,
-             "EnableDiscoverFeedTopSyncPromo",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kEnableNTPViewHierarchyRepair,
              "NTPViewHierarchyRepair",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kFeedHeaderSettings,
-             "FeedHeaderSettings",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kOverrideFeedSettings,
              "OverrideFeedSettings",
@@ -71,20 +57,6 @@ const char kDiscoverFeedSRSReconstructedTemplatesEnabled[] =
 const char kDiscoverFeedSRSPreloadTemplatesEnabled[] =
     "DiscoverFeedSRSPreloadTemplatesEnabled";
 
-// EnableDiscoverFeedTopSyncPromo parameters.
-const char kDiscoverFeedTopSyncPromoStyle[] = "DiscoverFeedTopSyncPromoStyle";
-const char kDiscoverFeedTopSyncPromoAutodismissImpressions[] =
-    "autodismissImpressions";
-const char kDiscoverFeedTopSyncPromoIgnoreEngagementCondition[] =
-    "IgnoreFeedEngagementConditionForTopSyncPromo";
-
-// Feature parameters for `kFeedHeaderSettings`.
-const char kEnableDotForNewFollowedContent[] =
-    "kEnableDotForNewFollowedContent";
-const char kDisableStickyHeaderForFollowingFeed[] =
-    "DisableStickyHeaderForFollowingFeed";
-const char kOverrideFeedHeaderHeight[] = "OverrideFeedHeaderHeight";
-
 // Feature parameters for `kOverrideFeedSettings`.
 const char kFeedSettingRefreshThresholdInSeconds[] =
     "RefreshThresholdInSeconds";
@@ -99,10 +71,6 @@ const char kFeedSettingDiscoverReferrerParameter[] =
 
 #pragma mark - Helpers
 
-bool IsDiscoverFeedPreviewEnabled() {
-  return base::FeatureList::IsEnabled(kEnableDiscoverFeedPreview);
-}
-
 bool IsNTPViewHierarchyRepairEnabled() {
   return base::FeatureList::IsEnabled(kEnableNTPViewHierarchyRepair);
 }
@@ -116,63 +84,9 @@ bool IsDiscoverFeedTopSyncPromoEnabled() {
          variations_service->GetStoredPermanentCountry() != "gb";
 }
 
-SigninPromoViewStyle GetTopOfFeedPromoStyle() {
-  CHECK(IsDiscoverFeedTopSyncPromoEnabled());
-  SigninPromoViewStyle promoStyle =
-      static_cast<SigninPromoViewStyle>(base::GetFieldTrialParamByFeatureAsInt(
-          kEnableDiscoverFeedTopSyncPromo, kDiscoverFeedTopSyncPromoStyle,
-          SigninPromoViewStyleCompactVertical));
-  // Don't handle default to force a compile-time failure if a value is added to
-  // the enum without being handled here.
-  switch (promoStyle) {
-    case SigninPromoViewStyleStandard:
-    case SigninPromoViewStyleCompactHorizontal:
-    case SigninPromoViewStyleCompactVertical:
-    case SigninPromoViewStyleOnlyButton:
-      return promoStyle;
-  }
-  // If no compile-time error was triggered above, it likely means that the
-  // value was incorrectly set through Finch. In this case, return the default
-  // vertical style.
-  return SigninPromoViewStyleCompactVertical;
-}
-
-bool ShouldIgnoreFeedEngagementConditionForTopSyncPromo() {
-  if (IsDiscoverFeedTopSyncPromoEnabled()) {
-    return base::GetFieldTrialParamByFeatureAsBool(
-        kEnableDiscoverFeedTopSyncPromo,
-        kDiscoverFeedTopSyncPromoIgnoreEngagementCondition, false);
-  }
-  return true;
-}
-
-int FeedSyncPromoAutodismissCount() {
-  return base::GetFieldTrialParamByFeatureAsInt(
-      kEnableDiscoverFeedTopSyncPromo,
-      kDiscoverFeedTopSyncPromoAutodismissImpressions,
-      kFeedSyncPromoDefaultAutodismissImpressions);
-}
-
 bool IsContentSuggestionsForSupervisedUserEnabled(PrefService* pref_service) {
   return pref_service->GetBoolean(
       prefs::kNTPContentSuggestionsForSupervisedUserEnabled);
-}
-
-bool IsStickyHeaderDisabledForFollowingFeed() {
-  return base::GetFieldTrialParamByFeatureAsBool(
-      kFeedHeaderSettings, kDisableStickyHeaderForFollowingFeed, true);
-}
-
-bool IsDotEnabledForNewFollowedContent() {
-  return base::GetFieldTrialParamByFeatureAsBool(
-      kFeedHeaderSettings, kEnableDotForNewFollowedContent, false);
-}
-
-int FollowingFeedHeaderHeight() {
-  int defaultWebChannelsHeaderHeight = 30;
-  return base::GetFieldTrialParamByFeatureAsInt(kFeedHeaderSettings,
-                                                kOverrideFeedHeaderHeight,
-                                                defaultWebChannelsHeaderHeight);
 }
 
 bool IsWebFeedFeedbackRerouteEnabled() {

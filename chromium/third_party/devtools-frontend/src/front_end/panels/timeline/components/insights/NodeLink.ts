@@ -10,13 +10,14 @@ import type * as Protocol from '../../../../generated/protocol.js';
 import * as ComponentHelpers from '../../../../ui/components/helpers/helpers.js';
 import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
 
+const {html} = LitHtml;
+
 export interface NodeLinkData {
   backendNodeId: Protocol.DOM.BackendNodeId;
   options?: Common.Linkifier.Options;
 }
 
 export class NodeLink extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-performance-node-link`;
 
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #boundRender = this.#render.bind(this);
@@ -30,8 +31,8 @@ export class NodeLink extends HTMLElement {
   }
 
   async #linkify(): Promise<Node|undefined> {
-    // TODO: consider using `TraceEngine.Extras.FetchNodes.extractRelatedDOMNodesFromEvent`, which
-    // requires traceParsedData.
+    // TODO: consider using `Trace.Extras.FetchNodes.extractRelatedDOMNodesFromEvent`, which
+    // requires parsedTrace.
 
     if (this.#backendNodeId === undefined) {
       return;
@@ -66,7 +67,7 @@ export class NodeLink extends HTMLElement {
   async #render(): Promise<void> {
     const relatedNodeEl = await this.#linkify();
     LitHtml.render(
-        LitHtml.html`<div class='node-link'>
+        html`<div class='node-link'>
         ${relatedNodeEl}
       </div>`,
         this.#shadow, {host: this});

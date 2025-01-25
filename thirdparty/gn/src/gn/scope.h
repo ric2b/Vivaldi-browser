@@ -315,11 +315,11 @@ class Scope {
   // set is constructed conservatively, meaning that every file that can
   // potentially affect this scope is included, but not necessarily every change
   // to these files will affect this scope.
-  const SourceFileSet& build_dependency_files() const {
-    return build_dependency_files_;
-  }
   void AddBuildDependencyFile(const SourceFile& build_dependency_file);
   void AddBuildDependencyFiles(const SourceFileSet& build_dependency_files);
+
+  // Collect all dependency files from this scope (and parent ones).
+  SourceFileSet CollectBuildDependencyFiles() const;
 
   // The item collector is where Items (Targets, Configs, etc.) go that have
   // been defined. If a scope can generate items, this non-owning pointer will
@@ -439,6 +439,8 @@ class Scope {
 
   SourceDir source_dir_;
 
+  // MOTE: build dependency files defined in this scope, not including
+  // parent ones.
   SourceFileSet build_dependency_files_;
 
   static UpdateParseMap target_update_list;

@@ -20,7 +20,6 @@
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/process/current_process.h"
-#include "base/profiler/process_type.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -51,7 +50,6 @@
 #include "chrome/grit/renderer_resources.h"
 #include "chrome/renderer/benchmarking_extension.h"
 #include "chrome/renderer/browser_exposed_renderer_interfaces.h"
-#include "chrome/renderer/cart/commerce_hint_agent.h"
 #include "chrome/renderer/chrome_content_settings_agent_delegate.h"
 #include "chrome/renderer/chrome_render_frame_observer.h"
 #include "chrome/renderer/chrome_render_thread_observer.h"
@@ -77,7 +75,6 @@
 #include "components/autofill/content/renderer/password_generation_agent.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/commerce/content/renderer/commerce_web_extractor.h"
-#include "components/commerce/core/commerce_feature_list.h"
 #include "components/content_capture/common/content_capture_features.h"
 #include "components/content_capture/renderer/content_capture_sender.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -91,15 +88,19 @@
 #include "components/error_page/common/error.h"
 #include "components/error_page/common/localized_error.h"
 #include "components/feed/feed_feature_list.h"
+#include "components/fingerprinting_protection_filter/common/fingerprinting_protection_filter_features.h"
+#include "components/fingerprinting_protection_filter/renderer/renderer_agent.h"
+#include "components/fingerprinting_protection_filter/renderer/unverified_ruleset_dealer.h"
 #include "components/grit/components_scaled_resources.h"
+#include "components/guest_view/buildflags/buildflags.h"
 #include "components/heap_profiling/in_process/heap_profiler_controller.h"
 #include "components/history_clusters/core/config.h"
 #include "components/metrics/call_stacks/call_stack_profile_builder.h"
 #include "components/network_hints/renderer/web_prescient_networking_impl.h"
 #include "components/no_state_prefetch/renderer/no_state_prefetch_client.h"
 #include "components/no_state_prefetch/renderer/no_state_prefetch_helper.h"
+#include "components/no_state_prefetch/renderer/no_state_prefetch_render_frame_observer.h"
 #include "components/no_state_prefetch/renderer/no_state_prefetch_utils.h"
-#include "components/no_state_prefetch/renderer/prerender_render_frame_observer.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/page_content_annotations/core/page_content_annotations_features.h"
 #include "components/page_load_metrics/renderer/metrics_render_frame_observer.h"
@@ -110,6 +111,7 @@
 #include "components/permissions/features.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/renderer/threat_dom_details.h"
+#include "components/sampling_profiler/process_type.h"
 #include "components/sampling_profiler/thread_profiler.h"
 #include "components/security_interstitials/content/renderer/security_interstitial_page_controller_delegate_impl.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
@@ -304,8 +306,6 @@ using SecureContextRequired = autofill::AutofillAgent::SecureContextRequired;
 using UserGestureRequired = autofill::AutofillAgent::UserGestureRequired;
 using UsesKeyboardAccessoryForSuggestions =
     autofill::AutofillAgent::UsesKeyboardAccessoryForSuggestions;
-using EnableHeavyFormDataScraping =
-    autofill::PasswordAutofillAgent::EnableHeavyFormDataScraping;
 
 namespace {
 
@@ -477,6 +477,13 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   subresource_filter_ruleset_dealer_ =
       std::make_unique<subresource_filter::UnverifiedRulesetDealer>();
 
+  if (fingerprinting_protection_filter::features::
+          IsFingerprintingProtectionFeatureEnabled()) {
+    fingerprinting_protection_ruleset_dealer_ = std::make_unique<
+        fingerprinting_protection_filter::UnverifiedRulesetDealer>();
+    thread->AddObserver(fingerprinting_protection_ruleset_dealer_.get());
+  }
+
   phishing_model_setter_ =
       std::make_unique<safe_browsing::PhishingModelSetterImpl>();
 
@@ -604,7 +611,7 @@ void ChromeContentRendererClient::RenderFrameCreated(
       new ChromeRenderFrameObserver(render_frame, web_cache_impl_.get());
   service_manager::BinderRegistry* registry = render_frame_observer->registry();
 
-  new prerender::PrerenderRenderFrameObserver(render_frame);
+  new prerender::NoStatePrefetchRenderFrameObserver(render_frame);
 
   auto content_settings_delegate =
       std::make_unique<ChromeContentSettingsAgentDelegate>(render_frame);
@@ -703,10 +710,7 @@ void ChromeContentRendererClient::RenderFrameCreated(
   if (!render_frame->IsInFencedFrameTree() ||
       base::FeatureList::IsEnabled(blink::features::kFencedFramesAPIChanges)) {
     auto password_autofill_agent = std::make_unique<PasswordAutofillAgent>(
-        render_frame, associated_interfaces,
-        EnableHeavyFormDataScraping(
-            chrome::GetChannel() == version_info::Channel::CANARY ||
-            chrome::GetChannel() == version_info::Channel::DEV));
+        render_frame, associated_interfaces);
     auto password_generation_agent = std::make_unique<PasswordGenerationAgent>(
         render_frame, password_autofill_agent.get(), associated_interfaces);
     new AutofillAgent(
@@ -752,6 +756,15 @@ void ChromeContentRendererClient::RenderFrameCreated(
     subresource_filter_agent->Initialize();
   }
 
+  if (fingerprinting_protection_filter::features::
+          IsFingerprintingProtectionFeatureEnabled() &&
+      fingerprinting_protection_ruleset_dealer_) {
+    auto* fingerprinting_protection_renderer_agent =
+        new fingerprinting_protection_filter::RendererAgent(
+            render_frame, fingerprinting_protection_ruleset_dealer_.get());
+    fingerprinting_protection_renderer_agent->Initialize();
+  }
+
 #if !BUILDFLAG(IS_ANDROID)
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kInstantProcess) &&
@@ -759,18 +772,6 @@ void ChromeContentRendererClient::RenderFrameCreated(
     new SearchBox(render_frame);
   }
 #endif
-
-// We should create CommerceHintAgent only for a main frame except a fenced
-// frame that is the main frame as well, so we should check if |render_frame|
-// is the fenced frame.
-#if !BUILDFLAG(IS_ANDROID)
-  if (command_line->HasSwitch(commerce::switches::kEnableChromeCart) &&
-#else
-  if (base::FeatureList::IsEnabled(commerce::kCommerceHintAndroid) &&
-#endif  // !BUILDFLAG(IS_ANDROID)
-      render_frame->GetWebFrame()->IsOutermostMainFrame()) {
-    new cart::CommerceHintAgent(render_frame);
-  }
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   new SpellCheckProvider(render_frame, spellcheck_.get());
@@ -816,7 +817,7 @@ void ChromeContentRendererClient::WebViewCreated(
     const url::Origin* outermost_origin) {
   new prerender::NoStatePrefetchClient(web_view);
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   extensions::ExtensionsRendererClient::Get()->WebViewCreated(web_view,
                                                               outermost_origin);
 #endif
@@ -1050,8 +1051,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
     };
     switch (status) {
       case chrome::mojom::PluginStatus::kNotFound: {
-        NOTREACHED_IN_MIGRATION();
-        break;
+        NOTREACHED();
       }
       case chrome::mojom::PluginStatus::kAllowed:
       case chrome::mojom::PluginStatus::kPlayImportantContent: {
@@ -1100,7 +1100,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
               is_module_allowed =
                   has_enable_nacl_switch ||
                   (is_pnacl_mime_type &&
-                   blink::WebOriginTrials::isTrialEnabled(&document, "PNaCl"));
+                   blink::WebOriginTrials::IsPNaClEnabled(&document));
             }
           }
           if (!is_module_allowed) {
@@ -1157,7 +1157,8 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
               render_frame, params, info, identifier, group_name,
               IDR_BLOCKED_PLUGIN_HTML,
               l10n_util::GetStringFUTF16(IDS_PLUGIN_BLOCKED, group_name));
-          placeholder->set_blocked_for_prerendering(is_no_state_prefetching);
+          placeholder->set_blocked_for_no_state_prefetching(
+              is_no_state_prefetching);
           placeholder->AllowLoading();
           break;
         }
@@ -1358,9 +1359,8 @@ void ChromeContentRendererClient::ReportNaClAppType(
       }
     } else {
       // We found an extension that is not covered by any metric
-      NOTREACHED_IN_MIGRATION()
-          << "Invalid NaCl usage in extension. Extension name: "
-          << extension->name() << ", type: " << extension->GetType();
+      NOTREACHED() << "Invalid NaCl usage in extension. Extension name: "
+                   << extension->name() << ", type: " << extension->GetType();
     }
   }
 
@@ -1417,7 +1417,7 @@ void ChromeContentRendererClient::PostIOThreadCreated(
   io_thread_task_runner->PostTask(
       FROM_HERE,
       base::BindOnce(&sampling_profiler::ThreadProfiler::StartOnChildThread,
-                     base::ProfilerThreadType::kIo));
+                     sampling_profiler::ProfilerThreadType::kIo));
 }
 
 void ChromeContentRendererClient::PostCompositorThreadCreated(
@@ -1425,7 +1425,7 @@ void ChromeContentRendererClient::PostCompositorThreadCreated(
   compositor_thread_task_runner->PostTask(
       FROM_HERE,
       base::BindOnce(&sampling_profiler::ThreadProfiler::StartOnChildThread,
-                     base::ProfilerThreadType::kCompositor));
+                     sampling_profiler::ProfilerThreadType::kCompositor));
   // Enable stack sampling for tracing.
   // We pass in CreateCoreUnwindersFactory here since it lives in the chrome/
   // layer while TracingSamplerProfiler is outside of chrome/.
@@ -1759,7 +1759,7 @@ void ChromeContentRendererClient::
     WillInitializeServiceWorkerContextOnWorkerThread() {
   // This is called on the service worker thread.
   sampling_profiler::ThreadProfiler::StartOnChildThread(
-      base::ProfilerThreadType::kServiceWorker);
+      sampling_profiler::ProfilerThreadType::kServiceWorker);
 }
 
 void ChromeContentRendererClient::

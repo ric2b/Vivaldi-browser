@@ -12,13 +12,22 @@
 @implementation VivaldiStartPagePrefs
 
 static PrefService *_prefService = nil;
+static PrefService *_localPrefService = nil;
 
 + (PrefService*)prefService {
-    return _prefService;
+  return _prefService;
+}
+
++ (PrefService*)localPrefService {
+  return _localPrefService;
 }
 
 + (void)setPrefService:(PrefService*)pref {
-    _prefService = pref;
+  _prefService = pref;
+}
+
++ (void)setLocalPrefService:(PrefService*)pref {
+  _localPrefService = pref;
 }
 
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
@@ -27,7 +36,7 @@ static PrefService *_prefService = nil;
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiSpeedDialSortingOrder,
                                 SpeedDialSortingOrderAscending);
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStartPageLayoutStyle,
-                                [VivaldiStartPagePrefs defaultLayout]);
+                                VivaldiStartPageLayoutStyleSmall);
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStartPageSDMaximumColumns,
                                 VivaldiStartPageLayoutColumnUnlimited);
   registry->RegisterBooleanPref(
@@ -39,6 +48,13 @@ static PrefService *_prefService = nil;
   registry->RegisterStringPref(vivaldiprefs::kVivaldiStartupWallpaper, "");
   registry->RegisterStringPref(vivaldiprefs::kVivaldiStartpagePortraitImage,"");
   registry->RegisterStringPref(vivaldiprefs::kVivaldiStartpageLandscapeImage,"");
+}
+
++ (void)registerLocalStatePrefs:(PrefRegistrySimple*)registry {
+  registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStartPageOpenWithItem,
+                                VivaldiStartPageStartItemTypeFirstGroup);
+  registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStartPageLastVisitedGroup,
+                                0);
 }
 
 #pragma mark - GETTERS
@@ -97,7 +113,7 @@ static PrefService *_prefService = nil;
     case 3:
       return VivaldiStartPageLayoutStyleList;
     default:
-      return [VivaldiStartPagePrefs defaultLayout];
+      return VivaldiStartPageLayoutStyleSmall;
   }
 }
 
@@ -144,6 +160,31 @@ static PrefService *_prefService = nil;
   PrefService *prefService = [VivaldiStartPagePrefs prefService];
   return prefService->GetBoolean(
       vivaldiprefs::kVivaldiStartPageShowSpeedDials);
+}
+
++ (const VivaldiStartPageStartItemType)getReopenStartPageWithItem {
+  PrefService *prefService = [VivaldiStartPagePrefs localPrefService];
+  int item =
+      prefService->GetInteger(vivaldiprefs::kVivaldiStartPageOpenWithItem);
+
+  // Cast the integer directly to the enum type,
+  // assuming it's within the valid range.
+  VivaldiStartPageStartItemType itemType = (VivaldiStartPageStartItemType)item;
+
+  // Check if the cast value is within the valid enum range.
+  if (itemType >= VivaldiStartPageStartItemTypeFirstGroup &&
+      itemType <= VivaldiStartPageStartItemTypeLastVisited) {
+    return itemType;
+  }
+
+  // Default fallback.
+  return VivaldiStartPageStartItemTypeFirstGroup;
+}
+
++ (const NSInteger)getStartPageLastVisitedGroupIndex {
+  PrefService *prefService = [VivaldiStartPagePrefs localPrefService];
+  return prefService->GetInteger(
+            vivaldiprefs::kVivaldiStartPageLastVisitedGroup);
 }
 
 + (BOOL)showStartPageCustomizeButton {
@@ -213,6 +254,18 @@ static PrefService *_prefService = nil;
       vivaldiprefs::kVivaldiStartPageShowSpeedDials, show);
 }
 
++ (void)setReopenStartPageWithItem:(const VivaldiStartPageStartItemType)item {
+  PrefService *prefService = [VivaldiStartPagePrefs localPrefService];
+  prefService->SetInteger(vivaldiprefs::kVivaldiStartPageOpenWithItem,
+                          item);
+}
+
++ (void)setStartPageLastVisitedGroupIndex:(const NSInteger)index {
+  PrefService *prefService = [VivaldiStartPagePrefs localPrefService];
+  prefService->SetInteger(vivaldiprefs::kVivaldiStartPageLastVisitedGroup,
+                          index);
+}
+
 + (void)setShowStartPageCustomizeButton:(BOOL)show {
   PrefService *prefService = [VivaldiStartPagePrefs prefService];
   prefService->SetBoolean(
@@ -236,14 +289,6 @@ static PrefService *_prefService = nil;
 }
 
 #pragma mark - PRIVATE
-
-+ (VivaldiStartPageLayoutStyle)defaultLayout {
-  BOOL isTablet = [VivaldiGlobalHelpers isDeviceTablet];
-  VivaldiStartPageLayoutStyle defaultLayout =
-    isTablet ? VivaldiStartPageLayoutStyleMedium :
-      VivaldiStartPageLayoutStyleSmall;
-  return defaultLayout;
-}
 
 // Return unlimited column by default which means fill the available screen
 + (VivaldiStartPageLayoutColumn)defaultColumns {

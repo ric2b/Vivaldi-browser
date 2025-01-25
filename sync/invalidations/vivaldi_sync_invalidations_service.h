@@ -11,7 +11,7 @@
 #include "components/sync/base/data_type.h"
 #include "components/sync/invalidations/sync_invalidations_service.h"
 #include "net/base/backoff_entry.h"
-#include "sync/invalidations/invalidation_service_stomp_websocket.h"
+#include "sync/invalidations/invalidation_service_stomp_client.h"
 #include "vivaldi_account/vivaldi_account_manager.h"
 
 class PrefService;
@@ -28,7 +28,7 @@ using NetworkContextProvider =
 class VivaldiSyncInvalidationsService
     : public syncer::SyncInvalidationsService,
       public VivaldiAccountManager::Observer,
-      public InvalidationServiceStompWebsocket::Client {
+      public InvalidationServiceStompClient::Delegate {
  public:
   VivaldiSyncInvalidationsService(
       const std::string& notification_server_url,
@@ -63,7 +63,7 @@ class VivaldiSyncInvalidationsService
   void OnTokenFetchSucceeded() override;
   void OnVivaldiAccountShutdown() override;
 
-  // Implementing InvalidationServiceStompWebsocket::Client
+  // Implementing InvalidationServiceStompClient::Delegate
   std::string GetLogin() const override;
   std::string GetVHost() const override;
   std::string GetChannel() const override;
@@ -79,8 +79,8 @@ class VivaldiSyncInvalidationsService
   VivaldiAccountManager* account_manager_;
   NetworkContextProvider network_context_provider_;
 
-  net::BackoffEntry websocket_backoff_;
-  base::OneShotTimer websocket_backoff_timer_;
+  net::BackoffEntry stomp_client_backoff_;
+  base::OneShotTimer stomp_client_backoff_timer_;
 
   bool invalidations_requested_ = false;
 
@@ -103,7 +103,7 @@ class VivaldiSyncInvalidationsService
                      /*allow_reentrancy=*/false>
       token_observers_;
 
-  std::unique_ptr<InvalidationServiceStompWebsocket> stomp_web_socket_;
+  std::unique_ptr<InvalidationServiceStompClient> stomp_client_;
 };
 
 }  // namespace vivaldi

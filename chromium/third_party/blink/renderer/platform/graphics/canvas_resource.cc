@@ -46,10 +46,10 @@
 #include "third_party/skia/include/core/SkPixmap.h"
 #include "third_party/skia/include/core/SkSize.h"
 #include "third_party/skia/include/gpu/GpuTypes.h"
-#include "third_party/skia/include/gpu/GrBackendSurface.h"
-#include "third_party/skia/include/gpu/GrTypes.h"
+#include "third_party/skia/include/gpu/ganesh/GrBackendSurface.h"
+#include "third_party/skia/include/gpu/ganesh/GrTypes.h"
 #include "third_party/skia/include/gpu/ganesh/gl/GrGLBackendSurface.h"
-#include "third_party/skia/include/gpu/gl/GrGLTypes.h"
+#include "third_party/skia/include/gpu/ganesh/gl/GrGLTypes.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/color_space.h"
 
@@ -414,13 +414,11 @@ CanvasResourceSharedImage::CanvasResourceSharedImage(
     base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper,
     base::WeakPtr<CanvasResourceProvider> provider,
     cc::PaintFlags::FilterQuality filter_quality,
-    bool is_origin_top_left,
     bool is_accelerated,
     gpu::SharedImageUsageSet shared_image_usage_flags)
     : CanvasResource(std::move(provider), filter_quality, info.colorInfo()),
       context_provider_wrapper_(std::move(context_provider_wrapper)),
       size_(info.width(), info.height()),
-      is_origin_top_left_(is_origin_top_left),
       is_accelerated_(is_accelerated),
       is_overlay_candidate_(
           shared_image_usage_flags.Has(gpu::SHARED_IMAGE_USAGE_SCANOUT)),
@@ -453,9 +451,6 @@ CanvasResourceSharedImage::CanvasResourceSharedImage(
         shared_image_usage_flags | gpu::SHARED_IMAGE_USAGE_GLES2_WRITE;
   }
 
-  GrSurfaceOrigin surface_origin = is_origin_top_left_
-                                       ? kTopLeft_GrSurfaceOrigin
-                                       : kBottomLeft_GrSurfaceOrigin;
   SkAlphaType surface_alpha_type = GetSkColorInfo().alphaType();
 
   scoped_refptr<gpu::ClientSharedImage> client_shared_image;
@@ -468,8 +463,9 @@ CanvasResourceSharedImage::CanvasResourceSharedImage(
     // resolved.
 
     client_shared_image = shared_image_interface->CreateSharedImage(
-        {GetSharedImageFormat(), Size(), GetColorSpace(), surface_origin,
-         surface_alpha_type, gpu::SharedImageUsageSet(shared_image_usage_flags),
+        {GetSharedImageFormat(), Size(), GetColorSpace(),
+         kTopLeft_GrSurfaceOrigin, surface_alpha_type,
+         gpu::SharedImageUsageSet(shared_image_usage_flags),
          "CanvasResourceRasterGmb"},
         gpu::kNullSurfaceHandle, gfx::BufferUsage::SCANOUT_CPU_READ_WRITE);
     if (!client_shared_image) {
@@ -477,8 +473,9 @@ CanvasResourceSharedImage::CanvasResourceSharedImage(
     }
   } else {
     client_shared_image = shared_image_interface->CreateSharedImage(
-        {GetSharedImageFormat(), Size(), GetColorSpace(), surface_origin,
-         surface_alpha_type, gpu::SharedImageUsageSet(shared_image_usage_flags),
+        {GetSharedImageFormat(), Size(), GetColorSpace(),
+         kTopLeft_GrSurfaceOrigin, surface_alpha_type,
+         gpu::SharedImageUsageSet(shared_image_usage_flags),
          "CanvasResourceRaster"},
         gpu::kNullSurfaceHandle);
     CHECK(client_shared_image);
@@ -517,29 +514,17 @@ scoped_refptr<CanvasResourceSharedImage> CanvasResourceSharedImage::Create(
     base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper,
     base::WeakPtr<CanvasResourceProvider> provider,
     cc::PaintFlags::FilterQuality filter_quality,
-    bool is_origin_top_left,
     bool is_accelerated,
     gpu::SharedImageUsageSet shared_image_usage_flags) {
   TRACE_EVENT0("blink", "CanvasResourceSharedImage::Create");
   auto resource = base::AdoptRef(new CanvasResourceSharedImage(
       info, std::move(context_provider_wrapper), std::move(provider),
-      filter_quality, is_origin_top_left, is_accelerated,
-      shared_image_usage_flags));
+      filter_quality, is_accelerated, shared_image_usage_flags));
   return resource->IsValid() ? resource : nullptr;
 }
 
 bool CanvasResourceSharedImage::IsValid() const {
   return !!owning_thread_data_.client_shared_image;
-}
-
-void CanvasResourceSharedImage::BeginReadAccess() {
-  RasterInterface()->BeginSharedImageAccessDirectCHROMIUM(
-      GetTextureIdForReadAccess(), GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM);
-}
-
-void CanvasResourceSharedImage::EndReadAccess() {
-  RasterInterface()->EndSharedImageAccessDirectCHROMIUM(
-      GetTextureIdForReadAccess());
 }
 
 void CanvasResourceSharedImage::BeginWriteAccess() {
@@ -660,18 +645,14 @@ scoped_refptr<StaticBitmapImage> CanvasResourceSharedImage::Bitmap() {
 
   SkImageInfo image_info = CreateSkImageInfo();
   if (!is_accelerated_) {
-    std::unique_ptr<gpu::ClientSharedImage::ScopedMapping> mapping;
-    void* memory = nullptr;
-    size_t stride = 0;
-    mapping = GetClientSharedImage()->Map();
+    std::unique_ptr<gpu::ClientSharedImage::ScopedMapping> mapping =
+        GetClientSharedImage()->Map();
     if (!mapping) {
       LOG(ERROR) << "MapSharedImage Failed.";
       return nullptr;
     }
-    memory = mapping->Memory(0);
-    stride = mapping->Stride(0);
-    SkPixmap pixmap(CreateSkImageInfo(), memory, stride);
-    auto sk_image = SkImages::RasterFromPixmapCopy(pixmap);
+    auto sk_image = SkImages::RasterFromPixmapCopy(
+        mapping->GetSkPixmapForPlane(0, CreateSkImageInfo()));
 
     // Unmap the underlying buffer.
     mapping.reset();
@@ -714,10 +695,11 @@ scoped_refptr<StaticBitmapImage> CanvasResourceSharedImage::Bitmap() {
   auto client_shared_image = GetClientSharedImage();
   uint32_t texture_target = client_shared_image->GetTextureTarget();
 
+  CHECK_EQ(client_shared_image->surface_origin(), kTopLeft_GrSurfaceOrigin);
   // If its cross thread, then the sync token was already verified.
   image = AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
       std::move(client_shared_image), GetSyncToken(), texture_id_for_image,
-      image_info, texture_target, is_origin_top_left_,
+      image_info, texture_target, /*is_origin_top_left=*/true,
       context_provider_wrapper_, owning_thread_ref_, owning_thread_task_runner_,
       std::move(release_callback), supports_display_compositing_,
       is_overlay_candidate_);
@@ -735,18 +717,15 @@ void CanvasResourceSharedImage::CopyRenderingResultsToGpuMemoryBuffer(
   }
   auto* sii =
       ContextProviderWrapper()->ContextProvider()->SharedImageInterface();
-  std::unique_ptr<gpu::ClientSharedImage::ScopedMapping> mapping;
-  void* memory = nullptr;
-  size_t stride = 0;
-  mapping = GetClientSharedImage()->Map();
+  std::unique_ptr<gpu::ClientSharedImage::ScopedMapping> mapping =
+      GetClientSharedImage()->Map();
   if (!mapping) {
     LOG(ERROR) << "MapSharedImage failed.";
     return;
   }
-  memory = mapping->Memory(0);
-  stride = mapping->Stride(0);
 
-  auto surface = SkSurfaces::WrapPixels(CreateSkImageInfo(), memory, stride);
+  auto surface = SkSurfaces::WrapPixels(
+      mapping->GetSkPixmapForPlane(0, CreateSkImageInfo()));
   SkPixmap pixmap;
   image->peekPixels(&pixmap);
   surface->writePixels(pixmap, 0, 0);
@@ -885,10 +864,6 @@ bool ExternalCanvasResource::IsValid() const {
   // whether the resource was dropped later, when we attempt to access the
   // mailbox.
   return is_cross_thread() || context_provider_wrapper_;
-}
-
-void ExternalCanvasResource::TakeSkImage(sk_sp<SkImage> image) {
-  NOTREACHED_IN_MIGRATION();
 }
 
 scoped_refptr<StaticBitmapImage> ExternalCanvasResource::Bitmap() {
@@ -1037,10 +1012,6 @@ bool CanvasResourceSwapChain::IsValid() const {
   return !!context_provider_wrapper_;
 }
 
-void CanvasResourceSwapChain::TakeSkImage(sk_sp<SkImage> image) {
-  NOTREACHED_IN_MIGRATION();
-}
-
 scoped_refptr<StaticBitmapImage> CanvasResourceSwapChain::Bitmap() {
   SkImageInfo image_info = SkImageInfo::Make(
       SkISize::Make(Size().width(), Size().height()), GetSkColorInfo());
@@ -1110,12 +1081,9 @@ void CanvasResourceSwapChain::PresentSwapChain() {
   // copied into the back buffer to support a retained mode like canvas expects.
   // The wait sync token ensure that the present executes before we do the copy.
   // Don't generate sync token after the copy so that it's not on critical path.
-  raster_interface->CopySharedImage(
-      front_buffer_shared_image_->mailbox(),
-      back_buffer_shared_image_->mailbox(),
-      back_buffer_shared_image_->GetTextureTarget(), 0, 0, 0, 0, size_.width(),
-      size_.height(), false /* unpack_flip_y */,
-      false /* unpack_premultiply_alpha */);
+  raster_interface->CopySharedImage(front_buffer_shared_image_->mailbox(),
+                                    back_buffer_shared_image_->mailbox(), 0, 0,
+                                    0, 0, size_.width(), size_.height());
   // Restore shared image access after copy when using legacy GL raster.
   if (!use_oop_rasterization_) {
     raster_interface->BeginSharedImageAccessDirectCHROMIUM(

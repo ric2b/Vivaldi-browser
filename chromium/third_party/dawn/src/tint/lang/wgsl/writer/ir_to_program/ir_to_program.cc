@@ -293,7 +293,7 @@ class State {
             case core::ir::Function::PipelineStage::kCompute: {
                 auto wgsize = fn->WorkgroupSize().value();
                 attrs.Push(b.Stage(ast::PipelineStage::kCompute));
-                attrs.Push(b.WorkgroupSize(u32(wgsize[0]), u32(wgsize[1]), u32(wgsize[2])));
+                attrs.Push(b.WorkgroupSize(Expr(wgsize[0]), Expr(wgsize[1]), Expr(wgsize[2])));
                 break;
             }
             case core::ir::Function::PipelineStage::kFragment:
@@ -595,6 +595,14 @@ class State {
             case core::AddressSpace::kHandle:
                 b.GlobalVar(name, ty, init, std::move(attrs));
                 return;
+            case core::AddressSpace::kPixelLocal:
+                Enable(wgsl::Extension::kChromiumExperimentalPixelLocal);
+                b.GlobalVar(name, ty, init, ref->AddressSpace(), std::move(attrs));
+                return;
+            case core::AddressSpace::kPushConstant:
+                Enable(wgsl::Extension::kChromiumExperimentalPushConstant);
+                b.GlobalVar(name, ty, init, ref->AddressSpace(), std::move(attrs));
+                return;
             default:
                 b.GlobalVar(name, ty, init, ref->AddressSpace(), std::move(attrs));
                 return;
@@ -657,8 +665,10 @@ class State {
                     case wgsl::BuiltinFn::kSubgroupShuffleUp:
                     case wgsl::BuiltinFn::kSubgroupShuffleDown:
                     case wgsl::BuiltinFn::kSubgroupAdd:
+                    case wgsl::BuiltinFn::kSubgroupInclusiveAdd:
                     case wgsl::BuiltinFn::kSubgroupExclusiveAdd:
                     case wgsl::BuiltinFn::kSubgroupMul:
+                    case wgsl::BuiltinFn::kSubgroupInclusiveMul:
                     case wgsl::BuiltinFn::kSubgroupExclusiveMul:
                     case wgsl::BuiltinFn::kSubgroupAnd:
                     case wgsl::BuiltinFn::kSubgroupOr:

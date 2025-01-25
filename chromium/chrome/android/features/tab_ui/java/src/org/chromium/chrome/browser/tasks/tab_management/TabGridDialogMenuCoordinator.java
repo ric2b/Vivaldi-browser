@@ -12,7 +12,6 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils;
@@ -32,7 +31,6 @@ public class TabGridDialogMenuCoordinator extends TabGroupOverflowMenuCoordinato
     private Supplier<Integer> mTabIdSupplier;
 
     /**
-     * @param onItemClickedCallback A callback for listening to clicks.
      * @param tabModelSupplier The supplier of the tab model.
      * @param tabIdSupplier The tab ID supplier for the tab or a tab ID from the group being acted
      *     on.
@@ -63,7 +61,6 @@ public class TabGridDialogMenuCoordinator extends TabGroupOverflowMenuCoordinato
     /**
      * Creates a {@link View.OnClickListener} that creates the menu and shows it when clicked.
      *
-     * @param anchorView The view to anchor the menu on.
      * @return The on click listener.
      */
     public View.OnClickListener getOnClickListener() {
@@ -90,27 +87,25 @@ public class TabGridDialogMenuCoordinator extends TabGroupOverflowMenuCoordinato
                 BrowserUiListMenuUtils.buildMenuListItemWithIncognitoBranding(
                         R.string.tab_grid_dialog_toolbar_edit_group_name,
                         R.id.edit_group_name,
-                        R.drawable.material_ic_edit_24dp,
+                        R.drawable.edit_group_color_24dp, // Vivaldi
                         R.color.default_icon_color_light_tint_list,
                         R.style.TextAppearance_TextLarge_Primary_Baseline_Light,
                         isIncognito,
                         /* enabled= */ true));
-        if (ChromeFeatureList.sTabGroupParityAndroid.isEnabled()) {
-            itemList.add(
-                    BrowserUiListMenuUtils.buildMenuListItemWithIncognitoBranding(
-                            R.string.tab_grid_dialog_toolbar_edit_group_color,
-                            R.id.edit_group_color,
-                            R.drawable.ic_colorize_24dp,
-                            R.color.default_icon_color_light_tint_list,
-                            R.style.TextAppearance_TextLarge_Primary_Baseline_Light,
-                            isIncognito,
-                            /* enabled= */ true));
-        }
+        itemList.add(
+                BrowserUiListMenuUtils.buildMenuListItemWithIncognitoBranding(
+                        R.string.tab_grid_dialog_toolbar_edit_group_color,
+                        R.id.edit_group_color,
+                        R.drawable.edit_group_color_24dp, // Vivaldi
+                        R.color.default_icon_color_light_tint_list,
+                        R.style.TextAppearance_TextLarge_Primary_Baseline_Light,
+                        isIncognito,
+                        /* enabled= */ true));
         itemList.add(
                 BrowserUiListMenuUtils.buildMenuListItemWithIncognitoBranding(
                         R.string.tab_grid_dialog_toolbar_close_group,
-                        R.id.close_tab,
-                        R.drawable.ic_tab_close_24dp,
+                        R.id.close_tab_group,
+                        R.drawable.close_tab_group, // Vivaldi
                         R.color.default_icon_color_light_tint_list,
                         R.style.TextAppearance_TextLarge_Primary_Baseline_Light,
                         isIncognito,
@@ -119,8 +114,8 @@ public class TabGridDialogMenuCoordinator extends TabGroupOverflowMenuCoordinato
             itemList.add(
                     BrowserUiListMenuUtils.buildMenuListItemWithIncognitoBranding(
                             R.string.tab_grid_dialog_toolbar_delete_group,
-                            R.id.delete_tab,
-                            R.drawable.material_ic_delete_24dp,
+                            R.id.delete_tab_group,
+                            R.drawable.menu_recent_tabs_24dp, // Vivaldi
                             R.color.default_icon_color_light_tint_list,
                             R.style.TextAppearance_TextLarge_Primary_Baseline_Light,
                             isIncognito,
@@ -137,7 +132,7 @@ public class TabGridDialogMenuCoordinator extends TabGroupOverflowMenuCoordinato
         @MemberRole int memberRole = TabShareUtils.getSelfMemberRole(outcome, identityManager);
         if (memberRole != MemberRole.UNKNOWN) {
             // Insert these items above the close group menu item.
-            int insertionIndex = getMenuItemIndex(itemList, R.id.close_tab);
+            int insertionIndex = getMenuItemIndex(itemList, R.id.close_tab_group);
             itemList.add(
                     insertionIndex++,
                     BrowserUiListMenuUtils.buildMenuListItemWithIncognitoBranding(

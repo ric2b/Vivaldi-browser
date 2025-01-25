@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../ui/components/icon_button/icon_button.js';
+
 import * as i18n from '../../../core/i18n/i18n.js';
-import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
@@ -66,7 +67,6 @@ export class PropertyDeselectedEvent extends Event {
   }
 }
 
-// eslint-disable-next-line rulesdir/check_component_naming
 export class StylePropertyEditor extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
   #authoredProperties: Map<string, string> = new Map();
@@ -140,8 +140,8 @@ export class StylePropertyEditor extends HTMLElement {
               class=${classes}
               jslog=${VisualLogging.item().track({click: true}).context(`${propertyName}-${propertyValue}`)}
               @click=${() => this.#onButtonClick(propertyName, propertyValue, selected)}>
-        <${IconButton.Icon.Icon.litTagName} style=${transform} name=${iconInfo.iconName}>
-        </${IconButton.Icon.Icon.litTagName}>
+        <devtools-icon style=${transform} name=${iconInfo.iconName}>
+        </devtools-icon>
       </button>
     `;
   }

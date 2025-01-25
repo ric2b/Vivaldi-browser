@@ -100,7 +100,7 @@ class MenubarController : public views::MenuDelegate,
   bool ShowContextMenu(views::MenuItemView* source,
                        int command_id,
                        const gfx::Point& p,
-                       ui::MenuSourceType source_type) override;
+                       ui::mojom::MenuSourceType source_type) override;
   views::MenuItemView* GetVivaldiSiblingMenu(
       views::MenuItemView* menu,
       const gfx::Point& screen_point,

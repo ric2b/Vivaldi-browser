@@ -128,7 +128,7 @@ bool CanOpenInPrivateWindow(content::BrowserContext* browser_context,
   if (!link_url.is_valid())
     return false;
 
-  if (!IsURLAllowedInIncognito(link_url, browser_context))
+  if (!IsURLAllowedInIncognito(link_url))
     return false;
 
   policy::IncognitoModeAvailability incognito_avail =
@@ -346,7 +346,8 @@ void VivaldiRenderViewContextMenu::InitMenu() {
       request.support.password =
         driver &&
         driver->IsPasswordFieldForPasswordManager(
-            autofill::FieldRendererId(params_.field_renderer_id), params_);
+                        autofill::FieldRendererId(params_.field_renderer_id),
+                        params_.form_control_type);
       if (request.support.password) {
         request.support.passwordgeneration =
             password_manager_util::ManualPasswordGenerationEnabled(driver);

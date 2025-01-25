@@ -2,31 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import './Table.js';
+
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
-import * as TraceEngine from '../../../../models/trace/trace.js';
+import type {INPInsightModel} from '../../../../models/trace/insights/InteractionToNextPaint.js';
+import * as Trace from '../../../../models/trace/trace.js';
 import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
 import type * as Overlays from '../../overlays/overlays.js';
 
-import {BaseInsight, md, shouldRenderForCategory} from './Helpers.js';
-import * as SidebarInsight from './SidebarInsight.js';
-import {Table, type TableData} from './Table.js';
-import {InsightsCategories} from './types.js';
+import {BaseInsightComponent, shouldRenderForCategory} from './Helpers.js';
+import {Category} from './types.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
-  /**
-   * @description Text to tell the user about the longest user interaction.
-   */
-  description:
-      'Improve user responsiveness by improving the Interaction to Next Paint metric. Learn how to [Optimize INP](https://web.dev/articles/optimize-inp).',
-  /**
-   * @description Title for the performance insight "INP by phase", which shows a breakdown of INP by phases / sections.
-   */
-  title: 'INP by phase',
-  /**
-   *@description Label used to denote the longest user interaction.
-   */
-  longestInteraction: 'Longest interaction',
   /**
    *@description Label used for the phase/component/stage/section of a larger duration.
    */
@@ -54,118 +44,105 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/components/insights/InteractionToNextPaint.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-export function getINPInsight(insights: TraceEngine.Insights.Types.TraceInsightData|null, navigationId: string|null):
-    TraceEngine.Insights.Types.InsightResults['InteractionToNextPaint']|null {
-  if (!insights || !navigationId) {
-    return null;
-  }
-
-  const insightsByNavigation = insights.get(navigationId);
-  if (!insightsByNavigation) {
-    return null;
-  }
-
-  const insight = insightsByNavigation.InteractionToNextPaint;
-  if (insight instanceof Error) {
-    return null;
-  }
-  return insight;
-}
-
-export class InteractionToNextPaint extends BaseInsight {
-  static readonly litTagName = LitHtml.literal`devtools-performance-inp`;
-  override insightCategory: InsightsCategories = InsightsCategories.INP;
+export class InteractionToNextPaint extends BaseInsightComponent<INPInsightModel> {
+  static override readonly litTagName = LitHtml.literal`devtools-performance-inp`;
+  override insightCategory: Category = Category.INP;
   override internalName: string = 'inp';
-  override userVisibleTitle: string = i18nString(UIStrings.title);
 
   override createOverlays(): Overlays.Overlays.TimelineOverlay[] {
-    if (!this.data.insights || !this.data.navigationId) {
-      return [];
-    }
-    const {navigationId, insights} = this.data;
-
-    const insightsByNavigation = insights.get(navigationId);
-    if (!insightsByNavigation) {
+    if (!this.model) {
       return [];
     }
 
-    const insight = getINPInsight(insights, this.data.navigationId);
-    if (!insight) {
-      return [];
-    }
-
-    const event = insight.longestInteractionEvent;
+    const event = this.model.longestInteractionEvent;
     if (!event) {
       return [];
     }
 
-    const p1 = TraceEngine.Helpers.Timing.traceWindowFromMicroSeconds(
+    return this.#createOverlaysForPhase(event);
+  }
+
+  // If `phase` is -1, then all phases are included. Otherwise it's just that phase index.
+  #createOverlaysForPhase(event: Trace.Types.Events.SyntheticInteractionPair, phase = -1):
+      Overlays.Overlays.TimelineOverlay[] {
+    const p1 = Trace.Helpers.Timing.traceWindowFromMicroSeconds(
         event.ts,
-        (event.ts + event.inputDelay) as TraceEngine.Types.Timing.MicroSeconds,
+        (event.ts + event.inputDelay) as Trace.Types.Timing.MicroSeconds,
     );
-    const p2 = TraceEngine.Helpers.Timing.traceWindowFromMicroSeconds(
+    const p2 = Trace.Helpers.Timing.traceWindowFromMicroSeconds(
         p1.max,
-        (p1.max + event.mainThreadHandling) as TraceEngine.Types.Timing.MicroSeconds,
+        (p1.max + event.mainThreadHandling) as Trace.Types.Timing.MicroSeconds,
     );
-    const p3 = TraceEngine.Helpers.Timing.traceWindowFromMicroSeconds(
+    const p3 = Trace.Helpers.Timing.traceWindowFromMicroSeconds(
         p2.max,
-        (p2.max + event.presentationDelay) as TraceEngine.Types.Timing.MicroSeconds,
+        (p2.max + event.presentationDelay) as Trace.Types.Timing.MicroSeconds,
     );
-    const sections = [
+    let sections = [
       {bounds: p1, label: i18nString(UIStrings.inputDelay), showDuration: true},
       {bounds: p2, label: i18nString(UIStrings.processingDuration), showDuration: true},
       {bounds: p3, label: i18nString(UIStrings.presentationDelay), showDuration: true},
     ];
+    if (phase !== -1) {
+      sections = [sections[phase]];
+    }
 
     return [
       {
         type: 'TIMESPAN_BREAKDOWN',
         sections,
-      },
-      {
-        type: 'ENTRY_LABEL',
-        // TODO(b/351757537) why aren't annotations rendering for synthetic events?
+        renderLocation: 'BELOW_EVENT',
         entry: event,
-        label: i18nString(UIStrings.longestInteraction),
       },
     ];
   }
 
-  #render(event: TraceEngine.Types.TraceEvents.SyntheticInteractionPair): LitHtml.TemplateResult {
-    const time = (us: TraceEngine.Types.Timing.MicroSeconds): string =>
+  #render(event: Trace.Types.Events.SyntheticInteractionPair): LitHtml.LitTemplate {
+    if (!this.model) {
+      return LitHtml.nothing;
+    }
+
+    const time = (us: Trace.Types.Timing.MicroSeconds): string =>
         i18n.TimeUtilities.millisToString(Platform.Timing.microSecondsToMilliSeconds(us));
 
     // clang-format off
-    return LitHtml.html`
+    return html`
         <div class="insights">
-            <${SidebarInsight.SidebarInsight.litTagName} .data=${{
-            title: this.userVisibleTitle,
+            <devtools-performance-sidebar-insight .data=${{
+            title: this.model.title,
+            description: this.model.description,
+            internalName: this.internalName,
             expanded: this.isActive(),
-            } as SidebarInsight.InsightDetails}
+            }}
             @insighttoggleclick=${this.onSidebarClick}>
-                <div slot="insight-description" class="insight-description">
-                  ${md(i18nString(UIStrings.description))}
-                </div>
-                <div slot="insight-content">
-                  ${LitHtml.html`<${Table.litTagName}
+                <div slot="insight-content" class="insight-section">
+                  ${html`<devtools-performance-table
                     .data=${{
+                      insight: this,
                       headers: [i18nString(UIStrings.phase), i18nString(UIStrings.duration)],
                       rows: [
-                        [i18nString(UIStrings.inputDelay), time(event.inputDelay)],
-                        [i18nString(UIStrings.processingDuration), time(event.mainThreadHandling)],
-                        [i18nString(UIStrings.presentationDelay), time(event.presentationDelay)],
+                        {
+                          values: [i18nString(UIStrings.inputDelay), time(event.inputDelay)],
+                          overlays: this.#createOverlaysForPhase(event, 0),
+                        },
+                        {
+                          values: [i18nString(UIStrings.processingDuration), time(event.mainThreadHandling)],
+                          overlays: this.#createOverlaysForPhase(event, 1),
+                        },
+                        {
+                          values: [i18nString(UIStrings.presentationDelay), time(event.presentationDelay)],
+                          overlays: this.#createOverlaysForPhase(event, 2),
+                        },
                       ],
-                    } as TableData}>
-                  </${Table.litTagName}>`}
+                    }}>
+                  </devtools-performance-table>`}
                 </div>
-            </${SidebarInsight.SidebarInsight}>
+            </devtools-performance-sidebar-insight>
         </div>`;
-    // clang-format on
+            // clang-format on
   }
 
   override render(): void {
-    const insight = getINPInsight(this.data.insights, this.data.navigationId);
-    const event = insight?.longestInteractionEvent;
+    const event = this.model?.longestInteractionEvent;
 
     const matchesCategory = shouldRenderForCategory({
       activeCategory: this.data.activeCategory,

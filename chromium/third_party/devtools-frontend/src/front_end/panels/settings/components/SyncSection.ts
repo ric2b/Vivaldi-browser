@@ -2,15 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as Common from '../../../core/common/common.js';
-import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
+import '../../../ui/components/chrome_link/chrome_link.js';
+import '../../../ui/components/settings/settings.js';
+
+import type * as Common from '../../../core/common/common.js';
 import type * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
+import type * as Platform from '../../../core/platform/platform.js';
+import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
-import * as Settings from '../../../ui/components/settings/settings.js';
-import * as ChromeLink from '../../../ui/components/chrome_link/chrome_link.js';
 
 import syncSectionStyles from './syncSection.css.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -43,7 +47,6 @@ export interface SyncSectionData {
 }
 
 export class SyncSection extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-sync-section`;
   readonly #shadow = this.attachShadow({mode: 'open'});
 
   #syncInfo: Host.InspectorFrontendHostAPI.SyncInformation = {isSyncActive: false};
@@ -72,13 +75,12 @@ export class SyncSection extends HTMLElement {
     this.#syncSetting?.setDisabled(checkboxDisabled);
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    LitHtml.render(LitHtml.html`
+    LitHtml.render(html`
       <fieldset>
-        <legend>${Common.Settings.getLocalizedSettingsCategory(Common.Settings.SettingCategory.SYNC)}</legend>
         ${renderAccountInfoOrWarning(this.#syncInfo)}
-        <${Settings.SettingCheckbox.SettingCheckbox.litTagName} .data=${
-            {setting: this.#syncSetting} as Settings.SettingCheckbox.SettingCheckboxData}>
-        </${Settings.SettingCheckbox.SettingCheckbox.litTagName}>
+        <setting-checkbox .data=${
+            {setting: this.#syncSetting}}>
+        </setting-checkbox>
       </fieldset>
     `, this.#shadow, {host: this});
     // clang-format on
@@ -90,28 +92,28 @@ export class SyncSection extends HTMLElement {
 
 function renderAccountInfoOrWarning(syncInfo: Host.InspectorFrontendHostAPI.SyncInformation): LitHtml.TemplateResult {
   if (!syncInfo.isSyncActive) {
-    const link = 'chrome://settings/syncSetup';
+    const link = 'chrome://settings/syncSetup' as Platform.DevToolsPath.UrlString;
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
+    return html`
       <span class="warning">
         ${i18nString(UIStrings.syncDisabled)}
-        <${ChromeLink.ChromeLink.ChromeLink.litTagName} .href=${link}>${i18nString(UIStrings.settings)}</${ChromeLink.ChromeLink.ChromeLink.litTagName}>
+        <devtools-chrome-link .href=${link}>${i18nString(UIStrings.settings)}</devtools-chrome-link>
       </span>`;
     // clang-format on
   }
   if (!syncInfo.arePreferencesSynced) {
-    const link = 'chrome://settings/syncSetup/advanced';
+    const link = 'chrome://settings/syncSetup/advanced' as Platform.DevToolsPath.UrlString;
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    return LitHtml.html`
+    return html`
       <span class="warning">
         ${i18nString(UIStrings.preferencesSyncDisabled)}
-        <${ChromeLink.ChromeLink.ChromeLink.litTagName} .href=${link}>${i18nString(UIStrings.settings)}</${ChromeLink.ChromeLink.ChromeLink.litTagName}>
+        <devtools-chrome-link .href=${link}>${i18nString(UIStrings.settings)}</devtools-chrome-link>
       </span>`;
     // clang-format on
   }
-  return LitHtml.html`
+  return html`
     <div class="account-info">
       <img src="data:image/png;base64, ${syncInfo.accountImage}" alt="Account avatar" />
       <div class="account-email">

@@ -346,9 +346,6 @@ public class SearchEngineAdapter extends BaseAdapter
 
     private static @TemplateUrlSourceType int getSearchEngineSourceType(
             TemplateUrl templateUrl, TemplateUrl defaultSearchEngine) {
-        // We don't separate PREPOPULATED and others in the Vivaldi UI
-        return TemplateUrlSourceType.PREPOPULATED;
-        /*
         if (templateUrl.getIsPrepopulated()) {
             return TemplateUrlSourceType.PREPOPULATED;
         } else if (templateUrl.getNativePtr() == defaultSearchEngine.getNativePtr()) {
@@ -356,7 +353,6 @@ public class SearchEngineAdapter extends BaseAdapter
         } else {
             return TemplateUrlSourceType.RECENT;
         }
-        */
     }
 
     private static boolean containsTemplateUrl(

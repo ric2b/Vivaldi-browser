@@ -1,37 +1,11 @@
-#version 310 es
-precision highp float;
-precision highp int;
+SKIP: INVALID
 
-layout(binding = 0, rgba16f) uniform highp writeonly image2D arg_0;
-void textureStore_58fc35() {
-  uint arg_1 = 1u;
-  vec4 arg_2 = vec4(1.0f);
-  imageStore(arg_0, ivec2(uvec2(arg_1, 0u)), arg_2);
-}
+<dawn>/src/tint/lang/glsl/writer/printer/printer.cc:733 internal compiler error: TINT_UNREACHABLE invalid texel format for read-write
+********************************************************************
+*  The tint shader compiler has encountered an unexpected error.   *
+*                                                                  *
+*  Please help us fix this issue by submitting a bug report at     *
+*  crbug.com/tint with the source program that triggered the bug.  *
+********************************************************************
 
-void fragment_main() {
-  textureStore_58fc35();
-}
-
-void main() {
-  fragment_main();
-  return;
-}
-#version 310 es
-
-layout(binding = 0, rgba16f) uniform highp writeonly image2D arg_0;
-void textureStore_58fc35() {
-  uint arg_1 = 1u;
-  vec4 arg_2 = vec4(1.0f);
-  imageStore(arg_0, ivec2(uvec2(arg_1, 0u)), arg_2);
-}
-
-void compute_main() {
-  textureStore_58fc35();
-}
-
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-void main() {
-  compute_main();
-  return;
-}
+tint executable returned error: signal: trace/BPT trap

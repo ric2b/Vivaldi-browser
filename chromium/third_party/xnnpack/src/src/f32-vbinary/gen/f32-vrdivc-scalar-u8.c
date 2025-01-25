@@ -19,7 +19,7 @@ void xnn_f32_vrdivc_ukernel__scalar_u8(
     const float* input_a,
     const float* input_b,
     float* output,
-    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
@@ -48,7 +48,6 @@ void xnn_f32_vrdivc_ukernel__scalar_u8(
     float vacc5 = vb / va5;
     float vacc6 = vb / va6;
     float vacc7 = vb / va7;
-
 
 
     output[0] = vacc0;

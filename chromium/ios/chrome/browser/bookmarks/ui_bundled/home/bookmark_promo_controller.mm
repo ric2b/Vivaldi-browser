@@ -49,18 +49,17 @@
   self = [super init];
   if (self) {
     _delegate = delegate;
-    ChromeBrowserState* browserState =
-        browser->GetBrowserState()->GetOriginalChromeBrowserState();
+    ProfileIOS* profile = browser->GetProfile()->GetOriginalProfile();
     _browser = browser->AsWeakPtr();
     _identityManagerObserverBridge.reset(
         new signin::IdentityManagerObserverBridge(
-            IdentityManagerFactory::GetForProfile(browserState), self));
+            IdentityManagerFactory::GetForProfile(profile), self));
     _signinPromoViewMediator = [[SigninPromoViewMediator alloc]
         initWithAccountManagerService:ChromeAccountManagerServiceFactory::
-                                          GetForBrowserState(browserState)
+                                          GetForProfile(profile)
                           authService:AuthenticationServiceFactory::
-                                          GetForBrowserState(browserState)
-                          prefService:browserState->GetPrefs()
+                                          GetForProfile(profile)
+                          prefService:profile->GetPrefs()
                           syncService:syncService
                           accessPoint:signin_metrics::AccessPoint::
                                           ACCESS_POINT_BOOKMARK_MANAGER
@@ -81,11 +80,6 @@
   _identityManagerObserverBridge.reset();
 }
 
-- (void)hidePromoCell {
-  DCHECK(_browser);
-  self.shouldShowSigninPromo = NO;
-}
-
 - (void)setShouldShowSigninPromo:(BOOL)shouldShowSigninPromo {
   if (_shouldShowSigninPromo != shouldShowSigninPromo) {
     _shouldShowSigninPromo = shouldShowSigninPromo;
@@ -95,14 +89,12 @@
 
 - (void)updateShouldShowSigninPromo {
   DCHECK(_browser);
-  ChromeBrowserState* browserState =
-      _browser->GetBrowserState()->GetOriginalChromeBrowserState();
+  ProfileIOS* profile = _browser->GetProfile()->GetOriginalProfile();
   AuthenticationService* authenticationService =
-      AuthenticationServiceFactory::GetForBrowserState(browserState);
+      AuthenticationServiceFactory::GetForProfile(profile);
   signin::IdentityManager* identityManager =
-      IdentityManagerFactory::GetForProfile(browserState);
-  syncer::SyncService* syncService =
-      SyncServiceFactory::GetForBrowserState(browserState);
+      IdentityManagerFactory::GetForProfile(profile);
+  syncer::SyncService* syncService = SyncServiceFactory::GetForProfile(profile);
 
   std::optional<SigninPromoAction> signinPromoAction;
   if (!identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
@@ -144,8 +136,7 @@
               signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER
                                     signinPromoAction:signinPromoAction.value()
                                 authenticationService:authenticationService
-                                          prefService:browserState
-                                                          ->GetPrefs()]) {
+                                          prefService:profile->GetPrefs()]) {
     self.shouldShowSigninPromo = NO;
     return;
   }

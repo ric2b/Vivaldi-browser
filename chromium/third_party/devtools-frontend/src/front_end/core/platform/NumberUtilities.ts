@@ -16,26 +16,6 @@ export const mod = (m: number, n: number): number => {
   return ((m % n) + n) % n;
 };
 
-export const bytesToString = (bytes: number): string => {
-  if (bytes < 1000) {
-    return `${bytes.toFixed(0)}\xA0B`;
-  }
-
-  const kilobytes = bytes / 1000;
-  if (kilobytes < 100) {
-    return `${kilobytes.toFixed(1)}\xA0kB`;
-  }
-  if (kilobytes < 1000) {
-    return `${kilobytes.toFixed(0)}\xA0kB`;
-  }
-
-  const megabytes = kilobytes / 1000;
-  if (megabytes < 100) {
-    return `${megabytes.toFixed(1)}\xA0MB`;
-  }
-  return `${megabytes.toFixed(0)}\xA0MB`;
-};
-
 export const toFixedIfFloating = (value: string): string => {
   if (!value || Number.isNaN(Number(value))) {
     return value;
@@ -48,6 +28,15 @@ export const toFixedIfFloating = (value: string): string => {
  * Rounds a number (including float) down.
  */
 export const floor = (value: number, precision: number = 0): number => {
+  // Allows for rounding to the nearest whole number.
+  // Ex: 1 / 10 -> round down to nearest 10th place
+  // Ex: 1 / 5 -> round down to nearest 5
+  // Ex: 1 / 50 -> round down to nearest 50
+  if (precision > 0 && precision < 1) {
+    precision = 1 / precision;
+    return Math.floor(value / precision) * precision;
+  }
+
   const mult = Math.pow(10, precision);
   return Math.floor(value * mult) / mult;
 };

@@ -59,7 +59,8 @@ public:
                                             DawnResourceProvider* resourceProvider,
                                             const RuntimeEffectDictionary* runtimeDict,
                                             const GraphicsPipelineDesc& pipelineDesc,
-                                            const RenderPassDesc& renderPassDesc);
+                                            const RenderPassDesc& renderPassDesc,
+                                            SkEnumBitMask<PipelineCreationFlags>);
 
     ~DawnGraphicsPipeline() override;
 
@@ -80,7 +81,7 @@ private:
                          BindGroupLayouts groupLayouts,
                          PrimitiveType primitiveType,
                          uint32_t refValue,
-                         skia_private::AutoTArray<sk_sp<DawnSampler>> immutableSamplers);
+                         skia_private::TArray<sk_sp<DawnSampler>> immutableSamplers);
 
     void freeGpuData() override;
 
@@ -90,7 +91,7 @@ private:
     const uint32_t fStencilReferenceValue;
 
     // Hold a ref to immutable samplers used such that their lifetime is properly managed.
-    const skia_private::AutoTArray<sk_sp<DawnSampler>> fImmutableSamplers;
+    const skia_private::TArray<sk_sp<DawnSampler>> fImmutableSamplers;
 };
 
 } // namespace skgpu::graphite

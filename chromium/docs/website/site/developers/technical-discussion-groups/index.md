@@ -52,6 +52,8 @@ title: Technical Discussion Groups
 *   [blink-network-dev](https://groups.google.com/a/chromium.org/forum/#!forum/blink-network-dev)
     *   Technical discussions about the web platform networking APIs -
                 covering XMLHttpRequest, Fetch API, Streams, WebSocket, etc.
+*   [build](https://groups.google.com/a/chromium.org/g/build)
+    *   Discussion of build-related issues for the Chromium browser
 *   [chromium-accessibility](https://groups.google.com/a/chromium.org/group/chromium-accessibility)
     *   The engineering (developer) team uses this to discuss technical
                 issues related to Chromium accessibility, including

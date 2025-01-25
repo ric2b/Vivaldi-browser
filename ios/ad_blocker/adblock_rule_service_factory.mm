@@ -15,23 +15,22 @@
 namespace adblock_filter {
 
 // static
-RuleService* RuleServiceFactory::GetForBrowserState(
-    ChromeBrowserState* browser_state) {
+RuleService* RuleServiceFactory::GetForProfile(ProfileIOS* profile) {
   return static_cast<RuleService*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 // static
-RuleService* RuleServiceFactory::GetForBrowserStateIfExists(
-    ChromeBrowserState* browser_state) {
+RuleService* RuleServiceFactory::GetForProfileIfExists(
+    ProfileIOS* profile) {
   // Since this is called as part of destroying the browser state, we need this
   // extra test to avoid running into code that tests whether the browser state
   // is still valid.
-  if (!GetInstance()->IsServiceCreated(browser_state)) {
+  if (!GetInstance()->IsServiceCreated(profile)) {
     return nullptr;
   }
   return static_cast<RuleService*>(
-      GetInstance()->GetServiceForBrowserState(browser_state, false));
+      GetInstance()->GetServiceForBrowserState(profile, false));
 }
 
 // static

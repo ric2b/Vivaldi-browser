@@ -154,10 +154,6 @@ class WebAppUiManager {
   virtual bool IsInAppWindow(content::WebContents* web_contents) const = 0;
   virtual const webapps::AppId* GetAppIdForWindow(
       const content::WebContents* web_contents) const = 0;
-  virtual void NotifyOnAssociatedAppChanged(
-      content::WebContents* web_contents,
-      const std::optional<webapps::AppId>& previous_app_id,
-      const std::optional<webapps::AppId>& new_app_id) const = 0;
 
   virtual bool CanReparentAppTabToWindow(const webapps::AppId& app_id,
                                          bool shortcut_created) const = 0;
@@ -166,6 +162,14 @@ class WebAppUiManager {
   virtual Browser* ReparentAppTabToWindow(content::WebContents* contents,
                                           const webapps::AppId& app_id,
                                           bool shortcut_created) = 0;
+
+  // Reparents the `contents` to a new browser window, returns a nullptr if the
+  // operation failed. Runs `completion_callback` with the web contents of the
+  // newly reparented app window.
+  virtual Browser* ReparentAppTabToWindow(
+      content::WebContents* contents,
+      const webapps::AppId& app_id,
+      base::OnceCallback<void(content::WebContents*)> completion_callback) = 0;
 
   // Shows the pre-launch dialog for a file handling web app launch. The user
   // can allow or block the launch.

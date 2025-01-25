@@ -22,6 +22,7 @@ class Profile;
 // Vivaldi
 struct ImportedNotesEntry;
 struct ImportedSpeedDialEntry;
+struct ImportedTabEntry;
 namespace extension_importer {
 class ChromiumExtensionsImporter;
 }
@@ -109,6 +110,9 @@ class ProfileWriter : public base::RefCountedThreadSafe<ProfileWriter> {
 
   virtual void AddExtensions(const std::vector<std::string>& extensions,
                              base::WeakPtr<ExternalProcessImporterHost> host);
+
+  virtual void AddOpenTabs(
+      const std::vector<ImportedTabEntry>& tabs);
 
  protected:
   friend class base::RefCountedThreadSafe<ProfileWriter>;

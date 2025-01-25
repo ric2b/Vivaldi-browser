@@ -69,4 +69,9 @@ extern NSString* const kSiriOpenLensFromIntents;
 // NSUserActivity for Clear Browsing Data intent.
 extern NSString* const kSiriClearBrowsingData;
 
+// Vivaldi
+// Home Screen Shortcut for uninstall survey form
+extern NSString* const kShowUninstallSurvey;
+// End Vivaldi
+
 #endif  // IOS_CHROME_BROWSER_INTENTS_INTENTS_CONSTANTS_H_

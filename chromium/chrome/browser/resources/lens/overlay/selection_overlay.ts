@@ -8,7 +8,7 @@ import './region_selection.js';
 import './post_selection_renderer.js';
 import './overlay_shimmer.js';
 import './overlay_shimmer_canvas.js';
-import './strings.m.js';
+import '/strings.m.js';
 import '//resources/cr_elements/cr_button/cr_button.js';
 import '//resources/cr_elements/cr_toast/cr_toast.js';
 
@@ -173,14 +173,10 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
       },
       enableCopyAsImage: {
         type: Boolean,
-        readOnly: true,
-        value: loadTimeData.getBoolean('enableCopyAsImage'),
         reflectToAttribute: true,
       },
       enableSaveAsImage: {
         type: Boolean,
-        readOnly: true,
-        value: loadTimeData.getBoolean('enableSaveAsImage'),
         reflectToAttribute: true,
       },
       isClosing: {
@@ -212,6 +208,8 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
         reflectToAttribute: true,
       },
       selectionOverlayRect: Object,
+      isSearchboxFocused: Boolean,
+      areLanguagePickersOpen: Boolean,
     };
   }
 
@@ -237,6 +235,13 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
   // bounds of the screenshot and the part the user interacts with. This should
   // be used instead of call getBoundingClientRect().
   private selectionOverlayRect: DOMRect;
+  // Whether the users focus is currently in the overlay searchbox. Passed in
+  // from parent.
+  private isSearchboxFocused: boolean;
+  // Whether any of the language pickers are currently open. Passed in from
+  // parent.
+  private areLanguagePickersOpen: boolean;
+
   // The selected region on which the context menu is being displayed. Used as
   // argument for copy and save as image calls.
   private selectedRegionContextMenuBox: CenterRotatedBox;
@@ -253,8 +258,10 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
   private currentGesture: GestureEvent = emptyGestureEvent();
   private disableShimmer: boolean;
   private useShimmerCanvas: boolean;
-  private enableCopyAsImage: boolean;
-  private enableSaveAsImage: boolean;
+  private enableCopyAsImage: boolean =
+      loadTimeData.getBoolean('enableCopyAsImage');
+  private enableSaveAsImage: boolean =
+      loadTimeData.getBoolean('enableSaveAsImage');
   private suppressCopyAndSaveAsImage: boolean =
       loadTimeData.getString('invocationSource') ===
       'ContentAreaContextMenuImage';
@@ -327,6 +334,10 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
         document, 'translate-mode-state-changed',
         (e: CustomEvent<TranslateState>) => {
           this.showTranslateContextMenuItem = !e.detail.translateModeEnabled;
+          this.translateModeEnabled = e.detail.translateModeEnabled;
+          // Resetting the cursor will properly set it to text or normal
+          // based on the current translate mode.
+          this.resetCursor();
         });
     this.eventTracker_.add(
         document, 'show-selected-text-context-menu',
@@ -380,6 +391,18 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
               this.showDetectedTextContextMenuOptions;
         });
     this.eventTracker_.add(
+        document, 'restore-selected-region-context-menu', () => {
+          // show-selected-region-context-menu may not have been called yet if
+          // we are still waiting for the text layer to receive text. Check for
+          // this condition by checking if the box has been set.
+          if (this.selectedRegionContextMenuBox !== undefined) {
+            this.showSelectedRegionContextMenu =
+                (!this.suppressCopyAndSaveAsImage &&
+                 (this.enableCopyAsImage || this.enableSaveAsImage)) ||
+                this.showDetectedTextContextMenuOptions;
+          }
+        });
+    this.eventTracker_.add(
         document, 'hide-selected-region-context-menu', () => {
           this.showSelectedRegionContextMenu = false;
           this.detectedTextStartIndex = -1;
@@ -410,14 +433,6 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
     this.eventTracker_.add(document, 'unfocus-region', () => {
       this.shimmerOnSegmentation = false;
     });
-    this.eventTracker_.add(
-        document, 'translate-mode-state-changed',
-        (e: CustomEvent<TranslateState>) => {
-          this.translateModeEnabled = e.detail.translateModeEnabled;
-          // Resetting the cursor will properly set it to text or normal
-          // based on the current translate mode.
-          this.resetCursor();
-        });
 
     this.updateSelectionOverlayRect();
     this.updateDevicePixelRatioListener();
@@ -616,54 +631,166 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
     }
 
     if (event.button === 2 /* right button */) {
-      this.$.textSelectionLayer.handleRightClick(event);
+      if (this.$.textSelectionLayer.handleRightClick(event)) {
+        return;
+      }
+      this.$.postSelectionRenderer.handleRightClick(event);
       return;
     }
 
-    this.dispatchEvent(new CustomEvent(
-        'selection-overlay-clicked', {bubbles: true, composed: true}));
     this.addDragListeners();
-    this.browserProxy.handler.closeSearchBubble();
-    this.browserProxy.handler.closePreselectionBubble();
-    this.suppressCopyAndSaveAsImage = false;
 
     this.currentGesture = {
-      state: GestureState.STARTING,
+      state: GestureState.NOT_STARTED,
       startX: event.clientX,
       startY: event.clientY,
       clientX: event.clientX,
       clientY: event.clientY,
     };
 
-    if (this.$.textSelectionLayer.handleDownGesture(this.currentGesture)) {
-      // Text is responding to this sequence of gestures.
-      this.draggingRespondent = DragFeature.TEXT;
-      this.$.postSelectionRenderer.clearSelection();
-    } else if (this.$.postSelectionRenderer.handleDownGesture(
-                   this.currentGesture)) {
-      this.draggingRespondent = DragFeature.POST_SELECTION;
+    // Try to close the translate feature promo if it is currently active. No-op
+    // if it is not active.
+    this.browserProxy.handler.maybeCloseTranslateFeaturePromo(
+        /*featureEngaged=*/ false);
+
+    // If searchbox is stealing focus, we only want to respond to drag gestures,
+    // so wait to send gesture started until a drag has happened. This is also
+    // the case if the language pickers are currently open.
+    if (!this.isSearchboxFocused && !this.areLanguagePickersOpen) {
+      // If searchbox isn't stealing focus, start the gesture ASAP.
+      this.handleGestureStart();
     }
   }
 
   private onPointerUp(event: PointerEvent) {
     this.updateGestureCoordinates(event);
 
+    if (this.currentGesture.state === GestureState.DRAGGING) {
+      // Cancel the animation frame and handle the drag event immediately so
+      // handleGestureEnd is not in an unexpected state.
+      this.cancelPendingDragAnimationFrame();
+      this.handleGestureDrag(event);
+    }
+
+    // Allow the clients to respond to the gesture, IFF a gesture has started.
+    if (this.currentGesture.state !== GestureState.NOT_STARTED) {
+      this.handleGestureEnd();
+    }
+
+    // After features have responded to the event, reset the current drag state.
+    this.currentGesture = emptyGestureEvent();
+    this.draggingRespondent = DragFeature.NONE;
+    this.removeDragListeners();
+  }
+
+  private onPointerMove(event: PointerEvent) {
+    this.updateGestureCoordinates(event);
+
+    // Ignore the event if the user isn't explicitly dragging yet.
+    if (!this.isDragging()) {
+      return;
+    }
+
+    if (this.currentGesture.state === GestureState.NOT_STARTED) {
+      // If a gesture hasn't started, start the gesture now that the user is
+      // dragging.
+      this.handleGestureStart();
+    }
+
+    if (this.currentGesture.state === GestureState.STARTING) {
+      // If the gesture just started, move into the dragging state.
+      this.set('currentGesture.state', GestureState.DRAGGING);
+    }
+
+    // If we haven't exited early, we must be in the dragging state.
+    assert(this.currentGesture.state === GestureState.DRAGGING);
+
+    // Handle the drag.
+    this.cancelPendingDragAnimationFrame();
+    this.onPointerMoveRequestId = requestAnimationFrame(() => {
+      this.handleGestureDrag(event);
+      this.onPointerMoveRequestId = undefined;
+    });
+  }
+
+  private cancelPendingDragAnimationFrame() {
+    if (this.onPointerMoveRequestId) {
+      cancelAnimationFrame(this.onPointerMoveRequestId);
+    }
+  }
+
+  private onPointerCancel() {
+    // Pointer cancelled, so cancel any pending gestures.
+    this.handleGestureCancel();
+
+    this.currentGesture = emptyGestureEvent();
+    this.draggingRespondent = DragFeature.NONE;
+    this.removeDragListeners();
+    this.resetCursor();
+  }
+
+  private handleGestureStart() {
+    this.set('currentGesture.state', GestureState.STARTING);
+
+    // Send events to hide UI.
+    this.browserProxy.handler.closeSearchBubble();
+    this.browserProxy.handler.closePreselectionBubble();
+    this.suppressCopyAndSaveAsImage = false;
+    this.dispatchEvent(
+        new CustomEvent('selection-started', {bubbles: true, composed: true}));
+
+    if (this.$.textSelectionLayer.handleGestureStart(this.currentGesture)) {
+      // Text is responding to this sequence of gestures.
+      this.draggingRespondent = DragFeature.TEXT;
+      this.$.postSelectionRenderer.clearSelection();
+    } else if (this.$.postSelectionRenderer.handleGestureStart(
+                   this.currentGesture)) {
+      this.draggingRespondent = DragFeature.POST_SELECTION;
+    }
+  }
+
+  private handleGestureDrag(event: PointerEvent) {
+    assert(this.currentGesture.state === GestureState.DRAGGING);
+    // Capture pointer events so gestures still work if the users pointer
+    // leaves the selection overlay div. Pointer capture is implicitly
+    // released after pointerup or pointercancel events.
+    this.setPointerCapture(event.pointerId);
+
+    if (this.draggingRespondent === DragFeature.TEXT) {
+      this.setCursorToText();
+      this.$.textSelectionLayer.handleGestureDrag(this.currentGesture);
+    } else if (this.draggingRespondent === DragFeature.POST_SELECTION) {
+      this.$.postSelectionRenderer.handleGestureDrag(this.currentGesture);
+    } else if (!this.translateModeEnabled) {
+      // Let the features respond to the current drag if no other feature
+      // responded first, but only if translate mode is not enabled.
+      // The dragging responding may not be TEXT in translate mode if
+      // there is no selectable text.
+      this.setCursorToCrosshair();
+      this.$.postSelectionRenderer.clearSelection();
+      this.draggingRespondent = DragFeature.MANUAL_REGION;
+      this.$.regionSelectionLayer.handleGestureDrag(this.currentGesture);
+    }
+  }
+
+  private handleGestureEnd() {
     // Allow proper feature to respond to the tap/drag event.
     switch (this.currentGesture.state) {
       case GestureState.DRAGGING:
+
         // Drag has finished. Let the features respond to the end of a drag.
         if (this.draggingRespondent === DragFeature.MANUAL_REGION) {
-          this.$.regionSelectionLayer.handleUpGesture(this.currentGesture);
+          this.$.regionSelectionLayer.handleGestureEnd(this.currentGesture);
         } else if (this.draggingRespondent === DragFeature.TEXT) {
-          this.$.textSelectionLayer.handleUpGesture();
+          this.$.textSelectionLayer.handleGestureEnd();
         } else if (this.draggingRespondent === DragFeature.POST_SELECTION) {
-          this.$.postSelectionRenderer.handleUpGesture();
+          this.$.postSelectionRenderer.handleGestureEnd();
         }
         break;
       case GestureState.STARTING:
         // This gesture was a tap. Let the features respond to a tap.
         if (this.draggingRespondent === DragFeature.TEXT) {
-          this.$.textSelectionLayer.handleUpGesture();
+          this.$.textSelectionLayer.handleGestureEnd();
           break;
         }
         if (this.translateModeEnabled) {
@@ -672,78 +799,26 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
           // there is no selectable text on the screen at all.
           break;
         }
-        if (this.$.objectSelectionLayer.handleUpGesture(this.currentGesture)) {
+        if (this.$.objectSelectionLayer.handleGestureEnd(this.currentGesture)) {
           break;
         }
-
-        this.$.regionSelectionLayer.handleUpGesture(this.currentGesture);
+        this.$.regionSelectionLayer.handleGestureEnd(this.currentGesture);
         break;
       default:  // Other states are invalid and ignored.
         break;
     }
 
-    // After features have responded to the event, reset the current drag state.
-    this.currentGesture = emptyGestureEvent();
-    this.draggingRespondent = DragFeature.NONE;
-    this.removeDragListeners();
     this.resetCursor();
-    this.dispatchEvent(new CustomEvent('pointer-released', {
+    this.dispatchEvent(new CustomEvent('selection-finished', {
       bubbles: true,
       composed: true,
     }));
   }
 
-  private onPointerMove(event: PointerEvent) {
-    // If a gesture hasn't started, ignore the pointer movement.
-    if (this.currentGesture.state === GestureState.NOT_STARTED) {
-      return;
-    }
-
-    this.updateGestureCoordinates(event);
-
-    if (this.onPointerMoveRequestId) {
-      cancelAnimationFrame(this.onPointerMoveRequestId);
-    }
-
-    this.onPointerMoveRequestId = requestAnimationFrame(() => {
-      if (this.isDragging()) {
-        this.set('currentGesture.state', GestureState.DRAGGING);
-
-        // Capture pointer events so gestures still work if the users pointer
-        // leaves the selection overlay div. Pointer capture is implicitly
-        // released after pointerup or pointercancel events.
-        this.setPointerCapture(event.pointerId);
-
-        if (this.draggingRespondent === DragFeature.TEXT) {
-          this.setCursorToText();
-          this.$.textSelectionLayer.handleDragGesture(this.currentGesture);
-        } else if (this.draggingRespondent === DragFeature.POST_SELECTION) {
-          this.$.postSelectionRenderer.handleDragGesture(this.currentGesture);
-        } else if (!this.translateModeEnabled) {
-          // Let the features respond to the current drag if no other feature
-          // responded first, but only if translate mode is not enabled.
-          // The dragging responding may not be TEXT in translate mode if
-          // there is no selectable text.
-          this.setCursorToCrosshair();
-          this.$.postSelectionRenderer.clearSelection();
-          this.draggingRespondent = DragFeature.MANUAL_REGION;
-          this.$.regionSelectionLayer.handleDragGesture(this.currentGesture);
-        }
-      }
-      this.onPointerMoveRequestId = undefined;
-    });
-  }
-
-  private onPointerCancel() {
-    // Pointer cancelled, so cancel any pending gestures.
+  private handleGestureCancel() {
     this.$.textSelectionLayer.cancelGesture();
     this.$.regionSelectionLayer.cancelGesture();
     this.$.postSelectionRenderer.cancelGesture();
-
-    this.currentGesture = emptyGestureEvent();
-    this.draggingRespondent = DragFeature.NONE;
-    this.removeDragListeners();
-    this.resetCursor();
   }
 
   private handleResize(entries: ResizeObserverEntry[]) {
@@ -920,7 +995,7 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
 
   private handleTranslate() {
     BrowserProxyImpl.getInstance().handler.issueTranslateSelectionRequest(
-        this.highlightedText, this.contentLanguage,
+        this.highlightedText.replaceAll('\r\n', ' '), this.contentLanguage,
         this.textSelectionStartIndex, this.textSelectionEndIndex);
     this.showSelectedTextContextMenu = false;
     recordLensOverlayInteraction(INVOCATION_SOURCE, UserAction.kTranslateText);
@@ -1010,6 +1085,15 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
     this.onImageRendered();
   }
 
+  /**
+   * Returns the bounding rect of the selection overlay. This is preferred over
+   * using getBoundingClientRect() because it is a cached DOM property which
+   * doesn't need to be recalculated every time.
+   */
+  getBoundingRect() {
+    return this.selectionOverlayRect;
+  }
+
   fetchNewScreenshotForTesting() {
     ScreenshotBitmapBrowserProxyImpl.getInstance().fetchScreenshot(
         this.screenshotDataReceived.bind(this));
@@ -1053,6 +1137,14 @@ export class SelectionOverlayElement extends SelectionOverlayElementBase {
 
   handleSaveAsImageForTesting() {
     this.handleSaveAsImage();
+  }
+
+  setSearchboxFocusForTesting(isFocused: boolean) {
+    this.isSearchboxFocused = isFocused;
+  }
+
+  setLanguagePickersOpenForTesting(open: boolean) {
+    this.areLanguagePickersOpen = open;
   }
 }
 

@@ -21,19 +21,16 @@ import org.chromium.chrome.browser.base.SplitCompatApplication;
 import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.dependency_injection.ChromeAppComponent;
-import org.chromium.chrome.browser.dependency_injection.ChromeAppModule;
 import org.chromium.chrome.browser.dependency_injection.DaggerChromeAppComponent;
-import org.chromium.chrome.browser.dependency_injection.ModuleFactoryOverrides;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fonts.FontPreloader;
 import org.chromium.chrome.browser.night_mode.SystemNightModeMonitor;
+import org.chromium.chrome.browser.notifications.chime.ChimeDelegate;
 import org.chromium.chrome.browser.profiles.ProfileResolver;
-import org.chromium.chrome.browser.webauthn.CredManUiRecommenderImpl;
 import org.chromium.components.browser_ui.util.BrowserUiUtilsCachedFlags;
 import org.chromium.components.browser_ui.util.GlobalDiscardableReferencePool;
 import org.chromium.components.embedder_support.browser_context.PartitionResolverSupplier;
 import org.chromium.components.module_installer.util.ModuleUtil;
-import org.chromium.components.webauthn.cred_man.CredManUiRecommenderProvider;
 import org.chromium.url.GURL;
 
 import org.chromium.build.BuildConfig;
@@ -66,9 +63,6 @@ public class ChromeApplicationImpl extends SplitCompatApplication.Impl {
             // TODO(crbug.com/40266922): Remove this after code changes allow for //components to
             // access cached flags.
             BrowserUiUtilsCachedFlags.getInstance()
-                    .setVerticalAutomotiveBackButtonToolbarFlag(
-                            ChromeFeatureList.sVerticalAutomotiveBackButtonToolbar.isEnabled());
-            BrowserUiUtilsCachedFlags.getInstance()
                     .setAsyncNotificationManagerFlag(
                             ChromeFeatureList.sAsyncNotificationManager.isEnabled());
 
@@ -97,16 +91,12 @@ public class ChromeApplicationImpl extends SplitCompatApplication.Impl {
             ContextualNotificationPermissionRequesterImpl.initialize();
             PartitionResolverSupplier.setInstance(new ProfileResolver());
 
-            AppHooks.get().getChimeDelegate().initialize();
+            new ChimeDelegate().initialize();
 
             // Initialize the AccessibilityHierarchySnapshotter. Do not include in release builds.
             if (!BuildConfig.IS_CHROME_BRANDED) {
                 HierarchySnapshotter.initialize();
             }
-
-            // Provide the supplier for CredManUiRecommender. This is set only for Chrome.
-            CredManUiRecommenderProvider.getOrCreate()
-                    .setCredManUiRecommenderSupplier(() -> new CredManUiRecommenderImpl());
         }
     }
 
@@ -154,20 +144,7 @@ public class ChromeApplicationImpl extends SplitCompatApplication.Impl {
     }
 
     private static ChromeAppComponent createComponent() {
-        ChromeAppModule.Factory overriddenFactory =
-                ModuleFactoryOverrides.getOverrideFor(ChromeAppModule.Factory.class);
-        ChromeAppModule module =
-                overriddenFactory == null ? new ChromeAppModule() : overriddenFactory.create();
-
-        AppHooksModule.Factory appHooksFactory =
-                ModuleFactoryOverrides.getOverrideFor(AppHooksModule.Factory.class);
-        AppHooksModule appHooksModule =
-                appHooksFactory == null ? new AppHooksModule() : appHooksFactory.create();
-
-        return DaggerChromeAppComponent.builder()
-                .chromeAppModule(module)
-                .appHooksModule(appHooksModule)
-                .build();
+        return DaggerChromeAppComponent.builder().build();
     }
 
     public static boolean isVivaldi() {

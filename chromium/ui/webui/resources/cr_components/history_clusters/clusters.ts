@@ -284,8 +284,8 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
    */
   protected onRemoveCluster_(event: CustomEvent<number>) {
     const index = event.detail;
-    this.clusters_.splice(index, 1);
-    this.requestUpdate();
+    this.clusters_ =
+        [...this.clusters_.slice(0, index), ...this.clusters_.slice(index + 1)];
   }
 
   /**
@@ -380,10 +380,9 @@ export class HistoryClustersElement extends HistoryClustersElementBase {
     this.hasResult_ = true;
     this.canLoadMore_ = result.canLoadMore;
     if (result.isContinuation) {
-      // Do not replace the existing result when `result` contains a partial
-      // set of clusters that should be appended to the existing ones.
-      this.clusters_.push(...result.clusters);
-      this.requestUpdate();
+      // Append the new set of clusters to the existing ones, since this is a
+      // continuation of the existing clusters.
+      this.clusters_ = [...this.clusters_.slice(), ...result.clusters];
     } else {
       // Scroll to the top when `result` contains a new set of clusters.
       this.scrollTarget.scrollTop = 0;

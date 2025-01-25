@@ -36,8 +36,7 @@ namespace tint::glsl::writer {
 namespace {
 
 TEST_F(GlslWriterTest, Let) {
-    auto* func = b.Function("main", ty.void_(), core::ir::Function::PipelineStage::kCompute);
-    func->SetWorkgroupSize(1, 1, 1);
+    auto* func = b.ComputeFunction("main");
     b.Append(func->Block(), [&] {
         b.Let("a", 2_f);
         b.Return(func);
@@ -53,8 +52,7 @@ void main() {
 }
 
 TEST_F(GlslWriterTest, LetValue) {
-    auto* func = b.Function("main", ty.void_(), core::ir::Function::PipelineStage::kCompute);
-    func->SetWorkgroupSize(1, 1, 1);
+    auto* func = b.ComputeFunction("main");
     b.Append(func->Block(), [&] {
         auto* a = b.Let("a", 2_f);
         b.Let("b", a);
@@ -72,8 +70,7 @@ void main() {
 }
 
 TEST_F(GlslWriterTest, Var) {
-    auto* func = b.Function("main", ty.void_(), core::ir::Function::PipelineStage::kCompute);
-    func->SetWorkgroupSize(1, 1, 1);
+    auto* func = b.ComputeFunction("main");
     b.Append(func->Block(), [&] {
         b.Var("a", 1_u);
         b.Return(func);
@@ -89,8 +86,7 @@ void main() {
 }
 
 TEST_F(GlslWriterTest, VarZeroInit) {
-    auto* func = b.Function("main", ty.void_(), core::ir::Function::PipelineStage::kCompute);
-    func->SetWorkgroupSize(1, 1, 1);
+    auto* func = b.ComputeFunction("main");
     b.Append(func->Block(), [&] {
         b.Var("a", function, ty.f32());
         b.Return(func);
@@ -278,8 +274,8 @@ TEST_F(GlslWriterTest, VarStorageUint32) {
     ASSERT_TRUE(Generate()) << err_ << output_.glsl;
     EXPECT_EQ(output_.glsl, GlslHeader() + R"(
 layout(binding = 1, std430)
-buffer tint_symbol_1_1_ssbo {
-  uint tint_symbol;
+buffer v_block_1_ssbo {
+  uint inner;
 } v_1;
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
@@ -307,8 +303,8 @@ struct SB {
 };
 
 layout(binding = 1, std430)
-buffer tint_symbol_1_1_ssbo {
-  SB tint_symbol;
+buffer v_block_1_ssbo {
+  SB inner;
 } v_1;
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {
@@ -325,8 +321,8 @@ TEST_F(GlslWriterTest, VarUniform) {
     ASSERT_TRUE(Generate()) << err_ << output_.glsl;
     EXPECT_EQ(output_.glsl, GlslHeader() + R"(
 layout(binding = 1, std140)
-uniform tint_symbol_1_1_ubo {
-  uint tint_symbol;
+uniform v_block_1_ubo {
+  uint inner;
 } v_1;
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main() {

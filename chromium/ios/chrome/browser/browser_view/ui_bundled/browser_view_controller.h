@@ -169,8 +169,8 @@ typedef struct {
 - (void)startVoiceSearch;
 
 // Vivaldi
-// Browser state of this BVC.
-@property(nonatomic,assign) ChromeBrowserState* browserState;
+// Profile of this BVC.
+@property(nonatomic,assign) ProfileIOS* profile;
 
 // Vivaldi Default Rating Manager
 @property(nonatomic, strong) VivaldiDefaultRatingManager* defaultRatingManager;

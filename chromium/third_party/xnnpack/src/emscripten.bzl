@@ -18,6 +18,7 @@ def xnnpack_emscripten_test_linkopts():
         "-s ERROR_ON_UNDEFINED_SYMBOLS=1",
         "-s EXIT_RUNTIME=1",
         "-s STACK_SIZE=5MB",
+        "-s TEXTDECODER=1",
         "--pre-js $(location //:preamble.js.lds)",
     ]
 
@@ -31,6 +32,7 @@ def xnnpack_emscripten_benchmark_linkopts():
         "-s ALLOW_MEMORY_GROWTH=1",
         "-s INITIAL_MEMORY=1gb",
         "-s MAXIMUM_MEMORY=4gb",
+        "-s TEXTDECODER=1",
         "--pre-js $(location //:preamble.js.lds)",
     ]
 

@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/graphics/static_bitmap_image_transform.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
 #include "third_party/blink/renderer/platform/image-encoders/image_encoder_utils.h"
@@ -92,8 +93,7 @@ OffscreenCanvas* OffscreenCanvas::Create(ScriptState* script_state,
 }
 
 OffscreenCanvas::~OffscreenCanvas() {
-  v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(
-      -memory_usage_);
+  external_memory_accounter_.Decrease(v8::Isolate::GetCurrent(), memory_usage_);
 }
 
 void OffscreenCanvas::Commit(scoped_refptr<CanvasResource>&& canvas_resource,
@@ -277,8 +277,8 @@ scoped_refptr<Image> OffscreenCanvas::GetSourceImageForCanvas(
 
   // If the alpha_disposition is already correct, or the image is opaque, this
   // is a no-op.
-  return GetImageWithAlphaDisposition(reason, std::move(image),
-                                      alpha_disposition);
+  return StaticBitmapImageTransform::GetWithAlphaDisposition(
+      reason, std::move(image), alpha_disposition);
 }
 
 gfx::Size OffscreenCanvas::BitmapSourceSize() const {
@@ -385,15 +385,12 @@ bool OffscreenCanvas::IsOpaque() const {
 
 CanvasRenderingContext* OffscreenCanvas::GetCanvasRenderingContext(
     ExecutionContext* execution_context,
-    const String& id,
+    CanvasRenderingContext::CanvasRenderingAPI rendering_api,
     const CanvasContextCreationAttributesCore& attributes) {
   DCHECK_EQ(execution_context, GetTopExecutionContext());
 
   if (execution_context->IsContextDestroyed())
     return nullptr;
-
-  CanvasRenderingContext::CanvasRenderingAPI rendering_api =
-      CanvasRenderingContext::RenderingAPIFromId(id);
 
   // Unknown type.
   if (rendering_api == CanvasRenderingContext::CanvasRenderingAPI::kUnknown)
@@ -421,8 +418,10 @@ CanvasRenderingContext* OffscreenCanvas::GetCanvasRenderingContext(
     probe::DidCreateOffscreenCanvasContext(this);
 
     CanvasContextCreationAttributesCore recomputed_attributes = attributes;
-    if (!allow_high_performance_power_preference_)
-      recomputed_attributes.power_preference = "low-power";
+    if (!allow_high_performance_power_preference_) {
+      recomputed_attributes.power_preference =
+          CanvasContextCreationAttributesCore::PowerPreference::kLowPower;
+    }
 
     context_ = factory->Create(this, recomputed_attributes);
     if (context_) {
@@ -479,6 +478,9 @@ bool OffscreenCanvas::EnableAcceleration() {
   // will be an accelerated canvas once it has been created.
   CanvasResourceProvider* provider =
       GetOrCreateCanvasResourceProvider(RasterModeHint::kPreferGPU);
+  if (!provider) {
+    return false;
+  }
   return provider->IsAccelerated();
 }
 
@@ -736,8 +738,7 @@ void OffscreenCanvas::UpdateMemoryUsage() {
     // AdjustAmountOfExternalAllocatedMemory is safe, hence the
     // 'diposing_' condition in the DCHECK below.
     DCHECK(ThreadState::Current()->IsAllocationAllowed() || disposing_);
-    v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(
-        delta_bytes);
+    external_memory_accounter_.Update(v8::Isolate::GetCurrent(), delta_bytes);
     memory_usage_ = new_memory_usage;
   }
 }

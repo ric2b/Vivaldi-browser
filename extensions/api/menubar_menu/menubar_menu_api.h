@@ -38,7 +38,8 @@ class MenubarMenuAPI : public BrowserContextKeyedAPI {
   // Functions that will send events to JS.
   static void SendAction(content::BrowserContext* browser_context,
                          int command,
-                         int event_state);
+                         int event_state,
+                         bool persistent);
   static void SendOpenBookmark(content::BrowserContext* browser_context,
                                int window_id,
                                int64_t bookmark_id,

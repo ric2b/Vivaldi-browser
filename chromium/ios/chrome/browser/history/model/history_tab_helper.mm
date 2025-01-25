@@ -24,6 +24,10 @@
 #import "net/http/http_response_headers.h"
 #import "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#import "ios/translate/vivaldi_ios_translate_client.h"
+// End Vivaldi
+
 namespace {
 
 std::optional<std::u16string> GetPageTitle(const web::NavigationItem& item) {
@@ -153,6 +157,7 @@ history::HistoryAddPageArgs HistoryTabHelper::CreateHistoryAddPageArgs(
       last_committed_item->GetUniqueID(), navigation_context->GetNavigationId(),
       referrer_url, redirects, transition, hidden, history::SOURCE_BROWSED,
       /*did_replace_entry=*/false, consider_for_ntp_most_visited,
+      /*is_ephemeral=*/false,
       navigation_context->IsSameDocument() ? GetPageTitle(*last_committed_item)
                                            : std::nullopt,
       // TODO(crbug.com/40279742): due to WebKit constraints, iOS does not
@@ -205,8 +210,15 @@ HistoryTabHelper::HistoryTabHelper(web::WebState* web_state)
   web_state_->AddObserver(this);
 
   // A translate client is not always attached to a web state (e.g. tests).
+
+#if defined(VIVALDI_BUILD)
+  if (VivaldiIOSTranslateClient* translate_client =
+          VivaldiIOSTranslateClient::FromWebState(web_state)) {
+#else
   if (ChromeIOSTranslateClient* translate_client =
           ChromeIOSTranslateClient::FromWebState(web_state)) {
+#endif // End Vivaldi
+
     translate_observation_.Observe(translate_client->GetTranslateDriver());
   }
 }

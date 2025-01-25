@@ -63,38 +63,56 @@ VkVertexInputRate VulkanInputRate(wgpu::VertexStepMode stepMode) {
 
 VkFormat VulkanVertexFormat(wgpu::VertexFormat format) {
     switch (format) {
+        case wgpu::VertexFormat::Uint8:
+            return VK_FORMAT_R8_UINT;
         case wgpu::VertexFormat::Uint8x2:
             return VK_FORMAT_R8G8_UINT;
         case wgpu::VertexFormat::Uint8x4:
             return VK_FORMAT_R8G8B8A8_UINT;
+        case wgpu::VertexFormat::Sint8:
+            return VK_FORMAT_R8_SINT;
         case wgpu::VertexFormat::Sint8x2:
             return VK_FORMAT_R8G8_SINT;
         case wgpu::VertexFormat::Sint8x4:
             return VK_FORMAT_R8G8B8A8_SINT;
+        case wgpu::VertexFormat::Unorm8:
+            return VK_FORMAT_R8_UNORM;
         case wgpu::VertexFormat::Unorm8x2:
             return VK_FORMAT_R8G8_UNORM;
         case wgpu::VertexFormat::Unorm8x4:
             return VK_FORMAT_R8G8B8A8_UNORM;
+        case wgpu::VertexFormat::Snorm8:
+            return VK_FORMAT_R8_SNORM;
         case wgpu::VertexFormat::Snorm8x2:
             return VK_FORMAT_R8G8_SNORM;
         case wgpu::VertexFormat::Snorm8x4:
             return VK_FORMAT_R8G8B8A8_SNORM;
+        case wgpu::VertexFormat::Uint16:
+            return VK_FORMAT_R16_UINT;
         case wgpu::VertexFormat::Uint16x2:
             return VK_FORMAT_R16G16_UINT;
         case wgpu::VertexFormat::Uint16x4:
             return VK_FORMAT_R16G16B16A16_UINT;
+        case wgpu::VertexFormat::Sint16:
+            return VK_FORMAT_R16_SINT;
         case wgpu::VertexFormat::Sint16x2:
             return VK_FORMAT_R16G16_SINT;
         case wgpu::VertexFormat::Sint16x4:
             return VK_FORMAT_R16G16B16A16_SINT;
+        case wgpu::VertexFormat::Unorm16:
+            return VK_FORMAT_R16_UNORM;
         case wgpu::VertexFormat::Unorm16x2:
             return VK_FORMAT_R16G16_UNORM;
         case wgpu::VertexFormat::Unorm16x4:
             return VK_FORMAT_R16G16B16A16_UNORM;
+        case wgpu::VertexFormat::Snorm16:
+            return VK_FORMAT_R16_SNORM;
         case wgpu::VertexFormat::Snorm16x2:
             return VK_FORMAT_R16G16_SNORM;
         case wgpu::VertexFormat::Snorm16x4:
             return VK_FORMAT_R16G16B16A16_SNORM;
+        case wgpu::VertexFormat::Float16:
+            return VK_FORMAT_R16_SFLOAT;
         case wgpu::VertexFormat::Float16x2:
             return VK_FORMAT_R16G16_SFLOAT;
         case wgpu::VertexFormat::Float16x4:
@@ -125,6 +143,8 @@ VkFormat VulkanVertexFormat(wgpu::VertexFormat format) {
             return VK_FORMAT_R32G32B32A32_SINT;
         case wgpu::VertexFormat::Unorm10_10_10_2:
             return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
+        case wgpu::VertexFormat::Unorm8x4BGRA:
+            return VK_FORMAT_B8G8R8A8_UNORM;
         default:
             DAWN_UNREACHABLE();
     }
@@ -331,7 +351,7 @@ Ref<RenderPipeline> RenderPipeline::CreateUninitialized(
 
 MaybeError RenderPipeline::InitializeImpl() {
     Device* device = ToBackend(GetDevice());
-    const PipelineLayout* layout = ToBackend(GetLayout());
+    PipelineLayout* layout = ToBackend(GetLayout());
 
     // Vulkan devices need cache UUID field to be serialized into pipeline cache keys.
     StreamIn(&mCacheKey, device->GetDeviceInfo().properties.pipelineCacheUUID);
@@ -539,6 +559,9 @@ MaybeError RenderPipeline::InitializeImpl() {
         DAWN_TRY_ASSIGN(renderPassInfo, device->GetRenderPassCache()->GetRenderPass(query));
     }
 
+    // TODO(crbug.com/366291600): Add internal immediate data size when needed.
+    DAWN_TRY(InitializeBase(layout, kClampFragDepthArgsSize));
+
     // The create info chains in a bunch of things created on the stack here or inside state
     // objects.
     VkGraphicsPipelineCreateInfo createInfo;
@@ -557,7 +580,7 @@ MaybeError RenderPipeline::InitializeImpl() {
     createInfo.pColorBlendState =
         (GetStageMask() & wgpu::ShaderStage::Fragment) ? &colorBlend : nullptr;
     createInfo.pDynamicState = &dynamic;
-    createInfo.layout = ToBackend(GetLayout())->GetHandle();
+    createInfo.layout = GetVkLayout();
     createInfo.renderPass = renderPassInfo.renderPass;
     createInfo.basePipelineHandle = VkPipeline{};
     createInfo.basePipelineIndex = -1;
@@ -591,8 +614,7 @@ MaybeError RenderPipeline::InitializeImpl() {
         cacheTimer.RecordMicroseconds("Vulkan.CreateGraphicsPipelines.CacheMiss");
     }
 
-    // TODO(dawn:549): Flush is currently in the same thread, but perhaps deferrable.
-    DAWN_TRY(cache->FlushIfNeeded());
+    DAWN_TRY(cache->DidCompilePipeline());
 
     SetLabelImpl();
 
@@ -695,6 +717,7 @@ RenderPipeline::~RenderPipeline() = default;
 
 void RenderPipeline::DestroyImpl() {
     RenderPipelineBase::DestroyImpl();
+    PipelineVk::DestroyImpl();
     if (mHandle != VK_NULL_HANDLE) {
         ToBackend(GetDevice())->GetFencedDeleter()->DeleteWhenUnused(mHandle);
         mHandle = VK_NULL_HANDLE;

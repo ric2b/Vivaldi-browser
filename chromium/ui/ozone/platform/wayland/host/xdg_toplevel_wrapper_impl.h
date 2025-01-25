@@ -10,10 +10,6 @@
 
 #include "ui/ozone/platform/wayland/host/shell_toplevel_wrapper.h"
 
-namespace gfx {
-class RoundedCornersF;
-}  // namespace gfx
-
 namespace ui {
 
 class XDGSurfaceWrapperImpl;
@@ -39,11 +35,6 @@ class XDGToplevelWrapperImpl : public ShellToplevelWrapper {
   void SetCanFullscreen(bool can_fullscreen) override;
   void SetFullscreen(WaylandOutput* wayland_output) override;
   void UnSetFullscreen() override;
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  void SetUseImmersiveMode(bool immersive) override;
-  void SetTopInset(int height) override;
-  void SetShadowCornersRadii(const gfx::RoundedCornersF& radii) override;
-#endif
   void SetMinimized() override;
   void SurfaceMove(WaylandConnection* connection) override;
   void SurfaceResize(WaylandConnection* connection, uint32_t hittest) override;
@@ -59,8 +50,6 @@ class XDGToplevelWrapperImpl : public ShellToplevelWrapper {
   void Unlock() override;
   void RequestWindowBounds(const gfx::Rect& bounds,
                            int64_t display_id) override;
-  void SetRestoreInfo(int32_t, int32_t) override;
-  void SetRestoreInfoWithWindowIdSource(int32_t, const std::string&) override;
   void SetSystemModal(bool modal) override;
   bool SupportsScreenCoordinates() const override;
 #if BUILDFLAG(IS_CHROMEOS_LACROS)

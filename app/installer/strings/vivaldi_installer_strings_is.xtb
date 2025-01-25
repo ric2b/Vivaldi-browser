@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Setja upp sjálfstæða útgáfu</translation>
 <translation id="1682285232070778125">Gera Vivaldi að sjálfgefnum vafra</translation>
 <translation id="1974060860693918893">Nánar</translation>
+<translation id="2053560788696003312">Vivaldi þarf Windows 10 eða nýrra.</translation>
 <translation id="2134216661302048561">Forrit fyrir Vivaldi uppsetningarferli hefur ekki lokið við uppsetningu á Vivaldi vafranum. Ertu viss um að þú viljir hætta við?</translation>
 <translation id="2286454467119466181">Einfalt</translation>
 <translation id="237789874664518125">Höfundarréttur <ph name="YEAR" /> Vivaldi Technologies AS. Öll réttindi áskilin. &lt;a&gt;Persónuverndarstefna&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Samþykkja og uppfæra</translation>
 <translation id="5302048478445481009">Tungumál</translation>
 <translation id="694714344624446243">Uppsetningarforrit fyrir Vivaldi</translation>
+<translation id="7467493612551448880">Útgáfan af Vivaldi sem þú ert að setja upp er ekki uppfærð fyrir útgáfuna af Windows sem þú ert að nota.
+
+Visit vivaldi.com/hala niður til þess að hala niður útgáfuna af Windows á Arm.</translation>
 <translation id="7658239707568436148">Hætta við</translation>
 <translation id="8773751185824654197">Athuga: ef verið er að uppfæra Vivaldi vafrann sem þegar er í gangi mun honum vera lokað og hann síðan enduropnaður</translation>
 <translation id="933060950687965486">Tegund af uppsetningu</translation>

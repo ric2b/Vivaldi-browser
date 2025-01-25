@@ -58,6 +58,7 @@ constexpr APIPermissionInfo::InitInfo permissions_to_register[] = {
     {APIPermissionID::kWebViewPrivate, "webViewPrivate"},
     {APIPermissionID::kWindowPrivate, "windowPrivate"},
     {APIPermissionID::kZoom, "zoom"},
+    {APIPermissionID::kOmniboxPrivate, "omniboxPrivate"},
 };
 
 }  // namespace

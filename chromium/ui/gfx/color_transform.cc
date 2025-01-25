@@ -134,8 +134,7 @@ float FromLinear(ColorSpace::TransferID id, float v) {
       // Handled by skcms_TransferFunction.
       break;
   }
-  NOTREACHED_IN_MIGRATION();
-  return 0;
+  NOTREACHED();
 }
 
 float ToLinear(ColorSpace::TransferID id, float v) {
@@ -180,8 +179,7 @@ float ToLinear(ColorSpace::TransferID id, float v) {
       // Handled by skcms_TransferFunction.
       break;
   }
-  NOTREACHED_IN_MIGRATION();
-  return 0;
+  NOTREACHED();
 }
 
 }  // namespace
@@ -759,7 +757,7 @@ class ColorTransformFromLinear : public ColorTransformPerChannelTransferFn {
       default:
         break;
     }
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
  private:
@@ -829,7 +827,7 @@ class ColorTransformToLinear : public ColorTransformPerChannelTransferFn {
       default:
         break;
     }
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
  private:
@@ -1327,7 +1325,7 @@ sk_sp<SkData> ColorTransformInternal::GetSkShaderUniforms(
   return SkData::MakeWithCopy(&data, sizeof(data));
 }
 
-ColorTransformInternal::~ColorTransformInternal() {}
+ColorTransformInternal::~ColorTransformInternal() = default;
 
 void ColorTransformInternal::Simplify() {
   for (auto iter = steps_.begin(); iter != steps_.end();) {
@@ -1376,7 +1374,7 @@ std::unique_ptr<ColorTransform> ColorTransform::NewColorTransform(
   return std::make_unique<ColorTransformInternal>(src, dst, options);
 }
 
-ColorTransform::ColorTransform() {}
-ColorTransform::~ColorTransform() {}
+ColorTransform::ColorTransform() = default;
+ColorTransform::~ColorTransform() = default;
 
 }  // namespace gfx

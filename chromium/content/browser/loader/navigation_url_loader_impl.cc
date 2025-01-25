@@ -124,7 +124,7 @@ namespace {
 
 BASE_FEATURE(kSkipUnnecessaryThreadHopsForParseHeaders,
              "SkipUnnecessaryThreadHopsForParseHeaders",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 class NavigationLoaderInterceptorBrowserContainer
     : public NavigationLoaderInterceptor {
@@ -287,8 +287,9 @@ std::unique_ptr<network::ResourceRequest> CreateResourceRequest(
   // first-party. Since fenced frames are main frames in terms of cookie
   // partitioning, this needs to be `is_main_frame` rather than
   // `is_outermost_main_frame`.
-  if (request_info.is_main_frame)
+  if (request_info.is_main_frame) {
     new_request->update_first_party_url_on_redirect = true;
+  }
 
   int load_flags = request_info.begin_params->load_flags;
   if (request_info.is_outermost_main_frame) {
@@ -380,8 +381,9 @@ void LogAcceptCHFrameStatus(AcceptCHFrameRestart status) {
 }
 
 bool IsSameOriginRedirect(const std::vector<GURL>& url_chain) {
-  if (url_chain.size() < 2)
+  if (url_chain.size() < 2) {
     return false;
+  }
 
   auto previous_origin = url::Origin::Create(url_chain[url_chain.size() - 2]);
   return previous_origin.IsSameOriginWith(url_chain[url_chain.size() - 1]);
@@ -460,10 +462,9 @@ void CheckParsedHeadersEquals(const network::mojom::ParsedHeadersPtr& lhs,
                      rhs->observe_browsing_topics));
   CHECK(mojo::Equals(adjusted_lhs->allow_cross_origin_event_reporting,
                      rhs->allow_cross_origin_event_reporting));
-  NOTREACHED_IN_MIGRATION()
-      << "The parsed headers don't match, but we don't know which "
-         "field does not match. Please add a DCHECK before this one "
-         "checking for the missing field.";
+  NOTREACHED() << "The parsed headers don't match, but we don't know which "
+                  "field does not match. Please add a DCHECK before this one "
+                  "checking for the missing field.";
 }
 #endif  // NDEBUG
 
@@ -579,8 +580,9 @@ void NavigationURLLoaderImpl::CreateInterceptors() {
             *request_info_);
     // The interceptor may not be created in certain cases (e.g., the origin
     // is not secure).
-    if (service_worker_interceptor)
+    if (service_worker_interceptor) {
       interceptors_.push_back(std::move(service_worker_interceptor));
+    }
   }
 
   // Set-up an interceptor for SignedExchange handling if it is enabled.
@@ -871,7 +873,7 @@ NavigationURLLoaderImpl::CreateNonNetworkLoaderFactory(
                 request_info.initiator_process_id,
                 *request_info.initiator_document_token)
           : nullptr,
-      &terminal_external_protocol);
+      request_info.isolation_info, &terminal_external_protocol);
   if (terminal_external_protocol) {
     return std::make_pair(
         /*is_cacheable=*/false,
@@ -940,14 +942,16 @@ void NavigationURLLoaderImpl::OnReceiveEarlyHints(
   // Allow Early Hints preload only for outermost main frames. Calculating
   // appropriate parameters to create URLLoaderFactory for subframes and fenced
   // frames are complicated and not supported yet.
-  if (frame_tree_node->GetParentOrOuterDocument())
+  if (frame_tree_node->GetParentOrOuterDocument()) {
     return;
+  }
 
   if (!early_hints_manager_) {
     std::optional<NavigationEarlyHintsManagerParams> params =
         delegate_->CreateNavigationEarlyHintsManagerParams(*early_hints);
-    if (!params)
+    if (!params) {
       return;
+    }
     early_hints_manager_ = std::make_unique<NavigationEarlyHintsManager>(
         *browser_context_, *storage_partition_, frame_tree_node_id_,
         std::move(*params));
@@ -979,8 +983,9 @@ void NavigationURLLoaderImpl::OnReceiveResponse(
     return;
   }
 
-  if (!response_body)
+  if (!response_body) {
     return;
+  }
 
   response_body_ = std::move(response_body);
   received_response_ = true;
@@ -991,6 +996,10 @@ void NavigationURLLoaderImpl::OnReceiveResponse(
         head_update_params_.load_timing_info.service_worker_start_time;
     head->load_timing.service_worker_ready_time =
         head_update_params_.load_timing_info.service_worker_ready_time;
+  }
+  if (head_update_params_.initial_service_worker_status.has_value()) {
+    head->initial_service_worker_status =
+        head_update_params_.initial_service_worker_status;
   }
   if (!head_update_params_.router_info.is_null()) {
     head->service_worker_router_info =
@@ -1103,12 +1112,10 @@ void NavigationURLLoaderImpl::CallOnReceivedResponse(
   }
 
   network::mojom::URLResponseHead* head_ptr = head.get();
-  // Record ServiceWorker Static Routing API metrics. This is only recorded
-  // when the API is used.
-  if (head_ptr->service_worker_router_info) {
-    RecordServiceWorkerRouterEvaluationResults(
-        head_ptr->service_worker_router_info.get());
-  }
+
+  // Record ServiceWorker and the Static Routing API metrics.
+  MaybeRecordServiceWorkerMainResourceInfo(head);
+
   auto on_receive_response = base::BindOnce(
       &NavigationURLLoaderImpl::NotifyResponseStarted,
       weak_factory_.GetWeakPtr(), std::move(head),
@@ -1129,8 +1136,9 @@ void NavigationURLLoaderImpl::OnReceiveRedirect(
     error = net::ERR_UNSAFE_REDIRECT;
   } else if (--redirect_limit_ == 0) {
     error = net::ERR_TOO_MANY_REDIRECTS;
-    if (redirect_info.is_signed_exchange_fallback_redirect)
+    if (redirect_info.is_signed_exchange_fallback_redirect) {
       UMA_HISTOGRAM_BOOLEAN("SignedExchange.FallbackRedirectLoop", true);
+    }
   }
   if (error != net::OK) {
     if (url_loader_) {
@@ -1165,7 +1173,7 @@ void NavigationURLLoaderImpl::OnUploadProgress(
     int64_t current_position,
     int64_t total_size,
     OnUploadProgressCallback callback) {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void NavigationURLLoaderImpl::OnTransferSizeUpdated(
@@ -1711,8 +1719,9 @@ void NavigationURLLoaderImpl::FollowRedirect(
 
 bool NavigationURLLoaderImpl::SetNavigationTimeout(base::TimeDelta timeout) {
   // If the timer has already been started, don't change it.
-  if (timeout_timer_.IsRunning())
+  if (timeout_timer_.IsRunning()) {
     return false;
+  }
 
   // Fail the navigation with error code ERR_TIMED_OUT if the timer triggers
   // before the navigation commits. (This triggers OnComplete() rather than
@@ -1826,38 +1835,54 @@ void NavigationURLLoaderImpl::RecordReceivedResponseUkmForOutermostMainFrame() {
   received_accept_ch_frame_ = false;
 }
 
-void NavigationURLLoaderImpl::RecordServiceWorkerRouterEvaluationResults(
-    network::mojom::ServiceWorkerRouterInfo* router_info) {
-  // Check if `matched_source_type` and `actual_source_type` exists. If
-  // `matched_source_type` exists, `actual_source_type` should also exist.
-  // Likewise, if `matched_source_type` does not exist, `actual_source_type`
-  // should also not exist.
-  CHECK_EQ(router_info->matched_source_type.has_value(),
-           router_info->actual_source_type.has_value());
+void NavigationURLLoaderImpl::MaybeRecordServiceWorkerMainResourceInfo(
+    const network::mojom::URLResponseHeadPtr& head) {
+  CHECK(head);
+  if (!head->initial_service_worker_status.has_value() &&
+      !head->service_worker_router_info) {
+    return;
+  }
+
   ukm::builders::ServiceWorker_MainResourceLoadCompleted builder(
       ukm_source_id_);
 
-  if (router_info->evaluation_worker_status) {
-    builder.SetWorkerStatusOnEvaluation(
-        static_cast<int64_t>(*router_info->evaluation_worker_status));
-  }
+  CHECK(head->initial_service_worker_status.has_value());
+  builder.SetInitialWorkerStatus(
+      static_cast<int64_t>(head->initial_service_worker_status.value()));
 
-  if (router_info->matched_source_type) {
-    builder.SetMatchedFirstRouterSourceType(
-        static_cast<int64_t>(*router_info->matched_source_type));
+  if (head->service_worker_router_info) {
+    network::mojom::ServiceWorkerRouterInfo* router_info =
+        head->service_worker_router_info.get();
+    if (router_info->evaluation_worker_status.has_value()) {
+      builder.SetWorkerStatusOnEvaluation(
+          static_cast<int64_t>(router_info->evaluation_worker_status.value()));
+    }
+    // Check if `matched_source_type` and `actual_source_type` exists. If
+    // `matched_source_type` exists, `actual_source_type` should also exist.
+    // Likewise, if `matched_source_type` does not exist, `actual_source_type`
+    // should also not exist.
+    CHECK_EQ(router_info->matched_source_type.has_value(),
+             router_info->actual_source_type.has_value());
+    if (router_info->matched_source_type) {
+      builder.SetMatchedFirstRouterSourceType(
+          static_cast<int64_t>(*router_info->matched_source_type));
+      if (router_info->matched_source_type ==
+          network::mojom::ServiceWorkerRouterSourceType::kCache) {
+        builder.SetCacheLookupTime(
+            router_info->cache_lookup_time.InMilliseconds());
+      }
+    }
+    if (router_info->actual_source_type) {
+      builder.SetActualRouterSourceType(
+          static_cast<int64_t>(*router_info->actual_source_type));
+    }
+    builder
+        .SetRouterRuleCount(ukm::GetExponentialBucketMinForCounts1000(
+            router_info->route_rule_num))
+        .SetRouterEvaluationTime(
+            router_info->router_evaluation_time.InMicroseconds());
   }
-
-  if (router_info->actual_source_type) {
-    builder.SetActualRouterSourceType(
-        static_cast<int64_t>(*router_info->actual_source_type));
-  }
-
-  builder
-      .SetRouterRuleCount(ukm::GetExponentialBucketMinForCounts1000(
-          router_info->route_rule_num))
-      .SetRouterEvaluationTime(
-          router_info->router_evaluation_time.InMicroseconds())
-      .Record(ukm::UkmRecorder::Get());
+  builder.Record(ukm::UkmRecorder::Get());
 }
 
 }  // namespace content

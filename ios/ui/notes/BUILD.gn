@@ -45,11 +45,10 @@ source_set("notes") {
     "note_add_edit_controller_delegate.h",
     "note_sorting_mode.h",
     "vivaldi_notes_pref.h",
-    "vivaldi_notes_pref.mm"
+    "vivaldi_notes_pref.mm",
   ]
 
   deps = [
-    ":markdown_js",
     "//base",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
@@ -74,19 +73,9 @@ source_set("notes") {
     "//vivaldi/ios/sync:file_sync",
     "//vivaldi/ios/sync:sync_notes",
     "//vivaldi/ios/ui/notes/cells",
+    "//vivaldi/ios/ui/notes/markdown:markdown_editor",
     "//vivaldi/ios/ui/notes/resources:notes_assets",
   ]
 
   frameworks = [ "UIKit.framework" ]
-}
-
-copy("markdown_js") {
-  sources = [
-    "//vivaldi/vivapp/src/mobile/markdown/markdown.html",
-    "$root_out_dir/resources/vivaldi/mobile-markdown-bundle.js"
-  ]
-  outputs = [ "$root_out_dir/Vivaldi.app/{{source_file_part}}" ]
-  deps = [
-    "//vivaldi/vivapp:bundle",
-  ]
 }

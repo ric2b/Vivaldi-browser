@@ -15,7 +15,7 @@
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_factory.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_grid_button.h"
-#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_grid_button_style.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_group_state.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/browser/ui/toolbar/tab_groups/ui/tab_group_indicator_constants.h"
@@ -304,6 +304,17 @@ using vivaldi::IsVivaldiRunning;
   }
   // TODO(crbug.com/40279063): Find out why primary toolbar height cannot be
   // zero. This is a temporary fix for the pdf bug.
+
+  if (IsVivaldiRunning()) {
+    // VIB-916
+    // Return 0 for us which brings back the pdf bug for Omnibox bottom state
+    // but saves us from the issue where there's a empty line because of
+    // primary toolbar being zero and shows between status
+    // bar background and webview, which looks very bad as it breaks the accent
+    // color presentation.
+    return CGSizeMake(UIViewNoIntrinsicMetric, height > 0 ? height : 0);
+  } // End Vivaldi
+
   return CGSizeMake(UIViewNoIntrinsicMetric, height > 0 ? height : 1);
 }
 
@@ -439,7 +450,7 @@ using vivaldi::IsVivaldiRunning;
   self.separator.translatesAutoresizingMaskIntoConstraints = NO;
   [self addSubview:self.separator];
   if (IsVivaldiRunning() &&
-      (GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE))
+      ![VivaldiGlobalHelpers canShowSidePanelForTrait:self.traitCollection])
     self.separator.backgroundColor = UIColor.clearColor;
 }
 
@@ -641,8 +652,12 @@ using vivaldi::IsVivaldiRunning;
       .active = YES;
 }
 
-- (void)setTabGridButtonStyle:(ToolbarTabGridButtonStyle)tabGridButtonStyle {
-  self.tabGridButton.tabGridButtonStyle = tabGridButtonStyle;
+- (void)updateTabGroupState:(ToolbarTabGroupState)tabGroupState {
+  const BOOL inGroup = tabGroupState == ToolbarTabGroupState::kTabGroup;
+  self.openNewTabButton.accessibilityLabel =
+      [self.buttonFactory.toolbarConfiguration
+          accessibilityLabelForOpenNewTabButtonInGroup:inGroup];
+  self.tabGridButton.tabGroupState = tabGroupState;
 }
 
 - (NSArray<ToolbarButton*>*)allButtons {
@@ -677,11 +692,10 @@ using vivaldi::IsVivaldiRunning;
 
 - (NSArray *)buttonsForLeadingStackView {
   BOOL isSplitToolbarMode = IsSplitToolbarMode(self.traitCollection);
-  BOOL splitMode = !VivaldiGlobalHelpers.canShowSidePanel && isSplitToolbarMode;
   BOOL showHomeButtonInSplitMode =
-    splitMode && self.bottomOmniboxEnabled && _homePageEnabled;
+      isSplitToolbarMode && self.bottomOmniboxEnabled && _homePageEnabled;
 
-  if (splitMode) {
+  if (isSplitToolbarMode) {
     self.leadingStackViewWidthNoItems.active = !showHomeButtonInSplitMode;
     self.leadingLocationBarContainerConstraint.constant =
       showHomeButtonInSplitMode ?
@@ -701,7 +715,7 @@ using vivaldi::IsVivaldiRunning;
 - (NSArray*)buttonsForTrailingStackView {
   BOOL isSplitToolbarMode = IsSplitToolbarMode(self.traitCollection);
 
-  if (!VivaldiGlobalHelpers.canShowSidePanel && isSplitToolbarMode) {
+  if (isSplitToolbarMode) {
     self.trailingStackView.spacing = 0;
     if (self.bottomOmniboxEnabled && self.tabBarEnabled) {
       return @[ self.vivaldiMoreButton, self.toolsMenuButton ];
@@ -771,6 +785,16 @@ using vivaldi::IsVivaldiRunning;
       [self.buttonFactory
           overflowMenuWithNavForwardEnabled:_canShowForward
                          navBackwordEnabled:_canShowBack];
+}
+
+#pragma mark - TraitCollectionChangeDelegate
+- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  [super traitCollectionDidChange:previousTraitCollection];
+  if ([VivaldiGlobalHelpers canShowSidePanelForTrait:self.traitCollection]) {
+    self.separator.backgroundColor = [UIColor colorNamed:kToolbarShadowColor];
+  } else {
+    self.separator.backgroundColor = UIColor.clearColor;
+  }
 }
 
 @end

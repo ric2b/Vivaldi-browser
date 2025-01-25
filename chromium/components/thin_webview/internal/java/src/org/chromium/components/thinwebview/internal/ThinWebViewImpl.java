@@ -20,6 +20,7 @@ import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndr
 import org.chromium.components.thinwebview.CompositorView;
 import org.chromium.components.thinwebview.ThinWebView;
 import org.chromium.components.thinwebview.ThinWebViewConstraints;
+import org.chromium.content_public.browser.Visibility;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.IntentRequestTracker;
@@ -31,7 +32,6 @@ public class ThinWebViewImpl extends FrameLayout implements ThinWebView {
     private final CompositorView mCompositorView;
     private final WindowAndroid mWindowAndroid;
     private long mNativeThinWebViewImpl;
-    private WebContents mWebContents;
     private View mContentView;
     // Passed to native and stored as a weak reference, so ensure this strong
     // reference is not optimized away by R8.
@@ -51,7 +51,10 @@ public class ThinWebViewImpl extends FrameLayout implements ThinWebView {
         if (ContextUtils.activityFromContext(context) != null) {
             mWindowAndroid =
                     new ActivityWindowAndroid(
-                            context, /* listenToActivityState= */ true, intentRequestTracker);
+                            context,
+                            /* listenToActivityState= */ true,
+                            intentRequestTracker,
+                            /* insetObserver= */ null);
         } else {
             mWindowAndroid = new WindowAndroid(context);
         }
@@ -78,14 +81,13 @@ public class ThinWebViewImpl extends FrameLayout implements ThinWebView {
             @Nullable View contentView,
             @Nullable WebContentsDelegateAndroid delegate) {
         if (mNativeThinWebViewImpl == 0) return;
-        mWebContents = webContents;
         // Native code holds only a weak reference to this object.
         mWebContentsDelegate = delegate;
         setContentView(contentView);
         ThinWebViewImplJni.get()
                 .setWebContents(
                         mNativeThinWebViewImpl, ThinWebViewImpl.this, webContents, delegate);
-        webContents.onShow();
+        webContents.updateWebContentsVisibility(Visibility.VISIBLE);
     }
 
     @Override

@@ -30,6 +30,19 @@ class ContextMenuShowFunction : public ExtensionFunction {
   ExtensionFunction::ResponseAction Run() override;
 };
 
+class ContextMenuUpdateFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("contextMenu.update", CONTEXTMENU_UPDATE)
+  ContextMenuUpdateFunction() = default;
+
+ private:
+  ~ContextMenuUpdateFunction() override = default;
+
+  // ExtensionFunction
+  ExtensionFunction::ResponseAction Run() override;
+};
+
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_API_CONTEXT_MENU_CONTEXT_MENU_API_H_

@@ -22,7 +22,6 @@ import org.jni_zero.NativeMethods;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.ChromeAutocompleteSchemeClassifier;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.NewTabPageDelegate;
@@ -168,7 +167,6 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     protected GURL mVisibleGurl = GURL.emptyGURL();
     protected String mFormattedFullUrl;
     protected String mUrlForDisplay;
-    private boolean mOmniboxUpdatedConnectionSecurityIndicatorsEnabled;
 
     // notifyUrlChanged and notifySecurityStateChanged are usually called 3 times across a same
     // document navigation. The first call is usually necessary, which updates the UrlBar to reflect
@@ -204,9 +202,6 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
 
     /** Handle any initialization that must occur after native has been initialized. */
     public void initializeWithNative() {
-        mOmniboxUpdatedConnectionSecurityIndicatorsEnabled =
-                ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.OMNIBOX_UPDATED_CONNECTION_SECURITY_INDICATORS);
         mNativeLocationBarModelAndroid = LocationBarModelJni.get().init(LocationBarModel.this);
         mSpannableDisplayTextCache = new LruCache<>(LRU_CACHE_SIZE);
     }
@@ -641,7 +636,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         if (publisherUrl != null) {
             assert getSecurityLevelFromStateModel(tab.getWebContents())
                     != ConnectionSecurityLevel.DANGEROUS;
-            return (publisherUrl.getScheme().equals(UrlConstants.HTTPS_SCHEME))
+            return publisherUrl.getScheme().equals(UrlConstants.HTTPS_SCHEME)
                     ? ConnectionSecurityLevel.SECURE
                     : ConnectionSecurityLevel.WARNING;
         }
@@ -700,7 +695,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
                 securityLevel,
                 isSmallDevice,
                 skipIconForNeutralState,
-                mOmniboxUpdatedConnectionSecurityIndicatorsEnabled, // Vivaldi
+                /* useLockIconForSecureState= */ false,
                 getTrackerBlockerIcon()); // Vivaldi
     }
 

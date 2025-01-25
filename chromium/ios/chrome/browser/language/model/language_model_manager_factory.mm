@@ -21,13 +21,13 @@
 
 namespace {
 
-void PrepareLanguageModels(ChromeBrowserState* const chrome_state,
+void PrepareLanguageModels(ProfileIOS* const profile,
                            language::LanguageModelManager* const manager) {
   // Create and set the primary Language Model to use based on the state of
   // experiments. Note: there are currently no such experiments on iOS.
-  manager->AddModel(language::LanguageModelManager::ModelType::FLUENT,
-                    std::make_unique<language::FluentLanguageModel>(
-                        chrome_state->GetPrefs()));
+  manager->AddModel(
+      language::LanguageModelManager::ModelType::FLUENT,
+      std::make_unique<language::FluentLanguageModel>(profile->GetPrefs()));
   manager->SetPrimaryModel(language::LanguageModelManager::ModelType::FLUENT);
 }
 
@@ -40,10 +40,10 @@ LanguageModelManagerFactory* LanguageModelManagerFactory::GetInstance() {
 }
 
 // static
-language::LanguageModelManager* LanguageModelManagerFactory::GetForBrowserState(
-    ChromeBrowserState* const state) {
+language::LanguageModelManager* LanguageModelManagerFactory::GetForProfile(
+    ProfileIOS* profile) {
   return static_cast<language::LanguageModelManager*>(
-      GetInstance()->GetServiceForBrowserState(state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 LanguageModelManagerFactory::LanguageModelManagerFactory()
@@ -56,13 +56,11 @@ LanguageModelManagerFactory::~LanguageModelManagerFactory() {}
 std::unique_ptr<KeyedService>
 LanguageModelManagerFactory::BuildServiceInstanceFor(
     web::BrowserState* const state) const {
-  ChromeBrowserState* const chrome_state =
-      ChromeBrowserState::FromBrowserState(state);
+  ProfileIOS* const profile = ProfileIOS::FromBrowserState(state);
   std::unique_ptr<language::LanguageModelManager> manager =
       std::make_unique<language::LanguageModelManager>(
-          chrome_state->GetPrefs(),
-          GetApplicationContext()->GetApplicationLocale());
-  PrepareLanguageModels(chrome_state, manager.get());
+          profile->GetPrefs(), GetApplicationContext()->GetApplicationLocale());
+  PrepareLanguageModels(profile, manager.get());
   return manager;
 }
 

@@ -208,7 +208,7 @@ ship a stable & reliable system to our millions of users.
 ### How to save/restore settings?
 
 For people who want to save & restore a set of "simple" variables (usually ones
-with values like "0" or "1" or "true" or "false" or similar), there's a few
+with values like "0" or "1" or "true" or "false" or similar), there are a few
 different possibilities.
 
 #### Use separate files.

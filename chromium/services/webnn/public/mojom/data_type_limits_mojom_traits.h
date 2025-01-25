@@ -114,6 +114,18 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.lesser_or_equal_input;
   }
+  static webnn::SupportedDataTypes logical_and_input(
+      const webnn::DataTypeLimits& data_type_limits) {
+    return data_type_limits.logical_and_input;
+  }
+  static webnn::SupportedDataTypes logical_or_input(
+      const webnn::DataTypeLimits& data_type_limits) {
+    return data_type_limits.logical_or_input;
+  }
+  static webnn::SupportedDataTypes logical_xor_input(
+      const webnn::DataTypeLimits& data_type_limits) {
+    return data_type_limits.logical_xor_input;
+  }
   static webnn::SupportedDataTypes logical_not_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.logical_not_input;
@@ -201,6 +213,14 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
   static webnn::SupportedDataTypes gather_elements_indices(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.gather_elements_indices;
+  }
+  static webnn::SupportedDataTypes gather_nd_input(
+      const webnn::DataTypeLimits& data_type_limits) {
+    return data_type_limits.gather_nd_input;
+  }
+  static webnn::SupportedDataTypes gather_nd_indices(
+      const webnn::DataTypeLimits& data_type_limits) {
+    return data_type_limits.gather_nd_indices;
   }
   static webnn::SupportedDataTypes gelu_input(
       const webnn::DataTypeLimits& data_type_limits) {
@@ -334,6 +354,14 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.reshape_input;
   }
+  static webnn::SupportedDataTypes scatter_elements_input(
+      const webnn::DataTypeLimits& data_type_limits) {
+    return data_type_limits.scatter_elements_input;
+  }
+  static webnn::SupportedDataTypes scatter_elements_indices(
+      const webnn::DataTypeLimits& data_type_limits) {
+    return data_type_limits.scatter_elements_indices;
+  }
   static webnn::SupportedDataTypes scatter_nd_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.scatter_nd_input;
@@ -417,6 +445,9 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
            data.ReadGreaterOrEqualInput(&out->greater_or_equal_input) &&
            data.ReadLesserInput(&out->lesser_input) &&
            data.ReadLesserOrEqualInput(&out->lesser_or_equal_input) &&
+           data.ReadLogicalAndInput(&out->logical_and_input) &&
+           data.ReadLogicalOrInput(&out->logical_or_input) &&
+           data.ReadLogicalXorInput(&out->logical_xor_input) &&
            data.ReadLogicalNotInput(&out->logical_not_input) &&
            data.ReadLogicalOutput(&out->logical_output) &&
            data.ReadAbsInput(&out->abs_input) &&
@@ -439,6 +470,8 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
            data.ReadGatherIndices(&out->gather_indices) &&
            data.ReadGatherElementsInput(&out->gather_elements_input) &&
            data.ReadGatherElementsIndices(&out->gather_elements_indices) &&
+           data.ReadGatherNdInput(&out->gather_nd_input) &&
+           data.ReadGatherNdIndices(&out->gather_nd_indices) &&
            data.ReadGeluInput(&out->gelu_input) &&
            data.ReadGemmInput(&out->gemm_input) &&
            data.ReadGruInput(&out->gru_input) &&
@@ -473,6 +506,8 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
            data.ReadReluInput(&out->relu_input) &&
            data.ReadResample2dInput(&out->resample2d_input) &&
            data.ReadReshapeInput(&out->reshape_input) &&
+           data.ReadScatterElementsInput(&out->scatter_elements_input) &&
+           data.ReadScatterElementsIndices(&out->scatter_elements_indices) &&
            data.ReadScatterNdInput(&out->scatter_nd_input) &&
            data.ReadScatterNdIndices(&out->scatter_nd_indices) &&
            data.ReadSigmoidInput(&out->sigmoid_input) &&

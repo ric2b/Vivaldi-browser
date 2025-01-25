@@ -70,7 +70,8 @@ std::unique_ptr<LoopbackServerEntity> NotesEntityBuilder::Build() {
 
   sync_pb::UniquePosition unique_position;
   // TODO(pvalenzuela): Allow caller customization of the position integer.
-  string suffix = GenerateSyncableNotesHash(originator_cache_guid_,
+  syncer::UniquePosition::Suffix suffix = GenerateSyncableNotesHash(
+      originator_cache_guid_,
                                             originator_client_item_id_);
   unique_position = syncer::UniquePosition::FromInt64(0, suffix).ToProto();
 

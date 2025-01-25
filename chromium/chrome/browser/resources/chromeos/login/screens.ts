@@ -67,11 +67,10 @@ import './screens/osauth/cryptohome_recovery.js';
 // SCREENS USED DURING THE LOGIN FLOW
 import './screens/login/arc_vm_data_migration.js';
 import './screens/login/encryption_migration.js';
-import './screens/login/lacros_data_backward_migration.js';
-import './screens/login/lacros_data_migration.js';
 import './screens/login/management_transition.js';
 import './screens/login/offline_login.js';
 import './screens/login/update_required_card.js';
+import './screens/common/account_selection.js';
 // SCREENS USED DURING THE OOBE FLOW
 import './screens/oobe/auto_enrollment_check.js';
 import './screens/oobe/consumer_update.js';
@@ -145,11 +144,7 @@ export const commonScreensList: OobeTypes.ScreensList = [
     condition: 'isOobeGaiaInfoScreenEnabled',
   },
   {tag: 'gaia-signin-element', id: 'gaia-signin'},
-  {
-    tag: 'gemini-intro-element',
-    id: 'gemini-intro',
-    condition: 'isOobeGeminiIntroEnabled',
-  },
+  {tag: 'gemini-intro-element', id: 'gemini-intro'},
   {tag: 'gesture-navigation-element', id: 'gesture-navigation'},
   {tag: 'guest-tos-element', id: 'guest-tos'},
   {tag: 'hw-data-collection-element', id: 'hw-data-collection'},
@@ -240,22 +235,17 @@ export const loginScreensList: OobeTypes.ScreensList = [
   {tag: 'cryptohome-recovery-element', id: 'cryptohome-recovery'},
   {tag: 'encryption-migration-element', id: 'encryption-migration'},
   {
-    tag: 'lacros-data-backward-migration-element',
-    id: 'lacros-data-backward-migration',
-    extra_classes: ['migrate'],
-  },
-  {
-    tag: 'lacros-data-migration-element',
-    id: 'lacros-data-migration',
-    extra_classes: ['migrate'],
-  },
-  {
     tag: 'management-transition-element',
     id: 'management-transition',
     extra_classes: ['migrate'],
   },
   {tag: 'offline-login-element', id: 'offline-login'},
   {tag: 'update-required-card-element', id: 'update-required'},
+  {
+    tag: 'account-selection-element',
+    id: 'account-selection',
+    condition: 'isOobeAddUserDuringEnrollmentEnabled',
+  },
 ];
 
 /**

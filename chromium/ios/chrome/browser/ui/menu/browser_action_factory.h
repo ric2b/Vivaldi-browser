@@ -112,6 +112,9 @@ class WebState;
 // Creates a UIAction instance for searching for the text in the pasteboard.
 - (UIAction*)actionToSearchCopiedText;
 
+// Creates a UIAction instance for opening the AI debug menu.
+- (UIAction*)actionToOpenAIMenu;
+
 #if defined(VIVALDI_BUILD)
 // Creates a UIAction instance configured for opening the `URL` in a background
 // tab and which will invoke the given `completion` block after execution.

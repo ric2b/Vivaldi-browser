@@ -41,6 +41,7 @@ import org.robolectric.shadows.ShadowLog;
 import org.chromium.base.LocaleUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.feed.FeedServiceBridge;
@@ -73,6 +74,7 @@ import java.util.Locale;
         manifest = Config.NONE,
         shadows = {})
 @DisableFeatures(ChromeFeatureList.FEED_FOLLOW_UI_UPDATE)
+@EnableFeatures(ChromeFeatureList.FEED_LOW_MEMORY_IMPROVEMENT)
 @SmallTest
 public final class WebFeedSnackbarControllerTest {
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
@@ -116,9 +118,9 @@ public final class WebFeedSnackbarControllerTest {
         mJniMocker.mock(WebFeedBridge.getTestHooksForTesting(), mWebFeedBridgeJniMock);
         mJniMocker.mock(FeedServiceBridge.getTestHooksForTesting(), mFeedServideBridgeJniMock);
         mContext = Robolectric.setupActivity(Activity.class);
-        when(mTracker.shouldTriggerHelpUI(FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
+        when(mTracker.shouldTriggerHelpUi(FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
                 .thenReturn(false);
-        when(mTracker.shouldTriggerHelpUIWithSnooze(
+        when(mTracker.shouldTriggerHelpUiWithSnooze(
                         FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
                 .thenReturn(new TriggerDetails(false, false));
         when(mTab.getOriginalUrl()).thenReturn(sTestUrl);
@@ -272,9 +274,9 @@ public final class WebFeedSnackbarControllerTest {
 
     @Test
     public void showPromoDialogForFollow_successful_active() {
-        when(mTracker.shouldTriggerHelpUI(FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
+        when(mTracker.shouldTriggerHelpUi(FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
                 .thenReturn(true);
-        when(mTracker.shouldTriggerHelpUIWithSnooze(
+        when(mTracker.shouldTriggerHelpUiWithSnooze(
                         FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
                 .thenReturn(new TriggerDetails(true, false));
         WebFeedBridge.FollowResults followResults = getSuccessfulFollowResult();
@@ -304,9 +306,9 @@ public final class WebFeedSnackbarControllerTest {
 
     @Test
     public void showPostSuccessfulFollowHelp_Dialog_FromForYouFeed() {
-        when(mTracker.shouldTriggerHelpUI(FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
+        when(mTracker.shouldTriggerHelpUi(FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
                 .thenReturn(true);
-        when(mTracker.shouldTriggerHelpUIWithSnooze(
+        when(mTracker.shouldTriggerHelpUiWithSnooze(
                         FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
                 .thenReturn(new TriggerDetails(true, false));
 
@@ -326,9 +328,9 @@ public final class WebFeedSnackbarControllerTest {
 
     @Test
     public void showPostSuccessfulFollowHelp_DialogAndSnackbar_FromFollowingFeed() {
-        when(mTracker.shouldTriggerHelpUI(FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
+        when(mTracker.shouldTriggerHelpUi(FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
                 .thenReturn(true);
-        when(mTracker.shouldTriggerHelpUIWithSnooze(
+        when(mTracker.shouldTriggerHelpUiWithSnooze(
                         FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
                 .thenReturn(new TriggerDetails(true, false));
 
@@ -364,9 +366,9 @@ public final class WebFeedSnackbarControllerTest {
 
     @Test
     public void showPromoDialogForFollow_successful_notActive() {
-        when(mTracker.shouldTriggerHelpUI(FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
+        when(mTracker.shouldTriggerHelpUi(FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
                 .thenReturn(true);
-        when(mTracker.shouldTriggerHelpUIWithSnooze(
+        when(mTracker.shouldTriggerHelpUiWithSnooze(
                         FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
                 .thenReturn(new TriggerDetails(true, false));
         WebFeedBridge.FollowResults followResults =
@@ -406,9 +408,9 @@ public final class WebFeedSnackbarControllerTest {
 
     @Test
     public void showPromoDialogForFollow_successful_noMetadata() {
-        when(mTracker.shouldTriggerHelpUI(FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
+        when(mTracker.shouldTriggerHelpUi(FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
                 .thenReturn(true);
-        when(mTracker.shouldTriggerHelpUIWithSnooze(
+        when(mTracker.shouldTriggerHelpUiWithSnooze(
                         FeatureConstants.IPH_WEB_FEED_POST_FOLLOW_DIALOG_FEATURE))
                 .thenReturn(new TriggerDetails(true, false));
         WebFeedBridge.FollowResults followResults =

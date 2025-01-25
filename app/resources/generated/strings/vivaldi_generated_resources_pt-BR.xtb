@@ -22,7 +22,7 @@
 <translation id="125220115284141797">Padrões</translation>
 <translation id="1257336506558170607">Exportar certificado selecionado</translation>
 <translation id="1297175357211070620">Destino</translation>
-<translation id="1303101771013849280">Arquivo HTML com Favoritos</translation>
+<translation id="1303101771013849280">Arquivo HTML com Marcadores</translation>
 <translation id="1358741672408003399">Ortografia e gramática</translation>
 <translation id="1430915738399379752">Imprimir</translation>
 <translation id="1451375123200651445">Página da Web, arquivo único</translation>
@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Falha ao carregar extensão</translation>
 <translation id="383891835335927981">Nenhum site teve o zoom modificado</translation>
 <translation id="385051799172605136">Voltar</translation>
+<translation id="3861977424605124250">Mostrar na inicialização</translation>
 <translation id="3867944738977021751">Campos do certificado</translation>
 <translation id="3905761538810670789">Reparar app</translation>
 <translation id="3908501907586732282">Ativar extensão</translation>
@@ -244,7 +245,7 @@
 <translation id="5059526285558225588">Escolha o que compartilhar</translation>
 <translation id="5063480226653192405">Uso</translation>
 <translation id="5116628073786783676">Sal&amp;var Áudio Como...</translation>
-<translation id="5143374789336132547">A extensão "<ph name="EXTENSION_NAME" />" alterou a página que é exibida quando você clica no botão "Página inicial".</translation>
+<translation id="5143374789336132547">A extensão "<ph name="EXTENSION_NAME" />" alterou a página que é exibida quando você clica no botão "Início".</translation>
 <translation id="5154108062446123722">Configurações avançadas para <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5154702632169343078">Assunto</translation>
 <translation id="5171343362375269016">Memória trocada</translation>
@@ -415,7 +416,7 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8071432093239591881">Imprimir como imagem</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
-        =1{Download está em andamento} other {Downloads estão em andamento}}</translation>
+        =1{Baixando arquivo} other {Baixando arquivos}}</translation>
 <translation id="8230134520748321204">Salvar senha para <ph name="ORIGIN" />?</translation>
 <translation id="8248050856337841185">C&amp;olar</translation>
 <translation id="8261378640211443080">Esta extensão não está listada na <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> e pode ter sido adicionada sem seu conhecimento.</translation>

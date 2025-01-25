@@ -29,7 +29,12 @@ group("api_implementations") {
   # experimental desktop-android build.
   # TODO(https://crbug.com/356905053): Continue moving more APIs here.
   public_deps = [
+    "//extensions/browser/api/alarms",
     "//extensions/browser/api/declarative_net_request",
+    "//extensions/browser/api/i18n",
+    "//extensions/browser/api/idle",
+    "//extensions/browser/api/runtime",
+    "//extensions/browser/api/storage",
     "//extensions/browser/api/test",
   ]
 
@@ -37,7 +42,6 @@ group("api_implementations") {
   if (enable_extensions) {
     public_deps += [
       "//extensions/browser:browser_sources",
-      "//extensions/browser/api/alarms",
       "//extensions/browser/api/app_current_window_internal",
       "//extensions/browser/api/app_runtime",
       "//extensions/browser/api/app_window",
@@ -50,8 +54,6 @@ group("api_implementations") {
       "//extensions/browser/api/feedback_private",
       "//extensions/browser/api/file_handlers",
       "//extensions/browser/api/file_system",
-      "//extensions/browser/api/i18n",
-      "//extensions/browser/api/idle",
       "//extensions/browser/api/management",
       "//extensions/browser/api/messaging",
       "//extensions/browser/api/messaging:native_messaging",
@@ -61,13 +63,11 @@ group("api_implementations") {
       "//extensions/browser/api/offscreen",
       "//extensions/browser/api/power",
       "//extensions/browser/api/printer_provider",
-      "//extensions/browser/api/runtime",
       "//extensions/browser/api/serial",
       "//extensions/browser/api/socket",
       "//extensions/browser/api/sockets_tcp",
       "//extensions/browser/api/sockets_tcp_server",
       "//extensions/browser/api/sockets_udp",
-      "//extensions/browser/api/storage",
       "//extensions/browser/api/system_cpu",
       "//extensions/browser/api/system_info",
       "//extensions/browser/api/system_memory",
@@ -80,16 +80,11 @@ group("api_implementations") {
     if (is_chromeos) {
       public_deps += [
         "//extensions/browser/api/cec_private",
-        "//extensions/browser/api/virtual_keyboard",
-        "//extensions/browser/api/webcam_private",
-      ]
-    }
-
-    if (is_chromeos_ash) {
-      public_deps += [
         "//extensions/browser/api/diagnostics",
         "//extensions/browser/api/lock_screen_data",
         "//extensions/browser/api/media_perception_private",
+        "//extensions/browser/api/virtual_keyboard",
+        "//extensions/browser/api/webcam_private",
       ]
     }
   }

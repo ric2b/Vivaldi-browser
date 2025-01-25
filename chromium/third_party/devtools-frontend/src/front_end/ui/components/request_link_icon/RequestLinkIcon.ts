@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../ui/components/icon_button/icon_button.js';
+
 import * as Common from '../../../core/common/common.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Platform from '../../../core/platform/platform.js';
@@ -9,12 +11,13 @@ import type * as SDK from '../../../core/sdk/sdk.js';
 import type * as Protocol from '../../../generated/protocol.js';
 import type * as Logs from '../../../models/logs/logs.js';
 import * as NetworkForward from '../../../panels/network/forward/forward.js';
-import * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 import * as LitHtml from '../../../ui/lit-html/lit-html.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import requestLinkIconStyles from './requestLinkIcon.css.js';
+
+const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -58,7 +61,6 @@ export const extractShortPath = (path: Platform.DevToolsPath.UrlString): string 
 };
 
 export class RequestLinkIcon extends HTMLElement {
-  static readonly litTagName = LitHtml.literal`devtools-request-link-icon`;
   readonly #shadow = this.attachShadow({mode: 'open'});
   #linkToPreflight?: boolean;
   // The value `null` indicates that the request is not available,
@@ -169,22 +171,22 @@ export class RequestLinkIcon extends HTMLElement {
     }
 
     if (this.#urlToDisplay) {
-      return LitHtml.html`<span title=${url}>${this.#urlToDisplay}</span>`;
+      return html`<span title=${url}>${this.#urlToDisplay}</span>`;
     }
 
     const filename = extractShortPath(url);
-    return LitHtml.html`<span aria-label=${i18nString(UIStrings.shortenedURL)} title=${url}>${filename}</span>`;
+    return html`<span aria-label=${i18nString(UIStrings.shortenedURL)} title=${url}>${filename}</span>`;
   }
 
   async #render(): Promise<void> {
     return coordinator.write(() => {
       // clang-format off
-      LitHtml.render(LitHtml.html`
+      LitHtml.render(html`
       <button class=${LitHtml.Directives.classMap({link: Boolean(this.#request)})}
               title=${this.#getTooltip()}
               jslog=${VisualLogging.link('request').track({click: true})}
               @click=${this.handleClick}>
-        <${IconButton.Icon.Icon.litTagName} name="arrow-up-down-circle"></${IconButton.Icon.Icon.litTagName}>
+        <devtools-icon name="arrow-up-down-circle"></devtools-icon>
         ${this.#maybeRenderURL()}
       </button>`,
       this.#shadow, {host: this});

@@ -176,12 +176,14 @@ class PropertyTreeManager {
   static void DropCompositorScrollDeltaNextCommit(cc::LayerTreeHost&,
                                                   CompositorElementId);
 
-  static uint32_t GetMainThreadScrollingReasons(const cc::LayerTreeHost&,
-                                                const ScrollPaintPropertyNode&);
+  static uint32_t GetMainThreadRepaintReasons(const cc::LayerTreeHost&,
+                                              const ScrollPaintPropertyNode&);
   // TODO(crbug.com/40517276): Remove this function after launching
   // RasterInducingScroll.
   static bool UsesCompositedScrolling(const cc::LayerTreeHost&,
                                       const ScrollPaintPropertyNode&);
+  static bool UsesRasterInducingScroll(const cc::LayerTreeHost&,
+                                       const ScrollPaintPropertyNode&);
 
   // Updates conditional render surface reasons for all effect nodes in
   // |GetEffectTree|. Every effect is supposed to have render surface enabled
@@ -358,7 +360,7 @@ class PropertyTreeManager {
 
   void UpdatePixelMovingFilterClipExpanders();
 
-  uint32_t NonCompositedMainThreadScrollingReasons(
+  uint32_t NonCompositedMainThreadRepaintReasons(
       const TransformPaintPropertyNode& scroll_translation) const;
 
   PropertyTreeManagerClient& client_;

@@ -93,6 +93,12 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       public RenderWidgetSignals::Observer,
       public base::trace_event::TraceLog::AsyncEnabledStateObserver {
  public:
+  // Duration before rendering is considered starved by render-blocking tasks,
+  // which is a safeguard against pathological cases for render-blocking image
+  // prioritization.
+  static constexpr base::TimeDelta kRenderBlockingStarvationThreshold =
+      base::Milliseconds(500);
+
   // Tracks prioritization of the next frame. This is used in conjunction with
   // `UseCase` and other signals to compute the priority of the compositor task
   // queue.
@@ -131,11 +137,9 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     // per-ASG task runner instead of the per-thread task runner.
     bool mbi_override_task_runner_handle;
 
-    // If ThreadedScrollPreventRenderingStarvation is enabled, this is set to
-    // the policy set in the associated feature param, otherwise this is
-    // equivalent to the existing behavior.
-    CompositorTQPolicyDuringThreadedScroll
-        compositor_tq_policy_during_threaded_scroll;
+    // If ThreadedScrollPreventRenderingStarvation is enabled, this controls the
+    // rendering anti-starvation threshold during UseCase::kCompositorGesture.
+    base::TimeDelta compositor_gesture_rendering_starvation_threshold;
 
     // The policy to use for discrete input-based task deferral. If
     // `features::kDeferRendererTasksAfterInput` is enabled, this is set to the
@@ -262,13 +266,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   scoped_refptr<MainThreadTaskQueue> NewTaskQueue(
       const MainThreadTaskQueue::QueueCreationParams& params);
 
-  // Returns a new loading task queue. This queue is intended for tasks related
-  // to resource dispatch, foreground HTML parsing, etc...
-  // Note: Tasks posted to kFrameLoadingControl queues must execute quickly.
-  scoped_refptr<MainThreadTaskQueue> NewLoadingTaskQueue(
-      MainThreadTaskQueue::QueueType queue_type,
-      FrameSchedulerImpl* frame_scheduler);
-
   // Returns a new throttleable task queue to be used for tests.
   scoped_refptr<MainThreadTaskQueue> NewThrottleableTaskQueueForTest(
       FrameSchedulerImpl* frame_scheduler);
@@ -371,6 +368,10 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     return main_thread_only().current_policy.find_in_page_priority;
   }
 
+  base::TimeTicks CurrentTaskStartTime() const {
+    return main_thread_only().current_task_start_time;
+  }
+
  protected:
   // ThreadSchedulerBase implementation:
   WTF::Vector<base::OnceClosure>& GetOnTaskCompletionCallbacks() override;
@@ -385,8 +386,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   void SetCurrentUseCaseForTest(UseCase use_case) {
     main_thread_only().current_use_case = use_case;
   }
-
-  void SetHaveSeenABlockingGestureForTesting(bool status);
 
   virtual void PerformMicrotaskCheckpoint();
 
@@ -458,7 +457,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     DISALLOW_NEW();
 
    public:
-    RAILMode rail_mode = RAILMode::kAnimation;
+    RAILMode rail_mode = RAILMode::kDefault;
     bool should_freeze_compositor_task_queue = false;
     bool should_pause_task_queues = false;
     bool should_pause_task_queues_for_android_webview = false;

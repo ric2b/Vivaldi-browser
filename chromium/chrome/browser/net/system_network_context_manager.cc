@@ -356,6 +356,7 @@ class SystemNetworkContextManager::NetworkProcessLaunchWatcher
   void BrowserChildProcessLaunchFailed(
       const content::ChildProcessData& data,
       const content::ChildProcessTerminationInfo& info) override {
+    CHECK(data.sandbox_type.has_value());
     if (data.sandbox_type == sandbox::mojom::Sandbox::kNetwork) {
       // This histogram duplicates data recorded in
       // ChildProcess.LaunchFailed.UtilityProcessErrorCode but is specific to
@@ -781,17 +782,12 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
   // The OSCrypt keys are process bound, so if network service is out of
   // process, send it the required key.
   if (content::IsOutOfProcessNetworkService()) {
-#if BUILDFLAG(IS_WIN)
-    // On Windows, if OSCrypt Async is enabled then OSCrypt manages the
-    // encryption key via the DPAPI key provider, and there is no need to send
-    // the key separately to OSCrypt sync.
-    if (!base::FeatureList::IsEnabled(
-            features::kUseOsCryptAsyncForCookieEncryption)) {
-      network_service->SetEncryptionKey(OSCrypt::GetRawEncryptionKey());
-    }
-#else
+    // On Windows, OSCrypt Async manages the encryption key via the DPAPI key
+    // provider, and there is no need to send the key separately to OSCrypt
+    // sync.
+#if !BUILDFLAG(IS_WIN)
     network_service->SetEncryptionKey(OSCrypt::GetRawEncryptionKey());
-#endif  // BUILDFLAG(IS_WIN)
+#endif  // !BUILDFLAG(IS_WIN)
   }
 
   // Configure SCT Auditing in the NetworkService.
@@ -824,8 +820,9 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
   // requires the SystemNetworkContextManager to be ready. It does not need to
   // be recreated every time the network service is restarted (and should not,
   // since it expects to outlive the NetworkTimeTracker).
+  // g_browser_process can be null in some tests.
   if (base::FeatureList::IsEnabled(features::kCertVerificationNetworkTime) &&
-      !cert_verifier_time_updater_) {
+      !cert_verifier_time_updater_ && g_browser_process) {
     cert_verifier_time_updater_ =
         std::make_unique<CertVerifierServiceTimeUpdater>(
             g_browser_process->network_time_tracker());

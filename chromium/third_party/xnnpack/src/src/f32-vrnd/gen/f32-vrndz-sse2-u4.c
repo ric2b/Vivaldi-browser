@@ -20,14 +20,14 @@ void xnn_f32_vrndz_ukernel__sse2_u4(
     size_t batch,
     const float* input,
     float* output,
-    const union xnn_f32_rnd_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const __m128i vmagic = _mm_load_si128((const __m128i*) params->sse2.sign_mask);
+  const __m128i vmagic = _mm_castps_si128(_mm_set1_ps(-0.0f));
   for (; batch >= 4 * sizeof(float); batch -= 4 * sizeof(float)) {
     const __m128 vx0123 = _mm_loadu_ps(input);
     input += 4;

@@ -44,7 +44,8 @@ void SelectClientHintsBrand(std::optional<std::string>& brand,
                             std::string& major_version,
                             std::string& full_version);
 
-void UpdateBrands(int seed, blink::UserAgentBrandList& brands);
+void UpdateBrands(
+    std::optional<blink::UserAgentBrandVersion>& additional_brand_version);
 
 void ConfigureClientHintsOverrides();
 

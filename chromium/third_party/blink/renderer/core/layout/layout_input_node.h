@@ -87,6 +87,7 @@ class CORE_EXPORT LayoutInputNode {
   bool IsFlexItem() const { return IsBlock() && box_->IsFlexItem(); }
   bool IsFlexibleBox() const { return IsBlock() && box_->IsFlexibleBox(); }
   bool IsGrid() const { return IsBlock() && box_->IsLayoutGrid(); }
+  bool IsMasonry() const { return IsBlock() && box_->IsLayoutMasonry(); }
   bool ShouldBeConsideredAsReplaced() const {
     return box_->ShouldBeConsideredAsReplaced();
   }
@@ -108,8 +109,6 @@ class CORE_EXPORT LayoutInputNode {
   bool IsInitialLetterBox() const { return box_->IsInitialLetterBox(); }
   bool IsMedia() const { return box_->IsMedia(); }
   bool IsCanvas() const { return box_->IsCanvas(); }
-  bool IsRubyColumn() const { return IsBlock() && box_->IsRubyColumn(); }
-  bool IsRubyText() const { return box_->IsRubyText(); }
 
   // Return true if this is the legend child of a fieldset that gets special
   // treatment (i.e. placed over the block-start border).
@@ -221,6 +220,12 @@ class CORE_EXPORT LayoutInputNode {
   Document& GetDocument() const { return box_->GetDocument(); }
 
   Node* GetDOMNode() const { return box_->GetNode(); }
+
+  // Return the DOM node of this, or, if none, that of the nearest ancestor that
+  // has one.
+  //
+  // Anonymous objects have no DOM node.
+  Node* EnclosingDOMNode() const { return box_->EnclosingNode(); }
 
   PhysicalSize InitialContainingBlockSize() const;
 

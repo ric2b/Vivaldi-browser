@@ -247,6 +247,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoAutofillSelected,
     kPseudoBackdrop,
     kPseudoBefore,
+    kPseudoCheck,
     kPseudoChecked,
     kPseudoCornerPresent,
     kPseudoCurrent,
@@ -270,6 +271,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoFocusVisible,
     kPseudoFocusWithin,
     kPseudoFullPageMedia,
+    kPseudoHasSlotted,
     kPseudoHorizontal,
     kPseudoHover,
     kPseudoIncrement,
@@ -294,6 +296,8 @@ class CORE_EXPORT CSSSelector {
     kPseudoOptional,
     kPseudoParent,  // Written as & (in nested rules).
     kPseudoPart,
+    kPseudoPermissionElementInvalidStyle,
+    kPseudoPermissionElementOccluded,
     kPseudoPermissionGranted,
     kPseudoPlaceholder,
     kPseudoPlaceholderShown,
@@ -311,8 +315,8 @@ class CORE_EXPORT CSSSelector {
     kPseudoScrollbarTrack,
     kPseudoScrollbarTrackPiece,
     kPseudoSearchText,
-    kPseudoSelectFallbackButton,
-    kPseudoSelectFallbackButtonText,
+    kPseudoSelectArrow,
+    kPseudoSelectHasChildButton,
     kPseudoPicker,
     kPseudoSelection,
     kPseudoSelectorFragmentAnchor,
@@ -469,7 +473,7 @@ class CORE_EXPORT CSSSelector {
   // http://www.w3.org/TR/css3-selectors/#attrnmsp
   const QualifiedName& Attribute() const;
   AttributeMatchType AttributeMatch() const;
-  bool IsCaseSensitiveAttribute() const;
+  bool LegacyCaseInsensitiveMatch() const;
   // Returns the argument of a parameterized selector. For example, :lang(en-US)
   // would have an argument of en-US.
   // Note that :nth-* selectors don't store an argument and just store the
@@ -499,6 +503,11 @@ class CORE_EXPORT CSSSelector {
                                .contains_complex_logical_combinations_
                          : false;
   }
+  bool HasArgumentMatchInShadowTree() const {
+    return HasRareData()
+               ? data_.rare_data_->bits_.has_.argument_match_in_shadow_tree_
+               : false;
+  }
 
 #if DCHECK_IS_ON()
   void Show() const;
@@ -512,6 +521,7 @@ class CORE_EXPORT CSSSelector {
   void SetIdentList(std::unique_ptr<Vector<AtomicString>>);
   void SetContainsPseudoInsideHasPseudoClass();
   void SetContainsComplexLogicalCombinationsInsideHasPseudoClass();
+  void SetHasArgumentMatchInShadowTree();
 
   void SetNth(int a, int b, CSSSelectorList* sub_selector);
   bool MatchNth(unsigned count) const;
@@ -589,13 +599,22 @@ class CORE_EXPORT CSSSelector {
   }
 
   bool MatchesPseudoElement() const;
+  bool IsAllowedInParentPseudo() const;
   bool IsTreeAbidingPseudoElement() const;
+  bool IsElementBackedPseudoElement() const;
+  static bool IsElementBackedPseudoElement(CSSSelector::PseudoType pseudo);
   bool IsAllowedAfterPart() const;
 
-  // Returns true if the immediately preceeding simple selector is ::part.
+  // Returns true if the immediately preceding simple selector is ::part.
+  // TODO(https://crbug.com/40280846): Remove this when removing the
+  // CSSCascadeCorrectScope flag.
   bool FollowsPart() const;
-  // Returns true if the immediately preceeding simple selector is ::slotted.
+  // Returns true if the immediately preceding simple selector is ::slotted.
   bool FollowsSlotted() const;
+
+  // Returns true if any preceding selectors have combinators that cross tree
+  // scopes.
+  bool CrossesTreeScopes() const;
 
   // True if the selector was added implicitly. This can happen for e.g.
   // nested rules that would otherwise lack the scoping selector (:scope).
@@ -651,7 +670,7 @@ class CORE_EXPORT CSSSelector {
   // Used for attribute selector (with value). Real type is AttributeMatchType.
   using AttributeMatchField =
       IsCoveredByBucketingField::DefineNextValue<unsigned, 2>;
-  using IsCaseSensitiveAttributeField =
+  using LegacyCaseInsensitiveMatchField =
       AttributeMatchField::DefineNextValue<bool, 1>;
   // 4 free bits here.
   BitField bits_;
@@ -701,6 +720,11 @@ class CORE_EXPORT CSSSelector {
         // Used for :has() with logical combinations (:is(), :where(), :not())
         // containing complex selector in its argument. e.g. :has(:is(.a .b))
         bool contains_complex_logical_combinations_;
+
+        // Used for :has() next to :host() (e.g. ':host:has(.a)') so that the
+        // :has() argument is tested on the elements in shadow tree of the host
+        // element.
+        bool argument_match_in_shadow_tree_;
       } has_;
 
       // See GetNestingType.
@@ -787,9 +811,9 @@ inline CSSSelector::AttributeMatchType CSSSelector::AttributeMatch() const {
   return static_cast<AttributeMatchType>(bits_.get<AttributeMatchField>());
 }
 
-inline bool CSSSelector::IsCaseSensitiveAttribute() const {
+inline bool CSSSelector::LegacyCaseInsensitiveMatch() const {
   DCHECK(IsAttributeSelector());
-  return bits_.get<IsCaseSensitiveAttributeField>();
+  return bits_.get<LegacyCaseInsensitiveMatchField>();
 }
 
 inline bool CSSSelector::IsASCIILower(const AtomicString& value) {
@@ -827,7 +851,7 @@ inline CSSSelector::CSSSelector()
             IsImplicitlyAddedField::encode(false) |
             IsCoveredByBucketingField::encode(false) |
             AttributeMatchField::encode(0) |
-            IsCaseSensitiveAttributeField::encode(false)),
+            LegacyCaseInsensitiveMatchField::encode(false)),
       data_(DataUnion::kConstructEmptyValue) {}
 
 inline CSSSelector::CSSSelector(const QualifiedName& tag_q_name,
@@ -840,7 +864,7 @@ inline CSSSelector::CSSSelector(const QualifiedName& tag_q_name,
             IsImplicitlyAddedField::encode(tag_is_implicit) |
             IsCoveredByBucketingField::encode(false) |
             AttributeMatchField::encode(0) |
-            IsCaseSensitiveAttributeField::encode(false)),
+            LegacyCaseInsensitiveMatchField::encode(false)),
       data_(tag_q_name) {}
 
 inline CSSSelector::CSSSelector(const StyleRule* parent_rule, bool is_implicit)
@@ -853,7 +877,7 @@ inline CSSSelector::CSSSelector(const StyleRule* parent_rule, bool is_implicit)
             IsImplicitlyAddedField::encode(is_implicit) |
             IsCoveredByBucketingField::encode(false) |
             AttributeMatchField::encode(0) |
-            IsCaseSensitiveAttributeField::encode(false)),
+            LegacyCaseInsensitiveMatchField::encode(false)),
       data_(parent_rule) {}
 
 inline CSSSelector::CSSSelector(const AtomicString& pseudo_name,
@@ -869,7 +893,7 @@ inline CSSSelector::CSSSelector(const AtomicString& pseudo_name,
             IsImplicitlyAddedField::encode(is_implicit) |
             IsCoveredByBucketingField::encode(false) |
             AttributeMatchField::encode(0) |
-            IsCaseSensitiveAttributeField::encode(false)),
+            LegacyCaseInsensitiveMatchField::encode(false)),
       data_(pseudo_name) {}
 
 inline CSSSelector::CSSSelector(const CSSSelector& o)

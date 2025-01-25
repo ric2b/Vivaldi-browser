@@ -33,8 +33,8 @@ class FormDataBytesConsumer final : public BytesConsumer {
                                     BytesConsumer* consumer_for_testing);
 
   // BytesConsumer implementation
-  Result BeginRead(const char** buffer, size_t* available) override {
-    return impl_->BeginRead(buffer, available);
+  Result BeginRead(base::span<const char>& buffer) override {
+    return impl_->BeginRead(buffer);
   }
   Result EndRead(size_t read_size) override {
     return impl_->EndRead(read_size);

@@ -33,16 +33,19 @@
 #include <utility>
 
 #include "dawn/common/GPUInfo.h"
+#include "dawn/common/StringViewUtils.h"
 #include "dawn/dawn_proc.h"
 #include "dawn/native/DawnNative.h"
 #include "dawn/tests/DawnTest.h"
 #include "dawn/tests/MockCallback.h"
+#include "dawn/tests/StringViewMatchers.h"
 #include "gtest/gtest.h"
 
 namespace dawn {
 namespace {
 
 using testing::_;
+using testing::EmptySizedString;
 using testing::MockCallback;
 using testing::SaveArg;
 
@@ -128,7 +131,7 @@ TEST_P(AdapterCreationTest, DefaultAdapter) {
     MockCallback<WGPURequestAdapterCallback> cb;
 
     WGPUAdapter cAdapter = nullptr;
-    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, nullptr, this))
+    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, EmptySizedString(), this))
         .WillOnce(SaveArg<1>(&cAdapter));
     RequestAdapter(instance, &options, cb.Callback(), cb.MakeUserdata(this));
 
@@ -143,14 +146,14 @@ TEST_P(AdapterCreationTest, NullGivesDefaultAdapter) {
     MockCallback<WGPURequestAdapterCallback> cb;
 
     WGPUAdapter cAdapter = nullptr;
-    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, nullptr, this))
+    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, EmptySizedString(), this))
         .WillOnce(SaveArg<1>(&cAdapter));
     RequestAdapter(instance, &options, cb.Callback(), cb.MakeUserdata(this));
 
     wgpu::Adapter adapter = wgpu::Adapter::Acquire(cAdapter);
     EXPECT_EQ(adapter != nullptr, anyAdapterAvailable);
 
-    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, nullptr, this + 1))
+    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, EmptySizedString(), this + 1))
         .WillOnce(SaveArg<1>(&cAdapter));
     RequestAdapter(instance, nullptr, cb.Callback(), cb.MakeUserdata(this + 1));
 
@@ -167,7 +170,7 @@ TEST_P(AdapterCreationTest, FallbackAdapter) {
 
     WGPUAdapter cAdapter = nullptr;
     if (swiftShaderAvailable) {
-        EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, nullptr, this))
+        EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, EmptySizedString(), this))
             .WillOnce(SaveArg<1>(&cAdapter));
     } else {
         EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Unavailable, nullptr, _, this))
@@ -195,7 +198,7 @@ TEST_P(AdapterCreationTest, PreferHighPerformance) {
 
     WGPUAdapter cAdapter = nullptr;
     if (anyAdapterAvailable) {
-        EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, nullptr, this))
+        EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, EmptySizedString(), this))
             .WillOnce(SaveArg<1>(&cAdapter));
     } else {
         EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Unavailable, nullptr, _, this))
@@ -224,7 +227,7 @@ TEST_P(AdapterCreationTest, PreferLowPower) {
 
     WGPUAdapter cAdapter = nullptr;
     if (anyAdapterAvailable) {
-        EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, nullptr, this))
+        EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, EmptySizedString(), this))
             .WillOnce(SaveArg<1>(&cAdapter));
     } else {
         EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Unavailable, nullptr, _, this))
@@ -252,7 +255,7 @@ TEST_P(AdapterCreationTest, Compatibility) {
     MockCallback<WGPURequestAdapterCallback> cb;
 
     WGPUAdapter cAdapter = nullptr;
-    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, nullptr, this))
+    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, EmptySizedString(), this))
         .WillOnce(SaveArg<1>(&cAdapter));
     RequestAdapter(instance, &options, cb.Callback(), cb.MakeUserdata(this));
 
@@ -271,7 +274,7 @@ TEST_P(AdapterCreationTest, NonCompatibility) {
     MockCallback<WGPURequestAdapterCallback> cb;
 
     WGPUAdapter cAdapter = nullptr;
-    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, nullptr, this))
+    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, EmptySizedString(), this))
         .WillOnce(SaveArg<1>(&cAdapter));
     RequestAdapter(instance, &options, cb.Callback(), cb.MakeUserdata(this));
 
@@ -290,7 +293,7 @@ TEST_P(AdapterCreationTest, GetInstance) {
     MockCallback<WGPURequestAdapterCallback> cb;
 
     WGPUAdapter cAdapter = nullptr;
-    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, nullptr, this))
+    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, EmptySizedString(), this))
         .WillOnce(SaveArg<1>(&cAdapter));
     RequestAdapter(instance, &options, cb.Callback(), cb.MakeUserdata(this));
 
@@ -308,7 +311,7 @@ TEST_P(AdapterCreationTest, InfoUnique) {
     MockCallback<WGPURequestAdapterCallback> cb;
 
     WGPUAdapter cAdapter = nullptr;
-    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, nullptr, this))
+    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, EmptySizedString(), this))
         .WillOnce(SaveArg<1>(&cAdapter));
     RequestAdapter(instance, &options, cb.Callback(), cb.MakeUserdata(this));
 
@@ -323,14 +326,14 @@ TEST_P(AdapterCreationTest, InfoUnique) {
     adapter.GetInfo(&info1);
     adapter.GetInfo(&info2);
 
-    EXPECT_NE(info1.vendor, info2.vendor);
-    EXPECT_STREQ(info1.vendor, info2.vendor);
-    EXPECT_NE(info1.architecture, info2.architecture);
-    EXPECT_STREQ(info1.architecture, info2.architecture);
-    EXPECT_NE(info1.device, info2.device);
-    EXPECT_STREQ(info1.device, info2.device);
-    EXPECT_NE(info1.description, info2.description);
-    EXPECT_STREQ(info1.description, info2.description);
+    EXPECT_NE(info1.vendor.data, info2.vendor.data);
+    EXPECT_EQ(info1.vendor, info2.vendor);
+    EXPECT_NE(info1.architecture.data, info2.architecture.data);
+    EXPECT_EQ(info1.architecture, info2.architecture);
+    EXPECT_NE(info1.device.data, info2.device.data);
+    EXPECT_EQ(info1.device, info2.device);
+    EXPECT_NE(info1.description.data, info2.description.data);
+    EXPECT_EQ(info1.description, info2.description);
 }
 
 // Test move assignment of the adapter info.
@@ -340,7 +343,7 @@ TEST_P(AdapterCreationTest, InfoMoveAssign) {
     MockCallback<WGPURequestAdapterCallback> cb;
 
     WGPUAdapter cAdapter = nullptr;
-    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, nullptr, this))
+    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, EmptySizedString(), this))
         .WillOnce(SaveArg<1>(&cAdapter));
     RequestAdapter(instance, &options, cb.Callback(), cb.MakeUserdata(this));
 
@@ -355,10 +358,10 @@ TEST_P(AdapterCreationTest, InfoMoveAssign) {
     adapter.GetInfo(&info1);
     adapter.GetInfo(&info2);
 
-    std::string vendor = info1.vendor;
-    std::string architecture = info1.architecture;
-    std::string device = info1.device;
-    std::string description = info1.description;
+    wgpu::StringView vendor = info1.vendor;
+    wgpu::StringView architecture = info1.architecture;
+    wgpu::StringView device = info1.device;
+    wgpu::StringView description = info1.description;
     wgpu::BackendType backendType = info1.backendType;
     wgpu::AdapterType adapterType = info1.adapterType;
     uint32_t vendorID = info1.vendorID;
@@ -368,10 +371,10 @@ TEST_P(AdapterCreationTest, InfoMoveAssign) {
     info2 = std::move(info1);
 
     // Expect info2 to have info1's old contents.
-    EXPECT_STREQ(info2.vendor, vendor.c_str());
-    EXPECT_STREQ(info2.architecture, architecture.c_str());
-    EXPECT_STREQ(info2.device, device.c_str());
-    EXPECT_STREQ(info2.description, description.c_str());
+    EXPECT_EQ(info2.vendor, vendor);
+    EXPECT_EQ(info2.architecture, architecture);
+    EXPECT_EQ(info2.device, device);
+    EXPECT_EQ(info2.description, description);
     EXPECT_EQ(info2.backendType, backendType);
     EXPECT_EQ(info2.adapterType, adapterType);
     EXPECT_EQ(info2.vendorID, vendorID);
@@ -379,10 +382,14 @@ TEST_P(AdapterCreationTest, InfoMoveAssign) {
     EXPECT_EQ(info2.compatibilityMode, compatibilityMode);
 
     // Expect info1 to be empty.
-    EXPECT_EQ(info1.vendor, nullptr);
-    EXPECT_EQ(info1.architecture, nullptr);
-    EXPECT_EQ(info1.device, nullptr);
-    EXPECT_EQ(info1.description, nullptr);
+    EXPECT_EQ(info1.vendor.data, nullptr);
+    EXPECT_EQ(info1.vendor.length, wgpu::kStrlen);
+    EXPECT_EQ(info1.architecture.data, nullptr);
+    EXPECT_EQ(info1.architecture.length, wgpu::kStrlen);
+    EXPECT_EQ(info1.device.data, nullptr);
+    EXPECT_EQ(info1.device.length, wgpu::kStrlen);
+    EXPECT_EQ(info1.description.data, nullptr);
+    EXPECT_EQ(info1.description.length, wgpu::kStrlen);
     EXPECT_EQ(info1.backendType, static_cast<wgpu::BackendType>(0));
     EXPECT_EQ(info1.adapterType, static_cast<wgpu::AdapterType>(0));
     EXPECT_EQ(info1.vendorID, 0u);
@@ -397,7 +404,7 @@ TEST_P(AdapterCreationTest, InfoMoveConstruct) {
     MockCallback<WGPURequestAdapterCallback> cb;
 
     WGPUAdapter cAdapter = nullptr;
-    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, nullptr, this))
+    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, EmptySizedString(), this))
         .WillOnce(SaveArg<1>(&cAdapter));
     RequestAdapter(instance, &options, cb.Callback(), cb.MakeUserdata(this));
 
@@ -410,10 +417,10 @@ TEST_P(AdapterCreationTest, InfoMoveConstruct) {
     wgpu::AdapterInfo info1;
     adapter.GetInfo(&info1);
 
-    std::string vendor = info1.vendor;
-    std::string architecture = info1.architecture;
-    std::string device = info1.device;
-    std::string description = info1.description;
+    wgpu::StringView vendor = info1.vendor;
+    wgpu::StringView architecture = info1.architecture;
+    wgpu::StringView device = info1.device;
+    wgpu::StringView description = info1.description;
     wgpu::BackendType backendType = info1.backendType;
     wgpu::AdapterType adapterType = info1.adapterType;
     uint32_t vendorID = info1.vendorID;
@@ -423,10 +430,10 @@ TEST_P(AdapterCreationTest, InfoMoveConstruct) {
     wgpu::AdapterInfo info2(std::move(info1));
 
     // Expect info2 to have info1's old contents.
-    EXPECT_STREQ(info2.vendor, vendor.c_str());
-    EXPECT_STREQ(info2.architecture, architecture.c_str());
-    EXPECT_STREQ(info2.device, device.c_str());
-    EXPECT_STREQ(info2.description, description.c_str());
+    EXPECT_EQ(info2.vendor, vendor);
+    EXPECT_EQ(info2.architecture, architecture);
+    EXPECT_EQ(info2.device, device);
+    EXPECT_EQ(info2.description, description);
     EXPECT_EQ(info2.backendType, backendType);
     EXPECT_EQ(info2.adapterType, adapterType);
     EXPECT_EQ(info2.vendorID, vendorID);
@@ -434,10 +441,14 @@ TEST_P(AdapterCreationTest, InfoMoveConstruct) {
     EXPECT_EQ(info2.compatibilityMode, compatibilityMode);
 
     // Expect info1 to be empty.
-    EXPECT_EQ(info1.vendor, nullptr);
-    EXPECT_EQ(info1.architecture, nullptr);
-    EXPECT_EQ(info1.device, nullptr);
-    EXPECT_EQ(info1.description, nullptr);
+    EXPECT_EQ(info1.vendor.data, nullptr);
+    EXPECT_EQ(info1.vendor.length, wgpu::kStrlen);
+    EXPECT_EQ(info1.architecture.data, nullptr);
+    EXPECT_EQ(info1.architecture.length, wgpu::kStrlen);
+    EXPECT_EQ(info1.device.data, nullptr);
+    EXPECT_EQ(info1.device.length, wgpu::kStrlen);
+    EXPECT_EQ(info1.description.data, nullptr);
+    EXPECT_EQ(info1.description.length, wgpu::kStrlen);
     EXPECT_EQ(info1.backendType, static_cast<wgpu::BackendType>(0));
     EXPECT_EQ(info1.adapterType, static_cast<wgpu::AdapterType>(0));
     EXPECT_EQ(info1.vendorID, 0u);
@@ -452,7 +463,7 @@ TEST_P(AdapterCreationTest, InfoOutliveAdapter) {
     MockCallback<WGPURequestAdapterCallback> cb;
 
     WGPUAdapter cAdapter = nullptr;
-    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, nullptr, this))
+    EXPECT_CALL(cb, Call(WGPURequestAdapterStatus_Success, _, EmptySizedString(), this))
         .WillOnce(SaveArg<1>(&cAdapter));
     RequestAdapter(instance, &options, cb.Callback(), cb.MakeUserdata(this));
 
@@ -466,10 +477,10 @@ TEST_P(AdapterCreationTest, InfoOutliveAdapter) {
     adapter.GetInfo(&info);
 
     // Make a copy of the info.
-    std::string vendor = info.vendor;
-    std::string architecture = info.architecture;
-    std::string device = info.device;
-    std::string description = info.description;
+    std::string vendor{std::string_view(info.vendor)};
+    std::string architecture{std::string_view(info.architecture)};
+    std::string device{std::string_view(info.device)};
+    std::string description{std::string_view(info.description)};
 
     // Release the adapter.
     adapter = nullptr;
@@ -477,10 +488,10 @@ TEST_P(AdapterCreationTest, InfoOutliveAdapter) {
     // Ensure we still read the info (pointers are still valid).
     // Check the values are equal to make sure they haven't been overwritten,
     // and to make sure the compiler can't elide no-op pointer reads.
-    EXPECT_EQ(info.vendor, vendor);
-    EXPECT_EQ(info.architecture, architecture);
-    EXPECT_EQ(info.device, device);
-    EXPECT_EQ(info.description, description);
+    EXPECT_EQ(std::string_view(info.vendor), vendor);
+    EXPECT_EQ(std::string_view(info.architecture), architecture);
+    EXPECT_EQ(std::string_view(info.device), device);
+    EXPECT_EQ(std::string_view(info.description), description);
 }
 
 }  // anonymous namespace

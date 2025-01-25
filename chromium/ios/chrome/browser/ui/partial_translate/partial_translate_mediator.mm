@@ -25,6 +25,20 @@
 #import "ios/web/public/web_state.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/ui/translate/vivaldi_translate_constants.h"
+#import "ios/ui/translate/vivaldi_translate_coordinator.h"
+#import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
+#import "prefs/vivaldi_pref_names.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 typedef void (^ProceduralBlockWithItemArray)(NSArray<UIMenuElement*>*);
 typedef void (^ProceduralBlockWithBlockWithItemArray)(
@@ -87,6 +101,10 @@ const NSUInteger kPartialTranslateCharactersLimit = 1000;
 
 @interface PartialTranslateMediator ()
 
+// Vivaldi
+    <VivaldiTranslateCoordinatorDelegate>
+// End Vivaldi
+
 // The base view controller to present UI.
 @property(nonatomic, weak) UIViewController* baseViewController;
 
@@ -95,6 +113,11 @@ const NSUInteger kPartialTranslateCharactersLimit = 1000;
 
 // The controller to display Partial Translate.
 @property(nonatomic, strong) id<PartialTranslateController> controller;
+
+// Vivaldi
+// Coordinator to present Vivaldi translate view
+@property(nonatomic, strong) VivaldiTranslateCoordinator* translateCoordinator;
+// End Vivaldi
 
 @end
 
@@ -129,10 +152,13 @@ const NSUInteger kPartialTranslateCharactersLimit = 1000;
 - (void)shutdown {
   _translateEnabled.Destroy();
   _fullscreenController = nullptr;
+
+  // Vivaldi
+  [self translateViewDidDismiss];
+  // End Vivaldi
 }
 
 - (void)handlePartialTranslateSelection {
-  DCHECK(base::FeatureList::IsEnabled(kIOSEditMenuPartialTranslate));
   WebSelectionTabHelper* tabHelper = [self webSelectionTabHelper];
   if (!tabHelper) {
     return;
@@ -145,29 +171,35 @@ const NSUInteger kPartialTranslateCharactersLimit = 1000;
 }
 
 - (BOOL)canHandlePartialTranslateSelection {
-  DCHECK(base::FeatureList::IsEnabled(kIOSEditMenuPartialTranslate));
   WebSelectionTabHelper* tabHelper = [self webSelectionTabHelper];
   if (!tabHelper) {
     return NO;
   }
+
+  if (IsVivaldiRunning()) {
+    return tabHelper->CanRetrieveSelectedText() &&
+        kMaxCharactersLimitPerChunk > 0u;
+  } else {
   return tabHelper->CanRetrieveSelectedText() &&
          ios::provider::PartialTranslateLimitMaxCharacters() > 0u;
+  } // End Vivaldi
+
 }
 
 - (BOOL)shouldInstallPartialTranslate {
+
+  if (IsVivaldiRunning()) {
+    if (kMaxCharactersLimitPerChunk == 0u) {
+      // Feature is not available.
+      return NO;
+    }
+  } else {
   if (ios::provider::PartialTranslateLimitMaxCharacters() == 0u) {
     // Feature is not available.
     return NO;
   }
-  if (!IsPartialTranslateEnabled()) {
-    // Feature is not enabled.
-    return NO;
-  }
-  if (self.incognito && !ShouldShowPartialTranslateInIncognito()) {
-    // Feature is enabled, but disabled in incognito, and the current tab is in
-    // incognito.
-    return NO;
-  }
+  } // End Vivaldi
+
   if (!_translateEnabled.GetValue() && _translateEnabled.IsManaged()) {
     // Translate is a managed settings and disabled.
     return NO;
@@ -226,12 +258,22 @@ const NSUInteger kPartialTranslateCharactersLimit = 1000;
   DCHECK(response);
   base::UmaHistogramCounts10000("IOS.PartialTranslate.SelectionLength",
                                 response.selectedText.length);
+
+#if defined(VIVALDI_BUILD)
+  if (response.selectedText.length >
+      std::min(kMaxCharactersLimitPerChunk, kPartialTranslateCharactersLimit)) {
+    return [self switchToFullTranslateWithError:PartialTranslateError::
+                                                    kSelectionTooLong];
+  }
+#else
   if (response.selectedText.length >
       std::min(ios::provider::PartialTranslateLimitMaxCharacters(),
                kPartialTranslateCharactersLimit)) {
     return [self switchToFullTranslateWithError:PartialTranslateError::
                                                     kSelectionTooLong];
   }
+#endif // End Vivaldi
+
   if (!response.valid ||
       [[response.selectedText
           stringByTrimmingCharactersInSet:[NSCharacterSet
@@ -248,6 +290,33 @@ const NSUInteger kPartialTranslateCharactersLimit = 1000;
     sourceRect.origin.y += fullscreenInset.top;
     sourceRect.origin.x += fullscreenInset.left;
   }
+
+  if (IsVivaldiRunning()) {
+    if (GetApplicationContext()
+          ->GetLocalState()->GetBoolean(
+                vivaldiprefs::kVivaldiPreferTranslatePanel)) {
+      id<BrowserCoordinatorCommands> browserCoordinatorCommandsHandler =
+          HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                             BrowserCoordinatorCommands);
+      [browserCoordinatorCommandsHandler
+          showTranslateSceneWithText:response.selectedText];
+    } else {
+      VivaldiTranslateCoordinator* coordinator =
+          [[VivaldiTranslateCoordinator alloc]
+              initWithBaseViewController:self.baseViewController
+                presentingViewController:self.baseViewController
+                                 browser:self.browser
+                              entryPoint:VivaldiTranslateEntryPointContextMenu
+                            selectedText:response.selectedText
+                              originView:self.baseViewController.view
+                              originRect:sourceRect];
+
+      coordinator.delegate = self;
+      _translateCoordinator = coordinator;
+      [_translateCoordinator start];
+    }
+    return;
+  } // End Vivaldi
 
   self.controller = ios::provider::NewPartialTranslateController(
       response.selectedText, sourceRect, self.incognito);
@@ -321,6 +390,18 @@ const NSUInteger kPartialTranslateCharactersLimit = 1000;
                         handler:^(UIAction* a) {
                           [weakSelf receivedWebSelectionResponse:response];
                         }];
+
+  if (IsVivaldiRunning()) {
+    action =
+        [UIAction actionWithTitle:title
+                            image:CustomSymbolWithPointSize(
+                                vOverflowTranslate, kSymbolActionPointSize)
+                       identifier:partialTranslateId
+                          handler:^(UIAction* a) {
+                            [weakSelf receivedWebSelectionResponse:response];
+                          }];
+  } // End Vivaldi
+
   completion(@[ action ]);
 }
 
@@ -359,5 +440,14 @@ const NSUInteger kPartialTranslateCharactersLimit = 1000;
   [builder replaceChildrenOfMenuForIdentifier:UIMenuLookup
                             fromChildrenBlock:childrenTransformBlock];
 }
+
+#pragma mark - Vivaldi (VivaldiTranslateCoordinatorDelegate)
+
+- (void)translateViewDidDismiss {
+  self.translateCoordinator.delegate = nil;
+  [self.translateCoordinator stop];
+  self.translateCoordinator = nil;
+}
+// End Vivaldi
 
 @end

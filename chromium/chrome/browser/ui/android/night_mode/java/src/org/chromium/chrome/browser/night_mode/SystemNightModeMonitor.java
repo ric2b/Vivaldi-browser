@@ -8,6 +8,7 @@ import android.content.res.Configuration;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.ThreadUtils;
 
 // Vivaldi
@@ -42,6 +43,12 @@ public class SystemNightModeMonitor {
             sInstance = new SystemNightModeMonitor();
         }
         return sInstance;
+    }
+
+    public static void setInstanceForTesting(SystemNightModeMonitor instance) {
+        var oldValue = sInstance;
+        sInstance = instance;
+        ResettersForTesting.register(() -> sInstance = oldValue);
     }
 
     private SystemNightModeMonitor() {

@@ -306,7 +306,7 @@ class TxtRecordRdata {
 // next_domain_name: The next domain to process. In mDNS, this value is expected
 // to match the record-level domain name in a negative response.
 //
-// An example of how the |types_| vector is serialized is as follows:
+// An example of how the `types_` vector is serialized is as follows:
 // When encoding the following DNS types:
 // - A (value 1)
 // - MX (value 15)
@@ -382,10 +382,10 @@ class OptRecordRdata {
     // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml
     uint16_t code;
 
-    // Size (in octets) of |data|.
+    // Size (in octets) of `data`.
     uint16_t length;
 
-    // Bit Field with meaning varying based on |code|.
+    // Bit Field with meaning varying based on `code`.
     std::vector<uint8_t> data;
   };
 
@@ -420,7 +420,7 @@ class OptRecordRdata {
   }
 
  private:
-  // NOTE: The elements of |options_| are stored is sorted order to simplify the
+  // NOTE: The elements of `options_` are stored is sorted order to simplify the
   // comparison operators of OptRecordRdata.
   std::vector<Option> options_;
 

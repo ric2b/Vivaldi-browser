@@ -20,6 +20,10 @@ class ServicePublisherImpl final
   class Delegate {
    public:
     Delegate();
+    Delegate(const Delegate&) = delete;
+    Delegate& operator=(const Delegate&) = delete;
+    Delegate(Delegate&&) noexcept = delete;
+    Delegate& operator=(Delegate&&) noexcept = delete;
     virtual ~Delegate();
 
     void SetPublisherImpl(ServicePublisherImpl* publisher);
@@ -37,11 +41,15 @@ class ServicePublisherImpl final
     ServicePublisherImpl* publisher_ = nullptr;
   };
 
-  // |delegate| is required and is used to implement state transitions.
+  // `delegate` is required and is used to implement state transitions.
   explicit ServicePublisherImpl(std::unique_ptr<Delegate> delegate);
+  ServicePublisherImpl(const ServicePublisherImpl&) = delete;
+  ServicePublisherImpl& operator=(const ServicePublisherImpl&) = delete;
+  ServicePublisherImpl(ServicePublisherImpl&&) noexcept = delete;
+  ServicePublisherImpl& operator=(ServicePublisherImpl&&) noexcept = delete;
   ~ServicePublisherImpl() override;
 
-  // Called by |delegate_| when an internal error occurs.
+  // Called by `delegate_` when an internal error occurs.
   void OnError(const Error& error);
 
   // ServicePublisher overrides.
@@ -58,17 +66,15 @@ class ServicePublisherImpl final
   void OnFatalError(const Error&) override;
   void OnRecoverableError(const Error&) override;
 
-  // Called by |delegate_| to transition the state machine (except kStarting and
+  // Called by `delegate_` to transition the state machine (except kStarting and
   // kStopping which are done automatically).
   void SetState(State state);
 
-  // Notifies each observer in |observers_| if the transition to |state_| is one
+  // Notifies each observer in `observers_` if the transition to `state_` is one
   // that is watched by the observer interface.
   void MaybeNotifyObserver();
 
   std::unique_ptr<Delegate> delegate_;
-
-  OSP_DISALLOW_COPY_AND_ASSIGN(ServicePublisherImpl);
 };
 
 }  // namespace openscreen::osp

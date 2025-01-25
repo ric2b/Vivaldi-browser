@@ -5,19 +5,17 @@
 <translation id="1456207338570705181">Търсене с докосване е възможност, налична само когато Google е зададена като основна търсачка във Vivaldi. Тя изпраща думата и нейния контекст към търсачката на Google. Може да я изключите в  <ph name="BEGIN_LINK" />Настройки<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Превключване между обикновени и частни раздели</translation>
 <translation id="1644574205037202324">История</translation>
-<translation id="17513872634828108">Отворени раздели</translation>
 <translation id="1829244130665387512">Намиране в страницата</translation>
 <translation id="1910514478706885609">Отвори в нов куп</translation>
 <translation id="1925021887439448749">Въведете собствен адрес</translation>
 <translation id="2038563949887743358">Включване на настолната версия</translation>
-<translation id="2139186145475833000">Добави към началния екран</translation>
 <translation id="2149973817440762519">Редактирай отметката</translation>
 <translation id="2306442503286132111">Записана отметка в папка <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Облик</translation>
 <translation id="2501278716633472235">Върни назад</translation>
 <translation id="2633278372998075009">Частни раздели</translation>
 <translation id="272026394418727548">Начална страница на Vivaldi</translation>
-<translation id="2951071800649516099">Добави страници към списъка за четене по&amp;#8209;късно</translation>
+<translation id="2951071800649516099">Добави страници към списъка за четене по-късно</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> отметка}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> отметки}}</translation>
@@ -36,6 +34,7 @@
 <translation id="4137746084635924146">Текущ език на устройство</translation>
 <translation id="4167670741834902166">Създай частен раздел</translation>
 <translation id="4195643157523330669">Отвори в нов раздел</translation>
+<translation id="4225895483398857530">Пряк път към лентата с инструменти</translation>
 <translation id="4243710787042215766">Отвори в частен раздел</translation>
 <translation id="4304713468139749426">Диспечер на пароли</translation>
 <translation id="451872707440238414">Търси в отметките</translation>
@@ -74,6 +73,7 @@
 <translation id="8560602726703398413">Списъкът за четене е в Отметки</translation>
 <translation id="85991616550051997">Преход към началната страница</translation>
 <translation id="8820817407110198400">Отметки</translation>
+<translation id="9042893549633094279">Поверителност и защита</translation>
 <translation id="9063523880881406963">Изключване на настолната версия</translation>
 <translation id="9080642952018487277">Влизане в частен режим</translation>
 <translation id="96681097142096641">Показване на опростена страница?</translation>

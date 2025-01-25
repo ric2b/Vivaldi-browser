@@ -28,7 +28,7 @@ LanguageDetectionModelLoaderServiceIOSFactory::GetInstance() {
 
 // static
 language_detection::LanguageDetectionModelLoaderServiceIOS*
-LanguageDetectionModelLoaderServiceIOSFactory::GetForBrowserState(
+LanguageDetectionModelLoaderServiceIOSFactory::GetForProfile(
     ProfileIOS* profile) {
   return static_cast<
       language_detection::LanguageDetectionModelLoaderServiceIOS*>(
@@ -49,13 +49,17 @@ LanguageDetectionModelLoaderServiceIOSFactory::
 std::unique_ptr<KeyedService>
 LanguageDetectionModelLoaderServiceIOSFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
+
+#if !defined(VIVALDI_BUILD)
   if (!translate::IsTFLiteLanguageDetectionEnabled()) {
     return nullptr;
   }
+#endif // End Vivaldi
+
   ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   return std::make_unique<
       language_detection::LanguageDetectionModelLoaderServiceIOS>(
-      LanguageDetectionModelServiceFactory::GetForBrowserState(profile));
+      LanguageDetectionModelServiceFactory::GetForProfile(profile));
 }
 
 web::BrowserState*

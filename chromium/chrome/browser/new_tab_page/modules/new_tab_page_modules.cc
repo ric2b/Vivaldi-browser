@@ -40,7 +40,14 @@ const std::vector<std::pair<const std::string, int>> MakeModuleIdNames(
   }
 
   if (IsDriveModuleEnabledForProfile(is_managed_profile, profile)) {
-    details.emplace_back("drive", IDS_NTP_MODULES_DRIVE_SENTENCE);
+    details.emplace_back("drive", IDS_NTP_MODULES_DRIVE_NAME);
+  }
+
+  // TODO(crbug.com/372722777): Implement something similar to
+  // `IsDriveModuleEnabledForProfile()` that limits who can see the sharepoint
+  // module.
+  if (base::FeatureList::IsEnabled(ntp_features::kNtpSharepointModule)) {
+    details.emplace_back("sharepoint", IDS_NTP_MODULES_SHAREPOINT_NAME);
   }
 
   if (base::FeatureList::IsEnabled(
@@ -71,7 +78,8 @@ bool HasModulesEnabled(
               switches::kSignedOutNtpModulesSwitch) ||
           (/* Can be null if Chrome signin is disabled. */ identity_manager &&
            identity_manager->GetAccountsInCookieJar()
-                   .signed_in_accounts.size() > 0));
+                   .GetPotentiallyInvalidSignedInAccounts()
+                   .size() > 0));
 }
 
 }  // namespace ntp

@@ -36,7 +36,7 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/reading_list/core/reading_list_model.h"
-#include "components/saved_tab_groups/features.h"
+#include "components/saved_tab_groups/public/features.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/sessions/content/content_live_tab.h"
 #include "components/sessions/core/session_id.h"
@@ -46,6 +46,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "ipc/ipc_message.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/gfx/range/range.h"
 
 namespace chrome {
@@ -78,8 +79,8 @@ Browser* BrowserTabStripModelDelegate::CreateNewStripWithTabs(
   // Create an empty new browser window the same size as the old one.
   Browser::CreateParams params(browser_->profile(), true);
   params.initial_bounds = window_bounds;
-  params.initial_show_state =
-      maximize ? ui::SHOW_STATE_MAXIMIZED : ui::SHOW_STATE_NORMAL;
+  params.initial_show_state = maximize ? ui::mojom::WindowShowState::kMaximized
+                                       : ui::mojom::WindowShowState::kNormal;
   Browser* browser = Browser::Create(params);
   TabStripModel* new_model = browser->tab_strip_model();
 
@@ -331,11 +332,22 @@ BrowserTabStripModelDelegate::GetBrowserWindowInterface() {
 
 void BrowserTabStripModelDelegate::OnGroupsDestruction(
     const std::vector<tab_groups::TabGroupId>& group_ids,
-    base::OnceCallback<void()> callback) {
-  tab_groups::SavedTabGroupUtils::MaybeShowSavedTabGroupDeletionDialog(
-      browser_,
-      tab_groups::DeletionDialogController::DialogType::CloseTabAndDelete,
-      group_ids, std::move(callback));
+    base::OnceCallback<void()> close_callback,
+    bool is_bulk_operation) {
+  if (is_bulk_operation && tab_groups::IsTabGroupsSaveV2Enabled()) {
+    // If this is a bulk operation, close the groups rather than delete
+    // them to retain the saved group.
+    for (auto group_id : group_ids) {
+      tab_groups::SavedTabGroupUtils::RemoveGroupFromTabstrip(browser_,
+                                                              group_id);
+    }
+    std::move(close_callback).Run();
+  } else {
+    tab_groups::SavedTabGroupUtils::MaybeShowSavedTabGroupDeletionDialog(
+        browser_,
+        tab_groups::DeletionDialogController::DialogType::CloseTabAndDelete,
+        group_ids, std::move(close_callback));
+  }
 }
 
 void BrowserTabStripModelDelegate::OnRemovingAllTabsFromGroups(

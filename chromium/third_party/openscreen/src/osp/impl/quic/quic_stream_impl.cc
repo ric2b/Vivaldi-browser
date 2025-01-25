@@ -17,29 +17,32 @@ QuicStreamImpl::QuicStreamImpl(Delegate& delegate,
                                quic::QuicSession* session,
                                quic::StreamType type)
     : osp::QuicStream(delegate),
-      quic::QuicStream(id, session, /*is_static*/ false, type) {}
+      quic::QuicStream(id, session, /*is_static=*/false, type) {}
 
 QuicStreamImpl::~QuicStreamImpl() = default;
 
 uint64_t QuicStreamImpl::GetStreamId() {
-  TRACE_SCOPED(TraceCategory::kQuic, "QuicStreamImpl::StreamId");
+  TRACE_SCOPED(TraceCategory::kQuic, "QuicStreamImpl::GetStreamId");
   return id();
 }
 
+// This is no-op if we try to write data on a read only stream.
 void QuicStreamImpl::Write(ByteView bytes) {
   TRACE_SCOPED(TraceCategory::kQuic, "QuicStreamImpl::Write");
-  OSP_CHECK(!write_side_closed());
+  if (write_side_closed()) {
+    return;
+  }
+
   WriteOrBufferData(
       std::string_view(reinterpret_cast<const char*>(bytes.data()),
                        bytes.size()),
       false, nullptr);
 }
 
-void QuicStreamImpl::CloseWriteEnd() {
-  TRACE_SCOPED(TraceCategory::kQuic, "QuicStreamImpl::CloseWriteEnd");
-  if (!write_side_closed()) {
+void QuicStreamImpl::Close() {
+  TRACE_SCOPED(TraceCategory::kQuic, "QuicStreamImpl::Close");
+  if (!write_side_closed() || !read_side_closed()) {
     Reset(quic::QUIC_STREAM_CANCELLED);
-    CloseWriteSide();
   }
 }
 

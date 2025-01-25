@@ -14,6 +14,8 @@
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "url/gurl.h"
 
+#include "base/observer_list.h"
+
 namespace blink {
 class URLLoaderThrottle;
 }  // namespace blink
@@ -78,6 +80,22 @@ class ExtensionThrottleManager {
 
   int GetNumberOfEntriesForTests() const { return url_entries_.size(); }
 
+   // NOTE(andre@vivaldi.com) : This is to avoid acccess to freed
+  // |extension_throttle_manager_|. It would be handed over to the
+  // webservice-worker, here in URLLoaderThrottleProviderImpl, and
+  // blink::ThrottlingURLLoader. If the loader owner, ie. a webservice-worker
+  // dies before the throttlingurlloader we would crash. Was VB-110644.
+  class Vivaldi_ExtensionManagerObserver {
+   public:
+    // Called when the observer class dies.
+    virtual void OnExtensionThrottleManagerExit(ExtensionThrottleManager* manager) {}
+   protected:
+    virtual ~Vivaldi_ExtensionManagerObserver() = default;
+  };
+
+  void AddObserver(Vivaldi_ExtensionManagerObserver* observer);
+  void RemoveObserver(Vivaldi_ExtensionManagerObserver* observer);
+
  protected:
   // Method that allows us to transform a URL into an ID that can be used in our
   // map. Resulting IDs will be lowercase and consist of the scheme, host, port
@@ -131,6 +149,8 @@ class ExtensionThrottleManager {
 
   // Used to synchronize all public methods.
   base::Lock lock_;
+
+  base::ObserverList<Vivaldi_ExtensionManagerObserver>::Unchecked observers_;
 };
 
 }  // namespace extensions

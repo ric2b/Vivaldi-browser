@@ -348,9 +348,9 @@ enum TestStepResult {
 };
 
 // Verifies that the certificate chain provided is not revoked according to
-// the provided Cast CRL at |verification_time|.
-// The provided CRL is verified at |verification_time|.
-// If |crl_required| is set, then a valid Cast CRL must be provided.
+// the provided Cast CRL at `verification_time`.
+// The provided CRL is verified at `verification_time`.
+// If `crl_required` is set, then a valid Cast CRL must be provided.
 // Otherwise, a missing CRL is be ignored.
 ErrorOr<CastDeviceCertPolicy> TestVerifyRevocation(
     const std::vector<std::string>& certificate_chain,

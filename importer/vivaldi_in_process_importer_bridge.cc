@@ -5,6 +5,7 @@
 #include "chrome/browser/importer/external_process_importer_host.h"
 #include "importer/imported_notes_entry.h"
 #include "importer/imported_speeddial_entry.h"
+#include "importer/imported_tab_entry.h"
 
 void InProcessImporterBridge::AddNotes(
     const std::vector<ImportedNotesEntry>& notes,
@@ -20,6 +21,11 @@ void InProcessImporterBridge::AddSpeedDial(
 void InProcessImporterBridge::AddExtensions(
     const std::vector<std::string>& extensions) {
   writer_->AddExtensions(extensions, host_);
+}
+
+void InProcessImporterBridge::AddOpenTabs(
+    const std::vector<ImportedTabEntry>& tabs) {
+  writer_->AddOpenTabs(tabs);
 }
 
 void InProcessImporterBridge::NotifyItemFailed(importer::ImportItem item,

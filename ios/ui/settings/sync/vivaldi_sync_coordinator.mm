@@ -5,6 +5,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
@@ -87,13 +88,12 @@
 
 - (void)start {
   syncer::SyncService* sync_service =
-      SyncServiceFactory::GetForBrowserState(self.browser->GetBrowserState());
+      SyncServiceFactory::GetForProfile(self.browser->GetProfile());
   vivaldi::VivaldiAccountManager* account_manager =
-      vivaldi::VivaldiAccountManagerFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
+      vivaldi::VivaldiAccountManagerFactory::GetForProfile(
+          self.browser->GetProfile());
   PrefService* pref_service =
-      ChromeBrowserState::FromBrowserState(self.browser->GetBrowserState())
-          ->GetPrefs();
+      ProfileIOS::FromBrowserState(self.browser->GetProfile())->GetPrefs();
   self.mediator =
       [[VivaldiSyncMediator alloc] initWithAccountManager:account_manager
                                               syncService:sync_service
@@ -289,7 +289,8 @@
   self.syncSettingsViewController.modelDelegate = self.mediator;
   self.syncSettingsViewController.serviceDelegate = self.mediator;
   self.syncSettingsViewController.applicationCommandsHandler =
-      self.delegate.applicationCommandsHandler;
+      HandlerForProtocol(
+          self.browser->GetCommandDispatcher(), ApplicationCommands);
   self.mediator.settingsConsumer = self.syncSettingsViewController;
   [controllers addObject:self.syncSettingsViewController];
   [self.baseNavigationController setViewControllers:controllers animated:YES];
@@ -505,6 +506,10 @@
 
 - (void)logOutButtonPressed {
   [self.mediator logOutButtonPressed];
+}
+
+- (void)updateDeviceName:(NSString*)deviceName {
+  [self.mediator updateDeviceName:deviceName];
 }
 
 - (void)deleteRemoteData {

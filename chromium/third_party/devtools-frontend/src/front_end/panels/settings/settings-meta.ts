@@ -26,9 +26,9 @@ const UIStrings = {
    */
   experiments: 'Experiments',
   /**
-   *@description Title of Ignore List settings
+   *@description Title of Ignore list settings
    */
-  ignoreList: 'Ignore List',
+  ignoreList: 'Ignore list',
   /**
    *@description Command for showing the keyboard shortcuts in Settings
    */
@@ -42,9 +42,9 @@ const UIStrings = {
    */
   showExperiments: 'Show Experiments',
   /**
-   *@description Command for showing the Ignore List settings
+   *@description Command for showing the Ignore list settings
    */
-  showIgnoreList: 'Show Ignore List',
+  showIgnoreList: 'Show Ignore list',
   /**
    *@description Name of the Settings view
    */
@@ -54,13 +54,13 @@ const UIStrings = {
    */
   documentation: 'Documentation',
   /**
-   *@description Text for Chrome AI settings
+   *@description Text for AI innovation settings
    */
-  chromeAI: 'Chrome AI',
+  aiInnovations: 'AI innovations',
   /**
-   *@description Command for showing the Chrome AI settings
+   *@description Command for showing the AI innovation settings
    */
-  showChromeAI: 'Show Chrome AI',
+  showAiInnovations: 'Show AI innovations',
 };
 
 const str_ = i18n.i18n.registerUIStrings('panels/settings/settings-meta.ts', UIStrings);
@@ -89,20 +89,19 @@ UI.ViewManager.registerViewExtension({
 });
 
 UI.ViewManager.registerViewExtension({
-  experiment: Root.Runtime.ExperimentName.GEN_AI_SETTINGS_PANEL,
   location: UI.ViewManager.ViewLocationValues.SETTINGS_VIEW,
   id: 'chrome-ai',
-  title: i18nLazyString(UIStrings.chromeAI),
-  commandPrompt: i18nLazyString(UIStrings.showChromeAI),
+  title: i18nLazyString(UIStrings.aiInnovations),
+  commandPrompt: i18nLazyString(UIStrings.showAiInnovations),
   order: 2,
   async loadView() {
     const Settings = await loadSettingsModule();
     return LegacyWrapper.LegacyWrapper.legacyWrapper(UI.Widget.VBox, new Settings.AISettingsTab.AISettingsTab());
   },
-  iconName: 'spark',
+  iconName: 'button-magic',
   settings: ['console-insights-enabled'],
   condition: config => {
-    return (config?.devToolsConsoleInsights?.enabled || config?.devToolsFreestylerDogfood?.enabled) ?? false;
+    return (config?.devToolsConsoleInsights?.enabled || config?.devToolsFreestyler?.enabled) ?? false;
   },
 });
 

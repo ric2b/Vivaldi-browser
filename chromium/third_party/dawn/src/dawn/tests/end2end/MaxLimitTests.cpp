@@ -223,7 +223,7 @@ TEST_P(MaxLimitTests, MaxBufferBindingSize) {
         wgpu::ErrorType oomResult;
         device.PopErrorScope(wgpu::CallbackMode::AllowProcessEvents,
                              [&oomResult](wgpu::PopErrorScopeStatus, wgpu::ErrorType type,
-                                          const char*) { oomResult = type; });
+                                          wgpu::StringView) { oomResult = type; });
         FlushWire();
         instance.ProcessEvents();
         // Max buffer size is smaller than the max buffer binding size.
@@ -549,10 +549,6 @@ TEST_P(MaxLimitTests, MaxStorageBuffersPerShaderStage) {
 // used correctly. The test loads a different value from each binding, and writes 1 to a storage
 // buffer if all values are correct.
 TEST_P(MaxLimitTests, ReallyLargeBindGroup) {
-    // TODO(crbug.com/345758016): VVL produces a false-positive WAR hazard for this test.
-    // Remove this suppression once the issue is fixed.
-    DAWN_SUPPRESS_TEST_IF(IsVulkan() && IsBackendValidationEnabled());
-
     // TODO(crbug.com/dawn/590): Crashing on ANGLE/D3D11.
     DAWN_SUPPRESS_TEST_IF(IsANGLED3D11());
 

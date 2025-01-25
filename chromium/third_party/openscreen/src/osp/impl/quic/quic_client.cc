@@ -49,18 +49,6 @@ bool QuicClient::Resume() {
   OSP_NOTREACHED();
 }
 
-ProtocolConnectionEndpoint::State QuicClient::GetState() {
-  return state_;
-}
-
-MessageDemuxer& QuicClient::GetMessageDemuxer() {
-  return demuxer_;
-}
-
-InstanceRequestIds& QuicClient::GetInstanceRequestIds() {
-  return instance_request_ids_;
-}
-
 std::unique_ptr<ProtocolConnection> QuicClient::CreateProtocolConnection(
     uint64_t instance_id) {
   return CreateProtocolConnectionImpl(instance_id);

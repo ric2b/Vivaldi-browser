@@ -112,7 +112,7 @@ class StreamingVideoEncoder {
     int encoded_size = 0;
 
     // The average size of an encoded frame in bytes, having this
-    // |frame_duration| and current target bitrate.
+    // `frame_duration` and current target bitrate.
     double target_size = 0.0;
 
     // The actual quantizer the video encoder used, in the range [0,63].
@@ -152,9 +152,9 @@ class StreamingVideoEncoder {
   virtual int GetTargetBitrate() const = 0;
   virtual void SetTargetBitrate(int new_bitrate) = 0;
 
-  // Encode |frame| using the video encoder, assemble an EncodedFrame, and
+  // Encode `frame` using the video encoder, assemble an EncodedFrame, and
   // enqueue into the Sender. The frame may be dropped if too many frames are
-  // in-flight. If provided, the |stats_callback| is run after the frame is
+  // in-flight. If provided, the `stats_callback` is run after the frame is
   // enqueued in the Sender (via the main TaskRunner).
   virtual void EncodeAndSend(const VideoFrame& frame,
                              Clock::time_point reference_time,
@@ -172,8 +172,8 @@ class StreamingVideoEncoder {
   static constexpr double kEquivalentEncodingSpeedStepPerQuantizerStep =
       1 / 20.0;
 
-  // Updates the |ideal_speed_setting_|, to take effect with the next frame
-  // encode, based on the given performance |stats|.
+  // Updates the `ideal_speed_setting_`, to take effect with the next frame
+  // encode, based on the given performance `stats`.
   void UpdateSpeedSettingForNextFrame(const Stats& stats);
 
   const Parameters params_;
@@ -184,7 +184,7 @@ class StreamingVideoEncoder {
   // (i.e., faster speed) request less CPU usage but will provide lower video
   // quality. Only the encode thread accesses these.
   double ideal_speed_setting_;  // A time-weighted average, from measurements.
-  int current_speed_setting_;   // Current |encoder_| speed setting.
+  int current_speed_setting_;   // Current `encoder_` speed setting.
 
   // This member should be last in the class since the thread should not start
   // until all above members have been initialized by the constructor.

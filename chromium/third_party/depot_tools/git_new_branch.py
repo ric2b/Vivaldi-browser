@@ -77,7 +77,7 @@ def main(args):
                    ' and new branch becomes current branch\'s upstream.')
     g.add_argument('--lkgr',
                    action='store_const',
-                   const='lkgr',
+                   const='origin/lkgr',
                    dest='upstream',
                    help='set basis ref for new branch to lkgr.')
 

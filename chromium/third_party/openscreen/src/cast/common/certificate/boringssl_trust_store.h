@@ -12,13 +12,14 @@
 #include <vector>
 
 #include "cast/common/public/trust_store.h"
+#include "platform/base/span.h"
 
 namespace openscreen::cast {
 
 class BoringSSLTrustStore final : public TrustStore {
  public:
   BoringSSLTrustStore();
-  explicit BoringSSLTrustStore(const std::vector<uint8_t>& trust_anchor_der);
+  explicit BoringSSLTrustStore(ByteView trust_anchor_der);
   explicit BoringSSLTrustStore(std::vector<bssl::UniquePtr<X509>> certs);
   ~BoringSSLTrustStore() override;
 

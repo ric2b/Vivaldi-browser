@@ -197,7 +197,7 @@ int deviation(SpatnavPoint pt, int navDir) {
 }
 
 int weightWithDeviation(int weight, int deviation) {
-  return weight * (1 + deviation);
+  return weight * (30 + deviation);
 }
 
 std::vector<SpatnavPoint> minWeights(const std::vector<SpatnavPoint>& pts,
@@ -431,7 +431,7 @@ QuadPtr Quad::NextUp() {
   }
 
   std::vector<SpatnavPoint> candidates = GetBestQuality(ds);
-  SpatnavPoint pt = nextPt(candidates, -90);
+  SpatnavPoint pt = nextPt(ds, -90);
   if (pt.IsNull()) {
     return nullptr;
   }
@@ -464,7 +464,7 @@ QuadPtr Quad::NextDown() {
   }
 
   std::vector<SpatnavPoint> candidates = GetBestQuality(ds);
-  SpatnavPoint pt = nextPt(candidates, 90);
+  SpatnavPoint pt = nextPt(ds, 90);
   if (pt.IsNull()) {
     return nullptr;
   }

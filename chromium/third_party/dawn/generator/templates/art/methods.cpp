@@ -25,7 +25,7 @@
 //* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 //* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 {% from 'art/kotlin_record_conversion.cpp' import define_kotlin_record_structure, define_kotlin_to_struct_conversion with context %}
-{% from 'art/api_jni_types.kt' import arg_to_jni_type, convert_to_kotlin, jni_signature, to_jni_type with context %}
+{% from 'art/api_jni_types.cpp' import arg_to_jni_type, convert_to_kotlin, jni_signature, to_jni_type with context %}
 #include <jni.h>
 #include <stdlib.h>
 #include <webgpu/webgpu.h>
@@ -126,15 +126,14 @@ jobject toByteBuffer(JNIEnv *env, const void* address, jlong size) {
             {% endfor %}
         );
         //* Allocate the native container
-        auto returnAllocation = std::make_unique<{{ as_cType(_kotlin_return.type.name) }}[]>(size);
+        args.{{ as_varName(_kotlin_return.name) }} = c.AllocArray<{{ as_cType(_kotlin_return.type.name) }}>(size);
         if (env->ExceptionCheck()) {  //* Early out if client (Kotlin) callback threw an exception.
             return nullptr;
         }
         //* Second call completes the native container
         wgpu{{ object.name.CamelCase() }}{{ method.name.CamelCase() }}(handle
             {% for arg in method.arguments -%}
-                {{- ', ' if object or not loop.first -}}
-                {{- 'returnAllocation.get()' if arg == _kotlin_return else "args." + as_varName(arg.name) -}}
+               , {{- "args." + as_varName(arg.name) -}}
             {% endfor %}
         );
         if (env->ExceptionCheck()) {  //* Early out if client (Kotlin) callback threw an exception.
@@ -144,9 +143,9 @@ jobject toByteBuffer(JNIEnv *env, const void* address, jlong size) {
         {% if _kotlin_return.annotation == '*' %}
             //* Make a native container to accept the data output via parameter.
             {{ as_cType(_kotlin_return.type.name) }} out = {};
-            args.{{ _kotlin_return.name.get() }} = &out;
+            args.{{ as_varName(_kotlin_return.name) }} = &out;
         {% endif %}
-        {{ 'auto result =' if _kotlin_return.type.name.get() != 'void' }}
+        {{ 'auto result =' if method.return_type.name.get() != 'void' }}
         {% if object %}
             wgpu{{ object.name.CamelCase() }}{{ method.name.CamelCase() }}(handle
         {% else %}
@@ -157,7 +156,7 @@ jobject toByteBuffer(JNIEnv *env, const void* address, jlong size) {
             {% endfor %}
         );
         if (env->ExceptionCheck()) {  //* Early out if client (Kotlin) callback threw an exception.
-            return {{ '0' if method.return_type.name.get() != 'void' }};
+            return {{ '0' if  _kotlin_return.type.name.get() != 'void' }};
         }
         {% if method.return_type.name.canonical_case() == 'status' %}
             if (result != WGPUStatus_Success) {
@@ -171,7 +170,7 @@ jobject toByteBuffer(JNIEnv *env, const void* address, jlong size) {
         {% if _kotlin_return.type.name.get() in ['void const *', 'void *'] %}
             size_t size = args.size;
         {% endif %}
-        {{ convert_to_kotlin("args." + _kotlin_return.name.get() if _kotlin_return.annotation == '*' else 'result',
+        {{ convert_to_kotlin("args." + as_varName(_kotlin_return.name) if _kotlin_return.annotation == '*' else 'result',
                              'result_kt',
                              'size' if _kotlin_return.type.name.get() in ['void const *', 'void *'] or _kotlin_return.length == 'size_t',
                              _kotlin_return) }}

@@ -59,13 +59,18 @@
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "components/webapps/browser/test/service_worker_registration_waiter.h"
 #include "components/webapps/browser/uninstall_result_code.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "ui/base/models/menu_model.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/gfx/geometry/point_conversions.h"
 
 class GURL;
 
@@ -90,6 +95,33 @@ void AutoAcceptDialogCallback(
       .Run(
           /*user_accepted=*/true, std::move(web_app_info));
 }
+
+// An utility that observes a `WebContents` instance to either finish loading or
+// for it to be destroyed. Useful for ensuring that the observed `WebContents`
+// has reached an end state.
+class WebContentsLoadOrDestroyedWaiter final
+    : public content::WebContentsObserver {
+ public:
+  explicit WebContentsLoadOrDestroyedWaiter(content::WebContents* web_contents)
+      : WebContentsObserver(web_contents) {
+    CHECK(web_contents);
+  }
+  ~WebContentsLoadOrDestroyedWaiter() override = default;
+
+  void Wait() { run_loop_.Run(); }
+
+  void DocumentOnLoadCompletedInPrimaryMainFrame() override {
+    run_loop_.Quit();
+  }
+
+  void WebContentsDestroyed() override {
+    Observe(nullptr);
+    run_loop_.Quit();
+  }
+
+ private:
+  base::RunLoop run_loop_;
+};
 
 }  // namespace
 
@@ -229,6 +261,7 @@ Browser* LaunchWebAppBrowserAndWait(Profile* profile,
   Browser* const app_browser =
       LaunchWebAppBrowser(profile, app_id, disposition);
   url_observer.Wait();
+  content::WaitForLoadStop(url_observer.web_contents());
   return app_browser;
 }
 
@@ -512,5 +545,62 @@ bool WaitForIPHToShowIfAny(Browser* browser) {
       iph_future.GetCallback());
   return iph_future.Get();
 }
+
+namespace test {
+
+void SimulateClickOnElement(content::WebContents* contents,
+                            std::string element_id,
+                            ClickMethod click) {
+  gfx::Point element_center = gfx::ToFlooredPoint(
+      content::GetCenterCoordinatesOfElementWithId(contents, element_id));
+  int modifiers = 0;
+  blink::WebMouseEvent::Button button = blink::WebMouseEvent::Button::kLeft;
+  switch (click) {
+    case ClickMethod::kLeftClick:
+      modifiers = blink::WebInputEvent::Modifiers::kNoModifiers;
+      break;
+    case ClickMethod::kMiddleClick:
+#if BUILDFLAG(IS_MAC)
+      modifiers = blink::WebInputEvent::Modifiers::kMetaKey;
+#else
+      modifiers = blink::WebInputEvent::Modifiers::kControlKey;
+#endif  // BUILDFLAG(IS_MAC)
+      break;
+    case ClickMethod::kShiftClick:
+      modifiers = blink::WebInputEvent::Modifiers::kShiftKey;
+      break;
+    case ClickMethod::kRightClickLaunchApp:
+      button = blink::WebMouseEvent::Button::kRight;
+      modifiers = blink::WebInputEvent::Modifiers::kNoModifiers;
+      break;
+  }
+  content::SimulateMouseClickAt(contents, modifiers, button, element_center);
+}
+
+void CompletePageLoadForAllWebContents() {
+  auto get_first_loading_web_contents = []() -> content::WebContents* {
+    for (Browser* browser : *BrowserList::GetInstance()) {
+      for (int i = 0; i < browser->tab_strip_model()->GetTabCount(); i++) {
+        content::WebContents* web_contents =
+            browser->tab_strip_model()->GetWebContentsAt(i);
+        if (!web_contents->IsDocumentOnLoadCompletedInPrimaryMainFrame()) {
+          return web_contents;
+        }
+      }
+    }
+    return nullptr;
+  };
+
+  // In some circumstances, this loop could hang forever (if pages never
+  // complete loading, or if they cause reloads, etc). However, these
+  // tests only use static test pages that don't do that, so this should
+  // be safe.
+  while (content::WebContents* loading_web_contents =
+             get_first_loading_web_contents()) {
+    WebContentsLoadOrDestroyedWaiter(loading_web_contents).Wait();
+  }
+}
+
+}  // namespace test
 
 }  // namespace web_app

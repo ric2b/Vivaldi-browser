@@ -48,8 +48,11 @@ std::vector<Scalar> special_values() {
   const Scalar sqrt2 = Scalar(std::sqrt(2));
   const Scalar inf = Eigen::NumTraits<Scalar>::infinity();
   const Scalar nan = Eigen::NumTraits<Scalar>::quiet_NaN();
+  // For 32-bit arm, working within or near the subnormal range can lead to incorrect results
+  // due to FTZ.
   const Scalar denorm_min = EIGEN_ARCH_ARM ? zero : std::numeric_limits<Scalar>::denorm_min();
-  const Scalar min = (std::numeric_limits<Scalar>::min)();
+  const Scalar min =
+      EIGEN_ARCH_ARM ? Scalar(1.1) * (std::numeric_limits<Scalar>::min)() : (std::numeric_limits<Scalar>::min)();
   const Scalar max = (std::numeric_limits<Scalar>::max)();
   const Scalar max_exp = (static_cast<Scalar>(int(Eigen::NumTraits<Scalar>::max_exponent())) * Scalar(EIGEN_LN2)) / eps;
   std::vector<Scalar> values = {zero,  denorm_min, min,   eps,     sqrt_half, one_half, one,
@@ -65,7 +68,7 @@ std::vector<Scalar> special_values() {
 template <typename Scalar>
 void special_value_pairs(Array<Scalar, Dynamic, Dynamic>& x, Array<Scalar, Dynamic, Dynamic>& y) {
   std::vector<Scalar> vals = special_values<Scalar>();
-  int num_cases = vals.size() * vals.size();
+  std::size_t num_cases = vals.size() * vals.size();
   // ensure both vectorized and non-vectorized paths taken
   const Index num_repeats = 2 * (Index)internal::packet_traits<Scalar>::size + 1;
   x.resize(num_repeats, num_cases);
@@ -151,6 +154,14 @@ void unary_op_test(std::string name, Fn fun, RefFn ref) {
   for (Index i = 0; i < valuesMap.size(); ++i) {
     Scalar e = static_cast<Scalar>(ref(valuesMap(i)));
     Scalar a = actual(i);
+#if EIGEN_ARCH_ARM
+    // Work around NEON flush-to-zero mode.
+    // If ref returns a subnormal value and Eigen returns 0, then skip the test.
+    if (a == Scalar(0) && (e > -(std::numeric_limits<Scalar>::min)() && e < (std::numeric_limits<Scalar>::min)()) &&
+        (e <= -std::numeric_limits<Scalar>::denorm_min() || e >= std::numeric_limits<Scalar>::denorm_min())) {
+      continue;
+    }
+#endif
     bool success = (a == e) || ((numext::isfinite)(e) && internal::isApprox(a, e, tol)) ||
                    ((numext::isnan)(a) && (numext::isnan)(e));
     if ((a == a) && (e == e)) success &= (bool)numext::signbit(e) == (bool)numext::signbit(a);
@@ -294,6 +305,7 @@ void float_pow_test_impl() {
             bool success = both_nan || (exact_or_approx && same_sign);
             all_pass &= success;
             if (!success) {
+              std::cout << "Base type: " << type_name(base) << ", Exponent type: " << type_name(exponent) << std::endl;
               std::cout << "pow(" << bases(j) << "," << exponent << ")   =   " << a << " !=  " << e << std::endl;
             }
           }
@@ -1250,61 +1262,6 @@ void typed_logicals_test(const ArrayType& m) {
   typed_logicals_test_impl<ArrayType>::run(m);
 }
 
-// print non-mangled typenames
-template <typename T>
-std::string printTypeInfo(const T&) {
-  return typeid(T).name();
-}
-template <>
-std::string printTypeInfo(const int8_t&) {
-  return "int8_t";
-}
-template <>
-std::string printTypeInfo(const int16_t&) {
-  return "int16_t";
-}
-template <>
-std::string printTypeInfo(const int32_t&) {
-  return "int32_t";
-}
-template <>
-std::string printTypeInfo(const int64_t&) {
-  return "int64_t";
-}
-template <>
-std::string printTypeInfo(const uint8_t&) {
-  return "uint8_t";
-}
-template <>
-std::string printTypeInfo(const uint16_t&) {
-  return "uint16_t";
-}
-template <>
-std::string printTypeInfo(const uint32_t&) {
-  return "uint32_t";
-}
-template <>
-std::string printTypeInfo(const uint64_t&) {
-  return "uint64_t";
-}
-template <>
-std::string printTypeInfo(const float&) {
-  return "float";
-}
-template <>
-std::string printTypeInfo(const double&) {
-  return "double";
-}
-// template<> std::string printTypeInfo(const long double&) { return "long double"; }
-template <>
-std::string printTypeInfo(const half&) {
-  return "half";
-}
-template <>
-std::string printTypeInfo(const bfloat16&) {
-  return "bfloat16";
-}
-
 template <typename SrcType, typename DstType, int RowsAtCompileTime, int ColsAtCompileTime>
 struct cast_test_impl {
   using SrcArray = Array<SrcType, RowsAtCompileTime, ColsAtCompileTime>;
@@ -1340,8 +1297,8 @@ struct cast_test_impl {
           DstType dstVal = dst(i, j);
           bool isApprox = verifyIsApprox(dstVal, refVal);
           if (!isApprox)
-            std::cout << printTypeInfo(srcVal) << ": [" << +srcVal << "] to " << printTypeInfo(dstVal) << ": ["
-                      << +dstVal << "] != [" << +refVal << "]\n";
+            std::cout << type_name(srcVal) << ": [" << +srcVal << "] to " << type_name(dstVal) << ": [" << +dstVal
+                      << "] != [" << +refVal << "]\n";
           VERIFY(isApprox);
         }
     }

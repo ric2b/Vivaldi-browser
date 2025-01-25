@@ -52,20 +52,15 @@ rtc::VideoSinkWants BuildSinkWants(std::optional<int> target_pixel_count,
 }
 
 rtc::VideoSinkWants BuildSinkWants(
-    std::optional<webrtc::Resolution> requested_resolution,
+    std::optional<webrtc::Resolution> scale_resolution_down_to,
     bool any_active_without_requested_resolution) {
   rtc::VideoSinkWants wants;
   wants.max_framerate_fps = kDefaultFps;
   wants.resolution_alignment = 1;
   wants.is_active = true;
-  if (requested_resolution) {
-    wants.target_pixel_count = requested_resolution->PixelCount();
-    wants.max_pixel_count = requested_resolution->PixelCount();
+  if (scale_resolution_down_to) {
     wants.requested_resolution.emplace(rtc::VideoSinkWants::FrameSize(
-        requested_resolution->width, requested_resolution->height));
-  } else {
-    wants.target_pixel_count = kWidth * kHeight;
-    wants.max_pixel_count = kWidth * kHeight;
+        scale_resolution_down_to->width, scale_resolution_down_to->height));
   }
   wants.aggregates.emplace(rtc::VideoSinkWants::Aggregates());
   wants.aggregates->any_active_without_requested_resolution =
@@ -1207,8 +1202,9 @@ TEST_P(VideoAdapterTest, AdaptResolutionWithSinkAlignment) {
 }
 
 // Verify the cases the OnOutputFormatRequest is ignored and
-// requested_resolution is used instead.
-TEST_P(VideoAdapterTest, UseRequestedResolutionInsteadOfOnOutputFormatRequest) {
+// scale_resolution_down_to is used instead.
+TEST_P(VideoAdapterTest,
+       UseScaleResolutionDownToInsteadOfOnOutputFormatRequest) {
   {
     // Both new and old API active => Use OnOutputFormatRequest
     OnOutputFormatRequest(640, 360, kDefaultFps);
@@ -1223,7 +1219,7 @@ TEST_P(VideoAdapterTest, UseRequestedResolutionInsteadOfOnOutputFormatRequest) {
   }
   {
     // New API active, old API inactive, ignore OnOutputFormatRequest and use
-    // requested_resolution.
+    // scale_resolution_down_to.
     OnOutputFormatRequest(640, 360, kDefaultFps);
     adapter_.OnSinkWants(
         BuildSinkWants(Resolution{.width = 960, .height = 540},
@@ -1261,7 +1257,7 @@ TEST_P(VideoAdapterTest, UseRequestedResolutionInsteadOfOnOutputFormatRequest) {
         Eq(Resolution{.width = 960, .height = 540}));
 
     // This is ignored since there is not any active NOT using
-    // requested_resolution.
+    // scale_resolution_down_to.
     OnOutputFormatRequest(320, 180, kDefaultFps);
 
     EXPECT_THAT(
@@ -1281,7 +1277,7 @@ TEST_P(VideoAdapterTest, UseRequestedResolutionInsteadOfOnOutputFormatRequest) {
   }
 }
 
-TEST_P(VideoAdapterTest, RequestedResolutionIsOrientationAgnostic) {
+TEST_P(VideoAdapterTest, ScaleResolutionDownToIsOrientationAgnostic) {
   // Request 1280x720 when frame is 720x1280.
   {
     adapter_.OnSinkWants(
@@ -1304,6 +1300,23 @@ TEST_P(VideoAdapterTest, RequestedResolutionIsOrientationAgnostic) {
             .first,
         Eq(Resolution{.width = 1280, .height = 720}));
   }
+}
+
+TEST_P(VideoAdapterTest, ScaleResolutionDownToMaintainsAspectRatio) {
+  // Request 720x720.
+  adapter_.OnSinkWants(
+      BuildSinkWants(Resolution{.width = 720, .height = 720},
+                     /* any_active_without_requested_resolution= */ false));
+
+  // A 1280x720 frame restricted to 720x720 produces 720x405.
+  EXPECT_TRUE(adapter_.AdaptFrameResolution(1280, 720, /*in_timestamp_ns=*/0,
+                                            &cropped_width_, &cropped_height_,
+                                            &out_width_, &out_height_));
+  EXPECT_EQ(out_width_, 720);
+  EXPECT_EQ(out_height_, 405);
+  // No cropping needed (coverage for https://crbug.com/webrtc/369865055).
+  EXPECT_EQ(cropped_width_, 1280);
+  EXPECT_EQ(cropped_height_, 720);
 }
 
 class VideoAdapterWithSourceAlignmentTest : public VideoAdapterTest {
@@ -1351,6 +1364,25 @@ TEST_P(VideoAdapterWithSourceAlignmentTest, AdaptResolutionWithSinkAlignment) {
   EXPECT_EQ(out_height_ % kSourceResolutionAlignment, 0);
   EXPECT_EQ(out_width_ % kSinkResolutionAlignment, 0);
   EXPECT_EQ(out_height_ % kSinkResolutionAlignment, 0);
+}
+
+TEST_P(VideoAdapterWithSourceAlignmentTest,
+       ScaleResolutionDownToMaintainsAspectRatioWithAlignment) {
+  // Request 720x720.
+  adapter_.OnSinkWants(
+      BuildSinkWants(Resolution{.width = 720, .height = 720},
+                     /* any_active_without_requested_resolution= */ false));
+
+  // A 1280x720 frame restricted to 720x720 produces 720x405 but this is not a
+  // multiple of `kSourceResolutionAlignment` (= 7), the rounded up multiple of
+  // this value that is less than the restrictions (720) is 714x406.
+  EXPECT_TRUE(adapter_.AdaptFrameResolution(1280, 720, /*in_timestamp_ns=*/0,
+                                            &cropped_width_, &cropped_height_,
+                                            &out_width_, &out_height_));
+  EXPECT_EQ(out_width_, 714);
+  EXPECT_EQ(out_height_, 406);
+  EXPECT_EQ(out_width_ % kSourceResolutionAlignment, 0);
+  EXPECT_EQ(out_height_ % kSourceResolutionAlignment, 0);
 }
 
 INSTANTIATE_TEST_SUITE_P(OnOutputFormatRequests,

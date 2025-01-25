@@ -15,6 +15,7 @@
 #include <iosfwd>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -23,10 +24,10 @@
 #include "absl/types/variant.h"
 #include "quiche/http2/core/spdy_alt_svc_wire_format.h"
 #include "quiche/http2/core/spdy_bitmasks.h"
+#include "quiche/common/http/http_header_block.h"
 #include "quiche/common/platform/api/quiche_export.h"
 #include "quiche/common/platform/api/quiche_flags.h"
 #include "quiche/common/platform/api/quiche_logging.h"
-#include "quiche/spdy/core/http2_header_block.h"
 
 namespace spdy {
 
@@ -501,8 +502,8 @@ class QUICHE_EXPORT SpdyFrameWithHeaderBlockIR : public SpdyFrameWithFinIR {
  public:
   ~SpdyFrameWithHeaderBlockIR() override;
 
-  const Http2HeaderBlock& header_block() const { return header_block_; }
-  void set_header_block(Http2HeaderBlock header_block) {
+  const quiche::HttpHeaderBlock& header_block() const { return header_block_; }
+  void set_header_block(quiche::HttpHeaderBlock header_block) {
     // Deep copy.
     header_block_ = std::move(header_block);
   }
@@ -512,27 +513,26 @@ class QUICHE_EXPORT SpdyFrameWithHeaderBlockIR : public SpdyFrameWithFinIR {
 
  protected:
   SpdyFrameWithHeaderBlockIR(SpdyStreamId stream_id,
-                             Http2HeaderBlock header_block);
+                             quiche::HttpHeaderBlock header_block);
   SpdyFrameWithHeaderBlockIR(const SpdyFrameWithHeaderBlockIR&) = delete;
   SpdyFrameWithHeaderBlockIR& operator=(const SpdyFrameWithHeaderBlockIR&) =
       delete;
 
  private:
-  Http2HeaderBlock header_block_;
+  quiche::HttpHeaderBlock header_block_;
 };
 
 class QUICHE_EXPORT SpdyDataIR : public SpdyFrameWithFinIR {
  public:
-  // Performs a deep copy on data.
-  SpdyDataIR(SpdyStreamId stream_id, absl::string_view data);
-
-  // Performs a deep copy on data.
-  SpdyDataIR(SpdyStreamId stream_id, const char* data);
-
-  // Moves data into data_store_. Makes a copy if passed a non-movable string.
+  // Makes a copy of `data` if passed a non-movable string.
   SpdyDataIR(SpdyStreamId stream_id, std::string data);
 
-  // Use in conjunction with SetDataShallow() for shallow-copy on data.
+  template <typename S>
+  SpdyDataIR(SpdyStreamId stream_id, S data)
+      : SpdyDataIR(stream_id, std::string(data)) {}
+
+  // Use in conjunction with SetDataShallow() to set the DATA frame payload
+  // length.
   explicit SpdyDataIR(SpdyStreamId stream_id);
   SpdyDataIR(const SpdyDataIR&) = delete;
   SpdyDataIR& operator=(const SpdyDataIR&) = delete;
@@ -554,24 +554,10 @@ class QUICHE_EXPORT SpdyDataIR : public SpdyFrameWithFinIR {
     padding_payload_len_ = padding_len - 1;
   }
 
-  // Deep-copy of data (keep private copy).
-  void SetDataDeep(absl::string_view data) {
-    data_store_ = std::make_unique<std::string>(data.data(), data.size());
-    data_ = data_store_->data();
-    data_len_ = data.size();
-  }
-
-  // Shallow-copy of data (do not keep private copy).
-  void SetDataShallow(absl::string_view data) {
-    data_store_.reset();
-    data_ = data.data();
-    data_len_ = data.size();
-  }
-
   // Use this method if we don't have a contiguous buffer and only
   // need a length.
   void SetDataShallow(size_t len) {
-    data_store_.reset();
+    data_store_ = std::nullopt;
     data_ = nullptr;
     data_len_ = len;
   }
@@ -586,7 +572,7 @@ class QUICHE_EXPORT SpdyDataIR : public SpdyFrameWithFinIR {
 
  private:
   // Used to store data that this SpdyDataIR should own.
-  std::unique_ptr<std::string> data_store_;
+  std::optional<std::string> data_store_;
   const char* data_;
   size_t data_len_;
 
@@ -712,8 +698,8 @@ class QUICHE_EXPORT SpdyGoAwayIR : public SpdyFrameIR {
 class QUICHE_EXPORT SpdyHeadersIR : public SpdyFrameWithHeaderBlockIR {
  public:
   explicit SpdyHeadersIR(SpdyStreamId stream_id)
-      : SpdyHeadersIR(stream_id, Http2HeaderBlock()) {}
-  SpdyHeadersIR(SpdyStreamId stream_id, Http2HeaderBlock header_block)
+      : SpdyHeadersIR(stream_id, quiche::HttpHeaderBlock()) {}
+  SpdyHeadersIR(SpdyStreamId stream_id, quiche::HttpHeaderBlock header_block)
       : SpdyFrameWithHeaderBlockIR(stream_id, std::move(header_block)) {}
   SpdyHeadersIR(const SpdyHeadersIR&) = delete;
   SpdyHeadersIR& operator=(const SpdyHeadersIR&) = delete;
@@ -780,9 +766,10 @@ class QUICHE_EXPORT SpdyWindowUpdateIR : public SpdyFrameIR {
 class QUICHE_EXPORT SpdyPushPromiseIR : public SpdyFrameWithHeaderBlockIR {
  public:
   SpdyPushPromiseIR(SpdyStreamId stream_id, SpdyStreamId promised_stream_id)
-      : SpdyPushPromiseIR(stream_id, promised_stream_id, Http2HeaderBlock()) {}
+      : SpdyPushPromiseIR(stream_id, promised_stream_id,
+                          quiche::HttpHeaderBlock()) {}
   SpdyPushPromiseIR(SpdyStreamId stream_id, SpdyStreamId promised_stream_id,
-                    Http2HeaderBlock header_block)
+                    quiche::HttpHeaderBlock header_block)
       : SpdyFrameWithHeaderBlockIR(stream_id, std::move(header_block)),
         promised_stream_id_(promised_stream_id),
         padded_(false),

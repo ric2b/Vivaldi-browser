@@ -21,6 +21,7 @@
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/mojom/view_type.mojom.h"
@@ -49,11 +50,17 @@ void TagWebContents(content::WebContents* contents,
 bool IsExtensionWebContents(content::WebContents* contents) {
   DCHECK(contents);
 
+  if (!base::FeatureList::IsEnabled(features::kGuestViewMPArch) &&
+      guest_view::GuestViewBase::IsGuest(contents)) {
+    return false;
+  }
+
   // Note(andre@vivaldi.com): We use webviews as ExtensionHost for extension
   //                          popups.
   if (!vivaldi::IsVivaldiRunning() &&
-      guest_view::GuestViewBase::IsGuest(contents))
+      guest_view::GuestViewBase::IsGuest(contents)) {
     return false;
+  } // End Vivaldi
 
   extensions::mojom::ViewType view_type = extensions::GetViewType(contents);
   return (view_type != extensions::mojom::ViewType::kInvalid &&
@@ -120,6 +127,10 @@ void WebContentsTags::CreateForPrintingContents(
 // static
 void WebContentsTags::CreateForGuestContents(
     content::WebContents* web_contents) {
+  // TODO(crbug.com/40202416): Support the MPArch GuestView implementation in
+  // task manager.
+  CHECK(!base::FeatureList::IsEnabled(features::kGuestViewMPArch));
+
   // NOTE(andre@vivaldi.com) : WebViews is shown in incognito windows with a
   // regular profile in ingocnito enabled extensions. Popups.
   if (!vivaldi::IsVivaldiRunning()) {

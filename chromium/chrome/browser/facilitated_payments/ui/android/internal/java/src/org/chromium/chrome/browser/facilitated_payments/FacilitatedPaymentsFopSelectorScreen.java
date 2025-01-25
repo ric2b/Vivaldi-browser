@@ -8,6 +8,7 @@ import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymen
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.ItemType.ADDITIONAL_INFO;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.ItemType.BANK_ACCOUNT;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.ItemType.CONTINUE_BUTTON;
+import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.ItemType.EWALLET;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.ItemType.FOOTER;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.ItemType.HEADER;
 
@@ -22,6 +23,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.FopSelectorProperties;
 import org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.ItemType;
+import org.chromium.chrome.browser.touch_to_fill.common.ItemDividerBase;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.SimpleRecyclerViewAdapter;
@@ -31,19 +33,18 @@ import org.chromium.ui.modelutil.SimpleRecyclerViewAdapter;
  * instruments.
  */
 public class FacilitatedPaymentsFopSelectorScreen implements FacilitatedPaymentsSequenceView {
-    private static class FacilitatedPaymentsHorizontalDividerItemDecoration
-            extends FacilitatedPaymentsItemDividerBase {
-        FacilitatedPaymentsHorizontalDividerItemDecoration(Context context) {
+    private static class HorizontalDividerItemDecoration extends ItemDividerBase {
+        HorizontalDividerItemDecoration(Context context) {
             super(context);
         }
 
         @Override
         protected boolean shouldSkipItemType(@ItemType int type) {
-            return type != ItemType.BANK_ACCOUNT;
+            return type != ItemType.BANK_ACCOUNT && type != ItemType.EWALLET;
         }
 
         @Override
-        protected boolean containsContinueButton(RecyclerView parent) {
+        protected boolean containsFillButton(RecyclerView parent) {
             int itemCount = parent.getAdapter().getItemCount();
             // The button will be above the footer if it's present.
             return itemCount > 1
@@ -76,8 +77,7 @@ public class FacilitatedPaymentsFopSelectorScreen implements FacilitatedPayments
                             RecyclerView.State state,
                             AccessibilityNodeInfoCompat info) {}
                 });
-        mView.addItemDecoration(
-                new FacilitatedPaymentsHorizontalDividerItemDecoration(mView.getContext()));
+        mView.addItemDecoration(new HorizontalDividerItemDecoration(mView.getContext()));
     }
 
     @Override
@@ -104,6 +104,10 @@ public class FacilitatedPaymentsFopSelectorScreen implements FacilitatedPayments
                 BANK_ACCOUNT,
                 BankAccountViewBinder::createBankAccountItemView,
                 BankAccountViewBinder::bindBankAccountItemView);
+        adapter.registerType(
+                EWALLET,
+                EwalletViewBinder::createEwalletItemView,
+                EwalletViewBinder::bindEwalletItemView);
         adapter.registerType(
                 ADDITIONAL_INFO,
                 FacilitatedPaymentsPaymentMethodsViewBinder::createAdditionalInfoView,

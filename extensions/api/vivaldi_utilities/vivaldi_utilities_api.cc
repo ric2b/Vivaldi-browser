@@ -5,6 +5,7 @@
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <utility>
@@ -34,21 +35,26 @@
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router_factory.h"
+#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/icon_manager.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
+#include "chrome/browser/permissions/system/system_permission_settings.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sessions/exit_type_service.h"
+#include "chrome/browser/sessions/session_restore.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
+#include "chrome/browser/ui/startup/startup_tab.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/passwords/password_bubble_view_base.h"
@@ -63,6 +69,7 @@
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/crash/core/app/crashpad.h"
 #include "components/custom_handlers/protocol_handler.h"
@@ -84,6 +91,7 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
+#include "extensions/browser/extension_system.h"
 #include "extensions/schema/vivaldi_utilities.h"
 #include "net/base/data_url.h"
 #include "net/base/filename_util.h"
@@ -102,6 +110,7 @@
 #include "base/vivaldi_switches.h"
 #include "browser/translate/vivaldi_translate_server_request.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "browser/vivaldi_version_utils.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "components/datasource/vivaldi_data_url_utils.h"
 #include "components/datasource/vivaldi_image_store.h"
@@ -146,6 +155,7 @@
 #elif BUILDFLAG(IS_MAC)
 
 #include "chrome/browser/password_manager/password_manager_util_mac.h"
+#include "base/mac/mac_util.h"
 
 #endif
 
@@ -156,23 +166,6 @@ namespace extensions {
 namespace {
 constexpr char kMutexNameKey[] = "name";
 constexpr char kMutexReleaseTokenKey[] = "release_token";
-
-// Helper for version testing. It is assumed that each array hold at least two
-// elements.
-static bool HasVersionChanged(std::vector<std::string> version,
-                              std::vector<std::string> last_seen) {
-  int last_seen_major, version_major, last_seen_minor, version_minor;
-  if (base::StringToInt(version[0], &version_major) &&
-      base::StringToInt(last_seen[0], &last_seen_major) &&
-      base::StringToInt(version[1], &version_minor) &&
-      base::StringToInt(last_seen[1], &last_seen_minor)) {
-    return (version_major > last_seen_major) ||
-           ((version_minor > last_seen_minor) &&
-            (version_major >= last_seen_major));
-  } else {
-    return false;
-  }
-}
 
 ContentSetting vivContentSettingFromString(const std::string& name) {
   ContentSetting setting;
@@ -455,6 +448,24 @@ void VivaldiUtilitiesAPI::TopSitesChanged(
     history::TopSitesObserver::ChangeReason change_reason) {
   ::vivaldi::BroadcastEvent(vivaldi::utilities::OnTopSitesChanged::kEventName,
                             vivaldi::utilities::OnTopSitesChanged::Create(),
+                            browser_context_);
+}
+
+void VivaldiUtilitiesAPI::OnSessionRecoveryStart() {
+  on_session_recovery_done_subscription_ =
+      SessionRestore::RegisterOnSessionRestoredCallback(base::BindRepeating(
+          &VivaldiUtilitiesAPI::OnSessionRecoveryDone, base::Unretained(this)));
+
+  ::vivaldi::BroadcastEvent(vivaldi::utilities::OnSessionRecoveryStart::kEventName,
+                            vivaldi::utilities::OnSessionRecoveryStart::Create(),
+                            browser_context_);
+}
+
+void VivaldiUtilitiesAPI::OnSessionRecoveryDone(Profile* profile, int tabs) {
+  on_session_recovery_done_subscription_ = {};
+
+  ::vivaldi::BroadcastEvent(vivaldi::utilities::OnSessionRecoveryDone::kEventName,
+                            vivaldi::utilities::OnSessionRecoveryDone::Create(),
                             browser_context_);
 }
 
@@ -930,8 +941,8 @@ ExtensionFunction::ResponseAction UtilitiesStoreImageFunction::Run() {
       return RespondNow(
           Error("unsupported mimeType - " + *params->options.mime_type));
     }
-    StoreImage(
-        base::RefCountedBytes::TakeVector(&params->options.data.value()));
+    StoreImage(base::MakeRefCounted<base::RefCountedBytes>(
+        std::move(params->options.data.value())));
   } else if (what_args == has_url) {
     GURL url(*params->options.url);
     if (!url.is_valid()) {
@@ -1552,40 +1563,24 @@ ExtensionFunction::ResponseAction UtilitiesCanShowWhatsNewPageFunction::Run() {
   results.show = false;
   results.firstrun = false;
 
-  // Show new features tab only for official final builds.
-  if (::vivaldi::ReleaseKind() >= ::vivaldi::Release::kBeta) {
-    Profile* profile =
-        Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
-    bool version_changed = false;
-    std::string version = ::vivaldi::GetVivaldiVersionString();
-    std::string last_seen_version =
-        profile->GetPrefs()->GetString(vivaldiprefs::kStartupLastSeenVersion);
+  Profile* profile =
+      Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
 
-    std::vector<std::string> version_array = base::SplitString(
-        version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-    std::vector<std::string> last_seen_array =
-        base::SplitString(last_seen_version, ".", base::KEEP_WHITESPACE,
-                          base::SPLIT_WANT_NONEMPTY);
-
-    if (version_array.size() != 4 || last_seen_array.size() != 4) {
-      version_changed = true;
-      results.firstrun = last_seen_array.size() == 0;
-      profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
-                                     version);
-    } else {
-      version_changed = HasVersionChanged(version_array, last_seen_array);
-      if (version_changed) {
-        profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
-                                       version);
-      }
-    }
-
-    const base::CommandLine* command_line =
-        base::CommandLine::ForCurrentProcess();
-    bool force_first_run = command_line->HasSwitch(switches::kForceFirstRun);
-    bool no_first_run = command_line->HasSwitch(switches::kNoFirstRun);
-    results.show = (version_changed || force_first_run) && !no_first_run;
+  std::string version = ::vivaldi::GetVivaldiVersionString();
+  const bool version_changed =
+      ::vivaldi::version::HasVersionChanged(profile->GetPrefs());
+  if (version_changed) {
+    profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
+                                   version);
   }
+
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  bool force_first_run = command_line->HasSwitch(switches::kForceFirstRun);
+  bool no_first_run = command_line->HasSwitch(switches::kNoFirstRun);
+  // Show new features tab only for official final builds.
+  results.show = (version_changed || force_first_run) && !no_first_run &&
+                 ::vivaldi::ReleaseKind() >= ::vivaldi::Release::kBeta;
 
   return RespondNow(ArgumentList(Results::Create(results)));
 }
@@ -1854,12 +1849,6 @@ UtilitiesGetMediaAvailableStateFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(is_available)));
 }
 
-ExtensionFunction::ResponseAction UtilitiesIsFirstRunFunction::Run() {
-  namespace Results = vivaldi::utilities::IsFirstRun::Results;
-  return RespondNow(
-      ArgumentList(Results::Create(first_run::IsChromeFirstRun())));
-}
-
 UtilitiesGenerateQRCodeFunction::~UtilitiesGenerateQRCodeFunction() {}
 
 UtilitiesGenerateQRCodeFunction::UtilitiesGenerateQRCodeFunction() {}
@@ -1925,10 +1914,13 @@ void UtilitiesGenerateQRCodeFunction::RespondOnUiThreadForFile(
     base::FilePath path) {
   namespace Results = vivaldi::utilities::GenerateQRCode::Results;
 
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  platform_util::ShowItemInFolder(profile, path);
-
-  Respond(ArgumentList(Results::Create(path.AsUTF8Unsafe())));
+  if (path.empty()) {
+    return Respond(Error("Failed to save QR code to file"));
+  } else {
+    Profile* profile = Profile::FromBrowserContext(browser_context());
+    platform_util::ShowItemInFolder(profile, path);
+    Respond(ArgumentList(Results::Create(path.AsUTF8Unsafe())));
+  }
 }
 
 void UtilitiesGenerateQRCodeFunction::RespondOnUiThread(
@@ -2062,6 +2054,31 @@ ExtensionFunction::ResponseAction UtilitiesGetFOAuthClientIdFunction::Run() {
 #else
   return RespondNow(Error("No Fastmail client id defined"));
 #endif  // VIVALDI_FASTMAIL_OAUTH_CLIENT_ID
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesGetOSGeolocationStateFunction::Run() {
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+  namespace Results = vivaldi::utilities::GetOSGeolocationState::Results;
+  return RespondNow(ArgumentList(Results::Create(
+      system_permission_settings::IsAllowed(
+          ContentSettingsType::GEOLOCATION))));
+#else
+  return RespondNow(Error("System not supported"));
+#endif
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesOpenOSGeolocationSettingsFunction::Run() {
+#if BUILDFLAG(IS_MAC)
+  base::mac::OpenSystemSettingsPane(
+      base::mac::SystemSettingsPane::kPrivacySecurity_LocationServices,
+      std::string());
+  namespace Results = vivaldi::utilities::OpenOSGeolocationSettings::Results;
+  return RespondNow(ArgumentList(Results::Create()));
+#else
+  return RespondNow(Error("System not supported"));
+#endif
 }
 
 UtilitiesGetCommandLineValueFunction::~UtilitiesGetCommandLineValueFunction() {}
@@ -2344,69 +2361,6 @@ ExtensionFunction::ResponseAction UtilitiesReadImageFunction::Run() {
   return RespondLater();
 }
 
-std::string UtilitiesDetectNewCrashesFunction::CheckForNewCrashes(
-    const std::string& lastSeenUUID) {
-  std::vector<crash_reporter::Report> reports;
-  crash_reporter::GetReports(&reports);
-  if (reports.empty()) {
-    return "";
-  }
-
-  // Reports are sorted by capture_time
-  const std::string lastCrashUUID = reports.front().local_id;
-  return (lastSeenUUID.empty() || lastCrashUUID != lastSeenUUID) ? lastCrashUUID
-                                                                 : lastSeenUUID;
-}
-
-void UtilitiesDetectNewCrashesFunction::SendResult(
-    const std::string& lastCrashUUID) {
-  namespace Results = vivaldi::utilities::DetectNewCrashes::Results;
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  if (!profile) {
-    Respond(ArgumentList(Results::Create(false)));
-    return;
-  }
-
-  PrefService* prefs = profile->GetOriginalProfile()->GetPrefs();
-  if (!prefs) {
-    Respond(ArgumentList(Results::Create(false)));
-    return;
-  }
-
-  if (!lastCrashUUID.empty() &&
-      prefs->GetString(vivaldiprefs::kStartupLastCrashReportSeen) !=
-          lastCrashUUID) {
-    prefs->SetString(vivaldiprefs::kStartupLastCrashReportSeen, lastCrashUUID);
-    Respond(ArgumentList(Results::Create(true)));
-    return;
-  }
-  Respond(ArgumentList(Results::Create(false)));
-  return;
-}
-
-ExtensionFunction::ResponseAction UtilitiesDetectNewCrashesFunction::Run() {
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  if (!profile) {
-    return RespondNow(Error("Cannot get profile."));
-  }
-
-  PrefService* prefs = profile->GetOriginalProfile()->GetPrefs();
-  if (!prefs) {
-    return RespondNow(Error("Cannot get prefs."));
-  }
-
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
-       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(
-          &UtilitiesDetectNewCrashesFunction::CheckForNewCrashes, this,
-          prefs->GetString(vivaldiprefs::kStartupLastCrashReportSeen)),
-      base::BindOnce(&UtilitiesDetectNewCrashesFunction::SendResult, this));
-
-  return RespondLater();
-}
-
 ExtensionFunction::ResponseAction UtilitiesIsRTLFunction::Run() {
   return RespondNow(Error("Unexpected call to the browser process"));
 }
@@ -2418,19 +2372,74 @@ ExtensionFunction::ResponseAction UtilitiesGetDirectMatchFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
   auto* service = direct_match::DirectMatchServiceFactory::GetForBrowserContext(
       browser_context());
-  const direct_match::DirectMatchService::DirectMatchUnit* unit_found =
+  auto [ unit_found, allowed_to_be_default_match ] =
       service->GetDirectMatch(params->query);
   if (unit_found) {
     vivaldi::utilities::DirectMatchItem item;
     item.name = unit_found->name;
     item.title = unit_found->title;
-    item.click_url = unit_found->click_url;
-    item.target_url = unit_found->target_url;
     item.image_url = unit_found->image_url;
     item.image_path = unit_found->image_path;
+    item.category = unit_found->category;
+    item.display_location_address_bar =
+        unit_found->display_locations.address_bar;
+    item.display_location_sd_dialog = unit_found->display_locations.sd_dialog;
+    item.redirect_url = unit_found->redirect_url;
+    item.allowed_to_be_default_match = allowed_to_be_default_match;
     return RespondNow(ArgumentList(Results::Create(item)));
   }
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesGetDirectMatchPopularSitesFunction::Run() {
+  namespace Results = vivaldi::utilities::GetDirectMatchPopularSites::Results;
+  auto* service = direct_match::DirectMatchServiceFactory::GetForBrowserContext(
+      browser_context());
+  const auto& units = service->GetPopularSites();
+  std::vector<vivaldi::utilities::DirectMatchItem> items;
+  if (units.size() > 0) {
+    for (const auto& unit : units) {
+      vivaldi::utilities::DirectMatchItem item;
+      item.name = unit->name;
+      item.title = unit->title;
+      item.image_url = unit->image_url;
+      item.image_path = unit->image_path;
+      item.category = unit->category;
+      item.display_location_address_bar = unit->display_locations.address_bar;
+      item.display_location_sd_dialog = unit->display_locations.sd_dialog;
+      item.redirect_url = unit->redirect_url;
+      items.push_back(std::move(item));
+    }
+  }
+  return RespondNow(ArgumentList(Results::Create(items)));
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesGetDirectMatchesForCategoryFunction::Run() {
+  using vivaldi::utilities::GetDirectMatchesForCategory::Params;
+  namespace Results = vivaldi::utilities::GetDirectMatchesForCategory::Results;
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+  auto* service = direct_match::DirectMatchServiceFactory::GetForBrowserContext(
+      browser_context());
+  const auto& units = service->GetDirectMatchesForCategory(params->category_id);
+  std::vector<vivaldi::utilities::DirectMatchItem> items;
+  if (units.size() > 0) {
+    for (const auto& unit : units) {
+      vivaldi::utilities::DirectMatchItem item;
+      item.name = unit->name;
+      item.title = unit->title;
+      item.image_url = unit->image_url;
+      item.image_path = unit->image_path;
+      item.category = unit->category;
+      item.display_location_address_bar = unit->display_locations.address_bar;
+      item.display_location_sd_dialog = unit->display_locations.sd_dialog;
+      item.redirect_url = unit->redirect_url;
+      items.push_back(std::move(item));
+    }
+  }
+  return RespondNow(ArgumentList(Results::Create(items)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesEmulateUserInputFunction::Run() {
@@ -2560,6 +2569,55 @@ ExtensionFunction::ResponseAction UtilitiesHasCommandLineSwitchFunction::Run() {
 
   return RespondNow(
       ArgumentList(Results::Create(cmd_line.HasSwitch(params->value))));
+}
+
+ExtensionFunction::ResponseAction
+UtilitiesAcknowledgeCrashedSessionFunction::Run() {
+  using vivaldi::utilities::AcknowledgeCrashedSession::Params;
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Browser* browser = ::vivaldi::FindBrowserByWindowId(params->window_id);
+  if (!browser) {
+    return RespondNow(Error("No Browser instance."));
+  }
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  DCHECK(profile);
+
+  extensions::ExtensionService* extension_service =
+      extensions::ExtensionSystem::Get(profile)->extension_service();
+  DCHECK(extension_service);
+
+  if (params->restore_session && !params->reenable_extensions) {
+    // Disable all temporary blocked extensions, and unblock them (blocked
+    // extensions are not visible to the user).
+    extension_service->DisableUserExtensionsExcept(std::vector<std::string>());
+  }
+
+  extension_service->UnblockAllExtensions();
+
+  {
+    // When user doesn't want to restore we still need to take crash lock to ACK
+    // the crash.
+    std::unique_ptr<ExitTypeService::CrashedLock> crashed_lock_;
+    if (ExitTypeService* exit_type_service =
+            ExitTypeService::GetInstanceForProfile(profile)) {
+      crashed_lock_ = exit_type_service->CreateCrashedLock();
+    }
+
+    std::unique_ptr<ExitTypeService::CrashedLock> lock =
+        std::move(crashed_lock_);
+
+    if (params->restore_session) {
+      VivaldiUtilitiesAPI* api =
+          VivaldiUtilitiesAPI::GetFactoryInstance()->Get(browser_context());
+      api->OnSessionRecoveryStart();
+      // OnSessionRecoveryDone is going to be called here.
+      SessionRestore::RestoreSessionAfterCrash(browser);
+    }
+  }
+
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

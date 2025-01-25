@@ -15,10 +15,10 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "quiche/http2/core/spdy_alt_svc_wire_format.h"
+#include "quiche/common/http/http_header_block.h"
 #include "quiche/common/platform/api/quiche_bug_tracker.h"
 #include "quiche/common/platform/api/quiche_flag_utils.h"
 #include "quiche/common/platform/api/quiche_logging.h"
-#include "quiche/spdy/core/http2_header_block.h"
 
 namespace spdy {
 
@@ -309,26 +309,14 @@ int SpdyFrameIR::flow_control_window_consumed() const { return 0; }
 bool SpdyFrameWithFinIR::fin() const { return fin_; }
 
 SpdyFrameWithHeaderBlockIR::SpdyFrameWithHeaderBlockIR(
-    SpdyStreamId stream_id, Http2HeaderBlock header_block)
+    SpdyStreamId stream_id, quiche::HttpHeaderBlock header_block)
     : SpdyFrameWithFinIR(stream_id), header_block_(std::move(header_block)) {}
 
 SpdyFrameWithHeaderBlockIR::~SpdyFrameWithHeaderBlockIR() = default;
 
-SpdyDataIR::SpdyDataIR(SpdyStreamId stream_id, absl::string_view data)
-    : SpdyFrameWithFinIR(stream_id),
-      data_(nullptr),
-      data_len_(0),
-      padded_(false),
-      padding_payload_len_(0) {
-  SetDataDeep(data);
-}
-
-SpdyDataIR::SpdyDataIR(SpdyStreamId stream_id, const char* data)
-    : SpdyDataIR(stream_id, absl::string_view(data)) {}
-
 SpdyDataIR::SpdyDataIR(SpdyStreamId stream_id, std::string data)
     : SpdyFrameWithFinIR(stream_id),
-      data_store_(std::make_unique<std::string>(std::move(data))),
+      data_store_(std::move(data)),
       data_(data_store_->data()),
       data_len_(data_store_->size()),
       padded_(false),

@@ -38,9 +38,6 @@ base::expected<absl::uint128, ParseError> ParseAggregationKeyPiece(
 COMPONENT_EXPORT(ATTRIBUTION_REPORTING)
 std::string HexEncodeAggregationKey(absl::uint128);
 
-COMPONENT_EXPORT(ATTRIBUTION_REPORTING)
-bool AggregationKeyIdHasValidLength(const std::string& key);
-
 template <typename T>
   requires(std::integral<T>)
 constexpr T ValueOrZero(std::optional<T> value) {
@@ -89,6 +86,8 @@ base::expected<base::TimeDelta, ParseError> ParseDuration(const base::Value&);
 
 base::expected<std::optional<SuitableOrigin>, ParseError>
 ParseAggregationCoordinator(const base::Value::Dict&);
+
+base::expected<int, ParseError> ParseAggregatableValue(const base::Value&);
 
 void SerializeUint64(base::Value::Dict&, std::string_view key, uint64_t value);
 

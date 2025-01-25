@@ -10,6 +10,7 @@
 #include <initializer_list>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // String query and manipulation utilities.
 namespace openscreen::string_util {
@@ -98,6 +99,40 @@ inline std::string_view StripLeadingAsciiWhitespace(std::string_view str) {
 // Concatenates arguments into a single string.
 [[nodiscard]] std::string StrCat(
     std::initializer_list<std::string_view> pieces);
+
+// Splits `value` into tokens separated by `delim`.  Leading and trailing
+// delimeters are stripped, and multiple consecutive delimeters are treated as
+// one.
+[[nodiscard]] std::vector<std::string_view> Split(std::string_view value,
+                                                  char delim);
+
+// Returns a string made by concatenating the strings iterated by `[begin,
+// end)`, each separated by `delim`.
+template <typename Iterator>
+[[nodiscard]] std::string Join(Iterator begin,
+                               Iterator end,
+                               std::string_view delim) {
+  // Compute size of the result.
+  size_t result_size = 0;
+  for (auto it = begin; it != end; it++) {
+    result_size += it->size() + delim.size();
+  }
+  std::string result;
+  if (!result_size) {
+    return result;
+  } else {
+    result_size -= delim.size();
+  }
+  result.reserve(result_size);
+
+  // Populate the result, which should never allocate.
+  for (auto it = begin; it != end; it++) {
+    result.append(*it);
+    if (it + 1 != end)
+      result.append(delim);
+  }
+  return result;
+}
 
 }  // namespace openscreen::string_util
 

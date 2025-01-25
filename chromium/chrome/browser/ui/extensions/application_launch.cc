@@ -57,6 +57,7 @@
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/manifest_handlers/web_file_handlers_info.h"
 #include "third_party/blink/public/common/features.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/display/scoped_display_for_new_windows.h"
 #include "ui/gfx/geometry/rect.h"
@@ -169,14 +170,15 @@ GURL UrlForExtension(const extensions::Extension* extension,
   return url;
 }
 
-ui::WindowShowState DetermineWindowShowState(Profile* profile,
-                                             apps::LaunchContainer container,
-                                             const Extension* extension) {
+ui::mojom::WindowShowState DetermineWindowShowState(
+    Profile* profile,
+    apps::LaunchContainer container,
+    const Extension* extension) {
   if (!extension || container != apps::LaunchContainer::kLaunchContainerWindow)
-    return ui::SHOW_STATE_DEFAULT;
+    return ui::mojom::WindowShowState::kDefault;
 
   if (IsRunningInForcedAppMode()) {
-    return ui::SHOW_STATE_FULLSCREEN;
+    return ui::mojom::WindowShowState::kFullscreen;
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -185,14 +187,14 @@ ui::WindowShowState DetermineWindowShowState(Profile* profile,
   extensions::LaunchType launch_type =
       extensions::GetLaunchType(ExtensionPrefs::Get(profile), extension);
   if (launch_type == extensions::LAUNCH_TYPE_FULLSCREEN) {
-    return ui::SHOW_STATE_MAXIMIZED;
+    return ui::mojom::WindowShowState::kMaximized;
   }
   if (launch_type == extensions::LAUNCH_TYPE_WINDOW) {
-    return ui::SHOW_STATE_DEFAULT;
+    return ui::mojom::WindowShowState::kDefault;
   }
 #endif
 
-  return ui::SHOW_STATE_DEFAULT;
+  return ui::mojom::WindowShowState::kDefault;
 }
 
 WebContents* OpenApplicationTab(Profile* profile,
@@ -342,8 +344,7 @@ WebContents* OpenEnabledApplicationHelper(Profile* profile,
 
   switch (params.container) {
     case apps::LaunchContainer::kLaunchContainerNone: {
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
     }
     // Panels are deprecated. Launch a normal window instead.
     case apps::LaunchContainer::kLaunchContainerPanelDeprecated:
@@ -355,8 +356,7 @@ WebContents* OpenEnabledApplicationHelper(Profile* profile,
       break;
     }
     default:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
 
   if (supports_web_file_handlers) {
@@ -492,6 +492,7 @@ WebContents* NavigateApplicationWindow(Browser* browser,
 
   NavigateParams nav_params(browser, url, transition);
   nav_params.disposition = disposition;
+  nav_params.pwa_navigation_capturing_force_off = true;
   Navigate(&nav_params);
 
   WebContents* const web_contents = nav_params.navigated_or_inserted_contents;

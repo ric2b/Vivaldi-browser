@@ -33,6 +33,7 @@
 #include "net/base/upload_progress.h"
 #include "net/cookies/cookie_setting_override.h"
 #include "net/cookies/cookie_util.h"
+#include "net/socket/socket_tag.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
 #include "services/network/attribution/attribution_request_helper.h"
@@ -194,7 +195,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer,
       mojo::PendingRemote<mojom::AcceptCHFrameObserver>
           accept_ch_frame_observer,
-      net::CookieSettingOverrides cookie_setting_overrides,
       std::unique_ptr<AttributionRequestHelper> attribution_request_helper,
       bool shared_storage_writable_eligible);
 
@@ -335,6 +335,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       bool automatically_assign_isolation_info,
       const ResourceRequest& request);
 
+  static net::CookieSettingOverrides CalculateCookieSettingOverrides(
+      net::CookieSettingOverrides factory_overrides,
+      const ResourceRequest& request);
+
  private:
   // This class is used to set the URLLoader as user data on a URLRequest. This
   // is used instead of URLLoader directly because SetUserData requires a
@@ -366,6 +370,31 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
     kErrorAfterResponseArrival = 4,
     kMaxValue = kErrorAfterResponseArrival,
   };
+
+  // Configures `url_request_`, including registering callbacks.
+  void ConfigureRequest(
+      const GURL& url,
+      std::string_view method,
+      const net::SiteForCookies& site_for_cookies,
+      bool force_ignore_site_for_cookies,
+      const std::vector<GURL>& url_chain,
+      const GURL& referrer,
+      net::ReferrerPolicy referrer_policy,
+      bool upgrade_if_insecure,
+      bool is_ad_tagged,
+      std::optional<net::IsolationInfo> isolation_info,
+      bool force_main_frame_for_same_site_cookies,
+      net::SecureDnsPolicy secure_dns_policy,
+      net::HttpRequestHeaders extra_request_headers,
+      const std::optional<std::vector<net::SourceStream::SourceType>>&
+          accepted_stream_types,
+      const std::optional<url::Origin>& initiator,
+      net::RedirectInfo::FirstPartyURLPolicy first_party_url_policy,
+      int request_load_flags,
+      bool priority_incremental,
+      net::CookieSettingOverrides cookie_setting_overrides,
+      std::optional<net::SharedDictionaryGetter> shared_dictionary_getter,
+      net::SocketTag socket_tag);
 
   void OpenFilesForUpload(const ResourceRequest& request);
   void SetUpUpload(const ResourceRequest& request,
@@ -601,22 +630,28 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // credentials and client certificates.
   void SetRequestCredentials(const GURL& url);
 
-  // Returns whether sending/storing credentials is allowed by COEP.
+  // Returns whether sending/storing credentials is allowed by COEP and
+  // Document-Isolation-Policy.
   // |url| is the latest request URL, either the original URL or
   // `redirect_info.new_url`.
-  // When Cross-Origin-Embedder-Policy: credentialless is set, do not
-  // send or store credentials for no-cors cross-origin request.
-  bool CoepAllowCredentials(const GURL& url);
+  // When Cross-Origin-Embedder-Policy: credentialless or
+  // Document-Isolation-Policy: isolate-and-credentialless are set, do not send
+  // or store credentials for no-cors cross-origin request.
+  bool WebPoliciesAllowCredentials(const GURL& url);
 
   // Returns whether TransferSizeUpdated IPC should be sent.
   bool ShouldSendTransferSizeUpdated() const;
 
+  // Returns true if the corresponding `URLResponseHead`'s
+  // `load_with_storage_access` field should be set.
+  bool ShouldSetLoadWithStorageAccess() const;
+
   // Records metrics about GET requests.
   void RecordRequestMetrics();
 
-  raw_ptr<net::URLRequestContext> url_request_context_;
+  const raw_ptr<net::URLRequestContext> url_request_context_;
 
-  raw_ptr<mojom::NetworkContextClient> network_context_client_;
+  const raw_ptr<mojom::NetworkContextClient> network_context_client_;
   DeleteCallback delete_callback_;
 
   int32_t options_;
@@ -706,9 +741,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   const mojom::RequestMode request_mode_;
   const mojom::CredentialsMode request_credentials_mode_;
 
-  bool has_user_activation_ = false;
+  const bool has_user_activation_ = false;
 
-  mojom::RequestDestination request_destination_ =
+  const mojom::RequestDestination request_destination_ =
       mojom::RequestDestination::kEmpty;
 
   scoped_refptr<ResourceSchedulerClient> resource_scheduler_client_;
@@ -719,12 +754,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   std::unique_ptr<ScopedThrottlingToken> throttling_token_;
 
-  net::HttpRequestHeaders custom_proxy_pre_cache_headers_;
-  net::HttpRequestHeaders custom_proxy_post_cache_headers_;
+  const net::HttpRequestHeaders custom_proxy_pre_cache_headers_;
+  const net::HttpRequestHeaders custom_proxy_post_cache_headers_;
 
   // Indicates the originating frame of the request, see
   // network::ResourceRequest::fetch_window_id for details.
-  std::optional<base::UnguessableToken> fetch_window_id_;
+  const std::optional<base::UnguessableToken> fetch_window_id_;
 
   PrivateNetworkAccessChecker private_network_access_checker_;
 
@@ -753,6 +788,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // codes, like kFailedPrecondition (outbound) and kBadResponse (inbound) are
   // specific to one direction.
   std::optional<mojom::TrustTokenOperationStatus> trust_token_status_;
+
+  // Whether the caller has opted into using the Storage Access API (via JS).
+  const net::StorageAccessApiStatus storage_access_api_status_;
 
   // This is used to determine whether it is allowed to use a dictionary when
   // there is a matching shared dictionary for the request.
@@ -811,11 +849,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   // Stores cookies passed from the browser process to later add them to the
   // request. This prevents the network stack from overriding them.
-  bool allow_cookies_from_browser_ = false;
+  const bool allow_cookies_from_browser_ = false;
   std::string cookies_from_browser_;
 
   // Specifies that the response head should include request cookies.
-  bool include_request_cookies_with_response_ = false;
+  const bool include_request_cookies_with_response_ = false;
   net::cookie_util::ParsedRequestCookies request_cookies_;
 
   std::vector<network::mojom::CookieAccessDetailsPtr> cookie_access_details_;

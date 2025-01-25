@@ -5,8 +5,6 @@
 #include "platform/impl/logging.h"
 
 #if defined(CAST_STANDALONE_SENDER_HAVE_EXTERNAL_LIBS)
-#include <getopt.h>
-
 #include <cinttypes>
 #include <cstdio>
 #include <cstring>
@@ -27,6 +25,7 @@
 #include "platform/impl/platform_client_posix.h"
 #include "platform/impl/task_runner.h"
 #include "platform/impl/text_trace_logging_platform.h"
+#include "third_party/getopt/getopt.h"
 #include "util/chrono_helpers.h"
 #include "util/stringprintf.h"
 
@@ -84,7 +83,7 @@ usage: %s <options> addr[:port] media_file
                             kDefaultCastPort, kDefaultMaxBitrate);
 }
 
-// Attempts to parse |string_form| into an IPEndpoint. The format is a
+// Attempts to parse `string_form` into an IPEndpoint. The format is a
 // standard-format IPv4 or IPv6 address followed by an optional colon and port.
 // If the port is not provided, kDefaultCastPort is assumed.
 //
@@ -109,17 +108,16 @@ int StandaloneSenderMain(int argc, char* argv[]) {
   // being exposed, consider if it applies to the standalone receiver,
   // standalone sender, osp demo, and test_main argument options.
   const struct option kArgumentOptions[] = {
-    {"max-bitrate", required_argument, nullptr, 'm'},
-    {"no-looping", no_argument, nullptr, 'n'},
-    {"developer-certificate", required_argument, nullptr, 'd'},
-    {"android-hack", no_argument, nullptr, 'a'},
-    {"remoting", no_argument, nullptr, 'r'},
-    {"tracing", no_argument, nullptr, 't'},
-    {"verbose", no_argument, nullptr, 'v'},
-    {"help", no_argument, nullptr, 'h'},
-    {"codec", required_argument, nullptr, 'c'},
-    {nullptr, 0, nullptr, 0}
-  };
+      {"max-bitrate", required_argument, nullptr, 'm'},
+      {"no-looping", no_argument, nullptr, 'n'},
+      {"developer-certificate", required_argument, nullptr, 'd'},
+      {"android-hack", no_argument, nullptr, 'a'},
+      {"remoting", no_argument, nullptr, 'r'},
+      {"tracing", no_argument, nullptr, 't'},
+      {"verbose", no_argument, nullptr, 'v'},
+      {"help", no_argument, nullptr, 'h'},
+      {"codec", required_argument, nullptr, 'c'},
+      {nullptr, 0, nullptr, 0}};
 
   int max_bitrate = kDefaultMaxBitrate;
   bool should_loop_video = true;
@@ -229,7 +227,7 @@ int StandaloneSenderMain(int argc, char* argv[]) {
     }
   }
 
-  // |cast_agent| must be constructed and destroyed from a Task run by the
+  // `cast_agent` must be constructed and destroyed from a Task run by the
   // TaskRunner.
   LoopingFileCastAgent* cast_agent = nullptr;
   task_runner->PostTask([&] {
@@ -251,7 +249,7 @@ int StandaloneSenderMain(int argc, char* argv[]) {
   // SIGTERM are signaled.
   task_runner->RunUntilSignaled();
 
-  // Spin the TaskRunner to destroy the |cast_agent| and execute any lingering
+  // Spin the TaskRunner to destroy the `cast_agent` and execute any lingering
   // destruction/shutdown tasks.
   OSP_LOG_INFO << "Shutting down...";
   task_runner->PostTask([&] {

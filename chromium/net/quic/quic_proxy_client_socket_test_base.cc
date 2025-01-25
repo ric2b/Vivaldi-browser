@@ -198,6 +198,8 @@ void QuicProxyClientSocketTestBase::InitializeSession() {
       base::SingleThreadTaskRunner::GetCurrentDefault().get(),
       /*socket_performance_watcher=*/nullptr, ConnectionEndpointMetadata(),
       /*report_ecn=*/true, /*enable_origin_frame=*/true,
+      /*allow_server_preferred_address=*/true,
+      MultiplexedSessionCreationInitiator::kUnknown,
       NetLogWithSource::Make(NetLogSourceType::NONE));
 
   writer->set_delegate(session_.get());
@@ -328,9 +330,10 @@ QuicProxyClientSocketTestBase::ConstructAckAndDataPacket(
     uint64_t largest_received,
     uint64_t smallest_received,
     std::string_view data) {
-  return client_maker_.MakeAckAndDataPacket(
-      packet_number, client_data_stream_id1_, largest_received,
-      smallest_received, !kFin, data);
+  return client_maker_.Packet(packet_number)
+      .AddAckFrame(/*first_received=*/1, largest_received, smallest_received)
+      .AddStreamFrame(client_data_stream_id1_, !kFin, data)
+      .Build();
 }
 
 std::unique_ptr<quic::QuicReceivedPacket>

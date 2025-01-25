@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/bubble_anchor_util.h"
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/tab_sharing/tab_sharing_ui.h"
 #include "chrome/grit/generated_resources.h"
@@ -32,6 +33,8 @@
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/strings/grit/ui_strings.h"
+
+#include "ui/infobar_container_web_proxy.h"
 
 namespace {
 using TabRole = ::TabSharingInfoBarDelegate::TabRole;
@@ -109,8 +112,7 @@ class TabSharingInfoBarDelegate::ShareTabInsteadButton
       case TabSharingInfoBarDelegate::TabShareType::CAPTURE:
         return l10n_util::GetStringUTF16(IDS_TAB_SHARING_INFOBAR_SHARE_BUTTON);
     }
-    NOTREACHED_IN_MIGRATION();
-    return std::u16string();
+    NOTREACHED();
   }
 
   bool IsEnabled() const override {
@@ -204,7 +206,9 @@ class TabSharingInfoBarDelegate::CscIndicatorButton
     if (!web_contents_) {
       return;
     }
-    ShowPageInfoDialog(web_contents_.get(), base::DoNothing());
+    ShowPageInfoDialog(web_contents_.get(), base::DoNothing(),
+                       bubble_anchor_util::Anchor::kLocationBar,
+                       ContentSettingsType::CAPTURED_SURFACE_CONTROL);
   }
 
   std::u16string GetLabel() const override {
@@ -306,6 +310,21 @@ infobars::InfoBar* TabSharingInfoBarDelegate::Create(
     TabShareType capture_type,
     bool favicons_used_for_switch_to_tab_button) {
   DCHECK(infobar_manager);
+  Browser* const browser = chrome::FindBrowserWithTab(web_contents);
+  if (browser && browser->is_vivaldi()) {
+    std::unique_ptr<::vivaldi::ConfirmInfoBarWebProxy> infobarproxy =
+        std::make_unique<vivaldi::ConfirmInfoBarWebProxy>(
+            base::WrapUnique(new TabSharingInfoBarDelegate(
+                shared_tab_name, capturer_name, web_contents, role,
+                share_this_tab_instead_button_state, focus_target,
+                captured_surface_control_active, ui, capture_type,
+                favicons_used_for_switch_to_tab_button)));
+
+    return old_infobar ? infobar_manager->ReplaceInfoBar(old_infobar,
+                                                         std::move(infobarproxy))
+                       : infobar_manager->AddInfoBar(std::move(infobarproxy));
+  }
+
   std::unique_ptr<infobars::InfoBar> new_infobar =
       CreateTabSharingInfoBar(base::WrapUnique(new TabSharingInfoBarDelegate(
           shared_tab_name, capturer_name, web_contents, role,

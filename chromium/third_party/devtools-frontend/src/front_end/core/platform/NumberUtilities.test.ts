@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {describeWithLocale} from '../../testing/EnvironmentHelpers.js';
+
 import * as Platform from './platform.js';
 
-describe('NumberUtilities', () => {
+describeWithLocale('NumberUtilities', () => {
   describe('clamp', () => {
     it('takes the lower bound if the number is smaller', () => {
       assert.strictEqual(5, Platform.NumberUtilities.clamp(1, 5, 10));
@@ -23,31 +25,6 @@ describe('NumberUtilities', () => {
     it('returns the remainder', () => {
       const result = Platform.NumberUtilities.mod(12, 5);
       assert.strictEqual(result, 2);
-    });
-  });
-
-  describe('bytesToString', () => {
-    it('formats for < 1000 bytes', () => {
-      assert.deepEqual(Platform.NumberUtilities.bytesToString(50), '50\xA0B');
-    });
-
-    it('formats for < 100 kilobytes', () => {
-      assert.deepEqual(Platform.NumberUtilities.bytesToString(5 * 1000), '5.0\xA0kB');
-    });
-
-    it('formats for < 1000 kilobytes', () => {
-      assert.deepEqual(Platform.NumberUtilities.bytesToString(500 * 1000), '500\xA0kB');
-    });
-
-    it('formats for < 100 megabytes', () => {
-      const oneAndAHalfMegabytes = 1500 * 1000;
-      assert.deepEqual(Platform.NumberUtilities.bytesToString(oneAndAHalfMegabytes), '1.5\xA0MB');
-    });
-
-    it('formats for > 100 megabytes', () => {
-      const oneMegabyte = 1000 * 1000;
-      const twoHundredAndTenMegabytes = oneMegabyte * 210;
-      assert.deepEqual(Platform.NumberUtilities.bytesToString(twoHundredAndTenMegabytes), '210\xA0MB');
     });
   });
 
@@ -83,6 +60,16 @@ describe('NumberUtilities', () => {
       assert.strictEqual(1.11, Platform.NumberUtilities.floor(1.1111, 2));
       assert.strictEqual(1.9, Platform.NumberUtilities.floor(1.9999, 1));
       assert.strictEqual(1.99, Platform.NumberUtilities.floor(1.9999, 2));
+    });
+
+    it('it can round down to the nearest 5*', () => {
+      assert.strictEqual(115, Platform.NumberUtilities.floor(116.1, 1 / 5));
+      assert.strictEqual(1150, Platform.NumberUtilities.floor(1167.31, 1 / 50));
+    });
+
+    it('it can round down to the nearest 10*', () => {
+      assert.strictEqual(110, Platform.NumberUtilities.floor(111.1, 1 / 10));
+      assert.strictEqual(1100, Platform.NumberUtilities.floor(1161.31, 1 / 100));
     });
   });
 

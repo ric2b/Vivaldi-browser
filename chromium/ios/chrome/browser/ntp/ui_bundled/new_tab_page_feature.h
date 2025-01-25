@@ -6,14 +6,10 @@
 #define IOS_CHROME_BROWSER_NTP_UI_BUNDLED_NEW_TAB_PAGE_FEATURE_H_
 
 #include "base/feature_list.h"
-#include "components/prefs/pref_service.h"
-#import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
+
+class PrefService;
 
 #pragma mark - Feature declarations
-
-// Feature flag to enable showing a live preview for Discover feed when opening
-// the feed context menu.
-BASE_DECLARE_FEATURE(kEnableDiscoverFeedPreview);
 
 // Feature flag to enable static resource serving for the Discover feed.
 // TODO(crbug.com/40246814): Remove this.
@@ -21,9 +17,6 @@ BASE_DECLARE_FEATURE(kEnableDiscoverFeedStaticResourceServing);
 
 // Feature flag to enable discofeed endpoint for the Discover feed.
 BASE_DECLARE_FEATURE(kEnableDiscoverFeedDiscoFeedEndpoint);
-
-// Feature flag to enable the sync promo on top of the discover feed.
-BASE_DECLARE_FEATURE(kEnableDiscoverFeedTopSyncPromo);
 
 // Feature flag to fix the NTP view hierarchy if it is broken before applying
 // constraints.
@@ -63,13 +56,6 @@ extern const char kDiscoverFeedSRSReconstructedTemplatesEnabled[];
 // TODO(crbug.com/40246814): Remove this.
 extern const char kDiscoverFeedSRSPreloadTemplatesEnabled[];
 
-// Parameter for the feed top sync promo's style.
-extern const char kDiscoverFeedTopSyncPromoStyle[];
-
-// Feature parameters for the feed header settings.
-extern const char kDisableStickyHeaderForFollowingFeed[];
-extern const char kOverrideFeedHeaderHeight[];
-
 // A parameter value for the feed's refresh threshold when the feed has already
 // been seen by the user.
 extern const char kFeedSettingRefreshThresholdInSeconds[];
@@ -89,38 +75,14 @@ extern const char kFeedSettingDiscoverReferrerParameter[];
 
 #pragma mark - Helpers
 
-// Whether the Discover feed content preview is shown in the context menu.
-bool IsDiscoverFeedPreviewEnabled();
-
 // Whether the NTP view hierarchy repair is enabled.
 bool IsNTPViewHierarchyRepairEnabled();
 
 // Whether the sync promo should be shown on top of the feed.
 bool IsDiscoverFeedTopSyncPromoEnabled();
 
-// Returns the feed top sync promo's UI style.
-SigninPromoViewStyle GetTopOfFeedPromoStyle();
-
-// Whether the feed top sync promo should only be shown to users who previously
-// engaged with the feed.
-bool ShouldIgnoreFeedEngagementConditionForTopSyncPromo();
-
-// Returns the number of impressions before autodismissing the feed sync promo.
-int FeedSyncPromoAutodismissCount();
-
 // Whether content suggestions are enabled for supervised users.
 bool IsContentSuggestionsForSupervisedUserEnabled(PrefService* pref_service);
-
-// YES if the Following feed header should not be sticky.
-bool IsStickyHeaderDisabledForFollowingFeed();
-
-// YES if a dot should appear to indicate that there is new content in the
-// Following feed.
-bool IsDotEnabledForNewFollowedContent();
-
-// Returns a custom height for the Following feed header if it is overridden
-// from the server, or returns the default value.
-int FollowingFeedHeaderHeight();
 
 // YES if discover feedback is going to be sent to the updated target.
 bool IsWebFeedFeedbackRerouteEnabled();

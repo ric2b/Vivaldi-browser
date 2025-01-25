@@ -4,10 +4,10 @@
 
 #include "discovery/dnssd/impl/conversion_layer.h"
 
+#include <string_view>
 #include <utility>
+#include <vector>
 
-#include "absl/strings/str_join.h"
-#include "absl/strings/str_split.h"
 #include "discovery/dnssd/impl/constants.h"
 #include "discovery/dnssd/impl/instance_key.h"
 #include "discovery/dnssd/impl/service_key.h"
@@ -15,6 +15,7 @@
 #include "discovery/mdns/public/mdns_constants.h"
 #include "discovery/mdns/public/mdns_records.h"
 #include "util/span_util.h"
+#include "util/string_util.h"
 
 namespace openscreen::discovery {
 namespace {
@@ -22,10 +23,11 @@ namespace {
 void AddServiceInfoToLabels(const std::string& service,
                             const std::string& domain,
                             std::vector<std::string>* labels) {
-  std::vector<std::string> service_labels = absl::StrSplit(service, '.');
+  std::vector<std::string_view> service_labels =
+      string_util::Split(service, '.');
   labels->insert(labels->end(), service_labels.begin(), service_labels.end());
 
-  std::vector<std::string> domain_labels = absl::StrSplit(domain, '.');
+  std::vector<std::string_view> domain_labels = string_util::Split(domain, '.');
   labels->insert(labels->end(), domain_labels.begin(), domain_labels.end());
 }
 

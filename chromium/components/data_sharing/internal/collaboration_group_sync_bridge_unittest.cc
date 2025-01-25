@@ -94,7 +94,7 @@ class MockObserver : public CollaborationGroupSyncBridge::Observer {
                const std::vector<GroupId>&,
                const std::vector<GroupId>&),
               (override));
-  MOCK_METHOD(void, OnDataLoaded, (), (override));
+  MOCK_METHOD(void, OnCollaborationGroupSyncDataLoaded, (), (override));
 };
 
 class CollaborationGroupSyncBridgeTest : public testing::Test {
@@ -206,7 +206,7 @@ TEST_F(CollaborationGroupSyncBridgeTest, ShouldMergeFullSyncData) {
 
 TEST_F(CollaborationGroupSyncBridgeTest,
        ShouldApplyIncrementalSyncChangesAndNotifyObserver) {
-  EXPECT_CALL(observer(), OnDataLoaded);
+  EXPECT_CALL(observer(), OnCollaborationGroupSyncDataLoaded);
   CreateBridgeAndWaitForReadyToSync();
   testing::Mock::VerifyAndClearExpectations(&observer());
 
@@ -370,6 +370,33 @@ TEST_F(CollaborationGroupSyncBridgeTest, ShouldApplyDisableSyncChanges) {
     data_type_store().ReadAllMetadata(get_metadata_callback.Get());
     run_loop.Run();
   }
+}
+
+TEST(CollaborationGroupSyncBridgeNoFixtureTest, ShouldReportIsDataLoaded) {
+  base::test::SingleThreadTaskEnvironment task_environment;
+
+  std::unique_ptr<syncer::DataTypeStore> data_type_store =
+      syncer::DataTypeStoreTestUtil::CreateInMemoryStoreForTest();
+  testing::NiceMock<syncer::MockDataTypeLocalChangeProcessor> mock_processor;
+  testing::NiceMock<MockObserver> observer;
+
+  CollaborationGroupSyncBridge bridge(
+      mock_processor.CreateForwardingProcessor(),
+      syncer::DataTypeStoreTestUtil::FactoryForForwardingStore(
+          data_type_store.get()));
+  bridge.AddObserver(&observer);
+
+  base::RunLoop run_loop;
+  ON_CALL(mock_processor, ModelReadyToSync)
+      .WillByDefault(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
+
+  // Loading is asynchronous, so data loading shouldn't happen yet.
+  EXPECT_FALSE(bridge.IsDataLoaded());
+
+  // Data should be loaded by the time ModelReadyToSync() is called.
+  EXPECT_CALL(observer, OnCollaborationGroupSyncDataLoaded);
+  run_loop.Run();
+  EXPECT_TRUE(bridge.IsDataLoaded());
 }
 
 }  // namespace

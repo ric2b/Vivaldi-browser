@@ -15,10 +15,11 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include <fp16/fp16.h>
 #include "xnnpack.h"
+#include "xnnpack/buffer.h"
+#include "xnnpack/isa-checks.h"
+#include "xnnpack/math.h"
 #include "xnnpack/microfnptr.h"
-#include "xnnpack/microparams.h"
 #include "replicable_random_device.h"
 
 class VCMulMicrokernelTester {
@@ -65,33 +66,29 @@ class VCMulMicrokernelTester {
     std::uniform_real_distribution<float> f32rdist(1.0f, 10.0f);
     std::uniform_real_distribution<float> f32idist(0.01f, 0.1f);
 
-    std::vector<uint16_t> a(2 * batch_size() + XNN_EXTRA_BYTES / sizeof(uint16_t));
-    std::vector<uint16_t> b(2 * batch_size() + XNN_EXTRA_BYTES / sizeof(uint16_t));
-    std::vector<uint16_t> y(2 * batch_size() + (inplace_a() || inplace_b() ? XNN_EXTRA_BYTES / sizeof(uint16_t) : 0));
-    std::vector<float> y_ref(2 * batch_size());
-    std::fill(a.begin(), a.end(), UINT16_C(0x7E00) /* NaN */);
-    std::fill(b.begin(), b.end(), UINT16_C(0x7E00) /* NaN */);
+    xnnpack::Buffer<xnn_float16> a(2 * batch_size() + XNN_EXTRA_BYTES / sizeof(xnn_float16));
+    xnnpack::Buffer<xnn_float16> b(2 * batch_size() + XNN_EXTRA_BYTES / sizeof(xnn_float16));
+    xnnpack::Buffer<xnn_float16> y(2 * batch_size() + (inplace_a() || inplace_b() ? XNN_EXTRA_BYTES / sizeof(xnn_float16) : 0));
+    xnnpack::Buffer<float> y_ref(2 * batch_size());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
-      std::generate_n(a.begin(), batch_size(), [&]() { return fp16_ieee_from_fp32_value(f32rdist(rng)); });
-      std::generate_n(a.begin() + batch_size(), batch_size(), [&]() { return fp16_ieee_from_fp32_value(f32idist(rng)); });
-      std::generate_n(b.begin(), batch_size(), [&]() { return fp16_ieee_from_fp32_value(f32rdist(rng)); });
-      std::generate_n(b.begin() + batch_size(), batch_size(), [&]() { return fp16_ieee_from_fp32_value(f32idist(rng)); });
+      std::generate_n(a.begin(), batch_size(), [&]() { return f32rdist(rng); });
+      std::generate_n(a.begin() + batch_size(), batch_size(), [&]() { return f32idist(rng); });
+      std::generate_n(b.begin(), batch_size(), [&]() { return f32rdist(rng); });
+      std::generate_n(b.begin() + batch_size(), batch_size(), [&]() { return f32idist(rng); });
       if (inplace_a()) {
         std::copy(a.cbegin(), a.cend(), y.begin());
       } else if (inplace_b()) {
         std::copy(b.cbegin(), b.cend(), y.begin());
-      } else {
-        std::fill(y.begin(), y.end(), UINT16_C(0x7E00) /* NaN */);
       }
-      const uint16_t* a_data = inplace_a() ? y.data() : a.data();
-      const uint16_t* b_data = inplace_b() ? y.data() : b.data();
+      const xnn_float16* a_data = inplace_a() ? y.data() : a.data();
+      const xnn_float16* b_data = inplace_b() ? y.data() : b.data();
 
       // Compute reference results.
       for (size_t i = 0; i < batch_size(); i++) {
-        float a0 = fp16_ieee_to_fp32_value(a_data[i]);
-        float b0 = fp16_ieee_to_fp32_value(b_data[i]);
-        float a1 = fp16_ieee_to_fp32_value(a_data[i + batch_size()]);
-        float b1 = fp16_ieee_to_fp32_value(b_data[i + batch_size()]);
+        float a0 = a_data[i];
+        float b0 = b_data[i];
+        float a1 = a_data[i + batch_size()];
+        float b1 = b_data[i + batch_size()];
         y_ref[i] = a0 * b0 - a1 * b1;
         y_ref[i + batch_size()] = a0 * b1 + a1 * b0;
       }
@@ -103,12 +100,12 @@ class VCMulMicrokernelTester {
       }
 
       // Call optimized micro-kernel.
-      vcmul(batch_size() * sizeof(uint16_t), a_data, b_data, y.data(), init_params != nullptr ? &params : nullptr);
+      vcmul(batch_size() * sizeof(xnn_float16), a_data, b_data, y.data(), init_params != nullptr ? &params : nullptr);
 
       // Verify results.
       for (size_t i = 0; i < batch_size(); i++) {
         const float tolerance = std::abs(y_ref[i]) * 1.0e-2f;
-        EXPECT_NEAR(fp16_ieee_to_fp32_value(y[i]), y_ref[i], tolerance)
+        EXPECT_NEAR(y[i], y_ref[i], tolerance)
           << "at " << i << " / " << batch_size();
       }
     }
@@ -119,12 +116,10 @@ class VCMulMicrokernelTester {
     std::uniform_real_distribution<float> f32rdist(1.0f, 10.0f);
     std::uniform_real_distribution<float> f32idist(0.01f, 0.1f);
 
-    std::vector<float> a(2 * batch_size() + XNN_EXTRA_BYTES / sizeof(float));
-    std::vector<float> b(2 * batch_size() + XNN_EXTRA_BYTES / sizeof(float));
-    std::vector<float> y(2 * batch_size() + (inplace_a() || inplace_b() ? XNN_EXTRA_BYTES / sizeof(float) : 0));
-    std::vector<double> y_ref(2 * batch_size());
-    std::fill(a.begin(), a.end(), std::nanf(""));
-    std::fill(b.begin(), b.end(), std::nanf(""));
+    xnnpack::Buffer<float> a(2 * batch_size() + XNN_EXTRA_BYTES / sizeof(float));
+    xnnpack::Buffer<float> b(2 * batch_size() + XNN_EXTRA_BYTES / sizeof(float));
+    xnnpack::Buffer<float> y(2 * batch_size() + (inplace_a() || inplace_b() ? XNN_EXTRA_BYTES / sizeof(float) : 0));
+    xnnpack::Buffer<double> y_ref(2 * batch_size());
     for (size_t iteration = 0; iteration < iterations(); iteration++) {
       std::generate_n(a.begin(), batch_size(), [&]() { return f32rdist(rng); });
       std::generate_n(a.begin() + batch_size(), batch_size(), [&]() { return f32idist(rng); });
@@ -134,8 +129,6 @@ class VCMulMicrokernelTester {
         std::copy(a.cbegin(), a.cend(), y.begin());
       } else if (inplace_b()) {
         std::copy(b.cbegin(), b.cend(), y.begin());
-      } else {
-        std::fill(y.begin(), y.end(), nanf(""));
       }
       const float* a_data = inplace_a() ? y.data() : a.data();
       const float* b_data = inplace_b() ? y.data() : b.data();
@@ -169,3 +162,93 @@ class VCMulMicrokernelTester {
   bool inplace_b_{false};
   size_t iterations_{15};
 };
+
+#define XNN_TEST_BINARY_BATCH_EQ(ukernel, arch_flags, batch_tile, is_binaryc, \
+                                 datatype, ...)                               \
+  TEST(ukernel, batch_eq) {                                                   \
+    TEST_REQUIRES_ARCH_FLAGS(arch_flags);                                     \
+    const size_t batch_scale = get_batch_scale<datatype>();                   \
+    VCMulMicrokernelTester()                                                  \
+        .batch_size(batch_tile* batch_scale)                                  \
+        .Test(__VA_ARGS__);                                                   \
+  }
+
+#define XNN_TEST_BINARY_BATCH_DIV(ukernel, arch_flags, batch_tile, is_binaryc, \
+                                  datatype, ...)                               \
+  TEST(ukernel, batch_div) {                                                   \
+    TEST_REQUIRES_ARCH_FLAGS(arch_flags);                                      \
+    const size_t batch_scale = get_batch_scale<datatype>();                    \
+    if (batch_tile == 1 && batch_scale == 1) return;                           \
+    for (size_t batch_size = batch_tile * batch_scale * 2;                     \
+         batch_size < batch_tile * batch_scale * 10;                           \
+         batch_size += batch_tile * batch_scale) {                             \
+      VCMulMicrokernelTester().batch_size(batch_size).Test(__VA_ARGS__);       \
+    }                                                                          \
+  }
+#define XNN_TEST_BINARY_BATCH_LT(ukernel, arch_flags, batch_tile, is_binaryc, \
+                                 datatype, ...)                               \
+  TEST(ukernel, batch_lt) {                                                   \
+    TEST_REQUIRES_ARCH_FLAGS(arch_flags);                                     \
+    const size_t batch_scale = get_batch_scale<datatype>();                   \
+    if (batch_tile == 1 && batch_scale == 1) return;                          \
+    for (size_t batch_size = batch_scale;                                     \
+         batch_size < batch_tile * batch_scale; batch_size++) {               \
+      VCMulMicrokernelTester().batch_size(batch_size).Test(__VA_ARGS__);      \
+    }                                                                         \
+  }
+
+#define XNN_TEST_BINARY_BATCH_GT(ukernel, arch_flags, batch_tile, is_binaryc, \
+                                 datatype, ...)                               \
+  TEST(ukernel, batch_gt) {                                                   \
+    TEST_REQUIRES_ARCH_FLAGS(arch_flags);                                     \
+    const size_t batch_scale = get_batch_scale<datatype>();                   \
+    const size_t batch_end = batch_tile == 1 ? 10 : batch_tile * 2;           \
+    const size_t batch_step = batch_scale == 1 ? 1 : batch_tile * 2;          \
+    for (size_t batch_size = batch_tile + 1; batch_size < batch_end;          \
+         batch_size += batch_step) {                                          \
+      VCMulMicrokernelTester().batch_size(batch_size).Test(__VA_ARGS__);      \
+    }                                                                         \
+  }
+
+#define XNN_TEST_BINARY_INPLACE_A(ukernel, arch_flags, batch_tile, is_binaryc, \
+                                  datatype, ...)                               \
+  TEST(ukernel, inplace_a) {                                                   \
+    TEST_REQUIRES_ARCH_FLAGS(arch_flags);                                      \
+    const size_t batch_scale = get_batch_scale<datatype>();                    \
+    for (size_t batch_size = 1; batch_size <= batch_tile * batch_scale * 5;    \
+         batch_size += std::max(1, batch_tile - 1) * batch_scale) {            \
+      VCMulMicrokernelTester()                                                 \
+          .batch_size(batch_size)                                              \
+          .inplace_a(true)                                                     \
+          .Test(__VA_ARGS__);                                                  \
+    }                                                                          \
+  }
+
+#define XNN_TEST_BINARY_INPLACE_B(ukernel, arch_flags, batch_tile, is_binaryc, \
+                                  datatype, ...)                               \
+  TEST(ukernel, inplace_b) {                                                   \
+    TEST_REQUIRES_ARCH_FLAGS(arch_flags);                                      \
+    const size_t batch_scale = get_batch_scale<datatype>();                    \
+    for (size_t batch_size = 1; batch_size <= batch_tile * batch_scale * 5;    \
+         batch_size += std::max(1, batch_tile - 1) * batch_scale) {            \
+      VCMulMicrokernelTester()                                                 \
+          .batch_size(batch_size)                                              \
+          .inplace_b(true)                                                     \
+          .Test(__VA_ARGS__);                                                  \
+    }                                                                          \
+  }
+
+#define XNN_TEST_BINARY_INPLACE_A_AND_B(ukernel, arch_flags, batch_tile,    \
+                                        is_binaryc, datatype, ...)          \
+  TEST(ukernel, inplace_a_and_b) {                                          \
+    TEST_REQUIRES_ARCH_FLAGS(arch_flags);                                   \
+    const size_t batch_scale = get_batch_scale<datatype>();                 \
+    for (size_t batch_size = 1; batch_size <= batch_tile * batch_scale * 5; \
+         batch_size += std::max(1, batch_tile - 1) * batch_scale) {         \
+      VCMulMicrokernelTester()                                              \
+          .batch_size(batch_size)                                           \
+          .inplace_a(true)                                                  \
+          .inplace_b(true)                                                  \
+          .Test(__VA_ARGS__);                                               \
+    }                                                                       \
+  }

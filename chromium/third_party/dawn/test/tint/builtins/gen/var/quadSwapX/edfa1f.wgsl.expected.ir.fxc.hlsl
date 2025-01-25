@@ -1,9 +1,9 @@
-SKIP: FAILED
+SKIP: INVALID
 
 
 RWByteAddressBuffer prevent_dce : register(u0);
 int4 quadSwapX_edfa1f() {
-  int4 arg_0 = (1).xxxx;
+  int4 arg_0 = (int(1)).xxxx;
   int4 res = QuadReadAcrossX(arg_0);
   return res;
 }

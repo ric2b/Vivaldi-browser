@@ -56,8 +56,8 @@ class DeviceAuthTest : public ::testing::Test {
         data_path_ + "device_chain.pem", data_path_ + "device_tls.pem");
     creds_.device_creds.serialized_crl = std::move(serialized_crl);
 
-    // Send an auth challenge.  |auth_handler_| will automatically respond
-    // via |router_| and we will catch the result in |challenge_reply|.
+    // Send an auth challenge.  `auth_handler_` will automatically respond
+    // via `router_` and we will catch the result in `challenge_reply`.
     AuthContext auth_context = AuthContext::Create();
     CastMessage auth_challenge = CreateAuthChallengeMessage(auth_context);
     if (record_this_test) {

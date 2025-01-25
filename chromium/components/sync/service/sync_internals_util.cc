@@ -35,6 +35,45 @@ const char kUninitialized[] = "Uninitialized";
 const char kUninitializedCSSClass[] = "uninitialized";
 const char kBadStateCSSClass[] = "in_bad_state";
 
+std::string SeverityToString(TypeStatusForDebugging::Severity severity) {
+  switch (severity) {
+    case TypeStatusForDebugging::Severity::kError:
+      return "severity_error";
+    case TypeStatusForDebugging::Severity::kWarning:
+      return "severity_warning";
+    case TypeStatusForDebugging::Severity::kInfo:
+      return "severity_info";
+    case TypeStatusForDebugging::Severity::kTransitioning:
+      return "transitioning";
+    case TypeStatusForDebugging::Severity::kOk:
+      return "ok";
+  }
+  NOTREACHED();
+}
+
+// Converts TypeStatusMapForDebugging to a base::Value::List.
+base::Value::List TypeStatusMapToValueList(
+    const TypeStatusMapForDebugging& map) {
+  base::Value::List result;
+  auto type_status_header = base::Value::Dict()
+                                .Set("status", "header")
+                                .Set("name", "Data Type")
+                                .Set("num_entries", "Total Entries")
+                                .Set("num_live", "Live Entries")
+                                .Set("message", "Message")
+                                .Set("state", "State");
+  result.Append(std::move(type_status_header));
+  for (const auto& [type, status] : map) {
+    base::Value::Dict type_status;
+    type_status.Set("name", DataTypeToDebugString(type));
+    type_status.Set("status", SeverityToString(status.severity));
+    type_status.Set("state", status.state);
+    type_status.Set("message", status.message);
+    result.Append(std::move(type_status));
+  }
+  return result;
+}
+
 // This class represents one field in chrome://sync-internals. It gets
 // serialized into a dictionary with entries for 'stat_name', 'stat_value' and
 // 'stat_status'.
@@ -177,8 +216,7 @@ std::string GetTransportStateString(syncer::SyncService::TransportState state) {
     case syncer::SyncService::TransportState::ACTIVE:
       return "Active";
   }
-  NOTREACHED_IN_MIGRATION();
-  return std::string();
+  NOTREACHED();
 }
 
 std::string GetUserActionableErrorString(
@@ -202,8 +240,7 @@ std::string GetUserActionableErrorString(
       return "Trusted vault recoverability degraded for everything";
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return std::string();
+  NOTREACHED();
 }
 
 // Returns a string describing the chrome version environment. Version format:
@@ -288,8 +325,7 @@ std::string GetConnectionStatus(const SyncTokenStatus& status) {
           "server error since %s",
           GetTimeStr(status.connection_status_update_time).c_str());
   }
-  NOTREACHED_IN_MIGRATION();
-  return std::string();
+  NOTREACHED();
 }
 
 }  // namespace
@@ -656,7 +692,8 @@ base::Value::Dict ConstructAboutInformation(
                    base::Value(unrecoverable_error_message));
   }
 
-  about_info.Set("type_status", service->GetTypeStatusMapForDebugging());
+  about_info.Set("type_status", TypeStatusMapToValueList(
+                                    service->GetTypeStatusMapForDebugging()));
 
   return about_info;
 }

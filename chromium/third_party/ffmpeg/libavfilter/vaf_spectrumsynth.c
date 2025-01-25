@@ -34,7 +34,6 @@
 #include "formats.h"
 #include "audio.h"
 #include "filters.h"
-#include "internal.h"
 #include "window_func.h"
 
 enum MagnitudeScale { LINEAR, LOG, NB_SCALES };
@@ -94,14 +93,18 @@ static const AVOption spectrumsynth_options[] = {
 
 AVFILTER_DEFINE_CLASS(spectrumsynth);
 
-static int query_formats(AVFilterContext *ctx)
+enum {
+    MAGNITUDE = 0,
+    PHASE     = 1,
+};
+
+static int query_formats(const AVFilterContext *ctx,
+                         AVFilterFormatsConfig **cfg_in,
+                         AVFilterFormatsConfig **cfg_out)
 {
-    SpectrumSynthContext *s = ctx->priv;
+    const SpectrumSynthContext *s = ctx->priv;
     AVFilterFormats *formats = NULL;
     AVFilterChannelLayouts *layout = NULL;
-    AVFilterLink *magnitude = ctx->inputs[0];
-    AVFilterLink *phase = ctx->inputs[1];
-    AVFilterLink *outlink = ctx->outputs[0];
     static const enum AVSampleFormat sample_fmts[] = { AV_SAMPLE_FMT_FLTP, AV_SAMPLE_FMT_NONE };
     static const enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_GRAY8, AV_PIX_FMT_GRAY16,
                                                    AV_PIX_FMT_YUV444P, AV_PIX_FMT_YUVJ444P,
@@ -109,28 +112,28 @@ static int query_formats(AVFilterContext *ctx)
     int ret, sample_rates[] = { 48000, -1 };
 
     formats = ff_make_format_list(sample_fmts);
-    if ((ret = ff_formats_ref         (formats, &outlink->incfg.formats        )) < 0 ||
+    if ((ret = ff_formats_ref         (formats, &cfg_out[0]->formats         )) < 0 ||
         (ret = ff_add_channel_layout  (&layout, &FF_COUNT2LAYOUT(s->channels))) < 0 ||
-        (ret = ff_channel_layouts_ref (layout , &outlink->incfg.channel_layouts)) < 0)
+        (ret = ff_channel_layouts_ref (layout , &cfg_out[0]->channel_layouts)) < 0)
         return ret;
 
     sample_rates[0] = s->sample_rate;
     formats = ff_make_format_list(sample_rates);
     if (!formats)
         return AVERROR(ENOMEM);
-    if ((ret = ff_formats_ref(formats, &outlink->incfg.samplerates)) < 0)
+    if ((ret = ff_formats_ref(formats, &cfg_out[0]->samplerates)) < 0)
         return ret;
 
     formats = ff_make_format_list(pix_fmts);
     if (!formats)
         return AVERROR(ENOMEM);
-    if ((ret = ff_formats_ref(formats, &magnitude->outcfg.formats)) < 0)
+    if ((ret = ff_formats_ref(formats, &cfg_in[MAGNITUDE]->formats)) < 0)
         return ret;
 
     formats = ff_make_format_list(pix_fmts);
     if (!formats)
         return AVERROR(ENOMEM);
-    if ((ret = ff_formats_ref(formats, &phase->outcfg.formats)) < 0)
+    if ((ret = ff_formats_ref(formats, &cfg_in[PHASE]->formats)) < 0)
         return ret;
 
     return 0;
@@ -140,10 +143,12 @@ static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     SpectrumSynthContext *s = ctx->priv;
+    FilterLink *inl0 = ff_filter_link(ctx->inputs[0]);
+    FilterLink *inl1 = ff_filter_link(ctx->inputs[1]);
     int width = ctx->inputs[0]->w;
     int height = ctx->inputs[0]->h;
     AVRational time_base  = ctx->inputs[0]->time_base;
-    AVRational frame_rate = ctx->inputs[0]->frame_rate;
+    AVRational frame_rate = inl0->frame_rate;
     float factor, overlap, scale;
     int i, ch, ret;
 
@@ -164,12 +169,12 @@ static int config_output(AVFilterLink *outlink)
                ctx->inputs[1]->time_base.num,
                ctx->inputs[1]->time_base.den);
         return AVERROR_INVALIDDATA;
-    } else if (av_cmp_q(frame_rate, ctx->inputs[1]->frame_rate) != 0) {
+    } else if (av_cmp_q(frame_rate, inl1->frame_rate) != 0) {
         av_log(ctx, AV_LOG_ERROR,
                "Magnitude and Phase framerates differ (%d/%d vs %d/%d).\n",
                frame_rate.num, frame_rate.den,
-               ctx->inputs[1]->frame_rate.num,
-               ctx->inputs[1]->frame_rate.den);
+               inl1->frame_rate.num,
+               inl1->frame_rate.den);
         return AVERROR_INVALIDDATA;
     }
 
@@ -542,6 +547,6 @@ const AVFilter ff_vaf_spectrumsynth = {
     .priv_size     = sizeof(SpectrumSynthContext),
     FILTER_INPUTS(spectrumsynth_inputs),
     FILTER_OUTPUTS(spectrumsynth_outputs),
-    FILTER_QUERY_FUNC(query_formats),
+    FILTER_QUERY_FUNC2(query_formats),
     .priv_class    = &spectrumsynth_class,
 };

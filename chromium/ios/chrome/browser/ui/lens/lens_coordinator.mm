@@ -12,6 +12,7 @@
 #import "components/prefs/pref_service.h"
 #import "components/search_engines/template_url.h"
 #import "components/search_engines/template_url_service.h"
+#import "components/segmentation_platform/embedder/home_modules/tips_manager/signal_constants.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/intents/intents_donation_helper.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
@@ -33,6 +34,8 @@
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/tips_manager/model/tips_manager_ios.h"
+#import "ios/chrome/browser/tips_manager/model/tips_manager_ios_factory.h"
 #import "ios/chrome/browser/ui/lens/features.h"
 #import "ios/chrome/browser/ui/lens/lens_availability.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
@@ -150,13 +153,12 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
       base::ScopedObservation<web::WebState, web::WebStateObserver>>(
       _webStateObserverBridge.get());
 
-  ChromeBrowserState* browserState = browser->GetBrowserState();
-  DCHECK(browserState);
+  ProfileIOS* profile = browser->GetProfile();
+  DCHECK(profile);
 
   self.templateURLService =
-      ios::TemplateURLServiceFactory::GetForBrowserState(browserState);
-  self.tracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(browserState);
+      ios::TemplateURLServiceFactory::GetForProfile(profile);
+  self.tracker = feature_engagement::TrackerFactory::GetForProfile(profile);
   self.loadingWebState = nil;
   self.lensWebPageLoadTriggeredFromInputSelection = NO;
   self.transitionAnimator = [[LensModalAnimator alloc] init];
@@ -189,7 +191,7 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
 #pragma mark - Commands
 
 - (void)searchImageWithLens:(SearchImageWithLensCommand*)command {
-  const bool isIncognito = self.browser->GetBrowserState()->IsOffTheRecord();
+  const bool isIncognito = self.browser->GetProfile()->IsOffTheRecord();
   __weak LensCoordinator* weakSelf = self;
 
   LensQuery* lensQuery = [LensQuery alloc];
@@ -202,6 +204,10 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
       base::BindOnce(^(const web::NavigationManager::WebLoadParams params) {
         [weakSelf openWebLoadParams:params];
       }));
+
+  if (IsSegmentationTipsManagerEnabled()) {
+    [self recordLensUsage];
+  }
 }
 
 - (void)openLensInputSelection:(OpenLensInputSelectionCommand*)command {
@@ -221,13 +227,14 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
 
   // Create a Lens configuration for this request.
   const LensEntrypoint entrypoint = command.entryPoint;
-  ChromeBrowserState* browserState = browser->GetBrowserState();
-  const bool isIncognito = browserState->IsOffTheRecord();
+  ProfileIOS* profile = browser->GetProfile();
+  const bool isIncognito = profile->IsOffTheRecord();
   LensConfiguration* configuration = [[LensConfiguration alloc] init];
   configuration.isIncognito = isIncognito;
   configuration.singleSignOnService =
       GetApplicationContext()->GetSingleSignOnService();
   configuration.entrypoint = entrypoint;
+  configuration.localState = GetApplicationContext()->GetLocalState();
 
   _dismissed = NO;
   _presentNTPLensIconBubbleOnDismiss =
@@ -239,15 +246,14 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
     DCHECK(featureTracker);
     featureTracker->NotifyEvent(
         feature_engagement::events::kLensButtonKeyboardUsed);
-    featureTracker->Dismissed(feature_engagement::kIPHiOSLensKeyboardFeature);
   } else if (entrypoint == LensEntrypoint::NewTabPage) {
-    browserState->GetPrefs()->SetInteger(
-        prefs::kNTPLensEntryPointNewBadgeShownCount, INT_MAX);
+    profile->GetPrefs()->SetInteger(prefs::kNTPLensEntryPointNewBadgeShownCount,
+                                    INT_MAX);
   }
 
   if (!isIncognito) {
     AuthenticationService* authenticationService =
-        AuthenticationServiceFactory::GetForBrowserState(browserState);
+        AuthenticationServiceFactory::GetForProfile(profile);
     id<SystemIdentity> identity = authenticationService->GetPrimaryIdentity(
         ::signin::ConsentLevel::kSignin);
     configuration.identity = identity;
@@ -315,6 +321,10 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
   }
   GetApplicationContext()->GetLocalState()->SetTime(prefs::kLensLastOpened,
                                                     base::Time::Now());
+
+  if (IsSegmentationTipsManagerEnabled()) {
+    [self recordLensUsage];
+  }
 }
 
 #pragma mark - ChromeLensControllerDelegate
@@ -450,6 +460,23 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
 
 #pragma mark - Private
 
+// Records the usage of Google Lens with the Tips Manager. This allows the Tips
+// Manager to provide relevant tips or guidance to the user about the Lens
+// feature.
+- (void)recordLensUsage {
+  CHECK(IsSegmentationTipsManagerEnabled());
+
+  if (!self.browser) {
+    return;
+  }
+
+  TipsManagerIOS* tipsManager =
+      TipsManagerIOSFactory::GetForProfile(self.browser->GetProfile());
+
+  tipsManager->NotifySignal(
+      segmentation_platform::tips_manager::signals::kLensUsed);
+}
+
 - (void)openWebLoadParams:(const web::NavigationManager::WebLoadParams&)params {
   if (!self.browser)
     return;
@@ -466,7 +493,7 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
     loadParams.append_to = OpenPosition::kCurrentTab;
     loadParams.SetInBackground(NO);
   }
-  loadParams.in_incognito = self.browser->GetBrowserState()->IsOffTheRecord();
+  loadParams.in_incognito = self.browser->GetProfile()->IsOffTheRecord();
   UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(loadParams);
 }
 

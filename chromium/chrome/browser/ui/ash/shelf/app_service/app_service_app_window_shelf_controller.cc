@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/components/arc/app/arc_app_constants.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "ash/public/cpp/app_types_util.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/borealis/borealis_service.h"
+#include "chrome/browser/ash/borealis/borealis_service_factory.h"
 #include "chrome/browser/ash/borealis/borealis_window_manager.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/crostini/crostini_features.h"
@@ -53,9 +55,11 @@
 #include "components/exo/shell_surface_base.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/services/app_service/public/cpp/instance.h"
+#include "components/user_manager/user_manager.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/widget/widget.h"
@@ -207,9 +211,9 @@ void AppServiceAppWindowShelfController::OnWindowInitialized(
   // shelf then it is added to a shelf by `ASAWSC::OnWindowVisibilityChanged()`
   // but when the window is created as a minimized window there is no change in
   // visible state and it is not added to the shelf. Hence, when a widget has a
-  // `initial_show_state_` as ui::SHOW_STATE_MINIMIZED, it should add itself to
-  // a shelf during initialization. The below code is applicable only for Lacros
-  // browser app.
+  // `initial_show_state_` as ui::mojom::WindowShowState::kMinimized, it should
+  // add itself to a shelf during initialization. The below code is applicable
+  // only for Lacros browser app.
   auto shelf_id = GetShelfId(window);
   if (!shelf_id.IsNull() &&
       GetAppType(shelf_id.app_id) == apps::AppType::kStandaloneBrowser &&
@@ -699,7 +703,7 @@ ash::ShelfID AppServiceAppWindowShelfController::GetShelfId(
   std::string shelf_app_id;
   if (ash::borealis::IsBorealisWindow(window)) {
     for (Profile* profile : profile_list_) {
-      shelf_app_id = borealis::BorealisService::GetForProfile(profile)
+      shelf_app_id = borealis::BorealisServiceFactory::GetForProfile(profile)
                          ->WindowManager()
                          .GetShelfAppId(window);
       if (!shelf_app_id.empty()) {

@@ -1,32 +1,49 @@
 #version 310 es
 
-void tint_symbol() {
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+void main() {
   {
-    for(int i = 0; (i < 2); i = (i + 2)) {
-      bool tint_continue = false;
+    int i = 0;
+    while(true) {
+      if ((i < 2)) {
+      } else {
+        break;
+      }
       {
-        for(int j = 0; (j < 2); j = (j + 2)) {
-          tint_continue = false;
+        int j = 0;
+        while(true) {
+          if ((j < 2)) {
+          } else {
+            break;
+          }
+          bool tint_continue = false;
           switch(i) {
-            case 0: {
+            case 0:
+            {
               tint_continue = true;
               break;
             }
-            default: {
+            default:
+            {
               break;
             }
           }
           if (tint_continue) {
+            {
+              j = (j + 2);
+            }
             continue;
           }
+          {
+            j = (j + 2);
+          }
+          continue;
         }
       }
+      {
+        i = (i + 2);
+      }
+      continue;
     }
   }
-}
-
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-void main() {
-  tint_symbol();
-  return;
 }

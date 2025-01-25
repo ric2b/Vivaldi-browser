@@ -37,7 +37,6 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/privacy_sandbox/TopicsBlockedFragment.java",
     "java/src/org/chromium/chrome/browser/privacy_sandbox/TopicsFragment.java",
     "java/src/org/chromium/chrome/browser/privacy_sandbox/TopicsHeaderPreference.java",
-    "java/src/org/chromium/chrome/browser/privacy_sandbox/TopicsLearnMoreFragment.java",
     "java/src/org/chromium/chrome/browser/privacy_sandbox/TopicsManageFragment.java",
     "java/src/org/chromium/chrome/browser/privacy_sandbox/TopicsUtils.java",
   ]
@@ -154,6 +153,7 @@ android_resources("java_resources") {
   sources = [
     "java/res/drawable-night/privacy_sandbox_interests_illustration.xml",
     "java/res/drawable-night/privacy_sandbox_notice_eea_illustration.xml",
+    "java/res/drawable/ic_arrow_back.xml",
     "java/res/drawable/ic_arrow_down.xml",
     "java/res/drawable/ic_auto_delete_24dp.xml",
     "java/res/drawable/ic_background_replace_24dp.xml",
@@ -204,9 +204,8 @@ android_resources("java_resources") {
     "java/res/xml/fledge_preference.xml",
     "java/res/xml/privacy_sandbox_preferences.xml",
     "java/res/xml/privacy_sandbox_preferences_restricted.xml",
-    "java/res/xml/topics_learn_more_preference.xml",
     "java/res/xml/topics_manage_preference.xml",
-    "java/res/xml/topics_preference_v2.xml",
+    "java/res/xml/topics_preference.xml",
   ]
   deps = [
     "//chrome/browser/ui/android/strings:ui_strings_grd",
@@ -222,5 +221,8 @@ android_resources("java_resources") {
 }
 
 java_cpp_enum("privacy_sandbox_enums") {
-  sources = [ "//chrome/browser/privacy_sandbox/privacy_sandbox_service.h" ]
+  sources = [
+    "//chrome/browser/privacy_sandbox/privacy_sandbox_activity_types_service.h",
+    "//chrome/browser/privacy_sandbox/privacy_sandbox_service.h",
+  ]
 }

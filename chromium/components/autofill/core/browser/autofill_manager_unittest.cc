@@ -9,6 +9,7 @@
 #include <tuple>
 #include <vector>
 
+#include "base/containers/to_vector.h"
 #include "base/ranges/algorithm.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -31,7 +32,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
-#include "components/autofill/core/browser/ml_model/autofill_ml_prediction_model_handler.h"
+#include "components/autofill/core/browser/ml_model/field_classification_model_handler.h"
 #endif
 
 namespace autofill {
@@ -67,13 +68,16 @@ class MockAutofillDriver : public TestAutofillDriver {
 };
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
-class MockAutofillMlPredictionModelHandler
-    : public AutofillMlPredictionModelHandler {
+class MockFieldClassificationModelHandler
+    : public FieldClassificationModelHandler {
  public:
-  explicit MockAutofillMlPredictionModelHandler(
+  explicit MockFieldClassificationModelHandler(
       optimization_guide::OptimizationGuideModelProvider* provider)
-      : AutofillMlPredictionModelHandler(provider) {}
-  ~MockAutofillMlPredictionModelHandler() override = default;
+      : FieldClassificationModelHandler(
+            provider,
+            optimization_guide::proto::OptimizationTarget::
+                OPTIMIZATION_TARGET_AUTOFILL_FIELD_CLASSIFICATION) {}
+  ~MockFieldClassificationModelHandler() override = default;
 
   MOCK_METHOD(
       void,
@@ -96,10 +100,7 @@ std::vector<FormData> CreateTestForms(size_t num_forms) {
 
 // Returns the FormGlobalIds of the specified |forms|.
 std::vector<FormGlobalId> GetFormIds(const std::vector<FormData>& forms) {
-  std::vector<FormGlobalId> ids;
-  ids.reserve(forms.size());
-  base::ranges::transform(forms, std::back_inserter(ids), &FormData::global_id);
-  return ids;
+  return base::ToVector(forms, &FormData::global_id);
 }
 
 // Matches a std::map<FormGlobalId, std::unique_ptr<FormStructure>>::value_type
@@ -305,8 +306,11 @@ TEST_F(AutofillManagerTest, FormCacheUpdatesValue) {
 }
 
 TEST_F(AutofillManagerTest, ObserverReceiveCalls) {
-  base::test::ScopedFeatureList feature_list{
-      features::kAutofillPageLanguageDetection};
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      /*enabled_features=*/{features::kAutofillPageLanguageDetection,
+                            features::kAutofillFixValueSemantics},
+      /*disabled_features=*/{});
 
   std::vector<FormData> forms = CreateTestForms(2);
   FormData form = forms[0];
@@ -359,8 +363,7 @@ TEST_F(AutofillManagerTest, ObserverReceiveCalls) {
   EXPECT_CALL(manager(), OnFocusOnNonFormFieldImpl).Times(AtLeast(0));
   EXPECT_CALL(manager(), OnDidFillAutofillFormDataImpl).Times(AtLeast(0));
   EXPECT_CALL(manager(), OnDidEndTextFieldEditingImpl).Times(AtLeast(0));
-  EXPECT_CALL(manager(), OnSelectOrSelectListFieldOptionsDidChangeImpl)
-      .Times(AtLeast(0));
+  EXPECT_CALL(manager(), OnSelectFieldOptionsDidChangeImpl).Times(AtLeast(0));
   EXPECT_CALL(manager(), OnJavaScriptChangedAutofilledValueImpl)
       .Times(AtLeast(0));
   EXPECT_CALL(manager(), OnFormSubmittedImpl).Times(AtLeast(0));
@@ -465,8 +468,7 @@ TEST_F(AutofillManagerTest, ObserverReceiveCalls) {
   // FillOrPreviewForm() triggers OnFillOrPreviewDataModelForm().
 
   EXPECT_CALL(observer, OnFormSubmitted(m, Ref(form)));
-  manager().OnFormSubmitted(form, true,
-                            mojom::SubmissionSource::FORM_SUBMISSION);
+  manager().OnFormSubmitted(form, mojom::SubmissionSource::FORM_SUBMISSION);
 
   // OnBeforeLoadedServerPredictions(), OnAfterLoadedServerPredictions() are
   // tested in AutofillManagerTest_OnLoadedServerPredictionsObserver.
@@ -489,7 +491,7 @@ TEST_F(AutofillManagerTest, TriggerFormExtractionInAllFrames) {
   manager().TriggerFormExtractionInAllFrames(base::DoNothing());
 }
 
-// Ensure that `AutofillMlPredictionModelHandler` is called when parsing the
+// Ensure that `FieldClassificationModelHandler` is called when parsing the
 // form in `ParseFormsAsync()`
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 TEST_F(AutofillManagerTest, GetMlModelPredictionsForForm) {
@@ -498,7 +500,7 @@ TEST_F(AutofillManagerTest, GetMlModelPredictionsForForm) {
   auto provider = std::make_unique<
       optimization_guide::TestOptimizationGuideModelProvider>();
   auto mock_handler =
-      std::make_unique<MockAutofillMlPredictionModelHandler>(provider.get());
+      std::make_unique<MockFieldClassificationModelHandler>(provider.get());
   // This test intentionally doesn't associate predictions to the
   // `FormStructure`, it only expects that `GetModelPredictionsForForms` gets
   // called.
@@ -510,7 +512,7 @@ TEST_F(AutofillManagerTest, GetMlModelPredictionsForForm) {
             std::move(callback).Run(std::move(forms));
           });
   EXPECT_CALL(*mock_handler, GetModelPredictionsForForms);
-  client_.set_ml_prediction_model_handler(std::move(mock_handler));
+  client_.set_autofill_ml_prediction_model_handler(std::move(mock_handler));
 
   FormData form = test::CreateTestAddressFormData();
   OnFormsSeenWithExpectations(manager(), /*updated_forms=*/{form},
@@ -520,7 +522,7 @@ TEST_F(AutofillManagerTest, GetMlModelPredictionsForForm) {
   // and is destroyed asynchronously. Resetting the `client_`'s handler triggers
   // the deletion. Wait for it to complete. This needs to happen before the
   // `provider` goes out of scope.
-  client_.set_ml_prediction_model_handler(nullptr);
+  client_.set_autofill_ml_prediction_model_handler(nullptr);
   task_environment_.RunUntilIdle();
 }
 #endif

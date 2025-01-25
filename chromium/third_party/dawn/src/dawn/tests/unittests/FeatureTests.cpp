@@ -25,6 +25,7 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <unordered_set>
 #include <vector>
 
 #include "dawn/native/Features.h"
@@ -119,6 +120,23 @@ TEST_F(FeatureTests, AdapterWithRequiredFeatureDisabled) {
     }
 }
 
+// For a given feature, returns a set containing the feature and its depending features if any to
+// ensure creating device with these features can success
+std::unordered_set<wgpu::FeatureName> FeatureAndDependenciesSet(wgpu::FeatureName feature) {
+    switch (feature) {
+        case wgpu::FeatureName::SubgroupsF16:
+            return {wgpu::FeatureName::SubgroupsF16, wgpu::FeatureName::ShaderF16,
+                    wgpu::FeatureName::Subgroups};
+        default:
+            return {feature};
+    }
+}
+
+bool IsExperimental(wgpu::FeatureName feature) {
+    return native::kFeatureNameAndInfoList[native::FromAPI(feature)].featureState ==
+           native::FeatureInfo::FeatureState::Experimental;
+}
+
 // Test creating device requiring a supported feature can succeed (with DisallowUnsafeApis adapter
 // toggle disabled for experimental features), and Device.GetEnabledFeatures() can return the names
 // of the enabled features correctly.
@@ -130,9 +148,31 @@ TEST_F(FeatureTests, RequireAndGetEnabledFeatures) {
         native::Feature feature = static_cast<native::Feature>(i);
         wgpu::FeatureName featureName = ToAPI(feature);
 
+        std::unordered_set<wgpu::FeatureName> requiredFeaturesSet =
+            FeatureAndDependenciesSet(featureName);
+        std::vector<wgpu::FeatureName> features(requiredFeaturesSet.cbegin(),
+                                                requiredFeaturesSet.cend());
+        bool requiredExperimentalFeature = false;
+        for (auto requiredFeature : features) {
+            requiredExperimentalFeature =
+                requiredExperimentalFeature || IsExperimental(requiredFeature);
+        }
+
         wgpu::DeviceDescriptor deviceDescriptor;
-        deviceDescriptor.requiredFeatures = &featureName;
-        deviceDescriptor.requiredFeatureCount = 1;
+        deviceDescriptor.requiredFeatures = features.data();
+        deviceDescriptor.requiredFeatureCount = features.size();
+
+        // Helper to check the returned device has all required features
+        auto ExpectDeviceHasRequiredFeatures =
+            [&requiredFeaturesSet](native::DeviceBase* deviceBase) {
+                native::SupportedFeatures enabledFeatures;
+                deviceBase->APIGetFeatures(&enabledFeatures);
+                ASSERT_EQ(requiredFeaturesSet.size(), enabledFeatures.featureCount);
+                for (uint32_t i = 0; i < enabledFeatures.featureCount; ++i) {
+                    wgpu::FeatureName enabledFeature = enabledFeatures.features[i];
+                    EXPECT_TRUE(requiredFeaturesSet.contains(enabledFeature));
+                }
+            };
 
         // Test with the default adapter.
         {
@@ -141,16 +181,12 @@ TEST_F(FeatureTests, RequireAndGetEnabledFeatures) {
 
             // Creating a device with experimental feature requires the adapter enables
             // AllowUnsafeAPIs or disables DisallowUnsafeApis, otherwise expect validation error.
-            if (native::kFeatureNameAndInfoList[feature].featureState ==
-                native::FeatureInfo::FeatureState::Experimental) {
+            if (requiredExperimentalFeature) {
                 ASSERT_EQ(nullptr, deviceBase) << i;
             } else {
                 // Requiring stable features should succeed.
                 ASSERT_NE(nullptr, deviceBase);
-                ASSERT_EQ(1u, deviceBase->APIEnumerateFeatures(nullptr));
-                wgpu::FeatureName enabledFeature;
-                deviceBase->APIEnumerateFeatures(&enabledFeature);
-                EXPECT_EQ(enabledFeature, featureName);
+                ExpectDeviceHasRequiredFeatures(deviceBase);
                 deviceBase->APIRelease();
             }
         }
@@ -162,10 +198,7 @@ TEST_F(FeatureTests, RequireAndGetEnabledFeatures) {
                 reinterpret_cast<const WGPUDeviceDescriptor*>(&deviceDescriptor)));
 
             ASSERT_NE(nullptr, deviceBase);
-            ASSERT_EQ(1u, deviceBase->APIEnumerateFeatures(nullptr));
-            wgpu::FeatureName enabledFeature;
-            deviceBase->APIEnumerateFeatures(&enabledFeature);
-            EXPECT_EQ(enabledFeature, featureName);
+            ExpectDeviceHasRequiredFeatures(deviceBase);
             deviceBase->APIRelease();
         }
     }

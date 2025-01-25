@@ -33,7 +33,7 @@
 
 #include "avfilter.h"
 #include "drawutils.h"
-#include "internal.h"
+#include "filters.h"
 #include "video.h"
 
 typedef struct LenscorrectionCtx {

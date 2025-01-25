@@ -47,11 +47,11 @@ class MdnsProbe : public MdnsReceiver::ResponseClient {
    public:
     virtual ~Observer();
 
-    // Called once the probing phase has been completed successfully. |probe| is
+    // Called once the probing phase has been completed successfully. `probe` is
     // expected to be stopped at the time of this call.
     virtual void OnProbeSuccess(MdnsProbe* probe) = 0;
 
-    // Called once the probing phase fails. |probe| is expected to be stopped at
+    // Called once the probing phase fails. `probe` is expected to be stopped at
     // the time of this call.
     virtual void OnProbeFailure(MdnsProbe* probe) = 0;
   };
@@ -59,7 +59,7 @@ class MdnsProbe : public MdnsReceiver::ResponseClient {
   MdnsProbe(DomainName target_name, IPAddress address);
   virtual ~MdnsProbe();
 
-  // Postpones the current probe operation by |delay|, after which the probing
+  // Postpones the current probe operation by `delay`, after which the probing
   // process is re-initialized.
   virtual void Postpone(std::chrono::seconds delay) = 0;
 
@@ -75,7 +75,7 @@ class MdnsProbe : public MdnsReceiver::ResponseClient {
 
 class MdnsProbeImpl : public MdnsProbe {
  public:
-  // |sender|, |receiver|, |random_delay|, |task_runner|, and |observer| must
+  // `sender`, `receiver`, `random_delay`, `task_runner`, and `observer` must
   // all persist for the duration of this object's lifetime.
   MdnsProbeImpl(MdnsSender& sender,
                 MdnsReceiver& receiver,

@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>  // NOLINT
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -97,6 +98,13 @@ TEST(CFTable, MakeCfgFromCfTable) {
   EXPECT_FALSE(cfg.BlockIsFunctionEntry(3));
 
   CHECK_EQ(cfg.GetCyclomaticComplexity(1), 2);
+}
+
+TEST(CFTable, SerializesAndDeserializesCfTable) {
+  std::stringstream stream;
+  WriteCfTable(g_cf_table, stream);
+  const CFTable cf_table = ReadCfTable(stream);
+  EXPECT_EQ(cf_table, g_cf_table);
 }
 
 TEST(FunctionComplexity, ComputeFuncComplexity) {
@@ -306,7 +314,7 @@ static void SymbolizeBinary(std::string_view test_dir,
       has_llvm_fuzzer_test_one_input = true;
       EXPECT_THAT(
           symbols.location(i),
-          testing::HasSubstr("centipede/testing/test_fuzz_target.cc:70"));
+          testing::HasSubstr("centipede/testing/test_fuzz_target.cc:71"));
     }
   }
   EXPECT_TRUE(has_llvm_fuzzer_test_one_input);

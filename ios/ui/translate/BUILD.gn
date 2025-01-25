@@ -1,0 +1,70 @@
+# Copyright 2024 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/apple/swift_source_set.gni")
+
+source_set("vivaldi_translate") {
+  sources = [
+    "vivaldi_translate_constants.h",
+    "vivaldi_translate_constants.mm",
+    "vivaldi_translate_consumer.h",
+    "vivaldi_translate_coordinator.h",
+    "vivaldi_translate_coordinator.mm",
+    "vivaldi_translate_entry_point.h",
+    "vivaldi_translate_language_item.h",
+    "vivaldi_translate_language_item.mm",
+    "vivaldi_translate_mediator.h",
+    "vivaldi_translate_mediator.mm",
+    "vivaldi_translate_view_delegate.h",
+  ]
+
+  deps = [
+    ":vivaldi_translate_swift",
+    "//base:i18n",
+    "//base",
+    "//components/language/core/browser",
+    "//components/language/core/language_model",
+    "//components/prefs",
+    "//components/translate/core/common",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/app/strings:ios_strings",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/common/ui/util",
+    "//ui/base",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+  ]
+}
+
+swift_source_set("vivaldi_translate_swift") {
+  bridge_header = "vivaldi_translate_swift_bridge.h"
+  sources = [
+    "vivaldi_translate_content_view_side_panel.swift",
+    "vivaldi_translate_content_view.swift",
+    "vivaldi_translate_header_view.swift",
+    "vivaldi_translate_keyboard_responder.swift",
+    "vivaldi_translate_language_item.swift",
+    "vivaldi_translate_language_picker_view.swift",
+    "vivaldi_translate_view_constants.swift",
+    "vivaldi_translate_view_editor_side_panel.swift",
+    "vivaldi_translate_view_hosting_controller.swift",
+    "vivaldi_translate_view_provider.swift",
+    "vivaldi_translate_view_side_panel.swift",
+    "vivaldi_translate_view_state.swift",
+    "vivaldi_translate_view.swift",
+  ]
+
+  deps = [
+    "//ios/chrome/app/strings",
+    "//ios/chrome/app/strings:ios_strings",
+    "//vivaldi/app:resources",
+    "//vivaldi/ios/ui/helpers:helpers_swift",
+  ]
+
+  frameworks = [
+    "SwiftUI.framework",
+    "UIKit.framework",
+  ]
+}

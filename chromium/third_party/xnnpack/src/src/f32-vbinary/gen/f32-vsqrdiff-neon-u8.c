@@ -20,14 +20,13 @@ void xnn_f32_vsqrdiff_ukernel__neon_u8(
     const float* input_a,
     const float* input_b,
     float* output,
-    const union xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_f32_default_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(float) == 0);
   assert(input_a != NULL);
   assert(input_b != NULL);
   assert(output != NULL);
-
 
   for (; batch >= 8 * sizeof(float); batch -= 8 * sizeof(float)) {
     const float32x4_t va0 = vld1q_f32(input_a); input_a += 4;
@@ -40,7 +39,6 @@ void xnn_f32_vsqrdiff_ukernel__neon_u8(
 
     vacc0 = vmulq_f32(vacc0, vacc0);
     vacc1 = vmulq_f32(vacc1, vacc1);
-
 
     vst1q_f32(output, vacc0); output += 4;
     vst1q_f32(output, vacc1); output += 4;

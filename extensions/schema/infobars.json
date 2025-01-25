@@ -55,6 +55,10 @@
           "linkText": {
             "type": "string",
             "description": "The text associated with a link to be shown in the infobar."
+          },
+          "isCloseable": {
+            "type": "boolean",
+            "description": "Should we have a dismiss button or not."
           }
         }
       }

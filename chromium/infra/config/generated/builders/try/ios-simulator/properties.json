@@ -14,7 +14,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "ios-simulator",
-              "project": "chromium-m130"
+              "project": "chromium-m132"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-mac-archive",
@@ -44,9 +44,10 @@
         {
           "bucket": "ci",
           "builder": "ios-simulator",
-          "project": "chromium-m130"
+          "project": "chromium-m132"
         }
-      ]
+      ],
+      "targets_spec_directory": "src/infra/config/generated/builders/try/ios-simulator/targets"
     }
   },
   "$build/code_coverage": {
@@ -86,5 +87,5 @@
   "builder_group": "tryserver.chromium.mac",
   "cq": "required",
   "recipe": "chromium/orchestrator",
-  "xcode_build_version": "16a242"
+  "xcode_build_version": "16b40"
 }

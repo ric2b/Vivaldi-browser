@@ -64,7 +64,7 @@ class CompileCurrentFile(sublime_plugin.TextCommand):
     a Queue that we write to from another thread to avoid blocking on IO.
 
     Args:
-      command: A list containing the command to execute and it's arguments.
+      command: A list containing the command to execute and its arguments.
     Returns:
       The exit code of the process running the command or,
        1 if we got interrupted.

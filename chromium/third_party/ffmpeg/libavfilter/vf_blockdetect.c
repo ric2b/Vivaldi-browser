@@ -32,7 +32,8 @@
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
-#include "internal.h"
+
+#include "filters.h"
 #include "video.h"
 
 typedef struct BLKContext {
@@ -198,6 +199,7 @@ static void set_meta(AVDictionary **metadata, const char *key, float d)
 
 static int blockdetect_filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
+    FilterLink      *inl  = ff_filter_link(inlink);
     AVFilterContext *ctx  = inlink->dst;
     BLKContext *s         = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
@@ -236,7 +238,7 @@ static int blockdetect_filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     set_meta(metadata, "lavfi.block", block);
 
-    s->nb_frames = inlink->frame_count_in;
+    s->nb_frames = inl->frame_count_in;
 
     return ff_filter_frame(outlink, in);
 }

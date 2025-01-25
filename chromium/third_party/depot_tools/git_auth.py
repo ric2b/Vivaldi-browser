@@ -36,7 +36,7 @@ class ConfigChanger(object):
     #
     # Increment this when making changes to the config, so that reliant
     # code can determine whether the config needs to be re-applied.
-    VERSION: int = 2
+    VERSION: int = 3
 
     def __init__(
         self,
@@ -130,6 +130,9 @@ class ConfigChanger(object):
         email: str = scm.GIT.GetConfig(cwd, 'user.email') or ''
         if gerrit_util.ShouldUseSSO(gerrit_host, email):
             return ConfigMode.NEW_AUTH_SSO
+        if not gerrit_util.LuciAuthAuthenticator.gerrit_account_exists(
+                gerrit_host):
+            return ConfigMode.NO_AUTH
         return ConfigMode.NEW_AUTH
 
     def apply(self, cwd: str) -> None:
@@ -177,8 +180,6 @@ class ConfigChanger(object):
 
     def _apply_gitcookies(self, cwd: str) -> None:
         """Apply config changes relating to gitcookies."""
-        # TODO(ayatane): Clear invalid setting.  Remove line after a few weeks
-        self._set_config(cwd, 'http.gitcookies', None, modify_all=True)
         if self.mode == ConfigMode.NEW_AUTH:
             # Override potential global setting
             self._set_config(cwd, 'http.cookieFile', '', modify_all=True)

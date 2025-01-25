@@ -3,12 +3,9 @@
 // found in the LICENSE file.
 
 import {assert} from 'chai';
-import {type Target} from 'puppeteer-core';
+import type {Target} from 'puppeteer-core';
 
-import {
-  type AssertedEventType,
-  type StepType,
-} from '../../../front_end/panels/recorder/models/Schema.js';
+import type {AssertedEventType, StepType} from '../../../front_end/panels/recorder/models/Schema.js';
 import {
   click,
   getBrowserAndPages,
@@ -16,6 +13,7 @@ import {
   getTestServerPort,
   waitFor,
 } from '../../../test/shared/helper.js';
+import {expectError} from '../../conductor/events.js';
 
 import {
   clickSelectButtonItem,
@@ -29,6 +27,12 @@ describe('Recorder', function() {
   if (this.timeout() !== 0) {
     this.timeout(40000);
   }
+
+  beforeEach(() => {
+    // The error is not an indication of the test failure. We should
+    // rely on test result with retries.
+    expectError(/Replay error Waiting failed/);
+  });
 
   describe('Replay', () => {
     it('should navigate to the url of the first section', async () => {

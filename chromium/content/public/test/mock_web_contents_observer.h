@@ -232,12 +232,8 @@ class MockWebContentsObserver : public WebContentsObserver {
               (RenderFrameHost* rfh, bool audible),
               (override));
   MOCK_METHOD(void,
-              OnIsConnectedToBluetoothDeviceChanged,
-              (bool is_connected_to_bluetooth_device),
-              (override));
-  MOCK_METHOD(void,
-              OnIsConnectedToUsbDeviceChanged,
-              (bool is_connected_to_usb_device),
+              OnCapabilityTypesChanged,
+              (WebContents::CapabilityType capability_type, bool used),
               (override));
   MOCK_METHOD(void, DidUpdateAudioMutingState, (bool muted), (override));
   MOCK_METHOD(void,
@@ -259,7 +255,8 @@ class MockWebContentsObserver : public WebContentsObserver {
               (override));
   MOCK_METHOD(void,
               AccessibilityLocationChangesReceived,
-              (const std::vector<ui::AXLocationChanges>& details),
+              (const ui::AXTreeID& tree_id,
+               ui::AXLocationAndScrollUpdates& details),
               (override));
   MOCK_METHOD(void, DidChangeThemeColor, (), (override));
   MOCK_METHOD(void, OnBackgroundColorChanged, (), (override));

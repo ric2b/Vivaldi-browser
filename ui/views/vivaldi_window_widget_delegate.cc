@@ -292,7 +292,7 @@ bool VivaldiWindowWidgetDelegate::ShouldShowWindowTitle() const {
 
 void VivaldiWindowWidgetDelegate::SaveWindowPlacement(
     const gfx::Rect& bounds,
-    ui::WindowShowState show_state) {
+    ui::mojom::WindowShowState show_state) {
   if (window_->browser() &&
       chrome::ShouldSaveWindowPlacement(window_->browser())) {
     WidgetDelegate::SaveWindowPlacement(bounds, show_state);
@@ -304,7 +304,7 @@ void VivaldiWindowWidgetDelegate::SaveWindowPlacement(
 bool VivaldiWindowWidgetDelegate::GetSavedWindowPlacement(
     const views::Widget* widget,
     gfx::Rect* bounds,
-    ui::WindowShowState* show_state) const {
+    ui::mojom::WindowShowState* show_state) const {
   chrome::GetSavedWindowBoundsAndShowState(window_->browser(), bounds,
                                            show_state);
 
@@ -326,7 +326,7 @@ bool VivaldiWindowWidgetDelegate::GetSavedWindowPlacement(
       window_rect.set_origin(WindowSizer::GetDefaultPopupOrigin(size));
     }
     *bounds = window_rect;
-    *show_state = ui::SHOW_STATE_NORMAL;
+    *show_state = ui::mojom::WindowShowState::kNormal;
   }
   // We return true because we can _always_ locate reasonable bounds using the
   // WindowSizer, and we don't want to trigger the Window's built-in "size to

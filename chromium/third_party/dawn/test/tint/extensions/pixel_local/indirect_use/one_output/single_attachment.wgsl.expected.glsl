@@ -1,35 +1,11 @@
 SKIP: INVALID
 
+<dawn>/src/tint/lang/glsl/writer/printer/printer.cc:849 internal compiler error: TINT_UNREACHABLE PixelLocal not supported
+********************************************************************
+*  The tint shader compiler has encountered an unexpected error.   *
+*                                                                  *
+*  Please help us fix this issue by submitting a bug report at     *
+*  crbug.com/tint with the source program that triggered the bug.  *
+********************************************************************
 
-enable chromium_experimental_pixel_local;
-
-struct PixelLocal {
-  a : u32,
-}
-
-var<pixel_local> P : PixelLocal;
-
-fn f0() {
-  P.a += 9;
-}
-
-fn f1() {
-  f0();
-  P.a += 8;
-}
-
-fn f2() {
-  P.a += 7;
-  f1();
-}
-
-@fragment
-fn f() -> @location(0) vec4f {
-  f2();
-  return vec4f(2);
-}
-
-Failed to generate: <dawn>/test/tint/extensions/pixel_local/indirect_use/one_output/single_attachment.wgsl:2:8 error: GLSL backend does not support extension 'chromium_experimental_pixel_local'
-enable chromium_experimental_pixel_local;
-       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
+tint executable returned error: signal: trace/BPT trap

@@ -16,9 +16,9 @@
 
 void xnn_f16_rminmax_ukernel__scalar_u3_acc3(
     size_t batch,
-    const void* input,
-    void* output,
-    const union xnn_f16_default_params params[restrict XNN_MIN_ELEMENTS(1)])
+    const xnn_float16* input,
+    xnn_float16* output,
+    const struct xnn_f16_default_params params[restrict XNN_MIN_ELEMENTS(1)])
 {
   assert(batch != 0);
   assert(batch % sizeof(uint16_t) == 0);

@@ -13,7 +13,6 @@
 #include "base/memory/weak_ptr.h"
 #include "build/chromeos_buildflags.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
-#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/platform_window/extensions/desk_extension.h"
@@ -28,10 +27,6 @@
 namespace views::corewm {
 enum class TooltipTrigger;
 }  // namespace views::corewm
-
-namespace gfx {
-class RoundedCornersF;
-}  // namespace gfx
 
 namespace ui {
 
@@ -79,11 +74,12 @@ class WaylandToplevelWindow : public WaylandWindow,
   void HandleToplevelConfigure(int32_t width,
                                int32_t height,
                                const WindowStates& window_states) override;
-  void HandleAuraToplevelConfigure(int32_t x,
-                                   int32_t y,
-                                   int32_t width,
-                                   int32_t height,
-                                   const WindowStates& window_states) override;
+  void HandleToplevelConfigureWithOrigin(
+      int32_t x,
+      int32_t y,
+      int32_t width,
+      int32_t height,
+      const WindowStates& window_states) override;
   void HandleSurfaceConfigure(uint32_t serial) override;
   void OnSequencePoint(int64_t seq) override;
   bool IsSurfaceConfigured() override;
@@ -92,6 +88,7 @@ class WaylandToplevelWindow : public WaylandWindow,
   bool OnInitialize(PlatformWindowInitProperties properties,
                     PlatformWindowDelegate::State* state) override;
   bool IsActive() const override;
+  bool IsSuspended() const override;
   void SetWindowGeometry(const PlatformWindowDelegate::State& state) override;
   bool IsScreenCoordinatesEnabled() const override;
   bool SupportsConfigureMinimizedState() const override;
@@ -159,12 +156,6 @@ class WaylandToplevelWindow : public WaylandWindow,
   void StartWindowDraggingSessionIfNeeded(
       ui::mojom::DragEventSource event_source,
       bool allow_system_drag) override;
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  void SetImmersiveFullscreenStatus(bool status) override;
-  void SetTopInset(int height) override;
-  gfx::RoundedCornersF GetWindowCornersRadii() override;
-  void SetShadowCornersRadii(const gfx::RoundedCornersF& radii) override;
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   void ShowSnapPreview(WaylandWindowSnapDirection snap,
                        bool allow_haptic_feedback) override;
   void CommitSnap(WaylandWindowSnapDirection snap, float snap_ratio) override;
@@ -267,13 +258,9 @@ class WaylandToplevelWindow : public WaylandWindow,
 #endif
 
   bool is_active_ = false;
+  bool is_suspended_ = false;
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // The flag that indicates the last requested immersive fullscreen status from
-  // SetImmersiveFullscreenStatue to detect the immersive status changes. Set to
-  // null if it had never been called.
-  std::optional<bool> last_requested_immersive_status_ = std::nullopt;
-
   // Unique ID for this window. May be shared over non-Wayland IPC transports
   // (e.g. mojo) to identify the window.
   std::string window_unique_id_;
@@ -302,12 +289,6 @@ class WaylandToplevelWindow : public WaylandWindow,
 
   std::optional<std::vector<gfx::Rect>> opaque_region_px_;
   std::optional<std::vector<gfx::Rect>> input_region_px_;
-
-  // Information used by the compositor to restore the window state upon
-  // creation.
-  int32_t restore_session_id_ = 0;
-  std::optional<int32_t> restore_window_id_ = 0;
-  std::optional<std::string> restore_window_id_source_;
 
   // Information pertaining to a window's persistability.
   bool persistable_ = true;

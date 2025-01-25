@@ -158,7 +158,7 @@ Error PublisherImpl::UpdatePublishedRegistration(
       GetDnsRecords(published_instance_it->second);
   const std::vector<MdnsRecord> new_records = GetDnsRecords(updated_endpoint);
 
-  // Populate the first part of each pair in |changed_instances|.
+  // Populate the first part of each pair in `changed_instances`.
   for (size_t i = 0; i < old_records.size(); i++) {
     const auto key = old_records[i].dns_type();
     OSP_CHECK(changed_records.find(key) == changed_records.end());
@@ -166,7 +166,7 @@ Error PublisherImpl::UpdatePublishedRegistration(
     changed_records.emplace(key, std::move(value));
   }
 
-  // Populate the second part of each pair in |changed_records|.
+  // Populate the second part of each pair in `changed_records`.
   for (size_t i = 0; i < new_records.size(); i++) {
     const auto key = new_records[i].dns_type();
     auto find_it = changed_records.find(key);
@@ -179,7 +179,7 @@ Error PublisherImpl::UpdatePublishedRegistration(
     }
   }
 
-  // Apply changes called out in |changed_records|.
+  // Apply changes called out in `changed_records`.
   Error total_result = Error::None();
   for (const auto& pair : changed_records) {
     OSP_CHECK(pair.second.first != std::nullopt ||

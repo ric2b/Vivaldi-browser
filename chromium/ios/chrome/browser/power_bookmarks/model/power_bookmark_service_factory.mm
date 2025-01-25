@@ -15,9 +15,9 @@
 
 // static
 power_bookmarks::PowerBookmarkService*
-PowerBookmarkServiceFactory::GetForBrowserState(web::BrowserState* state) {
+PowerBookmarkServiceFactory::GetForProfile(ProfileIOS* profile) {
   return static_cast<power_bookmarks::PowerBookmarkService*>(
-      GetInstance()->GetServiceForBrowserState(state, true));
+      GetInstance()->GetServiceForBrowserState(profile, true));
 }
 
 // static
@@ -37,11 +37,10 @@ PowerBookmarkServiceFactory::~PowerBookmarkServiceFactory() = default;
 std::unique_ptr<KeyedService>
 PowerBookmarkServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* state) const {
-  ChromeBrowserState* chrome_state =
-      ChromeBrowserState::FromBrowserState(state);
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(state);
 
   bookmarks::BookmarkModel* bookmark_model =
-      ios::BookmarkModelFactory::GetForBrowserState(chrome_state);
+      ios::BookmarkModelFactory::GetForProfile(profile);
 
   return std::make_unique<power_bookmarks::PowerBookmarkService>(
       bookmark_model, state->GetStatePath().AppendASCII("power_bookmarks"),

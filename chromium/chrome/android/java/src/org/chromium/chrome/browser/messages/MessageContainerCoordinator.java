@@ -18,6 +18,11 @@ import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.components.messages.MessageContainer;
 import org.chromium.ui.base.ViewUtils;
 
+// Vivaldi
+import org.vivaldi.browser.common.VivaldiUtils;
+import org.chromium.build.BuildConfig;
+import android.view.Gravity;
+
 /**
  * Coordinator of {@link MessageContainer}, which can adjust margins of the message container
  * and control the visibility of browser control when message is being shown.
@@ -59,6 +64,10 @@ public class MessageContainerCoordinator implements BrowserControlsStateProvider
         }
         CoordinatorLayout.LayoutParams params =
                 (CoordinatorLayout.LayoutParams) mContainer.getLayoutParams();
+        if (BuildConfig.IS_VIVALDI) { // Vivaldi VAB-10260
+            params.bottomMargin = getContainerTopOffset();
+            params.gravity = Gravity.START|Gravity.BOTTOM;
+        } else
         params.topMargin = getContainerTopOffset();
         mContainer.setLayoutParams(params);
     }
@@ -133,6 +142,15 @@ public class MessageContainerCoordinator implements BrowserControlsStateProvider
 
     /** @return Offset of the message container from the top of the screen. */
     private int getContainerTopOffset() {
+        if (BuildConfig.IS_VIVALDI) { // Vivaldi VAB-10260
+            if (VivaldiUtils.isTopToolbarOn()) {
+                View view = mContainer.getRootView().findViewById(R.id.bottom_controls);
+                if (view != null)
+                    return view.getHeight();
+            } else {
+                return mContainer.getRootView().findViewById(R.id.control_container).getHeight();
+            }
+        }
         if (mControlsManager.getContentOffset() == 0) return 0;
         final Resources res = mContainer.getResources();
         return mControlsManager.getContentOffset()

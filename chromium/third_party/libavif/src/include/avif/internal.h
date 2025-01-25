@@ -139,13 +139,6 @@ AVIF_NODISCARD avifBool avifFractionCD(avifFraction * a, avifFraction * b);
 AVIF_NODISCARD avifBool avifFractionAdd(avifFraction a, avifFraction b, avifFraction * result);
 AVIF_NODISCARD avifBool avifFractionSub(avifFraction a, avifFraction b, avifFraction * result);
 
-// Creates an int32 fraction that is approximately equal to 'v'.
-// Returns AVIF_FALSE if 'v' is NaN or abs(v) is > INT32_MAX.
-AVIF_NODISCARD avifBool avifDoubleToSignedFraction(double v, int32_t * numerator, uint32_t * denominator);
-// Creates a uint32 fraction that is approximately equal to 'v'.
-// Returns AVIF_FALSE if 'v' is < 0 or > UINT32_MAX or NaN.
-AVIF_NODISCARD avifBool avifDoubleToUnsignedFraction(double v, uint32_t * numerator, uint32_t * denominator);
-
 void avifImageSetDefaults(avifImage * image);
 // Copies all fields that do not need to be freed/allocated from srcImage to dstImage.
 void avifImageCopyNoAlloc(avifImage * dstImage, const avifImage * srcImage);
@@ -693,8 +686,10 @@ AVIF_NODISCARD avifBool avifROStreamReadBoxHeaderPartial(avifROStream * stream, 
 AVIF_NODISCARD avifBool avifROStreamReadVersionAndFlags(avifROStream * stream, uint8_t * version, uint32_t * flags); // version and flags ptrs are both optional
 AVIF_NODISCARD avifBool avifROStreamReadAndEnforceVersion(avifROStream * stream, uint8_t enforcedVersion); // currently discards flags
 // The following functions can read non-aligned bits.
-AVIF_NODISCARD avifBool avifROStreamReadBits8(avifROStream * stream, uint8_t * v, size_t bitCount);
-AVIF_NODISCARD avifBool avifROStreamReadBits(avifROStream * stream, uint32_t * v, size_t bitCount);
+AVIF_NODISCARD avifBool avifROStreamSkipBits(avifROStream * stream, size_t bitCount);
+AVIF_NODISCARD avifBool avifROStreamReadBitsU8(avifROStream * stream, uint8_t * v, size_t bitCount);
+AVIF_NODISCARD avifBool avifROStreamReadBitsU16(avifROStream * stream, uint16_t * v, size_t bitCount);
+AVIF_NODISCARD avifBool avifROStreamReadBitsU32(avifROStream * stream, uint32_t * v, size_t bitCount);
 
 typedef struct avifRWStream
 {
@@ -783,6 +778,8 @@ AVIF_NODISCARD avifBool avifSequenceHeaderParse(avifSequenceHeader * header, con
 // and the rest of the distribution. Discards at most 0.1% of values.
 // Removing outliers helps with accuracy/compression.
 avifResult avifFindMinMaxWithoutOutliers(const float * gainMapF, int numPixels, float * rangeMin, float * rangeMax);
+
+avifResult avifGainMapValidateMetadata(const avifGainMap * gainMap, avifDiagnostics * diag);
 
 #endif // AVIF_ENABLE_EXPERIMENTAL_GAIN_MAP
 

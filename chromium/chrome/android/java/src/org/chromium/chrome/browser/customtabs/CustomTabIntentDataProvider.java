@@ -65,8 +65,6 @@ import org.chromium.base.IntentUtils;
 import org.chromium.base.LocaleUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ResettersForTesting;
-import org.chromium.base.cached_flags.BooleanCachedFieldTrialParameter;
-import org.chromium.base.cached_flags.StringCachedFieldTrialParameter;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.version_info.VersionInfo;
@@ -83,6 +81,8 @@ import org.chromium.chrome.browser.share.ShareUtils;
 import org.chromium.chrome.browser.ui.google_bottom_bar.GoogleBottomBarCoordinator;
 import org.chromium.chrome.browser.ui.google_bottom_bar.proto.IntentParams.GoogleBottomBarIntentParams;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
+import org.chromium.components.cached_flags.BooleanCachedFieldTrialParameter;
+import org.chromium.components.cached_flags.StringCachedFieldTrialParameter;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.device.mojom.ScreenOrientationLockType;
@@ -184,6 +184,10 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     public static final String EXTRA_OPEN_IN_BROWSER_STATE =
             "androidx.browser.customtabs.extra.OPEN_IN_BROWSER_STATE";
 
+    @VisibleForTesting
+    static final String EXTRA_OPEN_IN_BROWSER_BUTTON_ALLOWED =
+            "androidx.browser.customtabs.extra.OPEN_IN_BROWSER_BUTTON_ALLOWED";
+
     @IntDef({
         CustomTabsButtonState.BUTTON_STATE_OFF,
         CustomTabsButtonState.BUTTON_STATE_ON,
@@ -218,7 +222,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     /** Pipe ("|") separated list of package names allowed to use the interactive Omnibox. */
     // TODO(b/40239922): remove when no longer relevant.
     private static final String DEFAULT_OMNIBOX_ALLOWED_PACKAGE_NAMES =
-            BuildConfig.ENABLE_DEBUG_LOGS ? "org.chromium.customtabsclient" : null;
+            BuildConfig.ENABLE_DEBUG_LOGS ? "org.chromium.customtabsclient" : "";
 
     public static final StringCachedFieldTrialParameter OMNIBOX_ALLOWED_PACKAGE_NAMES =
             ChromeFeatureList.newStringCachedFieldTrialParameter(
@@ -394,7 +398,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     private final boolean mIsCinemaMode;
 
     /** Add extras to customize menu items for opening Reader Mode UI custom tab from Chrome. */
-    public static void addReaderModeUIExtras(Intent intent) {
+    public static void addReaderModeUiExtras(Intent intent) {
         intent.putExtra(EXTRA_UI_TYPE, CustomTabsUiType.READER_MODE);
         IntentUtils.addTrustedIntentExtras(intent);
     }
@@ -561,7 +565,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
 
         final int requestedUiType =
                 IntentUtils.safeGetIntExtra(intent, EXTRA_UI_TYPE, CustomTabsUiType.DEFAULT);
-        mUiType = verifiedUiType(requestedUiType);
+        mUiType = getCustomTabsUiType(requestedUiType);
 
         mColorProvider = new CustomTabColorProviderImpl(intent, context, colorScheme);
 
@@ -707,11 +711,12 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
                 context.getResources()
                         .getDimensionPixelSize(R.dimen.custom_tabs_default_corner_radius);
         int radiusPx =
-                IntentUtils.safeGetIntExtra(intent, EXTRA_TOOLBAR_CORNER_RADIUS_IN_PIXEL_LEGACY, 0);
-        if (radiusPx > 0) return radiusPx;
+                IntentUtils.safeGetIntExtra(
+                        intent, EXTRA_TOOLBAR_CORNER_RADIUS_IN_PIXEL_LEGACY, -1);
+        if (radiusPx >= 0) return radiusPx;
 
-        int radiusDp = IntentUtils.safeGetIntExtra(intent, EXTRA_TOOLBAR_CORNER_RADIUS_DP, 0);
-        if (radiusDp > 0) {
+        int radiusDp = IntentUtils.safeGetIntExtra(intent, EXTRA_TOOLBAR_CORNER_RADIUS_DP, -1);
+        if (radiusDp >= 0) {
             return Math.round(radiusDp * context.getResources().getDisplayMetrics().density);
         }
 
@@ -799,11 +804,19 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     }
 
     /**
-     * Get the verified UI type, according to the intent extras, and whether the intent is trusted.
+     * Get the verified custom tabs UI type, according to the intent extras, and whether
+     * the intent is trusted.
+     *
+     * If the intent extras include a valid EXTRA_NETWORK, consider that the custom tab is
+     * used for captive portal scenarios especially and the UI hides the "Open in Chrome browser"
+     * menu item accordingly.
+     *
      * @param requestedUiType requested UI type in the intent, unqualified
      * @return verified UI type
      */
-    private int verifiedUiType(int requestedUiType) {
+    @BrowserServicesIntentDataProvider.CustomTabsUiType
+    private int getCustomTabsUiType(int requestedUiType) {
+        if (mNetwork != null) return CustomTabsUiType.NETWORK_BOUND_TAB;
         if (!isTrustedIntent()) {
             if (VersionInfo.isLocalBuild()) Log.w(TAG, FIRST_PARTY_PITFALL_MSG);
             return CustomTabsUiType.DEFAULT;
@@ -949,17 +962,28 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     private void addOpenInBrowserOption(Intent intent, Context context) {
         boolean usingInteractiveOmnibox =
                 CustomTabsConnection.getInstance().shouldEnableOmniboxForIntent(this);
+
         int openInBrowserState =
                 IntentUtils.safeGetIntExtra(
                         intent,
                         EXTRA_OPEN_IN_BROWSER_STATE,
-                        usingInteractiveOmnibox
-                                ? CustomTabsButtonState.BUTTON_STATE_DEFAULT
-                                : CustomTabsButtonState.BUTTON_STATE_OFF);
+                        CustomTabsButtonState.BUTTON_STATE_DEFAULT);
 
-        if (openInBrowserState == CustomTabsButtonState.BUTTON_STATE_DEFAULT
-                && isInteractiveOmniboxAllowed()) {
-            openInBrowserState = CustomTabsButtonState.BUTTON_STATE_ON;
+        if (openInBrowserState == CustomTabsButtonState.BUTTON_STATE_ON
+                && !ChromeFeatureList.sCctOpenInBrowserButtonIfEnabledByEmbedder.isEnabled()) {
+            openInBrowserState = CustomTabsButtonState.BUTTON_STATE_DEFAULT;
+        }
+
+        if (openInBrowserState == CustomTabsButtonState.BUTTON_STATE_DEFAULT) {
+            if (usingInteractiveOmnibox) {
+                openInBrowserState = CustomTabsButtonState.BUTTON_STATE_ON;
+            } else if (ChromeFeatureList.sCctOpenInBrowserButtonIfAllowedByEmbedder.isEnabled()
+                    && IntentUtils.safeGetBooleanExtra(
+                            intent, EXTRA_OPEN_IN_BROWSER_BUTTON_ALLOWED, false)) {
+                openInBrowserState = CustomTabsButtonState.BUTTON_STATE_ON;
+            } else {
+                openInBrowserState = CustomTabsButtonState.BUTTON_STATE_OFF;
+            }
         }
 
         if (openInBrowserState == CustomTabsButtonState.BUTTON_STATE_ON) {

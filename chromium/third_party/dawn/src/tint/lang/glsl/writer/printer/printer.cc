@@ -80,6 +80,8 @@
 #include "src/tint/lang/core/type/u32.h"
 #include "src/tint/lang/core/type/vector.h"
 #include "src/tint/lang/core/type/void.h"
+#include "src/tint/lang/glsl/ir/builtin_call.h"
+#include "src/tint/lang/glsl/ir/member_builtin_call.h"
 #include "src/tint/lang/glsl/writer/common/printer_support.h"
 #include "src/tint/lang/glsl/writer/common/version.h"
 #include "src/tint/utils/containers/map.h"
@@ -96,6 +98,7 @@ namespace {
 constexpr const char* kAMDGpuShaderHalfFloat = "GL_AMD_gpu_shader_half_float";
 constexpr const char* kOESSampleVariables = "GL_OES_sample_variables";
 constexpr const char* kEXTBlendFuncExtended = "GL_EXT_blend_func_extended";
+constexpr const char* kEXTTextureShadowLod = "GL_EXT_texture_shadow_lod";
 
 enum class LayoutFormat : uint8_t {
     kStd140,
@@ -112,7 +115,9 @@ class Printer : public tint::TextGenerator {
 
     /// @returns the generated GLSL shader
     tint::Result<std::string> Generate() {
-        auto valid = core::ir::ValidateAndDumpIfNeeded(ir_, "GLSL writer");
+        auto valid = core::ir::ValidateAndDumpIfNeeded(
+            ir_, "glsl.Printer",
+            core::ir::Capabilities{core::ir::Capability::kAllowHandleVarsWithoutBindings});
         if (valid != Success) {
             return std::move(valid.Failure());
         }
@@ -127,6 +132,7 @@ class Printer : public tint::TextGenerator {
             }
         }
 
+        FindHostShareableStructs();
         EmitRootBlock();
 
         // Emit functions.
@@ -173,8 +179,17 @@ class Printer : public tint::TextGenerator {
     /// Map of builtin structure to unique generated name
     Hashmap<const core::type::Struct*, std::string, 4> builtin_struct_names_;
 
+    Hashset<const core::type::Struct*, 16> uniform_structs_;
+    Hashset<const core::type::Struct*, 16> host_shareable_structs_;
     // The set of emitted structs
     Hashset<const core::type::Struct*, 4> emitted_structs_;
+
+    // For host shareable structs where we have injected padding, this map stores a pointer from the
+    // struct to a vector. The vector contains an entry for each member and padded item. Each
+    // padding item will have a `nullopt` set. Each real member will have a value of the index into
+    // the struct members list.
+    Hashmap<const core::type::Struct*, Vector<std::optional<uint32_t>, 4>, 4>
+        struct_to_padding_struct_ids_;
 
     /// Block to emit for a continuing
     std::function<void()> emit_continuing_;
@@ -208,6 +223,38 @@ class Printer : public tint::TextGenerator {
         return name;
     }
 
+    /// Find all structures that are used in host-shareable address spaces and mark them as such so
+    /// that we know to pad the properly when we emit them.
+    void FindHostShareableStructs() {
+        for (auto inst : *ir_.root_block) {
+            auto* ptr = inst->Result(0)->Type()->As<core::type::Pointer>();
+            if (!ptr || !core::IsHostShareable(ptr->AddressSpace())) {
+                continue;
+            }
+
+            // Look for structures at any nesting depth of this type.
+            Vector<const core::type::Type*, 8> type_queue;
+            type_queue.Push(ptr->StoreType());
+            while (!type_queue.IsEmpty()) {
+                auto* next = type_queue.Pop();
+                if (auto* str = next->As<core::type::Struct>()) {
+                    // Record this structure as host-shareable.
+                    host_shareable_structs_.Add(str);
+
+                    if (ptr->AddressSpace() == core::AddressSpace::kUniform) {
+                        uniform_structs_.Add(str);
+                    }
+
+                    for (auto* member : str->Members()) {
+                        type_queue.Push(member->Type());
+                    }
+                } else if (auto* arr = next->As<core::type::Array>()) {
+                    type_queue.Push(arr->ElemType());
+                }
+            }
+        }
+    }
+
     void EmitRootBlock() {
         TINT_SCOPED_ASSIGNMENT(current_block_, ir_.root_block);
 
@@ -229,15 +276,13 @@ class Printer : public tint::TextGenerator {
             auto out = Line();
 
             if (func->Stage() == core::ir::Function::PipelineStage::kCompute) {
-                auto wg_opt = func->WorkgroupSize();
+                auto wg_opt = func->WorkgroupSizeAsConst();
                 TINT_ASSERT(wg_opt.has_value());
 
                 auto& wg = wg_opt.value();
                 Line() << "layout(local_size_x = " << wg[0] << ", local_size_y = " << wg[1]
                        << ", local_size_z = " << wg[2] << ") in;";
             }
-
-            // TODO(dsinclair): Handle return type attributes
 
             EmitType(out, func->ReturnType());
             out << " ";
@@ -354,7 +399,7 @@ class Printer : public tint::TextGenerator {
                 out << "w";
                 break;
             default:
-                TINT_UNREACHABLE();
+                TINT_UNREACHABLE() << "invalid index for component";
         }
     }
 
@@ -612,8 +657,74 @@ class Printer : public tint::TextGenerator {
             },
             [&](const core::type::Texture* t) { EmitTextureType(out, t); },
 
-            // TODO(dsinclair): Handle remaining types
             TINT_ICE_ON_NO_MATCH);
+    }
+
+    void EmitStructMembers(TextBuffer& str_buf, const core::type::Struct* str) {
+        bool is_host_shareable = host_shareable_structs_.Contains(str);
+        Vector<std::optional<uint32_t>, 4> new_struct_to_old;
+
+        // Padding members need to be named consistently between different shader stages to satisfy
+        // GLSL's interface matching rules.
+        uint32_t pad_id = 0;
+        auto add_padding = [&](uint32_t size) {
+            auto pad_size = size / 4;
+            for (size_t i = 0; i < pad_size; ++i) {
+                std::string name;
+                do {
+                    name = "tint_pad_" + std::to_string(pad_id++);
+                } while (str->FindMember(ir_.symbols.Get(name)));
+
+                Line(&str_buf) << "uint " << name << ";";
+                new_struct_to_old.Push(std::nullopt);
+            }
+        };
+
+        uint32_t glsl_offset = 0;
+        for (auto* mem : str->Members()) {
+            auto out = Line(&str_buf);
+            auto ir_offset = mem->Offset();
+
+            if (is_host_shareable) {
+                if (DAWN_UNLIKELY(ir_offset < glsl_offset)) {
+                    // Unimplementable layout
+                    TINT_UNREACHABLE() << "Structure member offset (" << ir_offset
+                                       << ") is behind GLSL offset (" << glsl_offset << ")";
+                }
+
+                // Generate padding if required
+                if (auto padding = ir_offset - glsl_offset) {
+                    add_padding(padding);
+                    glsl_offset += padding;
+                }
+            }
+
+            EmitTypeAndName(out, mem->Type(), mem->Name().Name());
+            out << ";";
+
+            new_struct_to_old.Push(mem->Index());
+
+            auto size = mem->Type()->Size();
+            if (is_host_shareable) {
+                if (mem->Type()->Is<core::type::Struct>() && uniform_structs_.Contains(str)) {
+                    // std140 structs should be padded out to 16 bytes.
+                    uint32_t rounded_size = tint::RoundUp(16u, size);
+                    glsl_offset += rounded_size;
+                } else {
+                    glsl_offset += size;
+                }
+            }
+        }
+        if (is_host_shareable && !str->StructFlags().Contains(core::type::kBlock) &&
+            str->Size() > glsl_offset) {
+            add_padding(str->Size() - glsl_offset);
+        }
+
+        // If the lengths differ then we've added padding, so we need to handle it when constructing
+        // later.
+        if (new_struct_to_old.Length() != str->Members().Length()) {
+            struct_to_padding_struct_ids_.Add(str, new_struct_to_old);
+        }
     }
 
     void EmitStructType(const core::type::Struct* str) {
@@ -630,11 +741,7 @@ class Printer : public tint::TextGenerator {
 
         str_buf.IncrementIndent();
 
-        for (auto* mem : str->Members()) {
-            auto out = Line(&str_buf);
-            EmitTypeAndName(out, mem->Type(), mem->Name().Name());
-            out << ";";
-        }
+        EmitStructMembers(str_buf, str);
 
         str_buf.DecrementIndent();
         Line(&str_buf) << "};";
@@ -716,22 +823,25 @@ class Printer : public tint::TextGenerator {
                     out << "writeonly ";
                     break;
                 case core::Access::kReadWrite: {
-                    // ESSL 3.1 SPEC (chapter 4.9, Memory Access Qualifiers):
-                    // Except for image variables qualified with the format qualifiers r32f, r32i,
-                    // and r32ui, image variables must specify either memory qualifier readonly or
-                    // the memory qualifier writeonly.
-                    switch (storage->TexelFormat()) {
-                        case core::TexelFormat::kR32Float:
-                        case core::TexelFormat::kR32Sint:
-                        case core::TexelFormat::kR32Uint:
-                            break;
-                        default:
-                            TINT_UNREACHABLE();
+                    if (version_.IsES()) {
+                        // ESSL 3.1 SPEC (chapter 4.9, Memory Access Qualifiers):
+                        // Except for image variables qualified with the format qualifiers r32f,
+                        // r32i, and r32ui, image variables must specify either memory qualifier
+                        // readonly or the memory qualifier writeonly.
+                        switch (storage->TexelFormat()) {
+                            case core::TexelFormat::kR32Float:
+                            case core::TexelFormat::kR32Sint:
+                            case core::TexelFormat::kR32Uint:
+                                break;
+                            default:
+                                TINT_UNREACHABLE() << "invalid texel format for read-write :"
+                                                   << storage->TexelFormat();
+                        }
                     }
                     break;
                 }
                 default:
-                    TINT_UNREACHABLE();
+                    TINT_UNREACHABLE() << "invalid storage access";
             }
         }
         auto* subtype = sampled   ? sampled->Type()
@@ -751,9 +861,6 @@ class Printer : public tint::TextGenerator {
         out << (storage ? "image" : "sampler");
 
         switch (t->Dim()) {
-            case core::type::TextureDimension::k1d:
-                out << "1D";
-                break;
             case core::type::TextureDimension::k2d:
                 out << "2D";
                 if (ms || depth_ms) {
@@ -777,7 +884,7 @@ class Printer : public tint::TextGenerator {
                 out << "CubeArray";
                 break;
             default:
-                TINT_UNREACHABLE();
+                TINT_UNREACHABLE() << "unknown texture dimension: " << t->Dim();
         }
         if (t->Is<core::type::DepthTexture>()) {
             out << "Shadow";
@@ -939,11 +1046,9 @@ class Printer : public tint::TextGenerator {
         {
             ScopedIndent si(current_buffer_);
 
-            for (auto* mem : str->Members()) {
-                auto out = Line();
-                EmitTypeAndName(out, mem->Type(), mem->Name().Name());
-                out << ";";
-            }
+            TextBuffer str_buf;
+            EmitStructMembers(str_buf, str);
+            current_buffer_->Append(str_buf);
         }
 
         Line() << "} " << name << ";";
@@ -1098,11 +1203,83 @@ class Printer : public tint::TextGenerator {
                     [&](const core::ir::UserCall* c) { EmitUserCall(out, c); },
                     [&](const core::ir::Var* var) { out << NameOf(var->Result(0)); },
 
+                    [&](const glsl::ir::BuiltinCall* c) { EmitGlslBuiltinCall(out, c); },  //
+                    [&](const glsl::ir::MemberBuiltinCall* mbc) {
+                        EmitGlslMemberBuiltinCall(out, mbc);
+                    },
+
                     TINT_ICE_ON_NO_MATCH);
             },
             [&](const core::ir::FunctionParam* p) { out << NameOf(p); },  //
 
             TINT_ICE_ON_NO_MATCH);
+    }
+
+    void EmitGlslMemberBuiltinCall(StringStream& out, const glsl::ir::MemberBuiltinCall* c) {
+        EmitValue(out, c->Object());
+        out << "." << c->Func() << "(";
+
+        bool needs_comma = false;
+        for (const auto* arg : c->Args()) {
+            if (needs_comma) {
+                out << ", ";
+            }
+            EmitValue(out, arg);
+            needs_comma = true;
+        }
+        out << ")";
+    }
+
+    bool RequiresEXTTextureShadowLod(glsl::BuiltinFn fn) {
+        return fn == glsl::BuiltinFn::kExtTextureLod || fn == glsl::BuiltinFn::kExtTextureLodOffset;
+    }
+
+    glsl::BuiltinFn EXTToNonEXT(glsl::BuiltinFn fn) {
+        switch (fn) {
+            case glsl::BuiltinFn::kExtTextureLod:
+                return glsl::BuiltinFn::kTextureLod;
+            case glsl::BuiltinFn::kExtTextureLodOffset:
+                return glsl::BuiltinFn::kTextureLodOffset;
+            default:
+                TINT_UNREACHABLE() << "invalid function for conversion: " << fn;
+        }
+    }
+
+    void EmitGlslBuiltinCall(StringStream& out, const glsl::ir::BuiltinCall* c) {
+        // The atomic subtract is an add in GLSL. If the value is a u32, it just negates the u32 and
+        // GLSL handles it. We don't have u32 negation in the IR, so fake it in the printer.
+        if (c->Func() == glsl::BuiltinFn::kAtomicSub) {
+            out << "atomicAdd";
+            {
+                ScopedParen sp(out);
+
+                EmitValue(out, c->Args()[0]);
+                out << ", -";
+                {
+                    ScopedParen argSP(out);
+                    EmitValue(out, c->Args()[1]);
+                }
+            }
+            return;
+        }
+
+        auto fn = c->Func();
+
+        if (RequiresEXTTextureShadowLod(fn)) {
+            EmitExtension(kEXTTextureShadowLod);
+            fn = EXTToNonEXT(fn);
+        }
+
+        out << fn << "(";
+        bool needs_comma = false;
+        for (const auto* arg : c->Args()) {
+            if (needs_comma) {
+                out << ", ";
+            }
+            EmitValue(out, arg);
+            needs_comma = true;
+        }
+        out << ")";
     }
 
     /// Emit a convert instruction
@@ -1139,7 +1316,27 @@ class Printer : public tint::TextGenerator {
             [&](const core::type::Struct* struct_ty) {
                 EmitStructType(struct_ty);
                 out << StructName(struct_ty);
-                emit_args();
+
+                if (struct_to_padding_struct_ids_.Contains(struct_ty)) {
+                    out << "(";
+                    auto vec = struct_to_padding_struct_ids_.Get(struct_ty);
+                    bool needs_comma = false;
+                    for (auto idx : *vec) {
+                        if (needs_comma) {
+                            out << ", ";
+                        }
+                        needs_comma = true;
+
+                        if (!idx.has_value()) {
+                            out << "0u";
+                        } else {
+                            EmitValue(out, c->Args()[idx.value()]);
+                        }
+                    }
+                    out << ")";
+                } else {
+                    emit_args();
+                }
             },
             [&](Default) {
                 EmitType(out, c->Result(0)->Type());
@@ -1257,20 +1454,25 @@ class Printer : public tint::TextGenerator {
             case core::BuiltinFn::kAbs:
             case core::BuiltinFn::kAcos:
             case core::BuiltinFn::kAcosh:
-            case core::BuiltinFn::kAll:
-            case core::BuiltinFn::kAny:
             case core::BuiltinFn::kAsin:
             case core::BuiltinFn::kAsinh:
             case core::BuiltinFn::kAtan:
             case core::BuiltinFn::kAtanh:
+            case core::BuiltinFn::kAtomicAdd:
+            case core::BuiltinFn::kAtomicAnd:
+            case core::BuiltinFn::kAtomicExchange:
+            case core::BuiltinFn::kAtomicMax:
+            case core::BuiltinFn::kAtomicMin:
+            case core::BuiltinFn::kAtomicOr:
+            case core::BuiltinFn::kAtomicXor:
             case core::BuiltinFn::kCeil:
             case core::BuiltinFn::kClamp:
             case core::BuiltinFn::kCos:
             case core::BuiltinFn::kCosh:
             case core::BuiltinFn::kCross:
+            case core::BuiltinFn::kDegrees:
             case core::BuiltinFn::kDeterminant:
             case core::BuiltinFn::kDistance:
-            case core::BuiltinFn::kDot:
             case core::BuiltinFn::kExp:
             case core::BuiltinFn::kExp2:
             case core::BuiltinFn::kFloor:
@@ -1281,9 +1483,9 @@ class Printer : public tint::TextGenerator {
             case core::BuiltinFn::kLog2:
             case core::BuiltinFn::kMax:
             case core::BuiltinFn::kMin:
-            case core::BuiltinFn::kModf:
             case core::BuiltinFn::kNormalize:
             case core::BuiltinFn::kPow:
+            case core::BuiltinFn::kRadians:
             case core::BuiltinFn::kReflect:
             case core::BuiltinFn::kRefract:
             case core::BuiltinFn::kRound:
@@ -1301,8 +1503,10 @@ class Printer : public tint::TextGenerator {
             case core::BuiltinFn::kAtan2:
                 out << "atan";
                 break;
-            case core::BuiltinFn::kCountOneBits:
-                out << "bitCount";
+            case core::BuiltinFn::kAtomicStore:
+                // GLSL does not have an atomicStore, so we emulate it with
+                // atomicExchange.
+                out << "atomicExchange";
                 break;
             case core::BuiltinFn::kDpdx:
                 out << "dFdx";
@@ -1427,7 +1631,6 @@ class Printer : public tint::TextGenerator {
             [&](const core::type::Matrix* m) { EmitConstantMatrix(out, m, c); },
             [&](const core::type::Struct* s) { EmitConstantStruct(out, s, c); },
 
-            // TODO(dsinclair): Emit remaining constant types
             TINT_ICE_ON_NO_MATCH);
     }
 
@@ -1437,11 +1640,30 @@ class Printer : public tint::TextGenerator {
         EmitType(out, s);
         ScopedParen sp(out);
 
-        for (size_t i = 0; i < s->Members().Length(); ++i) {
-            if (i > 0) {
-                out << ", ";
+        if (struct_to_padding_struct_ids_.Contains(s)) {
+            auto vec = struct_to_padding_struct_ids_.Get(s);
+            uint32_t i = 0;
+            bool first = true;
+            for (auto idx : *vec) {
+                if (!first) {
+                    out << ", ";
+                }
+                first = false;
+
+                if (!idx.has_value()) {
+                    out << "0u";
+                } else {
+                    EmitConstant(out, c->Index(i));
+                    ++i;
+                }
             }
-            EmitConstant(out, c->Index(i));
+        } else {
+            for (size_t i = 0; i < s->Members().Length(); ++i) {
+                if (i > 0) {
+                    out << ", ";
+                }
+                EmitConstant(out, c->Index(i));
+            }
         }
     }
 

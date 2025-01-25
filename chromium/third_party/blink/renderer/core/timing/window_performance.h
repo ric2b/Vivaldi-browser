@@ -160,6 +160,10 @@ class CORE_EXPORT WindowPerformance final : public Performance,
   void CreateNavigationTimingInstance(
       mojom::blink::ResourceTimingInfoPtr navigation_resource_timing);
 
+  void OnPageScroll();
+  bool IsAutoscrollActive();
+  void ResetAutoscroll() { autoscroll_active_ = false; }
+
  private:
   static std::pair<AtomicString, DOMWindow*> SanitizedAttribution(
       ExecutionContext*,
@@ -179,8 +183,7 @@ class CORE_EXPORT WindowPerformance final : public Performance,
   // order; stop as soon as seeing an event with pending presentation promise.
   void ReportEventTimings();
   void ReportEvent(InteractiveDetector* interactive_detector,
-                   Member<PerformanceEventTiming> event_timing_entry,
-                   base::TimeTicks presentation_timestamp);
+                   Member<PerformanceEventTiming> event_timing_entry);
 
   void DispatchFirstInputTiming(PerformanceEventTiming* entry);
 
@@ -211,10 +214,6 @@ class CORE_EXPORT WindowPerformance final : public Performance,
   // Counts the total number of presentation promises we've registered for
   // events' presentation feedback since the beginning.
   uint64_t event_presentation_promise_count_ = 0;
-  // Map from presentation promise index to pending event presentation
-  // timestamp. It gets emptied consistently once corresponding entries are
-  // reported.
-  HashMap<uint64_t, base::TimeTicks> pending_event_presentation_time_map_;
   // Store all event timing and latency related data, including
   // PerformanceEventTiming, presentation_index, keycode and pointerId.
   // We use the data to calculate events latencies.
@@ -227,6 +226,22 @@ class CORE_EXPORT WindowPerformance final : public Performance,
   DOMHighResTimeStamp pending_pointer_down_start_time_;
   std::optional<base::TimeDelta> pending_pointer_down_processing_time_;
   std::optional<base::TimeDelta> pending_pointer_down_time_to_next_paint_;
+
+  // Set to true when text selection causes scrolling in the page. Reset when
+  // the mouse button is released and autoscroll stops. Used to ignore
+  // recording interaction metrics for all the events during the text
+  // selection autoscroll.
+  // We do this because the interactions following a scroll can cause a lot of
+  // work to be done (intersection observers, etc.) but this doesn't
+  // necessarily result in a degraded user experience.
+  // When users are actively scrolling a page, it is much harder to visualize
+  // the latency for any one specific animation frame, not in the same way as a
+  // typical discrete interaction, which are measured in INP only.
+  // The interactions causing text selection autoscroll are generally rare and
+  // not typically "designed by the site UI". It's more of user agent or
+  // accessibility use case. We don't want any pages to fail INP because of
+  // these interactions.
+  bool autoscroll_active_ = false;
 
   // Calculate responsiveness metrics and record UKM for them.
   Member<ResponsivenessMetrics> responsiveness_metrics_;

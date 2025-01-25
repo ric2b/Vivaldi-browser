@@ -96,6 +96,8 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   JumpList(const JumpList&) = delete;
   JumpList& operator=(const JumpList&) = delete;
 
+  ~JumpList() override;
+
   // Returns true if the custom JumpList is enabled.
   static bool Enabled();
 
@@ -148,8 +150,6 @@ class JumpList : public sessions::TabRestoreServiceObserver,
 
   friend JumpListFactory;
   explicit JumpList(Profile* profile);  // Use JumpListFactory instead
-
-  ~JumpList() override;
 
   // history::TopSitesObserver:
   void TopSitesLoaded(history::TopSites* top_sites) override;

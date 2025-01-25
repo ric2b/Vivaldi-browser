@@ -11,16 +11,17 @@
 
 namespace openscreen::osp {
 
+QuicStreamManager::Delegate::Delegate() = default;
+QuicStreamManager::Delegate::~Delegate() = default;
+
 QuicStreamManager::QuicStreamManager(Delegate& delegate)
     : delegate_(delegate) {}
 
-QuicStreamManager::~QuicStreamManager() {
-  OSP_CHECK(streams_.empty());
-}
+QuicStreamManager::~QuicStreamManager() = default;
 
 void QuicStreamManager::OnReceived(QuicStream* stream, ByteView bytes) {
-  auto stream_entry = streams_.find(stream->GetStreamId());
-  if (stream_entry == streams_.end()) {
+  auto stream_entry = streams_by_id_.find(stream->GetStreamId());
+  if (stream_entry == streams_by_id_.end()) {
     return;
   }
 
@@ -31,17 +32,17 @@ void QuicStreamManager::OnReceived(QuicStream* stream, ByteView bytes) {
 void QuicStreamManager::OnClose(uint64_t stream_id) {
   OSP_VLOG << "QUIC stream is closed for instance "
            << quic_connection_->instance_name();
-  auto stream_entry = streams_.find(stream_id);
-  if (stream_entry == streams_.end()) {
+  auto stream_entry = streams_by_id_.find(stream_id);
+  if (stream_entry == streams_by_id_.end()) {
     return;
   }
 
-  ServiceStreamPair& stream_pair = stream_entry->second;
   delegate_.OnClose(quic_connection_->instance_id(), stream_id);
-  if (stream_pair.protocol_connection) {
-    stream_pair.protocol_connection->OnClose();
+  auto* protocol_connection = stream_entry->second;
+  if (protocol_connection) {
+    protocol_connection->OnClose();
   }
-  streams_.erase(stream_entry);
+  streams_by_id_.erase(stream_entry);
 }
 
 std::unique_ptr<QuicProtocolConnection> QuicStreamManager::OnIncomingStream(
@@ -49,24 +50,13 @@ std::unique_ptr<QuicProtocolConnection> QuicStreamManager::OnIncomingStream(
   OSP_VLOG << "Incoming QUIC stream from instance "
            << quic_connection_->instance_name();
   auto protocol_connection = std::make_unique<QuicProtocolConnection>(
-      delegate_, *stream, quic_connection_->instance_id());
-  AddStreamPair(ServiceStreamPair{stream, protocol_connection.get()});
+      stream, quic_connection_->instance_id());
+  AddStream(*protocol_connection);
   return protocol_connection;
 }
 
-void QuicStreamManager::AddStreamPair(const ServiceStreamPair& stream_pair) {
-  const uint64_t stream_id = stream_pair.stream->GetStreamId();
-  streams_.emplace(stream_id, stream_pair);
-}
-
-void QuicStreamManager::DropProtocolConnection(
-    QuicProtocolConnection& connection) {
-  auto stream_entry = streams_.find(connection.GetID());
-  if (stream_entry == streams_.end()) {
-    return;
-  }
-
-  stream_entry->second.protocol_connection = nullptr;
+void QuicStreamManager::AddStream(QuicProtocolConnection& protocol_connection) {
+  streams_by_id_.emplace(protocol_connection.GetID(), &protocol_connection);
 }
 
 }  // namespace openscreen::osp

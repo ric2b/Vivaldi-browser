@@ -92,15 +92,23 @@
 }
 
 .network-config-ua-custom {
-  opacity: 50%;
   padding-bottom: 8px;
+
+  input,
+  devtools-user-agent-client-hints-form {
+    opacity: 38%;
+    pointer-events: none;
+  }
+
+  &.checked input,
+  &.checked devtools-user-agent-client-hints-form {
+    opacity: revert;
+    pointer-events: revert;
+  }
 }
 
-.network-config-ua-custom.checked {
-  opacity: 100%;
-}
-
-.client-hints-form {
+devtools-user-agent-client-hints-form {
+  display: block;
   margin-top: 14px;
   width: min(100%, 400px);
 }

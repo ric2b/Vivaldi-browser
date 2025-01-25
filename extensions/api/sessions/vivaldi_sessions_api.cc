@@ -27,7 +27,9 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/startup/startup_tab.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/sessions/session_service_factory.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
 #include "components/sessions/core/session_service_commands.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
@@ -614,7 +616,7 @@ void SessionsPrivateGetAllFunction::Piggyback() {
     VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
     if (window && window->type() == VivaldiBrowserWindow::NORMAL) {
       // Open in first browser with correct profile.
-      int error_code = sessions::OpenPersistentTabs(browser);
+      int error_code = sessions::OpenPersistentTabs(browser, true);
       if (error_code != sessions::kErrorWrongProfile) {
         break;
       }
@@ -1120,5 +1122,23 @@ ExtensionFunction::ResponseAction SessionsPrivateEmptyTrashFunction::Run() {
 
   return RespondNow(ArgumentList(Results::Create(error_code)));
 }
+
+ExtensionFunction::ResponseAction
+SessionsPrivateRestoreLastClosedFunction::Run() {
+  namespace Results = vivaldi::sessions_private::RestoreLastClosed::Results;
+  bool did_open_session_window = false;
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  SessionService* session_service =
+      SessionServiceFactory::GetForProfileForSessionRestore(
+          profile->GetOriginalProfile());
+  if (session_service &&
+      session_service->RestoreIfNecessary(StartupTabs(),
+                                           /* restore_apps */ false)) {
+    did_open_session_window = true;
+  }
+
+  return RespondNow(ArgumentList(Results::Create(did_open_session_window)));
+}
+
 
 }  // namespace extensions

@@ -15,6 +15,10 @@ class FullscreenController;
 class PrefService;
 class WebStateList;
 
+// Vivaldi
+class Browser;
+// End Vivaldi
+
 // Mediator that mediates between the browser container views and the
 // partial translate tab helpers.
 @interface PartialTranslateMediator : NSObject <PartialTranslateDelegate>
@@ -47,6 +51,10 @@ class WebStateList;
 // Whether partial translate action should be proposed (independently of the
 // current selection).
 - (BOOL)shouldInstallPartialTranslate;
+
+// Vivaldi
+@property(assign, nonatomic) Browser* browser;
+// End Vivaldi
 
 @end
 

@@ -379,12 +379,20 @@ export interface InspectorFrontendHostAPI {
   recordKeyDown(event: KeyDownEvent): void;
 }
 
+export interface AcceleratorDescriptor {
+  keyCode: number;
+  modifiers: number;
+}
+
 export interface ContextMenuDescriptor {
   type: 'checkbox'|'item'|'separator'|'subMenu';
   id?: number;
   label?: string;
+  accelerator?: AcceleratorDescriptor;
+  isExperimentalFeature?: boolean;
   enabled?: boolean;
   checked?: boolean;
+  isDevToolsPerformanceMenuItem?: boolean;
   subItems?: ContextMenuDescriptor[];
   shortcut?: string;
   jslogContext?: string;
@@ -427,6 +435,8 @@ export interface SyncInformation {
   accountImage?: string;
   /** The full name of the account used for syncing */
   accountFullName?: string;
+  /** Whether Chrome Sync is paused, equivalent to the user being logged out automatically */
+  isSyncPaused?: boolean;
 }
 
 /**
@@ -473,7 +483,6 @@ export const enum EnumeratedHistogram {
   CSSHintShown = 'DevTools.CSSHintShown',
   LighthouseModeRun = 'DevTools.LighthouseModeRun',
   LighthouseCategoryUsed = 'DevTools.LighthouseCategoryUsed',
-  ColorPickerOpenedFrom = 'DevTools.ColorPickerOpenedFrom',
   CSSPropertyDocumentation = 'DevTools.CSSPropertyDocumentation',
   SwatchActivated = 'DevTools.SwatchActivated',
   AnimationPlaybackRateChanged = 'DevTools.AnimationPlaybackRateChanged',
@@ -482,7 +491,5 @@ export const enum EnumeratedHistogram {
   LegacyResourceTypeFilterItemSelected = 'DevTools.LegacyResourceTypeFilterItemSelected',
   ResourceTypeFilterNumberOfSelectedChanged = 'DevTools.ResourceTypeFilterNumberOfSelectedChanged',
   ResourceTypeFilterItemSelected = 'DevTools.ResourceTypeFilterItemSelected',
-  NetworkPanelMoreFiltersNumberOfSelectedChanged = 'DevTools.NetworkPanelMoreFiltersNumberOfSelectedChanged',
-  NetworkPanelMoreFiltersItemSelected = 'DevTools.NetworkPanelMoreFiltersItemSelected',
   /* eslint-disable @typescript-eslint/naming-convention -- Shadows a legacy enum */
 }

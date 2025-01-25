@@ -149,6 +149,13 @@
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
+  "omniboxPrivate": {
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "allowlist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
   "pageActions": {
     "channel": "stable",
     "extension_types": [ "platform_app" ],

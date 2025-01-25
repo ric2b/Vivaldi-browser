@@ -121,10 +121,10 @@ class ManagePasswordsUIController
       const std::u16string& username,
       const password_manager::PasswordForm& form_to_update) override;
   void OnKeychainError() override;
-  void OnPasskeySaved(bool gpm_pin_created) override;
+  void OnPasskeySaved(bool gpm_pin_created, std::string passkey_rp_id) override;
   void OnPasskeyDeleted() override;
-  void OnPasskeyUpdated() override;
-  void OnPasskeyNotAccepted() override;
+  void OnPasskeyUpdated(std::string passkey_rp_id) override;
+  void OnPasskeyNotAccepted(std::string passkey_rp_id) override;
 
   virtual void NotifyUnsyncedCredentialsWillBeDeleted(
       std::vector<password_manager::PasswordForm> unsynced_credentials);
@@ -169,9 +169,9 @@ class ManagePasswordsUIController
   const password_manager::InteractionsStats* GetCurrentInteractionStats()
       const override;
   size_t GetTotalNumberCompromisedPasswords() const override;
-  bool DidAuthForAccountStoreOptInFail() const override;
   bool BubbleIsManualFallbackForSaving() const override;
   bool GpmPinCreatedDuringRecentPasskeyCreation() const override;
+  const std::string& PasskeyRpId() const override;
   void OnBubbleShown() override;
   void OnBubbleHidden() override;
   void OnNoInteraction() override;
@@ -384,7 +384,7 @@ class ManagePasswordsUIController
   // Used to bypass user authentication in integration tests.
   bool bypass_user_auth_for_testing_ = false;
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
   bool was_biometric_authentication_for_filling_promo_shown_ = false;
 #endif
 

@@ -320,11 +320,16 @@ else
 endif
 
 # BZip2 support.
-bzip2_dep = dependency('bzip2', required: false)
+bzip2_dep = dependency(
+  'bzip2',
+  required: get_option('bzip2').disabled() ? get_option('bzip2') : false,
+)
 if not bzip2_dep.found()
-  bzip2_dep = cc.find_library('bz2',
+  bzip2_dep = cc.find_library(
+    'bz2',
     has_headers: ['bzlib.h'],
-    required: get_option('bzip2'))
+    required: get_option('bzip2'),
+  )
 endif
 
 if bzip2_dep.found()
@@ -363,6 +368,10 @@ if brotli_dep.found()
   ft2_deps += [brotli_dep]
 endif
 
+if get_option('error_strings')
+  ftoption_command += ['--enable=FT_CONFIG_OPTION_ERROR_STRINGS']
+endif
+
 # We can now generate `ftoption.h`.
 ftoption_h = custom_target('ftoption.h',
   input: 'include/freetype/config/ftoption.h',
@@ -374,7 +383,8 @@ ftoption_h = custom_target('ftoption.h',
 ft2_sources += ftoption_h
 ft2_defines += ['-DFT_CONFIG_OPTIONS_H=<ftoption.h>']
 
-if host_machine.system() == 'windows'
+if host_machine.system() == 'windows' and \
+   get_option('default_library') == 'shared'
   ft2_defines += ['-DDLL_EXPORT=1']
 endif
 
@@ -477,10 +487,10 @@ summary({'OS': host_machine.system(),
         }, section: 'Operating System')
 
 summary({'Zlib': zlib_option,
-         'Bzip2': bzip2_dep.found() ? 'yes' : 'no',
-         'Png': libpng_dep.found() ? 'yes' : 'no',
-         'Harfbuzz': harfbuzz_dep.found() ? 'yes' : 'no',
-         'Brotli': brotli_dep.found() ? 'yes' : 'no',
-        }, section: 'Used Libraries')
+         'Bzip2': bzip2_dep.found(),
+         'Png': libpng_dep.found(),
+         'Harfbuzz': harfbuzz_dep.found(),
+         'Brotli': brotli_dep.found(),
+        }, bool_yn: true, section: 'Used Libraries')
 
 # EOF

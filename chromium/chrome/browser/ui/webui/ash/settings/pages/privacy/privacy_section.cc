@@ -4,15 +4,18 @@
 
 #include "chrome/browser/ui/webui/ash/settings/pages/privacy/privacy_section.h"
 
+#include <array>
+
 #include "ash/components/arc/arc_util.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/constants/web_app_id_constants.h"
 #include "base/check.h"
+#include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/branding_buildflags.h"
 #include "build/chromeos_buildflags.h"
@@ -30,11 +33,11 @@
 #include "chrome/browser/ui/webui/settings/settings_secure_dns_handler.h"
 #include "chrome/browser/ui/webui/settings/shared_settings_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/webui_util.h"
-#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -62,107 +65,102 @@ using ::chromeos::settings::mojom::Subpage;
 
 namespace {
 
-const std::vector<SearchConcept>& GetPrivacySearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags([] {
-    std::vector<SearchConcept> all_tags({
-        {IDS_OS_SETTINGS_TAG_PRIVACY_VERIFIED_ACCESS,
-         mojom::kPrivacyAndSecuritySectionPath,
-         mojom::SearchResultIcon::kShield,
-         mojom::SearchResultDefaultRank::kMedium,
-         mojom::SearchResultType::kSetting,
-         {.setting = mojom::Setting::kVerifiedAccess}},
-        {ash::features::IsOsSettingsRevampWayfindingEnabled()
-             ? IDS_OS_SETTINGS_TAG_PRIVACY_AND_SECURITY
-             : IDS_OS_SETTINGS_TAG_SECURITY_AND_PRIVACY,
-         mojom::kPrivacyAndSecuritySectionPath,
-         mojom::SearchResultIcon::kShield,
-         mojom::SearchResultDefaultRank::kMedium,
-         mojom::SearchResultType::kSection,
-         {.section = mojom::Section::kPrivacyAndSecurity}},
-    });
-
-    if (!IsGuestModeActive()) {
-      all_tags.insert(
-          all_tags.end(),
-          {{IDS_OS_SETTINGS_TAG_MANAGE_OTHER_PEOPLE_PAGE,
-            mojom::kManageOtherPeopleSubpagePathV2,
-            mojom::SearchResultIcon::kAvatar,
-            mojom::SearchResultDefaultRank::kMedium,
-            mojom::SearchResultType::kSubpage,
-            {.subpage = mojom::Subpage::kManageOtherPeopleV2}},
-           {IDS_OS_SETTINGS_TAG_GUEST_BROWSING,
-            mojom::kManageOtherPeopleSubpagePathV2,
-            mojom::SearchResultIcon::kAvatar,
-            mojom::SearchResultDefaultRank::kMedium,
-            mojom::SearchResultType::kSetting,
-            {.setting = mojom::Setting::kGuestBrowsingV2}},
-           {IDS_OS_SETTINGS_TAG_USERNAMES_AND_PHOTOS,
-            mojom::kManageOtherPeopleSubpagePathV2,
-            mojom::SearchResultIcon::kAvatar,
-            mojom::SearchResultDefaultRank::kMedium,
-            mojom::SearchResultType::kSetting,
-            {.setting = mojom::Setting::kShowUsernamesAndPhotosAtSignInV2},
-            {IDS_OS_SETTINGS_TAG_USERNAMES_AND_PHOTOS_ALT1,
-             IDS_OS_SETTINGS_TAG_USERNAMES_AND_PHOTOS_ALT2,
-             SearchConcept::kAltTagEnd}},
-           {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN,
-            mojom::kManageOtherPeopleSubpagePathV2,
-            mojom::SearchResultIcon::kAvatar,
-            mojom::SearchResultDefaultRank::kMedium,
-            mojom::SearchResultType::kSetting,
-            {.setting = mojom::Setting::kRestrictSignInV2},
-            {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN_ALT1,
-             SearchConcept::kAltTagEnd}},
-           {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN_ADD,
-            mojom::kManageOtherPeopleSubpagePathV2,
-            mojom::SearchResultIcon::kAvatar,
-            mojom::SearchResultDefaultRank::kMedium,
-            mojom::SearchResultType::kSetting,
-            {.setting = mojom::Setting::kAddToUserAllowlistV2}},
-           {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN_REMOVE,
-            mojom::kManageOtherPeopleSubpagePathV2,
-            mojom::SearchResultIcon::kAvatar,
-            mojom::SearchResultDefaultRank::kMedium,
-            mojom::SearchResultType::kSetting,
-            {.setting = mojom::Setting::kRemoveFromUserAllowlistV2}},
-           {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_PIN_OR_PASSWORD,
-            mojom::kSecurityAndSignInSubpagePathV2,
-            mojom::SearchResultIcon::kLock,
-            mojom::SearchResultDefaultRank::kMedium,
-            mojom::SearchResultType::kSetting,
-            {.setting = mojom::Setting::kChangeAuthPinV2},
-            {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_PIN_OR_PASSWORD_ALT1,
-             SearchConcept::kAltTagEnd}},
-           {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_WHEN_WAKING,
-            mojom::kSecurityAndSignInSubpagePathV2,
-            mojom::SearchResultIcon::kLock,
-            mojom::SearchResultDefaultRank::kMedium,
-            mojom::SearchResultType::kSetting,
-            {.setting = mojom::Setting::kLockScreenV2},
-            {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_WHEN_WAKING_ALT1,
-             SearchConcept::kAltTagEnd}},
-           {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_V2,
-            mojom::kSecurityAndSignInSubpagePathV2,
-            mojom::SearchResultIcon::kLock,
-            mojom::SearchResultDefaultRank::kMedium,
-            mojom::SearchResultType::kSubpage,
-            {.subpage = mojom::Subpage::kSecurityAndSignInV2}},
-           {IDS_OS_SETTINGS_TAG_LOCAL_DATA_RECOVERY,
-            mojom::kSecurityAndSignInSubpagePathV2,
-            mojom::SearchResultIcon::kLock,
-            mojom::SearchResultDefaultRank::kMedium,
-            mojom::SearchResultType::kSetting,
-            {.setting = mojom::Setting::kDataRecovery}}});
-    }
-
-    return all_tags;
-  }());
-
-  return *tags;
+base::span<const SearchConcept> GetPrivacySearchConceptsSharedWithGuestMode() {
+  static constexpr auto tags = std::to_array<SearchConcept>({
+      {IDS_OS_SETTINGS_TAG_PRIVACY_VERIFIED_ACCESS,
+       mojom::kPrivacyAndSecuritySectionPath,
+       mojom::SearchResultIcon::kShield,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kVerifiedAccess}},
+      {IDS_OS_SETTINGS_TAG_PRIVACY_AND_SECURITY,
+       mojom::kPrivacyAndSecuritySectionPath,
+       mojom::SearchResultIcon::kShield,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSection,
+       {.section = mojom::Section::kPrivacyAndSecurity}},
+  });
+  return tags;
 }
 
-const std::vector<SearchConcept>& GetFingerprintSearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+base::span<const SearchConcept> GetPrivacySearchConcepts(
+    const user_manager::User* user) {
+  DCHECK(!IsGuestModeActive(user));
+  static constexpr auto tags = std::to_array<SearchConcept>({
+      {IDS_OS_SETTINGS_TAG_MANAGE_OTHER_PEOPLE_PAGE,
+       mojom::kManageOtherPeopleSubpagePathV2,
+       mojom::SearchResultIcon::kAvatar,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kManageOtherPeopleV2}},
+      {IDS_OS_SETTINGS_TAG_GUEST_BROWSING,
+       mojom::kManageOtherPeopleSubpagePathV2,
+       mojom::SearchResultIcon::kAvatar,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kGuestBrowsingV2}},
+      {IDS_OS_SETTINGS_TAG_USERNAMES_AND_PHOTOS,
+       mojom::kManageOtherPeopleSubpagePathV2,
+       mojom::SearchResultIcon::kAvatar,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kShowUsernamesAndPhotosAtSignInV2},
+       {IDS_OS_SETTINGS_TAG_USERNAMES_AND_PHOTOS_ALT1,
+        IDS_OS_SETTINGS_TAG_USERNAMES_AND_PHOTOS_ALT2,
+        SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN,
+       mojom::kManageOtherPeopleSubpagePathV2,
+       mojom::SearchResultIcon::kAvatar,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kRestrictSignInV2},
+       {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN_ALT1, SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN_ADD,
+       mojom::kManageOtherPeopleSubpagePathV2,
+       mojom::SearchResultIcon::kAvatar,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kAddToUserAllowlistV2}},
+      {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN_REMOVE,
+       mojom::kManageOtherPeopleSubpagePathV2,
+       mojom::SearchResultIcon::kAvatar,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kRemoveFromUserAllowlistV2}},
+      {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_PIN_OR_PASSWORD,
+       mojom::kSecurityAndSignInSubpagePathV2,
+       mojom::SearchResultIcon::kLock,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kChangeAuthPinV2},
+       {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_PIN_OR_PASSWORD_ALT1,
+        SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_WHEN_WAKING,
+       mojom::kSecurityAndSignInSubpagePathV2,
+       mojom::SearchResultIcon::kLock,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kLockScreenV2},
+       {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_WHEN_WAKING_ALT1,
+        SearchConcept::kAltTagEnd}},
+      {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_V2,
+       mojom::kSecurityAndSignInSubpagePathV2,
+       mojom::SearchResultIcon::kLock,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kSecurityAndSignInV2}},
+      {IDS_OS_SETTINGS_TAG_LOCAL_DATA_RECOVERY,
+       mojom::kSecurityAndSignInSubpagePathV2,
+       mojom::SearchResultIcon::kLock,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kDataRecovery}},
+  });
+  return tags;
+}
+
+base::span<const SearchConcept> GetFingerprintSearchConcepts() {
+  static constexpr auto tags = std::to_array<SearchConcept>({
       {IDS_OS_SETTINGS_TAG_FINGERPRINT_ADD,
        mojom::kFingerprintSubpagePathV2,
        mojom::SearchResultIcon::kFingerprint,
@@ -176,11 +174,11 @@ const std::vector<SearchConcept>& GetFingerprintSearchConcepts() {
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kFingerprintV2}},
   });
-  return *tags;
+  return tags;
 }
 
-const std::vector<SearchConcept>& GetRemoveFingerprintSearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+base::span<const SearchConcept> GetRemoveFingerprintSearchConcepts() {
+  static constexpr auto tags = std::to_array<SearchConcept>({
       {IDS_OS_SETTINGS_TAG_FINGERPRINT_REMOVE,
        mojom::kFingerprintSubpagePathV2,
        mojom::SearchResultIcon::kFingerprint,
@@ -188,11 +186,11 @@ const std::vector<SearchConcept>& GetRemoveFingerprintSearchConcepts() {
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kRemoveFingerprintV2}},
   });
-  return *tags;
+  return tags;
 }
 
-const std::vector<SearchConcept>& GetPciguardSearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+base::span<const SearchConcept> GetPciguardSearchConcepts() {
+  static constexpr auto tags = std::to_array<SearchConcept>({
       {IDS_OS_SETTINGS_TAG_PRIVACY_PERIPHERAL_DATA_ACCESS_PROTECTION,
        mojom::kPrivacyAndSecuritySectionPath,
        mojom::SearchResultIcon::kShield,
@@ -205,56 +203,44 @@ const std::vector<SearchConcept>& GetPciguardSearchConcepts() {
         IDS_OS_SETTINGS_TAG_PRIVACY_PERIPHERAL_DATA_ACCESS_PROTECTION_ALT4,
         IDS_OS_SETTINGS_TAG_PRIVACY_PERIPHERAL_DATA_ACCESS_PROTECTION_ALT5}},
   });
-  return *tags;
+  return tags;
 }
 
-const std::vector<SearchConcept>& GetSmartPrivacySearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags([] {
-    std::vector<SearchConcept> init_tags;
-
-    if (ash::features::IsSnoopingProtectionEnabled() ||
-        ash::features::IsQuickDimEnabled()) {
-      init_tags.push_back({IDS_OS_SETTINGS_TAG_SMART_PRIVACY,
-                           mojom::kSmartPrivacySubpagePath,
-                           mojom::SearchResultIcon::kShield,
-                           mojom::SearchResultDefaultRank::kMedium,
-                           mojom::SearchResultType::kSubpage,
-                           {.subpage = mojom::Subpage::kSmartPrivacy}});
-    }
-
-    if (ash::features::IsSnoopingProtectionEnabled()) {
-      init_tags.push_back({IDS_OS_SETTINGS_TAG_SMART_PRIVACY_SNOOPING,
-                           mojom::kSmartPrivacySubpagePath,
-                           mojom::SearchResultIcon::kShield,
-                           mojom::SearchResultDefaultRank::kMedium,
-                           mojom::SearchResultType::kSetting,
-                           {.setting = mojom::Setting::kSnoopingProtection},
-                           {IDS_OS_SETTINGS_TAG_SMART_PRIVACY_SNOOPING_ALT1,
-                            IDS_OS_SETTINGS_TAG_SMART_PRIVACY_SNOOPING_ALT2}});
-    }
-
-    // Quick dim: a.k.a leave detection, a.k.a lock on leave, a.k.a. smart
-    // privacy screen lock.
-    //
-    // TODO(crbug.com/1241706): defrag these terms into one canonical name.
-    if (ash::features::IsQuickDimEnabled()) {
-      init_tags.push_back({IDS_OS_SETTINGS_TAG_SMART_PRIVACY_QUICK_DIM,
-                           mojom::kSmartPrivacySubpagePath,
-                           mojom::SearchResultIcon::kShield,
-                           mojom::SearchResultDefaultRank::kMedium,
-                           mojom::SearchResultType::kSetting,
-                           {.setting = mojom::Setting::kQuickDim}});
-    }
-
-    return init_tags;
-  }());
-
-  return *tags;
+base::span<const SearchConcept> GetSmartPrivacySearchConcepts() {
+  DCHECK(ash::features::IsSnoopingProtectionEnabled() &&
+         ash::features::IsQuickDimEnabled());
+  static constexpr auto tags = std::to_array<SearchConcept>({
+      {IDS_OS_SETTINGS_TAG_SMART_PRIVACY,
+       mojom::kSmartPrivacySubpagePath,
+       mojom::SearchResultIcon::kShield,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kSmartPrivacy}},
+      {IDS_OS_SETTINGS_TAG_SMART_PRIVACY_SNOOPING,
+       mojom::kSmartPrivacySubpagePath,
+       mojom::SearchResultIcon::kShield,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kSnoopingProtection},
+       {IDS_OS_SETTINGS_TAG_SMART_PRIVACY_SNOOPING_ALT1,
+        IDS_OS_SETTINGS_TAG_SMART_PRIVACY_SNOOPING_ALT2}},
+      // Quick dim: a.k.a leave detection, a.k.a lock on leave, a.k.a. smart
+      // privacy screen lock.
+      //
+      // TODO(crbug.com/1241706): defrag these terms into one canonical name.
+      {IDS_OS_SETTINGS_TAG_SMART_PRIVACY_QUICK_DIM,
+       mojom::kSmartPrivacySubpagePath,
+       mojom::SearchResultIcon::kShield,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kQuickDim}},
+  });
+  return tags;
 }
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-const std::vector<SearchConcept>& GetPrivacyGoogleChromeSearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+base::span<const SearchConcept> GetPrivacyGoogleChromeSearchConcepts() {
+  static constexpr auto tags = std::to_array<SearchConcept>({
       {IDS_OS_SETTINGS_TAG_PRIVACY_CRASH_REPORTS,
        mojom::kPrivacyHubSubpagePath,
        mojom::SearchResultIcon::kShield,
@@ -264,77 +250,54 @@ const std::vector<SearchConcept>& GetPrivacyGoogleChromeSearchConcepts() {
        {IDS_OS_SETTINGS_TAG_PRIVACY_CRASH_REPORTS_ALT1,
         SearchConcept::kAltTagEnd}},
   });
-  return *tags;
+  return tags;
 }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
-const std::vector<SearchConcept>& GetPrivacyControlsSearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags([] {
-    std::vector<SearchConcept> init_tags;
+base::span<const SearchConcept> GetPrivacyControlsSearchConcepts(
+    const user_manager::User* user) {
+  DCHECK(!IsGuestModeActive(user));
+  static constexpr auto tags = std::to_array<SearchConcept>({
+      {IDS_OS_SETTINGS_TAG_PRIVACY_CONTROLS,
+       mojom::kPrivacyHubSubpagePath,
+       mojom::SearchResultIcon::kPrivacyControls,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kPrivacyHub}},
+      {IDS_OS_SETTINGS_TAG_CAMERA,
+       mojom::kPrivacyHubCameraSubpagePath,
+       mojom::SearchResultIcon::kCamera,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kPrivacyHubCamera}},
+      {IDS_OS_SETTINGS_TAG_MICROPHONE,
+       mojom::kPrivacyHubMicrophoneSubpagePath,
+       mojom::SearchResultIcon::kMicrophone,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSubpage,
+       {.subpage = mojom::Subpage::kPrivacyHubMicrophone}},
+  });
+  return tags;
+}
 
-    if (IsGuestModeActive()) {
-      return init_tags;
-    }
-
-      init_tags.push_back({IDS_OS_SETTINGS_TAG_PRIVACY_CONTROLS,
-                           mojom::kPrivacyHubSubpagePath,
-                           ash::features::IsOsSettingsRevampWayfindingEnabled()
-                               ? mojom::SearchResultIcon::kPrivacyControls
-                               : mojom::SearchResultIcon::kShield,
-                           mojom::SearchResultDefaultRank::kMedium,
-                           mojom::SearchResultType::kSubpage,
-                           {.subpage = mojom::Subpage::kPrivacyHub}});
-      if (ash::features::IsCrosPrivacyHubAppPermissionsEnabled()) {
-        init_tags.push_back({IDS_OS_SETTINGS_TAG_CAMERA,
-                             mojom::kPrivacyHubCameraSubpagePath,
-                             mojom::SearchResultIcon::kCamera,
-                             mojom::SearchResultDefaultRank::kMedium,
-                             mojom::SearchResultType::kSubpage,
-                             {.subpage = mojom::Subpage::kPrivacyHubCamera}});
-
-        init_tags.push_back(
-            {IDS_OS_SETTINGS_TAG_MICROPHONE,
-             mojom::kPrivacyHubMicrophoneSubpagePath,
-             mojom::SearchResultIcon::kMicrophone,
-             mojom::SearchResultDefaultRank::kMedium,
-             mojom::SearchResultType::kSubpage,
-             {.subpage = mojom::Subpage::kPrivacyHubMicrophone}});
-      } else {
-        init_tags.push_back({IDS_OS_SETTINGS_TAG_CAMERA,
-                             mojom::kPrivacyHubSubpagePath,
-                             mojom::SearchResultIcon::kCamera,
-                             mojom::SearchResultDefaultRank::kMedium,
-                             mojom::SearchResultType::kSetting,
-                             {.setting = mojom::Setting::kCameraOnOff}});
-
-        init_tags.push_back({IDS_OS_SETTINGS_TAG_MICROPHONE,
-                             mojom::kPrivacyHubSubpagePath,
-                             mojom::SearchResultIcon::kMicrophone,
-                             mojom::SearchResultDefaultRank::kMedium,
-                             mojom::SearchResultType::kSetting,
-                             {.setting = mojom::Setting::kMicrophoneOnOff}});
-      }
-
-    if (ash::features::IsCrosPrivacyHubLocationEnabled()) {
-      init_tags.push_back(
-          {IDS_OS_SETTINGS_TAG_GEOLOCATION,
-           mojom::kPrivacyHubGeolocationSubpagePath,
-           mojom::SearchResultIcon::kGeolocation,
-           mojom::SearchResultDefaultRank::kMedium,
-           mojom::SearchResultType::kSubpage,
-           {.subpage = mojom::Subpage::kPrivacyHubGeolocation}});
-      init_tags.push_back(
-          {IDS_OS_SETTINGS_TAG_GEOLOCATION_ACCURACY,
-           mojom::kPrivacyHubGeolocationAdvancedSubpagePath,
-           mojom::SearchResultIcon::kGeolocation,
-           mojom::SearchResultDefaultRank::kMedium,
-           mojom::SearchResultType::kSubpage,
-           {.subpage = mojom::Subpage::kPrivacyHubGeolocationAdvanced}});
-    }
-    return init_tags;
-  }());
-
-  return *tags;
+base::span<const SearchConcept> GetPrivacyControlsLocationSearchConcepts(
+    const user_manager::User* user) {
+  DCHECK(!IsGuestModeActive(user));
+  DCHECK(features::IsCrosPrivacyHubLocationEnabled());
+  static constexpr auto tags = std::to_array<SearchConcept>(
+      {{IDS_OS_SETTINGS_TAG_GEOLOCATION,
+        mojom::kPrivacyHubGeolocationSubpagePath,
+        mojom::SearchResultIcon::kGeolocation,
+        mojom::SearchResultDefaultRank::kMedium,
+        mojom::SearchResultType::kSubpage,
+        {.subpage = mojom::Subpage::kPrivacyHubGeolocation}},
+       {IDS_OS_SETTINGS_TAG_GEOLOCATION_ACCURACY,
+        mojom::kPrivacyHubGeolocationAdvancedSubpagePath,
+        mojom::SearchResultIcon::kGeolocation,
+        mojom::SearchResultDefaultRank::kMedium,
+        mojom::SearchResultType::kSubpage,
+        {.subpage = mojom::Subpage::kPrivacyHubGeolocationAdvanced}}});
+  return tags;
 }
 
 }  // namespace
@@ -355,14 +318,18 @@ PrivacySection::PrivacySection(Profile* profile,
   }
 
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
-  updater.AddSearchTags(GetPrivacySearchConcepts());
+  updater.AddSearchTags(GetPrivacySearchConceptsSharedWithGuestMode());
+  auto* user = BrowserContextHelper::Get()->GetUserByBrowserContext(profile);
+  if (!IsGuestModeActive(user)) {
+    updater.AddSearchTags(GetPrivacySearchConcepts(user));
+  }
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   updater.AddSearchTags(GetPrivacyGoogleChromeSearchConcepts());
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
   // Fingerprint search tags are added if necessary. Remove fingerprint search
   // tags update dynamically during a user session.
-  if (!IsGuestModeActive() && AreFingerprintSettingsAllowed()) {
+  if (!IsGuestModeActive(user) && AreFingerprintSettingsAllowed()) {
     updater.AddSearchTags(GetFingerprintSearchConcepts());
 
     fingerprint_pref_change_registrar_.Init(pref_service_);
@@ -375,19 +342,33 @@ PrivacySection::PrivacySection(Profile* profile,
 
   updater.AddSearchTags(GetPciguardSearchConcepts());
 
-  // Conditionally adds search tags concepts based on the subset of smart
-  // privacy functionality enabled.
-  updater.AddSearchTags(GetSmartPrivacySearchConcepts());
+  // TODO(crbug.com/376720485): Both features shipped years ago and should be
+  // enabled by default. However, the feature check also checks for the
+  // presence of a command line... so someone else will have to clean this up
+  // one day.
+  //
+  // For now, assume they are always equal.
+  DCHECK_EQ(ash::features::IsSnoopingProtectionEnabled(),
+            ash::features::IsQuickDimEnabled());
+  if (ash::features::IsQuickDimEnabled()) {
+    updater.AddSearchTags(GetSmartPrivacySearchConcepts());
+  }
 
-  // Adds search concepts for the contents in the Privacy controls page
-  // depending on the enabled flags.
-  updater.AddSearchTags(GetPrivacyControlsSearchConcepts());
+  if (!IsGuestModeActive(user)) {
+    // Adds search concepts for the contents in the Privacy controls page
+    // depending on the enabled flags.
+    updater.AddSearchTags(GetPrivacyControlsSearchConcepts(user));
+    if (ash::features::IsCrosPrivacyHubLocationEnabled()) {
+      updater.AddSearchTags(GetPrivacyControlsLocationSearchConcepts(user));
+    }
+  }
 }
 
 PrivacySection::~PrivacySection() = default;
 
 void PrivacySection::AddHandlers(content::WebUI* web_ui) {
-  web_ui->AddMessageHandler(std::make_unique<PeripheralDataAccessHandler>());
+  web_ui->AddMessageHandler(
+      std::make_unique<PeripheralDataAccessHandler>(profile()));
 
   web_ui->AddMessageHandler(std::make_unique<MetricsConsentHandler>(
       profile(), g_browser_process->metrics_service(),
@@ -692,7 +673,7 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddString("geolocationAccuracyLearnMoreUrl",
                          chrome::kPrivacyHubGeolocationAccuracyLearnMoreURL);
 
-  html_source->AddString("osSettingsAppId", web_app::kOsSettingsAppId);
+  html_source->AddString("osSettingsAppId", ash::kOsSettingsAppId);
 
   html_source->AddString(
       "authPrompt",
@@ -866,9 +847,9 @@ void PrivacySection::RegisterHierarchy(HierarchyGenerator* generator) const {
       mojom::SearchResultIcon::kGeolocation,
       mojom::SearchResultDefaultRank::kMedium,
       mojom::kPrivacyHubGeolocationAdvancedSubpagePath);
-  RegisterNestedSettingBulk(mojom::Subpage::kPrivacyHubGeolocation,
-                            {{mojom::Setting::kGeolocationAdvanced}},
-                            generator);
+  RegisterNestedSettingBulk(
+      mojom::Subpage::kPrivacyHubGeolocation,
+      base::span_from_ref(mojom::Setting::kGeolocationAdvanced), generator);
 
   // Privacy hub camera.
   generator->RegisterNestedSubpage(

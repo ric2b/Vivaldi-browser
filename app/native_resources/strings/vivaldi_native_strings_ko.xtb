@@ -5,6 +5,7 @@
 <translation id="1118377629180821201">경관 12</translation>
 <translation id="1158503667684816647">다시 보지 않기</translation>
 <translation id="1222195720020481779">설치 관리자를 실행하는 중...</translation>
+<translation id="1224683873953469764">모바일용 Vivaldi 다운로드하기</translation>
 <translation id="1270785070369717623">Opera GX 브라우저가 실행 중인 상태에서는 설정에 접근할 수 없습니다. Vivaldi로 설정을 불러오려면 작업을 완료한 후 모든 Opera GX 창을 닫아주세요.</translation>
 <translation id="1276145862619442150">스피드 다이얼</translation>
 <translation id="1281950884873973195">동물 6</translation>
@@ -12,6 +13,7 @@
 <translation id="1454726940098520109">다시 확인을 보여주지 않기</translation>
 <translation id="1462666970065907900">정말로 이 창을 닫으실건가요?</translation>
 <translation id="1480046233931937785">크레딧</translation>
+<translation id="1521774566618522728">오늘 활성화됨</translation>
 <translation id="1526344461589023948">다운로드한 업데이트를 저장하던 중 오류가 발생했습니다. 컴퓨터에 저장 공간이 충분한지 확인 후 다시 시도해주세요.</translation>
 <translation id="1635542496948266458">프로필 변경</translation>
 <translation id="1657174850639146440">괴물 9</translation>
@@ -97,6 +99,7 @@
 <translation id="4430019312045809116">볼륨</translation>
 <translation id="443008484043213881">도구</translation>
 <translation id="4456211719108566931">괴물 6</translation>
+<translation id="4459169140545916303"><ph name="DEVICE_LAST_ACTIVATED_TIME" />일 전에 활성화됨</translation>
 <translation id="4512900838580567989">새 탭에 링크 열어놓기</translation>
 <translation id="4545097004879999966">Opera 메일</translation>
 <translation id="4548358047305717967">새 탭에 이미지 열어놓기</translation>
@@ -148,6 +151,7 @@
 <translation id="7099506190679014195">보안 키스토어 업그레이드</translation>
 <translation id="7111492742514999492">경관 9</translation>
 <translation id="7208252576848052204">Arc 브라우저가 실행 중인 상태에서는 설정에 접근할 수 없습니다. Vivaldi로 설정을 불러오려면 작업을 완료한 후 모든 Arc 창을 닫아주세요.</translation>
+<translation id="7321500017121629018">어제 활성화됨</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">설치 관리자를 실행할 수 없습니다. 컴퓨터에 충분한 메모리 또는 저장 공간이 있는지 확인 후 다시 시도해주세요.</translation>
 <translation id="7658239707568436148">취소</translation>

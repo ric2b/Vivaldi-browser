@@ -15,6 +15,8 @@ class PacketWriterImpl final : public quic::QuicPacketWriter {
   explicit PacketWriterImpl(UdpSocket* socket);
   PacketWriterImpl(const PacketWriterImpl&) = delete;
   PacketWriterImpl& operator=(const PacketWriterImpl&) = delete;
+  PacketWriterImpl(PacketWriterImpl&&) noexcept = delete;
+  PacketWriterImpl& operator=(PacketWriterImpl&&) noexcept = delete;
   ~PacketWriterImpl() override;
 
   // quic::QuicPacketWriter overrides.

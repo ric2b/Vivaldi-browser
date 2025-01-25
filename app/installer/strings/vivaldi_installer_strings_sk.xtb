@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">Inštalovať samostatne</translation>
 <translation id="1682285232070778125">Nastaviť Vivaldi ako predvolený prehliadač</translation>
 <translation id="1974060860693918893">Rozšírené</translation>
+<translation id="2053560788696003312">Vivaldi vyžaduje systém Windows 10 alebo novší.</translation>
 <translation id="2134216661302048561">Inštalátor Vivaldi nedokončil aktuálnu inštaláciu prehliadača Vivaldi. Naozaj chcete teraz odisť?</translation>
 <translation id="2286454467119466181">Jednoduché</translation>
 <translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Všetky práva vyhradené. &lt;a&gt;Zásady ochrany osobných údajov&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">Súhlasím a aktualizovať</translation>
 <translation id="5302048478445481009">Jazyk</translation>
 <translation id="694714344624446243">Inštalátor prehliadača Vivaldi</translation>
+<translation id="7467493612551448880">Verzia prehliadača Vivaldi, ktorú inštalujete, nie je optimalizovaná pre verziu systému Windows, ktorú používate.
+
+Navštívte stránku vivaldi.com/download a stiahnite si verziu pre Windows Arm.</translation>
 <translation id="7658239707568436148">Zrušiť</translation>
 <translation id="8773751185824654197">Poznámka: Ak počas aktualizácie je spustený prehliadač Vivaldi, tak bude zatvorený a potom znova spustený</translation>
 <translation id="933060950687965486">Typ inštalácie</translation>

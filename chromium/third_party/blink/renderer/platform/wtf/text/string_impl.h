@@ -161,27 +161,15 @@ class WTF_EXPORT StringImpl {
 
   static scoped_refptr<StringImpl> Create(base::span<const UChar>);
   static scoped_refptr<StringImpl> Create(base::span<const LChar>);
-  static scoped_refptr<StringImpl> Create(const UChar*, wtf_size_t length);
-  static scoped_refptr<StringImpl> Create(const LChar*, wtf_size_t length);
   static scoped_refptr<StringImpl> Create(
-      const LChar*,
-      wtf_size_t length,
+      base::span<const LChar>,
       ASCIIStringAttributes ascii_attributes);
-  static scoped_refptr<StringImpl> Create8BitIfPossible(const UChar*,
-                                                        wtf_size_t length);
-  template <wtf_size_t inlineCapacity>
   static scoped_refptr<StringImpl> Create8BitIfPossible(
-      const Vector<UChar, inlineCapacity>& vector) {
-    return Create8BitIfPossible(vector.data(), vector.size());
-  }
+      base::span<const UChar>);
 
-  ALWAYS_INLINE static scoped_refptr<StringImpl> Create(const char* s,
-                                                        wtf_size_t length) {
-    return Create(reinterpret_cast<const LChar*>(s), length);
-  }
-  static scoped_refptr<StringImpl> Create(const LChar*);
-  ALWAYS_INLINE static scoped_refptr<StringImpl> Create(const char* s) {
-    return Create(reinterpret_cast<const LChar*>(s));
+  ALWAYS_INLINE static scoped_refptr<StringImpl> Create(
+      base::span<const char> s) {
+    return Create(base::as_bytes(s));
   }
 
   // Create a StringImpl with space for `length` LChar characters. `data` will
@@ -222,6 +210,10 @@ class WTF_EXPORT StringImpl {
   }
   ALWAYS_INLINE const void* Bytes() const {
     return reinterpret_cast<const void*>(this + 1);
+  }
+  ALWAYS_INLINE base::span<const uint8_t> RawByteSpan() const {
+    return {reinterpret_cast<const uint8_t*>(this + 1),
+            CharactersSizeInBytes()};
   }
 
   template <typename CharType>
@@ -657,6 +649,17 @@ ALWAYS_INLINE size_t StringImpl::AllocationSize<LChar>(wtf_size_t length) {
   return base::CheckAdd(sizeof(StringImpl), length).ValueOrDie();
 }
 
+WTF_EXPORT bool Equal(const StringView& a, const LChar* b);
+inline bool Equal(const StringView& a, const char* b) {
+  return Equal(a, reinterpret_cast<const LChar*>(b));
+}
+inline bool Equal(const char* a, const StringView& b) {
+  return Equal(b, reinterpret_cast<const LChar*>(a));
+}
+inline bool Equal(const LChar* a, const StringView& b) {
+  return Equal(b, a);
+}
+
 WTF_EXPORT bool Equal(const StringImpl*, const StringImpl*);
 WTF_EXPORT bool Equal(const StringImpl*, const LChar*);
 inline bool Equal(const StringImpl* a, const char* b) {
@@ -949,8 +952,8 @@ static inline int CodeUnitCompare(const StringImpl* string1,
 
 inline scoped_refptr<StringImpl> StringImpl::IsolatedCopy() const {
   if (Is8Bit())
-    return Create(Characters8(), length_);
-  return Create(Characters16(), length_);
+    return Create(Span8());
+  return Create(Span16());
 }
 
 template <typename BufferType>

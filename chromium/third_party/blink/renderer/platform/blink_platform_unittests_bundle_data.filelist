@@ -231,6 +231,7 @@
 ../../web_tests/images/resources/animated-gif-with-offsets.gif
 ../../web_tests/images/resources/animated.gif
 ../../web_tests/images/resources/animated2.gif
+../../web_tests/images/resources/apng-test-suite-dispose-op-none-basic.png
 ../../web_tests/images/resources/apng00.png
 ../../web_tests/images/resources/apng01.png
 ../../web_tests/images/resources/apng08-ref.png
@@ -302,7 +303,7 @@
 ../../web_tests/images/resources/avif/silver-400-matrix-6.avif
 ../../web_tests/images/resources/avif/silver-full-range-srgb-420-8bpc.avif
 ../../web_tests/images/resources/avif/silver.png
-../../web_tests/images/resources/avif/small-with-gainmap-adobe.avif
+../../web_tests/images/resources/avif/small-with-gainmap-iso-gammazero.avif
 ../../web_tests/images/resources/avif/small-with-gainmap-iso-hdrbase.avif
 ../../web_tests/images/resources/avif/small-with-gainmap-iso-usealtcolorspace-differenticc.avif
 ../../web_tests/images/resources/avif/small-with-gainmap-iso-usealtcolorspace.avif

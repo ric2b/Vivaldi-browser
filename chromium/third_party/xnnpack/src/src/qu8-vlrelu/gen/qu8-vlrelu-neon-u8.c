@@ -12,24 +12,24 @@
 #include <arm_neon.h>
 
 #include "xnnpack/common.h"
-#include "xnnpack/vlrelu.h"
+#include "xnnpack/vunary.h"
 
 
 void xnn_qu8_vlrelu_ukernel__neon_u8(
     size_t batch,
     const uint8_t* input,
     uint8_t* output,
-    const union xnn_qu8_lrelu_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
+    const struct xnn_qu8_lrelu_params params[restrict XNN_MIN_ELEMENTS(1)]) XNN_OOB_READS
 {
   assert(batch != 0);
   assert(batch % sizeof(uint8_t) == 0);
   assert(input != NULL);
   assert(output != NULL);
 
-  const uint16x8_t vinput_zero_point = vld1q_dup_u16(&params->neon.input_zero_point);
-  const int16x8_t vpositive_multiplier = vld1q_dup_s16(&params->neon.positive_multiplier);
-  const int16x8_t vnegative_multiplier = vld1q_dup_s16(&params->neon.negative_multiplier);
-  const int16x8_t voutput_zero_point = vld1q_dup_s16(&params->neon.output_zero_point);
+  const uint16x8_t vinput_zero_point = vld1q_dup_u16(&params->scalar.input_zero_point);
+  const int16x8_t vpositive_multiplier = vdupq_n_s16(-params->scalar.positive_multiplier);
+  const int16x8_t vnegative_multiplier = vdupq_n_s16(-params->scalar.negative_multiplier);
+  const int16x8_t voutput_zero_point = vld1q_dup_s16(&params->scalar.output_zero_point);
   for (; batch >= 8 * sizeof(uint8_t); batch -= 8 * sizeof(uint8_t)) {
     const uint8x8_t vx = vld1_u8(input); input += 8;
     int16x8_t vacc = vreinterpretq_s16_u16(vsubw_u8(vinput_zero_point, vx));

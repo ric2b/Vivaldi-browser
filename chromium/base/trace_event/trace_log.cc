@@ -107,10 +107,10 @@ bool g_perfetto_initialized_by_tracelog = false;
 
 TraceLog* g_trace_log_for_testing = nullptr;
 
-ABSL_CONST_INIT thread_local TraceLog::ThreadLocalEventBuffer*
+constinit thread_local TraceLog::ThreadLocalEventBuffer*
     thread_local_event_buffer = nullptr;
-ABSL_CONST_INIT thread_local bool thread_blocks_message_loop = false;
-ABSL_CONST_INIT thread_local bool thread_is_in_trace_event = false;
+constinit thread_local bool thread_blocks_message_loop = false;
+constinit thread_local bool thread_is_in_trace_event = false;
 
 ThreadTicks ThreadNow() {
   return ThreadTicks::IsSupported()
@@ -1643,7 +1643,7 @@ std::string TraceLog::EventToConsoleMessage(char phase,
     thread_event_start_times_[thread_id].pop();
   }
 
-  std::string thread_name = thread_names_[thread_id];
+  const std::string& thread_name = thread_names_[thread_id];
   if (thread_colors_.find(thread_name) == thread_colors_.end()) {
     size_t next_color = (thread_colors_.size() % 6) + 1;
     thread_colors_[thread_name] = next_color;

@@ -63,9 +63,24 @@ void swap(const MatrixType& m) {
   }
   m1 = m1_copy;
   m2 = m2_copy;
+  d1 = m1.data(), d2 = m2.data();
+  swap(m1, m2);
+  VERIFY_IS_APPROX(m1, m2_copy);
+  VERIFY_IS_APPROX(m2, m1_copy);
+  if (MatrixType::SizeAtCompileTime == Dynamic) {
+    VERIFY(m1.data() == d2);
+    VERIFY(m2.data() == d1);
+  }
+  m1 = m1_copy;
+  m2 = m2_copy;
 
   // test swapping 2 matrices of different types
   m1.swap(m3);
+  VERIFY_IS_APPROX(m1, m3_copy);
+  VERIFY_IS_APPROX(m3, m1_copy);
+  m1 = m1_copy;
+  m3 = m3_copy;
+  swap(m1, m3);
   VERIFY_IS_APPROX(m1, m3_copy);
   VERIFY_IS_APPROX(m3, m1_copy);
   m1 = m1_copy;
@@ -77,9 +92,19 @@ void swap(const MatrixType& m) {
   VERIFY_IS_APPROX(m2, m1_copy);
   m1 = m1_copy;
   m2 = m2_copy;
+  swap(m1, m2.block(0, 0, rows, cols));
+  VERIFY_IS_APPROX(m1, m2_copy);
+  VERIFY_IS_APPROX(m2, m1_copy);
+  m1 = m1_copy;
+  m2 = m2_copy;
 
   // test swapping two expressions of different types
   m1.transpose().swap(m3.transpose());
+  VERIFY_IS_APPROX(m1, m3_copy);
+  VERIFY_IS_APPROX(m3, m1_copy);
+  m1 = m1_copy;
+  m3 = m3_copy;
+  swap(m1.transpose(), m3.transpose());
   VERIFY_IS_APPROX(m1, m3_copy);
   VERIFY_IS_APPROX(m3, m1_copy);
   m1 = m1_copy;

@@ -12,7 +12,7 @@ import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import {SearchResultsPane} from './SearchResultsPane.js';
-import {type SearchResult, type SearchScope} from './SearchScope.js';
+import type {SearchResult, SearchScope} from './SearchScope.js';
 import searchViewStyles from './searchView.css.js';
 
 const UIStrings = {
@@ -95,7 +95,6 @@ function createSearchToggleButton(iconName: string, jslogContext: string): Butto
   const button = new Buttons.Button.Button();
   button.data = {
     variant: Buttons.Button.Variant.ICON_TOGGLE,
-    size: Buttons.Button.Size.SMALL,
     iconName,
     toggledIconName: iconName,
     toggleType: Buttons.Button.ToggleType.PRIMARY,
@@ -192,7 +191,6 @@ export class SearchView extends UI.Widget.VBox {
     const clearInputFieldButton = new Buttons.Button.Button();
     clearInputFieldButton.data = {
       variant: Buttons.Button.Variant.ICON,
-      size: Buttons.Button.Size.SMALL,
       iconName: 'cross-circle-filled',
       jslogContext: 'clear-input',
       title: i18nString(UIStrings.clearInput),

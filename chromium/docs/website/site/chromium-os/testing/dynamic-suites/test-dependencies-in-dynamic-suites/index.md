@@ -115,7 +115,7 @@ determine that choosing both hosts would successfully cover. The problem is that
 the second test cannot be run in this testbed, as no machine meets all its
 dependencies.
 
-## A dead-stupid first pass (read: what we've implemented so far!)
+## A simple first pass which we've implemented so far!
 
 Since we only have tests with a single dependency these days, we’re going to
 start by gathering all the deps of all the tests in the suite, de-duping them,

@@ -364,7 +364,7 @@ compromises which exist only within an active session.
 
 The Chrome browser in ChromeOS brings security features like renderer process
 sandboxing, Safe Browsing, and Site Isolation, which provide protections against
-non-persistent compromises: its harder for malicious webpages to compromise the
+non-persistent compromises: it's harder for malicious webpages to compromise the
 OS. These features are enabled by default, and protect all Chrome users,
 including those on ChromeOS. For ChromeOS users, Verified boot means increased
 protection from persistent compromises: even in the unlikely case that a device

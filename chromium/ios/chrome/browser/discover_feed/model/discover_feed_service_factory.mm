@@ -18,18 +18,17 @@
 #import "ios/public/provider/chrome/browser/discover_feed/discover_feed_api.h"
 
 // static
-DiscoverFeedService* DiscoverFeedServiceFactory::GetForBrowserState(
-    ProfileIOS* profile,
-    bool create) {
-  return GetForProfile(profile, create);
+DiscoverFeedService* DiscoverFeedServiceFactory::GetForProfile(
+    ProfileIOS* profile) {
+  return static_cast<DiscoverFeedService*>(
+      GetInstance()->GetServiceForBrowserState(profile, /*create=*/true));
 }
 
 // static
-DiscoverFeedService* DiscoverFeedServiceFactory::GetForProfile(
-    ProfileIOS* profile,
-    bool create) {
+DiscoverFeedService* DiscoverFeedServiceFactory::GetForProfileIfExists(
+    ProfileIOS* profile) {
   return static_cast<DiscoverFeedService*>(
-      GetInstance()->GetServiceForBrowserState(profile, create));
+      GetInstance()->GetServiceForBrowserState(profile, /*create=*/false));
 }
 
 // static
@@ -57,11 +56,11 @@ DiscoverFeedServiceFactory::BuildServiceInstanceFor(
 
   DiscoverFeedConfiguration* configuration =
       [[DiscoverFeedConfiguration alloc] init];
-  configuration.browserStatePrefService = profile->GetPrefs();
+  configuration.profilePrefService = profile->GetPrefs();
   configuration.localStatePrefService =
       GetApplicationContext()->GetLocalState();
   configuration.authService =
-      AuthenticationServiceFactory::GetForBrowserState(profile);
+      AuthenticationServiceFactory::GetForProfile(profile);
   configuration.identityManager =
       IdentityManagerFactory::GetForProfile(profile);
   configuration.metricsRecorder =
@@ -69,8 +68,8 @@ DiscoverFeedServiceFactory::BuildServiceInstanceFor(
   configuration.singleSignOnService =
       GetApplicationContext()->GetSingleSignOnService();
   configuration.templateURLService =
-      ios::TemplateURLServiceFactory::GetForBrowserState(profile);
-  configuration.syncService = SyncServiceFactory::GetForBrowserState(profile);
+      ios::TemplateURLServiceFactory::GetForProfile(profile);
+  configuration.syncService = SyncServiceFactory::GetForProfile(profile);
 
   return ios::provider::CreateDiscoverFeedService(configuration);
 }

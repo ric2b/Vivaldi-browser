@@ -7,6 +7,8 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 
+#include "base/command_line.h"
+
 namespace base {
 
 namespace {
@@ -80,6 +82,17 @@ bool ScopedTempDir::Delete() {
     // We only clear the path if deleted the directory.
     path_.clear();
   }
+#if BUILDFLAG(IS_WIN)
+  // Testcode windows
+  else {
+
+    if (base::CommandLine::ForCurrentProcess()->GetProgram().BaseName() ==
+        FilePath(FILE_PATH_LITERAL("browser_tests.exe"))) {
+      LOG(ERROR) << "FAILED to delete Temp dir:"<< ::GetLastError() << ":" << path_.BaseName().AsUTF8Unsafe() ;
+    }
+  }
+  // End test code
+#endif
 
   return ret;
 }

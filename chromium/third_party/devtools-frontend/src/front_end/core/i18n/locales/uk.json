@@ -80,6 +80,9 @@
   "core/common/ResourceType.ts | ws": {
     "message": "WS"
   },
+  "core/common/Revealer.ts | animationsPanel": {
+    "message": "Панель \"Анімації\""
+  },
   "core/common/Revealer.ts | applicationPanel": {
     "message": "Панель \"Додаток\""
   },
@@ -199,24 +202,6 @@
   },
   "core/host/ResourceLoader.ts | unknownError": {
     "message": "Невідома помилка"
-  },
-  "core/i18n/time-utilities.ts | fdays": {
-    "message": "{PH1} дн."
-  },
-  "core/i18n/time-utilities.ts | fhrs": {
-    "message": "{PH1} год"
-  },
-  "core/i18n/time-utilities.ts | fmin": {
-    "message": "{PH1} хв"
-  },
-  "core/i18n/time-utilities.ts | fmms": {
-    "message": "{PH1} мкс"
-  },
-  "core/i18n/time-utilities.ts | fms": {
-    "message": "{PH1} мс"
-  },
-  "core/i18n/time-utilities.ts | fs": {
-    "message": "{PH1} с"
   },
   "core/sdk/CPUProfilerModel.ts | profileD": {
     "message": "Профіль {PH1}"
@@ -344,9 +329,6 @@
   "core/sdk/NetworkRequest.ts | domainMismatch": {
     "message": "Цей файл cookie заблоковано, оскільки домен URL-адреси запиту не є ні точним збігом, ні субдоменом визначеного для файлу cookie атрибута Domain."
   },
-  "core/sdk/NetworkRequest.ts | exemptionReasonCorsOptIn": {
-    "message": "Цей файл cookie дозволено, оскільки ввімкнено запити CORS. Докладніше: goo.gle/cors."
-  },
   "core/sdk/NetworkRequest.ts | exemptionReasonEnterprisePolicy": {
     "message": "Цей файл cookie дозволено правилом Chrome Enterprise. Докладніше: goo.gle/ce-3pc."
   },
@@ -357,16 +339,19 @@
     "message": "Цей файл cookie дозволено завдяки Storage Access API. Докладніше: goo.gle/saa."
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTPCDDeprecationTrial": {
-    "message": "Цей файл cookie дозволено через експеримент із застарілою функцією в межах припинення підтримки сторонніх файлів cookie. Докладніше: goo.gle/ps-dt."
+    "message": "Цей файл cookie дозволено через експеримент із застарілою функцією щодо сторонніх файлів cookie. Докладніше: goo.gle/ps-dt."
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTPCDHeuristics": {
-    "message": "Цей файл cookie дозволено через евристичні методи припинення підтримки сторонніх файлів cookie. Докладніше: goo.gle/hbe."
+    "message": "Цей файл cookie дозволено через евристичні методи сторонніх файлів cookie. Докладніше: goo.gle/hbe."
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTPCDMetadata": {
     "message": "Цей файл cookie дозволено в межах пільгового періоду експерименту із застарілою функцією щодо сторонніх файлів cookie. Докладніше: goo.gle/dt-grace."
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonTopLevelStorageAccessAPI": {
     "message": "Цей файл cookie дозволено завдяки Storage Access API вищого рівня. Докладніше: goo.gle/saa-top."
+  },
+  "core/sdk/NetworkRequest.ts | exemptionReasonTopLevelTPCDDeprecationTrial": {
+    "message": "Цей файл cookie дозволено в межах експерименту із застарілою функцією вищого рівня щодо сторонніх файлів cookie. Докладніше: goo.gle/ps-dt."
   },
   "core/sdk/NetworkRequest.ts | exemptionReasonUserSetting": {
     "message": "Цей файл cookie дозволено налаштуваннями користувача."
@@ -411,7 +396,7 @@
     "message": "Схема цього з'єднання не може зберігати файли cookie."
   },
   "core/sdk/NetworkRequest.ts | thirdPartyPhaseout": {
-    "message": "Цей файл cookie заблоковано, оскільки ми поступово припиняємо підтримку сторонніх файлів cookie. Дізнайтеся більше на вкладці \"Проблеми\"."
+    "message": "Цей файл cookie заблоковано через експериментальні параметри Chrome або конфігурацію вебпереглядача. Дізнайтеся більше на панелі \"Проблеми\"."
   },
   "core/sdk/NetworkRequest.ts | thisSetcookieDidntSpecifyASamesite": {
     "message": "Для цього заголовка Set-Cookie без визначеного атрибута SameSite за умовчанням було застосовано SameSite=Lax\". Заголовок заблоковано, оскільки він надійшов як міжсайтова відповідь, що не була відповіддю на навігацію верхнього рівня. Вона вважається міжсайтовою, оскільки схема URL-адреси відрізняється від схеми поточного сайту."
@@ -435,7 +420,7 @@
     "message": "Цю спробу налаштувати файл cookie через заголовок Set-Cookie заблоковано, оскільки файл cookie завеликий. Сукупний розмір назви та значення має бути не більшим за 4096 символів."
   },
   "core/sdk/NetworkRequest.ts | thisSetcookieWasBlockedDueThirdPartyPhaseout": {
-    "message": "Налаштування цього файлу cookie заблоковано, оскільки ми поступово припиняємо підтримку сторонніх файлів cookie. Дізнайтеся більше на вкладці \"Проблеми\"."
+    "message": "Налаштування цього файлу cookie заблоковано через експериментальні параметри Chrome або конфігурацію вебпереглядача. Дізнайтеся більше на панелі \"Проблеми\"."
   },
   "core/sdk/NetworkRequest.ts | thisSetcookieWasBlockedDueToUser": {
     "message": "Цю спробу налаштувати файл cookie через заголовок Set-Cookie заблоковано відповідно до налаштувань користувача."
@@ -451,6 +436,9 @@
   },
   "core/sdk/PageResourceLoader.ts | loadCanceledDueToReloadOf": {
     "message": "Завантаження скасовано через перезавантаження сторінки, що перевіряється"
+  },
+  "core/sdk/RehydratingConnection.ts | noSourceText": {
+    "message": "Не вказано вихідний текст"
   },
   "core/sdk/Script.ts | scriptRemovedOrDeleted": {
     "message": "Скрипт видалено."
@@ -512,6 +500,21 @@
   "core/sdk/ServiceWorkerManager.ts | stopping": {
     "message": "зупинення"
   },
+  "core/sdk/SourceMapScopeChainEntry.ts | block": {
+    "message": "Блок"
+  },
+  "core/sdk/SourceMapScopeChainEntry.ts | closure": {
+    "message": "Замикання"
+  },
+  "core/sdk/SourceMapScopeChainEntry.ts | global": {
+    "message": "Глобальні"
+  },
+  "core/sdk/SourceMapScopeChainEntry.ts | local": {
+    "message": "Локальні"
+  },
+  "core/sdk/SourceMapScopeChainEntry.ts | returnValue": {
+    "message": "Повернене значення"
+  },
   "core/sdk/sdk-meta.ts | achromatopsia": {
     "message": "Ахроматопсія (немає кольору)"
   },
@@ -534,7 +537,7 @@
     "message": "Вимкнути формат AVIF"
   },
   "core/sdk/sdk-meta.ts | disableCache": {
-    "message": "Вимкнути кеш (коли відкрито Інструменти розробника)"
+    "message": "Вимкнути кеш, коли відкрито Інструменти розробника"
   },
   "core/sdk/sdk-meta.ts | disableJavascript": {
     "message": "Вимкнути JavaScript"
@@ -650,9 +653,6 @@
   "core/sdk/sdk-meta.ts | extendGridLines": {
     "message": "Продовжувати лінії сітки"
   },
-  "core/sdk/sdk-meta.ts | hideCoreWebVitalsOverlay": {
-    "message": "Сховати оверлей основних веб-показників"
-  },
   "core/sdk/sdk-meta.ts | hideFramesPerSecondFpsMeter": {
     "message": "Сховати лічильник кадрів на секунду"
   },
@@ -673,6 +673,9 @@
   },
   "core/sdk/sdk-meta.ts | highlightAdFrames": {
     "message": "Виділити фрейми оголошень"
+  },
+  "core/sdk/sdk-meta.ts | networkCacheExplanation": {
+    "message": "Щоб імітувати мережеву взаємодію під час першого відвідування сторінки, вимкніть мережевий кеш."
   },
   "core/sdk/sdk-meta.ts | networkRequestBlocking": {
     "message": "Блокування запитів мережі"
@@ -703,9 +706,6 @@
   },
   "core/sdk/sdk-meta.ts | showAreaNames": {
     "message": "Показувати назви областей"
-  },
-  "core/sdk/sdk-meta.ts | showCoreWebVitalsOverlay": {
-    "message": "Показати оверлей основних веб-показників"
   },
   "core/sdk/sdk-meta.ts | showFramesPerSecondFpsMeter": {
     "message": "Показати лічильник кадрів на секунду"
@@ -763,9 +763,6 @@
   },
   "entrypoints/inspector_main/OutermostTargetSelector.ts | targetS": {
     "message": "Сторінка: {PH1}"
-  },
-  "entrypoints/inspector_main/RenderingOptions.ts | coreWebVitals": {
-    "message": "Основні веб-показники"
   },
   "entrypoints/inspector_main/RenderingOptions.ts | disableAvifImageFormat": {
     "message": "Вимкнути формат зображень AVIF"
@@ -853,9 +850,6 @@
   },
   "entrypoints/inspector_main/RenderingOptions.ts | scrollingPerformanceIssues": {
     "message": "Проблеми з продуктивністю прокручування"
-  },
-  "entrypoints/inspector_main/RenderingOptions.ts | showsAnOverlayWithCoreWebVitals": {
-    "message": "Показує оверлей з основними веб-показниками."
   },
   "entrypoints/inspector_main/RenderingOptions.ts | showsLayerBordersOrangeoliveAnd": {
     "message": "Відображення меж шару (помаранчевим/оливковим) і компонентів мозаїки (бірюзовим)."
@@ -965,14 +959,14 @@
   "entrypoints/main/main-meta.ts | auto": {
     "message": "авто"
   },
+  "entrypoints/main/main-meta.ts | autoTheme": {
+    "message": "Автоматично"
+  },
   "entrypoints/main/main-meta.ts | bottom": {
     "message": "Унизу"
   },
   "entrypoints/main/main-meta.ts | browserLanguage": {
     "message": "Мова інтерфейсу веб-переглядача"
-  },
-  "entrypoints/main/main-meta.ts | browserPreference": {
-    "message": "Налаштування вебпереглядача"
   },
   "entrypoints/main/main-meta.ts | cancelSearch": {
     "message": "Скасувати пошук"
@@ -994,6 +988,9 @@
   },
   "entrypoints/main/main-meta.ts | dockToRight": {
     "message": "Закріпити праворуч"
+  },
+  "entrypoints/main/main-meta.ts | dontMatchChromeColorSchemeCommand": {
+    "message": "Не зіставляти з колірною схемою Chrome"
   },
   "entrypoints/main/main-meta.ts | enableCtrlShortcutToSwitchPanels": {
     "message": "Увімкнути комбінації клавіш Ctrl + 1–9, щоб переходити між панелями"
@@ -1028,6 +1025,15 @@
   "entrypoints/main/main-meta.ts | lightLower": {
     "message": "світла"
   },
+  "entrypoints/main/main-meta.ts | matchChromeColorScheme": {
+    "message": "Зіставити з колірною схемою Chrome"
+  },
+  "entrypoints/main/main-meta.ts | matchChromeColorSchemeCommand": {
+    "message": "Зіставити з колірною схемою Chrome"
+  },
+  "entrypoints/main/main-meta.ts | matchChromeColorSchemeDocumentation": {
+    "message": "Підберіть кольори Інструментів розробника відповідно до власної теми Chrome (якщо використовується)"
+  },
   "entrypoints/main/main-meta.ts | nextPanel": {
     "message": "Наступна панель"
   },
@@ -1061,8 +1067,8 @@
   "entrypoints/main/main-meta.ts | searchOnEnterCommand": {
     "message": "Вимкнути пошук під час введення (натисніть Enter, щоб шукати)"
   },
-  "entrypoints/main/main-meta.ts | switchToBrowserPreferredColor": {
-    "message": "Застосувати колірну тему вебпереглядача"
+  "entrypoints/main/main-meta.ts | switchToBrowserPreferredTheme": {
+    "message": "Застосувати тему вебпереглядача"
   },
   "entrypoints/main/main-meta.ts | switchToDarkTheme": {
     "message": "Застосувати темну тему"
@@ -1145,9 +1151,6 @@
   "generated/Deprecation.ts | CSSCustomStateDeprecatedSyntax": {
     "message": ":--customstatename не підтримується. Натомість використовуйте синтаксис :state(customstatename)."
   },
-  "generated/Deprecation.ts | CSSInsetAreaProperty": {
-    "message": "Властивість inset-area не підтримується. Натомість використовуйте властивість position-area."
-  },
   "generated/Deprecation.ts | CSSSelectorInternalMediaControlsOverlayCastButton": {
     "message": "Щоб вимкнути інтеграцію Google Cast за умовчанням, використовуйте атрибут disableRemotePlayback замість засобу вибору -internal-media-controls-overlay-cast-button."
   },
@@ -1184,20 +1187,11 @@
   "generated/Deprecation.ts | DataUrlInSvgUse": {
     "message": "Обробка даних: підтримку URL-адрес у SVGUseElement припинено, і в майбутньому цю функцію буде вилучено."
   },
-  "generated/Deprecation.ts | DelegatedInkExpectedImprovement": {
-    "message": "DelegatedInkTrailPresenter.expectedImprovement не підтримується через можливі проблеми зі створенням цифрових відбитків."
-  },
-  "generated/Deprecation.ts | DocumentDomainSettingWithoutOriginAgentClusterHeader": {
-    "message": "Правило одного джерела більше не можна буде послаблювати, налаштувавши document.domain, і цю функцію буде вилучено. Щоб продовжити користуватися цією функцією, вимкніть кластери агентів за ключем джерела. Для цього надішліть заголовок Origin-Agent-Cluster: ?0 із відповіддю HTTP для документа й фреймів. Докладніше читайте на сторінці https://developer.chrome.com/blog/immutable-document-domain/."
-  },
   "generated/Deprecation.ts | GeolocationInsecureOrigin": {
     "message": "getCurrentPosition() і watchPosition() більше не працюють із незахищеними джерелами. Щоб користуватися цією функцією, перенесіть свій додаток на захищене джерело, наприклад HTTPS. Докладніше читайте на сторінці https://goo.gle/chrome-insecure-origins."
   },
   "generated/Deprecation.ts | GeolocationInsecureOriginDeprecatedNotRemoved": {
     "message": "getCurrentPosition() і watchPosition() з незахищених джерел не підтримуються. Щоб користуватися цією функцією, перенесіть свій додаток на захищене джерело, наприклад HTTPS. Докладніше читайте на сторінці https://goo.gle/chrome-insecure-origins."
-  },
-  "generated/Deprecation.ts | GetInnerHTML": {
-    "message": "Функція getInnerHTML() більше не підтримується, і незабаром її буде вилучено із цього вебпереглядача. Натомість використовуйте функцію getHTML()."
   },
   "generated/Deprecation.ts | GetUserMediaInsecureOrigin": {
     "message": "getUserMedia() більше не працює з незахищеними джерелами. Щоб користуватися цією функцією, перенесіть свій додаток на захищене джерело, наприклад HTTPS. Докладніше читайте на сторінці https://goo.gle/chrome-insecure-origins."
@@ -1307,6 +1301,9 @@
   "generated/Deprecation.ts | UnloadHandler": {
     "message": "Вивантаження блоків прослуховування подій не підтримується, і їх буде вилучено."
   },
+  "generated/Deprecation.ts | V8GPUAdapter_RequestAdapterInfo_Method": {
+    "message": "Метод GPUAdapter requestAdapterInfo() більше не підтримується. Натомість використовуйте атрибут GPUAdapter info."
+  },
   "generated/Deprecation.ts | V8SharedArrayBufferConstructedInExtensionWithoutIsolation": {
     "message": "Для розширень потрібно ввімкнути ізоляцію від міждоменних джерел, щоб і надалі використовувати SharedArrayBuffer. Докладніше читайте на сторінці https://developer.chrome.com/docs/extensions/mv3/cross-origin-isolation/."
   },
@@ -1348,6 +1345,9 @@
   },
   "models/bindings/DebuggerLanguagePlugins.ts | loadingDebugSymbolsForVia": {
     "message": "[{PH1}] Завантаження символів налагодження для {PH2} (через {PH3})…"
+  },
+  "models/bindings/IgnoreListManager.ts | addAllAnonymousScriptsToIgnoreList": {
+    "message": "Додати всі анонімні скрипти в список ігнорування"
   },
   "models/bindings/IgnoreListManager.ts | addAllContentScriptsToIgnoreList": {
     "message": "Додати всі скрипти розширень у список ігнорування"
@@ -1440,7 +1440,7 @@
     "message": "Trusted Types – порушення правил"
   },
   "models/issues_manager/CookieDeprecationMetadataIssue.ts | thirdPartyPhaseoutExplained": {
-    "message": "Підготовка до припинення підтримки сторонніх файлів cookie"
+    "message": "Зміни в обробці сторонніх файлів cookie в Chrome"
   },
   "models/issues_manager/CookieIssue.ts | aSecure": {
     "message": "a secure"
@@ -1449,10 +1449,10 @@
     "message": "an insecure"
   },
   "models/issues_manager/CookieIssue.ts | consoleTpcdErrorMessage": {
-    "message": "Сторонній файл cookie блокується в Chrome завдяки технологіям Privacy Sandbox."
+    "message": "Сторонній файл cookie заблоковано через експериментальні параметри Chrome або конфігурацію вебпереглядача."
   },
   "models/issues_manager/CookieIssue.ts | consoleTpcdWarningMessage": {
-    "message": "Сторонній файл cookie блокуватиметься в майбутніх версіях Chrome завдяки технологіям Privacy Sandbox."
+    "message": "Chrome пропонуватиме користувачам переглядати вебсторінки без сторонніх файлів cookie."
   },
   "models/issues_manager/CookieIssue.ts | fileCrosSiteRedirectBug": {
     "message": "Повідомити про помилку"
@@ -1467,7 +1467,7 @@
     "message": "Пояснення файлів cookie з атрибутом SameSite"
   },
   "models/issues_manager/CookieIssue.ts | thirdPartyPhaseoutExplained": {
-    "message": "Підготовка до припинення підтримки сторонніх файлів cookie"
+    "message": "Зміни в обробці сторонніх файлів cookie в Chrome"
   },
   "models/issues_manager/CorsIssue.ts | CORS": {
     "message": "Cross Origin Resource Sharing (CORS)"
@@ -1572,7 +1572,7 @@
     "message": "скинути"
   },
   "models/persistence/EditFileSystemView.ts | add": {
-    "message": "Додати"
+    "message": "Додати папку"
   },
   "models/persistence/EditFileSystemView.ts | enterAPath": {
     "message": "Укажіть шлях"
@@ -1581,7 +1581,7 @@
     "message": "Укажіть унікальний шлях"
   },
   "models/persistence/EditFileSystemView.ts | excludedFolders": {
-    "message": "Виключені папки"
+    "message": "Виключені підпапки"
   },
   "models/persistence/EditFileSystemView.ts | folderPath": {
     "message": "Шлях до папки"
@@ -1591,6 +1591,9 @@
   },
   "models/persistence/EditFileSystemView.ts | sViaDevtools": {
     "message": "{PH1} (через Інструменти розробника)"
+  },
+  "models/persistence/EditFileSystemView.ts | url": {
+    "message": "URL-адреса"
   },
   "models/persistence/IsolatedFileSystem.ts | blobCouldNotBeLoaded": {
     "message": "Не вдалося завантажити великий двійковий об'єкт."
@@ -1641,10 +1644,10 @@
     "message": "PlatformFileSystem не вдається прочитати файли."
   },
   "models/persistence/WorkspaceSettingsTab.ts | addFolder": {
-    "message": "Додати папку…"
+    "message": "Додати папку"
   },
   "models/persistence/WorkspaceSettingsTab.ts | folderExcludePattern": {
-    "message": "Шаблон виключення папки"
+    "message": "Виключити з робочої області"
   },
   "models/persistence/WorkspaceSettingsTab.ts | mappingsAreInferredAutomatically": {
     "message": "Зіставлення отримуються автоматично."
@@ -1685,8 +1688,65 @@
   "models/persistence/persistence-meta.ts | workspace": {
     "message": "Робоча область"
   },
-  "models/timeline_model/TimelineJSProfile.ts | threadS": {
-    "message": "Потік {PH1}"
+  "models/trace/insights/CLSCulprits.ts | description": {
+    "message": "Зміщення макета відбувається, коли елементи переміщуються без взаємодії з користувачем. [Дізнайтеся причини зміщення макета](https://web.dev/articles/optimize-cls), наприклад додавання або видалення елементів чи зміна шрифтів під час завантаження сторінки."
+  },
+  "models/trace/insights/CLSCulprits.ts | title": {
+    "message": "Причини зміщення макета"
+  },
+  "models/trace/insights/DocumentLatency.ts | description": {
+    "message": "Перший запит мережі найважливіший.  Щоб зменшити його затримку, уникайте переспрямувань, забезпечте швидку відповідь сервера й увімкніть стиснення тексту."
+  },
+  "models/trace/insights/DocumentLatency.ts | title": {
+    "message": "Затримка запиту на документ"
+  },
+  "models/trace/insights/FontDisplay.ts | description": {
+    "message": "Щоб текст завжди був видимим, змініть значення властивості [font-display](https://developer.chrome.com/blog/font-display) на swap або optional. Щоб зменшити зміщення макета, можна додатково оптимізувати swap за допомогою [перевизначення показників шрифту](https://developer.chrome.com/blog/font-fallbacks)."
+  },
+  "models/trace/insights/FontDisplay.ts | title": {
+    "message": "Відображення шрифту"
+  },
+  "models/trace/insights/InteractionToNextPaint.ts | description": {
+    "message": "Почніть аналіз із найдовшої фази. [Затримки можна зменшити.](https://web.dev/articles/optimize-inp#optimize_interactions) Щоб скоротити час обробки, [оптимізуйте витрати основного потоку](https://web.dev/articles/optimize-long-tasks), часто JS."
+  },
+  "models/trace/insights/InteractionToNextPaint.ts | title": {
+    "message": "Показник INP за етапами"
+  },
+  "models/trace/insights/LCPDiscovery.ts | description": {
+    "message": "Щоб оптимізувати показник LCP, зробіть зображення LCP [видимим](https://web.dev/articles/optimize-lcp#1_eliminate_resource_load_delay) у HTML-коді відразу й [не використовуйте відкладене завантаження](https://web.dev/articles/lcp-lazy-loading)"
+  },
+  "models/trace/insights/LCPDiscovery.ts | title": {
+    "message": "Виявлення запитів LCP"
+  },
+  "models/trace/insights/LCPPhases.ts | description": {
+    "message": "Для кожного етапу передбачено [конкретні стратегії оптимізації](https://web.dev/articles/optimize-lcp#lcp-breakdown). В ідеалі більшість часу LCP має витрачатися на завантаження ресурсів, не в межах затримок."
+  },
+  "models/trace/insights/LCPPhases.ts | title": {
+    "message": "Показник LCP за етапами"
+  },
+  "models/trace/insights/RenderBlocking.ts | description": {
+    "message": "Запити блокують початкове відображення сторінки, що може викликати затримку завантаження елементів LCP. За допомогою [відкладання або вставки](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources/) можна усунути ці запити мережі з критичного шляху."
+  },
+  "models/trace/insights/RenderBlocking.ts | title": {
+    "message": "Запити, які блокують відображення"
+  },
+  "models/trace/insights/SlowCSSSelector.ts | description": {
+    "message": "Якщо витрати на повторне обчислення стилю залишаються високими, їх можна зменшити за допомогою оптимізації селектора. [Оптимізуйте селектори](https://developer.chrome.com/docs/devtools/performance/selector-stats), які мають і тривалий час виконання, і високий відсоток повільних шляхів. Щоб зменшити витрати на зіставлення, використовуйте менше селекторів, обирайте їх простіші варіанти, а також надавайте перевагу компактнішій і менш розгалуженій архітектурі інтерфейсу DOM."
+  },
+  "models/trace/insights/SlowCSSSelector.ts | title": {
+    "message": "Витрати на селектор CSS"
+  },
+  "models/trace/insights/ThirdParties.ts | description": {
+    "message": "Сторонній код може значно погіршити швидкість завантаження. [Зменште обсяг стороннього коду й відкладіть його завантаження](https://developers.google.com/web/fundamentals/performance/optimizing-content-efficiency/loading-third-party-javascript/), щоб надати пріоритет контенту сторінки."
+  },
+  "models/trace/insights/ThirdParties.ts | title": {
+    "message": "Сторонній код"
+  },
+  "models/trace/insights/Viewport.ts | description": {
+    "message": "Область перегляду сторінки не оптимізовано для мобільних пристроїв, тому взаємодія за допомогою дотику може відбуватися із затримкою [до 300 мс](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/)."
+  },
+  "models/trace/insights/Viewport.ts | title": {
+    "message": "Область перегляду не оптимізовано для мобільних пристроїв"
   },
   "models/workspace/UISourceCode.ts | index": {
     "message": "(індекс)"
@@ -2453,6 +2513,21 @@
   "panels/application/ApplicationPanelSidebar.ts | documentNotAvailable": {
     "message": "Документ недоступний"
   },
+  "panels/application/ApplicationPanelSidebar.ts | extensionLocalStorage": {
+    "message": "Локальне"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | extensionManagedStorage": {
+    "message": "Кероване"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | extensionSessionStorage": {
+    "message": "Сеанс"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | extensionStorage": {
+    "message": "Сховище розширення"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | extensionSyncStorage": {
+    "message": "Синхронізація"
+  },
   "panels/application/ApplicationPanelSidebar.ts | frames": {
     "message": "Фрейми"
   },
@@ -2633,16 +2708,28 @@
   "panels/application/DOMStorageItemsView.ts | domStorageItemsCleared": {
     "message": "Об’єкти сховища DOM очищено"
   },
-  "panels/application/DOMStorageItemsView.ts | domStorageNumberEntries": {
-    "message": "Кількість записів, показаних у таблиці: {PH1}"
-  },
   "panels/application/DOMStorageItemsView.ts | key": {
     "message": "Ключ"
   },
-  "panels/application/DOMStorageItemsView.ts | selectAValueToPreview": {
-    "message": "Виберіть значення для перегляду"
-  },
   "panels/application/DOMStorageItemsView.ts | value": {
+    "message": "Значення"
+  },
+  "panels/application/ExtensionStorageItemsView.ts | extensionStorage": {
+    "message": "Сховище розширення"
+  },
+  "panels/application/ExtensionStorageItemsView.ts | extensionStorageItemDeleted": {
+    "message": "Об’єкт видалено зі сховища."
+  },
+  "panels/application/ExtensionStorageItemsView.ts | extensionStorageItems": {
+    "message": "Об’єкти сховища розширення"
+  },
+  "panels/application/ExtensionStorageItemsView.ts | extensionStorageItemsCleared": {
+    "message": "Об’єкти сховища розширення очищено"
+  },
+  "panels/application/ExtensionStorageItemsView.ts | key": {
+    "message": "Ключ"
+  },
+  "panels/application/ExtensionStorageItemsView.ts | value": {
     "message": "Значення"
   },
   "panels/application/IndexedDBViews.ts | clearObjectStore": {
@@ -2726,8 +2813,8 @@
   "panels/application/OpenedWindowDetailsView.ts | accessToOpener": {
     "message": "Доступ до сторінки, що відкрила вікно"
   },
-  "panels/application/OpenedWindowDetailsView.ts | clickToRevealInElementsPanel": {
-    "message": "Натисніть, щоб показати на панелі \"Елементи\""
+  "panels/application/OpenedWindowDetailsView.ts | clickToOpenInElementsPanel": {
+    "message": "Натисніть, щоб відкрити на панелі \"Елементи\""
   },
   "panels/application/OpenedWindowDetailsView.ts | closed": {
     "message": "закрито"
@@ -3167,6 +3254,9 @@
   "panels/application/components/BackForwardCacheStrings.ts | containsPlugins": {
     "message": "Сторінки з плагінами наразі не підходять для зворотного кешу."
   },
+  "panels/application/components/BackForwardCacheStrings.ts | contentDiscarded": {
+    "message": "Не визначено"
+  },
   "panels/application/components/BackForwardCacheStrings.ts | contentFileChooser": {
     "message": "Сторінки, які використовують FileChooser API, не підходять для зворотного кешу."
   },
@@ -3507,7 +3597,7 @@
     "message": "Фрейми"
   },
   "panels/application/components/BackForwardCacheView.ts | issuesInMultipleFrames": {
-    "message": "{n,plural, =1{# проблему виявлено в {m} фреймі.}one{# проблему виявлено в {m} фреймі.}few{# проблеми виявлено в {m} фреймах.}many{# проблем виявлено в {m} фреймах.}other{# проблеми виявлено в {m} фрейму.}}"
+    "message": "{n,plural, =1{В {m} фреймі виявлено стільки проблем: #.}one{У {m} фреймі виявлено стільки проблем: #.}few{У {m} фреймах виявлено стільки проблем: #.}many{У {m} фреймах виявлено стільки проблем: #.}other{У {m} фрейму виявлено стільки проблем: #.}}"
   },
   "panels/application/components/BackForwardCacheView.ts | issuesInSingleFrame": {
     "message": "{n,plural, =1{# проблему виявлено в 1 фреймі.}one{# проблему виявлено в 1 фреймі.}few{# проблеми виявлено в 1 фреймі.}many{# проблем виявлено в 1 фреймі.}other{# проблеми виявлено в 1 фреймі.}}"
@@ -3614,17 +3704,17 @@
   "panels/application/components/FrameDetailsView.ts | childDescription": {
     "message": "Цей фрейм є дочірнім для оголошення"
   },
-  "panels/application/components/FrameDetailsView.ts | clickToRevealInElementsPanel": {
-    "message": "Натисніть, щоб показати на панелі \"Елементи\""
+  "panels/application/components/FrameDetailsView.ts | clickToOpenInElementsPanel": {
+    "message": "Натисніть, щоб відкрити на панелі \"Елементи\""
   },
-  "panels/application/components/FrameDetailsView.ts | clickToRevealInNetworkPanel": {
-    "message": "Натисніть, щоб показати на панелі \"Мережа\""
+  "panels/application/components/FrameDetailsView.ts | clickToOpenInNetworkPanel": {
+    "message": "Натисніть, щоб відкрити на панелі \"Мережа\""
   },
-  "panels/application/components/FrameDetailsView.ts | clickToRevealInNetworkPanelMight": {
-    "message": "Натисніть, щоб показати на панелі \"Мережа\" (можливо, потрібно буде оновити сторінку)"
+  "panels/application/components/FrameDetailsView.ts | clickToOpenInNetworkPanelMight": {
+    "message": "Натисніть, щоб відкрити на панелі \"Мережа\" (можливо, потрібно буде оновити сторінку)"
   },
-  "panels/application/components/FrameDetailsView.ts | clickToRevealInSourcesPanel": {
-    "message": "Натисніть, щоб показати на панелі \"Джерела\""
+  "panels/application/components/FrameDetailsView.ts | clickToOpenInSourcesPanel": {
+    "message": "Натисніть, щоб відкрити на панелі \"Джерела\""
   },
   "panels/application/components/FrameDetailsView.ts | contentSecurityPolicy": {
     "message": "Правила щодо безпеки контенту (CSP)"
@@ -3998,6 +4088,12 @@
   "panels/application/preloading/PreloadingView.ts | filterFilterByRuleSet": {
     "message": "Фільтрувати за набором правил"
   },
+  "panels/application/preloading/PreloadingView.ts | noRuleSets": {
+    "message": "немає наборів правил"
+  },
+  "panels/application/preloading/PreloadingView.ts | prettyPrint": {
+    "message": "Автоматичне форматування"
+  },
   "panels/application/preloading/PreloadingView.ts | statusFailure": {
     "message": "Помилка"
   },
@@ -4186,9 +4282,6 @@
   },
   "panels/application/preloading/components/PreloadingString.ts | PrefetchFailedNon2XX": {
     "message": "Не вдалося виконати попередню вибірку, оскільки відповідь HTTP має інший код статусу, ніж 2XX."
-  },
-  "panels/application/preloading/components/PreloadingString.ts | PrefetchFailedPerPageLimitExceeded": {
-    "message": "Не вдалося виконати попередню вибірку, оскільки на вихідній сторінці виконується забагато попередніх вибірок."
   },
   "panels/application/preloading/components/PreloadingString.ts | PrefetchIneligibleRetryAfter": {
     "message": "У результаті попередньої вибірки для джерела було отримано відповідь HTTP 503 із заголовком Retry-After, що ще не минув."
@@ -4397,6 +4490,9 @@
   "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusUaChangeRequiresReload": {
     "message": "Під час навігації попереднього завантаження було змінено агент користувача."
   },
+  "panels/application/preloading/components/PreloadingString.ts | prerenderFinalStatusWindowClosed": {
+    "message": "Попередньо завантажену сторінку вивантажено, оскільки вона викликала метод window.close()."
+  },
   "panels/application/preloading/components/PreloadingString.ts | statusFailure": {
     "message": "Помилка"
   },
@@ -4415,14 +4511,14 @@
   "panels/application/preloading/components/PreloadingString.ts | statusSuccess": {
     "message": "Успішно"
   },
-  "panels/application/preloading/components/RuleSetGrid.ts | buttonClickToRevealInElementsPanel": {
-    "message": "Натисніть, щоб показати на панелі \"Елементи\""
-  },
-  "panels/application/preloading/components/RuleSetGrid.ts | buttonClickToRevealInNetworkPanel": {
-    "message": "Натисніть, щоб показати на панелі \"Мережа\""
-  },
   "panels/application/preloading/components/RuleSetGrid.ts | buttonRevealPreloadsAssociatedWithRuleSet": {
     "message": "Показати спекулятивні завантаження, пов’язані із цим набором правил"
+  },
+  "panels/application/preloading/components/RuleSetGrid.ts | clickToOpenInElementsPanel": {
+    "message": "Натисніть, щоб відкрити на панелі \"Елементи\""
+  },
+  "panels/application/preloading/components/RuleSetGrid.ts | clickToOpenInNetworkPanel": {
+    "message": "Натисніть, щоб відкрити на панелі \"Мережа\""
   },
   "panels/application/preloading/components/RuleSetGrid.ts | errors": {
     "message": "{errorCount,plural, =1{# помилка}one{# помилка}few{# помилки}many{# помилок}other{# помилки}}"
@@ -5027,11 +5123,20 @@
   "panels/console/ConsoleViewMessage.ts | explainThisError": {
     "message": "Проаналізувати цю помилку"
   },
+  "panels/console/ConsoleViewMessage.ts | explainThisErrorWithAI": {
+    "message": "Пояснення помилки. Технології ШІ."
+  },
   "panels/console/ConsoleViewMessage.ts | explainThisMessage": {
     "message": "Проаналізувати це повідомлення"
   },
+  "panels/console/ConsoleViewMessage.ts | explainThisMessageWithAI": {
+    "message": "Пояснення повідомлення. Технології ШІ."
+  },
   "panels/console/ConsoleViewMessage.ts | explainThisWarning": {
     "message": "Проаналізувати це попередження"
+  },
+  "panels/console/ConsoleViewMessage.ts | explainThisWarningWithAI": {
+    "message": "Пояснення попередження. Технології ШІ."
   },
   "panels/console/ConsoleViewMessage.ts | functionWasResolvedFromBound": {
     "message": "Функцію було розпізнано зі зв'язаної функції."
@@ -5603,6 +5708,9 @@
   "panels/elements/ElementStatePaneWidget.ts | forceElementState": {
     "message": "Примусово застосувати статус елемента"
   },
+  "panels/elements/ElementStatePaneWidget.ts | learnMore": {
+    "message": "Докладніше"
+  },
   "panels/elements/ElementStatePaneWidget.ts | toggleElementState": {
     "message": "Увімкнути або вимкнути статус елемента"
   },
@@ -5630,8 +5738,8 @@
   "panels/elements/ElementsPanel.ts | nodeCannotBeFoundInTheCurrent": {
     "message": "Не вдається знайти вузол на поточній сторінці."
   },
-  "panels/elements/ElementsPanel.ts | revealInElementsPanel": {
-    "message": "Показати на панелі \"Елементи\""
+  "panels/elements/ElementsPanel.ts | openInElementsPanel": {
+    "message": "Відкрити на панелі \"Елементи\""
   },
   "panels/elements/ElementsPanel.ts | showComputedStylesSidebar": {
     "message": "Показати бічну панель \"Обчислені стилі\""
@@ -5719,6 +5827,9 @@
   },
   "panels/elements/ElementsTreeElement.ts | editText": {
     "message": "Редагувати текст"
+  },
+  "panels/elements/ElementsTreeElement.ts | elementHasScrollableOverflow": {
+    "message": "Цей елемент має додаткове меню, яке можна прокручувати"
   },
   "panels/elements/ElementsTreeElement.ts | enableFlexMode": {
     "message": "Увімкнути режим Flex"
@@ -5924,11 +6035,14 @@
   "panels/elements/StylePropertyTreeElement.ts | gridEditorButton": {
     "message": "Відкрити редактор grid"
   },
+  "panels/elements/StylePropertyTreeElement.ts | jumpToAnimationsPanel": {
+    "message": "Перейти на панель \"Анімації\""
+  },
   "panels/elements/StylePropertyTreeElement.ts | openColorPickerS": {
     "message": "Відкрийте палітру. {PH1}"
   },
-  "panels/elements/StylePropertyTreeElement.ts | revealInSourcesPanel": {
-    "message": "Показати на панелі \"Джерела\""
+  "panels/elements/StylePropertyTreeElement.ts | openInSourcesPanel": {
+    "message": "Відкрити на панелі \"Джерела\""
   },
   "panels/elements/StylePropertyTreeElement.ts | shiftClickToChangeColorFormat": {
     "message": "Утримуйте Shift і натисніть, щоб змінити формат кольору."
@@ -6332,11 +6446,11 @@
   "panels/event_listeners/EventListenersView.ts | noEventListeners": {
     "message": "Немає блоків прослуховування подій"
   },
+  "panels/event_listeners/EventListenersView.ts | openInElementsPanel": {
+    "message": "Відкрити на панелі \"Елементи\""
+  },
   "panels/event_listeners/EventListenersView.ts | passive": {
     "message": "Пасивні"
-  },
-  "panels/event_listeners/EventListenersView.ts | revealInElementsPanel": {
-    "message": "Показати на панелі \"Елементи\""
   },
   "panels/event_listeners/EventListenersView.ts | togglePassive": {
     "message": "Увімкнути або вимкнути кнопку \"Пасивні\""
@@ -6344,23 +6458,14 @@
   "panels/event_listeners/EventListenersView.ts | toggleWhetherEventListenerIs": {
     "message": "Перемикач блоку прослуховування подій між пасивним станом і блокуванням"
   },
-  "panels/explain/components/ConsoleInsight.ts | back": {
-    "message": "Назад"
-  },
-  "panels/explain/components/ConsoleInsight.ts | cancel": {
-    "message": "Скасувати"
+  "panels/explain/components/ConsoleInsight.ts | badResponse": {
+    "message": "Погана відповідь"
   },
   "panels/explain/components/ConsoleInsight.ts | closeInsight": {
     "message": "Закрити пояснення"
   },
   "panels/explain/components/ConsoleInsight.ts | consoleMessage": {
     "message": "Повідомлення в консолі"
-  },
-  "panels/explain/components/ConsoleInsight.ts | continue": {
-    "message": "Продовжити"
-  },
-  "panels/explain/components/ConsoleInsight.ts | disableFeature": {
-    "message": "Вимкнути цю функцію"
   },
   "panels/explain/components/ConsoleInsight.ts | error": {
     "message": "В Інструментах розробника сталася помилка"
@@ -6370,6 +6475,9 @@
   },
   "panels/explain/components/ConsoleInsight.ts | generating": {
     "message": "Створюється пояснення…"
+  },
+  "panels/explain/components/ConsoleInsight.ts | goodResponse": {
+    "message": "Гарна відповідь"
   },
   "panels/explain/components/ConsoleInsight.ts | inputData": {
     "message": "Дані, які використовуються для аналізу цього повідомлення"
@@ -6382,12 +6490,6 @@
   },
   "panels/explain/components/ConsoleInsight.ts | networkRequest": {
     "message": "Запит мережі"
-  },
-  "panels/explain/components/ConsoleInsight.ts | next": {
-    "message": "Далі"
-  },
-  "panels/explain/components/ConsoleInsight.ts | notAvailable": {
-    "message": "Ця функція недоступна"
   },
   "panels/explain/components/ConsoleInsight.ts | notLoggedIn": {
     "message": "Щоб користуватися цією функцією, увійдіть у Chrome за допомогою облікового запису Google."
@@ -6413,26 +6515,20 @@
   "panels/explain/components/ConsoleInsight.ts | search": {
     "message": "Натомість скористатися пошуком"
   },
+  "panels/explain/components/ConsoleInsight.ts | settingsLink": {
+    "message": "Console insights у налаштуваннях"
+  },
+  "panels/explain/components/ConsoleInsight.ts | signIn": {
+    "message": "Увійти"
+  },
   "panels/explain/components/ConsoleInsight.ts | signInToUse": {
     "message": "Щоб користуватися цією функцією, увійдіть"
   },
   "panels/explain/components/ConsoleInsight.ts | stackTrace": {
     "message": "Трасування стека"
   },
-  "panels/explain/components/ConsoleInsight.ts | syncIsOff": {
-    "message": "Щоб користуватися цією функцією, увімкніть синхронізацію Chrome."
-  },
-  "panels/explain/components/ConsoleInsight.ts | thumbsDown": {
-    "message": "Не подобається"
-  },
-  "panels/explain/components/ConsoleInsight.ts | thumbsUp": {
-    "message": "Подобається"
-  },
-  "panels/explain/components/ConsoleInsight.ts | updateSettings": {
-    "message": "Оновити налаштування"
-  },
-  "panels/explain/explain-meta.ts | ageRestricted": {
-    "message": "Ця функція доступна лише для користувачів, яким виповнилося 18 років"
+  "panels/explain/components/ConsoleInsight.ts | turnOnInSettings": {
+    "message": "Увімкніть {PH1}, щоб отримувати від ШІ допомогу з аналізом і усуненням попереджень та помилок у консолі."
   },
   "panels/explain/explain-meta.ts | enableConsoleInsights": {
     "message": "Аналізувати повідомлення в консолі за допомогою ШІ"
@@ -6450,9 +6546,90 @@
     "message": "Ця функція недоступна у вашому регіоні"
   },
   "panels/explain/explain-meta.ts | policyRestricted": {
-    "message": "Адміністратор вашої організації вимкнув цю функцію. Щоб дізнатися більше, зверніться до адміністраторів."
+    "message": "Цим налаштуванням керує адміністратор"
   },
   "panels/explain/explain-meta.ts | wrongLocale": {
+    "message": "Щоб користуватися цією функцією, змініть мову в налаштуваннях Інструментів розробника на англійську"
+  },
+  "panels/freestyler/FreestylerPanel.ts | chatDeleted": {
+    "message": "Чат видалено"
+  },
+  "panels/freestyler/FreestylerPanel.ts | clearChatHistory": {
+    "message": "Очистити історію чату"
+  },
+  "panels/freestyler/FreestylerPanel.ts | deleteChat": {
+    "message": "Видалити чат"
+  },
+  "panels/freestyler/FreestylerPanel.ts | help": {
+    "message": "Довідка"
+  },
+  "panels/freestyler/FreestylerPanel.ts | history": {
+    "message": "Історія"
+  },
+  "panels/freestyler/FreestylerPanel.ts | newChat": {
+    "message": "Новий чат"
+  },
+  "panels/freestyler/FreestylerPanel.ts | newChatCreated": {
+    "message": "Новий чат створено"
+  },
+  "panels/freestyler/FreestylerPanel.ts | noPastConversations": {
+    "message": "Немає минулих чатів"
+  },
+  "panels/freestyler/FreestylerPanel.ts | sendFeedback": {
+    "message": "Надіслати відгук"
+  },
+  "panels/freestyler/FreestylerPanel.ts | settings": {
+    "message": "Налаштування"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | followTheSteps": {
+    "message": "Виконайте наведені вище дії, щоб поставити запитання"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | inputDisclaimerForEmptyState": {
+    "message": "Це експериментальна функція ШІ, тому вона не завжди працює правильно."
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | learnAbout": {
+    "message": "Докладніше про ШІ в Інструментах розробника"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | notLoggedIn": {
+    "message": "Ця функція доступна, лише якщо ви ввійшли в Chrome за допомогою облікового запису Google"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | offline": {
+    "message": "Перевірте інтернет-з’єднання й повторіть спробу"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | settingsLink": {
+    "message": "функцію \"Допомога від ШІ\" в налаштуваннях"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | turnOnForStyles": {
+    "message": "Щоб дізнатися більше про стилі CSS, увімкніть {PH1}"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | turnOnForStylesAndRequests": {
+    "message": "Щоб отримувати допомогу зі стилями й запитами мережі, увімкніть {PH1}"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | turnOnForStylesRequestsAndFiles": {
+    "message": "Щоб отримувати допомогу зі стилями, запитами мережі й файлами, увімкніть {PH1}"
+  },
+  "panels/freestyler/components/FreestylerChatUi.ts | turnOnForStylesRequestsPerformanceAndFiles": {
+    "message": "Щоб отримувати допомогу зі стилями, запитами мережі, ефективністю й файлами, увімкніть {PH1}"
+  },
+  "panels/freestyler/freestyler-meta.ts | aiAssistance": {
+    "message": "Допомога від ШІ"
+  },
+  "panels/freestyler/freestyler-meta.ts | askAi": {
+    "message": "Запитати ШІ"
+  },
+  "panels/freestyler/freestyler-meta.ts | enableAiAssistance": {
+    "message": "Увімкнути функцію \"Допомога від ШІ\""
+  },
+  "panels/freestyler/freestyler-meta.ts | geoRestricted": {
+    "message": "Ця функція недоступна у вашому регіоні"
+  },
+  "panels/freestyler/freestyler-meta.ts | policyRestricted": {
+    "message": "Цим налаштуванням керує адміністратор"
+  },
+  "panels/freestyler/freestyler-meta.ts | showAiAssistance": {
+    "message": "Показати панель \"Допомога від ШІ\""
+  },
+  "panels/freestyler/freestyler-meta.ts | wrongLocale": {
     "message": "Щоб користуватися цією функцією, змініть мову в налаштуваннях Інструментів розробника на англійську"
   },
   "panels/issues/AffectedBlockedByResponseView.ts | blockedResource": {
@@ -6789,7 +6966,7 @@
     "message": "Загальні"
   },
   "panels/issues/IssuesPane.ts | groupByCategory": {
-    "message": "Групувати за категорією"
+    "message": "Групування за категорією"
   },
   "panels/issues/IssuesPane.ts | groupByKind": {
     "message": "Групувати за типами"
@@ -7295,8 +7472,8 @@
   "panels/linear_memory_inspector/LinearMemoryInspectorController.ts | couldNotOpenLinearMemory": {
     "message": "Не вдалося відкрити лінійний інспектор пам'яті: помилка пошуку буфера."
   },
-  "panels/linear_memory_inspector/LinearMemoryInspectorController.ts | revealInMemoryInspectorPanel": {
-    "message": "Показати на панелі \"Інспектор пам’яті\""
+  "panels/linear_memory_inspector/LinearMemoryInspectorController.ts | openInMemoryInspectorPanel": {
+    "message": "Відкрити на панелі \"Інспектор пам’яті\""
   },
   "panels/linear_memory_inspector/LinearMemoryInspectorPane.ts | noOpenInspections": {
     "message": "Немає відкритих перевірок"
@@ -7604,11 +7781,8 @@
   "panels/mobile_throttling/ThrottlingManager.ts | hardwareConcurrency": {
     "message": "Апаратна паралельність"
   },
-  "panels/mobile_throttling/ThrottlingManager.ts | hardwareConcurrencyIsEnabled": {
-    "message": "Перевизначення апаратної паралельності ввімкнено"
-  },
-  "panels/mobile_throttling/ThrottlingManager.ts | hardwareConcurrencySettingTooltip": {
-    "message": "Перевизначити значення, надіслане параметром navigator.hardwareConcurrency на сторінці"
+  "panels/mobile_throttling/ThrottlingManager.ts | hardwareConcurrencySettingLabel": {
+    "message": "Перевизначити значення, надіслане параметром navigator.hardwareConcurrency"
   },
   "panels/mobile_throttling/ThrottlingManager.ts | noThrottling": {
     "message": "Без обмеження пропускної спроможності"
@@ -7650,7 +7824,7 @@
     "message": "Повільна мережа 3G та 6-кратне сповільнення ЦП"
   },
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | addCustomProfile": {
-    "message": "Додати спеціальний профіль…"
+    "message": "Додати профіль"
   },
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | dms": {
     "message": "{PH1} ms"
@@ -7955,15 +8129,6 @@
   "panels/network/NetworkDataGridNode.ts | redirect": {
     "message": "Переспрямування"
   },
-  "panels/network/NetworkDataGridNode.ts | requestContentHeadersOverridden": {
-    "message": "Текст і заголовки запитів перевизначено"
-  },
-  "panels/network/NetworkDataGridNode.ts | requestContentOverridden": {
-    "message": "Текст запиту перевизначено"
-  },
-  "panels/network/NetworkDataGridNode.ts | requestHeadersOverridden": {
-    "message": "Заголовки запиту перевизначено"
-  },
   "panels/network/NetworkDataGridNode.ts | sPreflight": {
     "message": "{PH1} + Підготовка"
   },
@@ -7999,9 +8164,6 @@
   },
   "panels/network/NetworkDataGridNode.ts | signedexchange": {
     "message": "Технологія SXG"
-  },
-  "panels/network/NetworkDataGridNode.ts | thirdPartyPhaseout": {
-    "message": "Файли cookie для цього запиту заблоковано, оскільки ми поступово припиняємо підтримку сторонніх файлів cookie. Дізнайтеся більше на вкладці \"Проблеми\"."
   },
   "panels/network/NetworkDataGridNode.ts | timeSubtitleTooltipText": {
     "message": "Затримка (час отримання відповіді – час початку)"
@@ -8084,9 +8246,6 @@
   "panels/network/NetworkItemView.ts | websocketMessages": {
     "message": "Повідомлення WebSocket"
   },
-  "panels/network/NetworkLogView.ts | allStrings": {
-    "message": "Усі"
-  },
   "panels/network/NetworkLogView.ts | areYouSureYouWantToClearBrowser": {
     "message": "Очистити кеш веб-переглядача?"
   },
@@ -8126,8 +8285,11 @@
   "panels/network/NetworkLogView.ts | copyAllAsFetch": {
     "message": "Скопіювати все як fetch"
   },
-  "panels/network/NetworkLogView.ts | copyAllAsHar": {
-    "message": "Скопіювати все як HAR"
+  "panels/network/NetworkLogView.ts | copyAllAsHarSanitized": {
+    "message": "Скопіювати все у форматі HAR (без чутливих даних)"
+  },
+  "panels/network/NetworkLogView.ts | copyAllAsHarWithSensitiveData": {
+    "message": "Скопіювати все у форматі HAR (із чутливими даними)"
   },
   "panels/network/NetworkLogView.ts | copyAllAsNodejsFetch": {
     "message": "Скопіювати все як fetch (Node.js)"
@@ -8147,8 +8309,11 @@
   "panels/network/NetworkLogView.ts | copyAllListedAsFetch": {
     "message": "Скопіювати все, що позначено як fetch"
   },
-  "panels/network/NetworkLogView.ts | copyAllListedAsHar": {
-    "message": "Скопіювати все, що позначено як HAR"
+  "panels/network/NetworkLogView.ts | copyAllListedAsHarSanitized": {
+    "message": "Скопіювати все перелічене як HAR (без чутливих даних)"
+  },
+  "panels/network/NetworkLogView.ts | copyAllListedAsHarWithSensitiveData": {
+    "message": "Скопіювати все перелічене як HAR (із чутливими даними)"
   },
   "panels/network/NetworkLogView.ts | copyAllListedAsNodejsFetch": {
     "message": "Скопіювати все, що позначено як fetch (Node.js)"
@@ -8243,9 +8408,6 @@
   "panels/network/NetworkLogView.ts | onlyShowThirdPartyRequests": {
     "message": "Показати лише запити, джерело яких відрізняється від джерела сторінки"
   },
-  "panels/network/NetworkLogView.ts | overTwoTypesSelected": {
-    "message": "{PH1}, {PH2}…"
-  },
   "panels/network/NetworkLogView.ts | overrideHeaders": {
     "message": "Перевизначити заголовки"
   },
@@ -8261,14 +8423,8 @@
   "panels/network/NetworkLogView.ts | replayXhr": {
     "message": "Повторити запит XHR"
   },
-  "panels/network/NetworkLogView.ts | requestTypes": {
-    "message": "Типи запитів"
-  },
   "panels/network/NetworkLogView.ts | requestTypesToInclude": {
     "message": "Типи запитів, які потрібно включити"
-  },
-  "panels/network/NetworkLogView.ts | requestTypesTooltip": {
-    "message": "Фільтрувати запити за типом"
   },
   "panels/network/NetworkLogView.ts | sBResourcesLoadedByThePage": {
     "message": "На сторінці завантажено {PH1} Б ресурсів"
@@ -8300,20 +8456,11 @@
   "panels/network/NetworkLogView.ts | sTransferred": {
     "message": "{PH1} перенесено"
   },
-  "panels/network/NetworkLogView.ts | saveAllAsHarWithContent": {
-    "message": "Зберегти все як HAR із контентом"
-  },
-  "panels/network/NetworkLogView.ts | showOnly": {
-    "message": "Показати лише {PH1}"
-  },
   "panels/network/NetworkLogView.ts | showOnlyHideRequests": {
     "message": "Показати лише/сховати запити"
   },
   "panels/network/NetworkLogView.ts | thirdParty": {
     "message": "Сторонні запити"
-  },
-  "panels/network/NetworkLogView.ts | twoTypesSelected": {
-    "message": "{PH1}, {PH2}"
   },
   "panels/network/NetworkLogView.ts | unblockS": {
     "message": "Розблокувати {PH1}"
@@ -8436,19 +8583,22 @@
     "message": "Вимкнути кеш"
   },
   "panels/network/NetworkPanel.ts | disableCacheWhileDevtoolsIsOpen": {
-    "message": "Вимкнути кеш (коли відкрито Інструменти розробника)"
+    "message": "Вимкнути кеш, коли відкрито Інструменти розробника"
   },
   "panels/network/NetworkPanel.ts | doNotClearLogOnPageReload": {
     "message": "Не очищати журнал після оновлення сторінки чи переходу на іншу"
   },
-  "panels/network/NetworkPanel.ts | exportHar": {
-    "message": "Експортувати HAR…"
+  "panels/network/NetworkPanel.ts | exportHarSanitized": {
+    "message": "Експортувати файл HAR (без чутливих даних)…"
+  },
+  "panels/network/NetworkPanel.ts | exportHarWithSensitiveData": {
+    "message": "Експортувати файл HAR (із чутливими даними)…"
   },
   "panels/network/NetworkPanel.ts | fetchingFrames": {
     "message": "Отримання фреймів…"
   },
   "panels/network/NetworkPanel.ts | groupByFrame": {
-    "message": "Групувати за фреймом"
+    "message": "Групування за фреймом"
   },
   "panels/network/NetworkPanel.ts | groupRequestsByTopLevelRequest": {
     "message": "Групувати запити за фреймом запиту верхнього рівня"
@@ -8465,14 +8615,17 @@
   "panels/network/NetworkPanel.ts | networkSettings": {
     "message": "Налаштування мережі"
   },
+  "panels/network/NetworkPanel.ts | openInNetworkPanel": {
+    "message": "Відкрити на панелі \"Мережа\""
+  },
+  "panels/network/NetworkPanel.ts | openInNetworkPanelMissingRequest": {
+    "message": "Відкрити на панелі \"Мережа\" (відсутній запит)"
+  },
   "panels/network/NetworkPanel.ts | preserveLog": {
     "message": "Зберігати журнал"
   },
   "panels/network/NetworkPanel.ts | recordingFrames": {
     "message": "Запис фреймів…"
-  },
-  "panels/network/NetworkPanel.ts | revealInNetworkPanel": {
-    "message": "Показати на панелі \"Мережа\""
   },
   "panels/network/NetworkPanel.ts | search": {
     "message": "Пошук"
@@ -8692,6 +8845,18 @@
   },
   "panels/network/RequestTimingView.ts | retrievalTimeS": {
     "message": "Час отримання: {PH1}"
+  },
+  "panels/network/RequestTimingView.ts | routerActualSource": {
+    "message": "Фактичне джерело: {PH1}"
+  },
+  "panels/network/RequestTimingView.ts | routerCacheLookup": {
+    "message": "Пошук у кеші"
+  },
+  "panels/network/RequestTimingView.ts | routerEvaluation": {
+    "message": "Оцінка маршрутизатора"
+  },
+  "panels/network/RequestTimingView.ts | routerMatchedSource": {
+    "message": "Зіставлене джерело: {PH1}"
   },
   "panels/network/RequestTimingView.ts | serverPush": {
     "message": "Надсилання із сервера"
@@ -9047,6 +9212,12 @@
   "panels/network/network-meta.ts | addNetworkRequestBlockingPattern": {
     "message": "Додати шаблон блокування запитів мережі"
   },
+  "panels/network/network-meta.ts | allowToGenerateHarWithSensitiveData": {
+    "message": "Дозволити створювати файл HAR із чутливими даними"
+  },
+  "panels/network/network-meta.ts | allowToGenerateHarWithSensitiveDataDocumentation": {
+    "message": "За умовчанням створені журнали HAR очищаються й не містять заголовків HTTP Cookie, Set-Cookie або Authorization. Якщо ввімкнути це налаштування, з’являться опції експортувати або скопіювати журнали HAR із чутливими даними."
+  },
   "panels/network/network-meta.ts | clear": {
     "message": "Очистити журнал мережі"
   },
@@ -9061,6 +9232,9 @@
   },
   "panels/network/network-meta.ts | diskCache": {
     "message": "кеш диска"
+  },
+  "panels/network/network-meta.ts | dontAllowToGenerateHarWithSensitiveData": {
+    "message": "Заборонити створювати файл HAR із чутливими даними"
   },
   "panels/network/network-meta.ts | dontGroupNetworkLogItemsByFrame": {
     "message": "Не групувати елементи журналу мережі за фреймом"
@@ -9176,6 +9350,27 @@
   "panels/performance_monitor/performance_monitor-meta.ts | systemMonitor": {
     "message": "системний монітор"
   },
+  "panels/profiler/HeapDetachedElementsDataGrid.ts | detachedElementsList": {
+    "message": "Список від’єднаних об’єктів"
+  },
+  "panels/profiler/HeapDetachedElementsDataGrid.ts | detachedNodes": {
+    "message": "Від’єднані вузли"
+  },
+  "panels/profiler/HeapDetachedElementsDataGrid.ts | nodeSize": {
+    "message": "Кількість вузлів"
+  },
+  "panels/profiler/HeapDetachedElementsView.ts | detachedElementProfile": {
+    "message": "Від’єднані об’єкти ({PH1})"
+  },
+  "panels/profiler/HeapDetachedElementsView.ts | detachedElementsDescription": {
+    "message": "У розділі \"Від’єднані об’єкти\" відображаються об’єкти, що зберігаються за допомогою посилання JS."
+  },
+  "panels/profiler/HeapDetachedElementsView.ts | detachedElementsTitle": {
+    "message": "Від’єднані об’єкти"
+  },
+  "panels/profiler/HeapDetachedElementsView.ts | startDetachedElements": {
+    "message": "Отримати від’єднані об’єкти"
+  },
   "panels/profiler/HeapProfileView.ts | allocationSampling": {
     "message": "Зразки розподілу"
   },
@@ -9185,9 +9380,6 @@
   "panels/profiler/HeapProfileView.ts | heapProfilerIsRecording": {
     "message": "Профайлер даних виконує запис"
   },
-  "panels/profiler/HeapProfileView.ts | itProvidesGoodApproximation": {
-    "message": "Цей інструмент надає приблизний розподіл із розбивкою на стеки виконання JavaScript."
-  },
   "panels/profiler/HeapProfileView.ts | name": {
     "message": "Назва"
   },
@@ -9195,7 +9387,7 @@
     "message": "Профіль {PH1}"
   },
   "panels/profiler/HeapProfileView.ts | recordMemoryAllocations": {
-    "message": "Запис розподілу пам'яті методом вибірки."
+    "message": "Приблизний розподіл пам’яті за допомогою вибірки довготривалих операцій із мінімальною витратою ресурсів і отримання розподілу за стеком виконання JavaScript"
   },
   "panels/profiler/HeapProfileView.ts | recording": {
     "message": "Запис…"
@@ -9226,9 +9418,6 @@
   },
   "panels/profiler/HeapProfileView.ts | stopping": {
     "message": "Зупинення…"
-  },
-  "panels/profiler/HeapProfileView.ts | thisProfileTypeHasMinimal": {
-    "message": "Цей тип профілю має найменші витрати на ефективність, його можна використовувати для довготривалих операцій."
   },
   "panels/profiler/HeapProfileView.ts | totalSize": {
     "message": "Загальний розмір"
@@ -9384,7 +9573,7 @@
     "message": "Не вдалося викликати метод \"{PH1}\""
   },
   "panels/profiler/HeapSnapshotView.ts | AllocationTimelinesShowInstrumented": {
-    "message": "На часових шкалах показується виміряна інструментарієм хронологія розподілу пам'яті для JavaScript. Після запису профілю ви можете вибрати інтервал і переглянути об'єкти, для яких тоді виділялася пам'ять (і не звільнялася до кінця запису). Використовуйте цей тип профілю для ізоляції витоків пам'яті."
+    "message": "Зберігайте дані про виділення пам’яті протягом певного часу й ізолюйте витоки пам’яті, вибравши інтервали з розподілами, які досі активні"
   },
   "panels/profiler/HeapSnapshotView.ts | allObjects": {
     "message": "Усі об'єкти"
@@ -9393,7 +9582,7 @@
     "message": "Розподіл"
   },
   "panels/profiler/HeapSnapshotView.ts | allocationInstrumentationOn": {
-    "message": "Виміряна інструментарієм хронологія розподілу пам'яті"
+    "message": "Розподіл на часовій шкалі"
   },
   "panels/profiler/HeapSnapshotView.ts | allocationStack": {
     "message": "Стек розподілу"
@@ -9417,7 +9606,7 @@
     "message": "Повторювані сегменти"
   },
   "panels/profiler/HeapSnapshotView.ts | exposeInternals": {
-    "message": "Розкрити внутрішні дані (зокрема додаткові відомості щодо застосування)"
+    "message": "Внутрішні дані з інформацією про застосування"
   },
   "panels/profiler/HeapSnapshotView.ts | filter": {
     "message": "Фільтр"
@@ -9435,7 +9624,7 @@
     "message": "Знімок даних"
   },
   "panels/profiler/HeapSnapshotView.ts | heapSnapshotProfilesShowMemory": {
-    "message": "У профілях знімків даних показано розподіл пам'яті між об'єктами JavaScript і пов'язаними вузлами DOM на сторінці."
+    "message": "Перегляньте розподіл пам’яті між об’єктами JavaScript і пов’язаними вузлами DOM"
   },
   "panels/profiler/HeapSnapshotView.ts | heapSnapshots": {
     "message": "Знімки даних"
@@ -9468,7 +9657,7 @@
     "message": "Перспектива"
   },
   "panels/profiler/HeapSnapshotView.ts | recordAllocationStacksExtra": {
-    "message": "Записувати трасування стеків розподілу (додаткові витрати на ефективність)"
+    "message": "Трасування стеків розподілу (додаткові витрати)"
   },
   "panels/profiler/HeapSnapshotView.ts | recording": {
     "message": "Запис…"
@@ -9492,7 +9681,7 @@
     "message": "Створення знімків…"
   },
   "panels/profiler/HeapSnapshotView.ts | stackWasNotRecordedForThisObject": {
-    "message": "Стек для цього об'єкта не записано, бо пам'ять для нього виділялася до початку запису цього профілю."
+    "message": "Не вдалося записати стек об’єкта, оскільки пам’ять для нього було розподілено до початку запису цього профілю."
   },
   "panels/profiler/HeapSnapshotView.ts | startRecordingHeapProfile": {
     "message": "Почати запис профайлера даних"
@@ -9581,17 +9770,11 @@
   "panels/profiler/ModuleUIStrings.ts | buildingDominatedNodes": {
     "message": "Створення домінованих вузлів…"
   },
-  "panels/profiler/ModuleUIStrings.ts | buildingDominatorTree": {
-    "message": "Створення дерева домінатора…"
-  },
   "panels/profiler/ModuleUIStrings.ts | buildingEdgeIndexes": {
     "message": "Створення індексів ребер…"
   },
   "panels/profiler/ModuleUIStrings.ts | buildingLocations": {
     "message": "Створення розташувань…"
-  },
-  "panels/profiler/ModuleUIStrings.ts | buildingPostorderIndex": {
-    "message": "Створення індексу postorder…"
   },
   "panels/profiler/ModuleUIStrings.ts | buildingRetainers": {
     "message": "Створення шляхів резервування…"
@@ -10337,6 +10520,24 @@
   "panels/search/SearchView.ts | searching": {
     "message": "Пошук…"
   },
+  "panels/security/CookieReportView.ts | allowed": {
+    "message": "Дозволено"
+  },
+  "panels/security/CookieReportView.ts | allowedByException": {
+    "message": "Дозволено як виняток"
+  },
+  "panels/security/CookieReportView.ts | blocked": {
+    "message": "Заблоковано"
+  },
+  "panels/security/CookieReportView.ts | body": {
+    "message": "Сторонні файли cookie, які користувачі можуть обмежувати за допомогою налаштувань. Якщо користувач обмежить файли cookie, цей сайт може не працювати."
+  },
+  "panels/security/CookieReportView.ts | learnMoreLink": {
+    "message": "Докладніше про те, як використовуються сторонні файли cookie"
+  },
+  "panels/security/CookieReportView.ts | title": {
+    "message": "Сторонні файли cookie"
+  },
   "panels/security/SecurityModel.ts | cipherWithMAC": {
     "message": "{PH1} – {PH2}"
   },
@@ -10433,15 +10634,6 @@
   "panels/security/SecurityPanel.ts | logName": {
     "message": "Назва журналу"
   },
-  "panels/security/SecurityPanel.ts | mainOrigin": {
-    "message": "Основне джерело"
-  },
-  "panels/security/SecurityPanel.ts | mainOriginNonsecure": {
-    "message": "Основне джерело (ненадійне)"
-  },
-  "panels/security/SecurityPanel.ts | mainOriginSecure": {
-    "message": "Основне джерело (надійне)"
-  },
   "panels/security/SecurityPanel.ts | missing": {
     "message": "немає"
   },
@@ -10460,9 +10652,6 @@
   "panels/security/SecurityPanel.ts | nonsecureForm": {
     "message": "ненадійна форма"
   },
-  "panels/security/SecurityPanel.ts | nonsecureOrigins": {
-    "message": "Ненадійні джерела"
-  },
   "panels/security/SecurityPanel.ts | notSecure": {
     "message": "Ненадійне"
   },
@@ -10478,9 +10667,6 @@
   "panels/security/SecurityPanel.ts | origin": {
     "message": "Джерело"
   },
-  "panels/security/SecurityPanel.ts | overview": {
-    "message": "Огляд"
-  },
   "panels/security/SecurityPanel.ts | possibleSpoofingUrl": {
     "message": "Імовірно, що цю URL-адресу підмінено"
   },
@@ -10495,9 +10681,6 @@
   },
   "panels/security/SecurityPanel.ts | reloadThePageToRecordRequestsFor": {
     "message": "Щоб записати запити на ресурси HTTP, оновіть сторінку."
-  },
-  "panels/security/SecurityPanel.ts | reloadToViewDetails": {
-    "message": "Оновіть, щоб переглянути деталі"
   },
   "panels/security/SecurityPanel.ts | resources": {
     "message": "Ресурси"
@@ -10519,9 +10702,6 @@
   },
   "panels/security/SecurityPanel.ts | secureConnectionSettings": {
     "message": "налаштування безпечного з'єднання"
-  },
-  "panels/security/SecurityPanel.ts | secureOrigins": {
-    "message": "Захищені джерела"
   },
   "panels/security/SecurityPanel.ts | securityOverview": {
     "message": "Огляд безпеки"
@@ -10622,9 +10802,6 @@
   "panels/security/SecurityPanel.ts | toCheckThisPagesStatusVisit": {
     "message": "Щоб перевірити статус цієї сторінки, перейдіть за посиланням: g.co/safebrowsingstatus."
   },
-  "panels/security/SecurityPanel.ts | unknownCanceled": {
-    "message": "Невідомо / скасовано"
-  },
   "panels/security/SecurityPanel.ts | unknownField": {
     "message": "невідомо"
   },
@@ -10661,17 +10838,53 @@
   "panels/security/SecurityPanel.ts | yourPageRequestedNonsecure": {
     "message": "З вашої сторінки надіслано запит на незахищені ресурси, які було заблоковано."
   },
+  "panels/security/SecurityPanelSidebar.ts | cookieReport": {
+    "message": "Сторонні файли cookie"
+  },
+  "panels/security/SecurityPanelSidebar.ts | mainOrigin": {
+    "message": "Основне джерело"
+  },
+  "panels/security/SecurityPanelSidebar.ts | mainOriginNonsecure": {
+    "message": "Основне джерело (ненадійне)"
+  },
+  "panels/security/SecurityPanelSidebar.ts | mainOriginSecure": {
+    "message": "Основне джерело (надійне)"
+  },
+  "panels/security/SecurityPanelSidebar.ts | nonsecureOrigins": {
+    "message": "Ненадійні джерела"
+  },
+  "panels/security/SecurityPanelSidebar.ts | overview": {
+    "message": "Огляд"
+  },
+  "panels/security/SecurityPanelSidebar.ts | privacy": {
+    "message": "Конфіденційність"
+  },
+  "panels/security/SecurityPanelSidebar.ts | reloadToViewDetails": {
+    "message": "Оновіть, щоб переглянути деталі"
+  },
+  "panels/security/SecurityPanelSidebar.ts | secureOrigins": {
+    "message": "Захищені джерела"
+  },
+  "panels/security/SecurityPanelSidebar.ts | security": {
+    "message": "Безпека"
+  },
+  "panels/security/SecurityPanelSidebar.ts | unknownCanceled": {
+    "message": "Невідомо / скасовано"
+  },
   "panels/security/security-meta.ts | security": {
     "message": "Безпека"
+  },
+  "panels/security/security-meta.ts | securityAndPrivacy": {
+    "message": "Безпека й конфіденційність"
   },
   "panels/security/security-meta.ts | showSecurity": {
     "message": "Показати панель \"Безпека\""
   },
-  "panels/sensors/LocationsSettingsTab.ts | addLocation": {
-    "message": "Додати місце…"
+  "panels/security/security-meta.ts | showSecurityAndPrivacy": {
+    "message": "Відкрити панель \"Безпека й конфіденційність\""
   },
-  "panels/sensors/LocationsSettingsTab.ts | customLocations": {
-    "message": "Власні місця"
+  "panels/sensors/LocationsSettingsTab.ts | addLocation": {
+    "message": "Додати місцезнаходження"
   },
   "panels/sensors/LocationsSettingsTab.ts | lat": {
     "message": "Шир."
@@ -10702,6 +10915,9 @@
   },
   "panels/sensors/LocationsSettingsTab.ts | locationNameMustBeLessThanS": {
     "message": "Назва місця має містити до {PH1} симв."
+  },
+  "panels/sensors/LocationsSettingsTab.ts | locations": {
+    "message": "Місцезнаходження"
   },
   "panels/sensors/LocationsSettingsTab.ts | long": {
     "message": "Довг."
@@ -10753,6 +10969,9 @@
   },
   "panels/sensors/SensorsView.ts | forcesSelectedIdleStateEmulation": {
     "message": "Примусова емуляція вибраного неактивного стану"
+  },
+  "panels/sensors/SensorsView.ts | forcesSelectedPressureStateEmulation": {
+    "message": "Примусова емуляція вибраного стану навантаження"
   },
   "panels/sensors/SensorsView.ts | forcesTouchInsteadOfClick": {
     "message": "Примусово застосовуються дотики замість кліків"
@@ -10826,6 +11045,12 @@
   "panels/sensors/sensors-meta.ts | accelerometer": {
     "message": "акселерометр"
   },
+  "panels/sensors/sensors-meta.ts | cpuPressure": {
+    "message": "Навантаження на ЦП"
+  },
+  "panels/sensors/sensors-meta.ts | critical": {
+    "message": "Критичний"
+  },
   "panels/sensors/sensors-meta.ts | deviceOrientation": {
     "message": "орієнтація пристрою"
   },
@@ -10834,6 +11059,9 @@
   },
   "panels/sensors/sensors-meta.ts | emulateIdleDetectorState": {
     "message": "Створити емуляцію стану неактивного детектора"
+  },
+  "panels/sensors/sensors-meta.ts | fair": {
+    "message": "Достатній"
   },
   "panels/sensors/sensors-meta.ts | forceEnabled": {
     "message": "Примусово ввімкнено"
@@ -10848,13 +11076,22 @@
     "message": "мовні коди"
   },
   "panels/sensors/sensors-meta.ts | locations": {
-    "message": "Місця"
+    "message": "Місцезнаходження"
   },
   "panels/sensors/sensors-meta.ts | noIdleEmulation": {
     "message": "Немає неактивних емуляцій"
   },
+  "panels/sensors/sensors-meta.ts | noPressureEmulation": {
+    "message": "Без замін"
+  },
+  "panels/sensors/sensors-meta.ts | nominal": {
+    "message": "Номінальний"
+  },
   "panels/sensors/sensors-meta.ts | sensors": {
     "message": "Датчики"
+  },
+  "panels/sensors/sensors-meta.ts | serious": {
+    "message": "Серйозний"
   },
   "panels/sensors/sensors-meta.ts | showLocations": {
     "message": "Показати місця"
@@ -10881,70 +11118,94 @@
     "message": "Користувач неактивний, екран розблоковано"
   },
   "panels/settings/AISettingsTab.ts | adminSettings": {
-    "message": "Функції, доступні для керованих користувачів, можуть відрізнятися залежно від налаштувань адміністратора"
+    "message": "Google може не збирати дані для деяких керованих облікових записів Google і/або регіонів. Функції, доступні керованим користувачам, можуть відрізнятися залежно від налаштувань їхньої організації."
+  },
+  "panels/settings/AISettingsTab.ts | ageRestricted": {
+    "message": "Ця функція доступна лише для користувачів, яким виповнилося 18 років"
   },
   "panels/settings/AISettingsTab.ts | boostYourProductivity": {
-    "message": "Працюйте продуктивніше за допомогою ШІ в Chrome"
-  },
-  "panels/settings/AISettingsTab.ts | chromeAi": {
-    "message": "Штучний інтелект у Chrome"
-  },
-  "panels/settings/AISettingsTab.ts | collapse": {
-    "message": "згорнути"
+    "message": "Працюйте продуктивніше за допомогою ШІ"
   },
   "panels/settings/AISettingsTab.ts | consoleInsightsSendsData": {
     "message": "Щоб створити пояснення, у Google надсилаються повідомлення в консолі, а також пов’язані трасування стека, вихідний код і заголовки мережі. Наші спеціалісти можуть переглядати дані, щоб покращувати цю функцію."
   },
-  "panels/settings/AISettingsTab.ts | expand": {
-    "message": "розгорнути"
+  "panels/settings/AISettingsTab.ts | enableAiAssistance": {
+    "message": "Увімкнути функцію \"Допомога від ШІ\""
+  },
+  "panels/settings/AISettingsTab.ts | enableConsoleInsights": {
+    "message": "Увімкнути Console insights"
   },
   "panels/settings/AISettingsTab.ts | experimentalFeatures": {
-    "message": "Ці функції експериментальні й можуть змінюватися"
+    "message": "Ці функції експериментальні й використовують генеративний штучний інтелект, тому можуть надавати неточну або образливу інформацію, яка не відображає погляди Google."
   },
   "panels/settings/AISettingsTab.ts | explainConsole": {
     "message": "Отримуйте пояснення щодо попереджень і помилок у консолі"
   },
   "panels/settings/AISettingsTab.ts | explainStyling": {
-    "message": "Отримуйте пояснення й додатковий контекст щодо використання стилів"
+    "message": "Проаналізуйте стилі CSS за допомогою ШІ"
+  },
+  "panels/settings/AISettingsTab.ts | explainStylingAndNetworkRequest": {
+    "message": "Проаналізуйте стилі й мережеву активність CSS за допомогою ШІ"
+  },
+  "panels/settings/AISettingsTab.ts | explainStylingNetworkAndFile": {
+    "message": "Проаналізуйте стилі, мережеву активність і джерела файлів CSS за допомогою ШІ"
+  },
+  "panels/settings/AISettingsTab.ts | explainStylingNetworkPerformanceAndFile": {
+    "message": "Проаналізуйте стилі, мережеву активність, вузькі місця продуктивності й джерела файлів CSS за допомогою ШІ"
   },
   "panels/settings/AISettingsTab.ts | freestylerSendsData": {
-    "message": "Будь-який контент DOM або CSS на сторінці, що перевіряється, може надсилатися в Google для створення пояснень. Наші спеціалісти можуть переглядати дані, щоб покращувати цю функцію."
-  },
-  "panels/settings/AISettingsTab.ts | generatedSnippets": {
-    "message": "Будьте обачні, використовуючи згенеровані фрагменти коду"
+    "message": "Будь-які дані, до яких можна отримати доступ через API вебсервісів, запити мережі, файли й трасування показників ефективності на сторінці, що перевіряється, можуть надсилатися в Google для створення пояснень. Наші спеціалісти можуть переглядати дані, щоб покращувати цю функцію. Не використовуйте її на сторінках з особистою або чутливою інформацією."
   },
   "panels/settings/AISettingsTab.ts | helpUnderstandConsole": {
     "message": "Допомагає проаналізувати й усунути попередження та помилки в консолі"
   },
   "panels/settings/AISettingsTab.ts | helpUnderstandStyling": {
-    "message": "Допомагає проаналізувати проблеми зі стилями й усунути їх"
+    "message": "Отримайте допомогу зі стилями CSS"
+  },
+  "panels/settings/AISettingsTab.ts | helpUnderstandStylingAndNetworkRequest": {
+    "message": "Отримайте допомогу зі стилями й запитами мережі CSS"
+  },
+  "panels/settings/AISettingsTab.ts | helpUnderstandStylingNetworkAndFile": {
+    "message": "Отримайте допомогу зі стилями, запитами мережі й файлами CSS"
+  },
+  "panels/settings/AISettingsTab.ts | helpUnderstandStylingNetworkPerformanceAndFile": {
+    "message": "Отримайте допомогу зі стилями, запитами мережі, ефективністю й файлами CSS"
   },
   "panels/settings/AISettingsTab.ts | learnMore": {
     "message": "Докладніше"
   },
-  "panels/settings/AISettingsTab.ts | oneOrMoreSettingsHaveChanged": {
-    "message": "Принаймні одне налаштування змінено. Щоб зміни набули чинності, оновіть сторінку."
+  "panels/settings/AISettingsTab.ts | notLoggedIn": {
+    "message": "Щоб користуватися цією функцією, увійдіть у Chrome за допомогою облікового запису Google."
+  },
+  "panels/settings/AISettingsTab.ts | offline": {
+    "message": "Ця функція доступна лише за наявності активного інтернет-з’єднання."
   },
   "panels/settings/AISettingsTab.ts | privacyNotice": {
-    "message": "Примітка про конфіденційність"
+    "message": "Політика конфіденційності Google"
   },
   "panels/settings/AISettingsTab.ts | receiveStylingSuggestions": {
-    "message": "Отримуйте пропозиції і зразки коду для вирішення проблем зі стилями"
+    "message": "Оптимізуйте розробку за допомогою контекстуальних пояснень і підказок"
   },
   "panels/settings/AISettingsTab.ts | receiveSuggestions": {
     "message": "Отримуйте пропозиції і зразки коду для вирішення проблем"
   },
   "panels/settings/AISettingsTab.ts | retainData": {
-    "message": "Спосіб зберігання даних про використання не передбачає можливість визначити їх походження, тому Google більше не виконуватиме запити на видалення. Ці дані зберігатимуться протягом 18 місяців."
+    "message": "Дані про використання зберігатимуться протягом 18 місяців, і Google не зможе ідентифікувати користувачів, які їх надали."
   },
   "panels/settings/AISettingsTab.ts | sendsDataToGoogle": {
-    "message": "Під час використання цих функцій у Google надсилаються відповідні дані. Нижче наведено додаткову інформацію про кожну із цих функцій."
+    "message": "Під час використання цих функцій у Google надсилаються відповідні дані. Ці дані й відгуки переглядають наші спеціалісти, щоб покращувати продукти й сервіси Google. Не надсилайте конфіденційну чи особисту інформацію."
+  },
+  "panels/settings/AISettingsTab.ts | showLess": {
+    "message": "Показати менше"
+  },
+  "panels/settings/AISettingsTab.ts | showMore": {
+    "message": "Показати більше"
   },
   "panels/settings/AISettingsTab.ts | termsOfService": {
     "message": "Загальні положення й умови Google"
   },
   "panels/settings/AISettingsTab.ts | termsOfServicePrivacyNotice": {
-    "message": "Використання цієї функції регулюється такими документами: {PH1} і {PH2}"
+    "message": "Використання цих функцій регулюється такими документами: {PH1} і {PH2}"
   },
   "panels/settings/AISettingsTab.ts | thingsToConsider": {
     "message": "Що варто врахувати"
@@ -10953,19 +11214,16 @@
     "message": "Коли функцію ввімкнено"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | addFilenamePattern": {
-    "message": "Додати шаблон назви файлу"
+    "message": "Додайте правило регулярного виразу для URL-адреси скрипту"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | addPattern": {
-    "message": "Додати шаблон…"
+    "message": "Додати правило регулярного виразу…"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | automaticallyIgnoreListKnownThirdPartyScripts": {
     "message": "Відомі сторонні скрипти з карт джерела"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | customExclusionRules": {
-    "message": "Власні правила виключення:"
-  },
-  "panels/settings/FrameworkIgnoreListSettingsTab.ts | debuggerWillSkipThroughThe": {
-    "message": "Налагоджувач пропускатиме скрипти й не зупинятиметься на їх непередбачених помилках."
+    "message": "Власні правила виключення"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | enableIgnoreListing": {
     "message": "Увімкнути список ігнорування"
@@ -10974,13 +11232,19 @@
     "message": "Зніміть прапорець, щоб вимкнути весь список ігнорування"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | frameworkIgnoreList": {
-    "message": "Список ігнорування фреймворку"
+    "message": "Список ігнорування"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | generalExclusionRules": {
-    "message": "Загальні правила виключення:"
+    "message": "Загальні правила виключення"
+  },
+  "panels/settings/FrameworkIgnoreListSettingsTab.ts | ignoreListAnonymousScripts": {
+    "message": "Анонімні скрипти з функції eval або консолі"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | ignoreListContentScripts": {
     "message": "Скрипти контенту, вставлені розширеннями"
+  },
+  "panels/settings/FrameworkIgnoreListSettingsTab.ts | ignoreListingDescription": {
+    "message": "Якщо ввімкнути цю опцію, налагоджувач пропускатиме скрипти зі списку ігнорування, а також виключення, які впливають лише на ці скрипти. Усі об’єкти флейм-графу зі збігами на панелі \"Ефективність\" буде згорнуто."
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | ignoreScriptsWhoseNamesMatchS": {
     "message": "Ігнорувати скрипти, назви яких відповідають шаблону \"{PH1}\""
@@ -10989,16 +11253,16 @@
     "message": "Докладніше"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | pattern": {
-    "message": "Додати шаблон"
+    "message": "Додайте правило регулярного виразу для URL-адреси скрипту"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | patternAlreadyExists": {
-    "message": "Шаблон уже існує"
+    "message": "Правило вже існує"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | patternCannotBeEmpty": {
-    "message": "Шаблон не може бути порожнім"
+    "message": "Укажіть правило"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | patternMustBeAValidRegular": {
-    "message": "Шаблон має бути дійсним регулярним виразом"
+    "message": "Правило має бути дійсним регулярним виразом"
   },
   "panels/settings/KeybindsSettingsTab.ts | FullListOfDevtoolsKeyboard": {
     "message": "Повний список комбінацій клавіш і жестів Інструментів розробника"
@@ -11025,7 +11289,7 @@
     "message": "Список комбінацій клавіш"
   },
   "panels/settings/KeybindsSettingsTab.ts | matchShortcutsFromPreset": {
-    "message": "Використати комбінації клавіш із набору налаштувань"
+    "message": "Набір налаштувань комбінацій клавіш"
   },
   "panels/settings/KeybindsSettingsTab.ts | noShortcutForAction": {
     "message": "Немає комбінації клавіш для дії"
@@ -11067,13 +11331,10 @@
     "message": "Докладніше"
   },
   "panels/settings/SettingsScreen.ts | noResults": {
-    "message": "Немає експериментів, що збігаються з фільтром"
+    "message": "Попередження: немає експериментів, що відповідають фільтру"
   },
   "panels/settings/SettingsScreen.ts | oneOrMoreSettingsHaveChanged": {
     "message": "Принаймні одне налаштування змінено. Щоб зміни набули чинності, оновіть сторінку."
-  },
-  "panels/settings/SettingsScreen.ts | preferences": {
-    "message": "Параметри"
   },
   "panels/settings/SettingsScreen.ts | restoreDefaultsAndReload": {
     "message": "Відновити налаштування за умовчанням і оновити сторінку"
@@ -11088,13 +11349,13 @@
     "message": "Комбінації клавіш"
   },
   "panels/settings/SettingsScreen.ts | theseExperimentsAreParticularly": {
-    "message": "Ці експерименти особливо нестабільні. Ви можете ввімкнути їх на власний ризик."
+    "message": "Попередження: ці експерименти особливо нестабільні. Ви можете ввімкнути їх на власний ризик."
   },
   "panels/settings/SettingsScreen.ts | theseExperimentsCouldBeUnstable": {
-    "message": "Ці експерименти можуть бути нестабільними або ненадійними, тому можуть вимагати перезапуску Інструментів розробника."
+    "message": "Попередження: ці експерименти можуть бути нестабільними або ненадійними."
   },
-  "panels/settings/SettingsScreen.ts | warning": {
-    "message": "ПОПЕРЕДЖЕННЯ:"
+  "panels/settings/SettingsScreen.ts | unstableExperiments": {
+    "message": "Нестабільні експерименти"
   },
   "panels/settings/components/SyncSection.ts | preferencesSyncDisabled": {
     "message": "Щоб увімкнути це налаштування, спершу потрібно ввімкнути синхронізацію налаштувань у Chrome."
@@ -11110,6 +11371,12 @@
   },
   "panels/settings/emulation/DevicesSettingsTab.ts | addCustomDevice": {
     "message": "Додати власний пристрій…"
+  },
+  "panels/settings/emulation/DevicesSettingsTab.ts | customDevices": {
+    "message": "Спеціальні пристрої"
+  },
+  "panels/settings/emulation/DevicesSettingsTab.ts | defaultDevices": {
+    "message": "Пристрої за умовчанням"
   },
   "panels/settings/emulation/DevicesSettingsTab.ts | device": {
     "message": "Пристрій"
@@ -11128,9 +11395,6 @@
   },
   "panels/settings/emulation/DevicesSettingsTab.ts | devicePixelRatio": {
     "message": "Коефіцієнт пікселів для пристрою"
-  },
-  "panels/settings/emulation/DevicesSettingsTab.ts | emulatedDevices": {
-    "message": "Емульовані пристрої"
   },
   "panels/settings/emulation/DevicesSettingsTab.ts | height": {
     "message": "Висота"
@@ -11237,8 +11501,8 @@
   "panels/settings/emulation/emulation-meta.ts | showDevices": {
     "message": "Показати пристрої"
   },
-  "panels/settings/settings-meta.ts | chromeAI": {
-    "message": "Штучний інтелект у Chrome"
+  "panels/settings/settings-meta.ts | aiInnovations": {
+    "message": "Інновації на основі ШІ"
   },
   "panels/settings/settings-meta.ts | documentation": {
     "message": "Документація"
@@ -11258,8 +11522,8 @@
   "panels/settings/settings-meta.ts | shortcuts": {
     "message": "Комбінації клавіш"
   },
-  "panels/settings/settings-meta.ts | showChromeAI": {
-    "message": "Показати ШІ в Chrome"
+  "panels/settings/settings-meta.ts | showAiInnovations": {
+    "message": "Показати інновації на основі ШІ"
   },
   "panels/settings/settings-meta.ts | showExperiments": {
     "message": "Показати експерименти"
@@ -11358,7 +11622,7 @@
     "message": "Перезапустити фрейм"
   },
   "panels/sources/CallStackSidebarPane.ts | showIgnorelistedFrames": {
-    "message": "Показати фрейми в списку ігнорування"
+    "message": "Показувати фрейми зі списку ігнорування"
   },
   "panels/sources/CallStackSidebarPane.ts | showMore": {
     "message": "Показати більше"
@@ -12284,6 +12548,33 @@
   "panels/timeline/AnimationsTrackAppender.ts | animations": {
     "message": "Анімації"
   },
+  "panels/timeline/AnnotationHelpers.ts | entriesLink": {
+    "message": "зв’язані записи"
+  },
+  "panels/timeline/AnnotationHelpers.ts | entryLabel": {
+    "message": "мітка запису"
+  },
+  "panels/timeline/AnnotationHelpers.ts | srAnnotationAdded": {
+    "message": "Анотацію \"{PH1}\" додано"
+  },
+  "panels/timeline/AnnotationHelpers.ts | srAnnotationRemoved": {
+    "message": "Анотацію \"{PH1}\" вилучено"
+  },
+  "panels/timeline/AnnotationHelpers.ts | srEnterLabelEditMode": {
+    "message": "Змінити текст мітки анотації"
+  },
+  "panels/timeline/AnnotationHelpers.ts | srEntriesLinked": {
+    "message": "Анотація тепер пов’язує події \"{PH1}\" і \"{PH2}\""
+  },
+  "panels/timeline/AnnotationHelpers.ts | srLabelTextUpdated": {
+    "message": "Мітку змінено на \"{PH1}\""
+  },
+  "panels/timeline/AnnotationHelpers.ts | srTimeRangeBoundsUpdated": {
+    "message": "Діапазон часу оновлено (початок: {PH1}; завершення: {PH2})"
+  },
+  "panels/timeline/AnnotationHelpers.ts | timeRange": {
+    "message": "діапазон часу"
+  },
   "panels/timeline/AppenderUtils.ts | sSelfS": {
     "message": "{PH1} (власний час: {PH2})"
   },
@@ -12291,10 +12582,10 @@
     "message": "Документи"
   },
   "panels/timeline/CountersGraph.ts | gpuMemory": {
-    "message": "Пам'ять графічного процесора"
+    "message": "Пам’ять графічного процесора"
   },
   "panels/timeline/CountersGraph.ts | jsHeap": {
-    "message": "Динамічна пам'ять JS"
+    "message": "Динамічна пам’ять JS"
   },
   "panels/timeline/CountersGraph.ts | listeners": {
     "message": "Прослуховувачі"
@@ -12307,345 +12598,6 @@
   },
   "panels/timeline/CountersGraph.ts | ss": {
     "message": "[{PH1}—{PH2}]"
-  },
-  "panels/timeline/EventUICategory.ts | animation": {
-    "message": "Анімація"
-  },
-  "panels/timeline/EventUICategory.ts | animationFrameFired": {
-    "message": "Активовано фрейм з анімацією"
-  },
-  "panels/timeline/EventUICategory.ts | async": {
-    "message": "Асинхронізація"
-  },
-  "panels/timeline/EventUICategory.ts | asyncTask": {
-    "message": "Асинхронне завдання"
-  },
-  "panels/timeline/EventUICategory.ts | cacheModule": {
-    "message": "Код модуля кешу"
-  },
-  "panels/timeline/EventUICategory.ts | cacheScript": {
-    "message": "Код скрипту кешу"
-  },
-  "panels/timeline/EventUICategory.ts | cachedWasmModule": {
-    "message": "Кешовано модуль Wasm"
-  },
-  "panels/timeline/EventUICategory.ts | cancelAnimationFrame": {
-    "message": "Скасувати фрейм анімації"
-  },
-  "panels/timeline/EventUICategory.ts | cancelIdleCallback": {
-    "message": "Скасування неактивного зворотного виклику"
-  },
-  "panels/timeline/EventUICategory.ts | commit": {
-    "message": "Надсилання"
-  },
-  "panels/timeline/EventUICategory.ts | compileCode": {
-    "message": "Компілювання коду"
-  },
-  "panels/timeline/EventUICategory.ts | compileModule": {
-    "message": "Компілювати модуль"
-  },
-  "panels/timeline/EventUICategory.ts | compileScript": {
-    "message": "Компілювання скрипта"
-  },
-  "panels/timeline/EventUICategory.ts | compiledWasmModule": {
-    "message": "Скомпільовано модуль Wasm"
-  },
-  "panels/timeline/EventUICategory.ts | compositeLayers": {
-    "message": "Компонування шарів"
-  },
-  "panels/timeline/EventUICategory.ts | computeIntersections": {
-    "message": "Обчислити перетини"
-  },
-  "panels/timeline/EventUICategory.ts | consoleTime": {
-    "message": "Час консолі"
-  },
-  "panels/timeline/EventUICategory.ts | cppGc": {
-    "message": "Збір сміття C++"
-  },
-  "panels/timeline/EventUICategory.ts | createWebsocket": {
-    "message": "Створити WebSocket"
-  },
-  "panels/timeline/EventUICategory.ts | decrypt": {
-    "message": "Дешифрування"
-  },
-  "panels/timeline/EventUICategory.ts | decryptReply": {
-    "message": "Дешифрування відповіді"
-  },
-  "panels/timeline/EventUICategory.ts | deserializeCodeCache": {
-    "message": "Прочитати кеш коду"
-  },
-  "panels/timeline/EventUICategory.ts | destroyWebsocket": {
-    "message": "Знищити WebSocket"
-  },
-  "panels/timeline/EventUICategory.ts | digest": {
-    "message": "Дайджест"
-  },
-  "panels/timeline/EventUICategory.ts | digestReply": {
-    "message": "Відповідь-дайджест"
-  },
-  "panels/timeline/EventUICategory.ts | domGc": {
-    "message": "Збір сміття DOM"
-  },
-  "panels/timeline/EventUICategory.ts | domcontentloadedEvent": {
-    "message": "Подія DOMContentLoaded"
-  },
-  "panels/timeline/EventUICategory.ts | drawFrame": {
-    "message": "Малювання фрейму"
-  },
-  "panels/timeline/EventUICategory.ts | drawing": {
-    "message": "Малювання"
-  },
-  "panels/timeline/EventUICategory.ts | embedderCallback": {
-    "message": "Зворотний виклик вбудовування"
-  },
-  "panels/timeline/EventUICategory.ts | encrypt": {
-    "message": "Шифрування"
-  },
-  "panels/timeline/EventUICategory.ts | encryptReply": {
-    "message": "Шифрування відповіді"
-  },
-  "panels/timeline/EventUICategory.ts | evaluateModule": {
-    "message": "Обчислення модуля"
-  },
-  "panels/timeline/EventUICategory.ts | evaluateScript": {
-    "message": "Обчислення скрипта"
-  },
-  "panels/timeline/EventUICategory.ts | event": {
-    "message": "Подія"
-  },
-  "panels/timeline/EventUICategory.ts | eventTiming": {
-    "message": "Часові мітки події"
-  },
-  "panels/timeline/EventUICategory.ts | experience": {
-    "message": "Зручність"
-  },
-  "panels/timeline/EventUICategory.ts | finishLoading": {
-    "message": "Кінець завантаження"
-  },
-  "panels/timeline/EventUICategory.ts | fireIdleCallback": {
-    "message": "Запуск неактивного зворотного виклику"
-  },
-  "panels/timeline/EventUICategory.ts | firstContentfulPaint": {
-    "message": "Перша візуалізація контенту"
-  },
-  "panels/timeline/EventUICategory.ts | firstPaint": {
-    "message": "Перша візуалізація"
-  },
-  "panels/timeline/EventUICategory.ts | frameStart": {
-    "message": "Початок фрейму"
-  },
-  "panels/timeline/EventUICategory.ts | frameStartMainThread": {
-    "message": "Початок фрейму (основний потік)"
-  },
-  "panels/timeline/EventUICategory.ts | frameStartedLoading": {
-    "message": "Початок завантаження фрейму"
-  },
-  "panels/timeline/EventUICategory.ts | functionCall": {
-    "message": "Виклик функції"
-  },
-  "panels/timeline/EventUICategory.ts | gcEvent": {
-    "message": "Подія збору сміття"
-  },
-  "panels/timeline/EventUICategory.ts | gpu": {
-    "message": "ГП"
-  },
-  "panels/timeline/EventUICategory.ts | hitTest": {
-    "message": "Перевірка hitTest"
-  },
-  "panels/timeline/EventUICategory.ts | idle": {
-    "message": "Бездіяльність"
-  },
-  "panels/timeline/EventUICategory.ts | imageDecode": {
-    "message": "Розкодування зображення"
-  },
-  "panels/timeline/EventUICategory.ts | installTimer": {
-    "message": "Встановлення таймера"
-  },
-  "panels/timeline/EventUICategory.ts | invalidateLayout": {
-    "message": "Анулювання макета"
-  },
-  "panels/timeline/EventUICategory.ts | jsFrame": {
-    "message": "Фрейм JS"
-  },
-  "panels/timeline/EventUICategory.ts | largestContentfulPaint": {
-    "message": "Візуалізація великого контенту"
-  },
-  "panels/timeline/EventUICategory.ts | layerize": {
-    "message": "Шарування"
-  },
-  "panels/timeline/EventUICategory.ts | layout": {
-    "message": "Макет"
-  },
-  "panels/timeline/EventUICategory.ts | layoutShift": {
-    "message": "Зміщення макета"
-  },
-  "panels/timeline/EventUICategory.ts | loading": {
-    "message": "Завантаження"
-  },
-  "panels/timeline/EventUICategory.ts | majorGc": {
-    "message": "Повний збір сміття"
-  },
-  "panels/timeline/EventUICategory.ts | messaging": {
-    "message": "Повідомлення"
-  },
-  "panels/timeline/EventUICategory.ts | minorGc": {
-    "message": "Скорочений збір сміття"
-  },
-  "panels/timeline/EventUICategory.ts | onMessage": {
-    "message": "У повідомленні"
-  },
-  "panels/timeline/EventUICategory.ts | onloadEvent": {
-    "message": "Подія onload"
-  },
-  "panels/timeline/EventUICategory.ts | optimizeCode": {
-    "message": "Оптимізація коду"
-  },
-  "panels/timeline/EventUICategory.ts | other": {
-    "message": "Інше"
-  },
-  "panels/timeline/EventUICategory.ts | paint": {
-    "message": "Візуалізація"
-  },
-  "panels/timeline/EventUICategory.ts | paintImage": {
-    "message": "Візуалізація зображення"
-  },
-  "panels/timeline/EventUICategory.ts | paintSetup": {
-    "message": "Налаштування візуалізації"
-  },
-  "panels/timeline/EventUICategory.ts | painting": {
-    "message": "Візуалізація"
-  },
-  "panels/timeline/EventUICategory.ts | parseAndCompile": {
-    "message": "Синтаксичний аналіз і компілювання"
-  },
-  "panels/timeline/EventUICategory.ts | parseHtml": {
-    "message": "Синтаксичний аналіз HTML"
-  },
-  "panels/timeline/EventUICategory.ts | parseStylesheet": {
-    "message": "Синтаксичний аналіз таблиці стилів"
-  },
-  "panels/timeline/EventUICategory.ts | prePaint": {
-    "message": "Попередня візуалізація"
-  },
-  "panels/timeline/EventUICategory.ts | profilingOverhead": {
-    "message": "Час, витрачений на виконання операції, коли профілювальник активний"
-  },
-  "panels/timeline/EventUICategory.ts | rasterizePaint": {
-    "message": "Растрування візуалізації"
-  },
-  "panels/timeline/EventUICategory.ts | rasterizing": {
-    "message": "Растеризація"
-  },
-  "panels/timeline/EventUICategory.ts | recalculateStyle": {
-    "message": "Повторне обчислення стилю"
-  },
-  "panels/timeline/EventUICategory.ts | receiveData": {
-    "message": "Отримання даних"
-  },
-  "panels/timeline/EventUICategory.ts | receiveResponse": {
-    "message": "Отримання відповіді"
-  },
-  "panels/timeline/EventUICategory.ts | receiveWebsocketHandshake": {
-    "message": "Підтвердження встановлення зв'язку з WebSocket"
-  },
-  "panels/timeline/EventUICategory.ts | removeTimer": {
-    "message": "Видалення таймера"
-  },
-  "panels/timeline/EventUICategory.ts | rendering": {
-    "message": "Відрисовка"
-  },
-  "panels/timeline/EventUICategory.ts | requestAnimationFrame": {
-    "message": "Запит на фрейм анімації"
-  },
-  "panels/timeline/EventUICategory.ts | requestIdleCallback": {
-    "message": "Запит на неактивний зворотний виклик"
-  },
-  "panels/timeline/EventUICategory.ts | requestMainThreadFrame": {
-    "message": "Запит на фрейм основного потоку"
-  },
-  "panels/timeline/EventUICategory.ts | runMicrotasks": {
-    "message": "Запуск мікрозавдань"
-  },
-  "panels/timeline/EventUICategory.ts | schedulePostMessage": {
-    "message": "Запланувати за допомогою postMessage"
-  },
-  "panels/timeline/EventUICategory.ts | scheduleStyleRecalculation": {
-    "message": "Запланувати повторне обчислення стилів"
-  },
-  "panels/timeline/EventUICategory.ts | scripting": {
-    "message": "Створення скриптів"
-  },
-  "panels/timeline/EventUICategory.ts | scroll": {
-    "message": "Прокручувати"
-  },
-  "panels/timeline/EventUICategory.ts | sendRequest": {
-    "message": "Надсилання запиту"
-  },
-  "panels/timeline/EventUICategory.ts | sendWebsocketHandshake": {
-    "message": "Надіслати підтвердження встановлення зв'язку з WebSocket"
-  },
-  "panels/timeline/EventUICategory.ts | sign": {
-    "message": "Підписання"
-  },
-  "panels/timeline/EventUICategory.ts | signReply": {
-    "message": "Підписання відповіді"
-  },
-  "panels/timeline/EventUICategory.ts | streamingCompileTask": {
-    "message": "Потокове передавання завдання компіляції"
-  },
-  "panels/timeline/EventUICategory.ts | streamingWasmResponse": {
-    "message": "Потокове передавання відповіді Wasm"
-  },
-  "panels/timeline/EventUICategory.ts | system": {
-    "message": "Система"
-  },
-  "panels/timeline/EventUICategory.ts | task": {
-    "message": "Завдання"
-  },
-  "panels/timeline/EventUICategory.ts | timerFired": {
-    "message": "Активовано таймер"
-  },
-  "panels/timeline/EventUICategory.ts | timestamp": {
-    "message": "Позначка часу"
-  },
-  "panels/timeline/EventUICategory.ts | updateLayer": {
-    "message": "Оновлення шару"
-  },
-  "panels/timeline/EventUICategory.ts | updateLayerTree": {
-    "message": "Оновлення дерева шарів"
-  },
-  "panels/timeline/EventUICategory.ts | userTiming": {
-    "message": "Час користувача"
-  },
-  "panels/timeline/EventUICategory.ts | verify": {
-    "message": "Підтвердження"
-  },
-  "panels/timeline/EventUICategory.ts | verifyReply": {
-    "message": "Підтвердити відповідь"
-  },
-  "panels/timeline/EventUICategory.ts | waitingForNetwork": {
-    "message": "Очікується мережа"
-  },
-  "panels/timeline/EventUICategory.ts | wasmModuleCacheHit": {
-    "message": "Наявність даних у кеші модуля Wasm"
-  },
-  "panels/timeline/EventUICategory.ts | wasmModuleCacheInvalid": {
-    "message": "Недійсний кеш модуля Wasm"
-  },
-  "panels/timeline/EventUICategory.ts | willSendRequest": {
-    "message": "Надсилатиме запит"
-  },
-  "panels/timeline/EventUICategory.ts | wsMessageReceived": {
-    "message": "Отримати повідомлення WebSocket"
-  },
-  "panels/timeline/EventUICategory.ts | wsMessageSent": {
-    "message": "Надіслати повідомлення WebSocket"
-  },
-  "panels/timeline/EventUICategory.ts | xhrLoad": {
-    "message": "Завантаження XHR"
-  },
-  "panels/timeline/EventUICategory.ts | xhrReadyStateChange": {
-    "message": "Стан готовності XHR змінено"
   },
   "panels/timeline/EventsTimelineTreeView.ts | Dms": {
     "message": "{PH1} мс"
@@ -12677,29 +12629,23 @@
   "panels/timeline/IsolateSelector.ts | selectJavascriptVmInstance": {
     "message": "Вибрати екземпляр віртуальної машини JavaScript"
   },
+  "panels/timeline/LayoutShiftsTrackAppender.ts | layoutShift": {
+    "message": "Зміщення макета"
+  },
+  "panels/timeline/LayoutShiftsTrackAppender.ts | layoutShiftCluster": {
+    "message": "Кластер зміщення макета"
+  },
   "panels/timeline/LayoutShiftsTrackAppender.ts | layoutShifts": {
     "message": "Зміщення макета"
   },
   "panels/timeline/NetworkTrackAppender.ts | network": {
     "message": "Мережа"
   },
-  "panels/timeline/NetworkTrackAppender.ts | wsConnectionClosed": {
-    "message": "WebSocket закрито"
-  },
-  "panels/timeline/NetworkTrackAppender.ts | wsConnectionOpened": {
-    "message": "WebSocket відкрито"
-  },
-  "panels/timeline/NetworkTrackAppender.ts | wsConnectionOpenedWithUrl": {
-    "message": "WebSocket відкрито: {PH1}"
-  },
   "panels/timeline/ServerTimingsTrackAppender.ts | serverSideTrack": {
     "message": "Час сервера: {PH1}"
   },
   "panels/timeline/ServerTimingsTrackAppender.ts | serverTimingTrack": {
     "message": "Цей шлях містить часові мітки, взяті із заголовків відповідей мережі Server-Timing. Час початку цих подій є приблизним і може бути неточним."
-  },
-  "panels/timeline/ThreadAppender.ts | anonymous": {
-    "message": "(анонімно)"
   },
   "panels/timeline/ThreadAppender.ts | bidderWorklet": {
     "message": "Учасник торгів Worklet"
@@ -12709,9 +12655,6 @@
   },
   "panels/timeline/ThreadAppender.ts | dedicatedWorker": {
     "message": "Виділено: Worker"
-  },
-  "panels/timeline/ThreadAppender.ts | eventDispatchS": {
-    "message": "Подія: {PH1}"
   },
   "panels/timeline/ThreadAppender.ts | frameS": {
     "message": "Фрейм — {PH1}"
@@ -12759,10 +12702,10 @@
     "message": "Worker: {PH1} — {PH2}"
   },
   "panels/timeline/ThreadAppender.ts | workletService": {
-    "message": "Сервіс аукціону Worklet"
+    "message": "Сервіс ворклету аукціону"
   },
   "panels/timeline/ThreadAppender.ts | workletServiceS": {
-    "message": "Сервіс аукціону Worklet – {PH1}"
+    "message": "Сервіс ворклету аукціону – {PH1}"
   },
   "panels/timeline/TimelineController.ts | tracingNotSupported": {
     "message": "Запис трасування ефективності для цільового об’єкта такого типу не підтримується"
@@ -12803,6 +12746,9 @@
   "panels/timeline/TimelineEventOverview.ts | sSDash": {
     "message": "{PH1} – {PH2}"
   },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | addScriptToIgnoreList": {
+    "message": "Додати скрипт у список ігнорування"
+  },
   "panels/timeline/TimelineFlameChartDataProvider.ts | droppedFrame": {
     "message": "Пропущений фрейм"
   },
@@ -12812,11 +12758,29 @@
   "panels/timeline/TimelineFlameChartDataProvider.ts | frames": {
     "message": "Фрейми"
   },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | hideChildren": {
+    "message": "Сховати дочірні записи"
+  },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | hideFunction": {
+    "message": "Сховати функцію"
+  },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | hideRepeatingChildren": {
+    "message": "Сховати повторювані дочірні записи"
+  },
   "panels/timeline/TimelineFlameChartDataProvider.ts | idleFrame": {
     "message": "Неактивний фрейм"
   },
   "panels/timeline/TimelineFlameChartDataProvider.ts | partiallyPresentedFrame": {
     "message": "Фрейм частково відображено"
+  },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | removeScriptFromIgnoreList": {
+    "message": "Вилучити скрипт зі списку ігнорування"
+  },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | resetChildren": {
+    "message": "Скинути дочірні об’єкти"
+  },
+  "panels/timeline/TimelineFlameChartDataProvider.ts | resetTrace": {
+    "message": "Скинути трасування"
   },
   "panels/timeline/TimelineFlameChartView.ts | sAtS": {
     "message": "{PH1}, {PH2}"
@@ -12824,29 +12788,14 @@
   "panels/timeline/TimelineHistoryManager.ts | currentSessionSS": {
     "message": "Поточний сеанс: {PH1}. {PH2}"
   },
-  "panels/timeline/TimelineHistoryManager.ts | landingPageTitleLocalAndFieldMetrics": {
-    "message": "Локальні показники й дані від користувачів"
-  },
-  "panels/timeline/TimelineHistoryManager.ts | landingPageTitleLocalMetrics": {
-    "message": "Локальні показники"
-  },
-  "panels/timeline/TimelineHistoryManager.ts | moments": {
-    "message": "моменти"
+  "panels/timeline/TimelineHistoryManager.ts | landingPageTitle": {
+    "message": "Показники в реальному часі"
   },
   "panels/timeline/TimelineHistoryManager.ts | noRecordings": {
     "message": "(немає записів)"
   },
-  "panels/timeline/TimelineHistoryManager.ts | sAgo": {
-    "message": "({PH1} тому)"
-  },
   "panels/timeline/TimelineHistoryManager.ts | sD": {
     "message": "{PH1} №{PH2}"
-  },
-  "panels/timeline/TimelineHistoryManager.ts | sH": {
-    "message": "{PH1} год"
-  },
-  "panels/timeline/TimelineHistoryManager.ts | sM": {
-    "message": "{PH1} хв"
   },
   "panels/timeline/TimelineHistoryManager.ts | selectTimelineSession": {
     "message": "Вибрати сеанс часової шкали"
@@ -12872,9 +12821,6 @@
   "panels/timeline/TimelinePanel.ts | CpuThrottlingIsEnabled": {
     "message": "- Увімкнено обмеження пропускної спроможності ЦП"
   },
-  "panels/timeline/TimelinePanel.ts | HardwareConcurrencyIsEnabled": {
-    "message": "- Перевизначення апаратної паралельності ввімкнено"
-  },
   "panels/timeline/TimelinePanel.ts | JavascriptSamplingIsDisabled": {
     "message": "- Застосування вибірки JavaScript вимкнено"
   },
@@ -12886,6 +12832,9 @@
   },
   "panels/timeline/TimelinePanel.ts | SignificantOverheadDueToPaint": {
     "message": "- Значні витрати через інструментарій для візуалізації"
+  },
+  "panels/timeline/TimelinePanel.ts | backToLiveMetrics": {
+    "message": "Повернутися на сторінку з показниками в реальному часі"
   },
   "panels/timeline/TimelinePanel.ts | bufferUsage": {
     "message": "Використання буфера"
@@ -12932,6 +12881,9 @@
   "panels/timeline/TimelinePanel.ts | enableSelectorStats": {
     "message": "Увімкнути статистику селектора CSS (повільно)"
   },
+  "panels/timeline/TimelinePanel.ts | eventSelected": {
+    "message": "Вибрано подію \"{PH1}\""
+  },
   "panels/timeline/TimelinePanel.ts | exportEnhancedTraces": {
     "message": "Трасування розширених показників ефективності"
   },
@@ -12944,11 +12896,17 @@
   "panels/timeline/TimelinePanel.ts | fixMe": {
     "message": "Виправити"
   },
+  "panels/timeline/TimelinePanel.ts | frameSelected": {
+    "message": "Фрейм вибрано"
+  },
   "panels/timeline/TimelinePanel.ts | hideSidebar": {
-    "message": "Сховати єдину бічну панель"
+    "message": "Сховати бічну панель"
   },
   "panels/timeline/TimelinePanel.ts | initializingProfiler": {
     "message": "Ініціалізація профілювальника…"
+  },
+  "panels/timeline/TimelinePanel.ts | learnMore": {
+    "message": "Докладніше"
   },
   "panels/timeline/TimelinePanel.ts | loadProfile": {
     "message": "Завантажити профіль…"
@@ -12968,6 +12926,9 @@
   "panels/timeline/TimelinePanel.ts | performanceExtension": {
     "message": "Дані розширень"
   },
+  "panels/timeline/TimelinePanel.ts | processed": {
+    "message": "Оброблено"
+  },
   "panels/timeline/TimelinePanel.ts | processingProfile": {
     "message": "Обробка профілю…"
   },
@@ -12983,8 +12944,17 @@
   "panels/timeline/TimelinePanel.ts | saveProfile": {
     "message": "Зберегти профіль…"
   },
+  "panels/timeline/TimelinePanel.ts | saveTraceWithAnnotationsMenuOption": {
+    "message": "Зберегти трасування"
+  },
+  "panels/timeline/TimelinePanel.ts | saveTraceWithoutAnnotationsMenuOption": {
+    "message": "Зберегти трасування без приміток"
+  },
   "panels/timeline/TimelinePanel.ts | screenshots": {
     "message": "Знімки екрана"
+  },
+  "panels/timeline/TimelinePanel.ts | selectionCleared": {
+    "message": "Виділення скасовано"
   },
   "panels/timeline/TimelinePanel.ts | showDataAddedByExtensions": {
     "message": "Показати дані, додані розширеннями з панелі \"Продуктивність\""
@@ -13035,7 +13005,7 @@
     "message": "% невідповідностей із повільним шляхом"
   },
   "panels/timeline/TimelineSelectorStatsView.ts | rejectPercentageExplanation": {
-    "message": "Відсоток невідповідних вузлів (кількість спроб зіставлення за виключенням кількості збігів), які не вдалося швидко виключити за допомогою фільтра Блума. Що нижче, то краще."
+    "message": "Відсоток вузлів без збігів (кількість спроб зіставлення за виключенням кількості збігів), які не вдалося швидко виключити за допомогою фільтра Блума через високу складність селектора. Що нижчий цей показник, то краще."
   },
   "panels/timeline/TimelineSelectorStatsView.ts | selector": {
     "message": "Селектор"
@@ -13071,19 +13041,22 @@
     "message": "Групувати за"
   },
   "panels/timeline/TimelineTreeView.ts | groupByActivity": {
-    "message": "Групувати за діями"
+    "message": "Групування за діями"
   },
   "panels/timeline/TimelineTreeView.ts | groupByCategory": {
-    "message": "Групувати за категорією"
+    "message": "Групування за категорією"
   },
   "panels/timeline/TimelineTreeView.ts | groupByDomain": {
-    "message": "Групувати за доменом"
+    "message": "Групування за доменом"
   },
   "panels/timeline/TimelineTreeView.ts | groupByFrame": {
-    "message": "Групувати за фреймом"
+    "message": "Групування за фреймом"
   },
   "panels/timeline/TimelineTreeView.ts | groupBySubdomain": {
-    "message": "Групувати за субдоменом"
+    "message": "Групування за субдоменом"
+  },
+  "panels/timeline/TimelineTreeView.ts | groupByThirdParties": {
+    "message": "Групування за сторонніми сервісами"
   },
   "panels/timeline/TimelineTreeView.ts | groupByUrl": {
     "message": "Групувати за URL-адресою"
@@ -13122,7 +13095,7 @@
     "message": "Щоб дізнатися більше, виберіть елемент."
   },
   "panels/timeline/TimelineTreeView.ts | selfTime": {
-    "message": "Власний час"
+    "message": "Час однієї дії"
   },
   "panels/timeline/TimelineTreeView.ts | showHeaviestStack": {
     "message": "Показати бічну панель \"Найважчий стек\""
@@ -13151,6 +13124,9 @@
   "panels/timeline/TimelineUIUtils.ts | allottedTime": {
     "message": "Виділений час"
   },
+  "panels/timeline/TimelineUIUtils.ts | animating": {
+    "message": "Триває анімація"
+  },
   "panels/timeline/TimelineUIUtils.ts | animationFrameRequested": {
     "message": "Надіслано запит на фрейм з анімацією"
   },
@@ -13175,6 +13151,66 @@
   "panels/timeline/TimelineUIUtils.ts | compile": {
     "message": "Компілювання"
   },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailed": {
+    "message": "Помилка компонування"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedAcceleratedAnimationsDisabled": {
+    "message": "Прискорені анімації вимкнено"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedAffectsImportantProperty": {
+    "message": "Ефект впливає на властивість із позначкою !important"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedAnimationAffectsNonCSSProperties": {
+    "message": "Анімація впливає на властивості, що не належать до CSS"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedAnimationHasNoVisibleChange": {
+    "message": "Анімація не має видимих змін"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedEffectHasNonReplaceCompositeMode": {
+    "message": "Ефект не використовує композитний режим \"replace\""
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedEffectHasUnsupportedTimingParams": {
+    "message": "Ефект містить непідтримувані параметри часу"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedEffectSuppressedByDevtools": {
+    "message": "Ефект заблоковано Інструментами розробника "
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedFilterRelatedPropertyMayMovePixels": {
+    "message": "Ресурс, пов’язаний із фільтром, може переміщувати пікселі"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedInvalidAnimationOrEffect": {
+    "message": "Недійсна анімація або ефект"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedMixedKeyframeValueTypes": {
+    "message": "Ключові кадри мають змішані типи значень"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedSVGTargetHasIndependentTransformProperty": {
+    "message": "Цільовий об’єкт SVG має незалежну властивість трансформації"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedTargetHasCSSOffset": {
+    "message": "Цільовий об’єкт має зміщення CSS"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedTargetHasIncompatibleAnimations": {
+    "message": "Цільовий об’єкт містить іншу несумісну анімацію"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedTargetHasInvalidCompositingState": {
+    "message": "Цільовий об’єкт має недійсний композитний стан"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedTimelineSourceHasInvalidCompositingState": {
+    "message": "Джерело діапазону часу має недійсний композитний стан"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedTransformDependsBoxSize": {
+    "message": "Ресурс, пов’язаний із трансформацією, залежить від розміру вікна"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedTransformRelatedPropertyCannotBeAcceleratedOnTarget": {
+    "message": "Неможливо прискорити ресурс, пов’язаний із трансформацією, у цільовому об’єкті"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedUnknownReason": {
+    "message": "Невідома причина"
+  },
+  "panels/timeline/TimelineUIUtils.ts | compositingFailedUnsupportedCSSProperty": {
+    "message": "{propertyCount,plural, =1{Непідтримувана властивість CSS: {properties}}one{Непідтримувані властивості CSS: {properties}}few{Непідтримувані властивості CSS: {properties}}many{Непідтримувані властивості CSS: {properties}}other{Непідтримувані властивості CSS: {properties}}}"
+  },
   "panels/timeline/TimelineUIUtils.ts | consumedCacheSize": {
     "message": "Розмір зайнятого кешу"
   },
@@ -13190,6 +13226,12 @@
   "panels/timeline/TimelineUIUtils.ts | currentClusterScore": {
     "message": "Оцінка поточного кластера"
   },
+  "panels/timeline/TimelineUIUtils.ts | delay": {
+    "message": "Затримка"
+  },
+  "panels/timeline/TimelineUIUtils.ts | description": {
+    "message": "Опис"
+  },
   "panels/timeline/TimelineUIUtils.ts | details": {
     "message": "Деталі"
   },
@@ -13203,7 +13245,7 @@
     "message": "Швидка компіляція всіх функцій"
   },
   "panels/timeline/TimelineUIUtils.ts | elementsAffected": {
-    "message": "Кількість задіяних елементів"
+    "message": "Кількість задіяних об’єктів"
   },
   "panels/timeline/TimelineUIUtils.ts | emptyPlaceholder": {
     "message": "{PH1}"
@@ -13218,7 +13260,7 @@
     "message": "не вдалося завантажити скрипт із кешу"
   },
   "panels/timeline/TimelineUIUtils.ts | firstInvalidated": {
-    "message": "Уперше анульовано"
+    "message": "Перше анулювання"
   },
   "panels/timeline/TimelineUIUtils.ts | firstLayoutInvalidation": {
     "message": "Перше анулювання макета"
@@ -13316,11 +13358,14 @@
   "panels/timeline/TimelineUIUtils.ts | preview": {
     "message": "Попередній перегляд"
   },
+  "panels/timeline/TimelineUIUtils.ts | priority": {
+    "message": "Пріоритет"
+  },
   "panels/timeline/TimelineUIUtils.ts | processingDuration": {
     "message": "Тривалість обробки"
   },
   "panels/timeline/TimelineUIUtils.ts | producedCacheSize": {
-    "message": "Розмір виконаного кешу"
+    "message": "Розмір створеного кешу"
   },
   "panels/timeline/TimelineUIUtils.ts | range": {
     "message": "Діапазон"
@@ -13329,7 +13374,7 @@
     "message": "Примусове повторне обчислення"
   },
   "panels/timeline/TimelineUIUtils.ts | relatedNode": {
-    "message": "Пов'язаний вузол"
+    "message": "Пов’язаний вузол"
   },
   "panels/timeline/TimelineUIUtils.ts | repeats": {
     "message": "Повторення"
@@ -13389,16 +13434,13 @@
     "message": "Статистика селектора"
   },
   "panels/timeline/TimelineUIUtils.ts | selfTime": {
-    "message": "Власний час"
+    "message": "Час однієї дії"
   },
   "panels/timeline/TimelineUIUtils.ts | size": {
     "message": "Розмір"
   },
   "panels/timeline/TimelineUIUtils.ts | stackTrace": {
     "message": "Трасування стека"
-  },
-  "panels/timeline/TimelineUIUtils.ts | state": {
-    "message": "Стан"
   },
   "panels/timeline/TimelineUIUtils.ts | streamed": {
     "message": "Передано"
@@ -13486,6 +13528,12 @@
   },
   "panels/timeline/UIDevtoolsUtils.ts | system": {
     "message": "Система"
+  },
+  "panels/timeline/components/BreadcrumbsUI.ts | activateBreadcrumb": {
+    "message": "Активувати ланцюжок навігації"
+  },
+  "panels/timeline/components/BreadcrumbsUI.ts | removeChildBreadcrumbs": {
+    "message": "Вилучити дочірні ланцюжки навігації"
   },
   "panels/timeline/components/CPUThrottlingSelector.ts | cpu": {
     "message": "ЦП: {PH1}"
@@ -13607,14 +13655,56 @@
   "panels/timeline/components/InteractionBreakdown.ts | processingDuration": {
     "message": "Тривалість обробки"
   },
+  "panels/timeline/components/LayoutShiftDetails.ts | animation": {
+    "message": "Анімація"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | cluster": {
+    "message": "Кластер зміщення макета ({PH1})"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | culprit": {
+    "message": "Причина"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | elementsShifted": {
+    "message": "Зміщені елементи"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | fontRequest": {
+    "message": "Запит на шрифт"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | injectedIframe": {
+    "message": "Вставлено iframe"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | layoutShift": {
+    "message": "Зміщення макета ({PH1})"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | nonCompositedAnimation": {
+    "message": "Анімація без композитингу"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | parentCluster": {
+    "message": "Батьківський кластер"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | shiftScore": {
+    "message": "Оцінка зміщення"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | startTime": {
+    "message": "Час початку"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | total": {
+    "message": "Усього"
+  },
+  "panels/timeline/components/LayoutShiftDetails.ts | unsizedImage": {
+    "message": "Зображення невідомого розміру"
+  },
   "panels/timeline/components/LiveMetricsView.ts | allDevices": {
     "message": "Усі пристрої"
   },
   "panels/timeline/components/LiveMetricsView.ts | auto": {
     "message": "Автоматично ({PH1})"
   },
+  "panels/timeline/components/LiveMetricsView.ts | clearCurrentLog": {
+    "message": "Очистити поточний журнал"
+  },
   "panels/timeline/components/LiveMetricsView.ts | collectionPeriod": {
-    "message": "Період збирання:"
+    "message": "Період збирання: {PH1}"
   },
   "panels/timeline/components/LiveMetricsView.ts | dateRange": {
     "message": "{PH1} – {PH2}"
@@ -13625,14 +13715,41 @@
   "panels/timeline/components/LiveMetricsView.ts | device": {
     "message": "Пристрій: {PH1}"
   },
+  "panels/timeline/components/LiveMetricsView.ts | disableNetworkCache": {
+    "message": "Вимкнути кеш мережі"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | duration": {
+    "message": "Тривалість у локальному середовищі (мс)"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | elementRenderDelay": {
+    "message": "Затримка відображення елемента"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | environmentSettings": {
+    "message": "Налаштування середовища"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | eventLogs": {
+    "message": "Розділ із журналами взаємодій і зміщень макета"
+  },
   "panels/timeline/components/LiveMetricsView.ts | fieldData": {
     "message": "Дані від користувачів"
   },
-  "panels/timeline/components/LiveMetricsView.ts | fieldDataLink": {
-    "message": "дані від користувачів"
+  "panels/timeline/components/LiveMetricsView.ts | inpInteraction": {
+    "message": "Взаємодія INP відповідає 98-му процентилю затримок взаємодії."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | inpInteractionLink": {
+    "message": "Взаємодія за показником INP"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | inputDelay": {
+    "message": "Затримка відповіді"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | interactionExcluded": {
+    "message": "Показник INP розраховується на основі 98-го процентиля затримок взаємодії, тому деякі затримки можуть бути більшими за значення INP."
   },
   "panels/timeline/components/LiveMetricsView.ts | interactions": {
     "message": "Взаємодії"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | layoutShifts": {
+    "message": "Зміщення макета"
   },
   "panels/timeline/components/LiveMetricsView.ts | lcpElement": {
     "message": "Елемент LCP"
@@ -13643,26 +13760,35 @@
   "panels/timeline/components/LiveMetricsView.ts | localAndFieldMetrics": {
     "message": "Локальні показники й дані від користувачів"
   },
+  "panels/timeline/components/LiveMetricsView.ts | localFieldLearnMoreLink": {
+    "message": "Докладніше про локальні дані й дані від користувачів"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | localFieldLearnMoreTooltip": {
+    "message": "Локальні показники збираються з поточної сторінки за допомогою вашого пристрою і з’єднання з мережею. Дані від користувачів вимірюються на основі взаємодій реальних користувачів, які застосовують різні пристрої і з’єднання з мережею."
+  },
   "panels/timeline/components/LiveMetricsView.ts | localMetrics": {
     "message": "Локальні показники"
   },
-  "panels/timeline/components/LiveMetricsView.ts | localMetricsLink": {
-    "message": "Локальні показники"
+  "panels/timeline/components/LiveMetricsView.ts | logToConsole": {
+    "message": "Додати на консоль додаткові дані про взаємодію"
   },
   "panels/timeline/components/LiveMetricsView.ts | mobile": {
     "message": "Мобільний пристрій"
   },
-  "panels/timeline/components/LiveMetricsView.ts | mostUsersDesktop": {
-    "message": "Більшість користувачів застосовують комп’ютери. Спробуйте створити емуляцію комп’ютерних вікон різного розміру."
-  },
-  "panels/timeline/components/LiveMetricsView.ts | mostUsersMobile": {
-    "message": "Більшість користувачів застосовують мобільні пристрої. Спробуйте створити емуляцію мобільних пристроїв реальних користувачів."
-  },
   "panels/timeline/components/LiveMetricsView.ts | needsDataOption": {
     "message": "{PH1} – немає даних"
   },
+  "panels/timeline/components/LiveMetricsView.ts | network": {
+    "message": "Мережа: {PH1}"
+  },
   "panels/timeline/components/LiveMetricsView.ts | nextSteps": {
     "message": "Подальші дії"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | notEnoughData": {
+    "message": "Недостатньо даних"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | numShifts": {
+    "message": "{shiftCount,plural, =1{{shiftCount} зміщення}one{{shiftCount} зміщення}few{{shiftCount} зміщення}many{{shiftCount} зміщень}other{{shiftCount} зміщення}}"
   },
   "panels/timeline/components/LiveMetricsView.ts | originOption": {
     "message": "Джерело"
@@ -13670,11 +13796,32 @@
   "panels/timeline/components/LiveMetricsView.ts | originOptionWithKey": {
     "message": "Джерело: {PH1}"
   },
-  "panels/timeline/components/LiveMetricsView.ts | recordingSettings": {
-    "message": "Налаштування запису"
+  "panels/timeline/components/LiveMetricsView.ts | percentDevices": {
+    "message": "{PH1}% на мобільних пристроях, {PH2}% на комп’ютерах"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | phase": {
+    "message": "Етап"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | presentationDelay": {
+    "message": "Затримка перед відображенням відповіді"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | processingDuration": {
+    "message": "Тривалість обробки"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | realUserEnvironments": {
+    "message": "Умови взаємодії реальних користувачів"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | resourceLoadDelay": {
+    "message": "Затримка завантаження ресурсу"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | resourceLoadDuration": {
+    "message": "Тривалість завантаження ресурсу"
   },
   "panels/timeline/components/LiveMetricsView.ts | seeHowYourLocalMetricsCompare": {
     "message": "Порівняйте свої локальні показники з даними від реальних користувачів у звіті {PH1}."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | showClsCluster": {
+    "message": "Перейти до кластера з найвищим показником зміщень макета."
   },
   "panels/timeline/components/LiveMetricsView.ts | showFieldDataForDevice": {
     "message": "Показувати дані від користувачів для такого типу пристроїв: {PH1}"
@@ -13682,26 +13829,110 @@
   "panels/timeline/components/LiveMetricsView.ts | showFieldDataForPage": {
     "message": "Показувати дані від користувачів для сторінки {PH1}"
   },
+  "panels/timeline/components/LiveMetricsView.ts | showInpInteraction": {
+    "message": "Перейти до взаємодій, пов’язаних із показником INP."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | simulateDifferentDevices": {
+    "message": "імітувати різні пристрої"
+  },
   "panels/timeline/components/LiveMetricsView.ts | tablet": {
     "message": "Планшет"
   },
-  "panels/timeline/components/LiveMetricsView.ts | theFieldMetricsAre": {
-    "message": "{PH1} вимірюються на основі взаємодій реальних користувачів, які застосовують різні пристрої і з’єднання з мережею."
-  },
-  "panels/timeline/components/LiveMetricsView.ts | theLocalMetricsAre": {
-    "message": "{PH1} збираються з поточної сторінки за допомогою вашого пристрою і з’єднання з мережею."
+  "panels/timeline/components/LiveMetricsView.ts | timeToFirstByte": {
+    "message": "Time to First Byte"
   },
   "panels/timeline/components/LiveMetricsView.ts | tryDisablingThrottling": {
-    "message": "Спробуйте вимкнути обмеження пропускної спроможності мережі, щоб дізнатися її приблизну затримку за даними реальних користувачів."
+    "message": "75-й процентиль занадто швидкий, щоб його можна було імітувати з обмеженням пропускної здатності"
   },
   "panels/timeline/components/LiveMetricsView.ts | tryUsingThrottling": {
-    "message": "Спробуйте обмежити пропускну спроможність мережі {PH1}, щоб дізнатися її приблизну затримку за даними реальних користувачів."
+    "message": "У 75-го процентиля такі самі затримки, як і за обмеження пропускної спроможності \"{PH1}\""
   },
   "panels/timeline/components/LiveMetricsView.ts | urlOption": {
     "message": "URL-адреса"
   },
   "panels/timeline/components/LiveMetricsView.ts | urlOptionWithKey": {
     "message": "URL-адреса: {PH1}"
+  },
+  "panels/timeline/components/LiveMetricsView.ts | useDeviceToolbar": {
+    "message": "За допомогою цієї панелі інструментів можна {PH1}."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | worstCluster": {
+    "message": "Найгірший кластер"
+  },
+  "panels/timeline/components/MetricCard.ts | betweenRange": {
+    "message": "({PH1}–{PH2})"
+  },
+  "panels/timeline/components/MetricCard.ts | clsHelpTooltip": {
+    "message": "Показник CLS відображає вкількість неочікувано зміщеного контенту. Щоб дізнатися більше про CLS, натисніть тут."
+  },
+  "panels/timeline/components/MetricCard.ts | considerTesting": {
+    "message": "Враховуйте локальні умови тестування"
+  },
+  "panels/timeline/components/MetricCard.ts | duration": {
+    "message": "Тривалість у локальному середовищі (мс)"
+  },
+  "panels/timeline/components/MetricCard.ts | field75thPercentile": {
+    "message": "75-й процентиль поля"
+  },
+  "panels/timeline/components/MetricCard.ts | good": {
+    "message": "Добре"
+  },
+  "panels/timeline/components/MetricCard.ts | gtRange": {
+    "message": "(>{PH1})"
+  },
+  "panels/timeline/components/MetricCard.ts | inpHelpTooltip": {
+    "message": "Показник INP відображає взагальну швидкість реагування на всі кліки мишею, дотики до екрана й дії на клавіатурі. Щоб дізнатися більше про INP, натисніть тут."
+  },
+  "panels/timeline/components/MetricCard.ts | interactToMeasure": {
+    "message": "Щоб виміряти показник INP, взаємодійте зі сторінкою."
+  },
+  "panels/timeline/components/MetricCard.ts | lcpHelpTooltip": {
+    "message": "Показник LCP відображає час візуалізації найбільшого зображення, текстового блоку або відео, видимого в області перегляду. Щоб дізнатися більше про LCP, натисніть тут."
+  },
+  "panels/timeline/components/MetricCard.ts | leqRange": {
+    "message": "(≤{PH1})"
+  },
+  "panels/timeline/components/MetricCard.ts | localValue": {
+    "message": "Локально"
+  },
+  "panels/timeline/components/MetricCard.ts | needsImprovement": {
+    "message": "Потрібно покращити"
+  },
+  "panels/timeline/components/MetricCard.ts | percentage": {
+    "message": "{PH1}%"
+  },
+  "panels/timeline/components/MetricCard.ts | phase": {
+    "message": "Етап"
+  },
+  "panels/timeline/components/MetricCard.ts | poor": {
+    "message": "Погано"
+  },
+  "panels/timeline/components/MetricCard.ts | recDynamicContentCLS": {
+    "message": "Динамічний контент може впливати на те, які зміщення макета відбуваються."
+  },
+  "panels/timeline/components/MetricCard.ts | recDynamicContentLCP": {
+    "message": "Якщо контент динамічний, елемент LCP може змінюватися під час кожного завантаження сторінки."
+  },
+  "panels/timeline/components/MetricCard.ts | recJourneyCLS": {
+    "message": "Взаємодія користувача зі сторінкою може впливати на зміщення макета. Протестуйте поширені типи взаємодії, наприклад прокручування сторінки."
+  },
+  "panels/timeline/components/MetricCard.ts | recJourneyINP": {
+    "message": "Дії користувача на сторінці можуть впливати на затримку взаємодії. Протестуйте поширені типи взаємодії."
+  },
+  "panels/timeline/components/MetricCard.ts | recThrottlingINP": {
+    "message": "У реальних користувачів взаємодія може тривати довше через низьку швидкість ЦП. Щоб імітувати роботу на повільнішому пристрої, зменште пропускну спроможність ЦП."
+  },
+  "panels/timeline/components/MetricCard.ts | recThrottlingLCP": {
+    "message": "У реальних користувачів завантаження сторінок може тривати довше через повільну роботу мережі. Щоб імітувати повільніше з’єднання, зменште пропускну спроможність мережі."
+  },
+  "panels/timeline/components/MetricCard.ts | recViewportCLS": {
+    "message": "Розмір екрана може впливати на те, які зміщення макета відбуваються. Протестуйте поширені розміри області перегляду."
+  },
+  "panels/timeline/components/MetricCard.ts | recViewportLCP": {
+    "message": "Розмір екрана може впливати на вибір елемента LCP. Протестуйте поширені розміри області перегляду."
+  },
+  "panels/timeline/components/MetricCard.ts | viewCardDetails": {
+    "message": "Переглянути дані картки"
   },
   "panels/timeline/components/MetricCompareStrings.ts | goodBetterCompare": {
     "message": "{PH2} – це високе значення для локального показника {PH1}, і воно значно вище за показники реальних користувачів."
@@ -13778,14 +14009,11 @@
   "panels/timeline/components/NetworkRequestDetails.ts | FromServiceWorker": {
     "message": " (джерело: service worker)"
   },
-  "panels/timeline/components/NetworkRequestDetails.ts | contentDownloading": {
-    "message": "Завантаження контенту"
+  "panels/timeline/components/NetworkRequestDetails.ts | blocking": {
+    "message": "Блокування"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | decodedBody": {
-    "message": "Розкодований контент"
-  },
-  "panels/timeline/components/NetworkRequestDetails.ts | duration": {
-    "message": "Тривалість"
+    "message": "Розкодовані дані"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | encodedData": {
     "message": "Закодовані дані"
@@ -13793,14 +14021,14 @@
   "panels/timeline/components/NetworkRequestDetails.ts | fromCache": {
     "message": "З кешу"
   },
-  "panels/timeline/components/NetworkRequestDetails.ts | initialPriority": {
-    "message": "Першочерговий пріоритет"
+  "panels/timeline/components/NetworkRequestDetails.ts | inBodyParserBlocking": {
+    "message": "Блокування внутрішнього синтаксичного аналізатора"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | initiatedBy": {
     "message": "Ініційовано подією:"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | mimeType": {
-    "message": "Тип MIME"
+    "message": "MIME-тип"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | networkRequest": {
     "message": "Запит мережі"
@@ -13814,23 +14042,20 @@
   "panels/timeline/components/NetworkRequestDetails.ts | priority": {
     "message": "Пріоритет"
   },
-  "panels/timeline/components/NetworkRequestDetails.ts | queuingAndConnecting": {
-    "message": "Додавання в чергу й підключення"
+  "panels/timeline/components/NetworkRequestDetails.ts | renderBlocking": {
+    "message": "Блокування відображення"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | requestMethod": {
     "message": "Метод запиту"
-  },
-  "panels/timeline/components/NetworkRequestDetails.ts | requestSentAndWaiting": {
-    "message": "Запит надіслано, і він очікує на відповідь"
-  },
-  "panels/timeline/components/NetworkRequestDetails.ts | waitingOnMainThread": {
-    "message": "Очікування в основному потоці"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | yes": {
     "message": "Так"
   },
   "panels/timeline/components/NetworkRequestTooltip.ts | contentDownloading": {
     "message": "Завантаження контенту"
+  },
+  "panels/timeline/components/NetworkRequestTooltip.ts | duration": {
+    "message": "Тривалість"
   },
   "panels/timeline/components/NetworkRequestTooltip.ts | priority": {
     "message": "Пріоритет"
@@ -13865,6 +14090,144 @@
   "panels/timeline/components/NetworkThrottlingSelector.ts | presets": {
     "message": "Набори налаштувань"
   },
+  "panels/timeline/components/RelatedInsightChips.ts | insightKeyword": {
+    "message": "Статистика"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | annotationGetStarted": {
+    "message": "Додайте до трасування анотацію, видиму для вас і інших користувачів"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | deleteAnnotationTutorialDescription": {
+    "message": "Щоб отримати доступ до функції видалення, наведіть курсор на список на бічній панелі, вибравши вкладку \"Анотації\"."
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | deleteAnnotationTutorialTitle": {
+    "message": "Видалити анотацію"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | deleteButton": {
+    "message": "Видалити анотацію \"{PH1}\""
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | entryLabelDescriptionLabel": {
+    "message": "Подія \"{PH1}\", що містить таку анотацію: {PH2}"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | entryLabelTutorialDescription": {
+    "message": "Щоб створити мітку об’єкта, двічі натисніть його й введіть текст."
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | entryLabelTutorialTitle": {
+    "message": "Додати мітку"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | entryLinkDescriptionLabel": {
+    "message": "Зв’язок між подіями \"{PH1}\" і \"{PH2}\""
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | entryLinkTutorialDescription": {
+    "message": "Двічі натисніть об’єкт, а потім – стрілку праворуч біля нього й виберіть цільовий об’єкт."
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | entryLinkTutorialTitle": {
+    "message": "Поєднання двох об’єктів"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | timeRangeDescriptionLabel": {
+    "message": "Діапазон часу (початок: {PH1}; завершення: {PH2})"
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | timeRangeTutorialDescription": {
+    "message": "Щоб додати анотацію до діапазону часу, натисніть Shift і виділить елементи на флейм-графі, а потім введіть текст."
+  },
+  "panels/timeline/components/SidebarAnnotationsTab.ts | timeRangeTutorialTitle": {
+    "message": "Укажіть діапазон часу"
+  },
+  "panels/timeline/components/SidebarInsightsTab.ts | feedbackButton": {
+    "message": "Відгук"
+  },
+  "panels/timeline/components/SidebarInsightsTab.ts | feedbackTooltip": {
+    "message": "Insights – це експериментальна функція. Ваш відгук допоможе нам покращити її."
+  },
+  "panels/timeline/components/SidebarSingleInsightSet.ts | metricScore": {
+    "message": "Показник {PH1}: {PH2} ({PH3})"
+  },
+  "panels/timeline/components/Utils.ts | fms": {
+    "message": "{PH1}[мс]()"
+  },
+  "panels/timeline/components/Utils.ts | fs": {
+    "message": "{PH1}[с]()"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | animation": {
+    "message": "Анімація"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | fontRequest": {
+    "message": "Запит на шрифт"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | injectedIframe": {
+    "message": "Вставлено iframe"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | layoutShiftCluster": {
+    "message": "Кластер зміщення макета ({PH1})"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | topCulprits": {
+    "message": "Основні причини зміщення макета"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | unsizedImages": {
+    "message": "Зображення невідомих розмірів"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | worstCluster": {
+    "message": "Найгірший кластер"
+  },
+  "panels/timeline/components/insights/CLSCulprits.ts | worstLayoutShiftCluster": {
+    "message": "Кластер із найвищим показником зміщення макета"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | failedAriaLabel": {
+    "message": "Не вдалося перевірити статистику: {PH1}"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | failedRedirects": {
+    "message": "Містить переспрямування"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | failedServerResponseTime": {
+    "message": "Сервер відповідає повільно"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | failedTextCompression": {
+    "message": "Без стиснення"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | passingRedirects": {
+    "message": "Уникає переспрямувань"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | passingServerResponseTime": {
+    "message": "Сервер відповідає швидко"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | passingTextCompression": {
+    "message": "Застосовано стиснення тексту"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | redirectsLabel": {
+    "message": "Переспрямування"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | serverResponseTimeLabel": {
+    "message": "Час відповіді сервера"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | successAriaLabel": {
+    "message": "Перевірку статистики пройдено: {PH1}"
+  },
+  "panels/timeline/components/insights/DocumentLatency.ts | uncompressedDownload": {
+    "message": "Завантаження без стиснення"
+  },
+  "panels/timeline/components/insights/FontDisplay.ts | fontColumn": {
+    "message": "Шрифт"
+  },
+  "panels/timeline/components/insights/FontDisplay.ts | wastedTimeColumn": {
+    "message": "Витрачений час"
+  },
+  "panels/timeline/components/insights/InteractionToNextPaint.ts | duration": {
+    "message": "Тривалість"
+  },
+  "panels/timeline/components/insights/InteractionToNextPaint.ts | inputDelay": {
+    "message": "Затримка відповіді"
+  },
+  "panels/timeline/components/insights/InteractionToNextPaint.ts | phase": {
+    "message": "Етап"
+  },
+  "panels/timeline/components/insights/InteractionToNextPaint.ts | presentationDelay": {
+    "message": "Затримка перед відображенням відповіді"
+  },
+  "panels/timeline/components/insights/InteractionToNextPaint.ts | processingDuration": {
+    "message": "Тривалість обробки"
+  },
+  "panels/timeline/components/insights/LCPDiscovery.ts | failedAriaLabel": {
+    "message": "Не вдалося перевірити статистику: {PH1}"
+  },
   "panels/timeline/components/insights/LCPDiscovery.ts | fetchPriorityApplied": {
     "message": "Застосовано параметр fetchpriority=high"
   },
@@ -13877,8 +14240,17 @@
   "panels/timeline/components/insights/LCPDiscovery.ts | requestDiscoverable": {
     "message": "Запит можна знайти в початковому документі"
   },
+  "panels/timeline/components/insights/LCPDiscovery.ts | successAriaLabel": {
+    "message": "Перевірку статистики пройдено: {PH1}"
+  },
   "panels/timeline/components/insights/LCPPhases.ts | elementRenderDelay": {
     "message": "Затримка відображення елемента"
+  },
+  "panels/timeline/components/insights/LCPPhases.ts | percentLCP": {
+    "message": "% від LCP"
+  },
+  "panels/timeline/components/insights/LCPPhases.ts | phase": {
+    "message": "Етап"
   },
   "panels/timeline/components/insights/LCPPhases.ts | resourceLoadDelay": {
     "message": "Затримка завантаження ресурсу"
@@ -13888,6 +14260,48 @@
   },
   "panels/timeline/components/insights/LCPPhases.ts | timeToFirstByte": {
     "message": "Time to First Byte"
+  },
+  "panels/timeline/components/insights/RenderBlocking.ts | duration": {
+    "message": "Тривалість"
+  },
+  "panels/timeline/components/insights/RenderBlocking.ts | renderBlockingRequest": {
+    "message": "Запит"
+  },
+  "panels/timeline/components/insights/SlowCSSSelector.ts | elapsed": {
+    "message": "Минуло часу"
+  },
+  "panels/timeline/components/insights/SlowCSSSelector.ts | matchAttempts": {
+    "message": "Кількість спроб"
+  },
+  "panels/timeline/components/insights/SlowCSSSelector.ts | matchCount": {
+    "message": "Кількість збігів"
+  },
+  "panels/timeline/components/insights/SlowCSSSelector.ts | topSelectors": {
+    "message": "Найкращі селектори"
+  },
+  "panels/timeline/components/insights/SlowCSSSelector.ts | total": {
+    "message": "Усього"
+  },
+  "panels/timeline/components/insights/ThirdParties.ts | columnBlockingTime": {
+    "message": "Час блокування"
+  },
+  "panels/timeline/components/insights/ThirdParties.ts | columnThirdParty": {
+    "message": "Сторонні постачальники послуг"
+  },
+  "panels/timeline/components/insights/ThirdParties.ts | columnTransferSize": {
+    "message": "Розмір передавання"
+  },
+  "panels/timeline/overlays/components/EntriesLinkOverlay.ts | diagram": {
+    "message": "Зв’язок між записами"
+  },
+  "panels/timeline/overlays/components/EntryLabelOverlay.ts | entryLabel": {
+    "message": "Мітка запису"
+  },
+  "panels/timeline/overlays/components/EntryLabelOverlay.ts | inputTextPrompt": {
+    "message": "Введіть мітку анотації"
+  },
+  "panels/timeline/overlays/components/TimeRangeOverlay.ts | timeRange": {
+    "message": "Діапазон часу"
   },
   "panels/timeline/timeline-meta.ts | hideChromeFrameInLayersView": {
     "message": "Сховати фрейм chrome під час перегляду шарів"
@@ -13927,6 +14341,387 @@
   },
   "panels/timeline/timeline-meta.ts | stop": {
     "message": "Зупинити"
+  },
+  "panels/timeline/utils/EntryName.ts | anonymous": {
+    "message": "(анонімно)"
+  },
+  "panels/timeline/utils/EntryName.ts | eventDispatchS": {
+    "message": "Подія: {PH1}"
+  },
+  "panels/timeline/utils/EntryName.ts | frame": {
+    "message": "Фрейм"
+  },
+  "panels/timeline/utils/EntryName.ts | wsConnectionClosed": {
+    "message": "WebSocket закрито"
+  },
+  "panels/timeline/utils/EntryName.ts | wsConnectionOpened": {
+    "message": "WebSocket відкрито"
+  },
+  "panels/timeline/utils/EntryName.ts | wsConnectionOpenedWithUrl": {
+    "message": "WebSocket відкрито: {PH1}"
+  },
+  "panels/timeline/utils/EntryStyles.ts | abortPostTaskCallback": {
+    "message": "Скасовано подію із застосуванням postTask API"
+  },
+  "panels/timeline/utils/EntryStyles.ts | animation": {
+    "message": "Анімація"
+  },
+  "panels/timeline/utils/EntryStyles.ts | animationFrameFired": {
+    "message": "Активовано фрейм з анімацією"
+  },
+  "panels/timeline/utils/EntryStyles.ts | async": {
+    "message": "Асинхронізація"
+  },
+  "panels/timeline/utils/EntryStyles.ts | asyncTask": {
+    "message": "Асинхронне завдання"
+  },
+  "panels/timeline/utils/EntryStyles.ts | cacheModule": {
+    "message": "Код модуля кешу"
+  },
+  "panels/timeline/utils/EntryStyles.ts | cacheScript": {
+    "message": "Код скрипту кешу"
+  },
+  "panels/timeline/utils/EntryStyles.ts | cachedWasmModule": {
+    "message": "Кешовано модуль Wasm"
+  },
+  "panels/timeline/utils/EntryStyles.ts | cancelAnimationFrame": {
+    "message": "Скасувати фрейм анімації"
+  },
+  "panels/timeline/utils/EntryStyles.ts | cancelIdleCallback": {
+    "message": "Скасування неактивного зворотного виклику"
+  },
+  "panels/timeline/utils/EntryStyles.ts | commit": {
+    "message": "Надсилання"
+  },
+  "panels/timeline/utils/EntryStyles.ts | compileCode": {
+    "message": "Компілювання коду"
+  },
+  "panels/timeline/utils/EntryStyles.ts | compileModule": {
+    "message": "Компілювання модуля"
+  },
+  "panels/timeline/utils/EntryStyles.ts | compileScript": {
+    "message": "Компілювання скрипту"
+  },
+  "panels/timeline/utils/EntryStyles.ts | compiledWasmModule": {
+    "message": "Скомпільовано модуль Wasm"
+  },
+  "panels/timeline/utils/EntryStyles.ts | compositeLayers": {
+    "message": "Компонування шарів"
+  },
+  "panels/timeline/utils/EntryStyles.ts | computeIntersections": {
+    "message": "Обчислення перетинів"
+  },
+  "panels/timeline/utils/EntryStyles.ts | consoleTime": {
+    "message": "Час консолі"
+  },
+  "panels/timeline/utils/EntryStyles.ts | cppGc": {
+    "message": "Збір сміття C++"
+  },
+  "panels/timeline/utils/EntryStyles.ts | createWebsocket": {
+    "message": "Створити WebSocket"
+  },
+  "panels/timeline/utils/EntryStyles.ts | decrypt": {
+    "message": "Дешифрування"
+  },
+  "panels/timeline/utils/EntryStyles.ts | decryptReply": {
+    "message": "Дешифрування відповіді"
+  },
+  "panels/timeline/utils/EntryStyles.ts | deserializeCodeCache": {
+    "message": "Десеріалізація кешу коду"
+  },
+  "panels/timeline/utils/EntryStyles.ts | destroyWebsocket": {
+    "message": "Знищити WebSocket"
+  },
+  "panels/timeline/utils/EntryStyles.ts | digest": {
+    "message": "Дайджест"
+  },
+  "panels/timeline/utils/EntryStyles.ts | digestReply": {
+    "message": "Зведення відповіді"
+  },
+  "panels/timeline/utils/EntryStyles.ts | domGc": {
+    "message": "Збір сміття DOM"
+  },
+  "panels/timeline/utils/EntryStyles.ts | domcontentloadedEvent": {
+    "message": "Подія DOMContentLoaded"
+  },
+  "panels/timeline/utils/EntryStyles.ts | drawFrame": {
+    "message": "Малювання фрейму"
+  },
+  "panels/timeline/utils/EntryStyles.ts | drawing": {
+    "message": "Малювання"
+  },
+  "panels/timeline/utils/EntryStyles.ts | embedderCallback": {
+    "message": "Зворотний виклик інструмента вставки"
+  },
+  "panels/timeline/utils/EntryStyles.ts | encrypt": {
+    "message": "Шифрування"
+  },
+  "panels/timeline/utils/EntryStyles.ts | encryptReply": {
+    "message": "Шифрування відповіді"
+  },
+  "panels/timeline/utils/EntryStyles.ts | evaluateModule": {
+    "message": "Оцінювання модуля"
+  },
+  "panels/timeline/utils/EntryStyles.ts | evaluateScript": {
+    "message": "Оцінювання скрипту"
+  },
+  "panels/timeline/utils/EntryStyles.ts | event": {
+    "message": "Подія"
+  },
+  "panels/timeline/utils/EntryStyles.ts | eventTiming": {
+    "message": "Часові межі події"
+  },
+  "panels/timeline/utils/EntryStyles.ts | experience": {
+    "message": "Зручність"
+  },
+  "panels/timeline/utils/EntryStyles.ts | finishLoading": {
+    "message": "Кінець завантаження"
+  },
+  "panels/timeline/utils/EntryStyles.ts | fireIdleCallback": {
+    "message": "Запуск неактивного зворотного виклику"
+  },
+  "panels/timeline/utils/EntryStyles.ts | firstContentfulPaint": {
+    "message": "Перша візуалізація контенту"
+  },
+  "panels/timeline/utils/EntryStyles.ts | firstPaint": {
+    "message": "Перша візуалізація"
+  },
+  "panels/timeline/utils/EntryStyles.ts | frameStart": {
+    "message": "Початок фрейму"
+  },
+  "panels/timeline/utils/EntryStyles.ts | frameStartMainThread": {
+    "message": "Початок фрейму (основний потік)"
+  },
+  "panels/timeline/utils/EntryStyles.ts | frameStartedLoading": {
+    "message": "Початок завантаження фрейму"
+  },
+  "panels/timeline/utils/EntryStyles.ts | functionCall": {
+    "message": "Виклик функції"
+  },
+  "panels/timeline/utils/EntryStyles.ts | gcEvent": {
+    "message": "Подія збору сміття"
+  },
+  "panels/timeline/utils/EntryStyles.ts | gpu": {
+    "message": "ГП"
+  },
+  "panels/timeline/utils/EntryStyles.ts | hitTest": {
+    "message": "Перевірка натиску"
+  },
+  "panels/timeline/utils/EntryStyles.ts | idle": {
+    "message": "Бездіяльність"
+  },
+  "panels/timeline/utils/EntryStyles.ts | imageDecode": {
+    "message": "Розкодування зображення"
+  },
+  "panels/timeline/utils/EntryStyles.ts | installTimer": {
+    "message": "Встановлення таймера"
+  },
+  "panels/timeline/utils/EntryStyles.ts | invalidateLayout": {
+    "message": "Анулювання макета"
+  },
+  "panels/timeline/utils/EntryStyles.ts | jsFrame": {
+    "message": "Фрейм JS"
+  },
+  "panels/timeline/utils/EntryStyles.ts | largestContentfulPaint": {
+    "message": "Візуалізація великого контенту"
+  },
+  "panels/timeline/utils/EntryStyles.ts | layerize": {
+    "message": "Шарування"
+  },
+  "panels/timeline/utils/EntryStyles.ts | layout": {
+    "message": "Макет"
+  },
+  "panels/timeline/utils/EntryStyles.ts | layoutShift": {
+    "message": "Зміщення макета"
+  },
+  "panels/timeline/utils/EntryStyles.ts | layoutShiftCluster": {
+    "message": "Кластер зміщення макета"
+  },
+  "panels/timeline/utils/EntryStyles.ts | loading": {
+    "message": "Завантаження"
+  },
+  "panels/timeline/utils/EntryStyles.ts | majorGc": {
+    "message": "Повний збір сміття"
+  },
+  "panels/timeline/utils/EntryStyles.ts | messaging": {
+    "message": "Повідомлення"
+  },
+  "panels/timeline/utils/EntryStyles.ts | minorGc": {
+    "message": "Скорочений збір сміття"
+  },
+  "panels/timeline/utils/EntryStyles.ts | onMessage": {
+    "message": "У повідомленні"
+  },
+  "panels/timeline/utils/EntryStyles.ts | onloadEvent": {
+    "message": "Подія onload"
+  },
+  "panels/timeline/utils/EntryStyles.ts | optimizeCode": {
+    "message": "Оптимізація коду"
+  },
+  "panels/timeline/utils/EntryStyles.ts | other": {
+    "message": "Інше"
+  },
+  "panels/timeline/utils/EntryStyles.ts | paint": {
+    "message": "Візуалізація"
+  },
+  "panels/timeline/utils/EntryStyles.ts | paintImage": {
+    "message": "Візуалізація зображення"
+  },
+  "panels/timeline/utils/EntryStyles.ts | paintSetup": {
+    "message": "Налаштування візуалізації"
+  },
+  "panels/timeline/utils/EntryStyles.ts | painting": {
+    "message": "Візуалізація"
+  },
+  "panels/timeline/utils/EntryStyles.ts | parseAndCompile": {
+    "message": "Синтаксичний аналіз і компілювання"
+  },
+  "panels/timeline/utils/EntryStyles.ts | parseHtml": {
+    "message": "Синтаксичний аналіз HTML"
+  },
+  "panels/timeline/utils/EntryStyles.ts | parseStylesheet": {
+    "message": "Синтаксичний аналіз таблиці стилів"
+  },
+  "panels/timeline/utils/EntryStyles.ts | prePaint": {
+    "message": "Попередня візуалізація"
+  },
+  "panels/timeline/utils/EntryStyles.ts | profilingOverhead": {
+    "message": "Час, витрачений на виконання операції, коли профілювальник активний"
+  },
+  "panels/timeline/utils/EntryStyles.ts | rasterizePaint": {
+    "message": "Растрування візуалізації"
+  },
+  "panels/timeline/utils/EntryStyles.ts | rasterizing": {
+    "message": "Растеризація"
+  },
+  "panels/timeline/utils/EntryStyles.ts | recalculateStyle": {
+    "message": "Повторне обчислення стилю"
+  },
+  "panels/timeline/utils/EntryStyles.ts | receiveData": {
+    "message": "Отримання даних"
+  },
+  "panels/timeline/utils/EntryStyles.ts | receiveResponse": {
+    "message": "Отримання відповіді"
+  },
+  "panels/timeline/utils/EntryStyles.ts | receiveWebsocketHandshake": {
+    "message": "Підтвердження встановлення зв’язку з WebSocket"
+  },
+  "panels/timeline/utils/EntryStyles.ts | removeTimer": {
+    "message": "Видалення таймера"
+  },
+  "panels/timeline/utils/EntryStyles.ts | rendering": {
+    "message": "Відрисовка"
+  },
+  "panels/timeline/utils/EntryStyles.ts | requestAnimationFrame": {
+    "message": "Запит на фрейм анімації"
+  },
+  "panels/timeline/utils/EntryStyles.ts | requestIdleCallback": {
+    "message": "Запит на неактивний зворотний виклик"
+  },
+  "panels/timeline/utils/EntryStyles.ts | requestMainThreadFrame": {
+    "message": "Запит на фрейм основного потоку"
+  },
+  "panels/timeline/utils/EntryStyles.ts | runMicrotasks": {
+    "message": "Запуск мікрозавдань"
+  },
+  "panels/timeline/utils/EntryStyles.ts | runPostTaskCallback": {
+    "message": "Активовано подію із застосуванням postTask API"
+  },
+  "panels/timeline/utils/EntryStyles.ts | schedulePostMessage": {
+    "message": "Запланувати за допомогою postMessage"
+  },
+  "panels/timeline/utils/EntryStyles.ts | schedulePostTaskCallback": {
+    "message": "Заплановано подію із застосуванням postTask API"
+  },
+  "panels/timeline/utils/EntryStyles.ts | scheduleStyleRecalculation": {
+    "message": "Планування повторного обчислення стилів"
+  },
+  "panels/timeline/utils/EntryStyles.ts | scripting": {
+    "message": "Створення скриптів"
+  },
+  "panels/timeline/utils/EntryStyles.ts | scroll": {
+    "message": "Прокручувати"
+  },
+  "panels/timeline/utils/EntryStyles.ts | sendRequest": {
+    "message": "Надсилання запиту"
+  },
+  "panels/timeline/utils/EntryStyles.ts | sendWebsocketHandshake": {
+    "message": "Надсилання запиту на встановлення зв’язку з WebSocket"
+  },
+  "panels/timeline/utils/EntryStyles.ts | sign": {
+    "message": "Підписання"
+  },
+  "panels/timeline/utils/EntryStyles.ts | signReply": {
+    "message": "Підписання відповіді"
+  },
+  "panels/timeline/utils/EntryStyles.ts | streamingCompileTask": {
+    "message": "Потокове передавання завдання компіляції"
+  },
+  "panels/timeline/utils/EntryStyles.ts | streamingWasmResponse": {
+    "message": "Потокове передавання відповіді Wasm"
+  },
+  "panels/timeline/utils/EntryStyles.ts | system": {
+    "message": "Система"
+  },
+  "panels/timeline/utils/EntryStyles.ts | task": {
+    "message": "Завдання"
+  },
+  "panels/timeline/utils/EntryStyles.ts | timerFired": {
+    "message": "Таймер активовано"
+  },
+  "panels/timeline/utils/EntryStyles.ts | timestamp": {
+    "message": "Позначка часу"
+  },
+  "panels/timeline/utils/EntryStyles.ts | updateLayer": {
+    "message": "Оновлення шару"
+  },
+  "panels/timeline/utils/EntryStyles.ts | updateLayerTree": {
+    "message": "Оновлення дерева шарів"
+  },
+  "panels/timeline/utils/EntryStyles.ts | userTiming": {
+    "message": "Користувацький час"
+  },
+  "panels/timeline/utils/EntryStyles.ts | verify": {
+    "message": "Підтвердження"
+  },
+  "panels/timeline/utils/EntryStyles.ts | verifyReply": {
+    "message": "Підтвердження відповіді"
+  },
+  "panels/timeline/utils/EntryStyles.ts | waitingForNetwork": {
+    "message": "Очікування на мережу"
+  },
+  "panels/timeline/utils/EntryStyles.ts | wasmModuleCacheHit": {
+    "message": "Наявність даних у кеші модуля Wasm"
+  },
+  "panels/timeline/utils/EntryStyles.ts | wasmModuleCacheInvalid": {
+    "message": "Недійсний кеш модуля Wasm"
+  },
+  "panels/timeline/utils/EntryStyles.ts | willSendRequest": {
+    "message": "Буде надіслано запит"
+  },
+  "panels/timeline/utils/EntryStyles.ts | wsMessageReceived": {
+    "message": "Отримати повідомлення WebSocket"
+  },
+  "panels/timeline/utils/EntryStyles.ts | wsMessageSent": {
+    "message": "Надсилання повідомлення WebSocket"
+  },
+  "panels/timeline/utils/EntryStyles.ts | xhrLoad": {
+    "message": "Завантаження XHR"
+  },
+  "panels/timeline/utils/EntryStyles.ts | xhrReadyStateChange": {
+    "message": "Зміна властивості readyState XHR"
+  },
+  "panels/utils/utils.ts | requestContentHeadersOverridden": {
+    "message": "Текст і заголовки запитів перевизначено"
+  },
+  "panels/utils/utils.ts | requestContentOverridden": {
+    "message": "Текст запиту перевизначено"
+  },
+  "panels/utils/utils.ts | requestHeadersOverridden": {
+    "message": "Заголовки запиту перевизначено"
+  },
+  "panels/utils/utils.ts | thirdPartyPhaseout": {
+    "message": "Файли cookie для цього запиту заблоковано через експериментальні параметри Chrome або конфігурацію вебпереглядача. Дізнайтеся більше на панелі \"Проблеми\"."
   },
   "panels/web_audio/AudioContextContentBuilder.ts | callbackBufferSize": {
     "message": "Розмір буфера зворотного виклику"
@@ -14066,6 +14861,33 @@
   "panels/webauthn/webauthn-meta.ts | webauthn": {
     "message": "WebAuthn"
   },
+  "panels/whats_new/ReleaseNoteView.ts | close": {
+    "message": "Закрити"
+  },
+  "panels/whats_new/ReleaseNoteView.ts | learnMore": {
+    "message": "Докладніше"
+  },
+  "panels/whats_new/whats_new-meta.ts | bug": {
+    "message": "помилка"
+  },
+  "panels/whats_new/whats_new-meta.ts | doNotShowWhatsNewAfterEachUpdate": {
+    "message": "Не показувати панель \"Що нового\" після кожного оновлення"
+  },
+  "panels/whats_new/whats_new-meta.ts | releaseNotes": {
+    "message": "Примітки до випуску"
+  },
+  "panels/whats_new/whats_new-meta.ts | reportADevtoolsIssue": {
+    "message": "Поскаржитися на проблему з Інструментами розробника"
+  },
+  "panels/whats_new/whats_new-meta.ts | showWhatsNew": {
+    "message": "Показати інструмент \"Що нового\""
+  },
+  "panels/whats_new/whats_new-meta.ts | showWhatsNewAfterEachUpdate": {
+    "message": "Показувати панель \"Що нового\" після кожного оновлення"
+  },
+  "panels/whats_new/whats_new-meta.ts | whatsNew": {
+    "message": "Що нового"
+  },
   "ui/components/data_grid/DataGrid.ts | enterToSort": {
     "message": "Параметр сортування для стовпця: {PH1}. Щоб застосувати фільтр сортування, натисніть клавішу Enter."
   },
@@ -14138,6 +14960,9 @@
   "ui/components/issue_counter/IssueLinkIcon.ts | issueUnavailable": {
     "message": "Проблема наразі недоступна"
   },
+  "ui/components/markdown_view/CodeBlock.ts | code": {
+    "message": "Код"
+  },
   "ui/components/markdown_view/CodeBlock.ts | copied": {
     "message": "Скопійовано в буфер обміну"
   },
@@ -14179,6 +15004,9 @@
   },
   "ui/components/request_link_icon/RequestLinkIcon.ts | shortenedURL": {
     "message": "Скорочена URL-адреса"
+  },
+  "ui/components/settings/SettingCheckbox.ts | learnMore": {
+    "message": "Докладніше"
   },
   "ui/components/survey_link/SurveyLink.ts | anErrorOccurredWithTheSurvey": {
     "message": "З опитуванням сталася помилка"
@@ -14726,6 +15554,12 @@
   "ui/legacy/components/data_grid/DataGrid.ts | sortByString": {
     "message": "Порядок сортування"
   },
+  "ui/legacy/components/data_grid/DataGridWithPreview.ts | numberEntries": {
+    "message": "Кількість записів, показаних у таблиці: {PH1}"
+  },
+  "ui/legacy/components/data_grid/DataGridWithPreview.ts | selectAValueToPreview": {
+    "message": "Виберіть значення для перегляду"
+  },
   "ui/legacy/components/data_grid/ShowMoreDataGridNode.ts | showAllD": {
     "message": "Показати всі {PH1}"
   },
@@ -14852,8 +15686,8 @@
   "ui/legacy/components/object_ui/ObjectPropertiesSection.ts | noProperties": {
     "message": "Немає властивостей"
   },
-  "ui/legacy/components/object_ui/ObjectPropertiesSection.ts | revealInMemoryInpector": {
-    "message": "Показати на панелі \"Інспектор пам’яті\""
+  "ui/legacy/components/object_ui/ObjectPropertiesSection.ts | openInMemoryInpector": {
+    "message": "Відкрити на панелі \"Інспектор пам’яті\""
   },
   "ui/legacy/components/object_ui/ObjectPropertiesSection.ts | showAllD": {
     "message": "Показати всі {PH1}"
@@ -14903,8 +15737,14 @@
   "ui/legacy/components/perf_ui/FilmStripView.ts | screenshotForSSelectToView": {
     "message": "Знімок екрана для {PH1}: виберіть, щоб переглянути попередні запити."
   },
+  "ui/legacy/components/perf_ui/FlameChart.ts | deleteAnnotations": {
+    "message": "Видалити анотації"
+  },
   "ui/legacy/components/perf_ui/FlameChart.ts | enterTrackConfigurationMode": {
     "message": "Налаштувати версії…"
+  },
+  "ui/legacy/components/perf_ui/FlameChart.ts | eventSelectedFromGroup": {
+    "message": "Вибрано подію \"{PH1}\" у групі \"{PH2}\". Натисніть клавішу Enter, щоб виділити цю подію."
   },
   "ui/legacy/components/perf_ui/FlameChart.ts | exitTrackConfigurationMode": {
     "message": "Завершити налаштування версій"
@@ -15062,6 +15902,9 @@
   "ui/legacy/components/source_frame/SourceFrame.ts | allowPasting": {
     "message": "дозволити вставлення"
   },
+  "ui/legacy/components/source_frame/SourceFrame.ts | binaryContentError": {
+    "message": "Редактор не може показувати двійкові дані. Щоб перевірити цей ресурс, відкрийте вкладку \"Відповідь\" на панелі \"Мережа\"."
+  },
   "ui/legacy/components/source_frame/SourceFrame.ts | bytecodePositionXs": {
     "message": "Позиція байт-коду 0x{PH1}"
   },
@@ -15090,7 +15933,7 @@
     "message": "Завантаження…"
   },
   "ui/legacy/components/source_frame/SourceFrame.ts | prettyPrint": {
-    "message": "Друкувати структурний текст"
+    "message": "Автоматичне форматування"
   },
   "ui/legacy/components/source_frame/SourceFrame.ts | source": {
     "message": "Джерело"
@@ -15161,8 +16004,8 @@
   "ui/legacy/components/utils/JSPresentationUtils.ts | showLess": {
     "message": "Показати менше"
   },
-  "ui/legacy/components/utils/JSPresentationUtils.ts | showSMoreFrames": {
-    "message": "{n,plural, =1{Показати ще # фрейм}one{Показати ще # фрейм}few{Показати ще # фрейми}many{Показати ще # фреймів}other{Показати ще # фрейму}}"
+  "ui/legacy/components/utils/JSPresentationUtils.ts | showMoreFrames": {
+    "message": "Показувати фрейми зі списку ігнорування"
   },
   "ui/legacy/components/utils/JSPresentationUtils.ts | unknownSource": {
     "message": "невідомо"

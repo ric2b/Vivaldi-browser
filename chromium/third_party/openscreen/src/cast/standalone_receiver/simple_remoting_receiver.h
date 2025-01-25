@@ -32,9 +32,9 @@ class SimpleRemotingReceiver {
 
   // The flow here closely mirrors the remoting.proto. The standalone receiver
   // indicates it is ready for initialization by calling
-  // |SendInitializeMessage|, then this class sends an initialize message to the
+  // `SendInitializeMessage`, then this class sends an initialize message to the
   // sender. The sender then replies with an initialization message containing
-  // configurations, which is passed to |initialize_cb|.
+  // configurations, which is passed to `initialize_cb`.
   using InitializeCallback = std::function<void(AudioCodec, VideoCodec)>;
   void SendInitializeMessage(InitializeCallback initialize_cb);
 

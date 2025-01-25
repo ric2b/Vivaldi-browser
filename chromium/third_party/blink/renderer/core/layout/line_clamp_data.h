@@ -20,7 +20,7 @@ struct LineClampData {
   enum State {
     kDisabled,
     kClampByLines,
-    kClampByBfcOffset,
+    kMeasureLinesUntilBfcOffset,
     // The line-clamp context is enabled, but no forced truncation
     // will happen. This is different from kDisabled in that
     // `text-overflow: ellipsis` will not take effect inside it.
@@ -29,41 +29,24 @@ struct LineClampData {
 
   bool IsLineClampContext() const { return state != kDisabled; }
 
-  std::optional<int> LinesUntilClamp() const {
-    if (state == kClampByLines) {
+  std::optional<int> LinesUntilClamp(bool show_measured_lines = false) const {
+    if (state == kClampByLines ||
+        (show_measured_lines && state == kMeasureLinesUntilBfcOffset)) {
       return lines_until_clamp;
     }
     return std::optional<int>();
   }
 
-  bool IsAtClampPoint(LayoutUnit bfc_offset) const {
-    switch (state) {
-      case kClampByLines:
-        return lines_until_clamp == 1;
-      case kClampByBfcOffset:
-        return clamp_bfc_offset == bfc_offset;
-      default:
-        return false;
-    }
+  bool IsAtClampPoint() const {
+    return state == kClampByLines && lines_until_clamp == 1;
   }
 
-  bool IsPastClampPoint(LayoutUnit bfc_offset, bool is_float = false) const {
-    switch (state) {
-      case kClampByLines:
-        return lines_until_clamp <= 0;
-      case kClampByBfcOffset:
-        if (is_float) {
-          return clamp_bfc_offset <= bfc_offset;
-        }
-        return clamp_bfc_offset < bfc_offset;
-      default:
-        return false;
-    }
+  bool IsPastClampPoint() const {
+    return state == kClampByLines && lines_until_clamp <= 0;
   }
 
-  bool ShouldHideForPaint(LayoutUnit bfc_offset, bool is_float = false) const {
-    return RuntimeEnabledFeatures::CSSLineClampEnabled() &&
-           IsPastClampPoint(bfc_offset, is_float);
+  bool ShouldHideForPaint() const {
+    return RuntimeEnabledFeatures::CSSLineClampEnabled() && IsPastClampPoint();
   }
 
   bool operator==(const LineClampData& other) const {
@@ -73,25 +56,25 @@ struct LineClampData {
     switch (state) {
       case kClampByLines:
         return lines_until_clamp == other.lines_until_clamp;
-      case kClampByBfcOffset:
-        return clamp_bfc_offset == other.clamp_bfc_offset;
+      case kMeasureLinesUntilBfcOffset:
+        return lines_until_clamp == other.lines_until_clamp &&
+               clamp_bfc_offset == other.clamp_bfc_offset;
       default:
         return true;
     }
   }
 
-  union {
-    // The number of lines until the clamp point. A value of 1 indicates the
-    // current line should be clamped. This may go negative.
-    // Only valid if state == kClampByLines
-    int lines_until_clamp;
+  // The BFC offset where the current block container should clamp.
+  // (Might not be the same BFC offset as other block containers in the same
+  // BFC, depending on the bottom bmp).
+  // Only valid if state == kClampByBfcOffset
+  LayoutUnit clamp_bfc_offset;
 
-    // The BFC offset where the current block container should clamp.
-    // (Might not be the same BFC offset as other block containers in the same
-    // BFC, depending on the bottom bmp).
-    // Only valid if state == kClampByBfcOffset
-    LayoutUnit clamp_bfc_offset;
-  };
+  // If state == kClampByLines, the number of lines until the clamp point.
+  // A value of 1 indicates the current line should be clamped. May go negative.
+  // With state == kMeasureLinesUntilBfcOffset, the number of lines found in the
+  // BFC so far.
+  int lines_until_clamp = 0;
 
   State state = kDisabled;
 };

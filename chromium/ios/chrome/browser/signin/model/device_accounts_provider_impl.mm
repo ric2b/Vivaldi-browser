@@ -28,9 +28,16 @@ AuthenticationErrorCategory AuthenticationErrorCategoryFromError(
     id<SystemIdentity> identity,
     NSError* error) {
   DCHECK(error);
-  if ([error.domain isEqualToString:kAuthenticationErrorDomain]) {
-    if (error.code == NO_AUTHENTICATED_USER) {
-      return kAuthenticationErrorCategoryUnknownIdentityErrors;
+  if ([error.domain isEqualToString:kSystemIdentityManagerErrorDomain]) {
+    SystemIdentityManagerErrorCode error_code =
+        static_cast<SystemIdentityManagerErrorCode>(error.code);
+    switch (error_code) {
+      case SystemIdentityManagerErrorCode::kNoAuthenticatedIdentity:
+        return kAuthenticationErrorCategoryUnknownIdentityErrors;
+      case SystemIdentityManagerErrorCode::kClientIDMismatch:
+        return kAuthenticationErrorCategoryUnknownIdentityErrors;
+      case SystemIdentityManagerErrorCode::kInvalidTokenIdentity:
+        return kAuthenticationErrorCategoryAuthorizationErrors;
     }
   }
 
@@ -53,8 +60,8 @@ AuthenticationErrorCategory AuthenticationErrorCategoryFromError(
       return kAuthenticationErrorCategoryUserCancellationErrors;
   }
 
-  NOTREACHED_IN_MIGRATION()
-      << "unexpected error: " << base::SysNSStringToUTF8([error description]);
+  NOTREACHED() << "unexpected error: "
+               << base::SysNSStringToUTF8([error description]);
 }
 
 // Helper function converting the result of fetching the access token from

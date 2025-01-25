@@ -10,7 +10,8 @@
 #include "base/memory/raw_ref.h"
 #include "device/vr/openxr/openxr_extension_handler_factory.h"
 #include "device/vr/public/mojom/openxr_interaction_profile_type.mojom-forward.h"
-#include "device/vr/public/mojom/vr_service.mojom-forward.h"
+#include "device/vr/public/mojom/xr_hand_tracking_data.mojom-forward.h"
+#include "device/vr/public/mojom/xr_session.mojom-shared.h"
 #include "third_party/openxr/src/include/openxr/openxr.h"
 
 namespace gfx {
@@ -57,8 +58,6 @@ class OpenXrHandTracker {
   virtual ~OpenXrHandTracker();
 
   XrResult Update(XrSpace base_space, XrTime predicted_display_time);
-
-  bool CanSupplyHandTrackingData() const;
 
   // Must not be overridden by subclasses.
   mojom::XRHandTrackingDataPtr GetHandTrackingData() const;

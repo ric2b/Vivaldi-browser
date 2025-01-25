@@ -210,9 +210,6 @@ class CONTENT_EXPORT BackForwardCacheImpl
   // Returns whether MediaSession's service is allowed for the BackForwardCache.
   static bool IsMediaSessionServiceAllowed();
 
-  // Returns whether back/forward cache is enabled for screen reader users.
-  static bool IsScreenReaderAllowed();
-
   // Returns where back/forward cache is allowed for pages with unload handlers.
   static bool IsUnloadAllowed();
 
@@ -415,13 +412,17 @@ class CONTENT_EXPORT BackForwardCacheImpl
   static bool UsingForegroundBackgroundCacheSizeLimit();
 
   // Returns true if one of the BFCache entries has a matching
-  // BrowsingInstanceId/SiteInstanceId/RenderFrameProxyHost.
-  // TODO(crbug.com/40195481): Remove these once the bug is fixed.
-  bool IsBrowsingInstanceInBackForwardCacheForDebugging(
-      BrowsingInstanceId browsing_instance_id);
-  bool IsSiteInstanceInBackForwardCacheForDebugging(
-      SiteInstanceId site_instance_id);
-  bool IsProxyInBackForwardCacheForDebugging(RenderFrameProxyHost* proxy);
+  // RFH/RFPH/RVH with the same SIG ID/RVH ID.
+  // TODO(crbug.com/354382462): Remove these once the bug is fixed.
+  bool IsRenderFrameHostWithSIGInBackForwardCacheForDebugging(
+      SiteInstanceGroupId site_instance_group_id);
+  bool IsRenderFrameProxyHostWithSIGInBackForwardCacheForDebugging(
+      SiteInstanceGroupId site_instance_group_id);
+  bool IsRenderViewHostWithMapIdInBackForwardCacheForDebugging(
+      const RenderViewHostImpl& rvh);
+
+  bool IsRelatedSiteInstanceInBackForwardCacheForDebugging(
+      SiteInstance& site_instance);
 
   // StoredPage::Delegate overrides:
   void RenderViewHostNoLongerStored(RenderViewHostImpl* rvh) override;

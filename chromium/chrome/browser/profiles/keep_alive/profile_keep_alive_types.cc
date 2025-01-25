@@ -65,12 +65,8 @@ std::ostream& operator<<(std::ostream& out,
       return out << "kDiceWebSigninInterceptionBubble";
     case ProfileKeepAliveOrigin::kHistoryMenuBridge:
       return out << "kHistoryMenuBridge";
-    case ProfileKeepAliveOrigin::kLacrosMainProfile:
-      return out << "kLacrosMainProfile";
     case ProfileKeepAliveOrigin::kProfileCreationSamlFlow:
       return out << "kProfileCreationSamlFlow";
-    case ProfileKeepAliveOrigin::kDriveFsNativeMessageHostLacros:
-      return out << "kDriveFsNativeMessageHostLacros";
     case ProfileKeepAliveOrigin::kProfileDeletionProcess:
       return out << "kProfileDeletionProcess";
     case ProfileKeepAliveOrigin::kProfileStatistics:
@@ -88,6 +84,5 @@ std::ostream& operator<<(std::ostream& out,
     case ProfileKeepAliveOrigin::kHeadlessCommand:
       return out << "kHeadlessCommand";
   }
-  NOTREACHED_IN_MIGRATION();
-  return out << static_cast<int>(origin);
+  NOTREACHED();
 }

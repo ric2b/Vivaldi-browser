@@ -6,6 +6,7 @@
 #import <UIKit/UIKit.h>
 
 extern NSString* const vVivaldiBrowserPrivacyUrl;
+extern NSString* const vVivaldiCommunityUrl;
 extern NSString* const vVivaldiCommunityPrivacyUrl;
 extern NSString* const vVivaldiSyncActivateAccountUrl;
 extern NSString* const vVivaldiSyncRegistrationUrl;
@@ -19,7 +20,9 @@ extern NSString* const vVivaldiRecoverUsernameUrl;
 extern NSString* const vVivaldiRecoverPasswordUrl;
 extern NSString* const vVivaldiDirectMatchLearnMoreUrl;
 
+extern const char vVivaldiSyncStatusUrl[];
 extern const char vVivaldiBugReportURL[];
+extern const char vVivaldiCrashReasonURL[];
 
 // Help
 extern const char vVivaldiHelpCopyLinkToHightlightUrl[];

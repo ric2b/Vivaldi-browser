@@ -43,7 +43,7 @@ StringView TypeToString(Component::Type type) {
     case Component::Type::kHash:
       return "hash";
   }
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 // Utility method to get the correct encoding callback for a given type.
@@ -98,7 +98,7 @@ liburlpattern::EncodeCallback GetEncodeCallback(std::string_view pattern_utf8,
     case Component::Type::kHash:
       return ::url_pattern::HashEncodeCallback;
   }
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 // Utility method to get the correct liburlpattern parse options for a given
@@ -203,8 +203,7 @@ Component* Component::Compile(v8::Isolate* isolate,
   if (!parse_result.ok()) {
     exception_state.ThrowTypeError(
         "Invalid " + TypeToString(type) + " pattern '" + final_pattern + "'. " +
-        String::FromUTF8(parse_result.status().message().data(),
-                         parse_result.status().message().size()));
+        String::FromUTF8(parse_result.status().message()));
     return nullptr;
   }
 
@@ -222,9 +221,8 @@ Component* Component::Compile(v8::Isolate* isolate,
                                             : WTF::kTextCaseASCIIInsensitive;
     DCHECK(base::IsStringASCII(regexp_string));
     regexp = MakeGarbageCollected<ScriptRegexp>(
-        isolate, String(regexp_string.data(), regexp_string.size()),
-        case_sensitive, MultilineMode::kMultilineDisabled,
-        UnicodeMode::kUnicodeSets);
+        isolate, String(regexp_string), case_sensitive,
+        MultilineMode::kMultilineDisabled, UnicodeMode::kUnicodeSets);
 
     if (!regexp->IsValid()) {
       // The regular expression failed to compile.  This means that some
@@ -235,7 +233,7 @@ Component* Component::Compile(v8::Isolate* isolate,
         if (part.type != liburlpattern::PartType::kRegex)
           continue;
         DCHECK(base::IsStringASCII(part.value));
-        String group_value(part.value.data(), part.value.size());
+        String group_value(part.value);
         regexp = MakeGarbageCollected<ScriptRegexp>(
             isolate, group_value, case_sensitive,
             MultilineMode::kMultilineDisabled, UnicodeMode::kUnicodeSets);
@@ -258,7 +256,7 @@ Component* Component::Compile(v8::Isolate* isolate,
     wtf_name_list.ReserveInitialCapacity(
         static_cast<wtf_size_t>(name_list.size()));
     for (const auto& name : name_list) {
-      wtf_name_list.push_back(String::FromUTF8(name.data(), name.size()));
+      wtf_name_list.push_back(String::FromUTF8(name));
     }
   }
 
@@ -354,12 +352,10 @@ bool Component::Match(StringView input,
         if (pair.second->empty()) {
           value = g_empty_string;
         } else {
-          value = String::FromUTF8(pair.second->data(), pair.second->length());
+          value = String::FromUTF8(*pair.second);
         }
       }
-      group_list->emplace_back(
-          String::FromUTF8(pair.first.data(), pair.first.length()),
-          std::move(value));
+      group_list->emplace_back(String::FromUTF8(pair.first), std::move(value));
     }
   }
   return result;
@@ -377,8 +373,7 @@ bool Component::ShouldTreatAsStandardURL() const {
 
   const auto protocol_matches = [&](const std::string& scheme) {
     DCHECK(base::IsStringASCII(scheme));
-    return Match(String(scheme.data(), static_cast<unsigned>(scheme.size())),
-                 /*group_list=*/nullptr);
+    return Match(String(scheme), /*group_list=*/nullptr);
   };
 
   should_treat_as_standard_url_ =

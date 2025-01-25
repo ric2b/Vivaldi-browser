@@ -278,7 +278,7 @@ ShellContentBrowserClient::CreateNonNetworkNavigationURLLoaderFactory(
         content::WebContents::FromFrameTreeNodeId(frame_tree_node_id);
     return extensions::CreateExtensionNavigationURLLoaderFactory(
         web_contents->GetBrowserContext(),
-        !!extensions::WebViewGuest::FromWebContents(web_contents));
+        !!extensions::WebViewGuest::FromFrameTreeNodeId(frame_tree_node_id));
   }
   return {};
 }
@@ -360,6 +360,7 @@ bool ShellContentBrowserClient::HandleExternalProtocol(
     bool has_user_gesture,
     const std::optional<url::Origin>& initiating_origin,
     content::RenderFrameHost* initiator_document,
+    const net::IsolationInfo& isolation_info,
     mojo::PendingRemote<network::mojom::URLLoaderFactory>* out_factory) {
   return false;
 }

@@ -27,7 +27,8 @@ function render(pageUrl, collectionOfAllPages) {
 
   let subPages = [];
   for (const item of collectionOfAllPages) {
-    if (isDescendant(item, topPage)) {
+    skip_subpages = item.data.skip_subpages || false;
+    if (isDescendant(item, topPage) && !skip_subpages) {
       subPages.push(new Page(item.data.title, item.data.page.url));
     }
   }

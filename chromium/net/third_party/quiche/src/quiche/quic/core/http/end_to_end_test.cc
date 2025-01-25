@@ -44,6 +44,7 @@
 #include "quiche/quic/core/quic_types.h"
 #include "quiche/quic/core/quic_utils.h"
 #include "quiche/quic/core/quic_versions.h"
+#include "quiche/quic/core/tls_client_handshaker.h"
 #include "quiche/quic/platform/api/quic_expect_bug.h"
 #include "quiche/quic/platform/api/quic_flags.h"
 #include "quiche/quic/platform/api/quic_logging.h"
@@ -92,6 +93,7 @@ using spdy::SpdySerializedFrame;
 using spdy::SpdySettingsIR;
 using ::testing::_;
 using ::testing::Assign;
+using ::testing::HasSubstr;
 using ::testing::Invoke;
 using ::testing::NiceMock;
 using ::testing::UnorderedElementsAreArray;
@@ -303,11 +305,6 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
       client->Connect();
     }
     return client;
-  }
-
-  bool DispatcherAckEnabled() const {
-    return GetQuicRestartFlag(quic_dispatcher_ack_buffered_initial_packets) &&
-           GetQuicRestartFlag(quic_dispatcher_replace_cid_on_first_packet);
   }
 
   void set_smaller_flow_control_receive_window() {
@@ -1182,13 +1179,29 @@ TEST_P(EndToEndTest, HandshakeConfirmed) {
   client_->Disconnect();
 }
 
+TEST_P(EndToEndTest, InvalidSNI) {
+  if (!version_.UsesTls()) {
+    ASSERT_TRUE(Initialize());
+    return;
+  }
+
+  SetQuicFlag(quic_client_allow_invalid_sni_for_test, true);
+  server_hostname_ = "invalid!.example.com";
+  ASSERT_FALSE(Initialize());
+
+  QuicSpdySession* client_session = GetClientSession();
+  ASSERT_TRUE(client_session);
+  EXPECT_THAT(client_session->error(),
+              IsError(QUIC_HANDSHAKE_FAILED_INVALID_HOSTNAME));
+  EXPECT_THAT(client_session->error_details(), HasSubstr("invalid hostname"));
+}
+
 // Two packet CHLO. The first one is buffered and acked by dispatcher, the
 // second one causes session to be created.
 TEST_P(EndToEndTest, TestDispatcherAckWithTwoPacketCHLO) {
   SetQuicFlag(quic_allow_chlo_buffering, true);
   SetQuicFlag(quic_dispatcher_max_ack_sent_per_connection, 1);
-  std::string google_handshake_message(kEthernetMTU, 'a');
-  client_config_.SetGoogleHandshakeMessageToSend(google_handshake_message);
+  client_extra_copts_.push_back(kCHP1);
   ASSERT_TRUE(Initialize());
   if (!version_.HasIetfQuicFrames()) {
     return;
@@ -1206,7 +1219,7 @@ TEST_P(EndToEndTest, TestDispatcherAckWithTwoPacketCHLO) {
   ASSERT_NE(server_connection, nullptr);
   const QuicConnectionStats& server_stats = server_connection->GetStats();
 
-  if (DispatcherAckEnabled() && version_ != ParsedQuicVersion::RFCv2()) {
+  if (version_ != ParsedQuicVersion::RFCv2()) {
     EXPECT_EQ(server_stats.packets_sent_by_dispatcher, 1u);
   } else {
     EXPECT_EQ(server_stats.packets_sent_by_dispatcher, 0u);
@@ -1218,7 +1231,7 @@ TEST_P(EndToEndTest, TestDispatcherAckWithTwoPacketCHLO) {
   EXPECT_EQ(dispatcher_stats.packets_enqueued_early, 1u);
   EXPECT_EQ(dispatcher_stats.packets_enqueued_chlo, 0u);
 
-  if (DispatcherAckEnabled() && version_ != ParsedQuicVersion::RFCv2()) {
+  if (version_ != ParsedQuicVersion::RFCv2()) {
     EXPECT_EQ(dispatcher_stats.packets_sent, 1u);
   } else {
     EXPECT_EQ(dispatcher_stats.packets_sent, 0u);
@@ -1257,7 +1270,7 @@ TEST_P(EndToEndTest,
     const QuicDispatcherStats& dispatcher_stats = GetDispatcherStats();
     EXPECT_EQ(dispatcher_stats.sessions_created, 1u);
 
-    if (DispatcherAckEnabled() && version_ != ParsedQuicVersion::RFCv2()) {
+    if (version_ != ParsedQuicVersion::RFCv2()) {
       // 2 CHLO packets are enqueued, but only the 1st caused a dispatcher ACK.
       EXPECT_EQ(dispatcher_stats.packets_sent, 1u);
       EXPECT_EQ(dispatcher_stats.packets_processed_with_unknown_cid, 2u);
@@ -1315,7 +1328,7 @@ TEST_P(EndToEndTest, TestDispatcherAckWithTwoPacketCHLO_BothBuffered) {
     EXPECT_EQ(dispatcher_stats.packets_enqueued_early, 1u);
     EXPECT_EQ(dispatcher_stats.packets_processed_with_unknown_cid, 2u);
 
-    if (DispatcherAckEnabled() && version_ != ParsedQuicVersion::RFCv2()) {
+    if (version_ != ParsedQuicVersion::RFCv2()) {
       // 2 CHLO packets are enqueued, but only the 1st caused a dispatcher ACK.
       EXPECT_EQ(dispatcher_stats.packets_sent, 1u);
     } else {
@@ -1335,8 +1348,7 @@ TEST_P(EndToEndTest, TestDispatcherAckWithTwoPacketCHLO_BothBuffered) {
 TEST_P(EndToEndTest, TestDispatcherAckWithThreePacketCHLO) {
   SetQuicFlag(quic_allow_chlo_buffering, true);
   SetQuicFlag(quic_dispatcher_max_ack_sent_per_connection, 2);
-  std::string google_handshake_message(2 * kEthernetMTU, 'a');
-  client_config_.SetGoogleHandshakeMessageToSend(google_handshake_message);
+  client_extra_copts_.push_back(kCHP2);
   ASSERT_TRUE(Initialize());
   if (!version_.HasIetfQuicFrames()) {
     return;
@@ -1354,7 +1366,7 @@ TEST_P(EndToEndTest, TestDispatcherAckWithThreePacketCHLO) {
   ASSERT_NE(server_connection, nullptr);
   const QuicConnectionStats& server_stats = server_connection->GetStats();
 
-  if (DispatcherAckEnabled() && version_ != ParsedQuicVersion::RFCv2()) {
+  if (version_ != ParsedQuicVersion::RFCv2()) {
     EXPECT_EQ(server_stats.packets_sent_by_dispatcher, 2u);
   } else {
     EXPECT_EQ(server_stats.packets_sent_by_dispatcher, 0u);
@@ -1367,7 +1379,7 @@ TEST_P(EndToEndTest, TestDispatcherAckWithThreePacketCHLO) {
   EXPECT_EQ(dispatcher_stats.packets_enqueued_early, 2u);
   EXPECT_EQ(dispatcher_stats.packets_enqueued_chlo, 0u);
 
-  if (DispatcherAckEnabled() && version_ != ParsedQuicVersion::RFCv2()) {
+  if (version_ != ParsedQuicVersion::RFCv2()) {
     EXPECT_EQ(dispatcher_stats.packets_sent, 2u);
   } else {
     EXPECT_EQ(dispatcher_stats.packets_sent, 0u);
@@ -1401,7 +1413,7 @@ TEST_P(EndToEndTest,
   ASSERT_NE(server_connection, nullptr);
   const QuicConnectionStats& server_stats = server_connection->GetStats();
 
-  if (DispatcherAckEnabled() && version_ != ParsedQuicVersion::RFCv2()) {
+  if (version_ != ParsedQuicVersion::RFCv2()) {
     EXPECT_EQ(server_stats.packets_sent_by_dispatcher, 1u);
   } else {
     EXPECT_EQ(server_stats.packets_sent_by_dispatcher, 0u);
@@ -1414,7 +1426,7 @@ TEST_P(EndToEndTest,
   EXPECT_EQ(dispatcher_stats.packets_enqueued_early, 2u);
   EXPECT_EQ(dispatcher_stats.packets_enqueued_chlo, 0u);
 
-  if (DispatcherAckEnabled() && version_ != ParsedQuicVersion::RFCv2()) {
+  if (version_ != ParsedQuicVersion::RFCv2()) {
     EXPECT_EQ(dispatcher_stats.packets_sent, 1u);
   } else {
     EXPECT_EQ(dispatcher_stats.packets_sent, 0u);
@@ -1453,7 +1465,7 @@ TEST_P(EndToEndTest,
     const QuicDispatcherStats& dispatcher_stats = GetDispatcherStats();
     EXPECT_EQ(dispatcher_stats.sessions_created, 1u);
 
-    if (DispatcherAckEnabled() && version_ != ParsedQuicVersion::RFCv2()) {
+    if (version_ != ParsedQuicVersion::RFCv2()) {
       // Packet 1 and Packet 2's retransmission caused dispatcher ACKs.
       EXPECT_EQ(dispatcher_stats.packets_sent, 2u);
       EXPECT_EQ(dispatcher_stats.packets_processed_with_unknown_cid, 3u);
@@ -5284,7 +5296,8 @@ TEST_P(EndToEndTest,
 
   client_.reset(CreateQuicClient(client_writer_));
   EXPECT_EQ("", client_->SendSynchronousRequest("/foo"));
-  EXPECT_THAT(client_->connection_error(), IsError(QUIC_HANDSHAKE_FAILED));
+  EXPECT_THAT(client_->connection_error(),
+              IsError(QUIC_HANDSHAKE_FAILED_SYNTHETIC_CONNECTION_CLOSE));
 }
 
 // Regression test for b/116200989.
@@ -7724,6 +7737,40 @@ TEST_P(EndToEndTest, OriginalConnectionIdClearedFromMap) {
   server_thread_->Resume();
 }
 
+TEST_P(EndToEndTest, FlowLabelSend) {
+  SetQuicRestartFlag(quic_support_flow_label2, true);
+  ASSERT_TRUE(Initialize());
+
+  const uint32_t server_flow_label = 2;
+  quiche::QuicheNotification set;
+  server_thread_->Schedule([this, &set]() {
+    QuicConnection* server_connection = GetServerConnection();
+    if (server_connection != nullptr) {
+      server_connection->set_outgoing_flow_label(server_flow_label);
+    } else {
+      ADD_FAILURE() << "Missing server connection";
+    }
+    set.Notify();
+  });
+  set.WaitForNotification();
+
+  const uint32_t client_flow_label = 1;
+  QuicConnection* client_connection = GetClientConnection();
+  client_connection->set_outgoing_flow_label(client_flow_label);
+
+  client_->SendSynchronousRequest("/foo");
+
+  if (server_address_.host().IsIPv6()) {
+    EXPECT_EQ(client_flow_label, client_connection->outgoing_flow_label());
+    EXPECT_EQ(server_flow_label, client_connection->last_received_flow_label());
+
+    server_thread_->Pause();
+    QuicConnection* server_connection = GetServerConnection();
+    EXPECT_EQ(server_flow_label, server_connection->outgoing_flow_label());
+    EXPECT_EQ(client_flow_label, server_connection->last_received_flow_label());
+  }
+}
+
 TEST_P(EndToEndTest, ServerReportsNotEct) {
   // Client connects using not-ECT.
   SetQuicRestartFlag(quic_support_ect1, true);
@@ -7842,6 +7889,26 @@ TEST_P(EndToEndTest, ClientReportsEct1) {
   server_connection->set_per_packet_options(nullptr);
   server_thread_->Resume();
   client_->Disconnect();
+}
+
+TEST_P(EndToEndTest, FixTimeouts) {
+  client_extra_copts_.push_back(kFTOE);
+  ASSERT_TRUE(Initialize());
+  if (!version_.UsesTls()) {
+    return;
+  }
+  EXPECT_TRUE(client_->client()->WaitForHandshakeConfirmed());
+  // Verify handshake timeout has been removed on both endpoints.
+  QuicConnection* client_connection = GetClientConnection();
+  EXPECT_EQ(QuicConnectionPeer::GetIdleNetworkDetector(client_connection)
+                .handshake_timeout(),
+            QuicTime::Delta::Infinite());
+  server_thread_->Pause();
+  QuicConnection* server_connection = GetServerConnection();
+  EXPECT_EQ(QuicConnectionPeer::GetIdleNetworkDetector(server_connection)
+                .handshake_timeout(),
+            QuicTime::Delta::Infinite());
+  server_thread_->Resume();
 }
 
 TEST_P(EndToEndTest, ClientMigrationAfterHalfwayServerMigration) {

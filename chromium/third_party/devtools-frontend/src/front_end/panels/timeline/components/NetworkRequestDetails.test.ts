@@ -10,9 +10,9 @@ import * as Timeline from '../timeline.js';
 import * as TimelineComponents from './components.js';
 
 describeWithMockConnection('NetworkRequestDetails', () => {
-  it('renders the right details for a network event from TraceEngine', async function() {
-    const {traceData} = await TraceLoader.traceEngine(this, 'lcp-web-font.json.gz');
-    const networkRequests = traceData.NetworkRequests.byTime;
+  it('renders the right details for a network event from Trace', async function() {
+    const {parsedTrace} = await TraceLoader.traceEngine(this, 'lcp-web-font.json.gz');
+    const networkRequests = parsedTrace.NetworkRequests.byTime;
     const cssRequest = networkRequests.find(request => {
       return request.args.data.url === 'https://chromedevtools.github.io/performance-stories/lcp-web-font/app.css';
     });
@@ -22,7 +22,7 @@ describeWithMockConnection('NetworkRequestDetails', () => {
 
     const details =
         new TimelineComponents.NetworkRequestDetails.NetworkRequestDetails(new Components.Linkifier.Linkifier());
-    await details.setData(traceData, cssRequest, Timeline.TargetForEvent.targetForEvent(traceData, cssRequest));
+    await details.setData(parsedTrace, cssRequest, Timeline.TargetForEvent.targetForEvent(parsedTrace, cssRequest));
 
     if (!details.shadowRoot) {
       throw new Error('Could not find expected element to test.');
@@ -33,7 +33,7 @@ describeWithMockConnection('NetworkRequestDetails', () => {
     assert.strictEqual(titleSwatch?.style.backgroundColor, 'rgb(191, 103, 255)');
 
     const rowData = getRowDataForDetailsElement(details.shadowRoot);
-    const durationInnerText = '12.58 ms' +
+    const durationInnerText = 'Duration12.58 ms' +
         'Queuing and connecting1.83 ms' +
         'Request sent and waiting4.80 ms' +
         'Content downloading1.66 ms' +
@@ -41,32 +41,39 @@ describeWithMockConnection('NetworkRequestDetails', () => {
     assert.deepEqual(
         rowData,
         [
-          {title: 'URL', value: 'chromedevtools.github.io/performance-stories/lcp-web-font/app.css'},
+          {title: undefined, value: 'chromedevtools.github.io/performance-stories/lcp-web-font/app.css'},
           {title: 'Request method', value: 'GET'},
-          {title: 'Initial priority', value: 'Highest'},
           {title: 'Priority', value: 'Highest'},
           {title: 'MIME type', value: 'text/css'},
           {title: 'Encoded data', value: ' (from cache)'},
           {title: 'Decoded body', value: '96 B'},
           {
+            title: 'Blocking',
+            value: 'Render blocking',
+          },
+          {title: 'From cache', value: 'Yes'},
+          {title: undefined, value: durationInnerText},
+          {
             title: 'Initiated by',
             value: 'chromedevtools.github.io/performance-stories/lcp-web-font/index.html',
           },
-          {title: 'From cache', value: 'Yes'},
-          {title: 'Duration', value: durationInnerText},
         ],
     );
   });
 });
 
 function getRowDataForDetailsElement(details: ShadowRoot) {
-  return Array.from(details.querySelectorAll<HTMLDivElement>('.network-request-details-row')).map(row => {
+  return Array.from(details.querySelectorAll<HTMLDivElement>('.network-request-details-row, .timing-rows')).map(row => {
     const title = row.querySelector<HTMLDivElement>('.title')?.innerText;
     // The innerText in here will contain a `\n` and a few space for each child <div> tag, so just remove these empty
     // characters for easier test.
     const regExpForLineBreakAndFollowingSpaces = /\n[\s]+/g;
-    const value =
+    let value =
         row.querySelector<HTMLDivElement>('.value')?.innerText.replaceAll(regExpForLineBreakAndFollowingSpaces, '');
+
+    if (!title && !value) {
+      value = row.innerText.replaceAll(regExpForLineBreakAndFollowingSpaces, '');
+    }
     return {title, value};
   });
 }

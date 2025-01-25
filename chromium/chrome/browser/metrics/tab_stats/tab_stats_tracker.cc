@@ -110,6 +110,9 @@ const char TabStatsTracker::UmaStatsReportingDelegate::
     kDailyDiscardsSuggestedHistogramName[] =
         "Discarding.DailyDiscards.Suggested";
 const char TabStatsTracker::UmaStatsReportingDelegate::
+    kDailyDiscardsFrozenWithGrowingMemoryHistogramName[] =
+        "Discarding.DailyDiscards.FrozenWithGrowingMemory";
+const char TabStatsTracker::UmaStatsReportingDelegate::
     kDailyReloadsExternalHistogramName[] = "Discarding.DailyReloads.External";
 const char TabStatsTracker::UmaStatsReportingDelegate::
     kDailyReloadsUrgentHistogramName[] = "Discarding.DailyReloads.Urgent";
@@ -117,6 +120,9 @@ const char TabStatsTracker::UmaStatsReportingDelegate::
     kDailyReloadsProactiveHistogramName[] = "Discarding.DailyReloads.Proactive";
 const char TabStatsTracker::UmaStatsReportingDelegate::
     kDailyReloadsSuggestedHistogramName[] = "Discarding.DailyReloads.Suggested";
+const char TabStatsTracker::UmaStatsReportingDelegate::
+    kDailyReloadsFrozenWithGrowingMemoryHistogramName[] =
+        "Discarding.DailyReloads.FrozenWithGrowingMemory";
 
 const char TabStatsTracker::UmaStatsReportingDelegate::
     kTabDuplicateCountSingleWindowHistogramName[] =
@@ -248,10 +254,14 @@ void TabStatsTracker::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(::prefs::kTabStatsDiscardsUrgent, 0);
   registry->RegisterIntegerPref(::prefs::kTabStatsDiscardsProactive, 0);
   registry->RegisterIntegerPref(::prefs::kTabStatsDiscardsSuggested, 0);
+  registry->RegisterIntegerPref(
+      ::prefs::kTabStatsDiscardsFrozenWithGrowingMemory, 0);
   registry->RegisterIntegerPref(::prefs::kTabStatsReloadsExternal, 0);
   registry->RegisterIntegerPref(::prefs::kTabStatsReloadsUrgent, 0);
   registry->RegisterIntegerPref(::prefs::kTabStatsReloadsProactive, 0);
   registry->RegisterIntegerPref(::prefs::kTabStatsReloadsSuggested, 0);
+  registry->RegisterIntegerPref(
+      ::prefs::kTabStatsReloadsFrozenWithGrowingMemory, 0);
 }
 
 void TabStatsTracker::TabStatsDailyObserver::OnDailyEvent(
@@ -450,17 +460,18 @@ void TabStatsTracker::OnResume() {
 }
 
 // resource_coordinator::TabLifecycleObserver:
-void TabStatsTracker::OnDiscardedStateChange(
+void TabStatsTracker::OnTabLifecycleStateChange(
     content::WebContents* contents,
-    ::mojom::LifecycleUnitDiscardReason reason,
-    bool is_discarded) {
-  // Increment the count in the data store for tabs metrics reporting.
-  tab_stats_data_store_->OnTabDiscardStateChange(reason, is_discarded);
+    mojom::LifecycleUnitState previous_state,
+    mojom::LifecycleUnitState new_state,
+    std::optional<LifecycleUnitDiscardReason> discard_reason) {
+  if (previous_state == ::mojom::LifecycleUnitState::DISCARDED ||
+      new_state == ::mojom::LifecycleUnitState::DISCARDED) {
+    tab_stats_data_store_->OnTabDiscardStateChange(
+        discard_reason.value(),
+        new_state == ::mojom::LifecycleUnitState::DISCARDED);
+  }
 }
-
-void TabStatsTracker::OnAutoDiscardableStateChange(
-    content::WebContents* contents,
-    bool is_auto_discardable) {}
 
 void TabStatsTracker::OnInitialOrInsertedTab(
     content::WebContents* web_contents) {
@@ -527,6 +538,8 @@ void TabStatsTracker::UmaStatsReportingDelegate::ReportDailyMetrics(
       static_cast<size_t>(LifecycleUnitDiscardReason::PROACTIVE);
   const size_t suggested_index =
       static_cast<size_t>(LifecycleUnitDiscardReason::SUGGESTED);
+  const size_t frozen_with_growing_memory_index = static_cast<size_t>(
+      LifecycleUnitDiscardReason::FROZEN_WITH_GROWING_MEMORY);
   base::UmaHistogramCounts10000(kDailyDiscardsExternalHistogramName,
                                 tab_stats.tab_discard_counts[external_index]);
   base::UmaHistogramCounts10000(kDailyDiscardsUrgentHistogramName,
@@ -535,6 +548,9 @@ void TabStatsTracker::UmaStatsReportingDelegate::ReportDailyMetrics(
                                 tab_stats.tab_discard_counts[proactive_index]);
   base::UmaHistogramCounts10000(kDailyDiscardsSuggestedHistogramName,
                                 tab_stats.tab_discard_counts[suggested_index]);
+  base::UmaHistogramCounts10000(
+      kDailyDiscardsFrozenWithGrowingMemoryHistogramName,
+      tab_stats.tab_discard_counts[frozen_with_growing_memory_index]);
   base::UmaHistogramCounts10000(kDailyReloadsExternalHistogramName,
                                 tab_stats.tab_reload_counts[external_index]);
   base::UmaHistogramCounts10000(kDailyReloadsUrgentHistogramName,
@@ -543,6 +559,9 @@ void TabStatsTracker::UmaStatsReportingDelegate::ReportDailyMetrics(
                                 tab_stats.tab_reload_counts[proactive_index]);
   base::UmaHistogramCounts10000(kDailyReloadsSuggestedHistogramName,
                                 tab_stats.tab_reload_counts[suggested_index]);
+  base::UmaHistogramCounts10000(
+      kDailyReloadsFrozenWithGrowingMemoryHistogramName,
+      tab_stats.tab_reload_counts[frozen_with_growing_memory_index]);
 }
 
 void TabStatsTracker::UmaStatsReportingDelegate::ReportHeartbeatMetrics(

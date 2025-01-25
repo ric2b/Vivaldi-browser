@@ -210,7 +210,7 @@ actually merge an uprev, unless you use `--production`. It will work from the
 `main` branch unless you use `--branch`.
 
 It's likely that just building the SDK board locally would be sufficent for most
-cases. To do that, from `~/chromiumos/src/scripts` run:
+cases. To do that, from `~/chromiumos/chromite/shell` run:
 
 ```
 ./build_sdk_board

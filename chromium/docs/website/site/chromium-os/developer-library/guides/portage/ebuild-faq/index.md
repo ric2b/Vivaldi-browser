@@ -619,14 +619,33 @@ and autouprev isn't supported) you must manually increase the version number in
 the ebuild filename.
 
 When upgrading to a new version of the package (i.e. grabbing a newer version
-from upstream), then increase the ebuild version number (`foo-M.m.ebuild`).
+from upstream), then increase the ebuild version number (`foo-M.m.ebuild`). If
+upgrading to an upstream version, set the ebuild version number to match the
+upstream version.
 
 When changing the ebuild contents (i.e. applying a custom patch or fixing
-cross-compile issues), then increase the ebuild revision number
-(`foo-M.m-rN.ebuild`).
+cross-compile issues) without switching to a new upstream version, then increase
+the ebuild revision number (`foo-M.m-rN.ebuild`). If the ebuild has not yet had
+changes from its content for this version, start it at -r1 to represent the
+first revision atop the base version.
 
-When uprevving ebuilds, just rename the symlink (by convention, named as
-`*-r#.ebuild`), or create a new one, if it doesn't exist.
+All ebuild content changes are made in the ebuild file (`foo-M.m.ebuild`), which
+ensures we can easily see version history for the changes we make to the ebuild.
+To tell Portage that the revision has changed, we point a symlink with a
+revisioned name (`foo-M.m-r#.ebuild`) to the ebuild file. Portage will recognize
+that this new revisioned symlink means it needs to rebuild/reinstall the
+package. This is convenient for our needs, though technically we're violating
+Portage's expectations by modifying the definition of `foo-M.m`'s ebuild. For
+our needs this is OK since we're always going to want to install `foo-M.m-r#`
+rather than `foo-M.m` once a revision exists, and since the benefits of seeing
+version history outweigh the fact that it represents a departure from Portage's
+expectations.
+
+When revising a version's ebuild, if this is the first revision (if no -r#
+symlink symlink exists), create the symlink with a revision number of -r1. If a
+symlink already exists, rename it with an incremented revision number. When
+upreving to a new version, delete the symlink if it exists since there is not
+yet a revision atop the base ebuild for the new version.
 
 ```bash
 $ ls -l
@@ -639,7 +658,9 @@ $ git mv chromeos-bsp-board-0.0.1-r1.ebuild chromeos-bsp-board-0.0.1-r2.ebuild
 ```
 
 If updating packages versions (say from PV=0.0.1 to PV=0.1.0 above), rename the
-base file (i.e., `chromeos-bsp-board-0.0.1.ebuild`).
+base file (i.e., `chromeos-bsp-board-0.0.1.ebuild`) and delete the symlink if it
+exists since there is not yet a revision atop the base ebuild for the new
+version.
 
 ### Using chromeos-version.sh
 

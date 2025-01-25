@@ -10,6 +10,7 @@
 <translation id="132390688737681464">Enregistrer et renseigner les adresses</translation>
 <translation id="1375198122581997741">À propos de la version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> n’a envoyé aucune donnée.</translation>
+<translation id="1555191101192706055">Des pirates informatiques qui se trouvent sur le site que vous avez essayé de consulter peuvent vous inciter à installer des logiciels malveillants affectant votre façon de naviguer, par exemple en modifiant votre page d’accueil ou en vous montrant des annonces supplémentaires sur les sites que vous consultez.</translation>
 <translation id="1559528461873125649">Fichier ou répertoire inexistant</translation>
 <translation id="1640244768702815859">Essayez de <ph name="BEGIN_LINK" />consulter la page d’accueil du site<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocole non supporté</translation>
@@ -22,6 +23,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Vérifier le proxy et le pare-feu<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Émis pour : <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Ce site ne peut pas fournir de connexion sécurisée</translation>
+<translation id="2178904466768126352">Sur le site que vous avez essayé de consulter, des pirates informatiques pourraient installer un logiciel malveillant qui vole ou supprime des éléments comme vos mots de passe, photos, messages ou numéros de carte de crédit.</translation>
 <translation id="2187317261103489799">Détecter (par défaut)</translation>
 <translation id="2224337661447660594">Aucun accès à Internet</translation>
 <translation id="2283340219607151381">Enregistrer et renseigner les adresses</translation>
@@ -92,6 +94,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Vérifier les configurations du pare-feu et de l’antivirus<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Essayer de lancer le diagnostic réseau<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Valide</translation>
+<translation id="4241830393007970744">Des pirates informatiques sur le site que vous avez essayé de consulter peuvent vous inciter à installer des logiciels ou à révéler des infos, comme vos mots de passe, ou vos numéros de téléphone ou de carte de crédit.</translation>
 <translation id="4250431568374086873">Votre connexion à ce site n’est pas totalement sécurisée</translation>
 <translation id="4265872034478892965">Autorisé par votre administrateur</translation>
 <translation id="4305666528087210886">Impossible d’accéder à votre fichier</translation>
@@ -102,6 +105,7 @@
 <translation id="4522570452068850558">Détails</translation>
 <translation id="4558551763791394412">Essayer de désactiver les extensions.</translation>
 <translation id="4592951414987517459">Votre connexion à <ph name="DOMAIN" /> est chiffrée à l’aide d’une méthode de chiffrement récente.</translation>
+<translation id="4598641255230617220">Coller et aller</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Votre connexion a été interrompue</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Exécution du diagnostic réseau de Windows<ph name="END_LINK" /></translation>
@@ -111,6 +115,7 @@
 <translation id="4764776831041365478">Il se peut que la page Web à l’adresse <ph name="URL" /> soit temporairement inaccessible ou qu'elle ait été déplacée de façon permanente à une autre adresse Web.</translation>
 <translation id="483241715238664915">Activer les avertissements</translation>
 <translation id="4943872375798546930">Aucun résultat</translation>
+<translation id="5017554619425969104">Texte que vous avez copié</translation>
 <translation id="5023310440958281426">Vérifiez les règles définies par votre administrateur</translation>
 <translation id="5039804452771397117">Autoriser</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 en cours d’utilisation)} other {(# en cours d’utilisation)}}</translation>
@@ -165,11 +170,11 @@
 <translation id="7108819624672055576">Autorisé par une extension</translation>
 <translation id="7111012039238467737">(Valide)</translation>
 <translation id="7113310725918019676">Autoriser <ph name="BLOCKED_TYPE" /> depuis <ph name="DOMAIN" /></translation>
+<translation id="7126644664682723998">Coller et rechercher</translation>
 <translation id="7179323680825933600">Enregistrer et saisir les modes de paiement</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ne respecte pas les normes de sécurité.</translation>
 <translation id="7219179957768738017">La connexion utilise <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Afficher les notifications</translation>
-<translation id="7227747683324411744">Des pirates informatiques qui se trouvent sur le site que vous essayez de consulter peuvent vous inciter à installer un logiciel malveillant affectant votre façon de naviguer, par exemple en modifiant votre page d’accueil ou en vous montrant des annonces supplémentaires sur les sites que vous consultez.</translation>
 <translation id="7353601530677266744">Ligne de commande</translation>
 <translation id="7364115444476960850">La page que vous essayez de visiter a été bloquée par <ph name="BLOCKER_NAME" /> de Vivaldi</translation>
 <translation id="7419106976560586862">Chemin d’accès au profil</translation>
@@ -177,7 +182,6 @@
 <translation id="7518003948725431193">Aucune page Web trouvée à l’adresse : <ph name="URL" /></translation>
 <translation id="7549584377607005141">Pour s’afficher correctement, cette page Web a besoin des données que vous avez saisies précédemment. Vous pouvez envoyer de nouveau ces données. Cependant, en procédant ainsi, vous répéterez toute action déjà effectuée sur cette page.</translation>
 <translation id="759889825892636187">Impossible actuellement de traiter cette demande via <ph name="HOST_NAME" />.</translation>
-<translation id="7605377493722372900">Des pirates informatiques qui se trouvent sur le site que vous essayez de consulter pourraient installer un logiciel malveillant dérobant ou supprimant des éléments tels que votre mot de passe, vos photos, vos messages ou votre numéro de carte de crédit.</translation>
 <translation id="7662298039739062396">Paramètre contrôlé par une extension</translation>
 <translation id="7663736086183791259">Certificat <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7714464543167945231">Certificat</translation>
@@ -203,7 +207,6 @@
 <translation id="8288807391153049143">Afficher le certificat</translation>
 <translation id="8289355894181816810">Contactez votre administrateur réseau si vous ne savez pas de quoi il s’agit.</translation>
 <translation id="8332188693563227489">L’accès à <ph name="HOST_NAME" /> a été refusé</translation>
-<translation id="8422228580902424274">Des pirates informatiques qui se trouvent sur le site que vous essayez de consulter peuvent vous inciter à installer un logiciel ou à divulguer des éléments tels que votre mot de passe, votre numéro de téléphone ou votre numéro de carte de crédit.</translation>
 <translation id="8473863474539038330">Adresses et autres</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> a mis trop de temps à répondre.</translation>
 <translation id="8503813439785031346">Nom d’utilisateur</translation>

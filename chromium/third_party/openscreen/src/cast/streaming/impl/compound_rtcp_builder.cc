@@ -44,7 +44,7 @@ void CompoundRtcpBuilder::IncludeFeedbackInNextPacket(
     std::vector<PacketNack> packet_nacks,
     std::vector<FrameId> frame_acks) {
   // Note: Serialization of these lists will depend on the value of
-  // |checkpoint_frame_id_| when BuildPacket() is called later.
+  // `checkpoint_frame_id_` when BuildPacket() is called later.
 
   nacks_for_next_packet_ = std::move(packet_nacks);
   acks_for_next_packet_ = std::move(frame_acks);
@@ -168,7 +168,7 @@ void CompoundRtcpBuilder::AppendCastFeedbackPacket(ByteBuffer& buffer) {
   AppendField<uint32_t>(session_.sender_ssrc(), buffer);
   AppendField<uint32_t>(kRtcpCastIdentifierWord, buffer);
   AppendField<uint8_t>(checkpoint_frame_id_.lower_8_bits(), buffer);
-  // The |loss_count_field| will be set after the Loss Fields are generated
+  // The `loss_count_field` will be set after the Loss Fields are generated
   // and the total count is known.
   uint8_t* const loss_count_field =
       ReserveSpace(sizeof(uint8_t), buffer).data();
@@ -205,12 +205,12 @@ int CompoundRtcpBuilder::AppendCastFeedbackLossFields(ByteBuffer& buffer) {
   }
 
   // The maximum number of entries is limited by available packet buffer space
-  // and the 8-bit |loss_count_field|.
+  // and the 8-bit `loss_count_field`.
   const int max_num_loss_fields =
       std::min<int>(buffer.size() / kRtcpFeedbackLossFieldSize,
                     std::numeric_limits<uint8_t>::max());
 
-  // Translate the |nacks_for_next_packet_| list into one or more entries
+  // Translate the `nacks_for_next_packet_` list into one or more entries
   // representing specific packet losses. Omit any NACKs before the checkpoint.
   OSP_DCHECK(AreElementsSortedAndUnique(nacks_for_next_packet_));
   auto it =
@@ -301,8 +301,8 @@ void CompoundRtcpBuilder::AppendCastFeedbackAckFields(ByteBuffer& buffer) {
         num_ack_bitvector_octets = new_count;
       }
 
-      // At this point, the ACK bit vector is valid at |octet_index|. Set the
-      // bit representing the ACK for |frame_id|.
+      // At this point, the ACK bit vector is valid at `octet_index`. Set the
+      // bit representing the ACK for `frame_id`.
       const int shift = bit_index % kBitsPerOctet;
       ack_bitvector[octet_index] |= 1 << shift;
     }

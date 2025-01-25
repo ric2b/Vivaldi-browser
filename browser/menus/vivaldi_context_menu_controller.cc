@@ -15,6 +15,7 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_context_menu.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -27,29 +28,37 @@ bool ContextMenuPostitionDelegate::CanSetPosition() const {
 std::unique_ptr<ContextMenuController> ContextMenuController::active_controller_;
 
 // Creates a new instance. Previous instance is kept in memory until new is
-// created as releasing too early can lead to crashes. This kind of memory
-// "leak" is a pattern chrome uses with the RenderViewContextMenu class for the
-// same reasons.
+// created or browser window is closed as releasing too early can lead to
+// crashes. This kind of memory "leak" is a pattern chrome uses with the
+// RenderViewContextMenu class for the same reasons.
 // static
 ContextMenuController* ContextMenuController::Create(
-    content::WebContents* window_web_contents,
+    VivaldiBrowserWindow* browser_window,
     VivaldiRenderViewContextMenu* rv_context_menu,
     std::optional<Params> params) {
   active_controller_.reset(new ContextMenuController(
-      window_web_contents, rv_context_menu, std::move(params)));
+      browser_window, rv_context_menu, std::move(params)));
+  return active_controller_.get();
+}
+
+// static
+ContextMenuController* ContextMenuController::GetActive() {
   return active_controller_.get();
 }
 
 ContextMenuController::ContextMenuController(
-    content::WebContents* window_web_contents,
+    VivaldiBrowserWindow* browser_window,
     VivaldiRenderViewContextMenu* rv_context_menu,
     std::optional<Params> params)
-    : window_web_contents_(window_web_contents),
+    : browser_window_(browser_window),
+      window_web_contents_(browser_window->web_contents()),
       rv_context_menu_(rv_context_menu),
       with_developer_tools_(!rv_context_menu_ ||
                             rv_context_menu_->SupportsInspectTools()),
       params_(std::move(params)) {
   using Origin = extensions::vivaldi::context_menu::Origin;
+
+  browser_window_->GetWidget()->AddObserver(this);
 
   // We set the height to zero depending on where we want chrome code to
   // position the menu. Chrome does not support placing a menu to the right or
@@ -86,7 +95,19 @@ ContextMenuController::ContextMenuController(
       vivaldiprefs::kKeyboardShortcutsEnable);
 }
 
-ContextMenuController::~ContextMenuController() {}
+ContextMenuController::~ContextMenuController() {
+  // Will be null if browser window has been destroyed.
+  if (browser_window_) {
+    browser_window_->GetWidget()->RemoveObserver(this);
+  }
+}
+
+// Called when browser window is being destroyed.
+void ContextMenuController::OnWidgetDestroying(views::Widget* widget) {
+  browser_window_->GetWidget()->RemoveObserver(this);
+  browser_window_ = nullptr;
+  active_controller_.reset(nullptr);
+}
 
 Profile* ContextMenuController::GetProfile() {
   return Profile::FromBrowserContext(window_web_contents_->GetBrowserContext());
@@ -322,6 +343,25 @@ void ContextMenuController::SanitizeModel(ui::SimpleMenuModel* menu_model) {
   }
 }
 
+bool ContextMenuController::Update(const std::vector<UpdateItem>& items) {
+  for (const UpdateItem& item : items) {
+    int command_id = item.id + IDC_VIV_MENU_FIRST;
+    auto it = id_to_checked_map_.find(command_id);
+    if (it != id_to_checked_map_.end()) {
+      if (item.checked.has_value()) {
+        id_to_checked_map_[command_id] = item.checked.value();
+      }
+      if (item.name.has_value()) {
+        const std::u16string title = base::UTF8ToUTF16(item.name.value());
+        menu_->SetTitle(title, command_id);
+      }
+    }
+  }
+  menu_->Refresh();
+
+  return true;
+}
+
 bool ContextMenuController::CanSetPosition() const {
   return params_->properties.force_views;
 }
@@ -488,8 +528,10 @@ void ContextMenuController::ExecuteCommand(int command_id, int event_flags) {
   if (developertools_controller_->HandleCommand(command_id)) {
   } else if (pwa_controller_ && pwa_controller_->HandleCommand(command_id)) {
   } else {
-    extensions::MenubarMenuAPI::SendAction(GetProfile(), command_id,
-                                           event_flags);
+    extensions::MenubarMenuAPI::SendAction(GetProfile(),
+                                           command_id,
+                                           event_flags,
+                                           IsCommandIdPersistent(command_id));
   }
 }
 
@@ -535,13 +577,6 @@ void ContextMenuController::MenuClosed(ui::SimpleMenuModel* source) {
     }
 
     CleanupAndNotifyClose();
-
-    // Allow views based menus to terminate immediately. Otherwise the
-    // controller may be terminated on exit and views based manus can happen to
-    // access objects that are no longer valid. VB-108963
-    if (!has_shown_ || menu_->IsViews()) {
-      active_controller_.reset(nullptr);
-    }
   }
 }
 

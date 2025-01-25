@@ -327,8 +327,7 @@ public class SpeechRecognitionImpl {
             mRecognizer.startListening(mIntent);
         } catch (SecurityException e) {
             Context context = ContextUtils.getApplicationContext();
-            String msg =
-                    context.getResources().getString(R.string.speech_recognition_service_not_found);
+            String msg = context.getString(R.string.speech_recognition_service_not_found);
             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show();
         }
     }
